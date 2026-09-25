@@ -152,16 +152,20 @@ test.describe('one trip, by the owner', () => {
     await test.step('4. buying at one shop: Mercadona Colón', async () => {
       const dialog = await openFilterSheet(page);
       await dialog
-        .getByRole('button', { name: /Choose the shop you are buying at/ })
+        .getByRole('button', {
+          name: /^(Choose|Change) the shop you are buying at$/,
+        })
         .click();
       await expect(page).toHaveURL(/\/sheet\/filter\/shop$/);
 
-      // The shops of a chain are drawn once its button is pressed.
+      // The shops of a chain are drawn once its button is pressed. A shop
+      // somebody bought at earlier is also under "Recent" (velista `0103`), so
+      // Colón can be drawn twice, and either row picks the same shop.
       const picker = sheet(page, 'Buying at');
       await picker
         .locator('lib-franchise-buttons button', { hasText: 'Mercadona' })
         .click();
-      await picker.locator('label.row', { hasText: 'Colón' }).click();
+      await picker.locator('label.row', { hasText: 'Colón' }).first().click();
       // The pick dismisses the picker back onto the filter sheet, which draws
       // it and is where the choice is confirmed.
       await expect(page).toHaveURL(/\/sheet\/filter$/);
