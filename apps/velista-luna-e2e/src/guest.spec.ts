@@ -20,13 +20,14 @@ import {
 
 /**
  * The owner and a guest (velista plan 0080, section 5.2, which is plan 0050
- * section 6 brought up to date: the swap it asked for was retired by 0069, so
- * the guest splits a line by product instead).
+ * section 6 brought up to date: the swap it asked for was retired by 0069 and
+ * the split that replaced it by 0092, so the guest skips a line instead, as
+ * velista 0096 section 3.3 has it).
  *
  * Two browser contexts on one basket. Alice owns it and shares it; a person
  * signed in to nothing opens the link, skips the name, and shops beside her.
  * What the guest does reaches Alice's screen through the socket, without a
- * reload, and what the guest is not shown (list names, the lists summary, the
+ * reload, and what the guest is not shown (list names, the lists behind a row,
  * line history) is asserted as absent rather than assumed.
  */
 test.describe('the owner and a guest', () => {
@@ -89,15 +90,13 @@ test.describe('the owner and a guest', () => {
       await expectBasketUrl(guest, basketId);
     });
 
-    await test.step('3. the guest records some of Milk, and Alice sees the remainder without a reload', async () => {
-      const dialog = await openSettleSheet(guest, 'Milk');
-      await dialog.getByRole('button', { name: 'Got some' }).click();
-      await expect(reel(dialog, 'How many')).toHaveAttribute(
-        'aria-valuenow',
-        '1'
-      );
-      await dialog.getByRole('button', { name: 'Record it' }).click();
-      await expectBasketUrl(guest, basketId);
+    await test.step('3. the guest buys some of Milk from the row, and Alice sees the remainder without a reload', async () => {
+      // The row's reel is how part of a row is bought: the settle sheet has no
+      // "Got some" any more (velista `0092`), only the ways of not buying it.
+      await nudge(reel(row(guest, 'Milk'), 'Milk, still to get'), -1);
+      await expect(
+        reel(row(guest, 'Milk'), 'Milk, still to get')
+      ).toHaveAttribute('aria-valuenow', '1');
 
       await expect(
         reel(row(page, 'Milk'), 'Milk, still to get')
@@ -107,45 +106,34 @@ test.describe('the owner and a guest', () => {
       );
     });
 
-    await test.step('4. the guest splits Milk by product, and Alice sees the new rows and who did it', async () => {
-      const dialog = await openSettleSheet(guest, 'Milk');
-      await dialog.getByRole('button', { name: 'Change', exact: true }).click();
-      await expect(dialog.locator('.pane-title')).toHaveText(
-        'Which did you get?'
-      );
-      await nudge(reel(dialog, 'Bread, units'), 1);
-      await dialog.getByRole('button', { name: 'Apply', exact: true }).click();
+    await test.step('4. the guest skips Nails, and Alice sees it skipped', async () => {
+      // A skip belongs to the basket, not to the person who pressed it (backend
+      // `0130` section 11 point 3), so the owner's screen says it too. It
+      // replaced the split by product, which velista `0092` retired.
+      const dialog = await openSettleSheet(guest, 'Nails');
+      await dialog
+        .getByRole('button', { name: 'Not today', exact: true })
+        .click();
       await expectBasketUrl(guest, basketId);
 
-      // On Alice's screen: two rows under the line's name, the unit that moved
-      // on the Bread one, and the Milk one now got by the guest, in the guest's
-      // name.
-      const milkRows = row(page, 'Milk');
-      await expect(milkRows).toHaveCount(2);
-      const breadShare = milkRows.filter({ hasText: 'Bread · ' });
-      await expect(reel(breadShare, 'Milk, still to get')).toHaveAttribute(
-        'aria-valuenow',
-        '1'
-      );
-      const milkShare = milkRows.filter({ hasText: 'Milk · ' });
-      await expect(milkShare.locator('.touched')).toContainText(
-        'Guest 1 got it'
+      await expect(row(page, 'Nails').locator('.skipped')).toHaveText(
+        'Skipped for now'
       );
     });
 
-    await test.step('5. the guest sees no list names, no lists summary and no line history', async () => {
-      await expect(guest.locator('lib-basket-line-row .from')).toHaveCount(0);
+    await test.step('5. the guest sees no list names, no lists behind a row and no line history', async () => {
+      await expect(guest.locator('lib-basket-row .from')).toHaveCount(0);
       await expect(
-        guest.locator('lib-basket-line-row .content').first()
+        guest.locator('lib-basket-row .content').first()
       ).toBeVisible();
 
       const dialog = await openSettleSheet(guest, 'Eggs');
-      await expect(dialog.locator('lib-line-lists-summary')).toHaveCount(0);
+      await expect(dialog.locator('lib-row-entries')).toHaveCount(0);
       await expect(
         dialog.getByRole('button', { name: 'Show line history' })
       ).toHaveCount(0);
       await expect(
-        dialog.getByRole('button', { name: /^Got (it|all)/ })
+        dialog.getByRole('button', { name: 'They had none', exact: true })
       ).toBeVisible();
       await guest.keyboard.press('Escape');
       await expectBasketUrl(guest, basketId);
