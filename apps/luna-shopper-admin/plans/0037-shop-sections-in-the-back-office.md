@@ -1,7 +1,8 @@
 # 0037 Shop sections in the back office
 
 > Back office half of backend `0167`. Needs `0036` (the tree has a screen and the item form
-> has a leaf picker). Prerequisite reading: backend `0167` in full (the three writes, the
+> has a leaf picker). Followed by `0038` (a map is reviewed), which reads the panels this
+> plan adds. Prerequisite reading: backend `0167` in full (the three writes, the
 > rule and the routes), admin `0034` (places and chains in the back office, where the chain
 > and location screens live), admin `0005` (the "Aisle position" free text on location
 > items), and the `admin-app` notes on nested members under a parent resource.
@@ -50,11 +51,14 @@ preview.
    ticks the sections the shop has and orders them (up and down controls, or a position
    number, as the review decides), then saves the ordered list. "Use the chain's default"
    sends the empty list. A section of another chain cannot be added, because the picker
-   lists the shop's chain only.
+   lists the shop's chain only. When the list was written by an accepted shop map (backend
+   `0168`), the panel says so with the map's version and warns that the next acceptance
+   overwrites a hand edit.
 3. **Pins on a product.** The item screen gets a "Where it is, per chain" panel: one row
    per chain the product is sold at (`supermarket_items`), showing the pinned sections or
    "By its categories" when none, and an edit that picks sections of that chain. Saving an
-   empty pick removes the pins.
+   empty pick removes the pins. Under a chain's row, the per shop pins an accepted map
+   wrote (backend `0168`) are listed read only, each with its shop and the map's version.
 4. **The preview.** The same panel takes a shop (a location picker limited to the chain)
    and shows the sections the rule of backend `0167` section 3 answers for this product
    there, with a sentence naming the branch that answered: pinned, covered, or "shown under

@@ -2,6 +2,8 @@
 
 > Needs `0166` first: a section covers categories, and a category has to be a row. Frontend
 > half: velista `0120` (the aisles of the shop you are in). Back office half: admin `0037`.
+> Followed by `0168` (a shop has a map), which writes a shop's section order and its per
+> shop pins from an accepted map, and adds step 1.5 to the rule of section 3.
 > Reads beside it: `0163` (the basket read at a shop, which is where a product's sections are
 > served) and `0141` (the walk order learned from sessions, which this plan does not replace).
 >
@@ -248,11 +250,14 @@ shared basket at a shop needs it (velista `0120`).
 
 ## 6. Open questions
 
-- **The pin is per chain, not per shop.** The heavy part of the configuration is naming
-  sections and mapping them, and that is done once per chain. A chain shelves a product the
-  same way in most of its shops, so a chain pin covers most cases with one row. A shop that
-  differs needs a per location pin, which is one more table with the same shape and a step
-  1.5 in the rule. Build it when a shop asks for it.
+- **The pin is per chain here, and per shop in `0168`.** The heavy part of the
+  configuration is naming sections and mapping them, and that is done once per chain. A
+  chain shelves a product the same way in most of its shops, so a chain pin covers most
+  cases with one row. The per shop pin exists too, as `location_item_sections` in `0168`,
+  and it is written only by an accepted shop map, never by hand: a product anchor on the
+  map is somebody standing in that shop saying where the product is. It is step 1.5 of the
+  rule, between present sections and chain pins. This plan builds neither the table nor
+  the step.
 - **`positionInStore` overlaps with a pin.** It is per location free text ("aisle 4, bottom
   shelf") and it stays useful for what a section cannot say. The back office keeps showing
   it. Whether it is renamed to "shelf note" or dropped is admin `0037`'s question.

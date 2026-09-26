@@ -6,7 +6,8 @@
 > sheet's wording with a shop chosen), and stops for the user's review before any code.
 >
 > Needs `0118` (categories are data), `0102` (buying at one shop) and backend `0167` (shop
-> sections, and `sectionIds` on the basket read at a shop). Prerequisite reading: `0077`
+> sections, and `sectionIds` on the basket read at a shop). Followed by `0121`, which draws
+> the shop's map beside this grouping. Prerequisite reading: `0077`
 > (grouping by category, whose pipeline this plan extends), `0075` section 3 (the pipeline
 > and `BasketViewSection`), `0091` section 7 (the shop is where the person is standing),
 > backend `0167` section 3 (the rule that decides a product's sections) and `0141` (the
