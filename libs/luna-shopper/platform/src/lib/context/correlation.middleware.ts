@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolveLocale } from '../localization/locale';
 import { setCorrelationIdOnActiveSpan } from '../telemetry/span-attributes';
+import { clientAddress } from './client-address';
 import { CORRELATION_ID_HEADER } from './correlation.constants';
 import { runWithRequestContext } from './request-context';
 
@@ -21,8 +22,9 @@ function headerValue(req: IncomingMessage, name: string): string | undefined {
  * the auth guard and the zone resolution, once they are known.
  *
  * A trusted client may supply the correlation id; otherwise one is minted. The IP
- * is taken from the proxy `X-Forwarded-For`, trusting the reverse proxy in front
- * of the cluster.
+ * is the entry the reverse proxy in front of the cluster appended to
+ * `X-Forwarded-For`, which is the last one: the first is whatever the client
+ * sent (see `clientAddress`).
  *
  * This is a plain Express style middleware applied with `app.use()` before the
  * router, so the AsyncLocalStorage scope wraps the whole request (guards,
@@ -37,10 +39,10 @@ export function correlationMiddleware(
   const supplied = headerValue(req, CORRELATION_ID_HEADER);
   const correlationId = supplied && supplied.trim() ? supplied : randomUUID();
 
-  const forwardedFor = headerValue(req, 'x-forwarded-for');
-  const ip =
-    forwardedFor?.split(',')[0]?.trim() ||
-    (req.socket?.remoteAddress ?? undefined);
+  const ip = clientAddress(
+    headerValue(req, 'x-forwarded-for'),
+    req.socket?.remoteAddress ?? undefined
+  );
 
   const locale = resolveLocale({
     acceptLanguage: headerValue(req, 'accept-language'),

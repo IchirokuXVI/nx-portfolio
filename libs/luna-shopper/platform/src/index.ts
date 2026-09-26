@@ -12,6 +12,7 @@ export * from './lib/logging/redaction';
 export * from './lib/logging/withheld-body';
 
 // Request context / correlation
+export * from './lib/context/client-address';
 export * from './lib/context/correlation.constants';
 export * from './lib/context/correlation.middleware';
 export * from './lib/context/request-context';
