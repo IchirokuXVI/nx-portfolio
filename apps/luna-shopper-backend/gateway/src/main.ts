@@ -11,6 +11,7 @@ import {
   bootstrapPlatform,
   MIN_CLIENT_VERSION_HEADER,
   setupSwagger,
+  trustReverseProxy,
 } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app/app.module';
@@ -44,6 +45,11 @@ async function bootstrap() {
   });
 
   const config = app.get(ConfigService).getOrThrow<GatewayConfig>('gateway');
+
+  // `req.ip` is Envoy's address for every caller unless the proxy is trusted,
+  // and the rate limiter keys on `req.ip`: without this line the whole of
+  // velista shares one bucket.
+  trustReverseProxy(app);
 
   if (config.corsOrigins.length > 0) {
     app.enableCors({

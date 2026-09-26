@@ -1,4 +1,4 @@
-<main class="page">
+<main #column class="page">
   <!--
     The destination header every screen without an app bar draws, written the same
     way the history's is down to the glyph's class name: the two are the same bar,
@@ -120,20 +120,6 @@
   </header>
 
   <!--
-    One line saying what this basket is, drawn only where the kind has something
-    to explain (velista `0091`, section 3). Under the bar rather than inside it:
-    the bar is a row of controls around a one line heading, and a sentence in it
-    would push the whole screen down on a 390 wide phone.
-
-    A paragraph and not part of the heading. A reader moving by heading wants
-    the name of the screen, and "Every list you can add to, in one place" is the
-    answer to a question they have not asked yet.
-  -->
-  @if (hint(); as hintKey) {
-    <p class="hint">{{ hintKey | rokuT }}</p>
-  }
-
-  <!--
     Which of the two screens this is. A live basket and a refetching one look
     identical while nobody else is shopping and completely different the moment
     somebody is, so the difference is said rather than left to be discovered
@@ -148,7 +134,7 @@
     How long this reader has, said once on arrival and again half an hour
     before the end (velista 0094, section 5).
 
-    **Above the lines and under the bar**, where the hint is, rather than in the
+    **Above the lines and under the bar**, rather than in the
     footer: somebody who came in on a link never saw the screen that would have
     told them, so this is the first thing about their own access they are told,
     and it has to be where they are already reading.
@@ -272,7 +258,94 @@
     }
 
     @default {
-      @if (rows().length === 0) {
+      @if (typing()) {
+        <!--
+          What the composer's field found (velista 0117, rule F1), in place of the
+          basket's body: the tools row, the chips, the banners and the sections. The
+          rows that match first, drawn by the same row the basket uses with its
+          controls, then from the third character the catalog's cards.
+
+          Every control in here cancels mousedown, once, on the region, so nothing
+          pressed takes the keyboard down (rule T2 of velista 0101). The heading is
+          a polite live region, so the count or the nothing sentence is heard as it
+          changes.
+        -->
+        <section
+          (mousedown)="holdFocus($event)"
+          [id]="resultsId"
+          aria-labelledby="basket-results-heading"
+          class="results"
+        >
+          <h2
+            [class.is-none]="resultRows().length === 0"
+            aria-live="polite"
+            class="results-heading"
+            id="basket-results-heading"
+          >
+            @if (resultRows().length > 0) {
+              {{ 'basket.add.resultsOnLists' | rokuT }}
+              <span class="results-count">&middot; {{ shownCount() }}</span>
+            } @else {
+              {{ 'basket.add.resultsNone' | rokuT: { query: typed() } }}
+            }
+          </h2>
+
+          @if (resultRows().length > 0) {
+            <ul class="lines">
+              @for (row of resultRows(); track row.key) {
+                <li>
+                  <lib-basket-row
+                    (left)="setRowLeft(row, $event)"
+                    (open)="openRow(row.row)"
+                    (revert)="revertRow(row.row)"
+                    (settle)="settleRow(row.row)"
+                    (swap)="openSwap(row.row)"
+                    [atShop]="pricedAtShop()"
+                    [busy]="isBusy(row.row)"
+                    [canSwap]="canSwap(row.row)"
+                    [chosenId]="insteadOf(row.row)"
+                    [entry]="row.entry"
+                    [finished]="finished()"
+                    [groupCheaper]="groupCheaper(row.row)"
+                    [highlight]="highlight()"
+                    [lists]="lists()"
+                    [meId]="meId()"
+                    [notice]="noticeFor(row.row)"
+                    [ownName]="ownName()"
+                    [people]="participantsById()"
+                    [priceMark]="row.priceMark"
+                    [products]="products()"
+                    [row]="row.row"
+                    [shelf]="row.shelf"
+                    [usual]="row.usual"
+                  />
+                </li>
+              }
+            </ul>
+          }
+
+          @if (catalogShown()) {
+            <div class="catalog">
+              <h2 class="results-heading">
+                {{ 'list.add.resultsCatalog' | rokuT }}
+              </h2>
+              <lib-suggestion-list
+                (chose)="chooseCard($event)"
+                (holdingChanged)="changeHolding($event)"
+                [emptyFor]="catalogEmptyFor()"
+                [freeText]="true"
+                [holdingsOf]="holdingsOf()"
+                [loading]="suggesting()"
+                [productLink]="productLink()"
+                [query]="suggestedFor()"
+                [suggestions]="suggestions()"
+                panelId="basket-results-catalog"
+                placement="page"
+              />
+            </div>
+          }
+        </section>
+      } @else if (rows().length === 0) {
         <!--
           Two words per kind (velista `0091`, section 3). "Nothing on this list"
           is about a basket somebody composed and nobody filled; the basket that
@@ -286,8 +359,8 @@
       } @else {
         <!--
           **The tools row** (plan 0074, section 3): the count at the leading edge
-          and the controls at the trailing one. `0075` puts the filter button
-          beside the search.
+          and the filter button (`0075`) at the trailing one. The search it held
+          is the composer's field since velista 0117.
 
           Not in the header, which already holds back, the title, the faces, share
           and finish. A sixth and seventh control there shrink the title to nothing
@@ -299,26 +372,19 @@
 
           **The row and the chips stay on screen** (velista 0079, section 2). One
           sticky bar holds both, so a shopper halfway down a long basket can still
-          search, filter, and see what is on without scrolling back to the top.
-          The empty state and the no match block stay below it, in the scroll.
+          filter, and see what is on, without scrolling back to the top. The empty
+          states stay below it, in the scroll.
         -->
         <lib-list-tools
-          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
-          (queryChange)="search($event)"
           [activeCount]="activeCount()"
-          [open]="searchOpen()"
-          [query]="searchQuery()"
-          [shown]="shownCount()"
-          [total]="countableRows().length"
-          fieldId="basket-search"
         >
           <!--
             "got" means bought. A line closed because the shop had none is counted
             separately rather than folded in, because folding it in would claim a
             purchase that never happened.
 
-            It counts the **whole** basket and never what a search left standing:
+            It counts the **whole** basket and never what a filter left standing:
             this is about how much shopping is left, and hiding rows does not buy
             anything.
           -->
@@ -365,7 +431,7 @@
 
           **Under the tools bar and above the prompt**, inside the scroll and
           outside the sticky bar: the bar's height is velista 0079's and a
-          banner inside it would push the search and the chips down a phone
+          banner inside it would push the row and the chips down a phone
           every time a line moved on somebody else's list.
 
           The count is the server's, per viewer. It goes when a read says zero,
@@ -403,21 +469,10 @@
         }
 
         <!--
-          Nothing matched (section 4.6). The basket's own empty state with
-          different words, and **the composer stays**: the thing somebody searched
-          for and did not find is very often the next line. Submitting it clears
-          the query, so the new row is seen landing rather than hidden by the
-          search that failed to find it.
-        -->
-        <!--
-          Nothing to draw, and the two reasons say different things (plan 0074
-          section 4.6, plan 0075 section 6). A search that found nothing quotes what
-          was typed, because the words are the thing to change. A filter that shows
-          nothing cannot quote anything, and the chips above already name what is on,
-          so it says so and points at them.
-
-          The composer stays in both cases: the thing somebody looked for and did not
-          find is very often the next line.
+          Nothing to draw (plan 0075, section 6). A filter that shows nothing cannot
+          quote anything, and the chips above already name what is on, so it says so
+          and points at them. A search that found nothing says so in the results
+          instead (velista 0117).
         -->
         @if (visibleCount() === 0) {
           <div [class.is-usual]="usualHidesAll()" class="empty">
@@ -443,11 +498,6 @@
               >
                 {{ 'basket.view.usual.showAll' | rokuT }}
               </button>
-            } @else if (searching()) {
-              <p class="empty-title">
-                {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
-              </p>
-              <p class="empty-body">{{ 'basket.search.noneHint' | rokuT }}</p>
             } @else {
               <p class="empty-title">{{ 'basket.view.none' | rokuT }}</p>
               <p class="empty-body">{{ 'basket.view.noneHint' | rokuT }}</p>
@@ -574,92 +624,42 @@
   that a guest is never pushed to register forbids explaining why.
 -->
 @if (state() === 'ready' && canAdd()) {
-  <div #dock="cdkOverlayOrigin" cdkOverlayOrigin class="composer-dock">
+  <div class="composer-dock">
     <!--
-      Where the next line goes, above the field it goes from.
-
-      A button when there is something to pick between and **text when there is
-      not**: one list chooses itself, and a button opening a sheet with one row
-      on it would be asking a question with one answer (`0030`).
+      The field always takes words (velista 0116). Where the line goes is asked
+      when it is added: the plus, or a card's add button, opens the picker below,
+      and the composer keeps the words until a list is picked.
     -->
-    @if (canRetarget()) {
-      <!--
-        Marked as the next step while nothing is chosen (velista 0110): the field
-        below it is locked until a list is, so this is the one thing to press.
-      -->
-      <button
-        (click)="openTarget()"
-        [class.is-next]="target() === null"
-        [disabled]="adding()"
-        class="target"
-        type="button"
-      >
-        @if (target(); as list) {
-          {{ 'basket.add.to' | rokuT: { list: list.name } }}
-        } @else {
-          {{ 'basket.add.choose' | rokuT }}
-        }
-      </button>
-    } @else if (target(); as list) {
-      <p class="target is-static">
-        {{ 'basket.add.to' | rokuT: { list: list.name } }}
-      </p>
-    }
-
     <!--
-      Locked while no target is chosen (velista 0110). Plans 0091 and 0092 kept
-      the field usable so somebody could type first and choose second, and the
-      words then went nowhere: a suggestion chosen, or the plus pressed, with no
-      list to put the line on did nothing at all. So nothing can be typed until a
-      list is chosen, and a tap on the field says why. The popover it opens is
-      only that sentence: the chip that chooses a list sits right under it
-      (velista 0113).
-
-      The reason is a sentence in the page, always in the document while the
-      field is locked, because the field names it in `aria-describedby` and a
-      description has to exist before it is read.
+      Escape closes the picker while it is open, and leaves the words; otherwise it
+      empties the field (velista 0117, rule F2).
     -->
-    @if (target() === null) {
-      <span class="visually-hidden" id="basket-add-needs-list">{{
-        'basket.add.needsList' | rokuT
-      }}</span>
-    }
     <lib-line-composer
-      (holdingChanged)="changeHolding($event)"
-      (lockedPressed)="openNeedsList()"
+      (fieldFocused)="onFieldFocused($event)"
       (queryChanged)="onComposerQuery($event)"
-      (submitted)="add($event)"
+      (submitted)="askWhere($event)"
       [busy]="adding()"
-      [holdingsOf]="holdingsOf()"
-      [lockReasonId]="target() === null ? 'basket-add-needs-list' : null"
-      [productLink]="productLink()"
-      [suggestedFor]="suggestedFor()"
-      [suggesting]="suggesting()"
-      [suggestions]="suggestions()"
+      [escapeClears]="pickerAnchor() === null"
+      [holdOnSend]="true"
+      [resultsId]="resultsId"
       [voice]="false"
     />
   </div>
 
   <!--
-    Held against the whole dock rather than the field, so it opens above the chip
-    and never covers the control it points to. It holds the sentence and nothing
-    else (velista 0113): a button in it would have opened right above the chip
-    that does the same thing.
+    Which list is it for? Held against the button that was pressed and never inside
+    the suggestion panel, which clips and scrolls. A pick is the add.
   -->
-  <lib-anchored-popover
-    (closed)="closeNeedsList($event)"
-    [labelledBy]="'basket-add-needs-list-text'"
-    [open]="needsListOpen() && target() === null"
-    [origin]="dock"
-  >
-    <p class="needs-list-text" id="basket-add-needs-list-text">
-      {{ 'basket.add.needsList' | rokuT }}
-    </p>
-  </lib-anchored-popover>
+  <lib-list-picker
+    (chosen)="pickList($event)"
+    (dismissed)="dismissPicker()"
+    [anchor]="pickerAnchor()"
+    [rows]="pickerRows()"
+  />
 }
 
 <!--
   The sheets, as children of the page they cover (rule E1, plan 0008): the page
   keeps its scroll underneath and Android's back button dismisses them.
 -->
-<router-outlet (deactivate)="onSheetDeactivated($event)" />
+<router-outlet />

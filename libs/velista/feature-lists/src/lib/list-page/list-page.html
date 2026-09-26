@@ -102,49 +102,104 @@
       <lib-list-notice messageKey="list.buying.notMine" />
     }
 
-    @if (current.empty) {
+    @if (typing()) {
+      <!--
+        What the composer's field found (velista 0117, rule F1), in place of the
+        list and its tools row: the lines that match first, drawn by the same rows
+        the list uses, then from the third character the catalog's cards.
+
+        Every control in here cancels mousedown, once, on the region, so nothing
+        pressed takes the keyboard down (rule T2 of velista 0101). The heading is a
+        polite live region, so the count or the nothing sentence is heard as it
+        changes.
+      -->
+      <section
+        (mousedown)="holdFocus($event)"
+        [id]="resultsId"
+        aria-labelledby="list-results-heading"
+        class="results"
+      >
+        <h2
+          [class.is-none]="drawnLines().length === 0"
+          #resultsHeading
+          aria-live="polite"
+          class="results-heading"
+          id="list-results-heading"
+        >
+          @if (drawnLines().length > 0) {
+            {{ 'list.add.resultsOnList' | rokuT }}
+            <span class="results-count"
+              >&middot; {{ drawnLines().length }}</span
+            >
+          } @else {
+            {{ 'list.add.resultsNone' | rokuT: { query: typed() } }}
+          }
+        </h2>
+
+        @if (drawnLines().length > 0) {
+          <lib-line-list
+            (act)="act($event)"
+            (dismiss)="dismissNote($event)"
+            (opened)="openLine($event)"
+            (quantityChanged)="changeQuantity($event)"
+            (retry)="retry($event)"
+            [announcement]="announcement()"
+            [highlight]="highlight()"
+            [lines]="drawnLines()"
+            [markedId]="markedLine()"
+          />
+        }
+
+        @if (catalogShown()) {
+          <div class="catalog">
+            <h2 class="results-heading">
+              {{ 'list.add.resultsCatalog' | rokuT }}
+            </h2>
+            <lib-suggestion-list
+              (chose)="chooseCard($event)"
+              (holdingChanged)="changeHolding($event)"
+              [emptyFor]="catalogEmptyFor()"
+              [freeText]="true"
+              [holdingsOf]="holdingsOf()"
+              [loading]="suggesting()"
+              [productLink]="productLink()"
+              [query]="suggestedFor()"
+              [suggestions]="suggestions()"
+              panelId="list-results-catalog"
+              placement="page"
+            />
+          </div>
+        }
+      </section>
+    } @else if (current.empty) {
       <div class="state">
         <p class="state-title">{{ 'list.empty.title' | rokuT }}</p>
         <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
       </div>
     } @else {
       <!--
-        The search and the filter (velista 0082, section 2), the basket's row with no
+        The count and the filter (velista 0082, section 2), the basket's row with no
         chip row: the filter button's badge says that something is on. Sticky at the
         top of the scroll, and absent in reorder mode, where the order is the thing
-        being edited.
+        being edited. No search of its own: the composer's field is the search
+        (velista 0117).
       -->
       @if (!reordering()) {
         <lib-list-tools
-          (openChange)="setSearchOpen($event)"
           (openFilter)="openFilter()"
-          (queryChange)="search($event)"
           [activeCount]="activeCount()"
-          [open]="searchOpen()"
-          [query]="searchQuery()"
-          [shown]="shownCount()"
-          [total]="current.lines.length"
-          fieldId="list-search"
         />
       }
 
       @let shown = groups();
       @if (nothingShown()) {
         <!--
-          Nothing left to draw (section 5). A search quotes what was typed, because
-          the words are the thing to change, and the composer below stays: the thing
-          somebody looked for is very often the next line. Otherwise the view
-          narrowed it away, and Reset puts the order and the category back.
+          Nothing left to draw (section 5): the view narrowed it away, and Reset puts
+          the order and the category back. A search that found nothing is said in the
+          results instead (velista 0117).
         -->
         <div class="state">
-          @if (searching()) {
-            <p class="state-title">
-              {{ 'basket.search.none' | rokuT: { query: searchQuery() } }}
-            </p>
-            <p class="state-body">{{ 'basket.search.noneHint' | rokuT }}</p>
-          } @else {
-            <p class="state-title">{{ 'list.view.none' | rokuT }}</p>
-          }
+          <p class="state-title">{{ 'list.view.none' | rokuT }}</p>
           @if (activeCount() > 0) {
             <button (click)="resetView()" class="state-action" type="button">
               {{ 'list.view.reset' | rokuT }}
@@ -367,18 +422,18 @@
         </div>
       }
 
+      <!--
+        The one field: it adds, and since velista 0117 it is also the list's search.
+        What it finds is drawn in the page, in the results above.
+      -->
       <lib-line-composer
-        (holdingChanged)="changeHolding($event)"
+        (fieldFocused)="onFieldFocused($event)"
         (queryChanged)="onComposerQuery($event)"
         (recordingFailed)="onRecordingFailed()"
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
-        [holdingsOf]="holdingsOf()"
-        [productLink]="productLink()"
-        [suggestedFor]="suggestedFor()"
-        [suggesting]="suggesting()"
-        [suggestions]="suggestions()"
+        [resultsId]="resultsId"
         [takeFocus]="page.empty"
         libTourAnchor="list-composer"
       />

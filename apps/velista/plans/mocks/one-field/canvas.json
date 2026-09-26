@@ -1,0 +1,56 @@
+{
+  "title": "Velista: one field finds and adds",
+  "lede": "The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Zone list, idle" },
+    { "file": "Typing.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "Zone list, typing" },
+    { "file": "NoLine.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "Zone list, nothing on it" },
+    { "file": "Basket.dc.html", "x": 0, "y": 964, "w": 390, "h": 844, "title": "Basket, idle" },
+    { "file": "BasketTyping.dc.html", "x": 470, "y": 964, "w": 390, "h": 844, "title": "Basket, typing" },
+    { "file": "BasketPick.dc.html", "x": 940, "y": 964, "w": 390, "h": 844, "title": "Basket, which list" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -460,
+      "w": 470,
+      "text": "THE BRIEF. One field at the bottom finds and adds. Typing filters the list from the first letter and asks the catalog from the third. The suggestion panel is gone: results draw in the list container, lines first, then products under a clear rule. The search buttons in both tools rows go. The nav hides while the field has focus. On the basket the plus asks which list, every time, so the field is never locked and a search needs no list.\nDrawn on Day, which is what the app shows on slot 0 today, on the chrome the app really has: the app bar, the page head, the card rows."
+    },
+    {
+      "id": "f1",
+      "x": 530,
+      "y": -460,
+      "w": 470,
+      "text": "RULE F1: A FOUND LINE IS THE ROW ITSELF. Not a copy inside a card: the same row, with its quantity chip and its tap, so raising Queso en lonchas from 1 to 2 happens where the line already is. Matching is by words, folded for case and accents, over the line's name, its products' names and its category labels, exactly as the search does today (plan 0082). The match is marked.\nProduct cards are the 0101 card, unchanged, and keep their 'already in your list' block for now. That block now repeats what the rows above already say, and it is the first thing to take out in a later update."
+    },
+    {
+      "id": "f2",
+      "x": 1060,
+      "y": -460,
+      "w": 470,
+      "text": "RULE F2: BACK CLEARS THE FIELD. The open search is one history entry, as plan 0109 already does for the search row, so back, Cancel and Escape all do the same thing: clear the words, restore the list and the nav.\nEach add clears the field too, so the list comes back with the new line in it and the field keeps focus for the next word. Adding in runs (0012 section 4.8) survives.\nEvery control in the results cancels mousedown, the 0101 rule, so the keyboard never drops under a thumb that is still travelling."
+    },
+    {
+      "id": "f3",
+      "x": 1590,
+      "y": -460,
+      "w": 470,
+      "text": "RULE F3: THE NAV HIDES ON FOCUS, NOT ON THE FIRST LETTER. The keyboard is already up at focus, and the bar gone gives the results 88px more, a full card. NavChrome already hides the bar for a sheet; this is one more reason in the same place.\nThe tools row hides while results show, because its filter and sort apply to the list, not to a search. The page scrolls so the first found line sits under the app bar; the page head is above the fold while typing and comes back with the list."
+    },
+    {
+      "id": "f4",
+      "x": 2120,
+      "y": -460,
+      "w": 470,
+      "text": "RULE F4: ON THE BASKET, THE PLUS ASKS WHICH LIST. No target chip, no lock, no remembered choice. Pressing plus, or the add button on a card, opens a picker anchored to that button with every list the reader can add to, and the pick is the add. It opens every time: adding from the basket is rare, and one honest tap beats a chip that remembers last week's list.\nThe keyboard stays up, so the picker cancels mousedown like everything else. The question already exists as a sheet, 'Which list is it for?' (basket.add.sheetTitle); the picker is the same choice without leaving the field."
+    },
+    {
+      "id": "gone",
+      "x": 2650,
+      "y": -460,
+      "w": 470,
+      "text": "WHAT GOES. The sentence under the basket title, 'Every list you can add to, in one place': it answers nothing and costs a line. The search glyph in both tools rows: the field is the search now. The 'Choose a list' band, the dashed locked field and its popover (plans 0110 and 0113). The suggestion panel and its keyboard arithmetic (0101): results have the whole page. The 'Line or product' search row (0109) and its Cancel: the field's Cancel is the back button."
+    }
+  ]
+}

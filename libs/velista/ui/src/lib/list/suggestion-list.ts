@@ -5,11 +5,9 @@ import {
 } from '@angular/cdk/overlay';
 import {
   afterNextRender,
-  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -17,7 +15,6 @@ import {
   input,
   output,
   signal,
-  viewChild,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import {
@@ -74,6 +71,12 @@ export interface SuggestionHoldingChange {
   readonly to: number;
 }
 
+/** A suggestion chosen, and the button it was chosen with. */
+export interface SuggestionChoice {
+  readonly suggestion: CatalogSuggestion;
+  readonly anchor: HTMLElement;
+}
+
 const NO_HOLDINGS: readonly SuggestionHolding[] = [];
 
 /**
@@ -121,13 +124,12 @@ const POPOVER_POSITIONS: ConnectedPosition[] = [
  *
  * - **The ranking is the server's** and is never re-sorted. A group ranks above an item
  *   for a bare word, and that ranking was made with prices, scopes and synonyms this
- *   component has never seen. Which end of it sits nearest the field is a different
- *   question, and it is {@link placement} that answers it. See {@link rows}.
+ *   component has never seen. Both placements draw it straight down, best first.
  * - **A finished search that found nothing says so, in one row** (velista `0108`,
  *   target 1). It used to draw nothing at all, on the grounds that "no matches" reads
  *   as the shopping list being wrong; on a phone the empty answer read as a search that
  *   never ran. The row names the words and, where the composer can still add them,
- *   says that. It is the composer's placement only, it is drawn only for the words
+ *   says that. It is the cards' placement only, it is drawn only for the words
  *   still in the field ({@link emptyFor}), and two characters or a search still
  *   running draw nothing, as before.
  * - **The skeleton waits {@link SKELETON_DELAY_MS}** before it is drawn, so a fast
@@ -138,22 +140,22 @@ const POPOVER_POSITIONS: ConnectedPosition[] = [
  *
  * ## Two drawings, by placement
  *
- * The composer's panel (`'above'`) draws **product cards** since velista `0101`: a
+ * A page's results (`'page'`) draw **product cards** since velista `0101`: a
  * photograph's place, the name, the pack, the price, the price per unit when it
  * differs, the chains that sell it with the cheapest named, a way through to the
  * product, the lines already holding it, and one button down the right edge that is
  * the only thing on the card that adds it. The mock is `apps/velista/plans/mocks/
- * typeahead/`, and the canvas is the specification.
+ * typeahead/`, and the canvas is the specification. They were the composer's panel
+ * above its field until velista `0117` made that field the page's search, and the
+ * page draws them in its results now.
  *
- * The line page (`'below'`) keeps its one line rows: `0101` changes the two composers
- * and nowhere else.
+ * The line page (`'below'`) keeps its one line rows.
  *
  * ## No free text row
  *
- * The composer used to end the panel with "add it as written". `0101` removed it: the
- * composer's own button already adds the typed words, and the row cost a card's height
- * in a panel that has to fit above the keyboard. A line is still free text first; the
- * button beside the field is how.
+ * The composer used to end its panel with "add it as written". `0101` removed it: the
+ * composer's own button already adds the typed words. A line is still free text
+ * first; the button beside the field is how.
  */
 @Component({
   selector: 'lib-suggestion-list',
@@ -184,16 +186,13 @@ export class SuggestionList {
    * a suggestion looks like and nothing about where it came from, the debounce, or the
    * scope. It is also what keeps the ordering honest, since a component that fetched
    * would eventually be tempted to re-rank.
-   *
-   * Read through {@link rows} rather than drawn directly, because which end of the
-   * ranking sits nearest the field depends on which side of it the panel opens.
    */
   readonly suggestions = input<readonly CatalogSuggestion[]>([]);
 
   /**
-   * The catalog is being asked and nothing has come back yet. The composer's
-   * panel draws three skeleton cards shaped like the cards they become, so the
-   * panel does not resize under the thumb when the answer lands (`Edge`).
+   * The catalog is being asked and nothing has come back yet. The cards'
+   * placement draws three skeleton cards shaped like the cards they become, so the
+   * results do not jump under the thumb when the answer lands (`Edge`).
    */
   readonly loading = input(false);
 
@@ -238,52 +237,25 @@ export class SuggestionList {
   readonly label = input('list.add.suggestions');
 
   /**
-   * Where this list sits relative to the field it belongs to.
+   * Where this list is drawn.
    *
-   * `'below'`, the default, is the line page's: inline under a search field with
-   * nothing in the way, growing downward on the page's own ground.
+   * `'below'`, the default, is the line page's: one line rows inline under a search
+   * field with nothing in the way, growing downward on the page's own ground.
    *
-   * `'above'` is the composer's: pinned to the bottom of the screen with the
-   * keyboard under it, so the list grows **upward over the lines**. Two things
-   * follow from that and neither is a style anybody may tune away:
+   * `'page'` is the product cards in a page's own results (velista `0117`), under the
+   * lines of the list that matched. The page scrolls them with everything else, so
+   * there is no cap and no surface of their own. They were the composer's panel above
+   * its field until the composer's field became the page's search.
    *
-   * - **It is opaque.** It covers rows of somebody's shopping list, and a
-   *   transparent panel over them is two lists of words in the same place. It was
-   *   exactly that until this input existed.
-   * - **It opens at its last row.** The card nearest the field is the one under
-   *   the thumb, and it is the server's best answer. A panel that opened at the top
-   *   of a scrolling list hid it behind cards the catalog ranked lower.
-   * - **It is read bottom to top**, so the ranking is drawn that way round. See
-   *   {@link rows}.
+   * Both draw the server's ranking straight down, best first.
    */
-  readonly placement = input<'below' | 'above'>('below');
+  readonly placement = input<'below' | 'page'>('below');
 
   /**
-   * The suggestions in the order they are **drawn** in, which is not always the order
-   * they arrived in.
-   *
-   * `'below'` draws the ranking straight down. The field is above the list, reading
-   * starts at the top, and the first row met is the best answer.
-   *
-   * `'above'` is read the other way round, and this is the whole of why it exists. The
-   * panel is pinned to the bottom of the screen with the field and the thumb under it,
-   * and it opens at its last row, so the row nearest the field is the one everybody
-   * sees first and the list climbs away from there. Drawn top to bottom, that put the
-   * server's best answer furthest from the thumb, at the far end of a list that
-   * usually needs scrolling to reach. Reversed, the panel reads outward from the
-   * field: the server's first suggestion directly above it, and the rest of the
-   * ranking climbing away in order.
-   *
-   * The ranking is still the server's and is still never re-sorted. Reversing it is
-   * not a second opinion about which answer is best; it is where the bottom of the
-   * panel is, and a panel that opens at its bottom has to be filled from there.
+   * A suggestion was chosen, with the button that chose it. The basket holds its
+   * list picker against that button (velista `0116`), and the list page ignores it.
    */
-  readonly rows = computed<readonly CatalogSuggestion[]>(() => {
-    const offered = this.suggestions();
-    return this.placement() === 'above' ? [...offered].reverse() : offered;
-  });
-
-  readonly chose = output<CatalogSuggestion>();
+  readonly chose = output<SuggestionChoice>();
 
   /** A line holding the product was stepped up or down from a card. */
   readonly holdingChanged = output<SuggestionHoldingChange>();
@@ -298,19 +270,18 @@ export class SuggestionList {
    */
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  /** The scrolling panel, absent while there is nothing to offer. */
-  private readonly _panel = viewChild<ElementRef<HTMLElement>>('panel');
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   private readonly _translator = inject(RokuTranslatorService);
 
   private readonly _injector = inject(Injector);
 
   /**
-   * What each card says, in the order it is drawn. The composer's placement only;
-   * the line page keeps its one line rows.
+   * What each card says, in the order it is drawn. The composer's and a page's
+   * results; the line page keeps its one line rows.
    */
   protected readonly cards = computed<readonly SuggestionCardView[]>(() => {
-    if (this.placement() !== 'above') {
+    if (this.placement() === 'below') {
       return [];
     }
     const locale = this._locale();
@@ -318,7 +289,7 @@ export class SuggestionList {
     this._translator.loaded();
     const now = new Date();
     const query = this.query();
-    return this.rows().map((suggestion) =>
+    return this.suggestions().map((suggestion) =>
       suggestionCardView(suggestion, {
         locale,
         now,
@@ -349,7 +320,7 @@ export class SuggestionList {
 
   protected readonly popoverPositions = POPOVER_POSITIONS;
 
-  /** The one card whose chain row is open, by key. One at a time: an opened card fills the panel. */
+  /** The one card whose chain row is open, by key. One at a time: an opened card is tall. */
   protected readonly openChains = signal<string | null>(null);
 
   /** The one group whose products are revealed, by key. */
@@ -357,20 +328,6 @@ export class SuggestionList {
 
   /** The one group whose popover is open, by key. */
   protected readonly infoFor = signal<string | null>(null);
-
-  /**
-   * The visual viewport's height, in pixels, or null before it is known.
-   *
-   * Read from `window.visualViewport` and not from `100svh`, because an iOS
-   * keyboard does not shorten the layout viewport, and the keyboard is exactly
-   * what this panel has to fit above (rule 3 of `0101`).
-   */
-  private readonly _viewport = signal<number | null>(null);
-
-  protected readonly viewportHeight = computed(() => {
-    const height = this._viewport();
-    return height === null ? null : `${Math.round(height)}px`;
-  });
 
   constructor() {
     effect((onCleanup) => {
@@ -381,62 +338,26 @@ export class SuggestionList {
       const timer = setTimeout(() => this._slow.set(true), SKELETON_DELAY_MS);
       onCleanup(() => clearTimeout(timer));
     });
+  }
 
-    const host = inject<ElementRef<HTMLElement>>(ElementRef);
-    const destroyRef = inject(DestroyRef);
-    afterNextRender(() => {
-      const viewport =
-        host.nativeElement.ownerDocument.defaultView?.visualViewport;
-      if (viewport === null || viewport === undefined) {
-        return;
-      }
-      const read = (): void => this._viewport.set(viewport.height);
-      read();
-      viewport.addEventListener('resize', read);
-      destroyRef.onDestroy(() => viewport.removeEventListener('resize', read));
-    });
-
-    // Opened at its last row, for `'above'` only, and re-opened there on every new
-    // set of results: a panel that grows upward is read from the bottom, and the card
-    // at the bottom is the server's best answer.
-    //
-    // `afterRenderEffect` because the rows have to be in the DOM before the panel can
-    // be measured, and because it runs in the browser and never on the server (plan
-    // 0001, D2). It is the shape the assistant column and the comments sheet already
-    // use to follow their own newest entry.
-    //
-    // Both inputs are read, so a set of results that arrives one keystroke after the
-    // last one re-anchors rather than leaving the panel wherever the previous list
-    // happened to be scrolled to. There is no "unless they scrolled up" exception
-    // here, unlike the comments sheet: this list is replaced wholesale by every
-    // keystroke, so a scroll position from a query nobody is typing any more is not a
-    // place anybody chose to be.
-    afterRenderEffect(() => {
-      if (this.placement() !== 'above') {
-        return;
-      }
-
-      this.suggestions();
-
-      const panel = this._panel()?.nativeElement;
-      if (panel === undefined) {
-        return;
-      }
-
-      panel.scrollTop = panel.scrollHeight;
+  /** A card or a row was chosen, with the button it was chosen by. */
+  protected choose(suggestion: CatalogSuggestion, event: Event): void {
+    this.chose.emit({
+      suggestion,
+      anchor: event.currentTarget as HTMLElement,
     });
   }
 
   /**
-   * **Nothing in the panel may close the keyboard** (rule 2 of `0101`).
+   * **Nothing in the list may close the keyboard** (rule 2 of `0101`).
    *
    * The browser moves focus on `mousedown`, and iOS Safari raises a synthetic one
    * before it does, so cancelling it here keeps the caret in the composer's field
-   * and the keyboard up, whatever inside the panel was pressed: the add button,
+   * and the keyboard up, whatever inside the list was pressed: the add button,
    * the chain row, the reveal, the badge, the stepper, the popover (a native
    * popover inserted beside its badge, so its events bubble through here too) or
    * the card itself. Not `pointerdown` and not `touchstart`: those carry the
-   * panel's own scroll, and cancelling them would take it away.
+   * page's own scroll, and cancelling them would take it away.
    */
   protected holdFocus(event: MouseEvent): void {
     event.preventDefault();
@@ -453,10 +374,9 @@ export class SuggestionList {
   }
 
   /**
-   * An opened card grows downward, past the panel's bottom edge, and the panel
-   * never grows (rule 3). So once it has drawn, the panel scrolls just far enough
-   * to show the whole card, or its top when the card is taller than the panel.
-   * Nothing moves when a card closes.
+   * An opened card grows downward, past the bottom of the screen. So once it has
+   * drawn, the page scrolls just far enough to show the whole card, or its top when
+   * the card is taller than the screen. Nothing moves when a card closes.
    */
   private _showOpened(
     card: SuggestionCardView,
@@ -467,21 +387,9 @@ export class SuggestionList {
     }
     afterNextRender(
       () => {
-        const panel = this._panel()?.nativeElement;
-        const drawn = panel?.querySelector<HTMLElement>(
-          `[data-card="${card.key}"]`
-        );
-        if (panel === undefined || drawn === null || drawn === undefined) {
-          return;
-        }
-        const top = drawn.offsetTop;
-        const bottom = top + drawn.offsetHeight;
-        if (bottom > panel.scrollTop + panel.clientHeight) {
-          panel.scrollTop = bottom - panel.clientHeight;
-        }
-        if (top < panel.scrollTop) {
-          panel.scrollTop = top;
-        }
+        this._host.nativeElement.parentElement
+          ?.querySelector<HTMLElement>(`[data-card="${card.key}"]`)
+          ?.scrollIntoView?.({ block: 'nearest' });
       },
       { injector: this._injector }
     );

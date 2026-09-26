@@ -1350,13 +1350,11 @@ export type BasketBackFallback = 'history' | 'home';
  *
  * **One computed, read by the template**, and never a `kind` check scattered
  * through it. There is one basket page and there will be one: the two kinds
- * differ in a heading, a sentence, four absent controls and two words of an
+ * differ in a heading, four absent controls and two words of an
  * empty state, which is a view model rather than a second screen.
  */
 export interface BasketSurface {
   readonly title: BasketTitle;
-  /** One line under the heading, or null where the kind has nothing to explain. */
-  readonly hintKey: string | null;
   readonly progress: BasketProgressSentence;
   /** Whether to offer ending the trip. Never on a basket that is never finished. */
   readonly finish: boolean;
@@ -1444,7 +1442,6 @@ export function selectBasketSurface(
     // the two whenever the basket has one.
     title:
       basket.kind === 'LIVE' ? liveTitle(basket, owner) : { kind: 'basket' },
-    hintKey: generated ? null : 'basket.live.hint',
     progress: basketProgressSentence(
       basket.kind,
       basket.progress,

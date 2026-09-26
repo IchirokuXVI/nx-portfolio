@@ -4,7 +4,9 @@ import {
   type BasketListRef,
   type BasketParticipant,
   type BasketRow,
+  type BasketRowState,
 } from '@portfolio/velista/models';
+import type { ListPickerRow } from '@portfolio/velista/ui';
 
 /**
  * The three sentences every row on the basket has to be able to say, in one
@@ -430,4 +432,53 @@ function formatDay(at: Date, locale: string): string {
   } catch {
     return at.toISOString().slice(0, 10);
   }
+}
+
+/** The states that leave a line still to buy: what the server counts as pending. */
+const STILL_TO_BUY: ReadonlySet<BasketRowState> = new Set([
+  'WANTED',
+  'PARTLY',
+  'SKIPPED',
+]);
+
+/**
+ * The basket list picker's rows (velista `0116`): every list a line can go to,
+ * each household's lists together in the order the server first names that
+ * household, and how many of the list's lines are still to buy.
+ *
+ * That is the order the target sheet it replaces used, so the lists do not move
+ * for anybody who learned them there. The count is per entry, since an entry is one
+ * line on one list, and it counts what the server would call pending: wanted,
+ * partly bought and skipped for now.
+ */
+export function listPickerRows(
+  lists: readonly BasketListRef[],
+  rows: readonly BasketRow[]
+): readonly ListPickerRow[] {
+  const pending = new Map<string, number>();
+  for (const row of rows) {
+    for (const entry of row.entries) {
+      if (entry.listId !== null && STILL_TO_BUY.has(entry.state)) {
+        pending.set(entry.listId, (pending.get(entry.listId) ?? 0) + 1);
+      }
+    }
+  }
+
+  const zones: string[] = [];
+  for (const list of lists) {
+    if (!zones.includes(list.zoneId)) {
+      zones.push(list.zoneId);
+    }
+  }
+
+  return zones.flatMap((zoneId) =>
+    lists
+      .filter((list) => list.zoneId === zoneId)
+      .map((list) => ({
+        listId: list.listId,
+        name: list.name,
+        zoneName: list.zoneName,
+        pending: pending.get(list.listId) ?? 0,
+      }))
+  );
 }

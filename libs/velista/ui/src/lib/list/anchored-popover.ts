@@ -2,10 +2,12 @@ import {
   CdkConnectedOverlay,
   type CdkOverlayOrigin,
   type ConnectedPosition,
+  type FlexibleConnectedPositionStrategyOrigin,
 } from '@angular/cdk/overlay';
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
 } from '@angular/core';
@@ -13,12 +15,15 @@ import {
 /** Why an {@link AnchoredPopover} asked to close. */
 export type AnchoredPopoverClose = 'escape' | 'outside' | 'detach';
 
+/** Which edge of the anchor the popover lines up with. */
+export type AnchoredPopoverAlign = 'start' | 'end';
+
 /**
  * Above the anchor and aligned with its start edge, since the anchors this is drawn
  * against sit at the foot of the screen and the room is upward; below it when the
  * anchor is near the top.
  */
-const POSITIONS: ConnectedPosition[] = [
+const START: ConnectedPosition[] = [
   {
     originX: 'start',
     originY: 'top',
@@ -33,6 +38,28 @@ const POSITIONS: ConnectedPosition[] = [
     overlayX: 'start',
     overlayY: 'top',
     offsetX: 12,
+    offsetY: 8,
+  },
+];
+
+/**
+ * The same two places, lined up with the anchor's end edge instead (velista
+ * `0116`). An anchor at the trailing edge of the screen, like the composer's plus or
+ * a card's add button, has no room after its start edge for a popover this wide.
+ */
+const END: ConnectedPosition[] = [
+  {
+    originX: 'end',
+    originY: 'top',
+    overlayX: 'end',
+    overlayY: 'bottom',
+    offsetY: -8,
+  },
+  {
+    originX: 'end',
+    originY: 'bottom',
+    overlayX: 'end',
+    overlayY: 'top',
     offsetY: 8,
   },
 ];
@@ -62,7 +89,7 @@ const POSITIONS: ConnectedPosition[] = [
       (overlayOutsideClick)="closed.emit('outside')"
       [cdkConnectedOverlayOpen]="open()"
       [cdkConnectedOverlayOrigin]="origin()"
-      [cdkConnectedOverlayPositions]="positions"
+      [cdkConnectedOverlayPositions]="positions()"
       [cdkConnectedOverlayUsePopover]="'inline'"
       cdkConnectedOverlay
     >
@@ -78,8 +105,16 @@ export class AnchoredPopover {
   /** Whether it is on screen. */
   readonly open = input(false);
 
-  /** What it is held against. */
-  readonly origin = input.required<CdkOverlayOrigin>();
+  /**
+   * What it is held against: a directive on the page, or an element the container
+   * was handed, such as the button that was just pressed (velista `0116`).
+   */
+  readonly origin = input.required<
+    CdkOverlayOrigin | FlexibleConnectedPositionStrategyOrigin
+  >();
+
+  /** Which edge of {@link origin} it lines up with. */
+  readonly align = input<AnchoredPopoverAlign>('start');
 
   /** The id of the element inside it that names it, for the dialog's label. */
   readonly labelledBy = input<string | null>(null);
@@ -87,7 +122,9 @@ export class AnchoredPopover {
   /** It wants to close, and why. */
   readonly closed = output<AnchoredPopoverClose>();
 
-  protected readonly positions = POSITIONS;
+  protected readonly positions = computed(() =>
+    this.align() === 'end' ? END : START
+  );
 
   /** Escape closes it, and the keypress goes no further. */
   protected onKey(event: KeyboardEvent): void {

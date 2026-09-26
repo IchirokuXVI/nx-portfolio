@@ -23,13 +23,9 @@ function rule(selector: string): string {
 }
 
 describe('suggestion-list.scss', () => {
-  it('sizes the composer’s panel to its cards, with no floor on its height (target 2)', () => {
-    const panel = rule('.panel');
-
-    expect(panel).not.toMatch(/min-height/);
-    expect(panel).toMatch(/max-height/);
-    // The bottom anchoring margin only ever did anything against a floor.
-    expect(SCSS).not.toMatch(/\.panel\s*>\s*:first-child/);
+  it('gives the cards no panel of their own: they scroll with the page (velista 0117)', () => {
+    expect(SCSS).not.toMatch(/(^|\n)\.panel\s*\{/);
+    expect(SCSS).not.toContain('--app-viewport');
   });
 
   it('keeps a card’s touch targets inside the card, at their full size (velista 0113)', () => {

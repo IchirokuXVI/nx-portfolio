@@ -67,78 +67,32 @@
   </div>
 } @else {
   <!--
-    The suggestions, above the field and below nothing (plan 0043, section 6).
-
-    Above, because the keyboard is under the field and a list drawn beneath it would be
-    behind the keys on every phone. Nearest the field first would be the reverse of the
-    server's ranking, so the order is kept and the whole block sits above: a group is
-    the top row and it is the row closest to what somebody typed.
-
-    **A finished search that found nothing says so**, in one row (velista 0108, target
-    1): an empty answer used to draw nothing, and read as a search that never ran. The
-    row quotes the words and says they can still be added as written, which the button
-    beside the field does, so there is always something to press.
-  -->
-  <!--
-    Waved away by a click anywhere on the page that is not this row and not the panel
-    itself, and back on the next keystroke. A dropdown pinned over somebody's list
-    with no way to put it down is a screen you have to type your way out of.
-  -->
-  @if (suggestionsShown()) {
-    <!--
-      Cards since velista 0101, and no free text row: the button beside the field
-      already adds the typed words.
-    -->
-    <lib-suggestion-list
-      (chose)="choose($event)"
-      (holdingChanged)="holdingChanged.emit($event)"
-      [emptyFor]="emptyFor()"
-      [freeText]="canSubmit() && !locked()"
-      [holdingsOf]="holdingsOf()"
-      [loading]="suggesting()"
-      [panelId]="panelId"
-      [placement]="'above'"
-      [productLink]="productLink()"
-      [query]="suggestedFor()"
-      [suggestions]="suggestions()"
-    />
-  }
-
-  <!--
   A form, so Enter on the field submits without a keydown handler and the phone's
   keyboard offers a Go key rather than a newline.
 -->
   <form (submit)="onSubmit($event)" class="composer">
     <div class="field-wrap">
       <!--
-        The combobox that owns the panel's grid (rule 8 of velista 0101): a card
-        holds several controls, which a listbox option may not.
-      -->
-      <!--
-        Locked (velista 0110): aria-disabled and read only rather than disabled, so a
-        tap or the keyboard still reaches it and the container can say why.
+        The page's one search (velista 0117): a search box that controls the region
+        the page draws its results in. It used to be the combobox of a panel of
+        suggestions above it.
       -->
       <input
-        (click)="onFieldTouched()"
-        (focus)="onFieldTouched()"
+        (blur)="fieldFocused.emit(false)"
+        (focus)="fieldFocused.emit(true)"
         (input)="onInput($event)"
-        [attr.aria-controls]="panelOpen() ? panelId : null"
-        [attr.aria-describedby]="lockReasonId()"
-        [attr.aria-disabled]="locked() ? 'true' : null"
-        [attr.aria-expanded]="panelOpen()"
+        (keydown.escape)="onEscape($event)"
+        [attr.aria-controls]="resultsId()"
         [attr.aria-label]="'list.add.placeholder' | rokuT"
         [attr.maxlength]="maxLength"
         [placeholder]="'list.add.placeholder' | rokuT"
-        [readOnly]="locked()"
         [value]="content()"
         #field
-        aria-autocomplete="list"
-        aria-haspopup="grid"
         autocomplete="off"
         class="field"
         enterkeyhint="send"
         name="content"
-        role="combobox"
+        role="searchbox"
         type="text"
       />
 
@@ -170,12 +124,18 @@
     With `voice` off there is no second job, so `button()` answers `add` whatever
     the field holds and this is the plus, disabled until something is typed
     (velista plan 0053, section 3). The basket is the one screen that does that.
+
+    Where a send is held for a question (velista 0116), the press does not take
+    focus: the picker opens over a keyboard that stays up, and the field keeps the
+    words until a list is picked.
   -->
     <button
       (click)="press()"
+      (mousedown)="holdFocusOnHold($event)"
       [attr.aria-label]="buttonLabel() | rokuT"
-      [disabled]="busy() || locked() || (button() === 'add' && !canSubmit())"
+      [disabled]="busy() || (button() === 'add' && !canSubmit())"
       [type]="button() === 'add' ? 'submit' : 'button'"
+      #sendButton
       class="send"
     >
       @if (button() === 'add') {

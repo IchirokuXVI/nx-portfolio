@@ -143,12 +143,6 @@ describe('selectBasketSurface', () => {
       });
     });
 
-    it('explains nothing under the heading', () => {
-      expect(
-        selectBasketSurface(generated, person('OWNER')).hintKey
-      ).toBeNull();
-    });
-
     it('offers the owner the finish control while it is open', () => {
       expect(selectBasketSurface(generated, person('OWNER')).finish).toBe(true);
       expect(selectBasketSurface(generated, person('REGISTERED')).finish).toBe(
@@ -244,12 +238,6 @@ describe('selectBasketSurface', () => {
         kind: 'key',
         key: 'basket.live.title',
       });
-    });
-
-    it('explains itself in one line under the heading', () => {
-      expect(selectBasketSurface(live, person('OWNER')).hintKey).toBe(
-        'basket.live.hint'
-      );
     });
 
     it('offers no finish, to anybody, ever', () => {

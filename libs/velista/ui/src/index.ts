@@ -57,6 +57,7 @@ export * from './lib/list/line-list';
 export * from './lib/list/line-row';
 export * from './lib/list/list-header';
 export * from './lib/list/list-notice';
+export * from './lib/list/list-picker';
 export * from './lib/list/list-tools';
 export * from './lib/list/quantity-reel';
 export * from './lib/list/quantity-stepper';

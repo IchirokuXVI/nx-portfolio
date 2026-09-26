@@ -783,10 +783,6 @@ describe('AppShellRoutes', () => {
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
-          // Which list the composer adds to (velista `0092`, section 7.3).
-          // Every line added from the basket names a list now, so there has to
-          // be somewhere to say which.
-          'sheet/add/list',
           // A suggestion's Details in the composer (velista `0107`).
           'sheet/products/:itemId',
         ]
@@ -840,10 +836,6 @@ describe('AppShellRoutes', () => {
           // What changed on the covered lists, read by a child route of this
           // page, so the store is the route's (velista `0093`, section 2).
           'BasketChangeStore',
-          // Where the composer's next line goes, per basket (velista `0092`,
-          // section 7.2). A store and not a signal on the page, because it
-          // reads and writes this device's memory.
-          'BasketTargetStore',
           'BasketViewStore',
         ]);
         // How the page knows which basket to open, since the URL holds no id.
@@ -910,7 +902,7 @@ describe('AppShellRoutes', () => {
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(10);
+      expect(sheets).toHaveLength(9);
       for (const entry of sheets) {
         expect(entry.canActivate).toBeUndefined();
       }
@@ -925,8 +917,7 @@ describe('AppShellRoutes', () => {
       // `BasketViewStore` is here rather than on the component because the sheets
       // that set its controls are **child routes** of this page (velista `0074`,
       // section 4.3), and a store the component provided is not one a sibling route
-      // can be sure to reach. `BasketTargetStore` is here for exactly that reason
-      // too: the sheet that sets it is `sheet/add/list` (velista `0092`).
+      // can be sure to reach.
       //
       // Asserted by name rather than by counting, because a count says nothing about
       // *which* provider went missing, and the socket is the one whose absence would
@@ -939,7 +930,6 @@ describe('AppShellRoutes', () => {
         'BasketSocket',
         'BasketStore',
         'BasketChangeStore',
-        'BasketTargetStore',
         'BasketViewStore',
       ]);
     });
@@ -1067,7 +1057,10 @@ describe('the sheets and their exit animation', () => {
     //
     // Similar products added three: the product sheet over the line page, and the
     // change sheet over both baskets.
-    expect(sheets).toHaveLength(45);
+    //
+    // `0116` took `sheet/add/list` off both baskets: the list is asked for by a
+    // popover at the moment of adding, which has no URL.
+    expect(sheets).toHaveLength(43);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
