@@ -17,7 +17,9 @@ import {
   addInTheAisle,
   chip,
   chooseProduct,
+  clearBasketSearch,
   closeSettleSheet,
+  composerField,
   expectBasketUrl,
   filterTool,
   generateBasket,
@@ -28,6 +30,7 @@ import {
   reel,
   row,
   rows,
+  searchBasket,
   sheet,
   signIn,
 } from './support/app';
@@ -94,14 +97,16 @@ test.describe('one trip, by the owner', () => {
     });
 
     await test.step('2. search for "egg": one line, and the count is announced', async () => {
-      await page.getByRole('button', { name: 'Search this list' }).click();
-      await page.locator('#basket-search').fill('egg');
+      // The composer's field is the basket's one search (velista 0117).
+      await searchBasket(page, 'egg');
 
       await expect(rows(page)).toHaveCount(1);
       await expect(row(page, 'Eggs')).toBeVisible();
-      await expect(page.locator('.search-count')).toHaveText(/1 of 4 lines/);
+      await expect(page.locator('#basket-results-heading')).toHaveText(
+        /On your lists\s*·\s*1/
+      );
 
-      await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await clearBasketSearch(page);
       await expect(rows(page)).toHaveCount(4);
     });
 
@@ -316,8 +321,11 @@ test.describe('one trip, by the owner', () => {
         /Filter and order, 4 on/
       );
       await expect(row(page, 'Milk')).toHaveCount(0);
-      await page.getByRole('button', { name: 'Search this list' }).click();
-      await page.locator('#basket-search').fill('nail');
+      // The sheet leaves after its fall, and the first character pushes
+      // `?search=1`. A push that lands during the fall leaves the sheet's scrim
+      // over the page, so the search waits for the sheet to be gone.
+      await expect(page.locator('lib-filter-sheet')).toHaveCount(0);
+      await searchBasket(page, 'nail');
       await expect(rows(page)).toHaveCount(1);
 
       await page
@@ -355,10 +363,8 @@ test.describe('one trip, by the owner', () => {
       await expect(chip(page, 'By category')).toBeVisible();
       await expect(chip(page, 'Only Hardware')).toHaveCount(0);
       await expect(chip(page, 'Only Groceries')).toHaveCount(0);
-      await expect(page.locator('#basket-search')).toHaveCount(0);
-      await expect(
-        page.getByRole('button', { name: 'Search this list' })
-      ).toBeVisible();
+      await expect(composerField(page)).toHaveValue('');
+      await expect(page.locator('#basket-results')).toHaveCount(0);
     });
   });
 });
