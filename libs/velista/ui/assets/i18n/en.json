@@ -496,7 +496,10 @@
       "hereNow": "here now"
     },
     "add": {
-      "placeholder": "Add something",
+      "placeholder": "Add or find something",
+      "resultsOnList": "On your list",
+      "resultsNone": "Nothing on your list says “{{query}}”",
+      "resultsCatalog": "From the catalog",
       "action": "Add",
       "quantity": "How many",
       "more": "One more",
@@ -1163,7 +1166,6 @@
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",
-      "hint": "Every list you can add to, in one place.",
       "left": "{{pending}} to buy",
       "leftAndGot": "{{pending}} to buy, {{done}} got this trip",
       "allGot": "Nothing left, {{done}} got this trip",
@@ -1219,16 +1221,6 @@
       "one": "from {{first}}",
       "two": "from {{first}} and {{second}}",
       "more": "from {{first}} and {{count}} more"
-    },
-    "search": {
-      "open": "Search this list",
-      "label": "Search this list",
-      "placeholder": "Line or product",
-      "clear": "Clear",
-      "cancel": "Cancel",
-      "count": "{{shown}} of {{total}} lines",
-      "none": "No line matches “{{query}}”",
-      "noneHint": "Add it below and it goes on this list."
     },
     "view": {
       "open": "Filter and order",
@@ -1561,10 +1553,10 @@
       "refused": "Only somebody who approves lines on that list can change it."
     },
     "add": {
-      "to": "To: {{list}}",
-      "choose": "Choose a list",
       "sheetTitle": "Which list is this for?",
-      "needsList": "Choose a list first. The new product goes into the list you pick."
+      "listCaption": "{{zone}} · {{count}} to buy",
+      "resultsOnLists": "On your lists",
+      "resultsNone": "Nothing on your lists says “{{query}}”"
     },
     "added": {
       "announced": "{{content}} added"

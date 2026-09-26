@@ -496,7 +496,10 @@
       "hereNow": "aquí ahora"
     },
     "add": {
-      "placeholder": "Añade algo",
+      "placeholder": "Añade o busca algo",
+      "resultsOnList": "En tu lista",
+      "resultsNone": "Nada en tu lista dice “{{query}}”",
+      "resultsCatalog": "Del catálogo",
       "action": "Añadir",
       "quantity": "Cuántos",
       "more": "Uno más",
@@ -1163,7 +1166,6 @@
     "live": {
       "title": "Todo por comprar",
       "titleOf": "{{name}}: todo por comprar",
-      "hint": "Todas las listas en las que puedes añadir, en un sitio.",
       "left": "{{pending}} por comprar",
       "leftAndGot": "{{pending}} por comprar, {{done}} en esta compra",
       "allGot": "No queda nada, {{done}} en esta compra",
@@ -1219,16 +1221,6 @@
       "one": "de {{first}}",
       "two": "de {{first}} y {{second}}",
       "more": "de {{first}} y {{count}} más"
-    },
-    "search": {
-      "open": "Buscar en esta lista",
-      "label": "Buscar en esta lista",
-      "placeholder": "Línea o producto",
-      "clear": "Borrar",
-      "cancel": "Cancelar",
-      "count": "{{shown}} de {{total}} líneas",
-      "none": "Ninguna línea coincide con «{{query}}»",
-      "noneHint": "Añádela abajo y se pone en esta lista."
     },
     "view": {
       "open": "Filtrar y ordenar",
@@ -1561,10 +1553,10 @@
       "refused": "Solo quien aprueba líneas en esa lista puede cambiarlo."
     },
     "add": {
-      "to": "Para: {{list}}",
-      "choose": "Elige una lista",
       "sheetTitle": "¿Para qué lista es?",
-      "needsList": "Primero elige una lista. El producto nuevo se añade a la lista que elijas."
+      "listCaption": "{{zone}} · {{count}} por comprar",
+      "resultsOnLists": "En tus listas",
+      "resultsNone": "Nada en tus listas dice “{{query}}”"
     },
     "added": {
       "announced": "{{content}} añadido"

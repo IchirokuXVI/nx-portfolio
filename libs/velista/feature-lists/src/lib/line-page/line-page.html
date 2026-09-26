@@ -194,7 +194,7 @@
             reads as a group being added to a group. See `suggestions`.
           -->
           <lib-suggestion-list
-            (chose)="addProduct($event)"
+            (chose)="addProduct($event.suggestion)"
             [label]="'list.page.searchProduct'"
             [suggestions]="suggestions()"
           />

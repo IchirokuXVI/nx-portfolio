@@ -1,0 +1,1025 @@
+<title>Velista: one field finds and adds</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Main .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Main .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Main .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-Main .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Main .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-Main .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Main .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-Main .head { flex: none; padding: 0 16px; }
+#ab-Main .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-Main .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-Main .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-Main .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Main .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-Main .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Main .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-Main .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-Main .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Main .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-Main .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-Main .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-Main .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-Main .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-Main mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-Main .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-Main .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Main .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-Main .row .text { flex: 1; min-width: 0; }
+#ab-Main .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Main .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-Main .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Main .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-Main .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-Main .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Main .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-Main .catalog .sect { padding: 0 4px; }
+#ab-Main .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-Main .sug:first-of-type { border-top: 0; }
+#ab-Main .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-Main .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-Main .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-Main .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-Main .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-Main .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Main .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-Main .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-Main .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-Main .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-Main .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-Main .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-Main .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-Main .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-Main .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-Main .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-Main .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Main .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-Main .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-Main .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-Main .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-Main .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-Main .field .ph { color: var(--app-text-muted); }
+#ab-Main .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-Main .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-Main .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-Main .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Main .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Main .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Main .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-Main .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-Main .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-Main .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Main .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+#ab-Typing .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Typing .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Typing .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-Typing .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Typing .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-Typing .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Typing .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-Typing .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-Typing .head { flex: none; padding: 0 16px; }
+#ab-Typing .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-Typing .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-Typing .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-Typing .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Typing .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-Typing .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Typing .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-Typing .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-Typing .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Typing .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-Typing .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-Typing .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-Typing .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-Typing .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-Typing mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-Typing .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-Typing .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Typing .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-Typing .row .text { flex: 1; min-width: 0; }
+#ab-Typing .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Typing .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-Typing .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Typing .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-Typing .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-Typing .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Typing .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-Typing .catalog .sect { padding: 0 4px; }
+#ab-Typing .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-Typing .sug:first-of-type { border-top: 0; }
+#ab-Typing .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-Typing .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-Typing .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-Typing .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-Typing .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-Typing .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Typing .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-Typing .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-Typing .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-Typing .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-Typing .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-Typing .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-Typing .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-Typing .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-Typing .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-Typing .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-Typing .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Typing .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-Typing .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-Typing .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-Typing .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Typing .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-Typing .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-Typing .field .ph { color: var(--app-text-muted); }
+#ab-Typing .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-Typing .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-Typing .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-Typing .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Typing .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Typing .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Typing .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Typing .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-Typing .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-Typing .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-Typing .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Typing .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+#ab-NoLine .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-NoLine .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-NoLine .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-NoLine .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-NoLine .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-NoLine .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-NoLine .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoLine .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-NoLine .head { flex: none; padding: 0 16px; }
+#ab-NoLine .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-NoLine .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-NoLine .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-NoLine .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-NoLine .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-NoLine .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-NoLine .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-NoLine .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-NoLine .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-NoLine .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-NoLine .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-NoLine .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-NoLine .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-NoLine .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-NoLine mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-NoLine .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-NoLine .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-NoLine .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-NoLine .row .text { flex: 1; min-width: 0; }
+#ab-NoLine .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-NoLine .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-NoLine .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-NoLine .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-NoLine .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-NoLine .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-NoLine .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-NoLine .catalog .sect { padding: 0 4px; }
+#ab-NoLine .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-NoLine .sug:first-of-type { border-top: 0; }
+#ab-NoLine .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-NoLine .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-NoLine .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-NoLine .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-NoLine .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-NoLine .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-NoLine .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-NoLine .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-NoLine .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-NoLine .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-NoLine .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-NoLine .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-NoLine .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-NoLine .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-NoLine .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-NoLine .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-NoLine .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-NoLine .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-NoLine .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-NoLine .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-NoLine .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoLine .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-NoLine .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-NoLine .field .ph { color: var(--app-text-muted); }
+#ab-NoLine .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-NoLine .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-NoLine .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-NoLine .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoLine .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-NoLine .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-NoLine .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-NoLine .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-NoLine .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-NoLine .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-NoLine .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-NoLine .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+#ab-Basket .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Basket .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Basket .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-Basket .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Basket .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-Basket .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Basket .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-Basket .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-Basket .head { flex: none; padding: 0 16px; }
+#ab-Basket .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-Basket .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-Basket .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-Basket .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Basket .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-Basket .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Basket .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-Basket .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-Basket .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Basket .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-Basket .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-Basket .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-Basket .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-Basket .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-Basket mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-Basket .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-Basket .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Basket .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-Basket .row .text { flex: 1; min-width: 0; }
+#ab-Basket .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Basket .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-Basket .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Basket .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-Basket .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-Basket .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Basket .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-Basket .catalog .sect { padding: 0 4px; }
+#ab-Basket .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-Basket .sug:first-of-type { border-top: 0; }
+#ab-Basket .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-Basket .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-Basket .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-Basket .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-Basket .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-Basket .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-Basket .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-Basket .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-Basket .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-Basket .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-Basket .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-Basket .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-Basket .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-Basket .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-Basket .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-Basket .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-Basket .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Basket .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-Basket .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-Basket .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-Basket .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Basket .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-Basket .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-Basket .field .ph { color: var(--app-text-muted); }
+#ab-Basket .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-Basket .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-Basket .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-Basket .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Basket .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Basket .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Basket .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Basket .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-Basket .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-Basket .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-Basket .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Basket .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+#ab-BasketTyping .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-BasketTyping .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-BasketTyping .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-BasketTyping .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-BasketTyping .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-BasketTyping .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-BasketTyping .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketTyping .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-BasketTyping .head { flex: none; padding: 0 16px; }
+#ab-BasketTyping .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-BasketTyping .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-BasketTyping .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-BasketTyping .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketTyping .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-BasketTyping .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketTyping .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-BasketTyping .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-BasketTyping .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-BasketTyping .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-BasketTyping .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-BasketTyping .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-BasketTyping .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-BasketTyping .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-BasketTyping mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-BasketTyping .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-BasketTyping .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-BasketTyping .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-BasketTyping .row .text { flex: 1; min-width: 0; }
+#ab-BasketTyping .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-BasketTyping .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-BasketTyping .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-BasketTyping .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-BasketTyping .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-BasketTyping .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketTyping .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-BasketTyping .catalog .sect { padding: 0 4px; }
+#ab-BasketTyping .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-BasketTyping .sug:first-of-type { border-top: 0; }
+#ab-BasketTyping .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-BasketTyping .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-BasketTyping .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-BasketTyping .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-BasketTyping .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-BasketTyping .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-BasketTyping .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-BasketTyping .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-BasketTyping .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-BasketTyping .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-BasketTyping .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-BasketTyping .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-BasketTyping .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-BasketTyping .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-BasketTyping .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-BasketTyping .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-BasketTyping .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketTyping .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-BasketTyping .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-BasketTyping .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-BasketTyping .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketTyping .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-BasketTyping .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-BasketTyping .field .ph { color: var(--app-text-muted); }
+#ab-BasketTyping .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-BasketTyping .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-BasketTyping .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-BasketTyping .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketTyping .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-BasketTyping .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-BasketTyping .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-BasketTyping .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-BasketTyping .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-BasketTyping .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-BasketTyping .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-BasketTyping .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+#ab-BasketPick .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-BasketPick .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-BasketPick .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+#ab-BasketPick .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-BasketPick .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+#ab-BasketPick .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-BasketPick .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketPick .ibtn.amber { color: var(--app-action-quiet-fg); }
+#ab-BasketPick .head { flex: none; padding: 0 16px; }
+#ab-BasketPick .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+#ab-BasketPick .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#ab-BasketPick .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+#ab-BasketPick .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketPick .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+#ab-BasketPick .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketPick .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+#ab-BasketPick .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-BasketPick .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-BasketPick .sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+#ab-BasketPick .sech b { font-size: var(--app-text-base); font-weight: 600; }
+#ab-BasketPick .lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+#ab-BasketPick .card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+#ab-BasketPick .card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-BasketPick mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+#ab-BasketPick .rows { flex: 1; min-height: 0; overflow: hidden; }
+#ab-BasketPick .row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-BasketPick .settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+#ab-BasketPick .row .text { flex: 1; min-width: 0; }
+#ab-BasketPick .row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-BasketPick .results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#ab-BasketPick .sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-BasketPick .sect .n { font-weight: 600; color: var(--app-text-secondary); }
+#ab-BasketPick .found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+#ab-BasketPick .nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketPick .catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+#ab-BasketPick .catalog .sect { padding: 0 4px; }
+#ab-BasketPick .sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+#ab-BasketPick .sug:first-of-type { border-top: 0; }
+#ab-BasketPick .pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+#ab-BasketPick .sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+#ab-BasketPick .sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ab-BasketPick .sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+#ab-BasketPick .sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+#ab-BasketPick .sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#ab-BasketPick .sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+#ab-BasketPick .sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+#ab-BasketPick .chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+#ab-BasketPick .mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+#ab-BasketPick .lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+#ab-BasketPick .details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+#ab-BasketPick .already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+#ab-BasketPick .already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-BasketPick .already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+#ab-BasketPick .already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+#ab-BasketPick .already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-BasketPick .stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+#ab-BasketPick .stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+#ab-BasketPick .stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+#ab-BasketPick .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketPick .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+#ab-BasketPick .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+#ab-BasketPick .field .ph { color: var(--app-text-muted); }
+#ab-BasketPick .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+#ab-BasketPick .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+#ab-BasketPick .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+#ab-BasketPick .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketPick .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-BasketPick .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-BasketPick .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-BasketPick .picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+#ab-BasketPick .picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+#ab-BasketPick .picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+#ab-BasketPick .picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-BasketPick .picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+</style>
+
+<header>
+  <h1>Velista: one field finds and adds</h1>
+  <p class="lede">The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 3120px; height: 2268px;">
+      <figure class="board" style="left: 0px; top: 460px; width: 390px;">
+        <figcaption>Zone list, idle</figcaption>
+        <div class="frame" id="ab-Main" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
+              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
+              <span class="avatar">P</span>
+            </div>
+            <div class="head">
+              <div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button></div>
+              <div class="title"><div><h1>Compra semanal</h1><p class="in">in Casa</p></div><a class="link" href="#settings">List settings</a></div>
+              <p class="prog">10 of 10 pending</p>
+              <div class="bar"></div>
+            </div>
+            <!-- the tools row keeps the filter; the search glyph is gone, the field below is the search -->
+            <div class="tools">
+              <span class="count"></span>
+              <button class="ibtn" type="button" aria-label="Filter and sort"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+            </div>
+            <div class="sech"><b>To buy</b><a class="link" href="#order">Put them in order</a></div>
+            <div class="lines">
+              <div class="card"><span class="name">Plátanos</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Pan de molde integral</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Aceite de oliva virgen extra</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Yogur natural</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Tomate frito</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Queso en lonchas</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Queso rallado</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Huevos L</span><span class="qtychip">1</span></div>
+            </div>
+            <div class="composer">
+              <label class="field" for="add"><span class="ph">Add or find something</span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send" type="button" aria-label="Say what you need"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg></button>
+            </div>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab" href="#catalog"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="Basket.dc.html"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 460px; width: 390px;">
+        <figcaption>Zone list, typing</figcaption>
+        <div class="frame" id="ab-Typing" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
+              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
+              <span class="avatar">P</span>
+            </div>
+            <!-- the page has scrolled to the results: the head is above the fold, the tools row is hidden while results show -->
+            <div class="results" aria-live="polite">
+              <div class="sect">On your list <span class="n">&middot; 2</span></div>
+              <div class="found">
+                <div class="card"><span class="name"><mark>Que</mark>so en lonchas</span><span class="qtychip">1</span></div>
+                <div class="card"><span class="name"><mark>Que</mark>so rallado</span><span class="qtychip">1</span></div>
+              </div>
+              <div class="catalog">
+                <div class="sect">From the catalog</div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">Queso en lonchas</span><span class="fmt">Pack 10</span><span class="sug-price">1,45 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 200 g</span><span class="sug-unit">7,25 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                    <span class="already">
+                      <span class="already-h">Product already in your list</span>
+                      <span class="already-row">
+                        <span class="already-text"><span class="already-line">Queso en lonchas</span></span>
+                        <span class="stepper" role="spinbutton" aria-label="How many on that line" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                          <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                          <span aria-hidden="true" class="value">1</span>
+                          <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Queso en lonchas, Hacendado, pack of 10" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">Queso rallado 4 quesos</span><span class="sug-price">1,70 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 200 g</span><span class="sug-unit">8,50 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Queso rallado 4 quesos, Hacendado" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <label class="field focus" for="add"><span>que</span><span class="caret"></span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send" type="button" aria-label="Add que as written" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+            </div>
+            <div class="keyboard" aria-hidden="true">Keyboard, 336 px. The nav is hidden while the field has focus.</div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 460px; width: 390px;">
+        <figcaption>Zone list, nothing on it</figcaption>
+        <div class="frame" id="ab-NoLine" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
+              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
+              <span class="avatar">P</span>
+            </div>
+            <div class="results" aria-live="polite">
+              <div class="sect">On your list</div>
+              <!-- said, not skipped: an empty section reads as a search that never happened -->
+              <p class="nothing" style="margin: 0;">Nothing on your list says &ldquo;at&uacute;n&rdquo;</p>
+              <div class="catalog">
+                <div class="sect">From the catalog</div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">At&uacute;n claro en aceite de oliva</span><span class="fmt">Pack 3</span><span class="sug-price">2,85 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 3 &times; 80 g</span><span class="sug-unit">11,88 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Atún claro en aceite de oliva, Hacendado, pack of 3" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">At&uacute;n claro al natural</span><span class="fmt">Pack 3</span><span class="sug-price">3,45 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Calvo &middot; 3 &times; 80 g</span><span class="sug-unit">14,38 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at 3 shops. Show every shop price"><span class="mark" style="background: #004e9f; color: #ffffff;">C</span><span class="lead-name">Carrefour</span><span class="mark" style="background: #c8102e; color: #ffffff;">D</span><span class="more">+1</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Atún claro al natural, Calvo, pack of 3" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">At&uacute;n en escabeche</span><span class="sug-price">1,05 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 80 g</span><span class="sug-unit">13,13 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Atún en escabeche, Hacendado" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <label class="field focus" for="add"><span>at&uacute;n</span><span class="caret"></span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send" type="button" aria-label="Add atún as written" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+            </div>
+            <div class="keyboard" aria-hidden="true">Keyboard, 336 px. The plus still adds the words as written.</div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1424px; width: 390px;">
+        <figcaption>Basket, idle</figcaption>
+        <div class="frame" id="ab-Basket" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <!-- the basket's own head, one row; the hint sentence under it is gone -->
+            <div class="appbar" style="padding: 0 16px 0 12px;">
+              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
+              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
+              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
+              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
+            </div>
+            <div class="tools">
+              <span class="count">12 to buy</span>
+              <button class="ibtn" type="button" aria-label="Filter"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+            </div>
+            <div class="rows">
+              <div class="row"><button class="settle" type="button" aria-label="Settle Aceite de oliva virgen extra"></button><span class="text"><b>Aceite de oliva virgen extra</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Arroz redondo"></button><span class="text"><b>Arroz redondo</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Huevos L"></button><span class="text"><b>Huevos L</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Leche entera"></button><span class="text"><b>Leche entera</b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Pan de molde integral"></button><span class="text"><b>Pan de molde integral</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Plátanos"></button><span class="text"><b>Pl&aacute;tanos</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Pollo entero"></button><span class="text"><b>Pollo entero</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Queso en lonchas"></button><span class="text"><b>Queso en lonchas</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Queso fresco"></button><span class="text"><b>Queso fresco</b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+              <div class="row"><button class="settle" type="button" aria-label="Settle Queso rallado"></button><span class="text"><b>Queso rallado</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+            </div>
+            <!-- no target chip, no lock: the field is always open, the plus asks which list -->
+            <div class="composer">
+              <label class="field" for="add"><span class="ph">Add or find something</span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send" type="button" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+            </div>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab" href="#catalog"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab on" href="#basket" aria-current="page"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 1424px; width: 390px;">
+        <figcaption>Basket, typing</figcaption>
+        <div class="frame" id="ab-BasketTyping" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar" style="padding: 0 16px 0 12px;">
+              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
+              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
+              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
+              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
+            </div>
+            <!-- the tools row is hidden while results show; the basket rows are the rows, with the list each came from -->
+            <div class="results" aria-live="polite">
+              <div class="sect">On your lists <span class="n">&middot; 3</span></div>
+              <div class="rows" style="flex: none;">
+                <div class="row"><button class="settle" type="button" aria-label="Settle Queso en lonchas" onmousedown="event.preventDefault()"></button><span class="text"><b><mark>Que</mark>so en lonchas</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+                <div class="row"><button class="settle" type="button" aria-label="Settle Queso fresco" onmousedown="event.preventDefault()"></button><span class="text"><b><mark>Que</mark>so fresco</b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+                <div class="row"><button class="settle" type="button" aria-label="Settle Queso rallado" onmousedown="event.preventDefault()"></button><span class="text"><b><mark>Que</mark>so rallado</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+              </div>
+              <div class="catalog">
+                <div class="sect">From the catalog</div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">Queso en lonchas</span><span class="fmt">Pack 10</span><span class="sug-price">1,45 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 200 g</span><span class="sug-unit">7,25 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                    <span class="already">
+                      <span class="already-h">Product already in your list</span>
+                      <span class="already-row">
+                        <span class="already-text"><span class="already-list">Compra semanal</span><span class="already-line">Queso en lonchas</span></span>
+                        <span class="stepper" role="spinbutton" aria-label="How many on that line" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                          <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                          <span aria-hidden="true" class="value">1</span>
+                          <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+                        </span>
+                      </span>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Queso en lonchas, Hacendado, pack of 10" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <label class="field focus" for="add"><span>que</span><span class="caret"></span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send" type="button" aria-label="Add que, choosing a list" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+            </div>
+            <div class="keyboard" aria-hidden="true">Keyboard, 336 px. No list was chosen and none is needed to search.</div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 1424px; width: 390px;">
+        <figcaption>Basket, which list</figcaption>
+        <div class="frame" id="ab-BasketPick" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar" style="padding: 0 16px 0 12px;">
+              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
+              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
+              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
+              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
+            </div>
+            <div class="results" aria-live="polite">
+              <div class="sect">On your lists <span class="n">&middot; 1</span></div>
+              <div class="rows" style="flex: none;">
+                <div class="row"><button class="settle" type="button" aria-label="Settle Queso fresco" onmousedown="event.preventDefault()"></button><span class="text"><b><mark>Queso fresco</mark></b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+              </div>
+              <div class="catalog">
+                <div class="sect">From the catalog</div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">Queso fresco de Burgos</span><span class="sug-price">0,95 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 250 g</span><span class="sug-unit">3,80 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at Mercadona. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Queso fresco de Burgos, Hacendado" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+                <div class="sug">
+                  <span class="sug-thumb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path></svg></span>
+                  <span class="sug-col">
+                    <span class="sug-l"><span class="sug-name">Queso fresco batido 0%</span><span class="sug-price">1,25 &euro;</span></span>
+                    <span class="sug-l"><span class="sug-meta">Hacendado &middot; 500 g</span><span class="sug-unit">2,50 &euro;/kg</span></span>
+                    <span class="sug-foot">
+                      <button class="chains" type="button" aria-label="Sold at 2 shops. Show every shop price"><span class="mark" style="background: #00843d; color: #ffffff;">M</span><span class="lead-name">Mercadona</span><span class="mark" style="background: #c8102e; color: #ffffff;">D</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></button>
+                      <a class="details" href="#detail">Details<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></a>
+                    </span>
+                  </span>
+                  <button class="pick" type="button" aria-label="Add Queso fresco batido, Hacendado" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+                </div>
+              </div>
+            </div>
+            <!-- the picker: a CDK overlay against the plus that was pressed, dismissed by a tap elsewhere or Escape; the keyboard stays up -->
+            <div class="picker" role="dialog" aria-label="Which list is it for?">
+              <h2>Which list is it for?</h2>
+              <button class="opt" type="button" onmousedown="event.preventDefault()">Compra semanal<small>Casa &middot; 10 to buy</small></button>
+              <button class="opt" type="button" onmousedown="event.preventDefault()">Fin de semana<small>Casa &middot; 2 to buy</small></button>
+              <span class="tail" aria-hidden="true"></span>
+            </div>
+            <div class="composer">
+              <label class="field focus" for="add"><span>queso fresco</span><span class="caret"></span></label>
+              <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+                <button class="step" type="button" aria-label="One fewer" onmousedown="event.preventDefault()"><span aria-hidden="true">&minus;</span></button>
+                <span aria-hidden="true" class="value">1</span>
+                <button class="step" type="button" aria-label="One more" onmousedown="event.preventDefault()"><span aria-hidden="true">+</span></button>
+              </span>
+              <button class="send pressed" type="button" aria-label="Add queso fresco, choosing a list" aria-expanded="true" onmousedown="event.preventDefault()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+            </div>
+            <div class="keyboard" aria-hidden="true">Keyboard, 336 px. The pick is the add.</div>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. One field at the bottom finds and adds. Typing filters the list from the first letter and asks the catalog from the third. The suggestion panel is gone: results draw in the list container, lines first, then products under a clear rule. The search buttons in both tools rows go. The nav hides while the field has focus. On the basket the plus asks which list, every time, so the field is never locked and a search needs no list.</p><p>Drawn on Day, which is what the app shows on slot 0 today, on the chrome the app really has: the app bar, the page head, the card rows.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>RULE F1: A FOUND LINE IS THE ROW ITSELF. Not a copy inside a card: the same row, with its quantity chip and its tap, so raising Queso en lonchas from 1 to 2 happens where the line already is. Matching is by words, folded for case and accents, over the line's name, its products' names and its category labels, exactly as the search does today (plan 0082). The match is marked.</p><p>Product cards are the 0101 card, unchanged, and keep their 'already in your list' block for now. That block now repeats what the rows above already say, and it is the first thing to take out in a later update.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE F2: BACK CLEARS THE FIELD. The open search is one history entry, as plan 0109 already does for the search row, so back, Cancel and Escape all do the same thing: clear the words, restore the list and the nav.</p><p>Each add clears the field too, so the list comes back with the new line in it and the field keeps focus for the next word. Adding in runs (0012 section 4.8) survives.</p><p>Every control in the results cancels mousedown, the 0101 rule, so the keyboard never drops under a thumb that is still travelling.</p></aside>
+      <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>RULE F3: THE NAV HIDES ON FOCUS, NOT ON THE FIRST LETTER. The keyboard is already up at focus, and the bar gone gives the results 88px more, a full card. NavChrome already hides the bar for a sheet; this is one more reason in the same place.</p><p>The tools row hides while results show, because its filter and sort apply to the list, not to a search. The page scrolls so the first found line sits under the app bar; the page head is above the fold while typing and comes back with the list.</p></aside>
+      <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE F4: ON THE BASKET, THE PLUS ASKS WHICH LIST. No target chip, no lock, no remembered choice. Pressing plus, or the add button on a card, opens a picker anchored to that button with every list the reader can add to, and the pick is the add. It opens every time: adding from the basket is rare, and one honest tap beats a chip that remembers last week's list.</p><p>The keyboard stays up, so the picker cancels mousedown like everything else. The question already exists as a sheet, 'Which list is it for?' (basket.add.sheetTitle); the picker is the same choice without leaving the field.</p></aside>
+      <aside class="note" style="left: 2650px; top: 0px; width: 470px;"><p>WHAT GOES. The sentence under the basket title, 'Every list you can add to, in one place': it answers nothing and costs a line. The search glyph in both tools rows: the field is the search now. The 'Choose a list' band, the dashed locked field and its popover (plans 0110 and 0113). The suggestion panel and its keyboard arithmetic (0101): results have the whole page. The 'Line or product' search row (0109) and its Cancel: the field's Cancel is the back button.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 3120;
+    var h = 2268;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

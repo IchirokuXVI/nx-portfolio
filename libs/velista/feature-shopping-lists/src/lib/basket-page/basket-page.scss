@@ -149,20 +149,6 @@ lib-line-composer {
   white-space: nowrap;
 }
 
-// What the basket that is always there is (velista `0091`, section 3).
-//
-// Secondary text, one line of it, sitting where the first row of the list would
-// otherwise start. It takes the page's own inline padding rather than the bar's,
-// because it belongs to the content below it and not to the furniture above.
-.hint {
-  flex: none;
-  margin: 0;
-  padding-inline: var(--app-space-4);
-  font-size: var(--app-text-sm);
-  line-height: var(--app-leading-body);
-  color: var(--app-text-secondary);
-}
-
 // A row of faces and no sentence. The overflow collapses into a stacked chip,
 // which is the same "+X" pattern the price display uses.
 .faces {
@@ -532,56 +518,62 @@ lib-line-composer {
   font-size: var(--app-icon-sm);
 }
 
-// Where the next line goes, above the field (velista 0092, section 7.2).
-//
-// A chip in the quiet action role, sized and padded the same whether it is a
-// button or the static line that stands in for it on a basket covering one list:
-// the dock must not change height when a second household joins the basket.
-//
-// The surface is the composer's own, so the chip reads as part of the dock rather
-// than as a row floating over the last line of the basket.
-.target {
-  @include shared.tap-target;
-
-  display: block;
-  inline-size: 100%;
-  margin: 0;
-  padding: var(--app-space-2) var(--app-space-4);
-  border: none;
-  border-block-end: 1px solid var(--app-border-subtle);
-  background: var(--app-surface-raised);
-  font-family: inherit;
-  font-size: var(--app-text-xs);
-  font-weight: 600;
-  color: var(--app-action-quiet-fg);
-  text-align: start;
-  cursor: pointer;
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
+// What the composer's field found (velista 0117, rule F1), in place of the basket's
+// body. The zone list page draws the same results, and these rules are its rules
+// with this column's zero inline padding: the rows reach the edges, as the basket's
+// own rows do, and the headings take the page's gutter.
+.results {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-2);
 }
 
-// One list, which chose itself: a statement rather than a control, so it takes
-// no pointer, no quiet accent and no target height it cannot honour.
-.target.is-static {
-  min-block-size: 0;
+// A section's name, small and quiet over what it names, as the mock draws it. The
+// count is a step brighter than the words, because it is the part that changes.
+.results-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding-inline: var(--app-space-4);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: var(--app-leading-heading);
+  text-transform: uppercase;
   color: var(--app-text-muted);
+}
+
+.results-count {
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+// Nothing matched: a sentence in the heading's place, so it reads as one.
+.results-heading.is-none {
+  font-size: var(--app-text-sm);
   font-weight: 500;
-  cursor: default;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--app-text-secondary);
 }
 
-// Nothing chosen yet, on a basket with more than one list (velista 0110): the
-// field below is locked until a list is, so the chip is the next step and is
-// tinted in the quiet accent it already speaks in. The dock keeps its height.
-.target.is-next {
-  background: var(--app-action-quiet-bg);
+// The catalog, under a rule and on the raised surface, down to the composer, so
+// the surface does not stop halfway down an empty page.
+.catalog {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin-block: var(--app-space-3) calc(var(--app-space-5) * -1);
+  padding: var(--app-space-3) var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
 }
 
-// Inside the popover the locked field opens. The sentence is the reason, in the
-// primary text, and the whole of what the popover holds (velista 0113).
-.needs-list-text {
-  margin: 0;
-  color: var(--app-text-primary);
+// The cards sit on the catalog's own padding, so its heading steps in to line up
+// with the heading above it.
+.catalog > .results-heading {
+  padding-inline: 0;
 }

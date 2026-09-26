@@ -10,7 +10,6 @@ import {
   BasketChangeStore,
   BasketSocket,
   BasketStore,
-  BasketTargetStore,
   BasketViewStore,
   ListViewStore,
   TripStore,
@@ -325,21 +324,6 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
       loadComponent: () =>
         import('@portfolio/velista/feature-shopping-lists').then(
           (m) => m.FilterSheet
-        ),
-    }),
-    // Which list the composer adds to (velista `0092`, section 7.3). A sheet
-    // rather than a menu on the dock, because it is a grouped list of every
-    // household's lists and the dock is one field and a button on a phone.
-    //
-    // Unguarded like its siblings: which reader may **use** it is decided by
-    // the page, from `Basket.lists`, which is the server's own redaction. A
-    // guest is served none, gets no composer, and has nothing to reach it
-    // from; the add behind it is refused for them regardless of what is drawn.
-    sheet({
-      path: 'add/list',
-      loadComponent: () =>
-        import('@portfolio/velista/feature-shopping-lists').then(
-          (m) => m.TargetListSheet
         ),
     }),
     // A suggestion's Details in the composer (velista `0107`). Over both routes,
@@ -1075,7 +1059,6 @@ export const AppShellRoutes: Route[] = [
               // page stays, and a store the page provided would be one the
               // sheet reaches a second copy of (velista `0093`, section 2).
               BasketChangeStore,
-              BasketTargetStore,
               BasketViewStore,
             ],
             children: basketSheetRoutes({ finish: false }),
@@ -1133,7 +1116,6 @@ export const AppShellRoutes: Route[] = [
               // page stays, and a store the page provided would be one the
               // sheet reaches a second copy of (velista `0093`, section 2).
               BasketChangeStore,
-              BasketTargetStore,
               BasketViewStore,
             ],
             children: basketSheetRoutes({ finish: true }),

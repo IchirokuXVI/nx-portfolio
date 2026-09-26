@@ -1,5 +1,4 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type {
   CatalogSuggestion,
@@ -15,7 +14,6 @@ import {
   type SilenceHandlers,
 } from '@portfolio/velista/platform';
 import { LineComposer } from './line-composer';
-import { SKELETON_DELAY_MS, SuggestionList } from './suggestion-list';
 
 /**
  * Plan 0038: the add button records when there is nothing typed.
@@ -223,15 +221,13 @@ describe('LineComposer, one slot and the empty field decides', () => {
       const added: unknown[] = [];
       fixture.componentInstance.submitted.subscribe((one) => added.push(one));
       fixture.componentRef.setInput('busy', true);
-      fixture.componentRef.setInput('suggestions', [OAT]);
       type(fixture, 'oat');
 
       host(fixture)
         .querySelector('form.composer')
         ?.dispatchEvent(new Event('submit'));
-      fixture.debugElement
-        .query(By.directive(SuggestionList))
-        .componentInstance.chose.emit(OAT);
+      // A card in the page's results, which reaches the composer through `choose`.
+      fixture.componentInstance.choose(OAT, document.createElement('button'));
       fixture.detectChanges();
 
       expect(added).toEqual([]);
@@ -259,10 +255,11 @@ describe('LineComposer, one slot and the empty field decides', () => {
   });
 
   /**
-   * Velista `0110`. The basket's composer while no list is chosen: the field and the
-   * button are held, and the field stays focusable so a tap can ask why.
+   * Velista `0116`. The basket's composer asks which list before it adds, so a send
+   * names the button it came from and leaves the words until the page says the line
+   * has somewhere to go.
    */
-  describe('while locked', () => {
+  describe('holding a send for a question', () => {
     const OAT: CatalogSuggestion = {
       kind: 'item',
       item: {
@@ -290,75 +287,92 @@ describe('LineComposer, one slot and the empty field decides', () => {
       return found;
     }
 
-    async function locked() {
+    async function held() {
       const rendered = await render(fakeCapture(), { voice: false });
-      rendered.fixture.componentRef.setInput('lockReasonId', 'why-locked');
+      rendered.fixture.componentRef.setInput('holdOnSend', true);
       rendered.fixture.detectChanges();
       return rendered;
     }
 
-    it('holds the field and the button, and says why through the field', async () => {
-      const { fixture } = await locked();
-
-      expect(field(fixture).readOnly).toBe(true);
-      expect(field(fixture).getAttribute('aria-disabled')).toBe('true');
-      expect(field(fixture).getAttribute('aria-describedby')).toBe(
-        'why-locked'
-      );
-      // Focusable, so the keyboard can reach it and ask: `disabled` would not be.
-      expect(field(fixture).disabled).toBe(false);
-      expect(button(fixture).disabled).toBe(true);
-    });
-
-    it('lets nothing typed through, and sends nothing on Enter or on a suggestion', async () => {
-      const { fixture } = await locked();
-      const queries: string[] = [];
-      const added: unknown[] = [];
-      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
-      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-      fixture.componentRef.setInput('suggestions', [OAT]);
-
+    it('is never locked: the field takes words and the plus sends them', async () => {
+      const { fixture } = await held();
       type(fixture, 'oat');
-      host(fixture)
-        .querySelector('form.composer')
-        ?.dispatchEvent(new Event('submit'));
-      fixture.componentInstance.choose(OAT);
 
-      expect(queries).toEqual([]);
-      expect(added).toEqual([]);
-    });
-
-    it('asks for the reason when the field is tapped or focused', async () => {
-      const { fixture } = await locked();
-      let pressed = 0;
-      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
-
-      field(fixture).dispatchEvent(new Event('focus'));
-      field(fixture).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-      expect(pressed).toBe(2);
-    });
-
-    it('works as before once unlocked, and asks for nothing', async () => {
-      const { fixture } = await locked();
-      let pressed = 0;
-      const added: unknown[] = [];
-      fixture.componentInstance.lockedPressed.subscribe(() => (pressed += 1));
-      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-
-      fixture.componentRef.setInput('lockReasonId', null);
-      fixture.detectChanges();
-      field(fixture).dispatchEvent(new Event('focus'));
-      type(fixture, 'oat');
-      host(fixture)
-        .querySelector('form.composer')
-        ?.dispatchEvent(new Event('submit'));
-
-      expect(pressed).toBe(0);
       expect(field(fixture).readOnly).toBe(false);
       expect(field(fixture).hasAttribute('aria-disabled')).toBe(false);
-      expect(field(fixture).hasAttribute('aria-describedby')).toBe(false);
+      expect(button(fixture).disabled).toBe(false);
+    });
+
+    it('names the plus as the anchor and keeps the words and the quantity', async () => {
+      const { fixture } = await held();
+      const added: { anchor?: HTMLElement }[] = [];
+      const queries: string[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(3);
+
+      button(fixture).click();
+      fixture.detectChanges();
+
+      expect(added).toEqual([
+        { content: 'oat', quantity: 3, anchor: button(fixture) },
+      ]);
+      expect(field(fixture).value).toBe('oat');
+      expect(fixture.componentInstance.quantity()).toBe(3);
+      expect(queries).toEqual(['oat']);
+    });
+
+    it('names the card button a suggestion was chosen with', async () => {
+      const { fixture } = await held();
+      const added: { anchor?: HTMLElement; itemIds?: readonly string[] }[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      const card = document.createElement('button');
+
+      fixture.componentInstance.choose(OAT, card);
+
+      expect(added[0]?.anchor).toBe(card);
+      expect(added[0]?.itemIds).toEqual(['item-oat']);
+    });
+
+    it('clears, resets and keeps focus once the page says the line was placed', async () => {
+      const { fixture } = await held();
+      const queries: string[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(2);
+      button(fixture).click();
+
+      fixture.componentInstance.sent();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(fixture.componentInstance.quantity()).toBe(1);
+      expect(queries).toEqual(['oat', '']);
+      expect(document.activeElement).toBe(field(fixture));
+    });
+
+    it('keeps focus in the field when the plus is pressed', async () => {
+      const { fixture } = await held();
+      type(fixture, 'oat');
+      const press = new MouseEvent('mousedown', { cancelable: true });
+
+      button(fixture).dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
+    });
+
+    it('names no anchor and clears at once without the hold', async () => {
+      const { fixture } = await render(fakeCapture(), { voice: false });
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      type(fixture, 'oat');
+
+      button(fixture).click();
+      fixture.detectChanges();
+
       expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+      expect(field(fixture).value).toBe('');
     });
   });
 
@@ -562,140 +576,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
   });
 });
 
-/**
- * The panel is put down by a click on the page, and the row it is pinned above is
- * what it is put down by everything except.
- *
- * The exception is the whole of the rule: the panel covers a list somebody may want
- * to look at, so tapping a line has to close it, while the field, the stepper and
- * the send button are the row they are still using to fill it. Both halves are the
- * host element, so neither can drift from the other.
- */
-describe('LineComposer, putting the suggestions down', () => {
-  const OFFERED: readonly CatalogSuggestion[] = [
-    {
-      kind: 'item',
-      item: {
-        id: 'item-oat',
-        name: { es: 'Bebida de avena', en: 'Oat drink' },
-        brand: 'Oatly',
-        size: null,
-        unit: 'UNIT',
-        productGroupId: null,
-        category: 'OTHER',
-        offer: null,
-        chainPrices: [],
-        imageUrl: null,
-        packCount: null,
-        unitBasis: null,
-      },
-    },
-  ];
-
-  async function offering() {
-    const { fixture } = await render();
-    fixture.componentRef.setInput('suggestions', OFFERED);
-    type(fixture, 'oat');
-    return fixture;
-  }
-
-  function drawn(fixture: ComponentFixture<LineComposer>): boolean {
-    return host(fixture).querySelector('.panel') !== null;
-  }
-
-  function clickOn(fixture: ComponentFixture<LineComposer>, target: Element) {
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    fixture.detectChanges();
-  }
-
-  function find(
-    fixture: ComponentFixture<LineComposer>,
-    selector: string
-  ): Element {
-    const found = host(fixture).querySelector(selector);
-    if (found === null) {
-      throw new Error(`there is no ${selector} to click`);
-    }
-    return found;
-  }
-
-  it('closes on a click anywhere else on the page', async () => {
-    const fixture = await offering();
-    expect(drawn(fixture)).toBe(true);
-
-    // A line of the list the panel is drawn over. Anything outside the host is the
-    // same gesture: this is not the row I am typing into.
-    clickOn(fixture, document.body);
-
-    expect(drawn(fixture)).toBe(false);
-  });
-
-  it('stays up for a click on the field it belongs to', async () => {
-    const fixture = await offering();
-
-    clickOn(fixture, find(fixture, 'input.field'));
-
-    expect(drawn(fixture)).toBe(true);
-  });
-
-  it('stays up for a click on the quantity', async () => {
-    const fixture = await offering();
-
-    // Setting the number and choosing the product are one gesture, so the control
-    // that sets it cannot be the control that takes the products away.
-    clickOn(fixture, find(fixture, 'lib-quantity-stepper .step'));
-
-    expect(drawn(fixture)).toBe(true);
-  });
-
-  it('stays up for a click on a suggestion, which is what chooses it', async () => {
-    const fixture = await offering();
-    const chosen: { content: string }[] = [];
-    fixture.componentInstance.submitted.subscribe((one) => chosen.push(one));
-
-    clickOn(fixture, find(fixture, 'button.pick'));
-
-    // The dismissal must not race the choice: were the panel closed by the click
-    // that lands on one of its own rows, choosing would be a coin toss.
-    expect(chosen).toHaveLength(1);
-  });
-
-  it('comes back on the next keystroke', async () => {
-    const fixture = await offering();
-    clickOn(fixture, document.body);
-    expect(drawn(fixture)).toBe(false);
-
-    // Typing is asking again. A panel that stayed shut until the field was emptied
-    // would be a dropdown somebody had broken for the rest of a sentence.
-    type(fixture, 'oat m');
-
-    expect(drawn(fixture)).toBe(true);
-  });
-});
-
-/**
- * The field is the combobox that owns the panel's grid (velista `0101`, rule 8),
- * and the panel's cards reach the page through the composer.
- */
-describe('LineComposer, the field and its cards', () => {
-  const OAT: CatalogSuggestion = {
-    kind: 'item',
-    item: {
-      id: 'item-oat',
-      name: { es: 'Bebida de avena', en: 'Oat drink' },
-      brand: 'Oatly',
-      size: null,
-      unit: 'UNIT',
-      productGroupId: null,
-      category: 'OTHER',
-      offer: null,
-      chainPrices: [],
-      imageUrl: null,
-      packCount: null,
-      unitBasis: null,
-    },
-  };
-
+describe('LineComposer, the field and its results', () => {
   function field(fixture: ComponentFixture<LineComposer>): HTMLInputElement {
     const found = host(fixture).querySelector<HTMLInputElement>('input.field');
     if (found === null) {
@@ -704,110 +585,95 @@ describe('LineComposer, the field and its cards', () => {
     return found;
   }
 
-  it('names the panel it controls while it is open, and nothing while it is not', async () => {
-    const { fixture } = await render();
-
-    expect(field(fixture).getAttribute('role')).toBe('combobox');
-    expect(field(fixture).getAttribute('aria-expanded')).toBe('false');
-    expect(field(fixture).getAttribute('aria-controls')).toBeNull();
-
-    fixture.componentRef.setInput('suggestions', [OAT]);
-    type(fixture, 'oat');
-
-    const panel = host(fixture).querySelector('.panel');
-    expect(field(fixture).getAttribute('aria-expanded')).toBe('true');
-    expect(field(fixture).getAttribute('aria-controls')).toBe(panel?.id);
-  });
-
-  describe('a search that found nothing (0108, target 1)', () => {
-    function answered(
-      fixture: ComponentFixture<LineComposer>,
-      words: string | null,
-      found: readonly CatalogSuggestion[] = []
-    ): void {
-      fixture.componentRef.setInput('suggestions', found);
-      fixture.componentRef.setInput('suggestedFor', words);
-      fixture.detectChanges();
+  /**
+   * Velista `0117`: where the page draws the results, the field is a search box that
+   * controls them, the composer draws no panel of its own, and Escape empties it.
+   */
+  describe('with the results on the page', () => {
+    async function onPage() {
+      const rendered = await render();
+      rendered.fixture.componentRef.setInput('resultsId', 'page-results');
+      rendered.fixture.detectChanges();
+      return rendered;
     }
 
-    it('says so for the words in the field, and that they can still be added', async () => {
-      const { fixture } = await render();
-      type(fixture, 'zzzz');
-      answered(fixture, 'zzzz');
-
-      expect(host(fixture).querySelector('.none-h')).not.toBeNull();
-      expect(host(fixture).querySelector('.none-p')).not.toBeNull();
-    });
-
-    it('takes the row away on the next keystroke', async () => {
-      const { fixture } = await render();
-      type(fixture, 'zzzz');
-      answered(fixture, 'zzzz');
-      type(fixture, 'zzzzz');
-
-      expect(host(fixture).querySelector('.none')).toBeNull();
-    });
-
-    it('draws no row while the search is still running, or when it found something', async () => {
-      const { fixture } = await render();
-      type(fixture, 'zzzz');
-      answered(fixture, 'zzzz');
-      fixture.componentRef.setInput('suggesting', true);
-      fixture.detectChanges();
-
-      expect(host(fixture).querySelector('.none')).toBeNull();
-
-      fixture.componentRef.setInput('suggesting', false);
-      answered(fixture, 'oat', [OAT]);
+    it('is a search box controlling the page’s region, with no panel of its own', async () => {
+      const { fixture } = await onPage();
       type(fixture, 'oat');
 
-      expect(host(fixture).querySelector('.none')).toBeNull();
-      expect(host(fixture).querySelectorAll('.sug')).toHaveLength(1);
+      expect(field(fixture).getAttribute('role')).toBe('searchbox');
+      expect(field(fixture).getAttribute('aria-controls')).toBe('page-results');
+      expect(field(fixture).hasAttribute('aria-haspopup')).toBe(false);
+      expect(host(fixture).querySelector('lib-suggestion-list')).toBeNull();
     });
 
-    it('does not offer to add the words while the composer is locked', async () => {
-      const { fixture } = await render(fakeCapture(), { voice: false });
-      fixture.componentRef.setInput('lockReasonId', 'why');
-      type(fixture, 'zzzz');
-      answered(fixture, 'zzzz');
+    it('empties the field on Escape, and says so', async () => {
+      const { fixture } = await onPage();
+      const queries: string[] = [];
+      fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
+      type(fixture, 'oat');
 
-      expect(host(fixture).querySelector('.none-p')).toBeNull();
+      const escape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        cancelable: true,
+      });
+      field(fixture).dispatchEvent(escape);
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(queries).toEqual(['oat', '']);
+      expect(escape.defaultPrevented).toBe(true);
+    });
+
+    it('lets Escape go on from an empty field', async () => {
+      const { fixture } = await onPage();
+      const escape = new KeyboardEvent('keydown', {
+        key: 'Escape',
+        cancelable: true,
+      });
+
+      field(fixture).dispatchEvent(escape);
+
+      expect(escape.defaultPrevented).toBe(false);
+    });
+
+    it('says when the field gains and loses focus', async () => {
+      const { fixture } = await onPage();
+      const focused: boolean[] = [];
+      fixture.componentInstance.fieldFocused.subscribe((one) =>
+        focused.push(one)
+      );
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      field(fixture).dispatchEvent(new Event('blur'));
+
+      expect(focused).toEqual([true, false]);
+    });
+
+    it('empties the field on clear() without taking focus', async () => {
+      const { fixture } = await onPage();
+      type(fixture, 'oat');
+      fixture.componentInstance.quantity.set(3);
+
+      fixture.componentInstance.clear();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(fixture.componentInstance.quantity()).toBe(1);
+      expect(document.activeElement).not.toBe(field(fixture));
     });
   });
 
-  it('draws the skeleton while the page is asking the catalog', async () => {
+  it('keeps the words on Escape where the page says so', async () => {
     const { fixture } = await render();
-    fixture.componentRef.setInput('suggesting', true);
+    fixture.componentRef.setInput('escapeClears', false);
     type(fixture, 'oat');
-    await new Promise((resolve) => setTimeout(resolve, SKELETON_DELAY_MS + 30));
-    fixture.detectChanges();
 
-    expect(host(fixture).querySelectorAll('.sk')).toHaveLength(3);
-  });
-
-  it('hands a stepped line from a card to the page', async () => {
-    const { fixture } = await render();
-    const holding = {
-      key: 'l1',
-      lineId: 'l1',
-      text: 'Oat drink',
-      listName: null,
-      quantity: 1,
-      editable: true,
-    };
-    const changed: unknown[] = [];
-    fixture.componentInstance.holdingChanged.subscribe((one) =>
-      changed.push(one)
+    field(fixture).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
     );
-    fixture.componentRef.setInput('suggestions', [OAT]);
-    fixture.componentRef.setInput('holdingsOf', () => [holding]);
-    type(fixture, 'oat');
-
-    host(fixture)
-      .querySelectorAll<HTMLButtonElement>('.already .step')[1]
-      ?.click();
     fixture.detectChanges();
 
-    expect(changed).toEqual([{ holding, from: 1, to: 2 }]);
+    expect(field(fixture).value).toBe('oat');
   });
 });

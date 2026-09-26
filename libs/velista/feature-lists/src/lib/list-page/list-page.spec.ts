@@ -59,6 +59,7 @@ import type {
   ZoneRole,
 } from '@portfolio/velista/models';
 import {
+  NavChrome,
   NOTIFICATION_TONE,
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -213,6 +214,7 @@ async function render(options: Options = {}): Promise<{
   /** The route the page was given, whose query a spec can move as the router would. */
   activatedRoute: ReturnType<typeof route>;
   tone: { play: jest.Mock };
+  chrome: { setComposing: jest.Mock };
   profiles: FakeShoppingProfileStore;
   itemNames: FakeItemNames;
   view: ListViewStore;
@@ -282,6 +284,9 @@ async function render(options: Options = {}): Promise<{
     options.line,
     options.search === true ? { search: '1' } : {}
   );
+  // The bottom bar's owner, as a double (velista `0117`): the router here is a
+  // fake with no state to read, and what matters is what the page tells it.
+  const chrome = { setComposing: jest.fn() };
 
   await TestBed.configureTestingModule({
     imports: [ListPage, RokuTranslatorTestingModule.forTesting()],
@@ -312,6 +317,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeSessionStore('REGISTERED'),
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: Router, useValue: router },
+      { provide: NavChrome, useValue: chrome },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: activatedRoute },
       // The composer's microphone posts through this (plan 0038). Every test in
@@ -348,6 +354,7 @@ async function render(options: Options = {}): Promise<{
     router,
     activatedRoute,
     tone,
+    chrome,
     profiles,
     itemNames,
     view: TestBed.inject(ListViewStore),
@@ -1296,20 +1303,36 @@ describe('ListPage: searching and viewing one category', () => {
     );
   });
 
-  describe('the open search is in the URL (velista 0109)', () => {
-    function searchButton(fixture: ComponentFixture<ListPage>) {
-      return query(fixture, 'lib-list-tools .tools .tool') as HTMLButtonElement;
+  /**
+   * Velista `0117`: the composer's field is the list's only search. Typing draws the
+   * lines that match, then from the third character the catalog, in place of the
+   * list, and the phone's back button empties the field through the entry the first
+   * character pushed (rule F2).
+   */
+  describe('one field finds and adds (velista 0117)', () => {
+    function field(fixture: ComponentFixture<ListPage>): HTMLInputElement {
+      return query(
+        fixture,
+        'lib-line-composer input.field'
+      ) as HTMLInputElement;
     }
 
-    it('opens by pushing search=1, merged into the query', async () => {
-      const { fixture, router, activatedRoute } = await render({
+    function typeInto(fixture: ComponentFixture<ListPage>, text: string): void {
+      const input = field(fixture);
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    it('sets the store’s query and pushes search=1 on the first keystroke', async () => {
+      const { fixture, router, activatedRoute, view } = await render({
         lines: LINES,
         items: ITEMS,
-        line: 'ln-milk',
       });
 
-      searchButton(fixture).click();
+      typeInto(fixture, 'l');
 
+      expect(view.query()).toBe('l');
       expect(router.navigate).toHaveBeenCalledWith([], {
         relativeTo: activatedRoute,
         queryParams: { search: '1' },
@@ -1317,22 +1340,73 @@ describe('ListPage: searching and viewing one category', () => {
       });
       // A push: nothing asked the router to replace the entry.
       expect(router.navigate.mock.calls[0][1]).not.toHaveProperty('replaceUrl');
+
+      typeInto(fixture, 'le');
+      expect(router.navigate).toHaveBeenCalledTimes(1);
     });
 
-    it('closes the field and clears the term when back takes search=1 off', async () => {
+    it('draws the lines and no catalog for two characters, and both from three, lines first', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+      typeInto(fixture, 'le');
+
+      expect(query(fixture, '.results-heading')?.textContent).toContain(
+        'list.add.resultsOnList'
+      );
+      expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
+      expect(query(fixture, '.catalog')).toBeNull();
+
+      typeInto(fixture, 'lec');
+
+      const results = query(fixture, '.results') as HTMLElement;
+      const headings = [...results.querySelectorAll('.results-heading')].map(
+        (one) => one.textContent?.trim() ?? ''
+      );
+      expect(headings[0]).toContain('list.add.resultsOnList');
+      expect(headings[1]).toBe('list.add.resultsCatalog');
+      expect(query(fixture, '.catalog lib-suggestion-list')).not.toBeNull();
+    });
+
+    it('says so when nothing on the list matches', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+      typeInto(fixture, 'zz');
+
+      expect(query(fixture, '.results-heading')?.textContent?.trim()).toBe(
+        'list.add.resultsNone'
+      );
+      expect(query(fixture, '.results lib-line-list')).toBeNull();
+    });
+
+    it('hides the tools row while the results show, and draws it again after', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+      typeInto(fixture, 'le');
+      expect(query(fixture, 'lib-list-tools')).toBeNull();
+
+      typeInto(fixture, '');
+      expect(query(fixture, 'lib-list-tools')).not.toBeNull();
+    });
+
+    it('draws no search of its own in the tools row', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+      expect(tools(fixture)).not.toBeNull();
+      expect(
+        query(fixture, 'lib-list-tools [aria-label="basket.search.open"]')
+      ).toBeNull();
+    });
+
+    it('empties the field and shows the list when back takes search=1 off', async () => {
       const { fixture, view, activatedRoute } = await render({
         lines: LINES,
         items: ITEMS,
       });
-
+      typeInto(fixture, 'leche');
+      // The push lands.
       activatedRoute.setQuery({ search: '1' });
       fixture.detectChanges();
       await fixture.whenStable();
-      expect(tools(fixture)?.open()).toBe(true);
-
-      view.search('leche');
-      fixture.detectChanges();
-      expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
 
       // The phone's back button: a popstate onto the entry without the parameter.
       activatedRoute.setQuery({});
@@ -1340,20 +1414,23 @@ describe('ListPage: searching and viewing one category', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(tools(fixture)?.open()).toBe(false);
-      expect(query(fixture, 'input.search-input')).toBeNull();
+      expect(field(fixture).value).toBe('');
       expect(view.query()).toBe('');
+      expect(query(fixture, '.results')).toBeNull();
       expect(rows(fixture)).toHaveLength(LINES.length);
     });
 
-    it('closes from Cancel through PageNavigation.back, to the list without search', async () => {
-      const { fixture, router } = await render({
+    it('takes search=1 off through PageNavigation.back when the field is emptied', async () => {
+      const { fixture, router, activatedRoute } = await render({
         lines: LINES,
         items: ITEMS,
-        search: true,
       });
+      typeInto(fixture, 'le');
+      activatedRoute.setQuery({ search: '1' });
+      fixture.detectChanges();
+      await fixture.whenStable();
 
-      (query(fixture, '.search-cancel') as HTMLButtonElement).click();
+      typeInto(fixture, '');
       await fixture.whenStable();
 
       expect(router.createUrlTree).toHaveBeenCalledWith(
@@ -1363,15 +1440,112 @@ describe('ListPage: searching and viewing one category', () => {
           queryParamsHandling: 'merge',
         })
       );
-      // Nothing of this app is behind a spec's first entry, which is the cold load
-      // of a URL with search=1: the fallback replaces, and never leaves the app.
+      // Nothing of this app is behind a spec's first entry, so the fallback
+      // replaces, and never leaves the app.
       expect(router.navigateByUrl).toHaveBeenCalledWith(
         '/velista/en/zones/z/lists/l',
         { replaceUrl: true }
       );
     });
 
-    it('keeps search=1 on the filter sheet, so closing it comes back to the search', async () => {
+    it('empties the field on Escape, which takes the entry off the same way', async () => {
+      const { fixture, router, activatedRoute } = await render({
+        lines: LINES,
+        items: ITEMS,
+      });
+      typeInto(fixture, 'le');
+      activatedRoute.setQuery({ search: '1' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      field(fixture).dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape' })
+      );
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(field(fixture).value).toBe('');
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        '/velista/en/zones/z/lists/l',
+        { replaceUrl: true }
+      );
+    });
+
+    it('replaces search=1 away on a cold load with an empty field', async () => {
+      const { router } = await render({
+        lines: LINES,
+        items: ITEMS,
+        search: true,
+      });
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        '/velista/en/zones/z/lists/l',
+        { replaceUrl: true }
+      );
+    });
+
+    it('gives the bar’s room to the page while the field has focus or holds words', async () => {
+      const { fixture, chrome } = await render({ lines: LINES, items: ITEMS });
+      const last = () => chrome.setComposing.mock.calls.at(-1)?.[0];
+
+      field(fixture).dispatchEvent(new Event('focus'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(last()).toBe(true);
+
+      typeInto(fixture, 'le');
+      field(fixture).dispatchEvent(new Event('blur'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      // Still true: the field holds words.
+      expect(last()).toBe(true);
+
+      typeInto(fixture, '');
+      await fixture.whenStable();
+      expect(last()).toBe(false);
+    });
+
+    it('clears the field, drops the results and keeps focus after an add', async () => {
+      const { fixture, lines } = await render({ lines: LINES, items: ITEMS });
+      field(fixture).focus();
+      typeInto(fixture, 'Pan');
+
+      (
+        query(fixture, 'lib-line-composer form.composer') as HTMLFormElement
+      ).dispatchEvent(new Event('submit'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.linesIn(LIST_ID).map((one) => one.content)).toContain('Pan');
+      expect(field(fixture).value).toBe('');
+      expect(document.activeElement).toBe(field(fixture));
+      expect(query(fixture, '.results')).toBeNull();
+    });
+
+    it('keeps the keyboard up: a press in the results does not take focus', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+      typeInto(fixture, 'le');
+      const press = new MouseEvent('mousedown', {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      query(fixture, '.results lib-line-list')?.dispatchEvent(press);
+
+      expect(press.defaultPrevented).toBe(true);
+    });
+
+    it('makes the field a search box that controls the results', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+
+      expect(field(fixture).getAttribute('role')).toBe('searchbox');
+      expect(field(fixture).getAttribute('aria-controls')).toBe('list-results');
+      typeInto(fixture, 'le');
+      expect(query(fixture, '#list-results')).not.toBeNull();
+    });
+
+    it('keeps search=1 on the filter sheet, so closing it comes back to the words', async () => {
       const { fixture, router, activatedRoute } = await render({
         lines: LINES,
         items: ITEMS,
@@ -1384,20 +1558,6 @@ describe('ListPage: searching and viewing one category', () => {
         relativeTo: activatedRoute,
         queryParams: { search: '1' },
       });
-    });
-
-    it('draws the field open and empty on a cold load with search=1', async () => {
-      const { fixture, view } = await render({
-        lines: LINES,
-        items: ITEMS,
-        search: true,
-      });
-
-      const input = query(fixture, 'input.search-input') as HTMLInputElement;
-      expect(input).not.toBeNull();
-      expect(input.value).toBe('');
-      expect(view.query()).toBe('');
-      expect(rows(fixture)).toHaveLength(LINES.length);
     });
   });
 

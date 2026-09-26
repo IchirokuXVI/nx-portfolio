@@ -1,10 +1,11 @@
-import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
   effect,
+  type ElementRef,
   inject,
   signal,
   untracked,
@@ -20,7 +21,6 @@ import {
   BasketChangeStore,
   BasketListStore,
   BasketStore,
-  BasketTargetStore,
   BasketViewStore,
   GroupMembers,
   SessionStore,
@@ -50,29 +50,34 @@ import {
   appPath,
   BrowserFacade,
   ListSearchNavigation,
+  NavChrome,
   searchOpenOf,
   sheetSegments,
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
-  AnchoredPopover,
-  type AnchoredPopoverClose,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
   ClockIcon,
   FlagIcon,
   LineComposer,
+  type LineComposerSubmit,
+  ListPicker,
+  type ListPickerRow,
   ListTools,
   OfflineIcon,
   PersonIcon,
   ShareIcon,
+  type SuggestionChoice,
   type SuggestionHolding,
   type SuggestionHoldingChange,
+  SuggestionList,
   VisitNotice,
 } from '@portfolio/velista/ui';
 import { basketErrorKey } from '../basket-error-copy';
 import {
+  listPickerRows,
   outstandingCaption,
   participantInitials,
   visitTime,
@@ -80,7 +85,6 @@ import {
 import { BASKET_PATHS, basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import { basketGroupScope } from '../swap-sheet/swap';
-import { TargetListSheet } from '../target-list-sheet/target-list-sheet';
 import { ChangeAcknowledger } from './change-acknowledger';
 import { SeenTarget } from './seen-target';
 
@@ -152,21 +156,21 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 @Component({
   selector: 'lib-basket-page',
   imports: [
-    AnchoredPopover,
     BasketRow,
-    CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
     ClockIcon,
     SeenTarget,
     FlagIcon,
     LineComposer,
+    ListPicker,
     ListTools,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
     RouterOutlet,
     ShareIcon,
+    SuggestionList,
     VisitNotice,
   ],
   templateUrl: './basket-page.html',
@@ -195,13 +199,6 @@ export class BasketPage {
   private readonly _view = inject(BasketViewStore);
 
   /**
-   * Where the composer's next line goes (velista `0092`, section 7.2).
-   *
-   * The fourth store this route provides, and it is a store rather than a signal
-   * on this page because it outlives one render of the dock and because it reads
-   * and writes this device's memory, which is not a page's business (rule D1).
-   */
-  /**
    * What changed on the covered lists, for the banner and for the sheet over
    * this page (velista `0093`).
    *
@@ -212,7 +209,6 @@ export class BasketPage {
    */
   private readonly _changes = inject(BasketChangeStore);
 
-  private readonly _target = inject(BasketTargetStore);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
   private readonly _translator = inject(RokuTranslatorService);
@@ -384,9 +380,6 @@ export class BasketPage {
         unavailable: 0,
       }
   );
-
-  /** One line under the heading, or null. Only the `LIVE` basket has one. */
-  protected readonly hint = computed(() => this.surface()?.hintKey ?? null);
 
   /** What an empty basket says, which is about what put lines in it. */
   protected readonly emptyTitle = computed(
@@ -671,9 +664,9 @@ export class BasketPage {
    * Where this basket's dismissal is remembered, or null before the id is
    * known.
    *
-   * Per basket rather than one key for the app, following `basketTargetKey`'s
-   * reasoning: somebody shopping two shared baskets in a week has two visits,
-   * and dismissing one says nothing about the other.
+   * Per basket rather than one key for the app: somebody shopping two shared
+   * baskets in a week has two visits, and dismissing one says nothing about the
+   * other.
    */
   private _visitNoticeKey(): string | null {
     const id = this._store.basket()?.id ?? null;
@@ -849,15 +842,6 @@ export class BasketPage {
       this._live ? this._store.openLive() : this._store.open(this._id)
     ).then(() => {
       this._view.restore();
-      // The target is checked against the refs that just arrived, for the same
-      // reason and at the same moment: a remembered list this reader no longer
-      // writes is not in `Basket.lists` any more, and the chip must stop naming
-      // it. `restore` drops it silently and keeps the record, because the list
-      // may come back on the next read.
-      const basket = this._store.basket();
-      if (basket !== null) {
-        this._target.restore(basket);
-      }
     });
 
     /**
@@ -893,6 +877,8 @@ export class BasketPage {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      // The bar comes back with whatever screen is next (velista `0117`).
+      this._chrome.setComposing(false);
       // The one timer this page owns. A route provider's `DestroyRef` never
       // fires in this app, so a timer set in the store would outlive the screen
       // and flip a signal for a basket nobody is looking at.
@@ -903,12 +889,7 @@ export class BasketPage {
       // on whatever the last one was searched for, and the search is the one thing
       // on this screen that is never remembered (section 4.7).
       this._view.leave();
-      // The third one on this route, let go in the same place for the same
-      // reason: a route provider's own `DestroyRef` never fires. The **record**
-      // survives, which is the whole point of writing it down; what is dropped is
-      // this page's hold on it.
-      this._target.leave();
-      // The fourth one on this route, for the same reason: without this a
+      // The third one on this route, for the same reason: without this a
       // basket opened later starts holding the previous basket's changes.
       this._changes.reset();
     });
@@ -1361,54 +1342,181 @@ export class BasketPage {
    */
   protected readonly visibleLines = this._view.visibleRows;
 
-  /** What is in the search field, for the count and for the no match sentence. */
-  protected readonly searchQuery = this._view.query;
-
-  /**
-   * Whether anything is being searched for, which decides **which** empty state is
-   * drawn: the search's, quoting what was typed, or the filter's (`0075`).
-   */
-  protected readonly searching = this._view.searching;
-
   /** The query folded once, handed to every row to draw its `<mark>` from. */
   protected readonly highlight = this._view.folded;
 
-  /** What was typed, or the empty string from Clear. */
-  protected search(query: string): void {
-    this._view.search(query);
-  }
+  // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
+  private readonly _chrome = inject(NavChrome);
 
   /**
-   * Whether the search field is open, which is `?search=1` (velista `0109`).
+   * Whether `?search=1` is on the URL (velista `0109`).
    *
-   * In the URL so the phone's back button closes the search rather than leaving the
-   * basket: opening pushes the parameter, and back pops it.
+   * Since `0117` it means that the composer's field holds words (rule F2). The first
+   * character pushes it, so the phone's back button has an entry to take off, and
+   * taking it off empties the field. Only the open state is in the URL, never the
+   * words.
    */
   protected readonly searchOpen = searchOpenOf(this._route);
 
-  /** The search button opens, and Cancel and Escape go back. */
-  protected setSearchOpen(open: boolean): void {
-    void (open
-      ? this._search.open(this._route)
-      : this._search.close(this._route));
+  /** The words in the field, trimmed, for the headings and the nothing sentence. */
+  protected readonly typed = computed(() => this._query().trim());
+
+  /**
+   * Whether the field holds words, which is when the results replace the basket's
+   * body: the rows that match, then the catalog's cards (rule F1).
+   */
+  protected readonly typing = computed(() => this.typed() !== '');
+
+  /** The catalog is asked from the third character, so its section starts there. */
+  protected readonly catalogShown = computed(
+    () => this.typed().length >= SUGGEST_MIN_CHARS
+  );
+
+  /**
+   * The words a finished catalog search answered with nothing, while they are still
+   * the words in the field, or null (velista `0108`, target 1).
+   */
+  protected readonly catalogEmptyFor = computed(() => {
+    const words = this.suggestedFor();
+    return words !== null &&
+      !this.suggesting() &&
+      this.suggestions().length === 0 &&
+      words === this.typed()
+      ? words
+      : null;
+  });
+
+  /**
+   * The rows that match, once each and in the order the basket draws them, for the
+   * results. The same rows the sections hold, so a row a search finds is the row
+   * the basket draws, with its controls.
+   */
+  protected readonly resultRows = computed(() =>
+    this.sections().flatMap((section) => section.rows)
+  );
+
+  /** The id of the results region, which the field names in `aria-controls`. */
+  protected readonly resultsId = 'basket-results';
+
+  /** Whether the composer's field has focus. */
+  private readonly _fieldFocused = signal(false);
+
+  /** The composer's field gained or lost focus. */
+  protected onFieldFocused(focused: boolean): void {
+    this._fieldFocused.set(focused);
   }
 
   /**
-   * The query goes when the field does, whichever way it closed, so the row that
-   * comes back is over the whole basket.
+   * The bar gives the page its room while the field has focus or holds words (rule
+   * F3), so the results reach from the basket's bar to the composer.
    */
-  private _searchWasOpen = false;
-
-  private readonly _clearClosedSearch = effect(() => {
-    const open = this.searchOpen();
-    const was = this._searchWasOpen;
-    this._searchWasOpen = open;
-    if (was && !open) {
-      untracked(() => this._view.search(''));
-    }
+  private readonly _hideChrome = effect(() => {
+    const composing = this._fieldFocused() || this.typing();
+    untracked(() => this._chrome.setComposing(composing));
   });
+
+  private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
+
+  /** Whether the results were already on screen at the last render. */
+  private _resultsDrawn = false;
+
+  /**
+   * When the results first appear, the column goes back to its top, so they sit
+   * under the basket's bar however far down the basket somebody was.
+   *
+   * Not further, unlike the zone list: the basket's bar is inside this column
+   * rather than above it, so scrolling the heading to the top would take the bar
+   * off the screen, and the bar stays while typing.
+   */
+  private readonly _scrollToResults = afterRenderEffect(() => {
+    const shown = this.typing();
+    const column = this._column()?.nativeElement;
+    if (!shown || column === undefined) {
+      this._resultsDrawn = false;
+      return;
+    }
+    if (this._resultsDrawn) {
+      return;
+    }
+    this._resultsDrawn = true;
+    column.scrollTo?.({ top: 0, behavior: 'auto' });
+  });
+
+  /** Whether an open of the search entry was asked for and has not landed yet. */
+  private _opening = false;
+
+  /** Whether a close of the search entry was asked for and has not landed yet. */
+  private _closing = false;
+
+  /** Whether the entry was on the URL the last time the effect below ran. */
+  private _wasOpen = false;
+
+  /**
+   * Keeps the history entry and the field saying the same thing (rule F2), as the
+   * zone list page does.
+   *
+   * - The first character pushes `search=1`.
+   * - An empty field with `search=1` on the URL goes back through
+   *   `ListSearchNavigation.close`, which is `PageNavigation.back` with the basket as
+   *   the fallback. The field is emptied by hand, by Escape and by an add, and a cold
+   *   load of `?search=1` arrives empty: all of them take the entry off the same way.
+   * - The entry going while the field still holds words is the phone's back button,
+   *   so the field is emptied to match.
+   *
+   * A close still in flight is not mistaken for back: words typed while it lands
+   * push a new entry rather than being emptied.
+   */
+  private readonly _followEntry = effect(() => {
+    const open = this.searchOpen();
+    const words = this.typing();
+    untracked(() => {
+      const was = this._wasOpen;
+      this._wasOpen = open;
+
+      if (open) {
+        this._opening = false;
+        if (!words && !this._closing) {
+          this._closing = true;
+          void this._search.close(this._route);
+        }
+        return;
+      }
+
+      const closing = this._closing;
+      this._closing = false;
+      if (!words) {
+        return;
+      }
+      if (was && !closing) {
+        this._composer()?.clear();
+        return;
+      }
+      if (!this._opening) {
+        this._opening = true;
+        void this._search.open(this._route);
+      }
+    });
+  });
+
+  /**
+   * A card's add button, in the results. It goes through the composer, which names
+   * the words and the products and, holding the send, hands them back with the
+   * button for the list picker (velista `0116`).
+   */
+  protected chooseCard(choice: SuggestionChoice): void {
+    this._composer()?.choose(choice.suggestion, choice.anchor);
+  }
+
+  /**
+   * Nothing in the results may take focus from the field, so the keyboard stays up
+   * whatever was pressed (rule T2 of velista `0101`). `mousedown` and never
+   * `pointerdown` or `touchstart`, which carry the page's own scroll.
+   */
+  protected holdFocus(event: MouseEvent): void {
+    event.preventDefault();
+  }
 
   // --- The filter sheet and its chips (plan 0075) ----------------------------
 
@@ -1593,100 +1701,70 @@ export class BasketPage {
   protected readonly adding = this._store.adding;
 
   /**
-   * The list the next line goes to, or null while none is chosen.
+   * The lists a line added here can go to, for the picker (velista `0116`).
    *
-   * Null is reachable only on a basket covering more than one list this reader
-   * writes: one list chooses itself, which is `BasketTargetStore.restore`'s
-   * business rather than this page's.
+   * Every list in `Basket.lists`, grouped by household in the order the server
+   * names them, each with how many of its lines are still to buy. The rows are the
+   * ones this page already holds, so this is a join in the client and not a request.
    */
-  protected readonly target = this._target.target;
+  protected readonly pickerRows = computed<readonly ListPickerRow[]>(() =>
+    listPickerRows(this._store.basket()?.lists ?? [], this._store.rows())
+  );
 
   /**
-   * Whether the chip above the field is a button.
+   * The button the picker is held against, or null while it is shut.
    *
-   * With one list in `Basket.lists` it is **text**: there is nothing to pick
-   * between, and a button opening a sheet with one row on it would be asking a
-   * question with one answer (`0030`).
+   * The plus beside the field, or the add button on a card: whichever was pressed.
    */
-  protected readonly canRetarget = computed(() => this._store.lists().size > 1);
+  protected readonly pickerAnchor = signal<HTMLElement | null>(null);
 
-  protected openTarget(): void {
-    // The chip is the popover's way out now that the popover holds no button of
-    // its own (velista 0113), and a press on the chip is not a press outside: the
-    // overlay counts its origin, the dock, as part of itself. So it is closed
-    // here, or it would stay drawn above the sheet's scrim.
-    this.needsListOpen.set(false);
-    void this._router.navigate(sheetSegments('add', 'list'), {
-      relativeTo: this._route,
-      queryParams: this._search.kept(this._route),
-    });
-  }
+  /** The line the open picker is asking about, as the composer sent it. */
+  private _waiting: LineComposerSubmit | null = null;
 
   /**
-   * Whether the popover saying a list comes first is up (velista `0110`).
+   * The plus or a card's add button was pressed, and the answer is a question:
+   * which list is it for? (velista `0116`.)
    *
-   * Drawn only while there is still no target, so choosing a list closes it
-   * without anything here having to watch for that.
+   * Asked every time, also when there is one list. Adding from the basket is rare,
+   * and a pick the reader sees beats a list remembered from last week that they do
+   * not. The composer holds the words until a list is picked, so waving the picker
+   * away leaves them in the field.
    */
-  protected readonly needsListOpen = signal(false);
-
-  /**
-   * Set for the moment this page hands focus back to the locked field itself, so
-   * the focus it causes is not read as somebody asking why the field is locked.
-   */
-  private _quietFocus = false;
-
-  /** The locked field was tapped or focused. */
-  protected openNeedsList(): void {
-    if (!this._quietFocus) {
-      this.needsListOpen.set(true);
-    }
-  }
-
-  /**
-   * The popover asked to close. On Escape, focus goes back to the field when it
-   * had moved into the popover, which is where it was before the popover opened.
-   * A press outside leaves focus wherever that press put it.
-   */
-  protected closeNeedsList(reason: AnchoredPopoverClose): void {
-    if (!this.needsListOpen()) {
+  protected askWhere(entry: LineComposerSubmit): void {
+    if (entry.anchor === undefined) {
+      // The composer here always names the button, because `holdOnSend` is on.
+      // This is the belt: a picker with nothing to stand on cannot be drawn.
       return;
     }
-    this.needsListOpen.set(false);
-    if (reason === 'escape') {
-      this._refocusField();
+    this._waiting = entry;
+    this.pickerAnchor.set(entry.anchor);
+  }
+
+  /** A list was picked, which is the add. */
+  protected async pickList(listId: string): Promise<void> {
+    const entry = this._waiting;
+    this._closePicker();
+    if (entry === null) {
+      return;
     }
+    // Cleared now, as an unheld send is: the add is not optimistic, but the words
+    // go back into the field if it fails (see `add`), and a field that kept them
+    // while the request was out would invite pressing the plus again.
+    this._composer()?.sent();
+    await this._addTo(listId, entry);
   }
 
   /**
-   * A sheet's route went (velista `0113`). When it was the target sheet and a
-   * list was chosen on it, the next thing to do is type, so focus goes to the
-   * composer's field.
-   *
-   * Here and not in the sheet, because this is the moment the sheet is gone: its
-   * fall has finished and nothing of it is left to hold focus. The sheet hands
-   * focus back only on Escape and the scrim, to whatever opened it, which is the
-   * chip and not the field. A dismissal without a choice is left to that.
-   *
-   * Quietly, so the focus is not read as a tap on a locked field. The target was
-   * set before the sheet closed, so the popover has nothing to say by now anyway.
-   * A target set by `restore` on arrival never passes through here, and moves no
-   * focus.
+   * The picker was waved away: a press outside it, or Escape, which has already
+   * handed focus back to the button. The words stay in the field.
    */
-  protected onSheetDeactivated(sheet: unknown): void {
-    if (sheet instanceof TargetListSheet && sheet.chose) {
-      this.needsListOpen.set(false);
-      this._refocusField();
-    }
+  protected dismissPicker(): void {
+    this._closePicker();
   }
 
-  private _refocusField(): void {
-    this._quietFocus = true;
-    try {
-      this._composer()?.focusField();
-    } finally {
-      this._quietFocus = false;
-    }
+  private _closePicker(): void {
+    this._waiting = null;
+    this.pickerAnchor.set(null);
   }
 
   /**
@@ -1833,6 +1911,13 @@ export class BasketPage {
 
   protected onComposerQuery(query: string): void {
     this._query.set(query);
+    // The rows are searched from the first character, the catalog from the third
+    // (velista `0117`).
+    this._view.search(query);
+    // New words are a new line: the open picker was asking about the old ones.
+    if (this._waiting !== null && query.trim() !== this._waiting.content) {
+      this._closePicker();
+    }
   }
 
   /**
@@ -1859,10 +1944,9 @@ export class BasketPage {
   private readonly _suggestEffect = effect((onCleanup) => {
     const query = this._query().trim();
 
-    // No list to add to, no request (velista `0110`). The field is locked then and
-    // cannot be typed into, so this is the belt: a suggestion offered with nowhere
-    // to put it is the thing that plan removed.
-    if (query.length < SUGGEST_MIN_CHARS || this.target() === null) {
+    // With or without a list chosen: the list is asked for at the moment of adding
+    // (velista `0116`), so the field searches from the first word.
+    if (query.length < SUGGEST_MIN_CHARS) {
       // Cleared synchronously rather than after the debounce: a dropdown that
       // lingered over a field somebody has just emptied is offering matches for
       // nothing.
@@ -1890,8 +1974,8 @@ export class BasketPage {
   });
 
   /**
-   * Add a line, from the field or from a suggestion (velista `0092`,
-   * section 7.4).
+   * Add a line to the list picked for it, from the field or from a suggestion
+   * (velista `0092`, section 7.4, and `0116`).
    *
    * **It names a list, and the add goes through that list's own rules.** So it
    * can land on a line the list already held (backend `0091`), and it can land
@@ -1908,21 +1992,13 @@ export class BasketPage {
    * nothing; losing the item somebody just remembered in an aisle is the failure
    * this screen cannot afford.
    */
-  protected async add(entry: {
-    content: string;
-    quantity: number;
-    itemIds?: readonly string[];
-  }): Promise<void> {
-    const target = this.target();
-    if (target === null) {
-      // The submit is disabled without one, so this is the belt: an add with no
-      // list is a line with nowhere to be.
-      return;
-    }
-
+  private async _addTo(
+    listId: string,
+    entry: LineComposerSubmit
+  ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
     const result = await this._store.addLine({
-      targetListId: target.listId,
+      targetListId: listId,
       content: entry.content,
       quantity: entry.quantity,
       ...(itemIds.length > 0 ? { itemIds } : {}),

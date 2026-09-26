@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Basket, idle</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+body { margin: 0; }
+/* Tokens copied from libs/velista/ui/src/lib/styles, Day values. */
+.vel {
+  --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-space-2: 4px; --app-space-3: 8px; --app-space-4: 12px; --app-space-5: 16px; --app-space-hair: 3px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-suggestion-thumb: 48px; --app-chain-mark: 18px; --app-suggestion-body: 59px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus: #2f6fed;
+  --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
+  --app-hover: rgba(17, 20, 31, 0.04); --app-thumb-bg: #ffffff;
+  font-family: var(--app-font-sans); color: var(--app-text-primary);
+}
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+.keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
+/* the app bar the standalone app draws */
+.appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
+.wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
+.avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+.ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
+.ibtn.amber { color: var(--app-action-quiet-fg); }
+/* the page head */
+.head { flex: none; padding: 0 16px; }
+.head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
+.head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
+.head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+.link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+.head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
+.tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+.tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 16px; }
+.sech b { font-size: var(--app-text-base); font-weight: 600; }
+/* zone list rows: cards */
+.lines { flex: 1; min-height: 0; padding: 2px 16px 0; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.card { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+.card .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qtychip { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* basket rows */
+.rows { flex: 1; min-height: 0; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+.settle { width: 26px; height: 26px; flex: none; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: transparent; padding: 0; margin: 0 4px; }
+.row .text { flex: 1; min-width: 0; }
+.row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+/* results while typing: found lines first, then the catalog under a rule */
+.results { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.sect { flex: none; display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+.sect .n { font-weight: 600; color: var(--app-text-secondary); }
+.found { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+.nothing { flex: none; display: flex; align-items: center; min-height: 44px; padding: 0 16px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+.catalog { flex: 1; min-height: 0; margin-top: 10px; padding: 0 12px; background: var(--app-surface-raised); border-top: 1px solid var(--app-border-subtle); overflow: hidden; }
+.catalog .sect { padding: 0 4px; }
+/* the 0101 card, unchanged */
+.sug { position: relative; flex: none; display: flex; gap: var(--app-space-4); padding: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); }
+.sug:first-of-type { border-top: 0; }
+.pick { flex: none; align-self: stretch; width: var(--app-touch-target); min-height: var(--app-touch-target); max-height: var(--app-suggestion-body); display: flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-sm); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); cursor: pointer; }
+.sug-thumb { flex: none; width: var(--app-suggestion-thumb); height: var(--app-suggestion-thumb); border-radius: var(--app-radius-sm); border: 1px solid var(--app-border-subtle); background: var(--app-surface-sunken); display: flex; align-items: center; justify-content: center; color: var(--app-text-muted); }
+.sug-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sug-l { display: flex; align-items: baseline; gap: var(--app-space-3); }
+.sug-name { flex: 1; min-width: 0; font-size: var(--app-text-base); line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmt { flex: none; align-self: center; padding: 1px 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); font-size: var(--app-text-2xs); color: var(--app-text-secondary); white-space: nowrap; }
+.sug-price { flex: none; font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sug-meta { flex: 1; min-width: 0; font-size: var(--app-text-xs); line-height: 15px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sug-unit { flex: none; font-size: var(--app-text-2xs); font-variant-numeric: tabular-nums; color: var(--app-text-muted); white-space: nowrap; }
+.sug-foot { display: flex; align-items: center; gap: var(--app-space-3); margin-top: 2px; height: 18px; min-width: 0; }
+.chains { min-width: 0; display: flex; align-items: center; gap: var(--app-space-2); margin-left: -2px; padding: 2px; border: 0; border-radius: var(--app-radius-full); background: transparent; color: var(--app-text-secondary); font-family: inherit; font-size: var(--app-text-2xs); cursor: pointer; }
+.mark { width: var(--app-chain-mark); height: var(--app-chain-mark); flex: none; display: flex; align-items: center; justify-content: center; border-radius: 5px; font-size: 10px; font-weight: 700; }
+.lead-name { min-width: 0; padding-right: var(--app-space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more { height: var(--app-chain-mark); padding: 0 5px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 5px; font-size: 10px; font-weight: 600; color: var(--app-text-muted); }
+.details { flex: none; margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 2px 2px 2px 6px; border-radius: var(--app-radius-sm); color: var(--app-text-muted); font-size: var(--app-text-2xs); text-decoration: none; }
+.already { margin-top: var(--app-space-2); padding-top: var(--app-space-3); border-top: 1px solid var(--app-border-subtle); display: flex; flex-direction: column; }
+.already-h { margin-bottom: 2px; font-size: var(--app-text-2xs); line-height: 15px; font-weight: 600; color: var(--app-text-secondary); }
+.already-row { display: flex; align-items: center; gap: var(--app-space-3); height: 44px; }
+.already-text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+.already-list { font-size: var(--app-text-2xs); line-height: 14px; color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.already-line { font-size: var(--app-text-xs); line-height: 16px; color: var(--app-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* lib-quantity-stepper */
+.stepper { flex: none; display: inline-flex; align-items: center; gap: var(--app-space-hair); background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-full); }
+.stepper .step { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: var(--app-touch-target); padding: 0; border: 0; border-radius: var(--app-radius-full); background: none; font: inherit; font-size: var(--app-text-lg); color: var(--app-text-primary); cursor: pointer; }
+.stepper .value { min-width: 2ch; text-align: center; font-size: var(--app-text-base); font-variant-numeric: tabular-nums; }
+/* the composer */
+.composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
+.field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
+.field .ph { color: var(--app-text-muted); }
+.caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
+.send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
+.send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
+/* the nav (0097) */
+.nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+.badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+/* the list picker on the basket: a CDK overlay against the button that was pressed */
+.picker { position: absolute; z-index: 5; right: 16px; bottom: 408px; width: 284px; padding: 6px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: var(--app-elevation-2); }
+.picker h2 { margin: 0; padding: 8px 10px 6px; font-size: var(--app-text-sm); font-weight: 600; }
+.picker .opt { display: flex; flex-direction: column; justify-content: center; width: 100%; box-sizing: border-box; min-height: 48px; padding: 4px 10px; border: 0; border-radius: var(--app-radius-sm); background: transparent; color: var(--app-text-primary); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.picker .opt small { margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.picker .tail { position: absolute; bottom: -5px; right: 17px; width: 9px; height: 9px; transform: rotate(45deg); border-right: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-raised); }
+</style>
+</helmet>
+<div class="vel phone">
+  <!-- the basket's own head, one row; the hint sentence under it is gone -->
+  <div class="appbar" style="padding: 0 16px 0 12px;">
+    <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
+    <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
+    <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
+    <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
+  </div>
+  <div class="tools">
+    <span class="count">12 to buy</span>
+    <button class="ibtn" type="button" aria-label="Filter"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+  </div>
+  <div class="rows">
+    <div class="row"><button class="settle" type="button" aria-label="Settle Aceite de oliva virgen extra"></button><span class="text"><b>Aceite de oliva virgen extra</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Arroz redondo"></button><span class="text"><b>Arroz redondo</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Huevos L"></button><span class="text"><b>Huevos L</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Leche entera"></button><span class="text"><b>Leche entera</b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Pan de molde integral"></button><span class="text"><b>Pan de molde integral</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Plátanos"></button><span class="text"><b>Pl&aacute;tanos</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Pollo entero"></button><span class="text"><b>Pollo entero</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Queso en lonchas"></button><span class="text"><b>Queso en lonchas</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Queso fresco"></button><span class="text"><b>Queso fresco</b><span>from Fin de semana</span></span><span class="qtychip">2</span></div>
+    <div class="row"><button class="settle" type="button" aria-label="Settle Queso rallado"></button><span class="text"><b>Queso rallado</b><span>from Compra semanal</span></span><span class="qtychip">1</span></div>
+  </div>
+  <!-- no target chip, no lock: the field is always open, the plus asks which list -->
+  <div class="composer">
+    <label class="field" for="add"><span class="ph">Add or find something</span></label>
+    <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
+      <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
+      <span aria-hidden="true" class="value">1</span>
+      <button class="step" type="button" aria-label="One more"><span aria-hidden="true">+</span></button>
+    </span>
+    <button class="send" type="button" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></button>
+  </div>
+  <nav class="nav" aria-label="Main">
+    <a class="tab" href="#home"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+    <a class="tab" href="#catalog"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+    <a class="tab on" href="#basket" aria-current="page"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

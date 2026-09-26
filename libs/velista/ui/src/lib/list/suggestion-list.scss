@@ -1,14 +1,8 @@
 // ------------------------------------------------------ The suggestions (0043, §6)
 //
-// Where it goes relative to its field is the **caller's**, not this component's: the
-// composer is pinned to the bottom with the keyboard under it, so its list grows
-// upward over the lines, and the line page's sits under the field where there is
-// nothing in the way. Both get the same rows and the same ranking; the one that grows
-// upward is read from the bottom, so it is drawn from the bottom too, which the
-// component decides in `rows`.
-//
-// The caller says which through `placement`, and the one that grows over the page is
-// the one that has to be opaque: the composer's cards, below, see `.panel`.
+// Which drawing is the **caller's**, through `placement`: the line page's one line
+// rows under its field, or the product cards in a page's own results (velista 0117).
+// Both draw the server's ranking straight down.
 :host {
   display: contents;
 }
@@ -134,64 +128,21 @@
   letter-spacing: 0.05em;
 }
 
-// ------------------------------------------- The composer's product cards (0101)
+// ------------------------------------------------- The product cards (0101, 0117)
 //
-// Drawn from `apps/velista/plans/mocks/typeahead/`, which is the specification. Every
-// height here is the keyboard's decision rather than a taste: see the suggestion card
-// tokens in `_semantic.scss`, where the arithmetic is written down.
-
-// Opaque, because it covers rows of somebody's own shopping list, and anchored to its
-// last card, because it grows upward from the field under the thumb.
-//
-// **It is as tall as its cards, and past three it scrolls** (velista 0108, target 2).
-// The cap is a `min()` of three cards and what the visual viewport leaves, and
-// `--app-viewport` is set on this element from `window.visualViewport`, because an iOS
-// keyboard does not shorten `100svh`. Until it is known the small viewport stands in.
-//
-// The cap never drops below two cards: a 375 by 667 phone resolves to two, which is the
-// floor the arithmetic protects, and a smaller screen scrolls rather than shows one.
-// That floor used to be a `min-height`, which sat one card at the bottom of a panel
-// sized for two with an empty raised surface above it. As a floor on the cap it keeps
-// the protection and lets one card, or the no results row, be a panel of its own size.
-// The panel still opens upward: it sits in the flow above the composer's field.
-.panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  max-height: min(
-    var(--app-suggestions-card-cap),
-    max(
-      calc(var(--app-viewport, 100svh) - var(--app-suggestions-chrome)),
-      calc(2 * var(--app-suggestion-card) + var(--app-space-3))
-    )
-  );
-  padding-inline: var(--app-space-4);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: var(--app-surface-raised);
-  border-block-start: 1px solid var(--app-border-subtle);
-  box-shadow: var(--app-elevation-2);
-  // No gutter. A phone draws an overlay scrollbar and takes no width for it, and a
-  // reserved track would come out of the column the product name already fights for.
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-  }
-}
+// Drawn from `apps/velista/plans/mocks/typeahead/`, which is the specification. They
+// sit in a page's results, which scroll with the page, so the list has no height and
+// no surface of its own.
 
 // A double tap must not zoom the page out from under a card.
-.panel button,
-.panel a {
+.sug button,
+.sug a {
   touch-action: manipulation;
 }
 
 // ---- one card
 
-// 77px with its hairline: three lines of type with 8px either side, which clears the
-// 48px photograph (`--app-suggestion-card`).
+// Three lines of type with 8px either side, which clears the 48px photograph.
 .sug {
   position: relative;
   flex: none;

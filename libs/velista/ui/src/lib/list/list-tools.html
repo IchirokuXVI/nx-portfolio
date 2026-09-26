@@ -1,91 +1,11 @@
-@if (open()) {
-  <!--
-    The field takes the whole row, and Cancel sits beside it rather than inside it:
-    it is not a clear, it puts the row back.
-
-    One row, the height of the closed one (velista 0079, section 3). Opening the
-    search must not move the first line by a pixel, so the label and the count are
-    still here for a screen reader and no longer drawn.
-  -->
-  <div class="search">
-    <label [for]="fieldId()" class="visually-hidden">
-      {{ 'basket.search.label' | rokuT }}
-    </label>
-
-    <span class="search-field">
-      <lib-search-icon class="search-glyph" />
-      <input
-        (input)="onInput($event)"
-        (keydown.escape)="close()"
-        [id]="fieldId()"
-        [placeholder]="'basket.search.placeholder' | rokuT"
-        [value]="query()"
-        #searchField
-        autocapitalize="none"
-        autocomplete="off"
-        class="search-input"
-        enterkeyhint="search"
-        type="search"
-      />
-
-      <!-- Only where there is something to clear. -->
-      @if (query() !== '') {
-        <button
-          (click)="clear()"
-          [attr.aria-label]="'basket.search.clear' | rokuT"
-          class="search-clear"
-          type="button"
-        >
-          <lib-close-icon class="search-clear-glyph" />
-        </button>
-      }
-    </span>
-
-    <button (click)="close()" class="search-cancel" type="button">
-      {{ 'basket.search.cancel' | rokuT }}
-    </button>
-
-    <!--
-      The filter stays while the field is open, or somebody searching has to cancel
-      the search to change the order.
-    -->
-    <ng-container [ngTemplateOutlet]="filterTool" />
-  </div>
+<div class="tools">
+  <div class="lead"><ng-content /></div>
 
   <!--
-    How many are left, heard and not seen. A search that silently empties the screen
-    is indistinguishable from one that broke, and this is the only thing announced on
-    a keystroke.
+    The filter control. The badge is how many settings are on, and the **name carries
+    it too**, because a count that only exists as a dot over a glyph is a count a
+    screen reader never hears.
   -->
-  <p aria-live="polite" class="visually-hidden search-count" role="status">
-    {{ 'basket.search.count' | rokuT: { shown: shown(), total: total() } }}
-  </p>
-} @else {
-  <div class="tools">
-    <div class="lead"><ng-content /></div>
-
-    <button
-      (click)="openSearch()"
-      [attr.aria-label]="'basket.search.open' | rokuT"
-      #searchButton
-      class="tool"
-      type="button"
-    >
-      <lib-search-icon class="tool-glyph" />
-    </button>
-
-    <ng-container [ngTemplateOutlet]="filterTool" />
-  </div>
-}
-
-<ng-content select="[listToolsBelow]" />
-
-<!--
-  The filter control, in one place, for the closed row and for the open search. The
-  badge is how many settings are on, and the **name carries it too**, because a count
-  that only exists as a dot over a glyph is a count a screen reader never hears.
--->
-<ng-template #filterTool>
   <button
     (click)="openFilter.emit()"
     [attr.aria-label]="
@@ -102,4 +22,6 @@
       <span aria-hidden="true" class="tool-badge">{{ activeCount() }}</span>
     }
   </button>
-</ng-template>
+</div>
+
+<ng-content select="[listToolsBelow]" />

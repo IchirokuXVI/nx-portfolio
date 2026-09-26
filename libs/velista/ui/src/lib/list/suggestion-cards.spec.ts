@@ -107,6 +107,7 @@ async function render(
     query?: string | null;
     emptyFor?: string | null;
     freeText?: boolean;
+    placement?: 'page' | 'below';
   } = {}
 ): Promise<Rendered> {
   TestBed.resetTestingModule();
@@ -116,7 +117,7 @@ async function render(
   }).compileComponents();
 
   const fixture = TestBed.createComponent(SuggestionList);
-  fixture.componentRef.setInput('placement', 'above');
+  fixture.componentRef.setInput('placement', inputs.placement ?? 'page');
   fixture.componentRef.setInput('suggestions', offered);
   fixture.componentRef.setInput('loading', inputs.loading ?? false);
   const holdings = inputs.holdings ?? [];
@@ -134,7 +135,9 @@ async function render(
 
   const chose: CatalogSuggestion[] = [];
   const changed: SuggestionHoldingChange[] = [];
-  fixture.componentInstance.chose.subscribe((one) => chose.push(one));
+  fixture.componentInstance.chose.subscribe((one) =>
+    chose.push(one.suggestion)
+  );
   fixture.componentInstance.holdingChanged.subscribe((one) =>
     changed.push(one)
   );
@@ -183,19 +186,19 @@ function mousedownCancelled(element: Element | null): boolean {
   return event.defaultPrevented;
 }
 
-describe('SuggestionList, the composer’s cards', () => {
-  it('draws a card per suggestion, the server’s best answer nearest the field', async () => {
+describe('SuggestionList, the cards', () => {
+  it('draws a card per suggestion, the server’s best answer first', async () => {
     const { fixture } = await render([item('a'), item('b'), item('c')]);
 
-    // Read from the bottom, where the field is: the ranking climbs away from it.
-    expect(cardNames(fixture)).toEqual(['Product c', 'Product b', 'Product a']);
+    // Read from the top of the page's results (velista 0117).
+    expect(cardNames(fixture)).toEqual(['Product a', 'Product b', 'Product c']);
   });
 
   it('is a grid of rows the field owns, not a listbox (rule 8)', async () => {
     const { fixture } = await render([item('a')]);
-    const panel = root(fixture).querySelector('.panel');
+    const panel = root(fixture).querySelector('[role="grid"]');
 
-    expect(panel?.getAttribute('role')).toBe('grid');
+    expect(panel).not.toBeNull();
     expect(cards(fixture)[0]?.getAttribute('role')).toBe('row');
     expect(root(fixture).querySelector('[role="option"]')).toBeNull();
   });
@@ -203,13 +206,13 @@ describe('SuggestionList, the composer’s cards', () => {
   it('draws nothing at all for an empty answer, and no free text row', async () => {
     const { fixture } = await render([]);
 
-    expect(root(fixture).querySelector('.panel')).toBeNull();
+    expect(root(fixture).querySelector('[role="grid"]')).toBeNull();
   });
 
   it('draws three skeleton cards while the catalog is being asked', async () => {
     const { fixture } = await render([], { loading: true });
     await pastSkeletonDelay(fixture);
-    const panel = root(fixture).querySelector('.panel');
+    const panel = root(fixture).querySelector('[role="status"]');
 
     expect(panel?.getAttribute('aria-busy')).toBe('true');
     expect(root(fixture).querySelectorAll('.sk')).toHaveLength(3);
@@ -246,9 +249,9 @@ describe('SuggestionList, the composer’s cards', () => {
         'list.add.card.noMatchFreeText'
       );
       // One row and nothing else: no card panel, no card, no skeleton.
-      expect(root(fixture).querySelectorAll('.panel, .sug, .sk')).toHaveLength(
-        0
-      );
+      expect(
+        root(fixture).querySelectorAll('[role="grid"], .sug, .sk')
+      ).toHaveLength(0);
     });
 
     it('leaves the second line out when the words cannot be added', async () => {
@@ -283,7 +286,7 @@ describe('SuggestionList, the composer’s cards', () => {
       fixture.detectChanges();
 
       expect(root(fixture).querySelector('.none')).toBeNull();
-      expect(root(fixture).querySelector('.panel')).toBeNull();
+      expect(root(fixture).querySelector('[role="grid"]')).toBeNull();
     });
   });
 
@@ -530,63 +533,34 @@ describe('SuggestionList, the composer’s cards', () => {
     const bare = await render([item('a')]);
     expect(root(bare.fixture).querySelector('a.details')).toBeNull();
   });
-
-  it('opens at its last card and re-anchors on every new answer', async () => {
-    const { fixture } = await render([item('a'), item('b'), item('c')]);
-    const panel = root(fixture).querySelector<HTMLElement>('.panel');
-    if (panel === null) {
-      throw new Error('no panel');
-    }
-    let top = 0;
-    Object.defineProperty(panel, 'scrollHeight', { get: () => 640 });
-    Object.defineProperty(panel, 'scrollTop', {
-      get: () => top,
-      set: (value: number) => (top = value),
-    });
-
-    fixture.componentRef.setInput('suggestions', [item('d'), item('e')]);
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(top).toBe(640);
-  });
 });
 
-describe('SuggestionList, the panel height follows the visual viewport', () => {
-  const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
-
-  afterEach(() => {
-    if (original === undefined) {
-      delete (window as { visualViewport?: unknown }).visualViewport;
-    } else {
-      Object.defineProperty(window, 'visualViewport', original);
-    }
-  });
-
-  it('writes the visual viewport’s height onto the panel, and follows it', async () => {
-    // An iOS keyboard does not shorten `100svh`, so the height has to come from
-    // `window.visualViewport` (rule 3).
-    const listeners: (() => void)[] = [];
-    const viewport = {
-      height: 508,
-      addEventListener: (_type: string, listener: () => void) =>
-        listeners.push(listener),
-      removeEventListener: () => undefined,
-    };
-    Object.defineProperty(window, 'visualViewport', {
-      configurable: true,
-      value: viewport,
+describe('SuggestionList, in a page’s results', () => {
+  it('draws the cards in the server’s order, with no panel around them', async () => {
+    const { fixture } = await render([item('first'), item('second')], {
+      placement: 'page',
     });
 
-    const { fixture } = await render([item('a')]);
-    const panel = root(fixture).querySelector<HTMLElement>('.panel');
-    expect(panel?.style.getPropertyValue('--app-viewport')).toBe('508px');
+    const grid = root(fixture).querySelector('[role="grid"]');
+    expect(grid).not.toBeNull();
+    expect(grid?.classList).not.toContain('panel');
+    expect(
+      [...root(fixture).querySelectorAll('[data-card]')].map((card) =>
+        card.getAttribute('data-card')
+      )
+    ).toEqual([
+      expect.stringContaining('first'),
+      expect.stringContaining('second'),
+    ]);
+  });
 
-    viewport.height = 331;
-    listeners.forEach((listener) => listener());
-    fixture.detectChanges();
-    await fixture.whenStable();
+  it('says so when the catalog found nothing for the words', async () => {
+    const { fixture } = await render([], {
+      placement: 'page',
+      emptyFor: 'zzzz',
+      freeText: true,
+    });
 
-    expect(panel?.style.getPropertyValue('--app-viewport')).toBe('331px');
+    expect(root(fixture).textContent).toContain('list.add.card.noMatch');
   });
 });

@@ -1,17 +1,16 @@
 <!--
-  **A finished search that found nothing says so** (velista 0108, target 1), in the
-  composer's panel: one row naming the words, and a second line when the composer can
-  still add them as written. Nothing is drawn for two characters, for a search still
+  **A finished search that found nothing says so** (velista 0108, target 1), under
+  the cards: one row naming the words, and a second line when the composer can still
+  add them as written. Nothing is drawn for two characters, for a search still
   running, or once the words in the field have changed. The line page's rows keep
   drawing nothing when there is nothing to offer.
 -->
-@if (placement() === 'above') {
+@if (placement() === 'page') {
   <!--
-    The composer's panel: product cards (velista 0101). Opaque, bottom anchored and
-    scrolling, never growing past three cards or what the keyboard leaves, and no
-    taller than the cards it holds (velista 0108, target 2).
+    Product cards (velista 0101), in a page's own results since velista 0117. The
+    page scrolls them with everything else.
 
-    `mousedown` is cancelled on the whole panel, once, which is rule 2: nothing in
+    `mousedown` is cancelled on the whole list, once, which is rule 2: nothing in
     here may take the focus from the field, so the keyboard stays up whatever was
     pressed. See `holdFocus`.
   -->
@@ -26,9 +25,6 @@
       (mousedown)="holdFocus($event)"
       [attr.aria-label]="label() | rokuT"
       [id]="panelId()"
-      [style.--app-viewport]="viewportHeight()"
-      #panel
-      class="panel"
       role="grid"
     >
       @for (card of cards(); track card.key) {
@@ -290,7 +286,7 @@
           -->
           <div class="pick-cell" role="gridcell">
             <button
-              (click)="chose.emit(card.suggestion)"
+              (click)="choose(card.suggestion, $event)"
               [attr.aria-label]="card.pickLabel"
               class="pick"
               type="button"
@@ -305,9 +301,7 @@
     <div
       (mousedown)="holdFocus($event)"
       [attr.aria-label]="'list.add.card.loading' | rokuT"
-      [style.--app-viewport]="viewportHeight()"
       aria-busy="true"
-      class="panel"
       role="status"
     >
       @for (bars of skeleton; track $index) {
@@ -327,15 +321,10 @@
     component of its own for its stylesheet; see `SuggestionNoMatch`.
   -->
   <lib-suggestion-no-match [freeText]="freeText()" [words]="emptyFor()" />
-} @else if (rows().length > 0) {
+} @else if (suggestions().length > 0) {
   <!-- The line page's one line rows, which velista 0101 leaves as they were. -->
-  <ul
-    [attr.aria-label]="label() | rokuT"
-    #panel
-    class="suggestions"
-    role="listbox"
-  >
-    @for (suggestion of rows(); track $index) {
+  <ul [attr.aria-label]="label() | rokuT" class="suggestions" role="listbox">
+    @for (suggestion of suggestions(); track $index) {
       <li role="none">
         <!--
           `aria-selected="false"` on every row, always. Nothing here is ever selected:
@@ -345,7 +334,7 @@
           list of options with no way to say which one it is on.
         -->
         <button
-          (click)="chose.emit(suggestion)"
+          (click)="choose(suggestion, $event)"
           [class.group]="suggestion.kind === 'group'"
           aria-selected="false"
           class="suggestion"
