@@ -195,12 +195,38 @@ export async function closeSettleSheet(
 }
 
 /**
- * Add a line from the basket's composer, to the named list (velista `0092`
- * section 7, `0110`).
+ * The composer's one field, which both finds and adds (velista `0117`).
+ */
+export function composerField(page: Page): Locator {
+  return page
+    .locator('lib-line-composer')
+    .getByRole('searchbox', { name: 'Add or find something' });
+}
+
+/**
+ * Type into the basket's field, which searches it (velista `0117`): the rows
+ * that match replace the basket's body under an "On your lists" heading.
+ */
+export async function searchBasket(page: Page, words: string): Promise<void> {
+  await composerField(page).fill(words);
+  await expect(page.locator('#basket-results')).toBeVisible();
+}
+
+/**
+ * Empty the basket's field with Escape, and the basket's body comes back
+ * (velista `0117`, rule F2).
+ */
+export async function clearBasketSearch(page: Page): Promise<void> {
+  await composerField(page).press('Escape');
+  await expect(composerField(page)).toHaveValue('');
+  await expect(page.locator('#basket-results')).toHaveCount(0);
+}
+
+/**
+ * Add a line from the basket's composer, to the named list (velista `0116`).
  *
- * A basket over more than one list adds to the list chosen beside the field,
- * and the field is locked until one is. The chip names the list once one is
- * chosen, so it is pressed whatever it says.
+ * The plus asks which list the words are for, in a picker held against it,
+ * every time, also when there is one list. A pick is the add.
  */
 export async function addInTheAisle(
   page: Page,
@@ -208,19 +234,24 @@ export async function addInTheAisle(
   list: string,
   content: string
 ): Promise<void> {
-  await page.locator('.composer-dock button.target').click();
-  const target = sheet(page, 'Which list is this for?');
-  // A click, not `check()`: choosing closes the sheet, and `check()` then
-  // waits to confirm a radio that is gone. The chip below is the confirmation.
-  await target.getByRole('radio', { name: list, exact: true }).click();
-  await expectBasketUrl(page, basketId);
-  await expect(page.locator('.composer-dock .target')).toHaveText(
-    `To: ${list}`
-  );
+  await composerField(page).fill(content);
+  await page
+    .locator('lib-line-composer')
+    .getByRole('button', { name: 'Add', exact: true })
+    .click();
 
-  const composer = page.locator('lib-line-composer');
-  await composer.getByRole('combobox', { name: 'Add something' }).fill(content);
-  await composer.getByRole('button', { name: 'Add', exact: true }).click();
+  // The picker is a CDK overlay, so it is drawn outside the composer.
+  const picker = page.locator('.picker');
+  await expect(
+    picker.getByRole('heading', { name: 'Which list is this for?' })
+  ).toBeVisible();
+  await picker
+    .locator('button.option')
+    .filter({ has: page.locator('.name').getByText(list, { exact: true }) })
+    .click();
+
+  await expectBasketUrl(page, basketId);
+  await expect(composerField(page)).toHaveValue('');
   await expect(row(page, content)).toBeVisible();
 }
 
