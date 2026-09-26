@@ -11,7 +11,6 @@ import {
   createThrottlerOptions,
   PlatformHealthModule,
   PlatformModule,
-  ProblemThrottlerGuard,
   RedisModule,
   RedisService,
   RedisThrottlerStorage,
@@ -34,6 +33,7 @@ import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
 import { GatewayPurchasesModule } from './purchases/purchases.module';
 import { GatewayStatsModule } from './stats/stats.module';
+import { GatewayThrottlerGuard } from './throttling/gateway-throttler.guard';
 import { GatewayZonesModule } from './zones/zones.module';
 
 @Module({
@@ -137,8 +137,10 @@ import { GatewayZonesModule } from './zones/zones.module';
   providers: [
     // The throttler guard runs globally; open endpoints override the bucket's
     // limit for themselves. The platform subclass is used rather than the
-    // library's own so a 429 carries the wait in the body (plan 0021, section 2).
-    { provide: APP_GUARD, useClass: ProblemThrottlerGuard },
+    // library's own so a 429 carries the wait in the body (plan 0021, section 2),
+    // and the gateway's subclass of it so a verified operator is counted per
+    // operator rather than against the bucket of the address it arrives from.
+    { provide: APP_GUARD, useClass: GatewayThrottlerGuard },
     // Advertises the oldest supported client on every response and refuses the ones
     // below it (velista plan 0034). Inert until `MIN_CLIENT_VERSION` is set, which
     // it is in neither cluster by default.
