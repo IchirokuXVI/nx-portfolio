@@ -352,6 +352,12 @@ tables. A product moved to a leaf under `ready-meals` or `pets` comes back as `O
 is the best a twelve value column can do, and the down path is for a broken deploy, not for
 a round trip.
 
+**Staging and production hold no products today** (the user, 2026-09-26): chains, shops and
+suggestions only. Steps 3 to 5 therefore move rows only on developer slots and the compose
+stacks, and the down path losing information costs nothing in either cluster. The landing
+leaves still exist, because a developer's slot holds a 4,300 product harvest and the
+migration has to leave it whole.
+
 `migrations.integration.spec.ts:137` asserts the enum type exists and flips to asserting it
 does not. The four migration specs that `INSERT INTO items ("name","category",...)` by hand
 (`price-scope`, `item-prices`, `brands` and their siblings) insert without the column and add
@@ -425,7 +431,7 @@ this one.
 | Tool | Today | Minimum change |
 | ---- | ----- | -------------- |
 | `curation/suggestions/src/rules.mjs`, `decision.mjs`, `gateway.mjs`, `prompt.md` | reads `enums.ItemCategory` from `openapi.json` and throws without it. The prompt lists twelve values. A CREATE requires `category` and posts it | read the vocabulary from `GET /v1/catalog/categories` at start, as leaf slugs grouped under their root's name. A CREATE requires `categorySlugs` (one or more), which the harvest bulk op takes as they are (section 3). `UNKNOWN_CATEGORY` validates a slug against the read |
-| `tools/catalog/review-entries.mjs` and its prompt | the same, older twin | the same change, or retire it if the suggestions tool has replaced it (ask) |
+| `tools/catalog/review-entries.mjs` and its prompt | the same, older twin from `0098`, which curation plan `0004` left as legacy | the same change. The suggestions library above is the production CLI; this one is retargeted too, so that no tool in the repository can write a value the wire no longer has |
 | `tools/leaflet/chains/src/*/prompt.txt`, `tools/leaflet/cli/src/check-page.mjs` | the vision model is told "MUST be one of exactly these values"; `check-page` validates against a hard coded list | the field becomes optional free text the model reads off the page, `check-page` stops validating it, and the value keeps travelling to `extra.category`, where nothing reads it. A reading's category was never used to place a product; removing the constraint loses nothing |
 
 The node tests beside each tool (`*.test.mjs`, `fixtures/queue-page.json`) follow.
@@ -450,9 +456,6 @@ The node tests beside each tool (`*.test.mjs`, `fixtures/queue-page.json`) follo
 - **Counts on the tree route are catalog wide.** The picker (`0119`) hides an empty leaf on
   them. With a chain chip chosen, a leaf can be empty for that chain and still be shown.
   Acceptable for the first version. A per chain count is one more parameter if it grates.
-- **The down migration loses information.** Stated in section 6. Confirm that is acceptable,
-  or ask for the old column to be kept for one release.
-- **`review-entries.mjs`.** Retire or retarget (section 9).
 
 ## Appendix A: the starting taxonomy
 
