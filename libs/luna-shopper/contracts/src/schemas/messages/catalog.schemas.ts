@@ -16,6 +16,7 @@ import {
   BRAND_LABEL_MAX_LENGTH,
   BRAND_ORDERS,
   BRAND_PATTERNS,
+  BULK_DECISION_MAX_OPERATIONS,
   CATALOG_SUGGESTION_KINDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
@@ -135,6 +136,8 @@ export const CATALOG_SCHEMA_IDS = {
   searchItemsRequest: schemaId('msg/item.search/request'),
   findItemByEanRequest: schemaId('msg/item.findByEan/request'),
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
+  findItemsByEansRequest: schemaId('msg/item.findByEans/request'),
+  findItemsByEansResult: schemaId('catalog/FindItemsByEansResult'),
   // Plan 0162: the harvester fills the pack counts a run saw.
   packCountFill: schemaId('catalog/PackCountFill'),
   fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
@@ -1181,6 +1184,22 @@ const findItemByEanResult = object(
     },
   },
   ['item']
+);
+const findItemsByEansRequest = object(
+  CATALOG_SCHEMA_IDS.findItemsByEansRequest,
+  {
+    userId: nonEmptyString(),
+    eans: {
+      ...array(nonEmptyString()),
+      maxItems: BULK_DECISION_MAX_OPERATIONS,
+    },
+  },
+  ['userId', 'eans']
+);
+const findItemsByEansResult = object(
+  CATALOG_SCHEMA_IDS.findItemsByEansResult,
+  { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
+  ['items']
 );
 /** One product and the count a run read for it (plan 0162, section 3). */
 const packCountFill = object(
@@ -2332,6 +2351,8 @@ export const catalogSchemas: JsonSchema[] = [
   listProductGroupsRequest,
   findItemByEanRequest,
   findItemByEanResult,
+  findItemsByEansRequest,
+  findItemsByEansResult,
   packCountFill,
   fillPackCountsRequest,
   fillPackCountsResult,
@@ -2483,6 +2504,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.findByEan]: {
     request: CATALOG_SCHEMA_IDS.findItemByEanRequest,
     response: CATALOG_SCHEMA_IDS.findItemByEanResult,
+  },
+  [ITEM_PATTERNS.findByEans]: {
+    request: CATALOG_SCHEMA_IDS.findItemsByEansRequest,
+    response: CATALOG_SCHEMA_IDS.findItemsByEansResult,
   },
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,

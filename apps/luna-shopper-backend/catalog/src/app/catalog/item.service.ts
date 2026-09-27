@@ -18,6 +18,8 @@ import {
   type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type FindItemsByEansRequest,
+  type FindItemsByEansResult,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemIdRequest,
@@ -534,6 +536,31 @@ export class ItemService {
   async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
     const row = await this.items.findOne({ where: { ean: req.ean } });
     return { item: row ? toItemView(row) : null };
+  }
+
+  /**
+   * {@link findByEan} for a whole decisions file, in one query. The file's
+   * barcode check used to ask once per barcode, and a thousand round trips
+   * ran past the gateway's route timeout before anything was created.
+   *
+   * Answers only the barcodes catalog holds. A barcode absent from the answer
+   * is free, and a repeated one is asked about once.
+   */
+  async findByEans(
+    req: FindItemsByEansRequest
+  ): Promise<FindItemsByEansResult> {
+    const eans = [...new Set(req.eans)];
+    if (eans.length > BULK_DECISION_MAX_OPERATIONS) {
+      throw new ValidationException(
+        `A barcode lookup carries at most ${BULK_DECISION_MAX_OPERATIONS} ` +
+          `barcodes, and this one carries ${eans.length}.`
+      );
+    }
+    if (eans.length === 0) {
+      return { items: [] };
+    }
+    const rows = await this.items.find({ where: { ean: In(eans) } });
+    return { items: rows.map((row) => toItemView(row)) };
   }
 
   /**

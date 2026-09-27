@@ -170,6 +170,13 @@ export const ITEM_PATTERNS = {
   /** EAN is unique when present, so this is a lookup, not a search (plan 0038). */
   findByEan: 'item.findByEan',
   /**
+   * {@link ITEM_PATTERNS.findByEan} for many barcodes in one round trip. The
+   * check a bulk decisions file runs before it creates anything, which was one
+   * request per barcode and ran past the gateway's route timeout on a file of
+   * a thousand products.
+   */
+  findByEans: 'item.findByEans',
+  /**
    * Several products in one transaction, all or nothing (plan 0100).
    *
    * The step `sourceEntry.applyDecisions` needs: a decisions file that creates
@@ -1645,6 +1652,24 @@ export interface FindItemByEanRequest {
  */
 export interface FindItemByEanResult {
   item: ItemView | null;
+}
+
+/**
+ * Find the items carrying any of these EANs. Capped at
+ * {@link BULK_DECISION_MAX_OPERATIONS}, the most barcodes one decisions file
+ * can name.
+ */
+export interface FindItemsByEansRequest {
+  userId: string;
+  eans: string[];
+}
+
+/**
+ * Only the barcodes catalog holds, one item each, in no particular order. A
+ * barcode that is absent from the answer is free.
+ */
+export interface FindItemsByEansResult {
+  items: ItemView[];
 }
 
 export interface ItemIdRequest extends AdminCredential {

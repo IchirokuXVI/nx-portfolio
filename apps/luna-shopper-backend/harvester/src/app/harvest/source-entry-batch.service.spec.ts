@@ -177,14 +177,16 @@ function build(
     }
     return { id: itemId };
   });
-  const findItemByEan = jest.fn(async (ean: string) => {
-    const holder = options.takenEans?.[ean];
-    return { item: holder ? item(holder) : null };
-  });
+  const findItemsByEans = jest.fn(async (eans: string[]) => ({
+    items: eans.flatMap((ean) => {
+      const holder = options.takenEans?.[ean];
+      return holder ? [{ ...item(holder), ean }] : [];
+    }),
+  }));
   const catalog = {
     createItems,
     deleteItem,
-    findItemByEan,
+    findItemsByEans,
   } as unknown as CatalogClient;
 
   const write = jest.fn(async (row: SourceCatalogEntry) => {
@@ -229,7 +231,7 @@ function build(
     saved,
     createItems,
     deleteItem,
-    findItemByEan,
+    findItemsByEans,
     write,
     manager,
     admin,
@@ -718,7 +720,7 @@ describe('SourceEntryBatchService', () => {
   });
 
   it('asks catalog about the barcode the row printed when the file names none', async () => {
-    const { service, findItemByEan } = build({
+    const { service, findItemsByEans } = build({
       rows: [entry({ ean: '8480000123456' })],
       takenEans: { '8480000123456': 'item-held' },
     });
@@ -735,8 +737,58 @@ describe('SourceEntryBatchService', () => {
       ])
     );
 
-    expect(findItemByEan).toHaveBeenCalledWith('8480000123456');
+    expect(findItemsByEans).toHaveBeenCalledWith(['8480000123456']);
     expect(result.results[0].error?.code).toBe(
+      BulkOperationErrorCode.ALREADY_TAKEN
+    );
+  });
+
+  // One request per barcode made a file of a thousand products outlast the
+  // gateway's route timeout, so the whole file is one question.
+  it('asks catalog about every barcode of the file in one request', async () => {
+    const rows = [
+      entry(),
+      entry({ id: 'e-2', externalId: '4242' }),
+      entry({ id: 'e-3', externalId: '4243' }),
+    ];
+    const { service, findItemsByEans } = build({
+      rows,
+      takenEans: { '8480000999999': 'item-held' },
+    });
+
+    const result = await service.applyDecisions(
+      request([
+        {
+          op: 'createItem',
+          entryId: 'e-1',
+          ref: 'milk',
+          item: { ean: '8480000123456' },
+          expect: expectFresh,
+        },
+        {
+          op: 'createItem',
+          entryId: 'e-2',
+          ref: 'cream',
+          item: { ean: '8480000999999' },
+          expect: expectFresh,
+        },
+        {
+          op: 'createItem',
+          entryId: 'e-3',
+          ref: 'butter',
+          item: { ean: '8480000123456' },
+          expect: expectFresh,
+        },
+      ])
+    );
+
+    expect(findItemsByEans).toHaveBeenCalledTimes(1);
+    expect(findItemsByEans).toHaveBeenCalledWith([
+      '8480000123456',
+      '8480000999999',
+    ]);
+    expect(result.results[0].error).toBeNull();
+    expect(result.results[1].error?.code).toBe(
       BulkOperationErrorCode.ALREADY_TAKEN
     );
   });
