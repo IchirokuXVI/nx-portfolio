@@ -75,6 +75,9 @@ export const SCOPES = [
   'admin',
   'luna-shopper-admin',
 
+  // The native Android walk app of the shop map field test (recorder plan 0002).
+  'android',
+
   // Shared code.
   'shared',
   'i18n',

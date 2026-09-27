@@ -214,3 +214,28 @@ test('a decide with no row asks for --row', async () => {
     /--row is required/
   );
 });
+
+test('a step opens its gateways through the factory serve hands it', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'curation-pool-'));
+  writeFileSync(
+    join(dir, 'state.json'),
+    JSON.stringify({
+      runId: 'r1',
+      mainUrl: 'http://main',
+      rehearsalUrl: 'http://rehearsal',
+      mainUser: 'curator',
+    })
+  );
+
+  const opened = [];
+  const makeSession = (options) => {
+    opened.push(options.baseUrl);
+    throw new Error('pooled factory reached');
+  };
+
+  await assert.rejects(
+    () => run(['next', '--run-dir', dir], { makeSession }),
+    /pooled factory reached/
+  );
+  assert.deepEqual(opened, ['http://main']);
+});

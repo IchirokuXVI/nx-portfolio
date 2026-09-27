@@ -1,0 +1,295 @@
+@use '../lab' as lab;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include lab.page;
+}
+
+// While recording the screen does not scroll: the live track takes whatever height
+// the buttons leave, so every control is always where the thumb expects it.
+.recording {
+  gap: var(--app-space-3);
+  overflow: hidden;
+  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
+  background: var(--app-surface-ground);
+  min-block-size: 100svh;
+}
+
+.head {
+  @include lab.header;
+  flex-wrap: wrap;
+}
+
+.back {
+  @include lab.back;
+  text-decoration: none;
+}
+
+.title {
+  @include lab.title;
+  flex-basis: 100%;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+}
+
+.field {
+  @include lab.field;
+}
+
+.label {
+  @include lab.label;
+}
+
+.input {
+  @include lab.input;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented {
+  @include lab.segmented;
+}
+
+.segment {
+  @include lab.segment;
+}
+
+.toggle {
+  @include lab.button-base;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-1);
+  padding-block: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  text-align: start;
+
+  &[aria-pressed='true'] {
+    border-color: var(--app-status-success-border);
+    background: var(--app-status-success-bg);
+  }
+}
+
+.toggle-state {
+  font-size: var(--app-text-lg);
+}
+
+.toggle-help {
+  font-weight: 400;
+  @include lab.muted;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+}
+
+.chip {
+  @include lab.button-base;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+
+  &[aria-pressed='true'] {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-bg);
+    color: var(--app-text-on-action);
+  }
+}
+
+.used {
+  font-family: var(--app-font-sans);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+
+.primary {
+  @include lab.primary;
+  text-decoration: none;
+}
+
+.secondary {
+  @include lab.secondary;
+  text-decoration: none;
+}
+
+.start {
+  margin-block-start: var(--app-space-2);
+}
+
+.muted {
+  margin: 0;
+  @include lab.muted;
+}
+
+.notice {
+  @include lab.notice(info);
+}
+
+.warning {
+  @include lab.notice(danger);
+}
+
+// The readout: three numbers large enough to read at arm's length in a bright aisle.
+.readout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: var(--app-space-2);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.stat-label {
+  @include lab.label;
+}
+
+.stat-value {
+  font-size: var(--app-text-3xl);
+  font-weight: 700;
+  line-height: var(--app-leading-heading);
+}
+
+.streams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  @include lab.muted;
+
+  b {
+    color: var(--app-text-primary);
+  }
+
+  .bad b {
+    color: var(--app-status-danger-fg);
+  }
+}
+
+.live {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  min-block-size: 0;
+}
+
+.plot {
+  flex: 1;
+  min-block-size: 0;
+}
+
+.live-mode {
+  margin: 0;
+  font-family: var(--app-font-mono);
+  @include lab.muted;
+}
+
+.live-off {
+  margin-inline-start: var(--app-space-2);
+  color: var(--app-status-danger-fg);
+}
+
+.last {
+  min-block-size: calc(var(--app-leading-body) * 1em);
+  margin: 0;
+  font-weight: 600;
+}
+
+.marks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--app-space-2);
+}
+
+.mark {
+  @include lab.button-base;
+  min-block-size: var(--app-button-height);
+  padding-block: var(--app-space-4);
+  border: var(--app-mark-ring-width) solid var(--app-border-strong);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+}
+
+.mark-entrance {
+  border-color: var(--app-status-success-border);
+  background: var(--app-status-success-bg);
+  color: var(--app-status-success-fg);
+}
+
+.mark-checkout {
+  border-color: var(--app-status-danger-border);
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+}
+
+.mark-checkpoint {
+  border-color: var(--app-status-info-border);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+}
+
+.mark-note {
+  border-color: var(--app-status-attention-border);
+  background: var(--app-status-attention-bg);
+  color: var(--app-status-attention-fg);
+}
+
+.finish {
+  @include lab.primary;
+  inline-size: 100%;
+
+  // Every state of the armed button, hover included: a phone keeps the hover of the
+  // first tap, and the plain primary hover would otherwise win and wash it out.
+  &.armed,
+  &.armed:hover:not(:disabled) {
+    background: var(--app-status-danger-fg);
+    color: var(--app-surface-ground);
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+}
+
+.panel-title {
+  @include lab.section-title;
+}
+
+.panel-actions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--app-space-2);
+}

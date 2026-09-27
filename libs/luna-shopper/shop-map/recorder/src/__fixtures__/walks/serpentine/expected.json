@@ -1,0 +1,590 @@
+{
+  "file": "walk-20260928-1020-six-aisle-serpentine.geojson",
+  "synthetic": true,
+  "truth": {
+    "steps": 132,
+    "turns": 11,
+    "distanceMetres": 92.4,
+    "endToStartMetres": 0,
+    "final": {
+      "x": 0,
+      "y": 0
+    },
+    "absoluteBearing": 212.5
+  },
+  "availableModes": [
+    "vio",
+    "gps",
+    "pdr:own:gyro:snap",
+    "pdr:own:gyro",
+    "pdr:own:game:snap",
+    "pdr:own:game",
+    "pdr:own:absolute:snap",
+    "pdr:own:absolute",
+    "pdr:hw:gyro:snap",
+    "pdr:hw:gyro",
+    "pdr:hw:game:snap",
+    "pdr:hw:game",
+    "pdr:hw:absolute:snap",
+    "pdr:hw:absolute"
+  ],
+  "modes": {
+    "vio": {
+      "fixed": {
+        "steps": 0,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": -1.2217,
+        "points": 2783,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0336
+          }
+        ]
+      }
+    },
+    "gps": {
+      "fixed": {
+        "steps": 0,
+        "turns": 0,
+        "distanceMetres": 279.5276,
+        "endToStartMetres": 9.4774,
+        "final": {
+          "x": 4.5004,
+          "y": -8.3408
+        },
+        "rotation": -1.029,
+        "bearing": 301.0425,
+        "points": 92,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 7.7666
+          }
+        ]
+      }
+    },
+    "pdr:own:gyro:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:own:gyro": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 1.4336,
+        "final": {
+          "x": 1.0927,
+          "y": -0.9279
+        },
+        "rotation": -0.0018,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 1.4336
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 1.4734,
+        "final": {
+          "x": 1.0858,
+          "y": -0.9959
+        },
+        "rotation": -0.0025,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 1.4734
+          }
+        ]
+      }
+    },
+    "pdr:own:game:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:own:game": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0.3021,
+        "final": {
+          "x": -0.2468,
+          "y": 0.1742
+        },
+        "rotation": 0.0072,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.3021
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.2369,
+        "final": {
+          "x": -0.2222,
+          "y": 0.082
+        },
+        "rotation": 0.0066,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.2369
+          }
+        ]
+      }
+    },
+    "pdr:own:absolute:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": -2.5741,
+        "bearing": 212.5138,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": -2.5741,
+        "bearing": 212.5138,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:own:absolute": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0.0708,
+        "final": {
+          "x": -0.0113,
+          "y": -0.0699
+        },
+        "rotation": -2.569,
+        "bearing": 212.8092,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0708
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.1569,
+        "final": {
+          "x": 0.0075,
+          "y": -0.1567
+        },
+        "rotation": -2.5696,
+        "bearing": 212.7706,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.1569
+          }
+        ]
+      }
+    },
+    "pdr:hw:gyro:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:hw:gyro": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 1.432,
+        "final": {
+          "x": 1.0903,
+          "y": -0.9283
+        },
+        "rotation": -0.0015,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 1.432
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 1.4719,
+        "final": {
+          "x": 1.0834,
+          "y": -0.9963
+        },
+        "rotation": -0.0022,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 1.4719
+          }
+        ]
+      }
+    },
+    "pdr:hw:game:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": 0,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:hw:game": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0.2882,
+        "final": {
+          "x": -0.2329,
+          "y": 0.1697
+        },
+        "rotation": 0.0064,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.2882
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.2224,
+        "final": {
+          "x": -0.2084,
+          "y": 0.0775
+        },
+        "rotation": 0.0058,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.2224
+          }
+        ]
+      }
+    },
+    "pdr:hw:absolute:snap": {
+      "fixed": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0,
+        "final": {
+          "x": 0,
+          "y": 0
+        },
+        "rotation": -2.5741,
+        "bearing": 212.5138,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 11,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.0908,
+        "final": {
+          "x": 0.0214,
+          "y": -0.0883
+        },
+        "rotation": -2.5741,
+        "bearing": 212.5138,
+        "points": 133,
+        "segments": 12,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0908
+          }
+        ]
+      }
+    },
+    "pdr:hw:absolute": {
+      "fixed": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 92.4,
+        "endToStartMetres": 0.0777,
+        "final": {
+          "x": 0.0016,
+          "y": -0.0777
+        },
+        "rotation": -2.5694,
+        "bearing": 212.7853,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.0777
+          }
+        ]
+      },
+      "weinberg": {
+        "steps": 132,
+        "turns": 0,
+        "distanceMetres": 90.3097,
+        "endToStartMetres": 0.1656,
+        "final": {
+          "x": 0.0206,
+          "y": -0.1643
+        },
+        "rotation": -2.57,
+        "bearing": 212.7522,
+        "points": 133,
+        "segments": 1,
+        "checkpoints": [
+          {
+            "label": "door",
+            "count": 2,
+            "errorMetres": 0.1656
+          }
+        ]
+      }
+    }
+  }
+}

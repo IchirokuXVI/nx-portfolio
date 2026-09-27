@@ -118,6 +118,12 @@
       "@portfolio/luna-shopper/postal-codes/dataset": [
         "./libs/luna-shopper/postal-codes/src/dataset.ts"
       ],
+      "@portfolio/luna-shopper/shop-map/model": [
+        "./libs/luna-shopper/shop-map/model/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/shop-map/recorder": [
+        "./libs/luna-shopper/shop-map/recorder/src/index.ts"
+      ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
       ],
@@ -142,6 +148,9 @@
       ],
       "@portfolio/velista/feature-install": [
         "./libs/velista/feature-install/src/index.ts"
+      ],
+      "@portfolio/velista/feature-walk-lab": [
+        "./libs/velista/feature-walk-lab/src/index.ts"
       ],
       "@portfolio/velista/feature-setup": [
         "./libs/velista/feature-setup/src/index.ts"

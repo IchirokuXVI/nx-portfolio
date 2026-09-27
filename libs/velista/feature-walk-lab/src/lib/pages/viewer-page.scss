@@ -1,0 +1,289 @@
+@use '../lab' as lab;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.page {
+  @include lab.page;
+  gap: var(--app-space-4);
+}
+
+.head {
+  @include lab.header;
+  flex-wrap: wrap;
+  row-gap: var(--app-space-2);
+}
+
+.back {
+  @include lab.back;
+  text-decoration: none;
+}
+
+.title {
+  @include lab.title;
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-3);
+  flex-basis: 100%;
+  margin: 0;
+  @include lab.muted;
+}
+
+.muted {
+  margin: 0;
+  @include lab.muted;
+}
+
+.warning {
+  @include lab.notice(danger);
+}
+
+.bad,
+.error {
+  color: var(--app-status-danger-fg);
+}
+
+.error {
+  display: block;
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-xs);
+}
+
+// The drawing gets most of a phone's height, and never less than a square.
+.plot-area {
+  block-size: 62svh;
+  min-block-size: 20rem;
+}
+
+.plot {
+  block-size: 100%;
+}
+
+.progress {
+  margin: 0;
+  @include lab.muted;
+  font-variant-numeric: tabular-nums;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+}
+
+.section-title {
+  @include lab.section-title;
+}
+
+.section-tools {
+  display: flex;
+  gap: var(--app-space-2);
+}
+
+.small {
+  @include lab.secondary;
+  font-size: var(--app-text-sm);
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--app-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend-item {
+  @include lab.button-base;
+  justify-content: flex-start;
+  inline-size: 100%;
+  border: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-weight: 500;
+  text-align: start;
+
+  &[aria-pressed='false'] {
+    background: transparent;
+    color: var(--app-text-muted);
+
+    .swatch {
+      opacity: 0.25;
+    }
+  }
+}
+
+.swatch {
+  flex: none;
+  inline-size: var(--app-space-8);
+  block-size: var(--app-space-3);
+  overflow: visible;
+}
+
+.mode,
+.mono {
+  font-family: var(--app-font-mono);
+  font-size: var(--app-text-sm);
+}
+
+.mode {
+  flex: 1;
+}
+
+.field {
+  @include lab.field;
+  min-inline-size: 0;
+}
+
+.label {
+  @include lab.label;
+  margin: 0;
+}
+
+.input {
+  @include lab.input;
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle {
+  @include lab.secondary;
+  justify-content: flex-start;
+
+  &[aria-pressed='true'] {
+    border-color: var(--app-status-success-border);
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+  }
+}
+
+.segmented {
+  @include lab.segmented;
+}
+
+.segment {
+  @include lab.segment;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--app-space-3);
+}
+
+.primary {
+  @include lab.primary;
+}
+
+.secondary {
+  @include lab.secondary;
+}
+
+// The table is wider than a phone; it scrolls on its own so the page never does.
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+}
+
+.metrics {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  th,
+  td {
+    padding: var(--app-space-2) var(--app-space-3);
+    text-align: end;
+  }
+
+  thead th {
+    background: var(--app-surface-sunken);
+
+    &:first-child {
+      text-align: start;
+    }
+
+    color: var(--app-text-secondary);
+    font-weight: 600;
+  }
+
+  tbody tr + tr {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+
+  tbody th {
+    position: sticky;
+    inset-inline-start: 0;
+    background: var(--app-surface-raised);
+    font-family: var(--app-font-mono);
+    font-weight: 500;
+    text-align: start;
+  }
+
+  td.muted {
+    text-align: start;
+    white-space: normal;
+  }
+}
+
+.dot {
+  display: inline-block;
+  inline-size: var(--app-dot-size);
+  block-size: var(--app-dot-size);
+  margin-inline-end: var(--app-space-1);
+  border-radius: var(--app-radius-full);
+}
+
+.details summary {
+  cursor: pointer;
+  min-block-size: var(--app-touch-target);
+  display: flex;
+  align-items: center;
+}
+
+.facts,
+.events {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--app-text-sm);
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--app-space-2);
+    justify-content: space-between;
+  }
+}
+
+.events li {
+  justify-content: flex-start;
+}

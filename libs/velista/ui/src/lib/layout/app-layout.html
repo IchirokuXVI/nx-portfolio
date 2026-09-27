@@ -102,7 +102,7 @@
   </lib-tour-spotlight>
 }
 
-@if (offline() && !mustUpdate()) {
+@if (coverOffline() && !mustUpdate()) {
   <!--
     Blocking, and shared by every page rather than owned by one, which is why it is
     here and not in the home page (plan 0003, section 3.1). Rendered over the outlet

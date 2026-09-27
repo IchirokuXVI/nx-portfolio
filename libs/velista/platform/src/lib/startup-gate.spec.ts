@@ -3,7 +3,11 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { BackendReadiness } from './backend-readiness';
 import { ConnectionState } from './connection-state';
-import { RENDERS_WHILE_CONNECTING, StartupGate } from './startup-gate';
+import {
+  RENDERS_WHILE_CONNECTING,
+  StartupGate,
+  WORKS_WITHOUT_BACKEND,
+} from './startup-gate';
 import { provideFakeBrowserFacade } from './testing/velista-testing';
 
 @Component({ selector: 'lib-test-page', template: 'page' })
@@ -91,6 +95,34 @@ describe('StartupGate', () => {
 
     expect(readiness.state()).toBe('unreachable');
     expect(gate.rendersNow()).toBe(true);
+  });
+
+  // The walk lab (recorder plan 0002). It is opened in a supermarket, where the
+  // backend is often out of reach, and it never needs one.
+  it('opens for a route that works without the backend, reachable or not', async () => {
+    build([
+      {
+        path: 'lab/walk',
+        data: { [WORKS_WITHOUT_BACKEND]: true },
+        children: [
+          { path: '', component: TestPage },
+          { path: 'record', component: TestPage },
+        ],
+      },
+      { path: 'zones', component: TestPage },
+    ]);
+    readiness.reportUnreachable();
+
+    await TestBed.inject(Router).navigate(['/lab/walk/record']);
+
+    // Inherited by the children, because the parent has no component.
+    expect(gate.worksWithoutBackend()).toBe(true);
+    expect(gate.rendersNow()).toBe(true);
+
+    await TestBed.inject(Router).navigate(['/zones']);
+
+    expect(gate.worksWithoutBackend()).toBe(false);
+    expect(gate.rendersNow()).toBe(false);
   });
 
   // `0072` draws the screen for a refused build. Until it does, the app runs on what

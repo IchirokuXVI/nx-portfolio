@@ -1795,5 +1795,161 @@
       "title": "Dilo en vez de escribirlo",
       "body": "Toca el micrófono, di lo que falta y vuelve a tocarlo para terminar. Es lo más rápido cuando tienes las manos ocupadas."
     }
+  },
+  "walkLab": {
+    "title": "Laboratorio de recorridos",
+    "intro": "Graba un recorrido por una tienda y compara cómo lo dibuja cada método. Los recorridos se quedan en este móvil hasta que los exportes.",
+    "common": {
+      "walks": "Recorridos",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "download": "Descargar",
+      "on": "Activado",
+      "off": "Desactivado",
+      "metres": "{{value}} m",
+      "seconds": "{{value}} s"
+    },
+    "platform": {
+      "web": "Web",
+      "android": "Android"
+    },
+    "mark": {
+      "entrance": "Entrada",
+      "checkout": "Caja",
+      "checkpoint": "Punto de control",
+      "note": "Nota"
+    },
+    "list": {
+      "record": "Grabar un recorrido",
+      "import": "Importar un archivo",
+      "empty": "Aún no hay recorridos. Graba uno o importa un archivo de la app de Android.",
+      "unnamed": "Recorrido sin nombre",
+      "partial": "Sin terminar",
+      "open": "Abrir",
+      "export": "Exportar",
+      "exporting": "Exportando",
+      "exported": "{{file}} guardado en tus descargas.",
+      "exportFailed": "No se pudo exportar: {{error}}",
+      "delete": "Borrar",
+      "deleteConfirm": "Borrar para siempre",
+      "saveFailed": "No se pudo guardar el recorrido en este móvil.",
+      "memoryOnly": "Este navegador no guarda los recorridos. Se pierden al cerrar la página, así que exporta cada uno.",
+      "storageError": "Problema de almacenamiento: {{error}}"
+    },
+    "import": {
+      "saved": "{{name}} importado.",
+      "error": {
+        "NOT_JSON": "Este archivo no es JSON. Elige un archivo .geojson o .json.",
+        "UNKNOWN_FORMAT": "Este archivo no es un recorrido ni un archivo GeoJSON.",
+        "UNSUPPORTED_VERSION": "Este recorrido viene de una versión más nueva y no se puede leer aquí.",
+        "INVALID": "Este recorrido está dañado o incompleto.",
+        "unknown": "No se pudo leer este archivo."
+      }
+    },
+    "record": {
+      "title": "Grabar un recorrido",
+      "name": "Nombre",
+      "holding": "Cómo sujetas el móvil",
+      "flat": "Plano",
+      "upright": "Vertical",
+      "step": "Longitud del paso en metros",
+      "camera": "Seguimiento con cámara",
+      "cameraHelp": "Sigue el móvil con la cámara. Es el método más preciso. Gasta más batería.",
+      "cameraUnsupported": "El seguimiento con cámara no está disponible en este navegador.",
+      "live": "Recorrido en directo",
+      "start": "Empezar",
+      "startHelp": "Empieza en la entrada. La pantalla no se apaga. Deja esta página abierta hasta terminar.",
+      "elapsed": "Tiempo",
+      "steps": "Pasos",
+      "distance": "Metros",
+      "liveOff": "Recorrido en directo no disponible",
+      "lastMark": "{{kind}} {{label}} a los {{time}}",
+      "checkpointTitle": "Nombre del punto de control",
+      "checkpointHelp": "Usa el mismo nombre cada vez que pases por el mismo sitio.",
+      "noteTitle": "Nota",
+      "label": "Nombre del punto de control",
+      "noteText": "Texto de la nota",
+      "finish": "Terminar",
+      "finishConfirm": "Toca otra vez para terminar",
+      "stoppedTitle": "Grabación detenida",
+      "stopped": {
+        "finished": "El recorrido está guardado.",
+        "hidden": "La grabación se detuvo porque la página quedó oculta. El recorrido está guardado.",
+        "left": "La grabación se detuvo al salir de la pantalla. El recorrido está guardado."
+      },
+      "open": "Abrir el recorrido",
+      "saveFailed": "No se pudo guardar el recorrido en este móvil. Descárgalo ahora o se perderá.",
+      "status": {
+        "motion": "Movimiento",
+        "orientation": "Orientación",
+        "location": "GPS",
+        "camera": "Cámara",
+        "saved": "Guardado",
+        "none": "nada",
+        "accuracy": "±{{m}} m",
+        "savedAgo": "hace {{s}} s",
+        "never": "todavía no"
+      },
+      "source": {
+        "sensor": "sensor",
+        "event": "eventos",
+        "none": "nada"
+      },
+      "cameraState": {
+        "off": "apagada",
+        "starting": "arrancando",
+        "tracking": "siguiendo",
+        "lost": "perdida",
+        "failed": "falló"
+      }
+    },
+    "view": {
+      "loading": "Cargando el recorrido",
+      "notFound": "Este recorrido no está en este móvil.",
+      "importedOnly": "Trazados importados. No se guardan.",
+      "plot": "El recorrido visto desde arriba",
+      "fit": "Encajar",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "computing": "Calculando el método {{done}} de {{total}}",
+      "computed": "{{total}} métodos en {{ms}} ms",
+      "legend": "Métodos",
+      "showAll": "Mostrar todos",
+      "hideAll": "Ocultar todos",
+      "pending": "en espera",
+      "failed": "falló",
+      "layers": "Marcas y mapa",
+      "selected": "Marcas y borrador del mapa sobre",
+      "draftOn": "Borrador del mapa: activado",
+      "draftOff": "Borrador del mapa: desactivado",
+      "draftNeedsSnap": "El borrador del mapa necesita un método con giros en ángulo recto (los que acaban en snap).",
+      "stepModel": "Longitud del paso",
+      "fixed": "Fija",
+      "weinberg": "Weinberg",
+      "stepMetres": "Metros por paso",
+      "weinbergK": "K",
+      "metrics": "Métricas",
+      "metricsHelp": "Distancias en metros. Fin a inicio es la separación cuando terminas donde empezaste. Una columna de punto de control es la mayor separación entre marcas con ese nombre.",
+      "col": {
+        "method": "Método",
+        "steps": "Pasos",
+        "turns": "Giros",
+        "distance": "Distancia",
+        "endToStart": "Fin a inicio",
+        "checkpoint": "{{label}}",
+        "ms": "ms"
+      },
+      "export": "Exportar",
+      "share": "Compartir",
+      "shareFailed": "No se pudo compartir. Usa Descargar.",
+      "recording": "Detalles de la grabación",
+      "rows_one": "{{count}} fila",
+      "rows_other": "{{count}} filas",
+      "origin": "Primera posición GPS",
+      "originValue": "{{lat}}, {{lon}} (±{{m}} m)",
+      "stepSetting": "Longitud del paso al grabar",
+      "app": "Grabado con",
+      "events": "Eventos"
+    }
   }
 }

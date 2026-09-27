@@ -20,6 +20,7 @@ import {
   type DeleteItemPricesByRunResult,
   type FillPackCountsResult,
   type FindItemByEanResult,
+  type FindItemsByEansResult,
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
@@ -152,6 +153,14 @@ export class CatalogClient {
    */
   findItemByEan(ean: string): Promise<FindItemByEanResult> {
     return this.send(ITEM_PATTERNS.findByEan, { userId: this.actor(), ean });
+  }
+
+  /**
+   * {@link findItemByEan} for every barcode of a decisions file, in one round
+   * trip. Answers only the barcodes catalog holds.
+   */
+  findItemsByEans(eans: string[]): Promise<FindItemsByEansResult> {
+    return this.send(ITEM_PATTERNS.findByEans, { userId: this.actor(), eans });
   }
 
   /**

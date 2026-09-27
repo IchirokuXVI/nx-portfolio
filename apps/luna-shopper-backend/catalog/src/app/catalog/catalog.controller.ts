@@ -47,6 +47,8 @@ import {
   type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type FindItemsByEansRequest,
+  type FindItemsByEansResult,
   type GetItemsRequest,
   type GetItemsResult,
   type GetSupermarketItemRequest,
@@ -357,6 +359,13 @@ export class CatalogController {
     @Payload() req: FindItemByEanRequest
   ): Promise<FindItemByEanResult> {
     return this.items.findByEan(req);
+  }
+
+  @MessagePattern(ITEM_PATTERNS.findByEans)
+  findItemsByEans(
+    @Payload() req: FindItemsByEansRequest
+  ): Promise<FindItemsByEansResult> {
+    return this.items.findByEans(req);
   }
 
   /**

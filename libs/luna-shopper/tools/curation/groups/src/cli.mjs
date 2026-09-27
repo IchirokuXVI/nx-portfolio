@@ -26,6 +26,7 @@
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { createSessionPool } from '../../auth/src/session.mjs';
 import { apply, decide, end, next, start } from './commands.mjs';
 import { serve } from './serve.mjs';
 
@@ -122,8 +123,12 @@ function readStdin(fd = 0) {
   return readFileSync(fd, 'utf8');
 }
 
-export async function run(argv, { stdin = readStdin } = {}) {
+export async function run(argv, { stdin = readStdin, makeSession } = {}) {
   const { command, flags } = parseArgs(argv);
+  // Only `serve` passes a factory: it pools sessions across steps, so a walk
+  // signs in once per gateway instead of once per step. A single command
+  // leaves each command on its own default.
+  const sessions = makeSession ? { makeSession } : {};
 
   if (!command || flags.help) {
     return { usage: USAGE };
@@ -131,6 +136,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
 
   if (command === 'start') {
     return start({
+      ...sessions,
       mainUrl: required(flags, 'main-url'),
       rehearsalUrl: required(flags, 'rehearsal-url'),
       runDir: required(flags, 'run-dir'),
@@ -151,6 +157,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
 
   if (command === 'next') {
     return next({
+      ...sessions,
       runDir: required(flags, 'run-dir'),
       mainPassword:
         typeof flags['main-password'] === 'string'
@@ -168,6 +175,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
       throw new Error(`the decision on stdin is not JSON: ${error.message}`);
     }
     return decide({
+      ...sessions,
       runDir: required(flags, 'run-dir'),
       itemId: required(flags, rowFlag(flags, 'item')),
       input,
@@ -188,6 +196,7 @@ export async function run(argv, { stdin = readStdin } = {}) {
 
   if (command === 'apply') {
     return apply({
+      ...sessions,
       mainUrl: required(flags, 'main-url'),
       file: required(flags, 'file'),
       mainUser:
@@ -219,7 +228,12 @@ const invokedDirectly =
 // dispatched here rather than from `run`: it owns the streams for as long as it
 // runs, and the answer lines are written by the loop itself.
 if (invokedDirectly && process.argv[2] === 'serve') {
-  serve({ input: process.stdin, output: process.stdout, run }).then(
+  const makeSession = createSessionPool();
+  serve({
+    input: process.stdin,
+    output: process.stdout,
+    run: (argv, options) => run(argv, { ...options, makeSession }),
+  }).then(
     () => {
       process.exitCode = 0;
     },
