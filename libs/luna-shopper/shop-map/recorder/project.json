@@ -1,0 +1,27 @@
+{
+  "name": "luna-shopper/shop-map/recorder",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/shop-map/recorder/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/shop-map/recorder/jest.config.cts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "generate-fixtures": {
+      "//": "Regenerates the synthetic walks and traces under src/__fixtures__ and their expected.json (recorder plans 0001 and 0002). Never edit the output by hand: this script is the only thing allowed to write it.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/shop-map/recorder/tools/generate-fixtures.ts"
+      }
+    }
+  }
+}

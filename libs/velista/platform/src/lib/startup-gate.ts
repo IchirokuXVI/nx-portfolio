@@ -28,6 +28,19 @@ import { BackendReadiness } from './backend-readiness';
 export const RENDERS_WHILE_CONNECTING = 'rendersWhileConnecting';
 
 /**
+ * Route `data` flag naming a route that never needs the backend at all.
+ *
+ * Carried by the walk lab (recorder plan 0002, section 7), a test tool that records
+ * sensors in a supermarket and keeps everything on the device. It is opened where the
+ * signal is worst, so neither of the two screens that exist for want of a backend may
+ * stand in front of it: the startup gate opens for it whatever the readiness says, and
+ * `AppLayout` does not cover it with the connection screen, whose reload would end a
+ * recording. `RENDERS_WHILE_CONNECTING` is the narrower statement, about the first
+ * seconds only, and a route that says this one needs no other.
+ */
+export const WORKS_WITHOUT_BACKEND = 'worksWithoutBackend';
+
+/**
  * Whether the app may draw the page it is on yet.
  *
  * ## Why this is a service, and why it is here
@@ -74,6 +87,17 @@ export class StartupGate {
     readsFlag(this._router.routerState.snapshot.root)
   );
 
+  private readonly _worksWithoutBackend = signal(
+    readsFlag(this._router.routerState.snapshot.root, WORKS_WITHOUT_BACKEND)
+  );
+
+  /**
+   * Whether the route now activated says it needs no backend at all. `AppLayout` reads
+   * it to keep the connection screen off such a page.
+   */
+  readonly worksWithoutBackend: Signal<boolean> =
+    this._worksWithoutBackend.asReadonly();
+
   /**
    * True when the outlet may exist.
    *
@@ -85,6 +109,7 @@ export class StartupGate {
     const state = this._readiness.state();
 
     return (
+      this._worksWithoutBackend() ||
       this._readiness.wasReady() ||
       state === 'too-old' ||
       (state === 'connecting' && this._rendersWhileConnecting())
@@ -98,11 +123,11 @@ export class StartupGate {
     // app, so `takeUntilDestroyed` is not an option here anyway.
     this._router.events
       .pipe(filter((event) => event instanceof NavigationEnd))
-      .subscribe(() =>
-        this._rendersWhileConnecting.set(
-          readsFlag(this._router.routerState.snapshot.root)
-        )
-      );
+      .subscribe(() => {
+        const root = this._router.routerState.snapshot.root;
+        this._rendersWhileConnecting.set(readsFlag(root));
+        this._worksWithoutBackend.set(readsFlag(root, WORKS_WITHOUT_BACKEND));
+      });
   }
 }
 
@@ -117,11 +142,14 @@ export class StartupGate {
  * one waits like every other screen. That is right, because those screens create a
  * group.
  */
-function readsFlag(from: ActivatedRouteSnapshot): boolean {
+function readsFlag(
+  from: ActivatedRouteSnapshot,
+  flag: string = RENDERS_WHILE_CONNECTING
+): boolean {
   let deepest = from;
   while (deepest.firstChild !== null) {
     deepest = deepest.firstChild;
   }
 
-  return deepest.data[RENDERS_WHILE_CONNECTING] === true;
+  return deepest.data[flag] === true;
 }

@@ -20,6 +20,7 @@ import {
   RENDERS_WHILE_CONNECTING,
   SHEET_SEGMENT,
   sheetFallGuard,
+  WORKS_WITHOUT_BACKEND,
 } from '@portfolio/velista/platform';
 import { APP_DEFAULT_LOCALE, APP_KEY, AppLayout } from '@portfolio/velista/ui';
 import {
@@ -955,6 +956,32 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-assistant').then(
                 (m) => m.AssistantPage
+              ),
+          },
+          {
+            /**
+             * The walk lab (recorder plan 0002, section 7): a test tool that records
+             * how well a phone's sensors map a shop, **linked from nowhere** and never
+             * used by a shopper.
+             *
+             * No guard, because it needs no account and sends nothing to a server. No
+             * bar, because it is not a place in the app. `WORKS_WITHOUT_BACKEND`,
+             * because it is opened inside a supermarket where the signal is worst: the
+             * startup gate and the connection screen both stand aside for it, and the
+             * latter's reload would otherwise end a recording. The flags sit on this
+             * componentless parent and every screen of the lab inherits them.
+             *
+             * Its three screens and its services come with its own route table, so the
+             * app registers nothing for it beyond this entry.
+             */
+            path: 'lab/walk',
+            data: {
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [WORKS_WITHOUT_BACKEND]: true,
+            },
+            loadChildren: () =>
+              import('@portfolio/velista/feature-walk-lab').then(
+                (m) => m.walkLabRoutes
               ),
           },
           {

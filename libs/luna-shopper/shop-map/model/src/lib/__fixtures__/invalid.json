@@ -1,0 +1,149 @@
+{
+  "OUT_OF_BOUNDS": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "too-wide", "kind": "shelf", "x": 4, "y": 1, "w": 2, "h": 1 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 1, "y": 1 },
+        "face": "e",
+        "sectionId": "sec-1"
+      },
+      { "id": "lost", "kind": "note", "at": { "x": 7, "y": 0 }, "text": "?" }
+    ]
+  },
+  "BLOCKING_OVERLAP": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "fridge", "kind": "fridge", "x": 1, "y": 2, "w": 1, "h": 1 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 1, "y": 1 },
+        "face": "e",
+        "sectionId": "sec-1"
+      }
+    ]
+  },
+  "ENTRANCE_INSIDE": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 },
+      { "id": "hatch", "kind": "exit", "x": 3, "y": 2, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 1, "y": 1 },
+        "face": "e",
+        "sectionId": "sec-1"
+      }
+    ]
+  },
+  "NO_ENTRANCE": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "way-out", "kind": "exit", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 1, "y": 1 },
+        "face": "e",
+        "sectionId": "sec-1"
+      }
+    ]
+  },
+  "ANCHOR_OFF_FIXTURE": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 3, "y": 1 },
+        "sectionId": "sec-1"
+      }
+    ]
+  },
+  "ANCHOR_UNREACHABLE": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "block", "kind": "shelf", "x": 0, "y": 0, "w": 3, "h": 3 },
+      { "id": "door", "kind": "entrance", "x": 3, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "buried",
+        "kind": "product",
+        "at": { "x": 1, "y": 1 },
+        "itemId": "item-1"
+      }
+    ]
+  },
+  "ANCHOR_UNNAMED": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "shelf", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 2 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      { "id": "s1", "kind": "section", "at": { "x": 1, "y": 1 }, "face": "e" },
+      {
+        "id": "p1",
+        "kind": "product",
+        "at": { "x": 1, "y": 2 },
+        "face": "e",
+        "text": "no barcode yet"
+      }
+    ]
+  },
+  "DISCONNECTED": {
+    "version": 1,
+    "cell": 0.5,
+    "size": { "cols": 5, "rows": 5 },
+    "fixtures": [
+      { "id": "wall", "kind": "wall", "x": 0, "y": 2, "w": 5, "h": 1 },
+      { "id": "door", "kind": "entrance", "x": 2, "y": 4, "w": 1, "h": 1 }
+    ],
+    "anchors": [
+      {
+        "id": "s1",
+        "kind": "section",
+        "at": { "x": 2, "y": 2 },
+        "face": "s",
+        "sectionId": "sec-1"
+      }
+    ]
+  }
+}

@@ -96,6 +96,15 @@ export class AppLayout {
    */
   readonly offline = this._connection.offline;
 
+  /**
+   * Whether to draw the connection screen, which is `offline` except on a page that
+   * says it needs no backend (the walk lab). That page is used where the signal is
+   * worst, and the screen's reload would end a recording.
+   */
+  readonly coverOffline = computed(
+    () => this.offline() && !this._gate.worksWithoutBackend()
+  );
+
   /** See {@link StartupScreen}. Wall clock from the app starting, per 0071 D8. */
   readonly startupSlow = this._readiness.slow;
 

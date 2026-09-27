@@ -1,0 +1,76 @@
+{
+  "segments": [
+    {
+      "from": {
+        "x": 0,
+        "y": 0
+      },
+      "to": {
+        "x": 0,
+        "y": 28
+      },
+      "heading": "n",
+      "steps": 20,
+      "confidence": 0.7750456614740682
+    },
+    {
+      "from": {
+        "x": 0,
+        "y": 28
+      },
+      "to": {
+        "x": 0,
+        "y": 0
+      },
+      "heading": "s",
+      "steps": 20,
+      "confidence": 0.8131551645551358
+    }
+  ],
+  "marks": [
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 0
+      },
+      "label": "door"
+    },
+    {
+      "kind": "entrance",
+      "at": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 28
+      },
+      "label": "aisle end"
+    },
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 0
+      },
+      "label": "door"
+    }
+  ],
+  "scans": [
+    {
+      "ean": "8480000123457",
+      "at": {
+        "x": 0,
+        "y": 28
+      },
+      "heading": "n"
+    }
+  ],
+  "notes": [],
+  "startedAt": 0,
+  "finishedAt": 27700
+}

@@ -1,0 +1,58 @@
+{
+  "segments": [
+    {
+      "from": {
+        "x": 0,
+        "y": 0
+      },
+      "to": {
+        "x": 0,
+        "y": 20
+      },
+      "heading": "n",
+      "steps": 14,
+      "confidence": 0.831519939899404
+    },
+    {
+      "from": {
+        "x": 0,
+        "y": 20
+      },
+      "to": {
+        "x": 14,
+        "y": 20
+      },
+      "heading": "e",
+      "steps": 10,
+      "confidence": 0.8935973471085157
+    }
+  ],
+  "marks": [
+    {
+      "kind": "entrance",
+      "at": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 20
+      },
+      "label": "corner"
+    },
+    {
+      "kind": "checkout",
+      "at": {
+        "x": 14,
+        "y": 20
+      }
+    }
+  ],
+  "scans": [],
+  "notes": [],
+  "startedAt": 0,
+  "finishedAt": 17820
+}
