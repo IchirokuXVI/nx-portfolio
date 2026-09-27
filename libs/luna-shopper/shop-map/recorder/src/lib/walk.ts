@@ -52,10 +52,8 @@ export interface RecorderOptions {
 
 export interface WalkRecorder {
   push(sample: MotionSample): void;
-  mark(
-    kind: 'entrance' | 'exit' | 'checkout' | 'counter',
-    label?: string
-  ): void;
+  /** Plan 0001's four kinds, and `checkpoint` (see `WalkMarkKind`). */
+  mark(kind: WalkMarkKind, label?: string): void;
   scan(ean: string): void;
   note(text: string): void;
   position(): { x: number; y: number; heading: Heading };

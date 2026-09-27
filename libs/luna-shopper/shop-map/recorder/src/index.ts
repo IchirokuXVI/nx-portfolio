@@ -31,6 +31,7 @@ export type { StreamName, WalkFile, WalkMark } from './lib/walk-file';
 export {
   WalkFileError,
   parseWalkImport,
+  readWalkFile,
   walkFileName,
 } from './lib/walk-import';
 export type { WalkFileErrorCode, WalkImport } from './lib/walk-import';
