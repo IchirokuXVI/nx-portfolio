@@ -1795,5 +1795,160 @@
       "title": "Say it instead of typing it",
       "body": "Tap the microphone, say what is missing, and tap it again to finish. It is the quickest way to add something with your hands full."
     }
+  },
+  "walkLab": {
+    "title": "Walk lab",
+    "intro": "Record a walk through a shop, then compare how each method maps it. Walks stay on this phone until you export them.",
+    "common": {
+      "walks": "Walks",
+      "cancel": "Cancel",
+      "save": "Save",
+      "download": "Download",
+      "on": "On",
+      "off": "Off",
+      "metres": "{{value}} m",
+      "seconds": "{{value}} s"
+    },
+    "platform": {
+      "web": "Web",
+      "android": "Android"
+    },
+    "mark": {
+      "entrance": "Entrance",
+      "checkout": "Checkout",
+      "checkpoint": "Checkpoint",
+      "note": "Note"
+    },
+    "list": {
+      "record": "Record a walk",
+      "import": "Import a file",
+      "empty": "No walks yet. Record one, or import a file from the Android app.",
+      "unnamed": "Untitled walk",
+      "partial": "Not finished",
+      "open": "Open",
+      "export": "Export",
+      "exporting": "Exporting",
+      "exported": "Saved {{file}} to your downloads.",
+      "exportFailed": "Export failed: {{error}}",
+      "delete": "Delete",
+      "deleteConfirm": "Delete for good",
+      "saveFailed": "The walk could not be saved on this phone.",
+      "memoryOnly": "This browser is not keeping walks. They are lost when the page closes, so export each one.",
+      "storageError": "Storage problem: {{error}}"
+    },
+    "import": {
+      "saved": "Imported {{name}}.",
+      "error": {
+        "NOT_JSON": "This file is not JSON. Pick a .geojson or .json file.",
+        "UNKNOWN_FORMAT": "This file is neither a walk nor a GeoJSON file.",
+        "UNSUPPORTED_VERSION": "This walk file is from a newer version and cannot be read here.",
+        "INVALID": "This walk file is damaged or incomplete.",
+        "unknown": "This file could not be read."
+      }
+    },
+    "record": {
+      "title": "Record a walk",
+      "name": "Name",
+      "holding": "How you hold the phone",
+      "flat": "Flat",
+      "upright": "Upright",
+      "step": "Step length in metres",
+      "camera": "Camera tracking",
+      "cameraHelp": "Follows the phone with the camera. The most accurate method. Uses more battery.",
+      "cameraUnsupported": "Camera tracking is not available in this browser.",
+      "live": "Live track",
+      "start": "Start",
+      "startHelp": "Start at the entrance. The screen stays on. Keep this page open until you finish.",
+      "elapsed": "Time",
+      "steps": "Steps",
+      "distance": "Metres",
+      "liveOff": "Live track unavailable",
+      "lastMark": "{{kind}} {{label}} at {{time}}",
+      "checkpointTitle": "Name this checkpoint",
+      "checkpointHelp": "Use the same name each time you pass the same place.",
+      "noteTitle": "Note",
+      "label": "Checkpoint name",
+      "noteText": "Note text",
+      "finish": "Finish",
+      "finishConfirm": "Tap again to finish",
+      "stoppedTitle": "Recording stopped",
+      "stopped": {
+        "finished": "The walk is saved.",
+        "hidden": "The recording stopped because the page was hidden. The walk is saved.",
+        "left": "The recording stopped when you left the screen. The walk is saved."
+      },
+      "open": "Open the walk",
+      "saveFailed": "The walk could not be saved on this phone. Download it now, or it is lost.",
+      "status": {
+        "motion": "Motion",
+        "orientation": "Orientation",
+        "location": "GPS",
+        "camera": "Camera",
+        "saved": "Saved",
+        "none": "none",
+        "accuracy": "±{{m}} m",
+        "savedAgo": "{{s}} s ago",
+        "never": "not yet"
+      },
+      "source": {
+        "sensor": "sensor",
+        "event": "events",
+        "none": "none"
+      },
+      "cameraState": {
+        "off": "off",
+        "starting": "starting",
+        "tracking": "tracking",
+        "lost": "lost",
+        "failed": "failed"
+      }
+    },
+    "view": {
+      "loading": "Loading the walk",
+      "notFound": "This walk is not on this phone.",
+      "importedOnly": "Imported tracks. Not saved.",
+      "plot": "The walk seen from above",
+      "fit": "Fit",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "computing": "Working out method {{done}} of {{total}}",
+      "computed": "{{total}} methods in {{ms}} ms",
+      "legend": "Methods",
+      "showAll": "Show all",
+      "hideAll": "Hide all",
+      "pending": "waiting",
+      "failed": "failed",
+      "layers": "Marks and map",
+      "selected": "Marks and draft map on",
+      "draftOn": "Draft map: on",
+      "draftOff": "Draft map: off",
+      "draftNeedsSnap": "The draft map needs a method with square turns (one ending in snap).",
+      "stepModel": "Step length",
+      "fixed": "Fixed",
+      "weinberg": "Weinberg",
+      "stepMetres": "Metres per step",
+      "weinbergK": "K",
+      "metrics": "Metrics",
+      "metricsHelp": "Distances in metres. End to start is the gap when you finish where you began. A checkpoint column is the largest gap between marks with that name.",
+      "col": {
+        "method": "Method",
+        "steps": "Steps",
+        "turns": "Turns",
+        "distance": "Distance",
+        "endToStart": "End to start",
+        "checkpoint": "{{label}}",
+        "ms": "ms"
+      },
+      "export": "Export",
+      "share": "Share",
+      "shareFailed": "Sharing did not work. Use Download.",
+      "recording": "Recording details",
+      "rows": "{{count}} rows",
+      "origin": "First GPS fix",
+      "originValue": "{{lat}}, {{lon}} (±{{m}} m)",
+      "stepSetting": "Step length when recorded",
+      "app": "Recorded with",
+      "events": "Events"
+    }
   }
 }
