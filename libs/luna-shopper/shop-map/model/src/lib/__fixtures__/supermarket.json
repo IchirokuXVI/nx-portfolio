@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "cell": 0.5,
+  "size": { "cols": 15, "rows": 16 },
+  "fixtures": [
+    { "id": "deli", "kind": "counter", "x": 6, "y": 0, "w": 3, "h": 1 },
+    { "id": "gondola-1", "kind": "freezer", "x": 1, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-2", "kind": "shelf", "x": 3, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-3", "kind": "shelf", "x": 5, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-4", "kind": "shelf", "x": 7, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-5", "kind": "shelf", "x": 9, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-6", "kind": "shelf", "x": 11, "y": 2, "w": 1, "h": 8 },
+    { "id": "gondola-7", "kind": "fridge", "x": 13, "y": 2, "w": 1, "h": 8 },
+    { "id": "checkout-a", "kind": "checkout", "x": 4, "y": 13, "w": 2, "h": 1 },
+    { "id": "checkout-b", "kind": "checkout", "x": 8, "y": 13, "w": 2, "h": 1 },
+    { "id": "way-in", "kind": "entrance", "x": 12, "y": 15, "w": 2, "h": 1 },
+    { "id": "way-out", "kind": "exit", "x": 1, "y": 15, "w": 2, "h": 1 }
+  ],
+  "anchors": [
+    {
+      "id": "a-produce",
+      "kind": "section",
+      "at": { "x": 13, "y": 3 },
+      "face": "w",
+      "sectionId": "sec-produce"
+    },
+    {
+      "id": "b-frozen",
+      "kind": "section",
+      "at": { "x": 1, "y": 6 },
+      "face": "e",
+      "sectionId": "sec-frozen"
+    },
+    {
+      "id": "c-bakery",
+      "kind": "section",
+      "at": { "x": 11, "y": 3 },
+      "face": "w",
+      "sectionId": "sec-bakery"
+    },
+    {
+      "id": "d-dairy",
+      "kind": "section",
+      "at": { "x": 9, "y": 8 },
+      "face": "w",
+      "categoryId": "dairy"
+    },
+    {
+      "id": "e-drinks",
+      "kind": "section",
+      "at": { "x": 7, "y": 8 },
+      "face": "w",
+      "sectionId": "sec-drinks"
+    },
+    {
+      "id": "f-cleaning",
+      "kind": "section",
+      "at": { "x": 5, "y": 3 },
+      "face": "w",
+      "sectionId": "sec-cleaning"
+    },
+    {
+      "id": "p-apples",
+      "kind": "product",
+      "at": { "x": 13, "y": 6 },
+      "face": "w",
+      "itemId": "item-apples"
+    },
+    {
+      "id": "p-bread",
+      "kind": "product",
+      "at": { "x": 11, "y": 7 },
+      "face": "e",
+      "itemId": "item-bread"
+    },
+    {
+      "id": "p-cheese",
+      "kind": "product",
+      "at": { "x": 8, "y": 0 },
+      "face": "s",
+      "itemId": "item-cheese"
+    },
+    {
+      "id": "p-soap",
+      "kind": "product",
+      "at": { "x": 5, "y": 9 },
+      "face": "e",
+      "ean": "8480000000011"
+    },
+    {
+      "id": "p-peas",
+      "kind": "product",
+      "at": { "x": 3, "y": 8 },
+      "face": "w",
+      "ean": "8480000000028"
+    },
+    {
+      "id": "n-offers",
+      "kind": "note",
+      "at": { "x": 14, "y": 12 },
+      "text": "Weekly offers stand"
+    }
+  ]
+}

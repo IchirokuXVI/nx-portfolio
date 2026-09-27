@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "cell": 0.5,
+  "size": { "cols": 8, "rows": 7 },
+  "fixtures": [
+    { "id": "shelf-left", "kind": "shelf", "x": 1, "y": 1, "w": 1, "h": 4 },
+    { "id": "shelf-right", "kind": "shelf", "x": 3, "y": 1, "w": 1, "h": 4 },
+    {
+      "id": "counter",
+      "kind": "counter",
+      "x": 5,
+      "y": 1,
+      "w": 2,
+      "h": 1,
+      "label": "Deli"
+    },
+    { "id": "door", "kind": "entrance", "x": 3, "y": 6, "w": 2, "h": 1 }
+  ],
+  "anchors": [
+    {
+      "id": "s-bread",
+      "kind": "section",
+      "at": { "x": 1, "y": 2 },
+      "face": "e",
+      "categoryId": "bread"
+    },
+    {
+      "id": "s-drinks",
+      "kind": "section",
+      "at": { "x": 3, "y": 4 },
+      "face": "w",
+      "sectionId": "sec-drinks"
+    },
+    {
+      "id": "s-deli",
+      "kind": "section",
+      "at": { "x": 5, "y": 1 },
+      "face": "s",
+      "sectionId": "sec-deli"
+    },
+    {
+      "id": "p-milk",
+      "kind": "product",
+      "at": { "x": 3, "y": 2 },
+      "face": "w",
+      "ean": "8410000000017"
+    },
+    {
+      "id": "p-ham",
+      "kind": "product",
+      "at": { "x": 6, "y": 1 },
+      "face": "s",
+      "itemId": "item-ham"
+    },
+    {
+      "id": "n-till",
+      "kind": "note",
+      "at": { "x": 6, "y": 3 },
+      "text": "Pay at the deli counter"
+    }
+  ]
+}

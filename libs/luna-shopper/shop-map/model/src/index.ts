@@ -20,6 +20,10 @@ export {
   walkableGrid,
 } from './lib/grid';
 export type { ShopMapGrid } from './lib/grid';
+export { normalizeShopMap } from './lib/normalize';
+export { fitOutline } from './lib/outline';
+export type { FittedOutline, MetricOutline } from './lib/outline';
+export { parallelAisles } from './lib/templates';
 export type {
   AnchorFace,
   AnchorKind,
@@ -33,3 +37,4 @@ export type {
   WalkOrder,
 } from './lib/types';
 export { PROBLEM_ORDER, validateShopMap } from './lib/validate';
+export { walkOrder } from './lib/walk-order';
