@@ -117,6 +117,7 @@ class Recorder(private val app: Context, private val store: WalkStore) {
     private var recording = false
     private var lastGyro: FloatArray? = null
     private var gyroExpected = false
+    private var firstAccelT = -1.0
     private var arState = ""
 
     private var sensorThread: HandlerThread? = null
@@ -153,7 +154,7 @@ class Recorder(private val app: Context, private val store: WalkStore) {
             t0 = SystemClock.elapsedRealtimeNanos()
             motion = null; game = null; absolute = null; magnetic = null; steps = null
             location = null; pose = null; pressure = null; origin = null
-            marks.clear(); events.clear(); poseSource = null; lastGyro = null; arState = ""
+            marks.clear(); events.clear(); poseSource = null; lastGyro = null; arState = ""; firstAccelT = -1.0
             sensorClocks.clear()
             fed.fill(0)
             recording = true
@@ -183,7 +184,12 @@ class Recorder(private val app: Context, private val store: WalkStore) {
         gyroExpected = sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE) != null
         register(Sensor.TYPE_ACCELEROMETER, "accelerometer", 10_000) { motion = ArrayList(1 shl 14) }
         if (gyroExpected) {
-            sm.registerListener(listener, sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 10_000, 0, handler)
+            gyroExpected = try {
+                sm.registerListener(listener, sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE), 10_000, 0, handler)
+            } catch (e: Exception) {
+                false
+            }
+            if (!gyroExpected) event("sensor-missing", "gyroscope (registration refused)")
         } else {
             event("sensor-missing", "gyroscope")
         }
@@ -314,8 +320,15 @@ class Recorder(private val app: Context, private val store: WalkStore) {
                     Sensor.TYPE_ACCELEROMETER -> {
                         val rows = motion ?: return
                         val g = lastGyro
-                        // Wait for the first gyroscope reading, so no row claims a zero rate.
-                        if (g == null && gyroExpected) return
+                        if (firstAccelT < 0) firstAccelT = t
+                        // Wait up to a second for the first gyroscope reading, so no row
+                        // claims a zero rate; a gyroscope that stays silent longer is
+                        // recorded as missing and the rows carry zero rates.
+                        if (g == null && gyroExpected) {
+                            if (t - firstAccelT < 1000) return
+                            gyroExpected = false
+                            events.add(WalkEvent(t, "sensor-missing", "gyroscope (no readings)"))
+                        }
                         if (rows.isNotEmpty() && t < rows.last()[0]) return
                         rows.add(
                             doubleArrayOf(

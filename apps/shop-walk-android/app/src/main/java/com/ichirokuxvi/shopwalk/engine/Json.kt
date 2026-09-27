@@ -27,7 +27,7 @@ object Json {
         fun skipWs() {
             while (i < s.length) {
                 val c = s[i]
-                if (c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '﻿') i++ else break
+                if (c == ' ' || c == '\n' || c == '\r' || c == '\t' || c.code == 0xFEFF) i++ else break
             }
         }
 
