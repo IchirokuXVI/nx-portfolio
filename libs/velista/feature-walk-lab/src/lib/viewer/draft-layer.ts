@@ -58,7 +58,11 @@ export function draftRects(walk: WalkFile, track: Track): PlotRect[] {
   });
 }
 
-/** The walk's bounding box in cells, over its segments and its marks. */
+/**
+ * The walk's bounding box in cells, over its segments, marks, notes and scans, the
+ * same box `walkToDocument` measures (a segment is a straight run, so its two ends
+ * bound it).
+ */
 export function cellBox(walk: Walk): {
   minX: number;
   minY: number;
@@ -66,12 +70,15 @@ export function cellBox(walk: Walk): {
   maxY: number;
 } {
   const cells = [
-    { x: 0, y: 0 },
     ...walk.segments.flatMap((s) => [s.from, s.to]),
     ...walk.marks.map((m) => m.at),
     ...walk.notes.map((n) => n.at),
     ...walk.scans.map((s) => s.at),
   ];
+  // What `walkToDocument` falls back to for an empty walk.
+  if (cells.length === 0) {
+    cells.push({ x: 0, y: 0 });
+  }
   return {
     minX: Math.min(...cells.map((c) => c.x)),
     minY: Math.min(...cells.map((c) => c.y)),

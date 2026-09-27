@@ -19,7 +19,12 @@ export const MIN_SCALE = 0.25;
 export const MAX_SCALE = 40;
 
 /** Zoom by `factor` keeping the point under `(cx, cy)` where it is. */
-export function zoomAt(view: View, factor: number, cx: number, cy: number): View {
+export function zoomAt(
+  view: View,
+  factor: number,
+  cx: number,
+  cy: number
+): View {
   const scale = clamp(view.scale * factor, MIN_SCALE, MAX_SCALE);
   const applied = scale / view.scale;
 

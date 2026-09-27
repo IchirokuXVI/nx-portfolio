@@ -92,7 +92,10 @@ export class WalkListPage {
       const parsed = parseWalkImport(text);
 
       if (parsed.kind === 'tracks') {
-        this._state.imported.set({ fileName: file.name, tracks: parsed.tracks });
+        this._state.imported.set({
+          fileName: file.name,
+          tracks: parsed.tracks,
+        });
         await this._router.navigate(['imported'], { relativeTo: this._route });
         return;
       }
@@ -143,7 +146,9 @@ export class WalkListPage {
       this.notice.set({
         tone: 'danger',
         key: 'walkLab.list.exportFailed',
-        params: { error: error instanceof Error ? error.message : String(error) },
+        params: {
+          error: error instanceof Error ? error.message : String(error),
+        },
       });
     } finally {
       this.exporting.set(null);

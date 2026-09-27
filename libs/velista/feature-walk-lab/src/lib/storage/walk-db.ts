@@ -153,7 +153,9 @@ export class WalkDb {
     }
 
     return this._try(async () => {
-      await write(db, [SUMMARIES], (tx) => tx.objectStore(SUMMARIES).put(summary));
+      await write(db, [SUMMARIES], (tx) =>
+        tx.objectStore(SUMMARIES).put(summary)
+      );
       return true;
     }, false);
   }
@@ -280,7 +282,11 @@ function all<T>(db: IDBDatabase, store: string): Promise<T[]> {
   );
 }
 
-function getOne<T>(db: IDBDatabase, store: string, id: string): Promise<T | null> {
+function getOne<T>(
+  db: IDBDatabase,
+  store: string,
+  id: string
+): Promise<T | null> {
   return request<T | undefined>(
     db.transaction(store, 'readonly').objectStore(store).get(id)
   ).then((value) => value ?? null);
@@ -288,7 +294,10 @@ function getOne<T>(db: IDBDatabase, store: string, id: string): Promise<T | null
 
 function chunksOf(db: IDBDatabase, walkId: string): Promise<WalkChunk[]> {
   return request<WalkChunk[]>(
-    db.transaction(CHUNKS, 'readonly').objectStore(CHUNKS).getAll(chunkRange(walkId))
+    db
+      .transaction(CHUNKS, 'readonly')
+      .objectStore(CHUNKS)
+      .getAll(chunkRange(walkId))
   );
 }
 

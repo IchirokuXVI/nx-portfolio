@@ -34,9 +34,13 @@ export interface XrFrameLike {
 
 export interface XrSessionLike extends EventTarget {
   readonly visibilityState?: 'visible' | 'visible-blurred' | 'hidden';
-  readonly renderState: { readonly baseLayer?: { framebuffer: WebGLFramebuffer | null } };
+  readonly renderState: {
+    readonly baseLayer?: { framebuffer: WebGLFramebuffer | null };
+  };
   requestReferenceSpace(type: 'local' | 'viewer'): Promise<unknown>;
-  requestAnimationFrame(callback: (time: number, frame: XrFrameLike) => void): number;
+  requestAnimationFrame(
+    callback: (time: number, frame: XrFrameLike) => void
+  ): number;
   updateRenderState(state: { baseLayer: unknown }): void;
   end(): Promise<void>;
 }
@@ -63,7 +67,9 @@ export interface CaptureWindow {
   RelativeOrientationSensor?: OrientationSensorConstructor;
   AbsoluteOrientationSensor?: OrientationSensorConstructor;
   XRWebGLLayer?: XrWebGlLayerConstructor;
-  DeviceMotionEvent?: { requestPermission?: () => Promise<'granted' | 'denied'> };
+  DeviceMotionEvent?: {
+    requestPermission?: () => Promise<'granted' | 'denied'>;
+  };
   DeviceOrientationEvent?: {
     requestPermission?: () => Promise<'granted' | 'denied'>;
   };

@@ -229,7 +229,7 @@
   @include lab.button-base;
   min-block-size: var(--app-button-height);
   padding-block: var(--app-space-4);
-  border: 2px solid var(--app-border-strong);
+  border: var(--app-mark-ring-width) solid var(--app-border-strong);
   background: var(--app-surface-raised);
   color: var(--app-text-primary);
   font-size: var(--app-text-lg);

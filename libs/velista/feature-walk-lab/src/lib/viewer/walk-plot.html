@@ -1,6 +1,5 @@
 <div class="frame">
   <svg
-    #svg
     (pointercancel)="onPointerUp($event)"
     (pointerdown)="onPointerDown($event)"
     (pointerleave)="onPointerUp($event)"
@@ -9,6 +8,7 @@
     (wheel)="onWheel($event)"
     [attr.aria-label]="label()"
     [attr.viewBox]="viewBox()"
+    #svg
     class="plot"
     preserveAspectRatio="xMidYMid meet"
     role="img"
@@ -30,9 +30,9 @@
       @for (line of drawnLines(); track line.id) {
         <polyline
           [attr.points]="line.d"
-          [attr.stroke]="line.style.color"
           [attr.stroke-dasharray]="line.style.dash"
           [attr.stroke-width]="line.style.width"
+          [attr.stroke]="line.style.color"
           class="track"
         />
       }

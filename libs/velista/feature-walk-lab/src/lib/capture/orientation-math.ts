@@ -22,7 +22,11 @@ export function eulerToQuaternion(
   beta: number | null | undefined,
   gamma: number | null | undefined
 ): [number, number, number, number] | null {
-  if (!isFiniteNumber(alpha) || !isFiniteNumber(beta) || !isFiniteNumber(gamma)) {
+  if (
+    !isFiniteNumber(alpha) ||
+    !isFiniteNumber(beta) ||
+    !isFiniteNumber(gamma)
+  ) {
     return null;
   }
 

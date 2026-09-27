@@ -26,11 +26,24 @@ import {
 import { formatDuration, formatMetres, formatStarted } from '../format';
 import { WalkDb } from '../storage/walk-db';
 import { WalkFiles, type ShareOutcome } from '../storage/walk-files';
-import { computeTracksInTurns, type ComputedTrack } from '../viewer/compute-tracks';
+import {
+  computeTracksInTurns,
+  type ComputedTrack,
+} from '../viewer/compute-tracks';
 import { draftRects } from '../viewer/draft-layer';
 import { exportWalk, pickMode } from '../viewer/export';
-import { isSnapMode, modeStyle, sortModes, type ModeStyle } from '../viewer/mode-style';
-import { WalkPlot, type PlotLine, type PlotMark, type PlotRect } from '../viewer/walk-plot';
+import {
+  isSnapMode,
+  modeStyle,
+  sortModes,
+  type ModeStyle,
+} from '../viewer/mode-style';
+import {
+  WalkPlot,
+  type PlotLine,
+  type PlotMark,
+  type PlotRect,
+} from '../viewer/walk-plot';
 import { WalkLabState } from '../walk-lab-state';
 
 type Load = 'loading' | 'ready' | 'missing';
@@ -324,7 +337,10 @@ export class ViewerPage {
       const modes: ModeId[] = [];
       imported.tracks.forEach((track, i) => {
         // A plain GeoJSON may repeat a mode, or name none; each line stays its own row.
-        const id = modes.includes(track.mode) || !track.mode ? `${track.mode || 'line'} ${i + 1}` : track.mode;
+        const id =
+          modes.includes(track.mode) || !track.mode
+            ? `${track.mode || 'line'} ${i + 1}`
+            : track.mode;
         modes.push(id);
         results.set(id, { mode: id, track: { ...track, mode: id }, ms: 0 });
       });

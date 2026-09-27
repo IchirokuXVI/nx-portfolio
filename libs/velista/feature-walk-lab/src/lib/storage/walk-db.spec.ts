@@ -63,7 +63,9 @@ describe('WalkDb', () => {
   });
 
   it('deletes a walk and everything recorded for it', async () => {
-    await db.save(new WalkBuilder(header('d', '2026-09-28T10:00:00Z')).toWalk());
+    await db.save(
+      new WalkBuilder(header('d', '2026-09-28T10:00:00Z')).toWalk()
+    );
     await db.delete('d');
 
     expect(await db.get('d')).toBeNull();

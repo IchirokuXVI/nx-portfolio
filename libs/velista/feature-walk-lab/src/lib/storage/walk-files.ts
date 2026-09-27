@@ -40,7 +40,11 @@ export class WalkFiles {
   /** Whether the browser says it can share this kind of file. */
   canShare(fileName: string, type = GEOJSON_TYPE): boolean {
     const nav = this._document.defaultView?.navigator;
-    if (!nav || typeof nav.canShare !== 'function' || typeof nav.share !== 'function') {
+    if (
+      !nav ||
+      typeof nav.canShare !== 'function' ||
+      typeof nav.share !== 'function'
+    ) {
       return false;
     }
     try {
@@ -55,7 +59,11 @@ export class WalkFiles {
    * Opens the share sheet with the file. Call it straight from a tap: the browser
    * refuses a share that is not triggered by one.
    */
-  async share(fileName: string, text: string, type = GEOJSON_TYPE): Promise<ShareOutcome> {
+  async share(
+    fileName: string,
+    text: string,
+    type = GEOJSON_TYPE
+  ): Promise<ShareOutcome> {
     const nav = this._document.defaultView?.navigator;
     if (!nav || typeof nav.share !== 'function') {
       return 'failed';

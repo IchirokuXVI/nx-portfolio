@@ -1,8 +1,8 @@
 import { type Routes } from '@angular/router';
 import { WalkCapture } from './capture/walk-capture';
-import { WalkLabState } from './walk-lab-state';
-import { WalkFiles } from './storage/walk-files';
 import { WalkDb } from './storage/walk-db';
+import { WalkFiles } from './storage/walk-files';
+import { WalkLabState } from './walk-lab-state';
 
 /**
  * The walk lab's three screens (recorder plan 0002, section 7), mounted by

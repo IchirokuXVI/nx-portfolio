@@ -149,7 +149,10 @@ export class WalkCapture {
    * the camera session both need the user activation the tap carries, so nothing is
    * awaited before them.
    */
-  async start(settings: CaptureSettings, listener: CaptureListener): Promise<WalkBuilder> {
+  async start(
+    settings: CaptureSettings,
+    listener: CaptureListener
+  ): Promise<WalkBuilder> {
     this._teardown();
 
     const win = this._window;
@@ -163,10 +166,15 @@ export class WalkCapture {
         platform: 'web',
         app: 'velista-walk-lab',
         appVersion: settings.appVersion,
-        ...(win?.navigator.userAgent ? { userAgent: win.navigator.userAgent } : {}),
+        ...(win?.navigator.userAgent
+          ? { userAgent: win.navigator.userAgent }
+          : {}),
       },
       holding: settings.holding,
-      settings: { stepMetres: settings.stepMetres, cellMetres: settings.cellMetres },
+      settings: {
+        stepMetres: settings.stepMetres,
+        cellMetres: settings.cellMetres,
+      },
       ...(settings.camera ? { poseSource: 'webxr' as const } : {}),
     };
 
@@ -236,7 +244,11 @@ export class WalkCapture {
     if (this._recording()) {
       builder.setDuration(this.now());
       if (reason !== 'finished') {
-        builder.event({ t: roundTo(this.now(), 1), kind: 'stopped', detail: reason });
+        builder.event({
+          t: roundTo(this.now(), 1),
+          kind: 'stopped',
+          detail: reason,
+        });
       }
     }
 
@@ -285,7 +297,8 @@ export class WalkCapture {
       if (answer !== 'granted') {
         this._event('permission-denied', 'motion');
       }
-      const askOrientation = this._window?.DeviceOrientationEvent?.requestPermission;
+      const askOrientation =
+        this._window?.DeviceOrientationEvent?.requestPermission;
       if (typeof askOrientation === 'function') {
         await askOrientation.call(this._window?.DeviceOrientationEvent);
       }
@@ -315,7 +328,9 @@ export class WalkCapture {
     };
 
     win.addEventListener('devicemotion', onMotion);
-    this._cleanups.push(() => win.removeEventListener('devicemotion', onMotion));
+    this._cleanups.push(() =>
+      win.removeEventListener('devicemotion', onMotion)
+    );
   }
 
   /**
@@ -325,7 +340,11 @@ export class WalkCapture {
    */
   private _listenToOrientation(): void {
     const win = this._window;
-    this._startOrientation('game', win?.RelativeOrientationSensor, 'deviceorientation');
+    this._startOrientation(
+      'game',
+      win?.RelativeOrientationSensor,
+      'deviceorientation'
+    );
     this._startOrientation(
       'absolute',
       win?.AbsoluteOrientationSensor,
@@ -339,7 +358,10 @@ export class WalkCapture {
     fallbackEvent: 'deviceorientation' | 'deviceorientationabsolute'
   ): void {
     const fallback = (why: string) => {
-      this._event('sensor-missing', `${stream} sensor: ${why}; using ${fallbackEvent}`);
+      this._event(
+        'sensor-missing',
+        `${stream} sensor: ${why}; using ${fallbackEvent}`
+      );
       this._listenToOrientationEvent(stream, fallbackEvent);
     };
 
@@ -519,7 +541,8 @@ export class WalkCapture {
       }
 
       if (doc.visibilityState === 'hidden') {
-        const xrVisible = this._xr !== null && this._xr.visibilityState !== 'hidden';
+        const xrVisible =
+          this._xr !== null && this._xr.visibilityState !== 'hidden';
         if (xrVisible) {
           this._event('hidden', 'ignored while camera tracking is on');
           return;
@@ -538,7 +561,9 @@ export class WalkCapture {
     };
 
     doc.addEventListener('visibilitychange', onChange);
-    this._cleanups.push(() => doc.removeEventListener('visibilitychange', onChange));
+    this._cleanups.push(() =>
+      doc.removeEventListener('visibilitychange', onChange)
+    );
   }
 
   private async _holdWakeLock(): Promise<void> {
@@ -615,7 +640,9 @@ export class WalkCapture {
       if (!gl) {
         throw new Error('no WebGL context');
       }
-      session.updateRenderState({ baseLayer: new win.XRWebGLLayer(session, gl) });
+      session.updateRenderState({
+        baseLayer: new win.XRWebGLLayer(session, gl),
+      });
       const space = await session.requestReferenceSpace('local');
 
       let tracking = false;
@@ -840,7 +867,8 @@ function uuid(win: Window | null): string {
 
 /** ISO 8601 with the local offset, as section 2 asks, rather than `toISOString`'s Z. */
 export function isoWithOffset(date: Date): string {
-  const pad = (n: number, width = 2) => String(Math.abs(n)).padStart(width, '0');
+  const pad = (n: number, width = 2) =>
+    String(Math.abs(n)).padStart(width, '0');
   const offset = -date.getTimezoneOffset();
   const sign = offset >= 0 ? '+' : '-';
   return (

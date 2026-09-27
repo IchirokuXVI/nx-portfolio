@@ -1,4 +1,7 @@
-import type { Track, WalkFile } from '@portfolio/luna-shopper/shop-map/recorder';
+import type {
+  Track,
+  WalkFile,
+} from '@portfolio/luna-shopper/shop-map/recorder';
 import { computeTracksInTurns, type ComputedTrack } from './compute-tracks';
 
 const walk = { id: 'w' } as unknown as WalkFile;

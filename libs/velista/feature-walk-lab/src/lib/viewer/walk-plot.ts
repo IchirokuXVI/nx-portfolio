@@ -1,14 +1,14 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
-  ElementRef,
   inject,
   input,
   signal,
   viewChild,
-  afterNextRender,
+  type ElementRef,
 } from '@angular/core';
 import type { WalkMark } from '@portfolio/luna-shopper/shop-map/recorder';
 import type { ModeStyle } from './mode-style';
@@ -168,8 +168,12 @@ export class WalkPlot {
   });
 
   /** A mark's radius in world units, so it stays the same size on screen. */
-  readonly markRadius = computed(() => 9 / (this._pxPerUnit() * this._view().scale));
-  readonly labelSize = computed(() => 13 / (this._pxPerUnit() * this._view().scale));
+  readonly markRadius = computed(
+    () => 9 / (this._pxPerUnit() * this._view().scale)
+  );
+  readonly labelSize = computed(
+    () => 13 / (this._pxPerUnit() * this._view().scale)
+  );
 
   private readonly _pointers = new Map<number, Point>();
 
@@ -234,9 +238,15 @@ export class WalkPlot {
     if (!ids.includes(event.pointerId)) {
       return;
     }
-    const before = ids.map((id) => this._pointers.get(id) as Point) as [Point, Point];
+    const before = ids.map((id) => this._pointers.get(id) as Point) as [
+      Point,
+      Point,
+    ];
     this._pointers.set(event.pointerId, next);
-    const after = ids.map((id) => this._pointers.get(id) as Point) as [Point, Point];
+    const after = ids.map((id) => this._pointers.get(id) as Point) as [
+      Point,
+      Point,
+    ];
     this._view.update((v) => pinch(v, before, after));
   }
 
@@ -248,7 +258,9 @@ export class WalkPlot {
     event.preventDefault();
     const svg = event.currentTarget as SVGSVGElement;
     const at = this._toSvg(svg, event);
-    this._view.update((v) => zoomAt(v, Math.exp(-event.deltaY * 0.0015), at.x, at.y));
+    this._view.update((v) =>
+      zoomAt(v, Math.exp(-event.deltaY * 0.0015), at.x, at.y)
+    );
   }
 
   /** Client pixels to SVG units, through the SVG's own screen matrix. */

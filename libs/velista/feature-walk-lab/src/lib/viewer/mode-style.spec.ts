@@ -34,7 +34,13 @@ describe('modeStyle', () => {
 describe('sortModes', () => {
   it('lists the camera, then the recorder of plan 0001, then snap modes, then the rest, then GPS', () => {
     expect(
-      sortModes(['gps', 'pdr:own:game', 'pdr:own:game:snap', 'pdr:own:gyro:snap', 'vio'])
+      sortModes([
+        'gps',
+        'pdr:own:game',
+        'pdr:own:game:snap',
+        'pdr:own:gyro:snap',
+        'vio',
+      ])
     ).toEqual([
       'vio',
       'pdr:own:gyro:snap',

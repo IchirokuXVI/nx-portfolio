@@ -15,7 +15,10 @@ import { sortModes } from './mode-style';
 export const DEFAULT_MODE = 'pdr:own:gyro:snap';
 
 /** The mode marks are placed on: the one asked for if the walk has it, else the default. */
-export function pickMode(modes: readonly ModeId[], preferred?: ModeId): ModeId | null {
+export function pickMode(
+  modes: readonly ModeId[],
+  preferred?: ModeId
+): ModeId | null {
   if (preferred && modes.includes(preferred)) {
     return preferred;
   }

@@ -3,10 +3,10 @@ import {
   Component,
   computed,
   DestroyRef,
-  ElementRef,
   inject,
   signal,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
@@ -113,7 +113,11 @@ export class RecordPage {
   private readonly _points = signal<readonly TrackPoint[]>([]);
 
   readonly lines = computed<PlotLine[]>(() => [
-    { id: this.liveMode(), points: this._points(), style: modeStyle(this.liveMode()) },
+    {
+      id: this.liveMode(),
+      points: this._points(),
+      style: modeStyle(this.liveMode()),
+    },
   ]);
 
   /** The marks on the live track, each at the last point at or before it. */
@@ -142,11 +146,15 @@ export class RecordPage {
   });
 
   readonly elapsedText = computed(() => formatDuration(this.elapsed()));
-  readonly distanceText = computed(() => formatMetres(this.distance(), this._locale()));
+  readonly distanceText = computed(() =>
+    formatMetres(this.distance(), this._locale())
+  );
 
   readonly savedAgo = computed(() => {
     const saved = this.status().savedAt;
-    return saved === null ? null : Math.max(0, Math.round((this.elapsed() - saved) / 1000));
+    return saved === null
+      ? null
+      : Math.max(0, Math.round((this.elapsed() - saved) / 1000));
   });
 
   private _engine: TrackEngine | null = null;
@@ -156,7 +164,9 @@ export class RecordPage {
   private _pendingT = 0;
 
   constructor() {
-    void this._capture.cameraSupported().then((yes) => this.cameraSupported.set(yes));
+    void this._capture
+      .cameraSupported()
+      .then((yes) => this.cameraSupported.set(yes));
 
     inject(DestroyRef).onDestroy(() => {
       this._stopTimers();
@@ -213,7 +223,12 @@ export class RecordPage {
       overlayRoot: this._root()?.nativeElement ?? null,
     };
 
-    this._engine = this._makeEngine(this.liveMode(), settings);
+    this._engine = this._makeEngine(this.liveMode(), {
+      settings: {
+        stepMetres: settings.stepMetres,
+        cellMetres: settings.cellMetres,
+      },
+    });
     this._releaseReload = this._reload.block();
     this.phase.set('recording');
 
@@ -292,7 +307,10 @@ export class RecordPage {
   async finish(): Promise<void> {
     if (!this.finishArmed()) {
       this.finishArmed.set(true);
-      this._finishTimer = setTimeout(() => this.finishArmed.set(false), FINISH_CONFIRM_MS);
+      this._finishTimer = setTimeout(
+        () => this.finishArmed.set(false),
+        FINISH_CONFIRM_MS
+      );
       return;
     }
 
@@ -321,7 +339,11 @@ export class RecordPage {
   downloadStopped(): void {
     const walk = this.stoppedWalk();
     if (walk) {
-      this._files.download(`walk-${walk.id}.json`, JSON.stringify(walk), 'application/json');
+      this._files.download(
+        `walk-${walk.id}.json`,
+        JSON.stringify(walk),
+        'application/json'
+      );
     }
   }
 
@@ -339,7 +361,11 @@ export class RecordPage {
     this._showStopped(reason, walk, this._capture.saveFailed());
   }
 
-  private _showStopped(reason: StopReason, walk: WalkFile, failed: boolean): void {
+  private _showStopped(
+    reason: StopReason,
+    walk: WalkFile,
+    failed: boolean
+  ): void {
     this.stopReason.set(reason);
     this.stoppedWalk.set(walk);
     this.saveFailed.set(failed);

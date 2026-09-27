@@ -5,7 +5,9 @@
   </header>
 
   <div class="actions">
-    <a class="primary" routerLink="record">{{ 'walkLab.list.record' | rokuT }}</a>
+    <a class="primary" routerLink="record">{{
+      'walkLab.list.record' | rokuT
+    }}</a>
     <label [class.busy]="importing()" class="secondary import">
       {{ 'walkLab.list.import' | rokuT }}
       <!--
@@ -14,9 +16,9 @@
         Anything picked is parsed, and a file that is not a walk says so.
       -->
       <input
-        #picker
         (change)="import(picker)"
         [disabled]="importing()"
+        #picker
         class="picker"
         type="file"
       />
@@ -25,7 +27,9 @@
 
   <p aria-live="polite" class="live" role="status">
     @if (notice(); as n) {
-      <span [class]="'notice notice-' + n.tone">{{ n.key | rokuT: n.params ?? {} }}</span>
+      <span [class]="'notice notice-' + n.tone">{{
+        n.key | rokuT: n.params ?? {}
+      }}</span>
     }
   </p>
 
@@ -51,17 +55,27 @@
                 <span class="num">{{ duration(walk) }}</span>
                 <span>{{ 'walkLab.platform.' + walk.platform | rokuT }}</span>
                 @if (walk.partial) {
-                  <span class="partial">{{ 'walkLab.list.partial' | rokuT }}</span>
+                  <span class="partial">{{
+                    'walkLab.list.partial' | rokuT
+                  }}</span>
                 }
               </p>
             </div>
 
             @if (confirming() === walk.id) {
               <div class="walk-actions">
-                <button (click)="confirmDelete(walk)" class="danger" type="button">
+                <button
+                  (click)="confirmDelete(walk)"
+                  class="danger"
+                  type="button"
+                >
                   {{ 'walkLab.list.deleteConfirm' | rokuT }}
                 </button>
-                <button (click)="cancelDelete()" class="secondary" type="button">
+                <button
+                  (click)="cancelDelete()"
+                  class="secondary"
+                  type="button"
+                >
                   {{ 'walkLab.common.cancel' | rokuT }}
                 </button>
               </div>

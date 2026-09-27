@@ -2,7 +2,7 @@
   The whole screen is one element on purpose: it is the root WebXR's DOM overlay
   shows over the camera, so every control stays usable while camera tracking runs.
 -->
-<main #root [class.recording]="phase() === 'recording'" class="page">
+<main [class.recording]="phase() === 'recording'" #root class="page">
   @switch (phase()) {
     @case ('setup') {
       <header class="head">
@@ -14,9 +14,9 @@
         <label class="field">
           <span class="label">{{ 'walkLab.record.name' | rokuT }}</span>
           <input
-            #nameInput
             (input)="setName(nameInput.value)"
             [value]="name()"
+            #nameInput
             autocomplete="off"
             class="input"
             enterkeyhint="done"
@@ -25,7 +25,9 @@
         </label>
 
         <div class="field">
-          <span class="label" id="holding-label">{{ 'walkLab.record.holding' | rokuT }}</span>
+          <span class="label" id="holding-label">{{
+            'walkLab.record.holding' | rokuT
+          }}</span>
           <div aria-labelledby="holding-label" class="segmented" role="group">
             <button
               (click)="holding.set('flat')"
@@ -49,9 +51,9 @@
         <label class="field">
           <span class="label">{{ 'walkLab.record.step' | rokuT }}</span>
           <input
-            #stepInput
             (change)="setStep(stepInput.value)"
             [value]="stepMetres()"
+            #stepInput
             class="input num"
             inputmode="decimal"
             max="1.4"
@@ -71,17 +73,26 @@
               type="button"
             >
               <span class="toggle-state">
-                {{ (camera() ? 'walkLab.common.on' : 'walkLab.common.off') | rokuT }}
+                {{
+                  (camera() ? 'walkLab.common.on' : 'walkLab.common.off')
+                    | rokuT
+                }}
               </span>
-              <span class="toggle-help">{{ 'walkLab.record.cameraHelp' | rokuT }}</span>
+              <span class="toggle-help">{{
+                'walkLab.record.cameraHelp' | rokuT
+              }}</span>
             </button>
           } @else {
-            <p class="muted">{{ 'walkLab.record.cameraUnsupported' | rokuT }}</p>
+            <p class="muted">
+              {{ 'walkLab.record.cameraUnsupported' | rokuT }}
+            </p>
           }
         </div>
 
         <div class="field">
-          <span class="label" id="live-label">{{ 'walkLab.record.live' | rokuT }}</span>
+          <span class="label" id="live-label">{{
+            'walkLab.record.live' | rokuT
+          }}</span>
           <div aria-labelledby="live-label" class="chips" role="group">
             @for (mode of liveModes(); track mode) {
               <button
@@ -97,14 +108,22 @@
         </div>
       </div>
 
-      <button (click)="start()" [disabled]="busy()" class="primary start" type="button">
+      <button
+        (click)="start()"
+        [disabled]="busy()"
+        class="primary start"
+        type="button"
+      >
         {{ 'walkLab.record.start' | rokuT }}
       </button>
       <p class="muted">{{ 'walkLab.record.startHelp' | rokuT }}</p>
     }
 
     @case ('recording') {
-      <section [attr.aria-label]="'walkLab.record.title' | rokuT" class="readout">
+      <section
+        [attr.aria-label]="'walkLab.record.title' | rokuT"
+        class="readout"
+      >
         <div class="stat">
           <span class="stat-label">{{ 'walkLab.record.elapsed' | rokuT }}</span>
           <span class="stat-value num">{{ elapsedText() }}</span>
@@ -114,7 +133,9 @@
           <span class="stat-value num">{{ steps() }}</span>
         </div>
         <div class="stat">
-          <span class="stat-label">{{ 'walkLab.record.distance' | rokuT }}</span>
+          <span class="stat-label">{{
+            'walkLab.record.distance' | rokuT
+          }}</span>
           <span class="stat-value num">{{ distanceText() }}</span>
         </div>
       </section>
@@ -132,14 +153,19 @@
           {{ 'walkLab.record.status.location' | rokuT }}
           <b class="num">
             @if (status().accuracyMetres !== null) {
-              {{ 'walkLab.record.status.accuracy' | rokuT: { m: status().accuracyMetres?.toFixed(0) } }}
+              {{
+                'walkLab.record.status.accuracy'
+                  | rokuT: { m: status().accuracyMetres?.toFixed(0) }
+              }}
             } @else {
               {{ 'walkLab.record.status.none' | rokuT }}
             }
           </b>
         </li>
         @if (cameraState() !== 'off') {
-          <li [class.bad]="cameraState() === 'failed' || cameraState() === 'lost'">
+          <li
+            [class.bad]="cameraState() === 'failed' || cameraState() === 'lost'"
+          >
             {{ 'walkLab.record.status.camera' | rokuT }}
             <b>{{ 'walkLab.record.cameraState.' + cameraState() | rokuT }}</b>
           </li>
@@ -182,7 +208,7 @@
                 : {
                     kind: ('walkLab.mark.' + mark.kind | rokuT),
                     label: mark.label ?? '',
-                    time: markTime(mark)
+                    time: markTime(mark),
                   }
           }}
         }
@@ -191,14 +217,23 @@
       @if (panel(); as kind) {
         <form (submit)="$event.preventDefault(); saveLabel()" class="panel">
           <h2 class="panel-title">
-            {{ (kind === 'checkpoint' ? 'walkLab.record.checkpointTitle' : 'walkLab.record.noteTitle') | rokuT }}
+            {{
+              (kind === 'checkpoint'
+                ? 'walkLab.record.checkpointTitle'
+                : 'walkLab.record.noteTitle'
+              ) | rokuT
+            }}
           </h2>
           @if (kind === 'checkpoint') {
             <p class="muted">{{ 'walkLab.record.checkpointHelp' | rokuT }}</p>
             @if (usedLabels().length > 0) {
               <div class="chips">
                 @for (label of usedLabels(); track label) {
-                  <button (click)="saveLabel(label)" class="chip used" type="button">
+                  <button
+                    (click)="saveLabel(label)"
+                    class="chip used"
+                    type="button"
+                  >
                     {{ label }}
                   </button>
                 }
@@ -206,17 +241,27 @@
             }
           }
           <input
-            #labelInput
             (input)="draft.set(labelInput.value)"
-            [attr.aria-label]="(kind === 'checkpoint' ? 'walkLab.record.label' : 'walkLab.record.noteText') | rokuT"
+            [attr.aria-label]="
+              (kind === 'checkpoint'
+                ? 'walkLab.record.label'
+                : 'walkLab.record.noteText'
+              ) | rokuT
+            "
             [value]="draft()"
+            #labelInput
             autocomplete="off"
             class="input"
             enterkeyhint="done"
             type="text"
           />
           <div class="panel-actions">
-            <button (click)="saveLabel()" [disabled]="draft().trim() === ''" class="primary" type="button">
+            <button
+              (click)="saveLabel()"
+              [disabled]="draft().trim() === ''"
+              class="primary"
+              type="button"
+            >
               {{ 'walkLab.common.save' | rokuT }}
             </button>
             <button (click)="closePanel()" class="secondary" type="button">
@@ -226,16 +271,32 @@
         </form>
       } @else {
         <div class="marks">
-          <button (click)="markNow('entrance')" class="mark mark-entrance" type="button">
+          <button
+            (click)="markNow('entrance')"
+            class="mark mark-entrance"
+            type="button"
+          >
             {{ 'walkLab.mark.entrance' | rokuT }}
           </button>
-          <button (click)="markNow('checkout')" class="mark mark-checkout" type="button">
+          <button
+            (click)="markNow('checkout')"
+            class="mark mark-checkout"
+            type="button"
+          >
             {{ 'walkLab.mark.checkout' | rokuT }}
           </button>
-          <button (click)="openPanel('checkpoint')" class="mark mark-checkpoint" type="button">
+          <button
+            (click)="openPanel('checkpoint')"
+            class="mark mark-checkpoint"
+            type="button"
+          >
             {{ 'walkLab.mark.checkpoint' | rokuT }}
           </button>
-          <button (click)="openPanel('note')" class="mark mark-note" type="button">
+          <button
+            (click)="openPanel('note')"
+            class="mark mark-note"
+            type="button"
+          >
             {{ 'walkLab.mark.note' | rokuT }}
           </button>
         </div>
@@ -247,7 +308,12 @@
           class="finish"
           type="button"
         >
-          {{ (finishArmed() ? 'walkLab.record.finishConfirm' : 'walkLab.record.finish') | rokuT }}
+          {{
+            (finishArmed()
+              ? 'walkLab.record.finishConfirm'
+              : 'walkLab.record.finish'
+            ) | rokuT
+          }}
         </button>
       }
     }
@@ -270,7 +336,9 @@
           {{ 'walkLab.record.open' | rokuT }}
         </button>
       }
-      <a class="secondary" routerLink="..">{{ 'walkLab.common.walks' | rokuT }}</a>
+      <a class="secondary" routerLink="..">{{
+        'walkLab.common.walks' | rokuT
+      }}</a>
     }
   }
 </main>

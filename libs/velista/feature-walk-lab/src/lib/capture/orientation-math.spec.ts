@@ -80,34 +80,40 @@ function ry(a: number): Mat {
   ];
 }
 
+function must<T>(value: T | null): T {
+  if (value === null) {
+    throw new Error('expected a value');
+  }
+  return value;
+}
+
 function expectVec(actual: Vec, expected: Vec): void {
   actual.forEach((value, i) => expect(value).toBeCloseTo(expected[i], 9));
 }
 
 describe('eulerToQuaternion', () => {
   it('answers the identity for a phone lying flat, top pointing along the world y', () => {
-    const q = eulerToQuaternion(0, 0, 0);
-    expect(q).not.toBeNull();
-    expectVec(rotate(q!, [1, 0, 0]), [1, 0, 0]);
-    expectVec(rotate(q!, [0, 1, 0]), [0, 1, 0]);
+    const q = must(eulerToQuaternion(0, 0, 0));
+    expectVec(rotate(q, [1, 0, 0]), [1, 0, 0]);
+    expectVec(rotate(q, [0, 1, 0]), [0, 1, 0]);
   });
 
   it('turns the device x into the world y for alpha 90', () => {
-    const q = eulerToQuaternion(90, 0, 0)!;
+    const q = must(eulerToQuaternion(90, 0, 0));
     expectVec(rotate(q, [1, 0, 0]), [0, 1, 0]);
   });
 
   it('points the top of an upright phone up for beta 90', () => {
-    const q = eulerToQuaternion(0, 90, 0)!;
+    const q = must(eulerToQuaternion(0, 90, 0));
     expectVec(rotate(q, [0, 1, 0]), [0, 0, 1]);
   });
 
   it('turns the screen normal towards the world x for gamma 90', () => {
-    const q = eulerToQuaternion(0, 0, 90)!;
+    const q = must(eulerToQuaternion(0, 0, 90));
     expectVec(rotate(q, [0, 0, 1]), [1, 0, 0]);
   });
 
-  it('matches Rz(alpha) Rx(beta) Ry(gamma), the Z-X\'-Y\'\' composition, for any angles', () => {
+  it("matches Rz(alpha) Rx(beta) Ry(gamma), the Z-X'-Y'' composition, for any angles", () => {
     const cases: [number, number, number][] = [
       [30, 45, -20],
       [212.5, -60, 80],
@@ -122,7 +128,7 @@ describe('eulerToQuaternion', () => {
     ];
 
     for (const [alpha, beta, gamma] of cases) {
-      const q = eulerToQuaternion(alpha, beta, gamma)!;
+      const q = must(eulerToQuaternion(alpha, beta, gamma));
       const m = mul(mul(rz(rad(alpha)), rx(rad(beta))), ry(rad(gamma)));
       const norm = Math.hypot(...q);
       expect(norm).toBeCloseTo(1, 12);
@@ -141,17 +147,18 @@ describe('eulerToQuaternion', () => {
 
 describe('motionRow', () => {
   it('writes [beta, gamma, alpha] converted from degrees to radians per second', () => {
-    const row = motionRow(12.345, {
-      accelerationIncludingGravity: { x: 0.1, y: 0.2, z: 9.81 },
-      rotationRate: { alpha: 180, beta: 90, gamma: -45 },
-    });
+    const row = must(
+      motionRow(12.345, {
+        accelerationIncludingGravity: { x: 0.1, y: 0.2, z: 9.81 },
+        rotationRate: { alpha: 180, beta: 90, gamma: -45 },
+      })
+    );
 
-    expect(row).not.toBeNull();
-    expect(row![0]).toBe(12.3);
-    expect(row!.slice(1, 4)).toEqual([0.1, 0.2, 9.81]);
-    expect(row![4]).toBeCloseTo(Math.PI / 2, 4);
-    expect(row![5]).toBeCloseTo(-Math.PI / 4, 4);
-    expect(row![6]).toBeCloseTo(Math.PI, 4);
+    expect(row[0]).toBe(12.3);
+    expect(row.slice(1, 4)).toEqual([0.1, 0.2, 9.81]);
+    expect(row[4]).toBeCloseTo(Math.PI / 2, 4);
+    expect(row[5]).toBeCloseTo(-Math.PI / 4, 4);
+    expect(row[6]).toBeCloseTo(Math.PI, 4);
   });
 
   it('writes zeros for a missing rotation rate and nothing for a missing acceleration', () => {

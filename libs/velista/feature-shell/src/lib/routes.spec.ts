@@ -3,7 +3,10 @@ import {
   NAV_CHROME,
   NO_NAV_CHROME,
   SHEET_SEGMENT,
+  WORKS_WITHOUT_BACKEND,
 } from '@portfolio/velista/platform';
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
@@ -191,7 +194,11 @@ describe('AppShellRoutes', () => {
       ];
 
       expect(
-        everyRoute.every((route) => route.loadComponent !== undefined)
+        everyRoute.every(
+          (route) =>
+            route.loadComponent !== undefined ||
+            route.loadChildren !== undefined
+        )
       ).toBe(true);
     });
   });
@@ -279,7 +286,11 @@ describe('AppShellRoutes', () => {
       ];
 
       expect(
-        everyRoute.every((route) => route.loadComponent !== undefined)
+        everyRoute.every(
+          (route) =>
+            route.loadComponent !== undefined ||
+            route.loadChildren !== undefined
+        )
       ).toBe(true);
     });
   });
@@ -1162,6 +1173,7 @@ describe('the bottom bar', () => {
     'auth/callback',
     'join/:code',
     's/:secret',
+    'lab/walk',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {
@@ -1299,5 +1311,65 @@ describe('the setup (velista 0098)', () => {
         page.path === 'setup' ? [authenticatedGuard] : SIGNED_IN
       );
     }
+  });
+});
+
+/**
+ * The walk lab (recorder plan 0002, section 7). A test tool for one person on one
+ * day, so everything true of it is about staying out of everybody else's way.
+ */
+describe('the walk lab', () => {
+  const lab = pages.find((route) => route.path === 'lab/walk');
+
+  it('is public, lazy, and needs no backend', () => {
+    expect(lab).toBeDefined();
+    expect(lab?.canActivate).toBeUndefined();
+    expect(lab?.canMatch).toBeUndefined();
+    expect(lab?.loadChildren).toBeDefined();
+    expect(lab?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+    expect(lab?.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+  });
+
+  it('is declared before the front door', () => {
+    const paths = pages.map((route) => route.path);
+    expect(paths.indexOf('lab/walk')).toBeLessThan(paths.indexOf(''));
+  });
+
+  /**
+   * Linked from nowhere. Its address is typed or pasted, and no screen a shopper can
+   * reach names it, so the only shipped files that may mention it are this route
+   * table and the lab itself.
+   */
+  it('is linked from nowhere', () => {
+    const root = resolve(__dirname, '../../../../..');
+    const allowed = ['libs/velista/feature-shell/src/lib/routes.ts'];
+    const offenders: string[] = [];
+
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          if (entry !== 'node_modules' && entry !== 'feature-walk-lab') {
+            walk(full);
+          }
+          continue;
+        }
+        // A spec is not a link, so only what ships is read.
+        if (!/\.(ts|html|json)$/.test(entry) || entry.endsWith('.spec.ts')) {
+          continue;
+        }
+        const path = relative(root, full).split(sep).join('/');
+        if (allowed.includes(path)) {
+          continue;
+        }
+        if (/lab\/walk/.test(readFileSync(full, 'utf8'))) {
+          offenders.push(path);
+        }
+      }
+    };
+    walk(join(root, 'libs/velista'));
+    walk(join(root, 'apps/velista/src'));
+
+    expect(offenders).toEqual([]);
   });
 });
