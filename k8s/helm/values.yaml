@@ -611,6 +611,13 @@ lunaShopperBackend:
       slowPaths:
         - path: /v1/assistant
           timeout: 120s
+        # A curation decisions file: up to a thousand products created and
+        # bound in one all or nothing request. It ran past fifteen seconds and
+        # the proxy answered 504 while the harvester went on and applied the
+        # file, so the operator could not tell whether it had landed. The
+        # barcode check is one query now, and this is the margin on top.
+        - path: /v1/admin/harvest/entries/decisions
+          timeout: 120s
     - name: luna-shopper-backend-realtime
       role: realtime
       image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-realtime

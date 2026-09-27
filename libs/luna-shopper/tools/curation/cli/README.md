@@ -120,6 +120,11 @@ same part. The parts are written beside the file as
 is refused, the parts before it stay applied and nothing after it is sent. The
 message names the parts that are left, one command each.
 
+A 504 is not a refusal. The proxy stopped waiting, but the server can still
+apply the part. To find out, wait a few minutes and send the same part again.
+A part that landed is refused at `VALIDATE`, because its rows are no longer
+queued. That refusal writes nothing. A part that did not land is applied.
+
 ## What a run directory holds
 
 - `decisions.jsonl`: a header line, then one line per decided row. This is the

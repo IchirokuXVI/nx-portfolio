@@ -347,15 +347,18 @@ export class SourceEntryBatchService {
    * and the operator is left to find which. Asked here, the file is refused at
    * `VALIDATE` with the row, the barcode and the product that holds it.
    *
-   * Outside any transaction on purpose: it is a round trip to catalog per
-   * barcode, and the rows are not what it reads.
+   * Outside any transaction on purpose: it is a round trip to catalog, and the
+   * rows are not what it reads. **One** round trip for the whole file: a
+   * request per barcode made a file of a thousand products spend longer here
+   * than the gateway's route timeout, and the operator got a 504 for a file
+   * that went on to land.
    */
   private async checkEans(
     operations: readonly SourceEntryDecisionOperation[],
     rows: ReadonlyMap<string, SourceCatalogEntry>
   ): Promise<SourceEntryDecisionOutcome[]> {
     const outcomes = blank(operations);
-    const holders = new Map<string, string | null>();
+    const eanOf = new Map<number, string>();
     for (const [index, operation] of operations.entries()) {
       if (!isCreate(operation)) {
         continue;
@@ -363,13 +366,24 @@ export class SourceEntryBatchService {
       const entry = rows.get(operation.entryId);
       const ean =
         operation.item.ean === undefined ? entry?.ean : operation.item.ean;
-      if (!ean) {
-        continue;
+      if (ean) {
+        eanOf.set(index, ean);
       }
-      if (!holders.has(ean)) {
-        const { item } = await this.catalog.findItemByEan(ean);
-        holders.set(ean, item?.id ?? null);
+    }
+    if (eanOf.size === 0) {
+      return outcomes;
+    }
+
+    const { items } = await this.catalog.findItemsByEans([
+      ...new Set(eanOf.values()),
+    ]);
+    const holders = new Map<string, string>();
+    for (const item of items) {
+      if (item.ean) {
+        holders.set(item.ean, item.id);
       }
+    }
+    for (const [index, ean] of eanOf) {
       const holder = holders.get(ean);
       if (holder) {
         fail(
