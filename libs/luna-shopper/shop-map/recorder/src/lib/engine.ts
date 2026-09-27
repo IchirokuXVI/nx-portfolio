@@ -68,16 +68,18 @@ interface ModeEngine {
  * - At each `game` or `absolute` row the rotation heading and the snapper are
  *   updated.
  * - A step takes the snapped heading `H` (snap modes) or the raw `psi` at the
- *   moment it is processed. Its point carries the step's own `t` (for an own
- *   step, the time of its largest `s`, which is before the row that emitted
- *   it). A step that arrives before the heading source has its first sample is
- *   ignored and not counted.
+ *   moment the step is handled: an own step when the row that ends it is
+ *   fed, an `hw` step when its event is fed. Its point carries the step's own
+ *   `t` (for an own step, the time of its largest `s`, which is before the row
+ *   that emitted it). A step that arrives before the heading source has its
+ *   first sample is ignored and not counted.
  * - Step length: `fixed` is `options.stepMetres ?? settings.stepMetres`.
  *   `weinberg` over an own step uses that step's `smax` and `smin`. Over an
  *   `hw` step it uses the largest and smallest `s` of the own detector's low
- *   pass over the motion rows since the previous `hw` step (the window is
- *   reset at every `hw` step, taken or ignored); with no motion row in the
- *   window, it falls back to the fixed length.
+ *   pass over the motion rows since the previous `hw` step (the span restarts
+ *   at every `hw` step, taken or ignored); with no motion row in the span, it
+ *   falls back to the fixed length. The own detector runs over `motion` in
+ *   every PDR mode, `hw` ones included, so `s` is the same filter in both.
  * - The start point is `{ t: 0, x: 0, y: 0 }`.
  */
 class PdrEngine implements ModeEngine {
@@ -89,7 +91,7 @@ class PdrEngine implements ModeEngine {
   private readonly points: TrackPoint[] = [{ t: 0, x: 0, y: 0 }];
   private readonly segments: TrackSegment[] = [];
   private segmentStart = 0;
-  private hwWindow: { max: number; min: number } | null = null;
+  private hwSpan: { max: number; min: number } | null = null;
   private readonly fixedLength: number;
   private readonly weinberg: boolean;
   private readonly k: number;
@@ -138,11 +140,11 @@ class PdrEngine implements ModeEngine {
     }
     const step = this.detector.push(t, Math.hypot(ax, ay, az));
     const s = this.detector.s;
-    if (this.hwWindow) {
-      if (s > this.hwWindow.max) this.hwWindow.max = s;
-      if (s < this.hwWindow.min) this.hwWindow.min = s;
+    if (this.hwSpan) {
+      if (s > this.hwSpan.max) this.hwSpan.max = s;
+      if (s < this.hwSpan.min) this.hwSpan.min = s;
     } else {
-      this.hwWindow = { max: s, min: s };
+      this.hwSpan = { max: s, min: s };
     }
     if (step && this.mode.steps === 'own') {
       const length = this.weinberg
@@ -153,11 +155,11 @@ class PdrEngine implements ModeEngine {
   }
 
   private onHardwareStep(t: number): void {
-    const window = this.hwWindow;
-    this.hwWindow = null;
+    const span = this.hwSpan;
+    this.hwSpan = null;
     const length =
-      this.weinberg && window
-        ? weinbergLength(window.max, window.min, this.k)
+      this.weinberg && span
+        ? weinbergLength(span.max, span.min, this.k)
         : this.fixedLength;
     this.step(t, length);
   }

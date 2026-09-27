@@ -1,27 +1,11 @@
 import { positionAt } from './metrics';
 import { headingOf, headingStep } from './recorder';
-import type { ShopMapDocument } from './shop-map-document';
 import type { Track } from './track-types';
 import type { Cell, Walk } from './walk';
 import type { WalkFile } from './walk-file';
 
-export interface WalkToDocumentOptions {
-  size?: { cols: number; rows: number };
-  outline?: ShopMapDocument['outline'];
-  /** Which side a scanned product sits on, 'right' by default. */
-  hand?: 'right' | 'left';
-  /** The document's informative `cell`, 0.5 by default. */
-  cellMetres?: number;
-}
-
-export function walkToDocument(
-  walk: Walk,
-  options: WalkToDocumentOptions = {}
-): ShopMapDocument {
-  void walk;
-  void options;
-  throw new Error('not implemented');
-}
+export { walkToDocument } from './document';
+export type { WalkToDocumentOptions } from './document';
 
 /**
  * A plan 0001 `Walk` from a track, so that `walkToDocument` can draw a draft
@@ -62,18 +46,16 @@ export function trackToWalk(walk: WalkFile, track: Track): Walk {
       metres = { x: metres.x + step * d.x, y: metres.y + step * d.y };
       pointCell[i] = toCell();
     }
-    const cursor = toCell();
     segments.push({
       from,
-      to: { ...cursor },
+      to: toCell(),
       heading,
       steps: seg.toIndex - seg.fromIndex,
       confidence: seg.confidence,
     });
   }
   const indexAt = (t: number): number => {
-    const p = positionAt(track, t);
-    const i = pts.indexOf(p);
+    const i = pts.indexOf(positionAt(track, t));
     return i < 0 ? 0 : i;
   };
   const marks: Walk['marks'] = [];
