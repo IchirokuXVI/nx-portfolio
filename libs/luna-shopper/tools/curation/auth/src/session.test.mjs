@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   createAdminSession,
+  createSessionPool,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_USERNAME,
   GatewayError,
@@ -357,6 +358,51 @@ describe('createAdminSession', () => {
     await assert.rejects(
       () => session.fetch('/a'),
       /answered a body that is not JSON/
+    );
+  });
+});
+
+describe('createSessionPool', () => {
+  it('signs in once for every step that names the same login', async () => {
+    const fetchImpl = fakeFetch((url) =>
+      url.endsWith('/v1/admin/auth/login')
+        ? OK_LOGIN
+        : { status: 200, body: { items: [] } }
+    );
+    const makeSession = createSessionPool((options) =>
+      createAdminSession({ ...options, fetchImpl })
+    );
+
+    // Two steps of one walk, each opening its gateway the way `next` and
+    // `decide` do. The trailing slash names the same origin.
+    await makeSession({ baseUrl: 'http://main/', username: 'curator' }).fetch(
+      '/a'
+    );
+    await makeSession({ baseUrl: 'http://main', username: 'curator' }).fetch(
+      '/b'
+    );
+
+    const logins = fetchImpl.calls.filter((call) =>
+      call.url.endsWith('/v1/admin/auth/login')
+    );
+    assert.equal(logins.length, 1);
+  });
+
+  it('keeps a different gateway or user on a session of its own', () => {
+    const makeSession = createSessionPool((options) => ({ options }));
+
+    const main = makeSession({ baseUrl: 'http://main', username: 'curator' });
+    assert.notEqual(
+      makeSession({ baseUrl: 'http://rehearsal', username: 'curator' }),
+      main
+    );
+    assert.notEqual(
+      makeSession({ baseUrl: 'http://main', username: 'someone-else' }),
+      main
+    );
+    assert.equal(
+      makeSession({ baseUrl: 'http://main', username: 'curator' }),
+      main
     );
   });
 });

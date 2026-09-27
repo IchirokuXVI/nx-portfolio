@@ -252,3 +252,36 @@ export function createAdminSession({
     },
   };
 }
+
+/**
+ * A session factory that hands back the same session for the same login.
+ *
+ * A serving decider runs every step of a walk in one process, and each step
+ * used to open its own sessions. A new session holds no token, so every `next`
+ * and every `decide` signed in again, and the admin login route allows five a
+ * minute per address. A walk against production was refused after its first
+ * few rows, whatever the per operator bucket allowed the searches themselves.
+ * With one session per gateway and user, a walk signs in once per gateway and
+ * again only when a token expires, which the 401 path already handles.
+ *
+ * Keyed on the origin, the username and the password, so a step naming a
+ * different login still gets a session of its own.
+ *
+ * @param {Function} [make] The factory to pool; defaults to {@link createAdminSession}.
+ */
+export function createSessionPool(make = createAdminSession) {
+  const sessions = new Map();
+  return (options = {}) => {
+    const key = JSON.stringify([
+      String(options.baseUrl ?? '').replace(/\/+$/, ''),
+      options.username ?? DEFAULT_ADMIN_USERNAME,
+      options.password ?? DEFAULT_ADMIN_PASSWORD,
+    ]);
+    let session = sessions.get(key);
+    if (!session) {
+      session = make(options);
+      sessions.set(key, session);
+    }
+    return session;
+  };
+}
