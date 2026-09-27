@@ -1,0 +1,135 @@
+:host {
+  display: block;
+  min-block-size: 0;
+}
+
+.frame {
+  position: relative;
+  block-size: 100%;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-sunken);
+  overflow: hidden;
+}
+
+// The whole drawing takes the pointer: one finger pans, two pinch, and the page does
+// not scroll or zoom underneath.
+.plot {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.grid-minor,
+.grid-major {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.grid-minor {
+  stroke: var(--app-border-subtle);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.grid-major {
+  stroke: var(--app-border-strong);
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+.track {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fixture {
+  fill: var(--app-status-neutral-bg);
+  stroke: var(--app-status-neutral-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.85;
+}
+
+.fixture-entrance,
+.fixture-exit {
+  fill: var(--app-status-success-bg);
+  stroke: var(--app-status-success-border);
+}
+
+.fixture-checkout,
+.fixture-counter {
+  fill: var(--app-status-danger-bg);
+  stroke: var(--app-status-danger-border);
+}
+
+.start {
+  fill: var(--app-text-primary);
+}
+
+.mark {
+  stroke: var(--app-surface-ground);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.mark-entrance {
+  fill: var(--app-status-success-fg);
+}
+
+.mark-checkout {
+  fill: var(--app-status-danger-fg);
+}
+
+.mark-checkpoint {
+  fill: var(--app-status-info-fg);
+}
+
+.mark-note {
+  fill: var(--app-status-attention-fg);
+}
+
+.mark-label {
+  fill: var(--app-text-primary);
+  paint-order: stroke;
+  stroke: var(--app-surface-ground);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  font-family: var(--app-font-sans);
+  font-weight: 600;
+}
+
+.zoom {
+  position: absolute;
+  inset-block-end: var(--app-space-3);
+  inset-inline-end: var(--app-space-3);
+  display: flex;
+  gap: var(--app-space-2);
+}
+
+.zoom-button {
+  min-inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.zoom-fit {
+  font-size: var(--app-text-sm);
+}

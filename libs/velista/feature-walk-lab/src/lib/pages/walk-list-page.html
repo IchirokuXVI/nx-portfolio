@@ -1,0 +1,96 @@
+<main class="page">
+  <header class="head">
+    <h1 class="title">{{ 'walkLab.title' | rokuT }}</h1>
+    <p class="lede">{{ 'walkLab.intro' | rokuT }}</p>
+  </header>
+
+  <div class="actions">
+    <a class="primary" routerLink="record">{{ 'walkLab.list.record' | rokuT }}</a>
+    <label [class.busy]="importing()" class="secondary import">
+      {{ 'walkLab.list.import' | rokuT }}
+      <!--
+        No `accept`: Android's picker turns extensions into MIME types, and a
+        `.geojson` from Drive often has none it knows, which greys the file out.
+        Anything picked is parsed, and a file that is not a walk says so.
+      -->
+      <input
+        #picker
+        (change)="import(picker)"
+        [disabled]="importing()"
+        class="picker"
+        type="file"
+      />
+    </label>
+  </div>
+
+  <p aria-live="polite" class="live" role="status">
+    @if (notice(); as n) {
+      <span [class]="'notice notice-' + n.tone">{{ n.key | rokuT: n.params ?? {} }}</span>
+    }
+  </p>
+
+  @if (memoryOnly()) {
+    <p class="warning">{{ 'walkLab.list.memoryOnly' | rokuT }}</p>
+  } @else if (storageError(); as error) {
+    <p class="warning">{{ 'walkLab.list.storageError' | rokuT: { error } }}</p>
+  }
+
+  @if (walks(); as list) {
+    @if (list.length === 0) {
+      <p class="empty">{{ 'walkLab.list.empty' | rokuT }}</p>
+    } @else {
+      <ul class="walks">
+        @for (walk of list; track walk.id) {
+          <li class="walk">
+            <div class="walk-head">
+              <h2 class="walk-name">
+                {{ walk.name || ('walkLab.list.unnamed' | rokuT) }}
+              </h2>
+              <p class="walk-meta">
+                <span>{{ started(walk) }}</span>
+                <span class="num">{{ duration(walk) }}</span>
+                <span>{{ 'walkLab.platform.' + walk.platform | rokuT }}</span>
+                @if (walk.partial) {
+                  <span class="partial">{{ 'walkLab.list.partial' | rokuT }}</span>
+                }
+              </p>
+            </div>
+
+            @if (confirming() === walk.id) {
+              <div class="walk-actions">
+                <button (click)="confirmDelete(walk)" class="danger" type="button">
+                  {{ 'walkLab.list.deleteConfirm' | rokuT }}
+                </button>
+                <button (click)="cancelDelete()" class="secondary" type="button">
+                  {{ 'walkLab.common.cancel' | rokuT }}
+                </button>
+              </div>
+            } @else {
+              <div class="walk-actions">
+                <a [routerLink]="[walk.id]" class="secondary">
+                  {{ 'walkLab.list.open' | rokuT }}
+                </a>
+                <button
+                  (click)="export(walk)"
+                  [disabled]="exporting() !== null"
+                  class="secondary"
+                  type="button"
+                >
+                  {{
+                    (exporting() === walk.id
+                      ? 'walkLab.list.exporting'
+                      : 'walkLab.list.export'
+                    ) | rokuT
+                  }}
+                </button>
+                <button (click)="askDelete(walk)" class="quiet" type="button">
+                  {{ 'walkLab.list.delete' | rokuT }}
+                </button>
+              </div>
+            }
+          </li>
+        }
+      </ul>
+    }
+  }
+</main>

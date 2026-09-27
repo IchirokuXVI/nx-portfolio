@@ -1,0 +1,185 @@
+// The walk lab's page furniture. One copy for the three screens of this library,
+// for the reason `_install-page.scss` gives: Sass resolves `@use` against the
+// filesystem, so a mixin cannot cross a library boundary.
+//
+// The lab is used one handed in a bright shop, so every control is at least the
+// touch target tall, the text is a step larger than the rest of the app, and the
+// primary actions are full width.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  flex: 1;
+  min-block-size: 0;
+  padding: var(--app-space-4);
+  padding-block-start: calc(var(--app-space-4) + var(--app-safe-top));
+  padding-block-end: calc(var(--app-space-8) + var(--app-safe-bottom));
+  overflow-y: auto;
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+}
+
+@mixin header {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+@mixin title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+}
+
+@mixin section-title {
+  margin: 0;
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+}
+
+@mixin button-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+
+  &:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  @include focus-ring;
+}
+
+@mixin primary {
+  @include button-base;
+  min-block-size: var(--app-button-height);
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  font-size: var(--app-text-lg);
+
+  &:hover:not(:disabled) {
+    background: var(--app-action-bg-hover);
+  }
+}
+
+@mixin secondary {
+  @include button-base;
+  border: 1px solid var(--app-action-quiet-border);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+}
+
+@mixin danger {
+  @include button-base;
+  border: 1px solid var(--app-status-danger-border);
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+}
+
+@mixin back {
+  @include secondary;
+  padding-inline: var(--app-space-3);
+}
+
+@mixin field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+@mixin label {
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+@mixin input {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  @include focus-ring;
+}
+
+// Two or three choices side by side, each a full touch target.
+@mixin segmented {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: var(--app-space-1);
+  padding: var(--app-space-1);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+@mixin segment {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &[aria-pressed='true'] {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+    box-shadow: var(--app-elevation-1);
+  }
+
+  @include focus-ring;
+}
+
+@mixin notice($tone: info) {
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-4);
+  border: 1px solid var(--app-status-#{$tone}-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-status-#{$tone}-bg);
+  color: var(--app-status-#{$tone}-fg);
+}
+
+@mixin muted {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

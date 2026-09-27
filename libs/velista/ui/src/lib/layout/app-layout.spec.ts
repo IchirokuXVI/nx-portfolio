@@ -14,6 +14,7 @@ import {
   StorageKeys,
   ThemeStore,
   TourStore,
+  WORKS_WITHOUT_BACKEND,
   type TourCardView,
 } from '@portfolio/velista/platform';
 import { readFileSync } from 'fs';
@@ -660,5 +661,27 @@ describe('AppLayout', () => {
     const host: HTMLElement = fixture.nativeElement;
     expect(host.querySelector('lib-connection-lost')).not.toBeNull();
     expect(outletOf(fixture)).not.toBeNull();
+  });
+
+  // The walk lab (recorder plan 0002) records in a supermarket with no signal and
+  // needs no backend. The connection screen would cover its controls, and its reload
+  // would end the recording.
+  it('draws a page that works without the backend with no connection screen over it', async () => {
+    const fixture = await createFixture({}, [
+      {
+        path: 'lab',
+        component: TestPage,
+        data: { [WORKS_WITHOUT_BACKEND]: true },
+      },
+    ]);
+    await TestBed.inject(Router).navigate(['/lab']);
+    TestBed.inject(BackendReadiness).reportUnreachable();
+    TestBed.inject(ConnectionState).reportNetworkFailure();
+    fixture.detectChanges();
+
+    const host: HTMLElement = fixture.nativeElement;
+    expect(outletOf(fixture)).not.toBeNull();
+    expect(host.querySelector('lib-connection-lost')).toBeNull();
+    expect(host.querySelector('lib-startup-screen')).toBeNull();
   });
 });

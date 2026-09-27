@@ -1,0 +1,91 @@
+<div class="frame">
+  <svg
+    #svg
+    (pointercancel)="onPointerUp($event)"
+    (pointerdown)="onPointerDown($event)"
+    (pointerleave)="onPointerUp($event)"
+    (pointermove)="onPointerMove($event)"
+    (pointerup)="onPointerUp($event)"
+    (wheel)="onWheel($event)"
+    [attr.aria-label]="label()"
+    [attr.viewBox]="viewBox()"
+    class="plot"
+    preserveAspectRatio="xMidYMid meet"
+    role="img"
+  >
+    <g [attr.transform]="transform()">
+      <path [attr.d]="grid().minor" class="grid-minor" />
+      <path [attr.d]="grid().major" class="grid-major" />
+
+      @for (rect of rects(); track rect.id) {
+        <rect
+          [attr.class]="'fixture fixture-' + rect.kind"
+          [attr.height]="rect.h"
+          [attr.width]="rect.w"
+          [attr.x]="rect.x"
+          [attr.y]="-(rect.y + rect.h)"
+        />
+      }
+
+      @for (line of drawnLines(); track line.id) {
+        <polyline
+          [attr.points]="line.d"
+          [attr.stroke]="line.style.color"
+          [attr.stroke-dasharray]="line.style.dash"
+          [attr.stroke-width]="line.style.width"
+          class="track"
+        />
+      }
+
+      <circle [attr.r]="markRadius() * 0.6" class="start" cx="0" cy="0" />
+
+      @for (mark of marks(); track $index) {
+        <g [attr.transform]="'translate(' + mark.x + ' ' + -mark.y + ')'">
+          @if (mark.kind === 'checkpoint') {
+            <circle [attr.r]="markRadius()" class="mark mark-checkpoint" />
+          } @else {
+            <rect
+              [attr.class]="'mark mark-' + mark.kind"
+              [attr.height]="markRadius() * 1.6"
+              [attr.width]="markRadius() * 1.6"
+              [attr.x]="-markRadius() * 0.8"
+              [attr.y]="-markRadius() * 0.8"
+            />
+          }
+          @if (mark.label) {
+            <text
+              [attr.font-size]="labelSize()"
+              [attr.x]="markRadius() * 1.3"
+              [attr.y]="labelSize() * 0.35"
+              class="mark-label"
+            >
+              {{ mark.label }}
+            </text>
+          }
+        </g>
+      }
+    </g>
+  </svg>
+
+  <div class="zoom">
+    <button
+      (click)="zoom(1.5)"
+      [attr.aria-label]="zoomInLabel()"
+      class="zoom-button"
+      type="button"
+    >
+      +
+    </button>
+    <button
+      (click)="zoom(1 / 1.5)"
+      [attr.aria-label]="zoomOutLabel()"
+      class="zoom-button"
+      type="button"
+    >
+      &minus;
+    </button>
+    <button (click)="fit()" class="zoom-button zoom-fit" type="button">
+      {{ fitLabel() }}
+    </button>
+  </div>
+</div>
