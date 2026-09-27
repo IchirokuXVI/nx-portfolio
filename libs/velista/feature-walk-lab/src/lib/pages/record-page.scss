@@ -51,6 +51,8 @@
 
 .input {
   @include lab.input;
+  inline-size: 100%;
+  min-inline-size: 0;
 }
 
 .num {
@@ -263,7 +265,10 @@
   @include lab.primary;
   inline-size: 100%;
 
-  &.armed {
+  // Every state of the armed button, hover included: a phone keeps the hover of the
+  // first tap, and the plain primary hover would otherwise win and wash it out.
+  &.armed,
+  &.armed:hover:not(:disabled) {
     background: var(--app-status-danger-fg);
     color: var(--app-surface-ground);
   }

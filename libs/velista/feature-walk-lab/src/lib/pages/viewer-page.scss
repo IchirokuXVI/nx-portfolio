@@ -150,6 +150,7 @@
 
 .field {
   @include lab.field;
+  min-inline-size: 0;
 }
 
 .label {
@@ -159,6 +160,8 @@
 
 .input {
   @include lab.input;
+  inline-size: 100%;
+  min-inline-size: 0;
 }
 
 .num {
@@ -220,6 +223,11 @@
 
   thead th {
     background: var(--app-surface-sunken);
+
+    &:first-child {
+      text-align: start;
+    }
+
     color: var(--app-text-secondary);
     font-weight: 600;
   }

@@ -208,10 +208,9 @@ export class RecordPage {
    * both.
    */
   start(): void {
-    if (this.phase() !== 'setup' || this.busy()) {
+    if (this.phase() !== 'setup') {
       return;
     }
-    this.busy.set(true);
 
     const settings = {
       name: this.name().trim() || undefined,
@@ -247,7 +246,9 @@ export class RecordPage {
       stopped: (reason, walk) => this._stopped(reason, walk),
     });
 
-    void started.finally(() => this.busy.set(false));
+    // Not awaited: the camera session can sit behind a permission prompt for as long
+    // as the person leaves it, and every control of the recording works meanwhile.
+    void started.catch(() => undefined);
     this._timer = setInterval(() => this._redraw(), REDRAW_MS);
   }
 
