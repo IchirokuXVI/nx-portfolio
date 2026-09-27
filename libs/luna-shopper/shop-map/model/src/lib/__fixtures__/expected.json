@@ -1,0 +1,117 @@
+{
+  "corner-shop": {
+    "problems": [],
+    "walk": {
+      "sections": [
+        { "anchorId": "s-drinks", "sectionId": "sec-drinks", "at": 3 },
+        { "anchorId": "s-bread", "categoryId": "bread", "at": 5 },
+        { "anchorId": "s-deli", "sectionId": "sec-deli", "at": 12 }
+      ],
+      "products": [
+        {
+          "anchorId": "p-milk",
+          "ean": "8410000000017",
+          "sectionAnchorId": "s-drinks",
+          "at": 5
+        },
+        {
+          "anchorId": "p-ham",
+          "itemId": "item-ham",
+          "sectionAnchorId": "s-deli",
+          "at": 12
+        }
+      ],
+      "route": [
+        { "x": 3, "y": 6 },
+        { "x": 2, "y": 6 },
+        { "x": 2, "y": 5 },
+        { "x": 2, "y": 4 },
+        { "x": 2, "y": 3 },
+        { "x": 2, "y": 2 },
+        { "x": 2, "y": 1 },
+        { "x": 2, "y": 0 },
+        { "x": 3, "y": 0 },
+        { "x": 4, "y": 0 },
+        { "x": 4, "y": 1 },
+        { "x": 4, "y": 2 },
+        { "x": 5, "y": 2 }
+      ],
+      "endsAtCheckout": false
+    }
+  },
+  "supermarket": {
+    "problems": [],
+    "walk": {
+      "sections": [
+        { "anchorId": "a-produce", "sectionId": "sec-produce", "at": 12 },
+        { "anchorId": "c-bakery", "sectionId": "sec-bakery", "at": 18 },
+        { "anchorId": "f-cleaning", "sectionId": "sec-cleaning", "at": 28 },
+        { "anchorId": "b-frozen", "sectionId": "sec-frozen", "at": 37 },
+        { "anchorId": "e-drinks", "sectionId": "sec-drinks", "at": 47 },
+        { "anchorId": "d-dairy", "categoryId": "dairy", "at": 53 }
+      ],
+      "products": [
+        {
+          "anchorId": "p-bread",
+          "itemId": "item-bread",
+          "sectionAnchorId": "c-bakery",
+          "at": 8
+        },
+        {
+          "anchorId": "p-apples",
+          "itemId": "item-apples",
+          "sectionAnchorId": "a-produce",
+          "at": 9
+        },
+        {
+          "anchorId": "p-cheese",
+          "itemId": "item-cheese",
+          "sectionAnchorId": "c-bakery",
+          "at": 22
+        },
+        {
+          "anchorId": "p-peas",
+          "ean": "8480000000028",
+          "sectionAnchorId": "b-frozen",
+          "at": 39
+        },
+        {
+          "anchorId": "p-soap",
+          "ean": "8480000000011",
+          "sectionAnchorId": "f-cleaning",
+          "at": 46
+        }
+      ],
+      "routeLength": 58,
+      "routeStart": { "x": 12, "y": 15 },
+      "routeEnd": { "x": 8, "y": 12 },
+      "endsAtCheckout": true
+    }
+  },
+  "invalid": {
+    "OUT_OF_BOUNDS": [
+      { "code": "OUT_OF_BOUNDS", "id": "too-wide" },
+      { "code": "OUT_OF_BOUNDS", "id": "lost" }
+    ],
+    "BLOCKING_OVERLAP": [
+      { "code": "BLOCKING_OVERLAP", "id": "fridge", "cell": { "x": 1, "y": 2 } }
+    ],
+    "ENTRANCE_INSIDE": [{ "code": "ENTRANCE_INSIDE", "id": "hatch" }],
+    "NO_ENTRANCE": [{ "code": "NO_ENTRANCE" }],
+    "ANCHOR_OFF_FIXTURE": [
+      { "code": "ANCHOR_OFF_FIXTURE", "id": "s1", "cell": { "x": 3, "y": 1 } }
+    ],
+    "ANCHOR_UNREACHABLE": [
+      {
+        "code": "ANCHOR_UNREACHABLE",
+        "id": "buried",
+        "cell": { "x": 1, "y": 1 }
+      }
+    ],
+    "ANCHOR_UNNAMED": [
+      { "code": "ANCHOR_UNNAMED", "id": "s1" },
+      { "code": "ANCHOR_UNNAMED", "id": "p1" }
+    ],
+    "DISCONNECTED": [{ "code": "DISCONNECTED", "cell": { "x": 0, "y": 0 } }]
+  }
+}
