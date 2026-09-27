@@ -1,0 +1,213 @@
+{
+  "segments": [
+    {
+      "from": {
+        "x": 0,
+        "y": 0
+      },
+      "to": {
+        "x": 0,
+        "y": 24
+      },
+      "heading": "n",
+      "steps": 17,
+      "confidence": 0.808829881351902
+    },
+    {
+      "from": {
+        "x": 0,
+        "y": 24
+      },
+      "to": {
+        "x": 4,
+        "y": 24
+      },
+      "heading": "e",
+      "steps": 3,
+      "confidence": 0.9485380889903883
+    },
+    {
+      "from": {
+        "x": 4,
+        "y": 24
+      },
+      "to": {
+        "x": 4,
+        "y": 0
+      },
+      "heading": "s",
+      "steps": 17,
+      "confidence": 0.8334624184361525
+    },
+    {
+      "from": {
+        "x": 4,
+        "y": 0
+      },
+      "to": {
+        "x": 8,
+        "y": 0
+      },
+      "heading": "e",
+      "steps": 3,
+      "confidence": 0.9485380889903883
+    },
+    {
+      "from": {
+        "x": 8,
+        "y": 0
+      },
+      "to": {
+        "x": 8,
+        "y": 24
+      },
+      "heading": "n",
+      "steps": 17,
+      "confidence": 0.8334624184361525
+    },
+    {
+      "from": {
+        "x": 8,
+        "y": 24
+      },
+      "to": {
+        "x": 13,
+        "y": 24
+      },
+      "heading": "e",
+      "steps": 3,
+      "confidence": 0.9485380889903883
+    },
+    {
+      "from": {
+        "x": 13,
+        "y": 24
+      },
+      "to": {
+        "x": 13,
+        "y": 0
+      },
+      "heading": "s",
+      "steps": 17,
+      "confidence": 0.8334624184361525
+    },
+    {
+      "from": {
+        "x": 13,
+        "y": 0
+      },
+      "to": {
+        "x": 17,
+        "y": 0
+      },
+      "heading": "e",
+      "steps": 3,
+      "confidence": 0.9485380889903883
+    },
+    {
+      "from": {
+        "x": 17,
+        "y": 0
+      },
+      "to": {
+        "x": 17,
+        "y": 24
+      },
+      "heading": "n",
+      "steps": 17,
+      "confidence": 0.8334624184361525
+    },
+    {
+      "from": {
+        "x": 17,
+        "y": 24
+      },
+      "to": {
+        "x": 21,
+        "y": 24
+      },
+      "heading": "e",
+      "steps": 3,
+      "confidence": 0.9485380889903883
+    },
+    {
+      "from": {
+        "x": 21,
+        "y": 24
+      },
+      "to": {
+        "x": 21,
+        "y": 0
+      },
+      "heading": "s",
+      "steps": 17,
+      "confidence": 0.8334624184361525
+    },
+    {
+      "from": {
+        "x": 21,
+        "y": 0
+      },
+      "to": {
+        "x": 0,
+        "y": 0
+      },
+      "heading": "w",
+      "steps": 15,
+      "confidence": 0.8531385368767895
+    }
+  ],
+  "marks": [
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 0
+      },
+      "label": "door"
+    },
+    {
+      "kind": "entrance",
+      "at": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "kind": "checkout",
+      "at": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "kind": "checkpoint",
+      "at": {
+        "x": 0,
+        "y": 0
+      },
+      "label": "door"
+    }
+  ],
+  "scans": [
+    {
+      "ean": "8410000000017",
+      "at": {
+        "x": 8,
+        "y": 24
+      },
+      "heading": "n"
+    }
+  ],
+  "notes": [
+    {
+      "text": "fish counter",
+      "at": {
+        "x": 17,
+        "y": 0
+      }
+    }
+  ],
+  "startedAt": 0,
+  "finishedAt": 92760
+}
