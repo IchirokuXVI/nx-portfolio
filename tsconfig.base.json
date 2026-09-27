@@ -118,6 +118,9 @@
       "@portfolio/luna-shopper/postal-codes/dataset": [
         "./libs/luna-shopper/postal-codes/src/dataset.ts"
       ],
+      "@portfolio/luna-shopper/shop-map/recorder": [
+        "./libs/luna-shopper/shop-map/recorder/src/index.ts"
+      ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
       ],
