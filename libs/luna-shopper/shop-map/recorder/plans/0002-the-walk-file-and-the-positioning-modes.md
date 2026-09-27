@@ -1,3 +1,5 @@
+> **PR:** [#523](https://github.com/IchirokuXVI/nx-portfolio/pull/523) (the library and the velista walk lab), [#522](https://github.com/IchirokuXVI/nx-portfolio/pull/522) (the Android walk app)
+
 # 0002: the walk file, and the positioning modes
 
 > A field test, not a feature. Built so the user can walk real shops with a phone on

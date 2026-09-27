@@ -1,3 +1,5 @@
+> **PR:** [#523](https://github.com/IchirokuXVI/nx-portfolio/pull/523) (synthetic traces in place of phone traces, and no demo page, which the velista walk lab replaced)
+
 # 0001: steps, turns and scans
 
 > Third of the shop map series. Needs `shop-map/plans/0001` (the document). Consumed by

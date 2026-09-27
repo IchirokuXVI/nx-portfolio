@@ -1,3 +1,5 @@
+> **PR:** [#523](https://github.com/IchirokuXVI/nx-portfolio/pull/523)
+
 # 0001: the shop map folder, and the document
 
 > First of the shop map series. It creates `libs/luna-shopper/shop-map/` as a folder of
