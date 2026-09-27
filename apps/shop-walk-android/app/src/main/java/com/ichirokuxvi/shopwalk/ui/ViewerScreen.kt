@@ -208,9 +208,9 @@ private fun WalkViewer(
 @Composable
 private fun MetricsTable(s: TrackSet) {
     Text("Metrics (metres)", fontWeight = FontWeight.Bold)
-    val labels = s.metrics.flatMap { it.checkpointErrors.keys }.distinct()
+    val labels = s.metrics.flatMap { m -> m.checkpoints.map { it.label } }.distinct()
     Column(Modifier.horizontalScroll(rememberScrollState())) {
-        val header = listOf("mode", "steps", "turns", "dist", "end-start") + labels.map { "cp $it" }
+        val header = listOf("mode", "steps", "turns", "dist", "end-start") + labels.map { "cp ${it.ifEmpty { "(no label)" }}" }
         TableRow(header, bold = true)
         for (m in s.metrics) {
             TableRow(
@@ -220,7 +220,7 @@ private fun MetricsTable(s: TrackSet) {
                     if (Modes.isSnap(m.mode)) m.turns.toString() else "–",
                     formatMetres(m.distanceMetres),
                     formatMetres(m.endToStartMetres),
-                ) + labels.map { formatMetres(m.checkpointErrors[it]) },
+                ) + labels.map { formatMetres(m.checkpoint(it)) },
                 color = colorFor(m.mode),
             )
         }

@@ -303,6 +303,8 @@ class Recorder(private val app: Context, private val store: WalkStore) {
             val clock = sensorClocks.getOrPut(e.sensor.type) { ClockMapper() }
             val ts = clock.toElapsedRealtime(e.timestamp)
             val v = e.values
+            // A reader refuses a row with a value that is not a finite number.
+            for (x in v) if (x.isNaN() || x.isInfinite()) return
             synchronized(lock) {
                 if (!recording) return
                 val t = tOf(ts)
@@ -476,7 +478,6 @@ class Recorder(private val app: Context, private val store: WalkStore) {
             watermark = nowT() - 300.0
             availability = Availability(
                 motion = motion != null,
-                gyro = gyroExpected,
                 game = game != null,
                 absolute = absolute != null,
                 steps = steps != null,

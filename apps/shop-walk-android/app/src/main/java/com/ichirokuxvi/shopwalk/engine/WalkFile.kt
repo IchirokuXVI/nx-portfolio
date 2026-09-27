@@ -137,19 +137,32 @@ object WalkJson {
         else -> emptyList()
     }
 
-    private fun rows(v: Any?): List<DoubleArray>? = when (v) {
-        null -> null
-        is DoubleArray -> if (v.isEmpty()) emptyList() else null
-        is List<*> -> v.mapNotNull { it as? DoubleArray }
-        else -> null
+    /** A stream's rows, stably sorted by `t` only when they are out of order. */
+    private fun rows(v: Any?): List<DoubleArray>? {
+        val rows = when (v) {
+            null -> return null
+            is DoubleArray -> if (v.isEmpty()) emptyList() else return null
+            is List<*> -> v.mapNotNull { (it as? DoubleArray)?.takeIf { r -> r.isNotEmpty() } }
+            else -> return null
+        }
+        for (k in 1 until rows.size) {
+            if (rows[k][0] < rows[k - 1][0]) return rows.sortedBy { it[0] }
+        }
+        return rows
     }
 
-    private fun flat(v: Any?): DoubleArray? = when (v) {
-        null -> null
-        is DoubleArray -> v
-        // Tolerate steps written as one element rows.
-        is List<*> -> v.mapNotNull { (it as? DoubleArray)?.firstOrNull() }.toDoubleArray()
-        else -> null
+    private fun flat(v: Any?): DoubleArray? {
+        val steps = when (v) {
+            null -> return null
+            is DoubleArray -> v
+            // Tolerate steps written as one element rows.
+            is List<*> -> v.mapNotNull { (it as? DoubleArray)?.firstOrNull() }.toDoubleArray()
+            else -> return null
+        }
+        for (k in 1 until steps.size) {
+            if (steps[k] < steps[k - 1]) return steps.sortedArray()
+        }
+        return steps
     }
 
     /** The walk as a JSON tree in the field order of the contract. */

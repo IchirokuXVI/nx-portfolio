@@ -12,14 +12,17 @@ object Modes {
     fun pdr(steps: StepSource, heading: HeadingSource, snap: Boolean): String =
         "pdr:${steps.id}:${heading.id}" + if (snap) ":snap" else ""
 
-    /** Every mode id in a fixed display order: own before hw, gyro, game, absolute, snap first. */
+    /**
+     * Every mode id in the order the TypeScript twin lists them: vio, gps, then the PDR
+     * modes with own before hw, then gyro, game, absolute, and snap before free.
+     */
     val ALL: List<String> = buildList {
+        add(VIO)
+        add(GPS)
         for (s in StepSource.entries) for (h in HeadingSource.entries) {
             add(pdr(s, h, true))
             add(pdr(s, h, false))
         }
-        add(VIO)
-        add(GPS)
     }
 
     fun isSnap(mode: String): Boolean = mode.endsWith(":snap")
@@ -30,7 +33,6 @@ object Modes {
 /** Which streams a walk has, which decides which modes are available. */
 data class Availability(
     val motion: Boolean,
-    val gyro: Boolean,
     val game: Boolean,
     val absolute: Boolean,
     val steps: Boolean,
@@ -43,7 +45,7 @@ data class Availability(
     }
 
     fun heading(h: HeadingSource): Boolean = when (h) {
-        HeadingSource.GYRO -> motion && gyro
+        HeadingSource.GYRO -> motion
         HeadingSource.GAME -> game
         HeadingSource.ABSOLUTE -> absolute
     }
@@ -62,24 +64,16 @@ data class Availability(
     }
 
     companion object {
-        /**
-         * A stream is available when the file carries it, even empty: a present but empty
-         * `steps` means the phone had a step detector and it never fired. Gyro heading also
-         * needs motion rows that carry the three rates.
-         */
+        /** A stream counts when it has at least one row, as in the TypeScript twin. */
         fun of(walk: WalkFile): Availability {
             val s = walk.streams
-            val motion = s.motion
-            val gyro = motion != null && (motion.isEmpty() || motion.any { it.size >= 7 }) &&
-                walk.events.none { it.kind == "sensor-missing" && it.detail?.startsWith("gyroscope") == true }
             return Availability(
-                motion = motion != null,
-                gyro = gyro,
-                game = s.game != null,
-                absolute = s.absolute != null,
-                steps = s.steps != null,
-                pose = s.pose != null,
-                location = s.location != null,
+                motion = !s.motion.isNullOrEmpty(),
+                game = !s.game.isNullOrEmpty(),
+                absolute = !s.absolute.isNullOrEmpty(),
+                steps = (s.steps?.size ?: 0) > 0,
+                pose = !s.pose.isNullOrEmpty(),
+                location = !s.location.isNullOrEmpty(),
             )
         }
     }

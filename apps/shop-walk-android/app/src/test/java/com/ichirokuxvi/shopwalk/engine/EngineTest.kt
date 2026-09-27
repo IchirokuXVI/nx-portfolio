@@ -115,7 +115,7 @@ class HeadingTest {
         val qUp = doubleArrayOf(0.0, 0.0, sin(a / 2), cos(a / 2))
         val qE = doubleArrayOf(sin(a / 2), 0.0, 0.0, cos(a / 2))
         val q = mul(qUp, qE)
-        assertEquals(-PI / 2, Quat.forwardBearing(q[0], q[1], q[2], q[3]), 1e-9)
+        assertEquals(3 * PI / 2, Quat.forwardBearing(q[0], q[1], q[2], q[3]), 1e-9)
     }
 
     private fun mul(a: DoubleArray, b: DoubleArray): DoubleArray {
@@ -134,12 +134,11 @@ class SnapTest {
 
     @Test
     fun snapsA75DegreeTurnTo90AndDiscardsTheResidue() {
-        val s = Snapper(EngineOptions())
-        s.start(0.0)
+        val s = Snapper(EngineOptions(), 0.0)
         var t = 0.0
         var psi = 0.0
         // Turning at 75 deg/s for one second, then still.
-        repeat(100) { psi += Math.toRadians(0.75); s.update(t, psi, 75.0); t += 10.0 }
+        repeat(100) { psi += Math.toRadians(0.75); s.update(t, psi, 75.0 * DEG); t += 10.0 }
         assertEquals(0, s.turns)
         repeat(39) { s.update(t, psi, 0.0); t += 10.0 }
         assertEquals(0, s.turns) // settled needs 400 ms
@@ -151,8 +150,7 @@ class SnapTest {
 
     @Test
     fun ignoresA50DegreeWiggle() {
-        val s = Snapper(EngineOptions())
-        s.start(0.0)
+        val s = Snapper(EngineOptions(), 0.0)
         var t = 0.0
         repeat(200) { s.update(t, Math.toRadians(50.0), 0.0); t += 10.0 }
         assertEquals(0, s.turns)
@@ -161,8 +159,7 @@ class SnapTest {
 
     @Test
     fun a150DegreeTurnIsTwoQuarters() {
-        val s = Snapper(EngineOptions())
-        s.start(0.0)
+        val s = Snapper(EngineOptions(), 0.0)
         var t = 0.0
         repeat(100) { s.update(t, -Math.toRadians(150.0), 0.0); t += 10.0 }
         assertEquals(1, s.turns)
@@ -174,15 +171,14 @@ class AlignmentAndMetricsTest {
 
     private fun track(vararg pts: Double, mode: String = "m"): Track {
         val n = pts.size / 3
-        return Track(mode, DoubleArray(n) { pts[it * 3] }, DoubleArray(n) { pts[it * 3 + 1] }, DoubleArray(n) { pts[it * 3 + 2] }, n - 1, 0)
+        return Track(mode, DoubleArray(n) { pts[it * 3] }, DoubleArray(n) { pts[it * 3 + 1] }, DoubleArray(n) { pts[it * 3 + 2] }, n - 1, 0, emptyList())
     }
 
     @Test
     fun rotatesTheFirstPointBeyond3MetresOntoPlusY() {
         val t = track(0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 2.0, 2.5, 0.0, 3.0, 4.0, 0.0, 4.0, 4.0, 3.0)
         val a = Alignment.align(t)
-        assertTrue(a.alignedFound)
-        assertEquals(90.0, a.rotationDeg, 1e-9)
+        assertEquals(PI / 2, a.rotation, 1e-9)
         assertEquals(0.0, a.x[2], 1e-9)
         assertEquals(2.5, a.y[2], 1e-9)
         assertEquals(-3.0, a.x[4], 1e-9)
@@ -193,7 +189,7 @@ class AlignmentAndMetricsTest {
     fun leavesAShortTrackAlone() {
         val t = track(0.0, 0.0, 0.0, 1.0, 2.0, 0.0)
         val a = Alignment.align(t)
-        assertEquals(0.0, a.rotationDeg, 0.0)
+        assertEquals(0.0, a.rotation, 0.0)
         assertEquals(2.0, a.x[1], 0.0)
     }
 
@@ -210,8 +206,8 @@ class AlignmentAndMetricsTest {
         val m = Metrics.of(t, marks)
         assertEquals(15.5, m.distanceMetres, 1e-9)
         assertEquals(0.5, m.endToStartMetres, 1e-9)
-        assertEquals(setOf("door"), m.checkpointErrors.keys)
-        assertEquals(hypot(0.5, 4.0), m.checkpointErrors["door"]!!, 1e-9)
+        assertEquals(listOf("door"), m.checkpoints.map { it.label })
+        assertEquals(0.5, m.checkpoint("door")!!, 1e-9)
         assertEquals(0, Metrics.positionAt(t, -5.0))
         assertEquals(1, Metrics.positionAt(t, 1999.9))
         assertEquals(2, Metrics.positionAt(t, 2000.0))
@@ -241,7 +237,7 @@ class TrackEngineTest {
                 assertEquals(tr.mode, 3, tr.turns)
                 assertEquals(tr.mode, 4, tr.segments.size)
                 assertEquals(tr.mode, 0.0, m.endToStartMetres, 1e-6)
-                assertEquals(tr.mode, 0.0, m.checkpointErrors["door"]!!, 1e-6)
+                assertEquals(tr.mode, 0.0, m.checkpoint("door")!!, 1e-6)
             } else {
                 assertEquals(tr.mode, 0, tr.turns)
                 assertTrue(tr.mode, m.endToStartMetres < 0.5)
@@ -311,7 +307,7 @@ class TrackEngineTest {
     @Test
     fun modesFollowTheStreams() {
         val walk = Synth().rest(100).build()
-        val bare = walk.copy(streams = WalkStreams(steps = DoubleArray(0), game = emptyList()))
+        val bare = walk.copy(streams = WalkStreams(steps = doubleArrayOf(50.0), game = listOf(doubleArrayOf(0.0, 0.0, 0.0, 0.0, 1.0))))
         assertEquals(listOf("pdr:hw:game:snap", "pdr:hw:game"), Availability.of(bare).modes())
         assertNull(TrackSet.compute(bare).track("pdr:own:gyro"))
         assertNotNull(TrackSet.compute(walk).track("pdr:own:gyro"))

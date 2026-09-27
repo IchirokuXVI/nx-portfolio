@@ -3,20 +3,28 @@ package com.ichirokuxvi.shopwalk.engine
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 
-/** The streams the engine reads, in the order rows with the same `t` are fed. */
+/**
+ * The streams the engine reads, in the order rows with the same `t` are fed: the order
+ * of the keys of `streams` in section 2 (magnetic and pressure are read by no mode).
+ */
 enum class Stream { MOTION, GAME, ABSOLUTE, STEPS, LOCATION, POSE }
 
-/** A snapped segment between two turns (section 5.4, rule 5). */
-data class Segment(val fromT: Double, val toT: Double, val headingDeg: Double, val steps: Int, val confidence: Double)
+/**
+ * A stretch of a track between two turns (section 5.4, rule 5), as point indices, with
+ * the confidence `exp(-seconds / 60)` over the time between its end points. A snap mode
+ * closes one at each counted turn that has at least one step since the last; every other
+ * mode has one.
+ */
+data class Segment(val fromIndex: Int, val toIndex: Int, val confidence: Double)
 
 /**
  * A computed track: points `{ t, x, y }` in metres on the floor, start at the origin.
- * `rotationDeg` is the alignment rotation (section 5.6), degrees clockwise, 0 before
- * alignment and when the track never went [EngineOptions.alignMetres].
+ * [rotation] is the alignment of section 5.6 in radians, counterclockwise positive: the
+ * track's first point 3 m out was `rotation` clockwise from +y before it. 0 before
+ * alignment and when the track never went 3 m.
  */
 class Track(
     val mode: String,
@@ -25,11 +33,15 @@ class Track(
     val y: DoubleArray,
     val steps: Int,
     val turns: Int,
-    val segments: List<Segment> = emptyList(),
-    val rotationDeg: Double = 0.0,
-    val alignedFound: Boolean = false,
+    val segments: List<Segment>,
+    val rotation: Double = 0.0,
+    /** True for the modes whose unaligned +y is north: every absolute mode, and gps. */
+    val northUp: Boolean = false,
 ) {
     val size: Int get() = t.size
+
+    /** Degrees clockwise from north of the aligned +y, for a north up mode. */
+    val bearingDeg: Double? get() = if (northUp) TrackSet.normaliseDeg(rotation * 180 / Math.PI) else null
 }
 
 private class Growable(cap: Int = 256) {
@@ -51,8 +63,20 @@ private class Growable(cap: Int = 256) {
 /**
  * The incremental engine of recorder plan 0002: fed stream rows merged by `t`, it keeps
  * every available mode's track up to date. The recording screen feeds it live and the
- * viewer feeds it a whole file through [replay]; the two are the same code, the shape of
- * the TypeScript `createTrackEngine`.
+ * viewer feeds it a whole file through [replay]; the two are the same code, and the rules
+ * are the TypeScript `createTrackEngine`'s:
+ *
+ * - At a motion row the gyro heading and its snapper are updated first, then the own step
+ *   detector runs, so a step is placed with the heading after that row.
+ * - At a game or absolute row that rotation heading and its snapper are updated.
+ * - A step takes the snapped heading (snap modes) or the raw one at the moment it is
+ *   processed, and its point carries the step's own `t` (for an own step, the time of its
+ *   largest `s`). A step before its heading source's first sample is ignored, not counted.
+ * - Weinberg over a hardware step uses the largest and smallest `s` of the own detector
+ *   over the motion rows since the previous hardware step, or the fixed length when there
+ *   was no motion row in between.
+ * - A PDR track starts at `{ t: 0, x: 0, y: 0 }`; vio and gps before their first row are
+ *   that point alone.
  */
 class TrackEngine(val availability: Availability, val options: EngineOptions = EngineOptions()) {
 
@@ -62,11 +86,28 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
     private val absolute = if (availability.absolute) RotationHeading(true) else null
     private val snappers = HashMap<HeadingSource, Snapper>()
 
-    private class Pdr(val mode: String, val steps: StepSource, val heading: HeadingSource, val snap: Boolean) {
+    private inner class Pdr(val mode: String, val steps: StepSource, val heading: HeadingSource, val snap: Boolean) {
         val points = Growable().apply { add(0.0, 0.0, 0.0) }
-        var x = 0.0
-        var y = 0.0
-        var count = 0
+        val segments = ArrayList<Segment>()
+        var segmentStart = 0
+
+        fun closeSegment() {
+            val last = points.n - 1
+            if (last <= segmentStart) return
+            segments.add(segment(segmentStart, last))
+            segmentStart = last
+        }
+
+        fun segment(from: Int, to: Int) =
+            Segment(from, to, exp(-(points.t[to] - points.t[from]) / 1000.0 / options.confidenceTauS))
+
+        fun allSegments(): List<Segment> {
+            val last = points.n - 1
+            val out = if (snap) ArrayList(segments) else ArrayList()
+            val from = if (snap) segmentStart else 0
+            if (last > from || out.isEmpty()) out.add(segment(from, last))
+            return out
+        }
     }
 
     private val pdr = ArrayList<Pdr>()
@@ -79,15 +120,12 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
     var ownSteps = 0; private set
     /** Hardware steps seen so far. */
     var hwSteps = 0; private set
-    /** The latest `t` fed. */
-    var lastT = 0.0; private set
 
     // For a hardware step's Weinberg length: the largest and smallest `s` since the last one.
     private var hwWinMax = Double.NEGATIVE_INFINITY
     private var hwWinMin = Double.POSITIVE_INFINITY
 
     init {
-        for (h in HeadingSource.entries) if (availability.heading(h)) snappers[h] = Snapper(options)
         for (s in StepSource.entries) for (h in HeadingSource.entries) {
             if (!availability.steps(s) || !availability.heading(h)) continue
             pdr.add(Pdr(Modes.pdr(s, h, true), s, h, true))
@@ -111,10 +149,9 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
     fun pushMotion(r: DoubleArray) {
         if (r.size < 4) return
         val t = r[0]
-        lastT = max(lastT, t)
         if (gyro != null && r.size >= 7) {
             gyro.push(t, r[1], r[2], r[3], r[4], r[5], r[6])
-            snap(HeadingSource.GYRO, t, gyro)
+            afterHeading(HeadingSource.GYRO, t, gyro)
         }
         val det = own ?: return
         val step = det.push(t, r[1], r[2], r[3])
@@ -132,15 +169,12 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
 
     private fun pushRotation(r: DoubleArray, abs: Boolean) {
         if (r.size < 5) return
-        val t = r[0]
-        lastT = max(lastT, t)
         val src = (if (abs) absolute else game) ?: return
-        src.push(t, r[1], r[2], r[3], r[4])
-        snap(if (abs) HeadingSource.ABSOLUTE else HeadingSource.GAME, t, src)
+        src.push(r[0], r[1], r[2], r[3], r[4])
+        afterHeading(if (abs) HeadingSource.ABSOLUTE else HeadingSource.GAME, r[0], src)
     }
 
     fun pushStep(t: Double) {
-        lastT = max(lastT, t)
         if (!availability.steps) return
         hwSteps++
         val len = if (options.stepModel == StepModel.WEINBERG && hwWinMax >= hwWinMin) {
@@ -156,99 +190,81 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
     private fun pushLocation(r: DoubleArray) {
         if (r.size < 3) return
         val g = gps ?: return
-        lastT = max(lastT, r[0])
         val start = gpsStart ?: r.also { gpsStart = it }
-        val lat0 = Math.toRadians(start[1])
-        val x = (r[2] - start[2]) * METRES_PER_DEGREE * cos(lat0)
-        val y = (r[1] - start[1]) * METRES_PER_DEGREE
+        val lat0 = start[1]
+        val x = (r[2] - start[2]) * METRES_PER_DEGREE * cos(lat0 * (Math.PI / 180))
+        val y = (r[1] - lat0) * METRES_PER_DEGREE
         g.add(r[0], x, y)
     }
 
     private fun pushPose(r: DoubleArray) {
         if (r.size < 4) return
         val v = vio ?: return
-        lastT = max(lastT, r[0])
         val start = vioStart ?: r.also { vioStart = it }
-        v.add(r[0], r[1] - start[1], -(r[3] - start[3]))
+        v.add(r[0], r[1] - start[1], start[3] - r[3])
     }
 
-    private fun snap(h: HeadingSource, t: Double, state: HeadingState) {
-        val s = snappers[h] ?: return
+    private fun afterHeading(h: HeadingSource, t: Double, state: HeadingState) {
         // The first heading row starts the snapper and is also its first settling sample.
-        if (!s.started) s.start(state.psi)
-        s.update(t, state.psi, state.rateDegPerS)
+        val s = snappers.getOrPut(h) { Snapper(options, state.psi) }
+        if (s.update(t, state.psi, state.rate)) {
+            for (p in pdr) if (p.snap && p.heading == h) p.closeSegment()
+        }
     }
 
     private fun weinberg(sMax: Double, sMin: Double): Double =
         options.weinbergK * max(0.0, sMax - sMin).pow(0.25)
 
-    private fun heading(h: HeadingSource, snap: Boolean): Double {
-        if (snap) return snappers[h]?.h ?: 0.0
-        return when (h) {
-            HeadingSource.GYRO -> gyro?.psi
-            HeadingSource.GAME -> game?.psi
-            HeadingSource.ABSOLUTE -> absolute?.psi
-        } ?: 0.0
+    private fun headingState(h: HeadingSource): HeadingState? = when (h) {
+        HeadingSource.GYRO -> gyro
+        HeadingSource.GAME -> game
+        HeadingSource.ABSOLUTE -> absolute
     }
 
     private fun advance(source: StepSource, t: Double, len: Double) {
         for (p in pdr) {
             if (p.steps != source) continue
-            val psi = heading(p.heading, p.snap)
-            p.x += len * sin(psi)
-            p.y += len * cos(psi)
-            p.count++
-            p.points.add(t, p.x, p.y)
+            val state = headingState(p.heading) ?: continue
+            if (!state.started) continue
+            val psi = if (p.snap) snappers[p.heading]?.h ?: state.psi else state.psi
+            val g = p.points
+            val lx = g.x[g.n - 1]
+            val ly = g.y[g.n - 1]
+            g.add(t, lx + len * sin(psi), ly + len * cos(psi))
         }
+    }
+
+    private fun direct(mode: String, g: Growable, northUp: Boolean): Track {
+        if (g.n == 0) {
+            return Track(mode, doubleArrayOf(0.0), doubleArrayOf(0.0), doubleArrayOf(0.0), 0, 0, listOf(Segment(0, 0, 1.0)), 0.0, northUp)
+        }
+        return Track(mode, g.t.copyOf(g.n), g.x.copyOf(g.n), g.y.copyOf(g.n), 0, 0, listOf(Segment(0, g.n - 1, 1.0)), 0.0, northUp)
     }
 
     /** The current tracks, unaligned, as copies safe to hand to another thread. */
     fun tracks(): List<Track> {
         val out = ArrayList<Track>()
+        vio?.let { out.add(direct(Modes.VIO, it, false)) }
+        gps?.let { out.add(direct(Modes.GPS, it, true)) }
         for (p in pdr) {
             val g = p.points
-            val t = g.t.copyOf(g.n)
-            val snapper = snappers[p.heading]
             out.add(
                 Track(
                     mode = p.mode,
-                    t = t,
+                    t = g.t.copyOf(g.n),
                     x = g.x.copyOf(g.n),
                     y = g.y.copyOf(g.n),
-                    steps = p.count,
-                    turns = if (p.snap) snapper?.turns ?: 0 else 0,
-                    segments = if (p.snap && snapper != null) segments(t, snapper) else emptyList(),
+                    steps = g.n - 1,
+                    turns = if (p.snap) snappers[p.heading]?.turns ?: 0 else 0,
+                    segments = p.allSegments(),
+                    northUp = p.heading == HeadingSource.ABSOLUTE,
                 ),
             )
         }
-        vio?.let { out.add(Track(Modes.VIO, it.t.copyOf(it.n), it.x.copyOf(it.n), it.y.copyOf(it.n), 0, 0)) }
-        gps?.let { out.add(Track(Modes.GPS, it.t.copyOf(it.n), it.x.copyOf(it.n), it.y.copyOf(it.n), 0, 0)) }
-        val order = Modes.ALL
-        out.sortBy { order.indexOf(it.mode) }
         return out
     }
 
     fun track(mode: String): Track? = tracks().firstOrNull { it.mode == mode }
-
-    private fun segments(stepT: DoubleArray, s: Snapper): List<Segment> {
-        val out = ArrayList<Segment>()
-        var from = 0.0
-        var heading = s.startHeading
-        for (turn in s.turnLog) {
-            out.add(segment(from, turn[0], heading, stepT))
-            from = turn[0]
-            heading = turn[1]
-        }
-        out.add(segment(from, max(lastT, stepT.lastOrNull() ?: 0.0), heading, stepT))
-        return out
-    }
-
-    private fun segment(from: Double, to: Double, heading: Double, stepT: DoubleArray): Segment {
-        var n = 0
-        for (k in 1 until stepT.size) if (stepT[k] > from && stepT[k] <= to) n++
-        val seconds = max(0.0, to - from) / 1000.0
-        return Segment(from, to, Math.toDegrees(heading), n, exp(-seconds / options.confidenceTauS))
-    }
 
     companion object {
         const val METRES_PER_DEGREE = 111320.0
@@ -269,13 +285,12 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
             val streams = Stream.entries
             while (true) {
                 var best = -1
-                var bestT = Double.POSITIVE_INFINITY
+                var bestT = 0.0
                 for (k in lists.indices) {
                     val l = lists[k]
-                    if (idx[k] < l.size) {
-                        val tt = l[idx[k]][0]
-                        if (tt < bestT) { bestT = tt; best = k }
-                    }
+                    if (idx[k] >= l.size) continue
+                    val tt = l[idx[k]][0]
+                    if (best == -1 || tt < bestT) { bestT = tt; best = k }
                 }
                 if (best < 0) break
                 engine.push(streams[best], lists[best][idx[best]])
@@ -283,8 +298,5 @@ class TrackEngine(val availability: Availability, val options: EngineOptions = E
             }
             return engine
         }
-
-        @Suppress("unused")
-        private fun clamp(v: Double, lo: Double, hi: Double) = min(hi, max(lo, v))
     }
 }

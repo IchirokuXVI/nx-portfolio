@@ -1,9 +1,6 @@
 package com.ichirokuxvi.shopwalk.engine
 
-import java.time.OffsetDateTime
-import java.time.format.DateTimeFormatter
 import kotlin.math.cos
-import kotlin.math.round
 import kotlin.math.sin
 
 /** A line read from a plain GeoJSON with no `walk`, in metres around its first coordinate. */
@@ -23,10 +20,11 @@ object GeoJson {
 
     /** `walk-<YYYYMMDD>-<HHmm>-<name in kebab case>.geojson`. */
     fun fileName(walk: WalkFile): String {
-        val stamp = try {
-            OffsetDateTime.parse(walk.startedAt).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
-        } catch (e: Exception) {
-            "00000000-0000"
+        // The date and time digits as written in startedAt, with no time zone conversion.
+        val m = Regex("^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})").find(walk.startedAt)
+        val stamp = if (m == null) "00000000-0000" else {
+            val g = m.groupValues
+            "${g[1]}${g[2]}${g[3]}-${g[4]}${g[5]}"
         }
         val kebab = kebab(walk.name.orEmpty())
         return if (kebab.isEmpty()) "walk-$stamp.geojson" else "walk-$stamp-$kebab.geojson"
@@ -34,7 +32,7 @@ object GeoJson {
 
     fun kebab(s: String): String {
         val folded = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD)
-            .replace(Regex("\\p{M}+"), "")
+            .replace(Regex("[\\u0300-\\u036f]"), "")
             .lowercase()
         return folded.replace(Regex("[^a-z0-9]+"), "-").trim('-')
     }
@@ -44,13 +42,13 @@ object GeoJson {
         val lat0 = origin?.lat ?: 0.0
         val lon0 = origin?.lon ?: 0.0
         val lat = lat0 + north / M
-        val lon = lon0 + east / (M * cos(Math.toRadians(lat0)))
+        val lon = lon0 + east / (M * cos(lat0 * Math.PI / 180))
         return doubleArrayOf(round7(lon), round7(lat))
     }
 
     /** Rotates an aligned local point by [bearingDeg] into east and north. */
     fun toEastNorth(x: Double, y: Double, bearingDeg: Double): DoubleArray {
-        val b = Math.toRadians(bearingDeg)
+        val b = bearingDeg * Math.PI / 180
         val c = cos(b)
         val s = sin(b)
         return doubleArrayOf(x * c + y * s, -x * s + y * c)
@@ -67,7 +65,8 @@ object GeoJson {
     fun export(set: TrackSet, selectedMode: String?): Map<String, Any?> {
         val walk = set.walk
         val origin = walk.origin
-        val bearing = set.bearingDeg
+        // Rounded to two decimals first, then used to project, as the TypeScript twin does.
+        val bearing = round2(set.bearingDeg)
         val features = ArrayList<Any?>()
         val metrics = set.metrics.associateBy { it.mode }
         fun coords(track: Track, k: Int): DoubleArray {
@@ -115,7 +114,7 @@ object GeoJson {
         return linkedMapOf(
             "type" to "FeatureCollection",
             "localFrame" to (origin == null),
-            "bearing" to Math.round(bearing * 100.0) / 100.0,
+            "bearing" to bearing,
             "features" to features,
             "walk" to WalkJson.toValue(walk),
         )
@@ -158,7 +157,7 @@ object GeoJson {
             ?: return Imported.Plain(emptyList(), emptyList())
         val lon0 = first[0]
         val lat0 = first[1]
-        val k = M * cos(Math.toRadians(lat0))
+        val k = M * cos(lat0 * Math.PI / 180)
         val lines = rawLines.map { (name, ps) ->
             PlainLine(name, DoubleArray(ps.size) { (ps[it][0] - lon0) * k }, DoubleArray(ps.size) { (ps[it][1] - lat0) * M })
         }
