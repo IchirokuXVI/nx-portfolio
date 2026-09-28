@@ -190,6 +190,19 @@ export const ERROR_CATALOG: Record<
     en: 'That category does not exist.',
     es: 'Esa categoría no existe.',
   },
+  // Shop sections (plan 0167).
+  [ERROR_CODES.SECTION_NOT_FOUND]: {
+    en: 'That section does not exist.',
+    es: 'Esa sección no existe.',
+  },
+  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: {
+    en: 'A section belongs to one chain. A shop or a pinned product can only use sections of its own chain.',
+    es: 'Una sección pertenece a una sola cadena. Una tienda o un producto fijado solo puede usar secciones de su propia cadena.',
+  },
+  [ERROR_CODES.SECTION_SLUG_TAKEN]: {
+    en: 'This chain already has a section with that slug.',
+    es: 'Esta cadena ya tiene una sección con ese identificador.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

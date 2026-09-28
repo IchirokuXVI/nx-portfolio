@@ -278,6 +278,32 @@ export const ERROR_CODES = {
    * or slugs that matched nothing travel in `details` as `unknown`.
    */
   CATEGORY_NOT_FOUND: 'category_not_found',
+  /**
+   * An id names no shop section (plan 0167, section 4).
+   *
+   * Its own code rather than a plain {@link NOT_FOUND}, for the reason
+   * {@link CATEGORY_NOT_FOUND} gives: on a shop's list or a pin the missing
+   * thing is a value in the body, not the route's resource. The ids that
+   * matched nothing travel in `details` as `unknown`.
+   */
+  SECTION_NOT_FOUND: 'section_not_found',
+  /**
+   * A shop's list or a pin named a section of another chain (plan 0167,
+   * section 1).
+   *
+   * A section belongs to one chain, and a shop lists only its own chain's
+   * sections, which a trigger enforces because a foreign key cannot say it.
+   * The sections that broke the rule travel in `details` as `sectionIds`.
+   */
+  SECTION_OF_ANOTHER_CHAIN: 'section_of_another_chain',
+  /**
+   * The chain already has a section with this slug (plan 0167, section 1).
+   *
+   * Two sections named "Frescos" in one chain is an operator error worth
+   * refusing. The holder's id travels in `details` as `sectionId`, so the back
+   * office can offer to open it rather than only say no.
+   */
+  SECTION_SLUG_TAKEN: 'section_slug_taken',
   INTERNAL: 'internal',
 } as const;
 
@@ -391,5 +417,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  // Plan 0167: 404 the way an unknown category is, and 409 for the two that
+  // turn on another row: which chain a section belongs to, and which section
+  // already holds a slug.
+  [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

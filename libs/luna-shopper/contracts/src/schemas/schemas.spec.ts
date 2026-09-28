@@ -19,6 +19,7 @@ import {
   POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
+  SECTION_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -98,6 +99,7 @@ describe('contract schemas', () => {
       ...Object.values(PRODUCT_GROUP_PATTERNS),
       ...Object.values(BRAND_PATTERNS),
       ...Object.values(CATEGORY_PATTERNS),
+      ...Object.values(SECTION_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(HARVEST_PRESET_PATTERNS),
@@ -921,6 +923,198 @@ describe('contract schemas', () => {
       expect(
         validateMessageResponse('category.delete', { id: 'c-ice-cream' }).valid
       ).toBe(true);
+    });
+
+    describe('shop sections (plan 0167)', () => {
+      const section = {
+        id: 's-pizzas',
+        supermarketId: 'mercadona',
+        slug: 'pizzas',
+        name: { es: 'Pizzas' },
+        position: 3,
+        categoryIds: ['c-pizzas'],
+      };
+
+      it('a section covers roots and leaves, and may cover none', () => {
+        const create = (fields: Record<string, unknown>) =>
+          validateMessageRequest('section.create', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            slug: 'frozen',
+            name: { en: 'Frozen', es: 'Congelados' },
+            ...fields,
+          }).valid;
+        expect(create({ categoryIds: ['c-frozen', 'c-pizzas'] })).toBe(true);
+        // The middle aisle of whatever is on offer: pins only.
+        expect(create({ categoryIds: [], position: 0 })).toBe(true);
+        expect(create({})).toBe(false);
+        expect(create({ categoryIds: ['c-frozen', 'c-frozen'] })).toBe(false);
+
+        // The slug is an identity: an edit cannot carry one.
+        expect(
+          validateMessageRequest('section.update', {
+            userId: 'owner',
+            sectionId: 's-pizzas',
+            categoryIds: ['c-pizzas'],
+            position: 1,
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.update', {
+            userId: 'owner',
+            sectionId: 's-pizzas',
+            slug: 'pizza',
+          }).valid
+        ).toBe(false);
+
+        // The back office's reads carry the shop count; nothing requires it.
+        expect(
+          validateMessageResponse('section.get', {
+            ...section,
+            locationCount: 12,
+          }).valid
+        ).toBe(true);
+        expect(validateMessageResponse('section.create', section).valid).toBe(
+          true
+        );
+        expect(
+          validateMessageResponse('section.list', {
+            items: [{ ...section, locationCount: 0 }],
+            nextCursor: null,
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.list', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            query: 'piz',
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.delete', { id: 's-pizzas' }).valid
+        ).toBe(true);
+      });
+
+      it('a shop’s list is read with no account, and says whose list it is', () => {
+        expect(
+          validateMessageRequest('section.forLocation', {
+            supermarketLocationId: 'loc-1',
+          }).valid
+        ).toBe(true);
+        for (const source of ['LOCATION', 'CHAIN']) {
+          expect(
+            validateMessageResponse('section.forLocation', {
+              sections: [section],
+              source,
+            }).valid
+          ).toBe(true);
+        }
+        expect(
+          validateMessageResponse('section.forLocation', {
+            sections: [],
+            source: 'NONE',
+          }).valid
+        ).toBe(false);
+
+        const put = (sectionIds: unknown) =>
+          validateMessageRequest('section.setForLocation', {
+            userId: 'owner',
+            supermarketLocationId: 'loc-1',
+            sectionIds,
+          }).valid;
+        expect(put(['s-pizzas', 's-frozen'])).toBe(true);
+        // Empty returns the shop to its chain's default.
+        expect(put([])).toBe(true);
+        expect(put(['s-pizzas', 's-pizzas'])).toBe(false);
+        expect(put(undefined)).toBe(false);
+      });
+
+      it('a pin names a product and sections of one chain; empty removes it', () => {
+        const pin = (sectionIds: unknown) =>
+          validateMessageRequest('section.setPins', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            itemId: 'i-pizza',
+            sectionIds,
+          }).valid;
+        expect(pin(['s-pizzas'])).toBe(true);
+        expect(pin([])).toBe(true);
+        expect(pin(['s-pizzas', 's-pizzas'])).toBe(false);
+        expect(
+          validateMessageResponse('section.setPins', {
+            supermarketId: 'mercadona',
+            itemId: 'i-pizza',
+            sectionIds: [],
+          }).valid
+        ).toBe(true);
+
+        expect(
+          validateMessageRequest('section.listPins', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            sectionId: 's-pizzas',
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.listPins', {
+            items: [
+              {
+                supermarketId: 'mercadona',
+                itemId: 'i-pizza',
+                sectionIds: ['s-pizzas'],
+              },
+            ],
+            nextCursor: null,
+          }).valid
+        ).toBe(true);
+      });
+
+      it('the rule answers many products at one shop, naming the step', () => {
+        expect(
+          validateMessageRequest('section.itemsAtLocation', {
+            supermarketLocationId: 'loc-1',
+            itemIds: ['i-pizza', 'i-milk'],
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.itemsAtLocation', {
+            supermarketLocationId: 'loc-1',
+          }).valid
+        ).toBe(false);
+        const answer = (step: string) =>
+          validateMessageResponse('section.itemsAtLocation', {
+            source: 'CHAIN',
+            items: [{ itemId: 'i-pizza', sectionIds: [], step }],
+          }).valid;
+        expect(answer('PINNED')).toBe(true);
+        expect(answer('COVERED')).toBe(true);
+        expect(answer('NONE')).toBe(true);
+        expect(answer('GUESSED')).toBe(false);
+      });
+
+      it('a basket product at a shop may carry its sections, and need not', () => {
+        const validate = createContractsAjv().getSchema(
+          'luna://basket/BasketProductView'
+        );
+        const product = {
+          id: 'i-pizza',
+          name: { es: 'Pizza' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean: null,
+          unitSize: null,
+          packCount: null,
+          categories: [MILK_CATEGORY],
+          defaultUnit: 'UNIT',
+          productGroupId: null,
+          atShop: null,
+        };
+        expect(validate?.(product)).toBe(true);
+        expect(validate?.({ ...product, sectionIds: [] })).toBe(true);
+        expect(validate?.({ ...product, sectionIds: ['s-pizzas'] })).toBe(true);
+        expect(validate?.({ ...product, sectionIds: null })).toBe(false);
+      });
     });
 
     it('the harvest create override names leaf slugs (plan 0166)', () => {

@@ -14,6 +14,7 @@ import {
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
+  SECTION_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -25,6 +26,8 @@ import {
   type GetItemsResult,
   type ItemPage,
   type ItemView,
+  type LocationSectionsRequest,
+  type LocationSectionsView,
   type PriceScopePage,
   type ProductGroupOfferPage,
   type ProductGroupPage,
@@ -231,6 +234,42 @@ export class CatalogLocationsController {
         cursor: query.cursor,
         limit: query.limit,
       }
+    );
+  }
+}
+
+/**
+ * A shop's sections, in its order (plan 0167, section 4): the aisles of the
+ * shop you are in, which velista `0120` draws the basket by.
+ *
+ * **Public: no guard and no token**, and its own controller for that reason,
+ * because a guard is carried by the controller and every other read here
+ * takes a velista token. A shop's aisle list is not private, and a guest
+ * reading a shared basket at a shop has no account to present. The same
+ * reasoning as `supermarketLocation.shopAvailability`, which the basket read
+ * already asks for a guest. It carries the default throttler bucket, like
+ * every route: the answer is reference data a few dozen rows long.
+ *
+ * Declared beside {@link CatalogLocationsController} on the same path. The
+ * two do not collide: its routes are `:id` and `:id/offers`, and this one is
+ * `:id/sections`.
+ */
+@ApiTags('catalog')
+@Controller({ path: 'catalog/locations', version: '1' })
+export class CatalogLocationSectionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.forLocation, {
+    description:
+      'The shop’s sections in its order, each with the categories it covers. `source` is `LOCATION` when the shop has a list of its own and `CHAIN` when it inherits its chain’s. An unknown shop is a 404.',
+  })
+  @ApiProblemResponses({ notFound: true })
+  sections(@UuidParam('id') id: string): Promise<LocationSectionsView> {
+    const req: LocationSectionsRequest = { supermarketLocationId: id };
+    return this.nats.send<LocationSectionsView>(
+      SECTION_PATTERNS.forLocation,
+      req
     );
   }
 }

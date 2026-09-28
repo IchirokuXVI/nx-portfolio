@@ -8,6 +8,7 @@ import {
   LineApprovalStatus,
   ParticipantKind,
   PriceSourceKind,
+  SECTION_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   UnitOfMeasure,
@@ -15,6 +16,7 @@ import {
   type CatalogScopeView,
   type BasketParticipantContext,
   type BasketParticipantView,
+  type ItemSectionsAtLocationView,
   type ItemView,
   type ShopAvailabilityView,
 } from '@portfolio/luna-shopper/contracts';
@@ -233,6 +235,8 @@ interface World {
   readonly basketShop?: string | null;
   /** What catalog answers about a shop (plan 0163), or a throw. */
   readonly shop?: ShopAvailabilityView | 'throws';
+  /** What catalog answers the sections rule with (plan 0167), or a throw. */
+  readonly sections?: ItemSectionsAtLocationView | 'throws';
 }
 
 /** Refusing nothing, which is the default every test but two runs with. */
@@ -269,6 +273,11 @@ function build(world: World = {}) {
           throw new Error('catalog does not know that shop');
         }
         return world.shop;
+      case SECTION_PATTERNS.itemsAtLocation:
+        if (world.sections === 'throws' || world.sections === undefined) {
+          throw new Error('catalog cannot answer the sections rule');
+        }
+        return world.sections;
       case ITEM_PATTERNS.getMany:
         if (world.items === 'throws') {
           throw new Error('catalog unreachable');
@@ -1121,5 +1130,127 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
 
       expect(result.rows[0].usual).toEqual(usual);
     });
+  });
+});
+
+describe('GET /v1/baskets/:id at a shop: its sections (plan 0167)', () => {
+  const SHOP = '5c7e9a1b-3d5f-4a7b-9c1d-3e5f7a9b1c3d';
+  const PIZZAS = 's-pizzas';
+  const FROZEN = 's-frozen';
+
+  const shop = (): ShopAvailabilityView => ({
+    location: {
+      id: SHOP,
+      supermarketId: 'mercadona',
+      priceScopeId: SCOPE_A,
+      priceScopeIds: [SCOPE_A],
+      label: null,
+      address: 'Ronda de los Tejares 32',
+      city: 'Córdoba',
+      country: 'ES',
+      postalCode: '14008',
+      postalCodeSource: null,
+      latitude: null,
+      longitude: null,
+      externalRef: null,
+      externalProvider: null,
+    },
+    supermarket: {
+      id: 'mercadona',
+      name: { en: 'Mercadona', es: 'Mercadona' },
+    } as ShopAvailabilityView['supermarket'],
+    availability: [],
+  });
+
+  const rule = (): ItemSectionsAtLocationView => ({
+    source: 'LOCATION',
+    items: [
+      { itemId: 'i-hacendado', sectionIds: [PIZZAS], step: 'PINNED' },
+      { itemId: 'i-pascual', sectionIds: [PIZZAS, FROZEN], step: 'COVERED' },
+      { itemId: 'i-unpriced', sectionIds: [], step: 'NONE' },
+    ],
+  });
+
+  it('carries sectionIds on every product, from one call for the whole read', async () => {
+    const { controller, calls } = build({ shop: shop(), sections: rule() });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: SHOP,
+    });
+
+    expect(
+      result.products.map((product) => [product.id, product.sectionIds])
+    ).toEqual([
+      ['i-hacendado', [PIZZAS]],
+      ['i-pascual', [PIZZAS, FROZEN]],
+      // Catalog answered and nothing holds it: an answer, drawn under its
+      // own categories.
+      ['i-unpriced', []],
+    ]);
+    const asked = calls.filter(
+      (call) => call.subject === SECTION_PATTERNS.itemsAtLocation
+    );
+    expect(asked).toEqual([
+      {
+        subject: SECTION_PATTERNS.itemsAtLocation,
+        payload: {
+          supermarketLocationId: SHOP,
+          itemIds: ['i-hacendado', 'i-pascual', 'i-unpriced'],
+        },
+      },
+    ]);
+  });
+
+  it('reads the sections of the basket’s own shop when the read names none', async () => {
+    const { controller, calls } = build({
+      basketShop: SHOP,
+      shop: shop(),
+      sections: rule(),
+    });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    expect(result.products[0].sectionIds).toEqual([PIZZAS]);
+    expect(
+      calls.filter((call) => call.subject === SECTION_PATTERNS.itemsAtLocation)
+    ).toHaveLength(1);
+  });
+
+  it('leaves sectionIds absent, not empty, when catalog cannot answer the rule', async () => {
+    const { controller } = build({ shop: shop(), sections: 'throws' });
+
+    const result = await controller.get(participant(), BASKET_ID, {
+      locationId: SHOP,
+    });
+
+    // The read still answers, shop half included.
+    expect(result.products).toHaveLength(3);
+    expect(result.products[0].atShop).not.toBeNull();
+    for (const product of result.products) {
+      expect(product).not.toHaveProperty('sectionIds');
+    }
+  });
+
+  it('leaves sectionIds absent on a read with no shop, and asks nothing about sections', async () => {
+    const { controller, calls } = build({ sections: rule() });
+
+    const result = await controller.get(participant(), BASKET_ID);
+
+    for (const product of result.products) {
+      expect(product).not.toHaveProperty('sectionIds');
+    }
+    expect(calls.map((call) => call.subject)).not.toContain(
+      SECTION_PATTERNS.itemsAtLocation
+    );
+  });
+
+  it('carries sectionIds on the permanent basket read at the device’s shop', async () => {
+    const { live } = build({ shop: shop(), sections: rule() });
+
+    const result = await live.live({ userId: OWNER } as never, {
+      locationId: SHOP,
+    });
+
+    expect(result.products[1].sectionIds).toEqual([PIZZAS, FROZEN]);
   });
 });
