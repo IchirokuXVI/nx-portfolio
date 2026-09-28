@@ -45,6 +45,13 @@ const derive = (kind: string, slug: string): string =>
 export const MERCADONA_SUPERMARKET_ID = '5efa0000-0000-4000-a000-000000000001';
 
 export const groupId = (slug: string): string => derive('group', slug);
+/**
+ * A category's id (plan 0166, section 5). One namespace for roots and leaves,
+ * because a slug is unique across the whole tree and not only among siblings.
+ * The migration that created the table inserted its roots and landing leaves
+ * under these same ids, so the seed that follows it upserts over them.
+ */
+export const categoryId = (slug: string): string => derive('category', slug);
 export const itemId = (store: string, slug: string): string =>
   derive('item', `${store}/${slug}`);
 /**

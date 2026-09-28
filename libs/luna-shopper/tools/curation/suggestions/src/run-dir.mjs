@@ -2,7 +2,7 @@
  * The run directory: the only state this library keeps (plan 0001).
  *
  * A killed run resumes for free because everything a subcommand needs is on
- * disk between invocations. There are four files a walk reads, and a fifth
+ * disk between invocations. There are five files a walk reads, and a sixth
  * nothing reads back:
  *
  * - `state.json`: the run's identity, the two urls, the chain walk cursor, the
@@ -16,6 +16,8 @@
  * - `shared-eans.json`: which queued entries print an EAN another queued entry
  *   of their chain prints, as `start` read the queue (plan 0006). Written once,
  *   like `brands.json`.
+ * - `categories.json`: the category vocabulary as `start` read it from the
+ *   category tree (backend plan 0166). Written once, like `brands.json`.
  * - `brands-to-register.json`: what `propose-brands` suggests registering, as
  *   the body `POST /v1/admin/catalog/brands/register-many` takes. More than 200
  *   brands are split into `brands-to-register-2.json` and on, one body each.
@@ -86,6 +88,37 @@ export function readBrands(dir) {
   if (!existsSync(path)) {
     throw new Error(
       `${path} does not exist. It is written by start, so this run directory was started before the brand registry existed. Start a new run.`
+    );
+  }
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const CATEGORIES_FILE = 'categories.json';
+
+export function categoriesPath(dir) {
+  return join(dir, CATEGORIES_FILE);
+}
+
+/**
+ * The category vocabulary as `start` read it from the category tree, and the
+ * moment it read it (backend plan 0166).
+ *
+ * `{ readAt, categories, categoryGroups }`: the leaf slugs, and the same slugs
+ * grouped under their root's name. Written once beside `brands.json` and for
+ * the same reason: a category is a row an operator can add while a walk runs,
+ * and one walk applies one vocabulary from its first row to its last.
+ */
+export function writeCategories(dir, snapshot) {
+  const path = categoriesPath(dir);
+  writeFileSync(path, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+  return path;
+}
+
+export function readCategories(dir) {
+  const path = categoriesPath(dir);
+  if (!existsSync(path)) {
+    throw new Error(
+      `${path} does not exist. It is written by start, so this run directory was started before categories were read from the category tree. Start a new run.`
     );
   }
   return JSON.parse(readFileSync(path, 'utf8'));

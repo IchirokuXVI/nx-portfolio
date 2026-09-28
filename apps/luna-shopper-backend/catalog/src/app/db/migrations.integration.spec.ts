@@ -55,6 +55,9 @@ describeIntegration('catalog schema (real Postgres)', () => {
       'postal_code_points',
       // Plan 0075.
       'catalog_audit',
+      // Plan 0166.
+      'categories',
+      'item_categories',
     ]) {
       expect(names.has(table)).toBe(true);
     }
@@ -129,15 +132,39 @@ describeIntegration('catalog schema (real Postgres)', () => {
     expect(names.has('tg_product_groups_members')).toBe(true);
   });
 
-  it('has the enum types the item columns depend on', async () => {
+  it('has the enum types the item columns depend on, and no category enum (plan 0166)', async () => {
     const rows = await dataSource.query(
       `SELECT typname FROM pg_type WHERE typtype = 'e'`
     );
     const names = new Set(rows.map((r: { typname: string }) => r.typname));
-    expect(names.has('item_category')).toBe(true);
+    // A category is a row now, and the column and its type are gone.
+    expect(names.has('item_category')).toBe(false);
     expect(names.has('unit_of_measure')).toBe(true);
     expect(names.has('price_scope_kind')).toBe(true);
     expect(names.has('price_source_kind')).toBe(true);
+  });
+
+  it('holds the category tree to two levels in the database (plan 0166)', async () => {
+    const columns = await dataSource.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'items'`
+    );
+    expect(
+      columns.map((c: { column_name: string }) => c.column_name)
+    ).not.toContain('category');
+
+    const triggers = await dataSource.query(
+      `SELECT tgname FROM pg_trigger WHERE NOT tgisinternal`
+    );
+    const names = new Set(triggers.map((t: { tgname: string }) => t.tgname));
+    expect(names.has('tg_categories_two_levels')).toBe(true);
+    expect(names.has('tg_item_categories_on_a_leaf')).toBe(true);
+
+    const indexes = await dataSource.query(
+      `SELECT indexname FROM pg_indexes WHERE tablename = 'item_categories'`
+    );
+    expect(indexes.map((i: { indexname: string }) => i.indexname)).toContain(
+      'ix_item_categories_category'
+    );
   });
 
   it('names the four scope tiers in order (plan 0116, section 2)', async () => {

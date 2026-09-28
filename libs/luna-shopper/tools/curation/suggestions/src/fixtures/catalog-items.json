@@ -7,7 +7,14 @@
     "sku": null,
     "ean": null,
     "unitSize": 1,
-    "category": "DAIRY",
+    "categories": [
+      {
+        "id": "cat-milk",
+        "parentId": "cat-dairy-and-eggs",
+        "slug": "milk",
+        "name": { "en": "Milk", "es": "Leche" }
+      }
+    ],
     "defaultUnit": "LITER",
     "productGroupId": null
   },
@@ -19,7 +26,14 @@
     "sku": null,
     "ean": null,
     "unitSize": 1,
-    "category": "PANTRY",
+    "categories": [
+      {
+        "id": "cat-oil-and-vinegar",
+        "parentId": "cat-pantry",
+        "slug": "oil-and-vinegar",
+        "name": { "en": "Oil and vinegar", "es": "Aceite y vinagre" }
+      }
+    ],
     "defaultUnit": "LITER",
     "productGroupId": null
   },
@@ -31,7 +45,14 @@
     "sku": null,
     "ean": "8410376012347",
     "unitSize": 0.46,
-    "category": "BAKERY",
+    "categories": [
+      {
+        "id": "cat-bread",
+        "parentId": "cat-bakery",
+        "slug": "bread",
+        "name": { "en": "Bread", "es": "Pan" }
+      }
+    ],
     "defaultUnit": "KILOGRAM",
     "productGroupId": null
   },
@@ -43,7 +64,14 @@
     "sku": null,
     "ean": null,
     "unitSize": 1,
-    "category": "DAIRY",
+    "categories": [
+      {
+        "id": "cat-milk",
+        "parentId": "cat-dairy-and-eggs",
+        "slug": "milk",
+        "name": { "en": "Milk", "es": "Leche" }
+      }
+    ],
     "defaultUnit": "LITER",
     "productGroupId": null
   }

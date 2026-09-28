@@ -6,6 +6,7 @@ import {
 import {
   CatalogDashboard,
   catalogRoutes,
+  CATEGORIES,
   ITEMS,
   LOCATION_ITEMS,
   LOCATIONS,
@@ -99,8 +100,9 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * Inside the catalog the order follows what an operator is holding in their head
  * rather than the alphabet. A chain, then the shops it has and the scopes it
  * prices against, because both belong to a chain and neither can be read without
- * naming one. Then the products, then the groups that make two products
- * comparable, then the prices, which need a product and a scope to exist at all.
+ * naming one. Then the products, then the categories they sit in (admin plan
+ * 0036), then the groups that make two products comparable, then the prices,
+ * which need a product and a scope to exist at all.
  * Backend plan 0080 puts the price policies straight after the prices they
  * decide between. The per shop rows are last: they are the narrowest question in
  * the catalog and the one asked least often.
@@ -128,6 +130,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
       LOCATIONS,
       PRICE_SCOPES,
       ITEMS,
+      CATEGORIES,
       PRODUCT_GROUPS,
       PRICES,
       PRICE_POLICIES,

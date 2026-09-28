@@ -9,7 +9,7 @@ import {
   untracked,
   type Signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   RokuTranslatorPipe,
   RokuTranslatorService,
@@ -25,6 +25,7 @@ import {
   type ActionConfirmation,
   type BulkAction,
   type BulkPanelInputs,
+  type ErrorLinkTarget,
   type FieldDescriptor,
   type FilterDescriptor,
   type NamedAction,
@@ -63,7 +64,13 @@ interface PendingAction extends RowAction {
  */
 @Component({
   selector: 'lib-resource-list-page',
-  imports: [ResourceList, ConfirmDialog, NgComponentOutlet, RokuTranslatorPipe],
+  imports: [
+    ResourceList,
+    ConfirmDialog,
+    NgComponentOutlet,
+    RokuTranslatorPipe,
+    RouterLink,
+  ],
   template: `
     <lib-resource-list
       (act)="run($event)"
@@ -106,6 +113,21 @@ interface PendingAction extends RowAction {
       [sorts]="descriptor.sorts ?? []"
       [titleKey]="descriptor.labels.many"
     >
+      @if (refusal(); as refused) {
+        <p class="refusal" listRefusal role="alert" data-refusal>
+          {{ refused.key | rokuT: { name: refused.name } }}
+          @if (refused.link; as link) {
+            <a
+              [queryParams]="link.queryParams ?? null"
+              [routerLink]="link.commands"
+              >{{ link.labelKey | rokuT }}</a
+            >
+          }
+          <button (click)="refusal.set(null)" type="button">
+            {{ 'resource.action.dismiss' | rokuT }}
+          </button>
+        </p>
+      }
       @if (bulkActions.length > 0) {
         <div class="bulk" listBulk>
           @if (activeBulk(); as action) {
@@ -168,6 +190,36 @@ interface PendingAction extends RowAction {
       display: flex;
       flex: 1;
       flex-direction: column;
+    }
+
+    .refusal {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-danger);
+      border-radius: var(--admin-radius);
+      background: var(--admin-danger-wash);
+      color: var(--admin-danger-on-wash);
+    }
+
+    .refusal > button {
+      margin-inline-start: auto;
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .refusal > button:focus-visible,
+    .refusal > a:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
     }
 
     .bulk {
@@ -236,8 +288,23 @@ export class ResourceListPage {
    */
   readonly store = new ResourceListStore<ResourceRow>(
     this.descriptor,
-    this.descriptor.gateway()
+    this.descriptor.gateway(),
+    this._linkedFilters()
   );
+
+  /**
+   * The delete the server refused, said once above the list, or `null`.
+   *
+   * A delete that failed used to leave the row where it was and say nothing,
+   * so the operator could not tell a refusal from a click that missed. A
+   * category that still holds products is the refusal this was written for
+   * (admin plan 0036), and its link opens those products.
+   */
+  readonly refusal = signal<{
+    readonly key: string;
+    readonly name: string;
+    readonly link: ErrorLinkTarget | null;
+  } | null>(null);
 
   readonly compact = this._viewport.compact;
 
@@ -483,9 +550,49 @@ export class ResourceListPage {
     }
 
     this.busyRowId.set(row.id);
-    await this.store.remove(row.id);
+    this.refusal.set(null);
+    const error = await this.store.remove(row.id);
     this.busyRowId.set(null);
     this.deleting.set(null);
+
+    if (error !== null) {
+      const declared = this.descriptor.errorLinks?.[error.code];
+      // A link that names no detail is about the row the delete was for.
+      const id =
+        declared === undefined
+          ? null
+          : declared.detail === undefined
+            ? row.id
+            : error.detailString(declared.detail);
+      this.refusal.set({
+        key: gatewayErrorKey(error) ?? 'resource.error.unknown',
+        name: row.title,
+        link:
+          declared === undefined || id === null
+            ? null
+            : this._registry.linkFor(declared, id),
+      });
+    }
+  }
+
+  /**
+   * The filters the link that opened this list asked for.
+   *
+   * Only parameters the descriptor declares as a filter are read, so a query
+   * string cannot send the gateway something the list would never send
+   * itself. A refusal's link uses this to open a list already narrowed: the
+   * products of a category that could not be deleted.
+   */
+  private _linkedFilters(): Record<string, string> {
+    const params = this._route.snapshot.queryParamMap;
+    const filters: Record<string, string> = {};
+    for (const filter of this.descriptor.filters ?? []) {
+      const value = params.get(filter.param);
+      if (value !== null && value !== '') {
+        filters[filter.param] = value;
+      }
+    }
+    return filters;
   }
 
   /**

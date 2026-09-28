@@ -318,7 +318,6 @@ describe('the request', () => {
       brand: 'Hacendado',
       unitSize: 1,
       defaultUnit: 'LITER',
-      category: 'DAIRY',
       ean: MILK_ITEM.ean,
     });
   });
@@ -346,7 +345,6 @@ describe('the request', () => {
       brand: null,
       unitSize: null,
       defaultUnit: null,
-      category: null,
       ean: null,
     });
   });
@@ -618,7 +616,6 @@ describe('the directory grows mid run', () => {
     name: { es: 'Café molido Marcilla 250 g', en: 'Marcilla ground coffee' },
     brand: 'Marcilla',
     unitSize: 250,
-    category: 'PANTRY',
     defaultUnit: 'GRAM',
     ean: null,
     productGroupId: null,

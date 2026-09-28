@@ -9,7 +9,8 @@ import {
 } from './decision.mjs';
 import { indexBrands } from './rules.mjs';
 
-const CATEGORIES = ['DAIRY', 'PANTRY', 'OTHER'];
+/** Leaf slugs of the category tree (backend plan 0166, appendix A). */
+const CATEGORIES = ['milk', 'oil-and-vinegar', 'uncategorised'];
 const UNITS = ['UNIT', 'LITER', 'GRAM'];
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
@@ -75,7 +76,7 @@ function goodItem(overrides = {}) {
     brand: 'Hacendado',
     unitSize: 1,
     defaultUnit: 'LITER',
-    category: 'DAIRY',
+    categorySlugs: ['milk'],
     ean: null,
     ...overrides,
   };
@@ -146,13 +147,26 @@ test('the schema check refuses what it cannot act on', () => {
       confidence: 1,
       item: {
         nameEs: 'Leche',
-        category: 'DAIRY',
+        categorySlugs: ['milk'],
         defaultUnit: 'LITER',
         unitSize: '1',
       },
     }).error,
     /"item.unitSize" must be a number or null/
   );
+  // One or more slugs (backend plan 0166): a lone string, an empty list and a
+  // list of blanks are all a CREATE with no category.
+  for (const categorySlugs of [undefined, 'milk', [], ['  '], [42]]) {
+    assert.match(
+      checkDecisionShape({
+        decision: 'CREATE',
+        confidence: 1,
+        item: { nameEs: 'Leche', categorySlugs, defaultUnit: 'LITER' },
+      }).error,
+      /needs "item.categorySlugs", one or more category slugs/,
+      JSON.stringify(categorySlugs)
+    );
+  }
 });
 
 test('a LINK may name a run created product by ref', () => {
@@ -174,7 +188,7 @@ test('the schema check normalizes what it accepts', () => {
       nameEs: '  Leche entera  ',
       nameEn: '',
       brand: '  Hacendado ',
-      category: ' DAIRY ',
+      categorySlugs: [' milk ', 'plant-drinks', 'milk', ''],
       defaultUnit: ' LITER ',
     },
     issues: ['a bare string note', { code: 'X', detail: 'y' }, 42],
@@ -182,6 +196,11 @@ test('the schema check normalizes what it accepts', () => {
   });
   assert.equal(checked.ok, true);
   assert.equal(checked.decision.item.nameEs, 'Leche entera');
+  // Trimmed, blanks dropped, and a repeat named once, in the order meant.
+  assert.deepEqual(checked.decision.item.categorySlugs, [
+    'milk',
+    'plant-drinks',
+  ]);
   assert.equal(checked.decision.item.nameEn, null);
   assert.equal(checked.decision.item.brand, 'Hacendado');
   assert.equal(checked.decision.item.unitSize, null);
@@ -411,10 +430,15 @@ test('SIZELESS_CREATE is a judgment the model stands by, so it is not retryable'
   );
 });
 
-test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', () => {
+test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the two vocabularies', () => {
   const issues = validateDecision({
     decision: createDecision(
-      goodItem({ category: 'CHEESE', defaultUnit: 'BOTTLE' })
+      // `DAIRY` is the retired enum value and `dairy-and-eggs` a root, which
+      // holds no product: neither is a leaf slug the tree answered.
+      goodItem({
+        categorySlugs: ['milk', 'DAIRY', 'dairy-and-eggs'],
+        defaultUnit: 'BOTTLE',
+      })
     ),
     entry: ENTRY,
     supermarket: MERCADONA,
@@ -423,7 +447,16 @@ test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', 
     categories: CATEGORIES,
     units: UNITS,
   });
-  assert.ok(codes(issues).includes('UNKNOWN_CATEGORY'));
+  // One issue per slug the tree does not hold, and none for the one it does.
+  assert.deepEqual(
+    issues
+      .filter((entry) => entry.code === 'UNKNOWN_CATEGORY')
+      .map((entry) => entry.detail),
+    [
+      '"DAIRY" is not a leaf slug of the category tree this run read.',
+      '"dairy-and-eggs" is not a leaf slug of the category tree this run read.',
+    ]
+  );
   assert.ok(codes(issues).includes('UNKNOWN_UNIT'));
 });
 

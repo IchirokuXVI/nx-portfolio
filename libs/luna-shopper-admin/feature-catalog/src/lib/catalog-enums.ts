@@ -1,33 +1,26 @@
 import type { EnumOption } from '@portfolio/luna-shopper-admin/models';
 
 /**
- * The catalog's five enumerations, as options with keyed labels.
+ * The catalog's enumerations, as options with keyed labels.
  *
- * Once each, here, because they are shared: a category is a column on the item
- * list and a filter above it, and a scope kind is read on the scope screen and
- * again on the price screen that has to say what kind of thing it is pricing
- * against. Two descriptors listing the same twelve categories would be two
- * chances for one of them to fall behind the enum.
+ * Once each, here, because they are shared: a scope kind is read on the scope
+ * screen and again on the price screen that has to say what kind of thing it
+ * is pricing against, and two descriptors listing the same values would be two
+ * chances for one of them to fall behind the wire.
  *
- * The **values** are the wire's, copied from `Wire.EnumsItemCategory` and its
+ * A product's category is not one of them any more. It is a row of the
+ * category tree (backend plan 0166, admin plan 0036), picked from the tree
+ * rather than from a list this file could hold.
+ *
+ * The **values** are the wire's, copied from `Wire.EnumsUnitOfMeasure` and its
  * siblings, and a spec asserts that each list still covers its type. The
  * labels are keys, translated where they are drawn.
  */
 
-/** What kind of thing a product is. */
-export const ITEM_CATEGORY_OPTIONS: readonly EnumOption[] = [
-  { value: 'PRODUCE', label: 'catalog.itemCategory.PRODUCE' },
-  { value: 'DAIRY', label: 'catalog.itemCategory.DAIRY' },
-  { value: 'BAKERY', label: 'catalog.itemCategory.BAKERY' },
-  { value: 'MEAT', label: 'catalog.itemCategory.MEAT' },
-  { value: 'SEAFOOD', label: 'catalog.itemCategory.SEAFOOD' },
-  { value: 'FROZEN', label: 'catalog.itemCategory.FROZEN' },
-  { value: 'BEVERAGES', label: 'catalog.itemCategory.BEVERAGES' },
-  { value: 'SNACKS', label: 'catalog.itemCategory.SNACKS' },
-  { value: 'PANTRY', label: 'catalog.itemCategory.PANTRY' },
-  { value: 'HOUSEHOLD', label: 'catalog.itemCategory.HOUSEHOLD' },
-  { value: 'PERSONAL_CARE', label: 'catalog.itemCategory.PERSONAL_CARE' },
-  { value: 'OTHER', label: 'catalog.itemCategory.OTHER' },
+/** Whether a category is a root or sits inside one, as the tree list filters it. */
+export const CATEGORY_KIND_OPTIONS: readonly EnumOption[] = [
+  { value: 'root', label: 'catalog.categories.kind.root' },
+  { value: 'leaf', label: 'catalog.categories.kind.leaf' },
 ];
 
 /** What a product is measured in, and what a group compares its members in. */
