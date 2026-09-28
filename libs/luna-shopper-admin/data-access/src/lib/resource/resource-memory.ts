@@ -44,6 +44,16 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
   };
 
   /**
+   * The same tables, for a hand written memory twin whose routes are not a
+   * resource's CRUD (admin plan 0037): a shop's section list and the preview of
+   * where a product is in a shop read across sections, shops and products, and
+   * have to see what the screens wrote.
+   */
+  tables(): MemoryTables {
+    return this._lookup;
+  }
+
+  /**
    * The table for a path, seeded once.
    *
    * One table can be asked for by two callers, and only one of them knows the
