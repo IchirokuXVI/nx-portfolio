@@ -15,6 +15,7 @@ import {
   ResourceFormStore,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  fieldMessage,
   isEditable,
   toCell,
   type ErrorLink,
@@ -208,6 +209,16 @@ export class ResourceFormPage {
         messages[field.name] = forField;
       }
     }
+
+    // A refusal the descriptor says is about one field is drawn under it,
+    // rather than as the banner (admin plan 0036).
+    const error = this.store.error();
+    const field =
+      error === null ? undefined : this.descriptor.errorFields?.[error.code];
+    const key = gatewayErrorKey(error);
+    if (field !== undefined && key !== null) {
+      messages[field] = [...(messages[field] ?? []), fieldMessage(key)];
+    }
     return messages;
   });
 
@@ -245,7 +256,8 @@ export class ResourceFormPage {
     if (error === null) {
       return null;
     }
-    return Object.keys(error.fieldErrors).length > 0
+    return Object.keys(error.fieldErrors).length > 0 ||
+      this.descriptor.errorFields?.[error.code] !== undefined
       ? null
       : gatewayErrorKey(error);
   });
@@ -274,18 +286,12 @@ export class ResourceFormPage {
       return null;
     }
 
-    const id = error.detailString(declared.detail);
-    const path = this._registry.pathOf(declared.resource);
-    if (id === null || path === null) {
-      return null;
-    }
-
-    return {
-      commands: [...path, id],
-      // The least a link can say, for a resource that did not name its own
-      // words. Every one that does reads better than this.
-      labelKey: declared.label ?? 'resource.error.openRow',
-    };
+    // A link that names no detail is about this row itself.
+    const id =
+      declared.detail === undefined
+        ? this._id
+        : error.detailString(declared.detail);
+    return id === null ? null : this._registry.linkFor(declared, id);
   });
 
   // Drawn only while `store.status()` is `'error'`, so the fallback is for the

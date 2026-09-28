@@ -137,6 +137,55 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
    * descriptor is how a resource gets one without a second class per entity.
    */
   readonly seed?: readonly T[];
+  /**
+   * What the in-memory table enforces beyond storing what it is given.
+   *
+   * Most resources need nothing: the memory gateway keeps rows and matches
+   * filters by substring, and that is enough to drive a screen. A few have rules
+   * a screen is built around, and a memory twin that ignored them would let the
+   * screen that explains a refusal go untested. The category tree is the first
+   * (admin plan 0036): a third level is refused, a product on a root is
+   * refused, and a product's `categoryIds` become the `categories` its row
+   * carries.
+   *
+   * Ignored by the HTTP gateway, where the server is the one enforcing.
+   */
+  readonly memory?: ResourceMemoryRules<T>;
+}
+
+/**
+ * The other tables, for a rule that has to look across them.
+ *
+ * `table` seeds a table the first time it is asked for, exactly as a screen
+ * opening it would, so a product can be checked against the categories before
+ * anything has listed them.
+ */
+export interface MemoryTables {
+  table<R extends ResourceRow>(source: ResourceSource<R>): readonly R[];
+}
+
+/**
+ * One resource's rules in memory.
+ *
+ * Each is a method rather than a property holding a function, for the reason
+ * the descriptor's `read` is one: under `strictFunctionTypes` a property's
+ * parameter is checked contravariantly, and a source for a concrete row has to
+ * remain assignable to a source for any row.
+ *
+ * A write rule answers the row to store, or throws the `GatewayError` the
+ * server would have answered with.
+ */
+export interface ResourceMemoryRules<T extends ResourceRow = ResourceRow> {
+  /**
+   * Whether a row matches one filter, or `undefined` for the ordinary
+   * substring rule. For a parameter that is not a column, such as the
+   * category tree's `kind`.
+   */
+  matches?(row: T, param: string, value: string): boolean | undefined;
+  create?(input: ResourceRow, tables: MemoryTables): ResourceRow;
+  update?(current: T, input: ResourceRow, tables: MemoryTables): ResourceRow;
+  /** Throws to refuse the delete. */
+  remove?(current: T, tables: MemoryTables): void;
 }
 
 /** Builds the gateway for one resource. */

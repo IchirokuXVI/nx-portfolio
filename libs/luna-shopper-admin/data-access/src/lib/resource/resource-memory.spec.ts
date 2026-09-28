@@ -28,6 +28,45 @@ describe('ResourceMemoryGateways', () => {
     gateways = TestBed.inject(ResourceMemoryGateways);
   });
 
+  /**
+   * A resource can state rules the table keeps (admin plan 0036): how it reads
+   * a parameter that is not a column, what a write stores, and what it
+   * refuses. The category tree is the first to need them.
+   */
+  it('keeps the rules a source states for its own table', async () => {
+    const tree = gateways.for<ResourceRow>({
+      path: '/test/tree',
+      seed: [
+        { id: 'r', parentId: null },
+        { id: 'l', parentId: 'r' },
+      ],
+      memory: {
+        matches: (row, param, value) =>
+          param === 'kind'
+            ? (value === 'root') === (row['parentId'] === null)
+            : undefined,
+        create: (input) => ({ ...input, made: true }),
+        update: (_current, input) => ({ ...input, changed: true }),
+        remove: () => {
+          throw new Error('refused');
+        },
+      },
+    });
+
+    expect(
+      (await tree.list({ filters: { kind: 'leaf' } })).items.map(
+        (row) => row['id']
+      )
+    ).toEqual(['l']);
+    expect(await tree.create({ parentId: 'r' })).toMatchObject({ made: true });
+    expect(await tree.update('l', { parentId: null })).toMatchObject({
+      changed: true,
+      parentId: null,
+    });
+    await expect(tree.remove('r')).rejects.toThrow('refused');
+    expect((await tree.list({})).items).toHaveLength(3);
+  });
+
   it('is what the token resolves to with no configuration at all', () => {
     expect(TestBed.inject(RESOURCE_GATEWAYS)).toBeInstanceOf(
       ResourceMemoryGateways

@@ -2,6 +2,11 @@ import { Injectable } from '@angular/core';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import type { BulkOperationError } from '../bulk-operation-error';
+import {
+  CATEGORY_SEED,
+  seededLeaf,
+  type ProductCategory,
+} from '../categories/category-seed';
 import { GatewayError } from '../gateway-error';
 import type {
   ApplyEntryDecisionsInput,
@@ -514,7 +519,7 @@ export class HarvestMemory implements HarvestServiceI {
       unitSize: input.unitSize ?? entry.unitSize,
       packCount:
         input.packCount === undefined ? entry.packCount : input.packCount,
-      category: input.category ?? 'OTHER',
+      categories: entryCategories(input.categorySlugs),
       defaultUnit: input.defaultUnit ?? 'UNIT',
       productGroupId: null,
     };
@@ -1399,4 +1404,56 @@ function digestOf(document: Readonly<Record<string, unknown>>): string {
   return typeof stated === 'string' && stated !== ''
     ? stated
     : JSON.stringify(document);
+}
+
+/**
+ * The categories a product created from a queued row is given (backend plan
+ * 0166, section 7).
+ *
+ * The slugs the operator named, resolved the way catalog resolves them: an
+ * unknown one is refused with `category_not_found` naming it, and a root with
+ * `category_not_a_leaf`, because a product only goes on a category inside
+ * another. None named means "resolve from the source path", and this twin has
+ * no path table, so it answers what catalog answers for a path nothing maps:
+ * `uncategorised`.
+ */
+function entryCategories(
+  slugs: readonly string[] | undefined
+): ProductCategory[] {
+  const named = slugs ?? [];
+  if (named.length === 0) {
+    const fallback = seededLeaf('uncategorised');
+    return fallback === null ? [] : [fallback];
+  }
+
+  const root = CATEGORY_SEED.find(
+    (category) => category.parentId === null && named.includes(category.slug)
+  );
+  if (root !== undefined) {
+    throw new GatewayError({
+      code: 'category_not_a_leaf',
+      status: 409,
+      correlationId: '',
+      details: { categoryId: root.id },
+    });
+  }
+
+  const resolved = named.map((slug) => ({
+    slug,
+    category: seededLeaf(slug),
+  }));
+  const unknown = resolved
+    .filter((entry) => entry.category === null)
+    .map((entry) => entry.slug);
+  if (unknown.length > 0) {
+    throw new GatewayError({
+      code: 'category_not_found',
+      status: 404,
+      correlationId: '',
+      details: { unknown },
+    });
+  }
+  return resolved.flatMap((entry) =>
+    entry.category === null ? [] : [entry.category]
+  );
 }
