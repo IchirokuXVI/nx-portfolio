@@ -516,6 +516,43 @@
           -->
           @for (section of sections(); track section.key) {
             @if (section.rows.length > 0) {
+              @if (section.uncoveredBand) {
+                <!--
+                  The band between the shop's aisles and the categories of what no
+                  aisle holds (velista 0120, rules A3 and A4 of the mock). A
+                  paragraph and not a heading, so moving by heading still reads one
+                  flat run of groups. It says we could not find these categories,
+                  never that the shop lacks them, and the info control says so in
+                  full.
+                -->
+                <div class="uncovered-band">
+                  <p class="uncovered-label" id="basket-uncovered-label">
+                    {{ 'basket.group.uncovered' | rokuT }}
+                  </p>
+                  <button
+                    (click)="toggleUncoveredInfo()"
+                    [attr.aria-expanded]="uncoveredInfoOpen()"
+                    [attr.aria-label]="'basket.group.uncoveredInfo' | rokuT"
+                    #uncoveredControl
+                    #uncoveredOrigin="cdkOverlayOrigin"
+                    cdkOverlayOrigin
+                    class="uncovered-info"
+                    type="button"
+                  >
+                    <lib-info-icon aria-hidden="true" class="uncovered-glyph" />
+                  </button>
+                  <lib-anchored-popover
+                    (closed)="closeUncoveredInfo($event, uncoveredControl)"
+                    [open]="uncoveredInfoOpen()"
+                    [origin]="uncoveredOrigin"
+                    align="end"
+                    labelledBy="basket-uncovered-label"
+                  >
+                    <span>{{ 'basket.group.uncoveredWhy' | rokuT }}</span>
+                    <span>{{ 'basket.group.uncoveredWhere' | rokuT }}</span>
+                  </lib-anchored-popover>
+                </div>
+              }
               <section class="group">
                 @if (section.heading; as heading) {
                   <!--

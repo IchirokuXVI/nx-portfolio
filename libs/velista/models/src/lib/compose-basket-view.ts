@@ -11,8 +11,10 @@ import type {
   BasketShop,
 } from './basket-view';
 import { basketRowPick, basketShelfMark } from './basket-view';
+import { catalogName } from './catalog-browse';
 import type { BasketRowState } from './enums';
 import { categoryName, type ProductCategory } from './product-category';
+import type { ShopSection } from './shop-section';
 import { inLocale } from './shopping-profile';
 
 /**
@@ -141,6 +143,16 @@ export interface BasketViewContext {
    * marks and prices nothing until this names {@link BasketViewState.shop}.
    */
   readonly shop: BasketShop | null;
+  /**
+   * The sections of {@link shop}, in the order it is walked, or null while they have
+   * not been read (velista `0120`).
+   *
+   * They arrive here like the products do, so the pipeline stays a function of what
+   * it is handed: `ShopSectionsStore` reads them once per shop per session and the
+   * view store passes the chosen shop's. Null, and an empty list, both draw the
+   * category grouping exactly as it was before. See {@link basketGroupsByAisle}.
+   */
+  readonly sections: readonly ShopSection[] | null;
 }
 
 /**
@@ -313,6 +325,16 @@ export interface BasketViewSection {
    */
   readonly progress: BasketProgress | null;
   readonly rows: readonly BasketViewRow[];
+  /**
+   * Set on the first category drawn after the shop's aisles (velista `0120`, rule
+   * A3 of the mock): the page draws the band that says these categories could not
+   * be found in this shop above this section's heading.
+   *
+   * Only when there is at least one aisle before it, so a shop that covers nothing
+   * draws the category grouping with no band, and never on "No category", whose own
+   * hint already says why it exists. Absent everywhere else.
+   */
+  readonly uncoveredBand?: true;
 }
 
 /** The one section an ungrouped, unfiltered basket is drawn as. */
@@ -333,6 +355,9 @@ const OTHER_LISTS_SECTION_KEY = 'other-lists';
  * product whose categories none could be read (`0118`).
  */
 const NO_CATEGORY_SECTION_KEY = 'no-category';
+
+/** What an aisle's section key starts with, beside `category:` and `list:`. */
+const AISLE_SECTION_PREFIX = 'aisle:';
 
 /** The sink holding the rows the chosen shop does not list (`0078`, section 5). */
 const NOT_LISTED_SECTION_KEY = 'not-listed';
@@ -748,7 +773,9 @@ function groupRows(
   notes: RowNotes
 ): readonly BasketViewSection[] {
   if (state.grouping === 'category') {
-    return byCategory(rows, context, notes);
+    return basketGroupsByAisle(state, context)
+      ? byAisle(rows, context, context.sections ?? [], notes)
+      : byCategory(rows, context, notes);
   }
   if (state.grouping === 'list') {
     return byList(rows, context, notes);
@@ -886,6 +913,124 @@ function byCategory(
   }
 
   return sections;
+}
+
+/**
+ * Whether grouping by category draws the shop's aisles (velista `0120`).
+ *
+ * Three things have to be true, and until they are the grouping is `byCategory`
+ * exactly as before, with nothing waiting (target 3):
+ *
+ * - the products describe the chosen shop ({@link basketReadAtShop}), so a read
+ *   still out at a newly chosen shop never files its rows under the new shop's
+ *   aisles;
+ * - that shop's sections have loaded and there is at least one, so a shop nobody has
+ *   configured looks exactly as it does today;
+ * - the read named sections at all: a product carrying `sectionIds` is the server
+ *   saying it asked, and a read whose sections call failed carries none.
+ *
+ * The filter sheet's radio and the chip ask the same question, so the words switch to
+ * Aisle and By aisle in the same frame as the headings, and a chip never names a
+ * grouping the headings do not show.
+ */
+export function basketGroupsByAisle(
+  state: Pick<BasketViewState, 'shop'>,
+  context: Pick<BasketViewContext, 'shop' | 'sections' | 'products'>
+): boolean {
+  if (!basketReadAtShop(state, context)) {
+    return false;
+  }
+  if ((context.sections ?? []).length === 0) {
+    return false;
+  }
+  for (const product of context.products.values()) {
+    if (Array.isArray(product.sectionIds)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The aisle view of a shop somebody configured (velista `0120`, target 2).
+ *
+ * Three parts, in this order:
+ *
+ * 1. **The shop's aisles**, one section per shop section that holds a row, in the
+ *    order the shop is walked, headed by the section's name. A row goes under every
+ *    section its product names, so a frozen pizza in Pizzas and in Frozen is drawn
+ *    in both and is still one line: settling either copy settles the row, and
+ *    `basketViewRows` counts it once.
+ * 2. **The categories of the products no section holds**, built by
+ *    {@link byCategory} exactly as it builds them without a shop, first row's
+ *    place and data names. The first of them carries the band.
+ * 3. **"No category"**, last, as ever.
+ *
+ * A section id the shop's list does not name is ignored, and a product left with no
+ * known section is one no aisle holds: a list read earlier than the basket is not a
+ * reason to lose a row.
+ *
+ * Inside every section the incoming order stays. `0141`'s walk order is an order of
+ * rows and the shop's order is an order of aisles, so neither needs the other.
+ */
+function byAisle(
+  rows: readonly BasketRow[],
+  context: BasketViewContext,
+  shopSections: readonly ShopSection[],
+  notes: RowNotes
+): readonly BasketViewSection[] {
+  const held = new Map<string, BasketRow[]>(
+    shopSections.map((one) => [one.id, []])
+  );
+  const uncovered: BasketRow[] = [];
+
+  for (const row of rows) {
+    const ids = basketRowPick(row, context.products)?.sectionIds ?? [];
+    let placed = false;
+    for (const id of ids) {
+      const aisle = held.get(id);
+      if (aisle !== undefined) {
+        if (!aisle.includes(row)) {
+          aisle.push(row);
+        }
+        placed = true;
+      }
+    }
+    if (!placed) {
+      uncovered.push(row);
+    }
+  }
+
+  const sections: BasketViewSection[] = [];
+  const drawn = new Set<string>();
+  for (const one of shopSections) {
+    const aisle = held.get(one.id) ?? [];
+    // Once: a list naming the same section twice still draws one heading.
+    if (aisle.length === 0 || drawn.has(one.id)) {
+      continue;
+    }
+    drawn.add(one.id);
+    sections.push(
+      section(
+        `${AISLE_SECTION_PREFIX}${one.id}`,
+        { kind: 'text', text: catalogName(one.name, context.locale) },
+        null,
+        rowsOf(aisle, notes),
+        true
+      )
+    );
+  }
+
+  const rest = byCategory(uncovered, context, notes);
+  const first = rest[0];
+  if (
+    sections.length > 0 &&
+    first !== undefined &&
+    first.key !== NO_CATEGORY_SECTION_KEY
+  ) {
+    return [...sections, { ...first, uncoveredBand: true }, ...rest.slice(1)];
+  }
+  return [...sections, ...rest];
 }
 
 /**
@@ -1183,6 +1328,8 @@ export function basketViewChips(
     readonly chainName?: string | null;
     /** Whether the shop is the basket's own, which no chip can take off (`0102`). */
     readonly shopLocked?: boolean;
+    /** Whether grouping by category draws the shop's aisles (`0120`). */
+    readonly byAisle?: boolean;
   }
 ): readonly BasketViewChip[] {
   const chips: BasketViewChip[] = [];
@@ -1199,9 +1346,11 @@ export function basketViewChips(
     chips.push({
       property: 'grouping',
       key:
-        state.grouping === 'category'
-          ? 'basket.view.chip.byCategory'
-          : 'basket.view.chip.byList',
+        state.grouping === 'list'
+          ? 'basket.view.chip.byList'
+          : names.byAisle === true
+            ? 'basket.view.chip.byAisle'
+            : 'basket.view.chip.byCategory',
       args: null,
     });
   }

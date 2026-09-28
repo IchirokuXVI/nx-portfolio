@@ -16,6 +16,8 @@ import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
 import { GroupMembers } from './catalog/group-members';
 import { CategoryStore } from './catalog/category-store';
+import { ShopSectionsMemory } from './shops/shop-sections-memory';
+import { ShopSectionsStore } from './shops/shop-sections-store';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
@@ -155,6 +157,10 @@ import { ZoneStore } from './zones/zone-store';
  * `CategoryStore` (velista `0118`) joins for `ItemNames`' first reason, and is app
  * scoped for a stronger version of its second: the tree is read once per session, and
  * the zone list, the category picker and the aisles of a shop all sort by the one copy.
+ * `ShopSectionsStore` (velista `0120`) joins beside it for the same two reasons: it
+ * resolves `SHOP_SECTIONS_SERVICE`, and a shop's aisles are read once per session and
+ * outlive the basket page that asked. `ShopSectionsMemory` is listed with it for
+ * `ShopMemory`'s reason; `ShopSectionsApi` stays out like every other real transport.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -205,6 +211,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineStore,
   CommentMemory,
   CategoryStore,
+  ShopSectionsStore,
+  ShopSectionsMemory,
   GroupMembers,
   GroupNames,
   ItemNames,

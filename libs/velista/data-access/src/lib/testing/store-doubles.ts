@@ -25,6 +25,7 @@ import type {
   ShoppingListsLoad,
   ShoppingListSummary,
   ShoppingProfile,
+  ShopSection,
   Supermarket,
   UserKind,
   UsernameScope,
@@ -73,6 +74,7 @@ import {
   type FieldSaveState,
   type ProfileField,
 } from '../profiles/shopping-profile-store';
+import { ShopSectionsStore } from '../shops/shop-sections-store';
 import {
   ZoneStore,
   type ZoneDeparture,
@@ -2504,4 +2506,46 @@ export function provideFakeSharedListStore(
   store: FakeSharedListStore = fakeSharedListStore()
 ): Provider {
   return { provide: SharedListStore, useValue: store };
+}
+
+/**
+ * A `ShopSectionsStore` that holds what you gave it (velista `0120`).
+ *
+ * Holds nothing by default, which is every shop before its sections land: the basket
+ * is grouped by category. {@link land} is a shop's sections arriving later, for a spec
+ * that asserts the page regroups. The real store's own behaviour, asking once per shop
+ * and retrying after a failure, is covered against the real thing in its spec.
+ */
+export function fakeShopSectionsStore(
+  held: Readonly<Record<string, readonly ShopSection[]>> = {}
+) {
+  const sections = signal<ReadonlyMap<string, readonly ShopSection[]>>(
+    new Map(Object.entries(held))
+  );
+  const ensured: string[] = [];
+
+  return {
+    sectionsOf: (locationId: string | null) =>
+      locationId === null ? null : (sections().get(locationId) ?? null),
+    ensure: async (locationId: string) => {
+      ensured.push(locationId);
+    },
+    prime: (locationId: string, next: readonly ShopSection[]) => {
+      sections.update((all) => new Map(all).set(locationId, next));
+    },
+    /** A shop's sections arriving, as the real store's read landing would. */
+    land: (locationId: string, next: readonly ShopSection[]) => {
+      sections.update((all) => new Map(all).set(locationId, next));
+    },
+    /** Every shop a screen asked about, in order. */
+    ensured: () => [...ensured],
+  };
+}
+
+export type FakeShopSectionsStore = ReturnType<typeof fakeShopSectionsStore>;
+
+export function provideFakeShopSectionsStore(
+  store: FakeShopSectionsStore = fakeShopSectionsStore()
+): Provider {
+  return { provide: ShopSectionsStore, useValue: store };
 }

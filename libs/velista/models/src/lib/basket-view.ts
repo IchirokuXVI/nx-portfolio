@@ -378,6 +378,16 @@ export interface BasketProduct {
    * section, as it does a row with no product.
    */
   readonly categories: readonly ProductCategory[];
+  /**
+   * Which of the read's shop's sections hold this product (velista `0120`; backend
+   * `0167`, section 4), or null when the read named no shop, or the server could
+   * not read that shop's sections.
+   *
+   * **Empty is an answer**: no section of this shop holds it, so the aisle grouping
+   * draws it under its own categories after the aisles. Null is no answer at all,
+   * and draws exactly as a shop nobody has configured.
+   */
+  readonly sectionIds: readonly string[] | null;
 }
 
 /**

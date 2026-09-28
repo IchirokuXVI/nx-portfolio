@@ -37,6 +37,7 @@ import { CatalogMemory } from '../catalog/catalog-memory';
 import { memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import type { BasketChangeContext } from '../mapping/basket-change-mappers';
+import { memorySectionIdsAt } from '../shops/shop-sections-memory';
 import type { BasketServiceI } from './basket-service';
 
 /** The one link this fake knows. Anything else is dead, like most links are. */
@@ -156,6 +157,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     atShop: null,
     imageUrl: null,
     categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-milk-pascual',
@@ -172,6 +174,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     atShop: null,
     imageUrl: null,
     categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-milk-central',
@@ -188,6 +191,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     atShop: null,
     imageUrl: null,
     categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-eggs',
@@ -201,6 +205,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     atShop: null,
     imageUrl: null,
     categories: [memoryCategory('eggs')],
+    sectionIds: null,
   },
 ];
 
@@ -845,7 +850,15 @@ export class BasketMemory implements BasketServiceI {
           product.id,
           at === undefined
             ? product
-            : { ...product, atShop: atShopOf(product, at) },
+            : {
+                ...product,
+                atShop: atShopOf(product, at),
+                // Which of the shop's aisles hold it (velista `0120`).
+                sectionIds: memorySectionIdsAt(
+                  locationId,
+                  product.categories.map((category) => category.id)
+                ),
+              },
         ])
       ),
       // The chain and its shops reach every participant, a guest included,

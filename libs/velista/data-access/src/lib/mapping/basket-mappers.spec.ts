@@ -417,6 +417,41 @@ describe('toBasket: the product’s aisle', () => {
   });
 });
 
+describe('toBasket: the shop’s aisles a product is in (velista `0120`)', () => {
+  function sectionIdsOf(raw: unknown) {
+    return toBasket({
+      ...BASKET,
+      products: [{ id: 'i-1', sectionIds: raw }],
+    })?.products.get('i-1')?.sectionIds;
+  }
+
+  it('reads the ids, keeping the wire’s order and each id once', () => {
+    expect(sectionIdsOf(['sec-b', 'sec-a', 'sec-b'])).toEqual([
+      'sec-b',
+      'sec-a',
+    ]);
+  });
+
+  it('keeps an empty list, which says no section of this shop holds it', () => {
+    expect(sectionIdsOf([])).toEqual([]);
+  });
+
+  it('reads an absent field, or one that is not a list, as no answer', () => {
+    expect(
+      toBasket({ ...BASKET, products: [{ id: 'i-1' }] })?.products.get('i-1')
+        ?.sectionIds
+    ).toBeNull();
+    expect(sectionIdsOf('sec-a')).toBeNull();
+  });
+
+  it('drops anything that is not an id', () => {
+    expect(sectionIdsOf(['sec-a', 3, null, '', 'sec-b'])).toEqual([
+      'sec-a',
+      'sec-b',
+    ]);
+  });
+});
+
 /**
  * A rename's merge question (velista `0084`, backend `0113`).
  *

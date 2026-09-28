@@ -1242,6 +1242,8 @@
         "legend": "Group by",
         "none": "Nothing",
         "category": "Category",
+        "aisle": "Aisle",
+        "aisleHint": "this shop’s order",
         "list": "List",
         "listHint": "each list’s own amounts"
       },
@@ -1297,6 +1299,7 @@
       "chip": {
         "remove": "Remove: {{name}}",
         "byCategory": "By category",
+        "byAisle": "By aisle",
         "byList": "By list",
         "shop": "{{name}}",
         "more": "+{{count}}",
@@ -1324,6 +1327,10 @@
       "notListedHint": "still yours to get",
       "noCategory": "No category",
       "noCategoryHint": "lines with no product",
+      "uncovered": "Categories we could not find in this shop",
+      "uncoveredInfo": "About these categories",
+      "uncoveredWhy": "These products are grouped by their category.",
+      "uncoveredWhere": "This shop may carry these categories, or similar ones, but we have no information about where they are.",
       "progress": "{{done}} of {{total}} got",
       "unavailable_one": "{{count}} not available",
       "unavailable_other": "{{count}} not available",

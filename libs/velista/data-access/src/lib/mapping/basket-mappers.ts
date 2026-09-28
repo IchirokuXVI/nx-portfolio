@@ -47,6 +47,7 @@ import {
   str,
   strOr,
 } from './primitives';
+import { toSectionIds } from './shop-section-mappers';
 
 /**
  * The basket, from the wire (velista `0044`; backend `0050` and `0051`).
@@ -590,6 +591,11 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         // constant, and a product left with none goes under "No category": a line
         // whose aisle this build cannot name is still a line to buy.
         categories: toProductCategories(raw['categories']),
+        // Which of the read's shop's sections hold it (velista `0120`, backend
+        // `0167`). Absent on a read at no shop and when the server could not read
+        // the shop's sections, both null; an empty list is kept, since it says no
+        // section of this shop holds the product.
+        sectionIds: toSectionIds(raw['sectionIds']),
       };
 }
 
