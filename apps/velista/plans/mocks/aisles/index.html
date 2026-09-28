@@ -1,0 +1,1241 @@
+<title>Velista: the aisles of the shop you are in</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Aisles .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Aisles .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Aisles .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Aisles .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Aisles .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-Aisles .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-Aisles .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Aisles .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-Aisles .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Aisles .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-Aisles .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-Aisles .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-Aisles .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-Aisles .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-Aisles .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Aisles .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-Aisles .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Aisles .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Aisles .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-Aisles .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-Aisles .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-Aisles .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-Aisles .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-Aisles .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-Aisles .body { flex: 1; min-width: 0; }
+#ab-Aisles .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Aisles .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-Aisles .body .unl { color: var(--app-text-secondary); }
+#ab-Aisles .row.done .body b { color: var(--app-text-muted); }
+#ab-Aisles .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-Aisles .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-Aisles .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-Aisles .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Aisles .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-Aisles .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-Aisles .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Aisles .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-Aisles .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Aisles .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Aisles .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-Aisles .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-Aisles .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-Aisles .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-Aisles .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-Aisles .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-Aisles .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-Aisles .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Aisles .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-Aisles .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-Aisles .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-Aisles .ch.picked { background: var(--app-status-attention-bg); }
+#ab-Aisles .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-Aisles .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-Aisles .picked .radio { border: 4.5px solid #e8962e; }
+#ab-Aisles .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-Aisles .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-Aisles .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-Aisles .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-Aisles .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-Aisles .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-Aisles .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-Aisles .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-Aisles .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-Aisles .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-Aisles .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-Aisles .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-TwoAisles .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-TwoAisles .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAisles .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-TwoAisles .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-TwoAisles .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-TwoAisles .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-TwoAisles .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-TwoAisles .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-TwoAisles .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-TwoAisles .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-TwoAisles .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-TwoAisles .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-TwoAisles .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAisles .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-TwoAisles .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-TwoAisles .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-TwoAisles .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-TwoAisles .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-TwoAisles .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAisles .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-TwoAisles .body { flex: 1; min-width: 0; }
+#ab-TwoAisles .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-TwoAisles .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-TwoAisles .body .unl { color: var(--app-text-secondary); }
+#ab-TwoAisles .row.done .body b { color: var(--app-text-muted); }
+#ab-TwoAisles .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-TwoAisles .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-TwoAisles .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-TwoAisles .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-TwoAisles .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-TwoAisles .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-TwoAisles .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-TwoAisles .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-TwoAisles .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-TwoAisles .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-TwoAisles .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-TwoAisles .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-TwoAisles .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-TwoAisles .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-TwoAisles .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-TwoAisles .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-TwoAisles .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-TwoAisles .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-TwoAisles .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-TwoAisles .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-TwoAisles .ch.picked { background: var(--app-status-attention-bg); }
+#ab-TwoAisles .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-TwoAisles .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-TwoAisles .picked .radio { border: 4.5px solid #e8962e; }
+#ab-TwoAisles .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAisles .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-TwoAisles .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-TwoAisles .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-TwoAisles .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-TwoAisles .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-TwoAisles .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-TwoAisles .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-TwoAisles .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-TwoAisles .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-TwoAisles .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-TwoAisles .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-TwoAislesSettled .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-TwoAislesSettled .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAislesSettled .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-TwoAislesSettled .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-TwoAislesSettled .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-TwoAislesSettled .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-TwoAislesSettled .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-TwoAislesSettled .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-TwoAislesSettled .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-TwoAislesSettled .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-TwoAislesSettled .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-TwoAislesSettled .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-TwoAislesSettled .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAislesSettled .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-TwoAislesSettled .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-TwoAislesSettled .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-TwoAislesSettled .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-TwoAislesSettled .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-TwoAislesSettled .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-TwoAislesSettled .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-TwoAislesSettled .body { flex: 1; min-width: 0; }
+#ab-TwoAislesSettled .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-TwoAislesSettled .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-TwoAislesSettled .body .unl { color: var(--app-text-secondary); }
+#ab-TwoAislesSettled .row.done .body b { color: var(--app-text-muted); }
+#ab-TwoAislesSettled .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-TwoAislesSettled .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-TwoAislesSettled .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-TwoAislesSettled .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-TwoAislesSettled .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-TwoAislesSettled .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-TwoAislesSettled .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-TwoAislesSettled .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-TwoAislesSettled .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-TwoAislesSettled .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-TwoAislesSettled .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-TwoAislesSettled .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-TwoAislesSettled .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-TwoAislesSettled .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-TwoAislesSettled .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-TwoAislesSettled .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-TwoAislesSettled .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-TwoAislesSettled .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-TwoAislesSettled .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-TwoAislesSettled .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-TwoAislesSettled .ch.picked { background: var(--app-status-attention-bg); }
+#ab-TwoAislesSettled .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-TwoAislesSettled .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-TwoAislesSettled .picked .radio { border: 4.5px solid #e8962e; }
+#ab-TwoAislesSettled .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-TwoAislesSettled .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-TwoAislesSettled .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-TwoAislesSettled .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-TwoAislesSettled .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-TwoAislesSettled .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-TwoAislesSettled .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-TwoAislesSettled .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-TwoAislesSettled .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-TwoAislesSettled .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-TwoAislesSettled .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-TwoAislesSettled .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedDivider .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedDivider .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDivider .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedDivider .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedDivider .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedDivider .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedDivider .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDivider .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedDivider .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedDivider .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedDivider .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedDivider .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedDivider .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDivider .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedDivider .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDivider .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDivider .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-MixedDivider .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedDivider .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDivider .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedDivider .body { flex: 1; min-width: 0; }
+#ab-MixedDivider .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDivider .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDivider .body .unl { color: var(--app-text-secondary); }
+#ab-MixedDivider .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedDivider .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedDivider .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedDivider .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedDivider .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDivider .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedDivider .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedDivider .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDivider .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedDivider .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedDivider .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedDivider .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedDivider .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedDivider .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedDivider .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedDivider .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedDivider .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedDivider .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedDivider .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedDivider .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedDivider .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDivider .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedDivider .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedDivider .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedDivider .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedDivider .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDivider .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedDivider .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedDivider .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDivider .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedDivider .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedDivider .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedDivider .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedDivider .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedDivider .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedDivider .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDivider .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedHint .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedHint .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHint .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedHint .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedHint .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedHint .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedHint .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedHint .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedHint .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedHint .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedHint .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedHint .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedHint .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHint .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedHint .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedHint .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedHint .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-MixedHint .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedHint .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHint .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedHint .body { flex: 1; min-width: 0; }
+#ab-MixedHint .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedHint .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedHint .body .unl { color: var(--app-text-secondary); }
+#ab-MixedHint .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedHint .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedHint .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedHint .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedHint .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedHint .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedHint .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedHint .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedHint .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedHint .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedHint .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedHint .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedHint .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedHint .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedHint .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedHint .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedHint .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedHint .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedHint .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedHint .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedHint .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedHint .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedHint .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedHint .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedHint .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedHint .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHint .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedHint .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedHint .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedHint .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedHint .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedHint .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedHint .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedHint .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedHint .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedHint .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedHint .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedDividerEs .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedDividerEs .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerEs .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedDividerEs .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedDividerEs .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedDividerEs .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedDividerEs .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerEs .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedDividerEs .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedDividerEs .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedDividerEs .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedDividerEs .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedDividerEs .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerEs .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedDividerEs .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerEs .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerEs .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-MixedDividerEs .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedDividerEs .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerEs .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedDividerEs .body { flex: 1; min-width: 0; }
+#ab-MixedDividerEs .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerEs .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerEs .body .unl { color: var(--app-text-secondary); }
+#ab-MixedDividerEs .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedDividerEs .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedDividerEs .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedDividerEs .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedDividerEs .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerEs .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedDividerEs .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedDividerEs .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerEs .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedDividerEs .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedDividerEs .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedDividerEs .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedDividerEs .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedDividerEs .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedDividerEs .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedDividerEs .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedDividerEs .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedDividerEs .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedDividerEs .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedDividerEs .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedDividerEs .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerEs .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedDividerEs .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedDividerEs .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedDividerEs .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedDividerEs .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerEs .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedDividerEs .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedDividerEs .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerEs .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedDividerEs .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedDividerEs .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedDividerEs .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedDividerEs .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedDividerEs .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedDividerEs .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerEs .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedHintEs .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedHintEs .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHintEs .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedHintEs .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedHintEs .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedHintEs .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedHintEs .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedHintEs .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedHintEs .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedHintEs .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedHintEs .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedHintEs .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedHintEs .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHintEs .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedHintEs .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedHintEs .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedHintEs .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-MixedHintEs .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedHintEs .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedHintEs .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedHintEs .body { flex: 1; min-width: 0; }
+#ab-MixedHintEs .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedHintEs .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedHintEs .body .unl { color: var(--app-text-secondary); }
+#ab-MixedHintEs .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedHintEs .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedHintEs .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedHintEs .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedHintEs .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedHintEs .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedHintEs .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedHintEs .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedHintEs .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedHintEs .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedHintEs .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedHintEs .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedHintEs .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedHintEs .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedHintEs .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedHintEs .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedHintEs .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedHintEs .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedHintEs .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedHintEs .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedHintEs .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedHintEs .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedHintEs .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedHintEs .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedHintEs .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedHintEs .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedHintEs .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedHintEs .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedHintEs .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedHintEs .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedHintEs .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedHintEs .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedHintEs .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedHintEs .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedHintEs .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedHintEs .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedHintEs .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-SheetNoShop .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-SheetNoShop .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetNoShop .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-SheetNoShop .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-SheetNoShop .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-SheetNoShop .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-SheetNoShop .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-SheetNoShop .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-SheetNoShop .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-SheetNoShop .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-SheetNoShop .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-SheetNoShop .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-SheetNoShop .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetNoShop .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-SheetNoShop .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-SheetNoShop .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-SheetNoShop .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-SheetNoShop .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-SheetNoShop .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetNoShop .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-SheetNoShop .body { flex: 1; min-width: 0; }
+#ab-SheetNoShop .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-SheetNoShop .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-SheetNoShop .body .unl { color: var(--app-text-secondary); }
+#ab-SheetNoShop .row.done .body b { color: var(--app-text-muted); }
+#ab-SheetNoShop .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-SheetNoShop .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-SheetNoShop .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-SheetNoShop .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-SheetNoShop .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-SheetNoShop .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-SheetNoShop .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-SheetNoShop .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-SheetNoShop .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-SheetNoShop .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-SheetNoShop .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-SheetNoShop .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-SheetNoShop .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-SheetNoShop .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-SheetNoShop .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-SheetNoShop .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-SheetNoShop .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-SheetNoShop .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-SheetNoShop .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-SheetNoShop .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-SheetNoShop .ch.picked { background: var(--app-status-attention-bg); }
+#ab-SheetNoShop .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-SheetNoShop .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-SheetNoShop .picked .radio { border: 4.5px solid #e8962e; }
+#ab-SheetNoShop .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-SheetNoShop .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-SheetNoShop .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-SheetNoShop .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-SheetNoShop .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-SheetNoShop .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-SheetNoShop .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-SheetNoShop .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-SheetNoShop .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-SheetNoShop .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-SheetNoShop .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-SheetNoShop .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-SheetShop .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-SheetShop .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetShop .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-SheetShop .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-SheetShop .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-SheetShop .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-SheetShop .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-SheetShop .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-SheetShop .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-SheetShop .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-SheetShop .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-SheetShop .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-SheetShop .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetShop .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-SheetShop .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-SheetShop .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-SheetShop .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+#ab-SheetShop .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-SheetShop .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-SheetShop .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-SheetShop .body { flex: 1; min-width: 0; }
+#ab-SheetShop .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-SheetShop .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-SheetShop .body .unl { color: var(--app-text-secondary); }
+#ab-SheetShop .row.done .body b { color: var(--app-text-muted); }
+#ab-SheetShop .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-SheetShop .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-SheetShop .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-SheetShop .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-SheetShop .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-SheetShop .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-SheetShop .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-SheetShop .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-SheetShop .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-SheetShop .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-SheetShop .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-SheetShop .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-SheetShop .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-SheetShop .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-SheetShop .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-SheetShop .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-SheetShop .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-SheetShop .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-SheetShop .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-SheetShop .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-SheetShop .ch.picked { background: var(--app-status-attention-bg); }
+#ab-SheetShop .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-SheetShop .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-SheetShop .picked .radio { border: 4.5px solid #e8962e; }
+#ab-SheetShop .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-SheetShop .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-SheetShop .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-SheetShop .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-SheetShop .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-SheetShop .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-SheetShop .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-SheetShop .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-SheetShop .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-SheetShop .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-SheetShop .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-SheetShop .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+</style>
+
+<header>
+  <h1>Velista: the aisles of the shop you are in</h1>
+  <p class="lede">The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes, each with a recommendation, and they need answers before any code. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 2880px; height: 3372px;">
+      <figure class="board" style="left: 0px; top: 600px; width: 390px;">
+        <figcaption>Grouped by aisle at Mercadona, Calle Mayor 3</figcaption>
+        <div class="frame" id="ab-Aisles" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="ghead"><h2>Fruit and vegetables<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Tomatoes"></i></span><span class="body"><b>Tomatoes</b><span>Tomate rama, 1 kg · 1.89 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Bananas"></i></span><span class="body"><b>Bananas</b><span>Plátano de Canarias, 1 kg · 1.35 €</span><span>from Groceries</span></span><span class="qty">2</span></div>
+              <div class="ghead"><h2>Bakery<span class="c">0 of 1 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Wholemeal sliced bread"></i></span><span class="body"><b>Wholemeal sliced bread</b><span>Pan de molde integral Hacendado · 1.15 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Deli and cheese<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Sliced cheese"></i></span><span class="body"><b>Sliced cheese</b><span>Queso lonchas Hacendado, 250 g · 2.05 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Serrano ham"></i></span><span class="body"><b>Serrano ham</b><span>Jamón serrano lonchas, 250 g · 2.95 €</span><span>from Weekly shop and Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Dairy and eggs<span class="c">0 of 3 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Milk"></i></span><span class="body"><b>Milk</b><span>Leche entera Hacendado, 1 L · 0.98 €</span><span>from Weekly shop</span></span><span class="qty">6</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 600px; width: 390px;">
+        <figcaption>One row in two aisles: the frozen pizza</figcaption>
+        <div class="frame" id="ab-TwoAisles" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Greek yogurt"></i></span><span class="body"><b>Greek yogurt</b><span>Yogur griego Hacendado, 6 × 125 g · 1.85 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pizzas<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Four cheese pizza"></i></span><span class="body"><b>Four cheese pizza</b><span>Pizza fresca cuatro quesos, 400 g · 2.40 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Barbecue pizza"></i></span><span class="body"><b>Barbecue pizza</b><span>Pizza barbacoa congelada Hacendado · 2.60 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Frozen<span class="c">0 of 3 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Frozen peas"></i></span><span class="body"><b>Frozen peas</b><span>Guisantes finos congelados, 1 kg · 2.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Barbecue pizza"></i></span><span class="body"><b>Barbecue pizza</b><span>Pizza barbacoa congelada Hacendado · 2.60 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 600px; width: 390px;">
+        <figcaption>Settled under Pizzas, so settled under Frozen</figcaption>
+        <div class="frame" id="ab-TwoAislesSettled" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">15 to buy, 1 got this trip</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Greek yogurt"></i></span><span class="body"><b>Greek yogurt</b><span>Yogur griego Hacendado, 6 × 125 g · 1.85 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pizzas<span class="c">1 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Four cheese pizza"></i></span><span class="body"><b>Four cheese pizza</b><span>Pizza fresca cuatro quesos, 400 g · 2.40 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="row done"><span class="st"><i class="got" aria-label="Settle Barbecue pizza"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></i></span><span class="body"><b>Barbecue pizza</b><span>Pizza barbacoa congelada Hacendado · 2.60 €</span><span class="who">you got it</span><span>from Weekly shop</span></span><span class="qty">0</span></div>
+              <div class="ghead"><h2>Frozen<span class="c">1 of 3 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Frozen peas"></i></span><span class="body"><b>Frozen peas</b><span>Guisantes finos congelados, 1 kg · 2.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row done"><span class="st"><i class="got" aria-label="Settle Barbecue pizza"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></i></span><span class="body"><b>Barbecue pizza</b><span>Pizza barbacoa congelada Hacendado · 2.60 €</span><span class="who">you got it</span><span>from Weekly shop</span></span><span class="qty">0</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">15</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1564px; width: 390px;">
+        <figcaption>Mixed list, option A: one band (recommended)</figcaption>
+        <div class="frame" id="ab-MixedDivider" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="rest"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span>The rest, by category</span></div>
+              <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Oil and vinegar<span class="c">0 of 1 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Olive oil"></i></span><span class="body"><b>Olive oil</b><span>Aceite de oliva virgen extra, 1 L · 8.95 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Soft drinks<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2.15 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Tonic water"></i></span><span class="body"><b>Tonic water</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; not listed at Mercadona · 3.20 € at Dia</span></span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>No category</h2><span class="hint">lines with no product</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Something for the cat"></i></span><span class="body"><b>Something for the cat</b><span>from Groceries</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 1564px; width: 390px;">
+        <figcaption>Mixed list, option B: a hint on every heading</figcaption>
+        <div class="frame" id="ab-MixedHint" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2><span class="hint">not in an aisle here yet</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Oil and vinegar<span class="c">0 of 1 got</span></h2><span class="hint">not in an aisle here yet</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Olive oil"></i></span><span class="body"><b>Olive oil</b><span>Aceite de oliva virgen extra, 1 L · 8.95 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Soft drinks<span class="c">0 of 2 got</span></h2><span class="hint">not in an aisle here yet</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2.15 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Tonic water"></i></span><span class="body"><b>Tonic water</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; not listed at Mercadona · 3.20 € at Dia</span></span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>No category</h2><span class="hint">lines with no product</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Something for the cat"></i></span><span class="body"><b>Something for the cat</b><span>from Groceries</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 1564px; width: 390px;">
+        <figcaption>Option A in Spanish</figcaption>
+        <div class="frame" id="ab-MixedDividerEs" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="Historial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Todo por comprar</span>
+              <span class="ibtn" aria-label="Personas"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Compartir"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 por comprar</span>
+              <span class="ibtn on" aria-label="Filtrar y ordenar, 2 activos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Quitar: Mercadona">&times;</span></span><span class="chip">Por pasillo<span class="x" aria-label="Quitar: Por pasillo">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="rest"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span>El resto, por categoría</span></div>
+              <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Aceite y vinagre<span class="c">0 de 1 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Aceite de oliva"></i></span><span class="body"><b>Aceite de oliva</b><span>Aceite de oliva virgen extra, 1 L · 8,95 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Refrescos<span class="c">0 de 2 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2,15 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Tónica"></i></span><span class="body"><b>Tónica</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; no está en Mercadona · 3,20 € en Dia</span></span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Sin categoría</h2><span class="hint">líneas sin producto</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Algo para el gato"></i></span><span class="body"><b>Algo para el gato</b><span>de Fin de semana</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Añade o busca algo</span>
+              <span class="send" aria-label="Añadir la línea"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Inicio</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catálogo</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Lista de la compra</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 1564px; width: 390px;">
+        <figcaption>Option B in Spanish</figcaption>
+        <div class="frame" id="ab-MixedHintEs" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="Historial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Todo por comprar</span>
+              <span class="ibtn" aria-label="Personas"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Compartir"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 por comprar</span>
+              <span class="ibtn on" aria-label="Filtrar y ordenar, 2 activos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Quitar: Mercadona">&times;</span></span><span class="chip">Por pasillo<span class="x" aria-label="Quitar: Por pasillo">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2><span class="hint">aún sin pasillo en esta tienda</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Aceite y vinagre<span class="c">0 de 1 conseguidos</span></h2><span class="hint">aún sin pasillo en esta tienda</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Aceite de oliva"></i></span><span class="body"><b>Aceite de oliva</b><span>Aceite de oliva virgen extra, 1 L · 8,95 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Refrescos<span class="c">0 de 2 conseguidos</span></h2><span class="hint">aún sin pasillo en esta tienda</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2,15 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Tónica"></i></span><span class="body"><b>Tónica</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; no está en Mercadona · 3,20 € en Dia</span></span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Sin categoría</h2><span class="hint">líneas sin producto</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Algo para el gato"></i></span><span class="body"><b>Algo para el gato</b><span>de Fin de semana</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Añade o busca algo</span>
+              <span class="send" aria-label="Añadir la línea"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Inicio</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catálogo</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Lista de la compra</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 2528px; width: 390px;">
+        <figcaption>The filter sheet, no shop: as today</figcaption>
+        <div class="frame" id="ab-SheetNoShop" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">1</span></span>
+            </div>
+            <div class="chips"><span class="chip">By category<span class="x" aria-label="Remove: By category">&times;</span></span></div>
+            <div class="list">
+              <div class="ghead"><h2>Fruit<span class="c">0 of 1 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Bananas"></i></span><span class="body"><b>Bananas</b><span>Plátano de Canarias, 1 kg · 1.49 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+            <div class="scrim"></div>
+            <div class="sheet" role="dialog" aria-label="Filter and order">
+              <div class="handle"></div>
+              <div class="sbody">
+                <div class="shead"><h2>Filter and order</h2><span class="reset">Reset</span></div>
+                <div class="legend">Order</div>
+                <div class="card">
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">The way you shop</span><span class="chint">Calculated from your last trips</span></span></div>
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">A to Z</span></span></div>
+                </div>
+                <div class="legend">Group by</div>
+                <div class="card">
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">Nothing</span></span></div>
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">Category</span></span></div>
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">List</span></span><span class="cnote">each list’s own amounts</span></div>
+                </div>
+                <div class="legend">Buying at</div>
+                <div class="card">
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">Any of your shops</span></span><span class="cnote">the cheapest</span></div>
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct" style="color: var(--app-text-muted);">One shop</span></span><span class="pick">Choose</span></div>
+                </div>
+                <div class="legend">Lists</div>
+                <div class="card">
+                <div class="ch picked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></span><span class="cb"><span class="ct">Weekly shop</span></span><span class="cnote">9</span></div>
+                <div class="ch picked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></span><span class="cb"><span class="ct">Groceries</span></span><span class="cnote">7</span></div>
+                </div>
+                <div class="sfade"></div>
+              </div>
+              <div class="sfoot"><div class="confirm">Show 16 lines</div></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 2528px; width: 390px;">
+        <figcaption>The filter sheet, a shop chosen: Aisle</figcaption>
+        <div class="frame" id="ab-SheetShop" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="ghead"><h2>Fruit and vegetables<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Tomatoes"></i></span><span class="body"><b>Tomatoes</b><span>Tomate rama, 1 kg · 1.89 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+            <div class="scrim"></div>
+            <div class="sheet" role="dialog" aria-label="Filter and order">
+              <div class="handle"></div>
+              <div class="sbody">
+                <div class="shead"><h2>Filter and order</h2><span class="reset">Reset</span></div>
+                <div class="legend">Order</div>
+                <div class="card">
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">The way you shop</span><span class="chint">Calculated from your last trips</span></span></div>
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">A to Z</span></span></div>
+                </div>
+                <div class="legend">Group by</div>
+                <div class="card">
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">Nothing</span></span></div>
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">Aisle</span></span><span class="cnote">this shop’s order</span></div>
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">List</span></span><span class="cnote">each list’s own amounts</span></div>
+                </div>
+                <div class="legend">Buying at</div>
+                <div class="card">
+                <div class="ch"><span class="radio"></span><span class="cb"><span class="ct">Any of your shops</span></span><span class="cnote">the cheapest</span></div>
+                <div class="ch picked"><span class="radio"></span><span class="cb"><span class="ct">Mercadona</span><span class="chint">Calle Mayor 3</span></span><span class="pick">Change</span></div>
+                </div>
+                <div class="card"><div class="ch" style="min-height: 56px;"><span class="cb"><span class="ct">Only what I usually buy here</span><span class="chint">Counted at every Mercadona</span></span><span class="switch" role="switch" aria-checked="false"></span></div></div>
+                <div class="legend">Lists</div>
+                <div class="card">
+                <div class="ch picked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></span><span class="cb"><span class="ct">Weekly shop</span></span><span class="cnote">9</span></div>
+                <div class="ch picked"><span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0c14" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4.5 4.5L19 7"></path></svg></span><span class="cb"><span class="ct">Groceries</span></span><span class="cnote">7</span></div>
+                </div>
+                <div class="sfade"></div>
+              </div>
+              <div class="sfoot"><div class="confirm">Show 16 lines</div></div>
+            </div>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. Plan 0077 called grouping by category the aisle view, and it is, until the person stands in a shop whose aisles are not the taxonomy's. With Buying at set to one shop (0102), the basket read says which of that shop's sections every product is in (backend 0167), and the page is drawn in those sections, in the order the shop is walked.</p><p>A product no section covers keeps its own categories, after the aisles. The rows with no product stay last. Without a shop nothing changes, and a shop nobody has configured looks exactly as it does today.</p><p>The shop drawn here is Mercadona, Calle Mayor 3. Its chain has eight sections mapped, which is about half of the taxonomy of backend 0166 appendix A, so one basket shows all three parts.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>THE SHOP'S SECTIONS IN THIS MOCK, in its walk order, with what each covers (the chain's default, source CHAIN).</p><p>1. Fruit and vegetables / Fruta y verdura: the root fruit-and-vegetables</p><p>2. Bakery / Horno: the root bakery</p><p>3. Deli and cheese / Charcutería y quesos: the root cold-cuts-and-cheese</p><p>4. Meat / Carnicería: the root meat</p><p>5. Fish / Pescadería: the root fish-and-seafood</p><p>6. Dairy and eggs / Huevos, leche y mantequilla: the root dairy-and-eggs</p><p>7. Pizzas / Pizzas: the leaf pizzas</p><p>8. Frozen / Congelados: the root frozen</p><p>Nothing covers pantry, drinks, household or the rest, so those products keep their own leaves: Pasta, rice and legumes, Oil and vinegar, Soft drinks. A section with no row in the basket draws nothing, which is why Meat and Fish are absent.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE A1: AN AISLE HEADING LOOKS LIKE A CATEGORY HEADING. The same h2, the same count, the same place. No aisle number, no icon, no colour of its own: the plan forbids a number, and a second heading style would ask the shopper to learn which kind they are reading.</p><p>The chips say it instead. Mercadona and By aisle sit side by side, so whoever is handed the phone can see why the headings are not the usual ones.</p><p>The name is data, read through inLocale, so a section named only in Spanish reads in Spanish for an English reader too.</p><p>Inside an aisle the rows keep the order they arrive in (0141's walk order). A row the shop does not list still sinks to the end of its own section (0078), as Tonic water does under Soft drinks.</p></aside>
+      <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>NOT DRAWN, ON PURPOSE. The shop's map (0121 is on hold). An aisle number. Sections on the zone list or on the catalog tab. Configuring sections from the phone (admin 0037). Any change to settling or to the walk order.</p><p>A shop with its own section list (source LOCATION) looks the same as one on the chain's default: the only difference is the order of the headings.</p><p>The whole page moves nothing while the sections load. It is drawn by category, as today, and it recomposes by aisle when they land (plan target 3).</p></aside>
+      <aside class="note" style="left: 1410px; top: 600px; width: 470px;"><p>RULE A2: A ROW IN TWO AISLES IS DRAWN IN BOTH, AND IT IS STILL ONE LINE. The frozen barbecue pizza carries two leaves, frozen-meals-and-pizzas and pizzas. The shop has a Pizzas section on the leaf and a Frozen section on the root, so the server answers both ids and the pizza is drawn under each heading, in its own place in each.</p><p>SETTLING EITHER COPY SETTLES THE LINE. Tapped under Pizzas, both copies turn to got in the same frame, both headings move (Pizzas 1 of 2 got, Frozen 1 of 3 got), and the page count moves once: 15 to buy, 1 got this trip. The same holds for the reel, a partial settle and a revert.</p><p>Nothing new is built for it: this is what the pipeline already does for a product in two categories (0077 section 3). Changing how such a row settles is an action boundary of the plan.</p></aside>
+      <aside class="note" style="left: 1940px; top: 600px; width: 470px;"><p>OPEN QUESTIONS, ASSUMED AS DRAWN.</p><p>1. A row in two aisles counts in both headings. Pizzas says 1 of 2 got and Frozen 1 of 3 got, although the page counts the line once. Each heading counts what is under it, as 0077 already does for two categories. Confirm.</p><p>2. Group by List with a shop chosen is unchanged and never shows aisles. Confirm.</p><p>3. When the shop changes while the page is grouped, the page recomposes with the new shop's aisles, or by category while they load. No message is shown. Confirm.</p><p>4. A guest on a shared basket at a shop sees the same aisles: the sections read takes no account (backend 0167 section 4). Confirm.</p></aside>
+      <aside class="note" style="left: 1880px; top: 1564px; width: 470px;"><p>THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART.</p><p>Option A draws one band between the last aisle and the first category: The rest, by category / El resto, por categoría. Option B adds a hint to every category heading below the aisles, in the plan's words: not in an aisle here yet / aún sin pasillo en esta tienda.</p><p>RECOMMENDED: A, with the copy drawn.</p><p>Why A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line. English just fits; the Spanish artboard beside it shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.</p><p>Why not the plan's words. Not in an aisle here yet can be read as not sold here, which is exactly what the rule never says (backend 0167 never infers availability). And yet invites a question the shopper cannot answer. The rest, by category says what the reader is looking at, in a word the filter sheet already uses.</p></aside>
+      <aside class="note" style="left: 2410px; top: 1564px; width: 470px;"><p>RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.</p><p>No category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.</p><p>The band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries no control and cannot be collapsed.</p><p>The categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan.</p></aside>
+      <aside class="note" style="left: 940px; top: 2528px; width: 420px;"><p>COPY, ENGLISH AND SPANISH.</p><p>Radio under Group by, with a shop: Aisle / Pasillo.</p><p>Its note, new: this shop's order / el orden de esta tienda.</p><p>Radio without a shop, unchanged: Category / Categoría.</p><p>Chip with a shop: By aisle / Por pasillo.</p><p>Chip without, unchanged: By category / Por categoría.</p><p>The band, new: The rest, by category / El resto, por categoría.</p><p>Option B's hint, only if B is chosen: not in an aisle here yet / aún sin pasillo en esta tienda.</p><p>Heading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.</p><p>Section names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados.</p></aside>
+      <aside class="note" style="left: 1410px; top: 2528px; width: 470px;"><p>THE RADIO'S WORDS: A DEPARTURE FROM THE PLAN, TO CONFIRM. The plan says the radio reads Group by aisle. It sits under the legend Group by, so on screen that reads Group by, then Group by aisle. The mock draws Aisle / Pasillo, and a screen reader still hears the legend first: Group by, Aisle.</p><p>RECOMMENDED: Aisle, with the note this shop's order. The radio's word changes because of a choice made further down, in Buying at, and the note is what ties the two together for somebody who did not notice the change.</p><p>Category and Aisle are one radio with two names, not two radios. So with a shop chosen there is no way to group by the app's categories. Confirm that this is wanted.</p></aside>
+      <aside class="note" style="left: 1940px; top: 2528px; width: 470px;"><p>WHEN THE WORDS SWITCH: A SECOND DEPARTURE, TO CONFIRM. The plan says the words follow the shop alone. RECOMMENDED: Aisle and By aisle only once the shop's sections have loaded and the list is not empty. While they load, and for a chain nobody has configured, the page is grouped by category and the words stay Category and By category, so a chip never names a grouping the headings do not show. The words then change in the same frame as the headings.</p><p>The sections are read once per shop per session, so after the first visit the switch is immediate.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 2880;
+    var h = 3372;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

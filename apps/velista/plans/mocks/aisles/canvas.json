@@ -1,0 +1,157 @@
+{
+  "title": "Velista: the aisles of the shop you are in",
+  "lede": "The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes, each with a recommendation, and they need answers before any code. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Aisles.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Grouped by aisle at Mercadona, Calle Mayor 3"
+    },
+    {
+      "file": "TwoAisles.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "One row in two aisles: the frozen pizza"
+    },
+    {
+      "file": "TwoAislesSettled.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Settled under Pizzas, so settled under Frozen"
+    },
+    {
+      "file": "MixedDivider.dc.html",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Mixed list, option A: one band (recommended)"
+    },
+    {
+      "file": "MixedHint.dc.html",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Mixed list, option B: a hint on every heading"
+    },
+    {
+      "file": "MixedDividerEs.dc.html",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Option A in Spanish"
+    },
+    {
+      "file": "MixedHintEs.dc.html",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Option B in Spanish"
+    },
+    {
+      "file": "SheetNoShop.dc.html",
+      "x": 0,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "The filter sheet, no shop: as today"
+    },
+    {
+      "file": "SheetShop.dc.html",
+      "x": 470,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "The filter sheet, a shop chosen: Aisle"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -600,
+      "w": 470,
+      "text": "THE BRIEF. Plan 0077 called grouping by category the aisle view, and it is, until the person stands in a shop whose aisles are not the taxonomy's. With Buying at set to one shop (0102), the basket read says which of that shop's sections every product is in (backend 0167), and the page is drawn in those sections, in the order the shop is walked.\nA product no section covers keeps its own categories, after the aisles. The rows with no product stay last. Without a shop nothing changes, and a shop nobody has configured looks exactly as it does today.\nThe shop drawn here is Mercadona, Calle Mayor 3. Its chain has eight sections mapped, which is about half of the taxonomy of backend 0166 appendix A, so one basket shows all three parts."
+    },
+    {
+      "id": "sections",
+      "x": 530,
+      "y": -600,
+      "w": 470,
+      "text": "THE SHOP'S SECTIONS IN THIS MOCK, in its walk order, with what each covers (the chain's default, source CHAIN).\n1. Fruit and vegetables / Fruta y verdura: the root fruit-and-vegetables\n2. Bakery / Horno: the root bakery\n3. Deli and cheese / Charcutería y quesos: the root cold-cuts-and-cheese\n4. Meat / Carnicería: the root meat\n5. Fish / Pescadería: the root fish-and-seafood\n6. Dairy and eggs / Huevos, leche y mantequilla: the root dairy-and-eggs\n7. Pizzas / Pizzas: the leaf pizzas\n8. Frozen / Congelados: the root frozen\nNothing covers pantry, drinks, household or the rest, so those products keep their own leaves: Pasta, rice and legumes, Oil and vinegar, Soft drinks. A section with no row in the basket draws nothing, which is why Meat and Fish are absent."
+    },
+    {
+      "id": "a1",
+      "x": 1060,
+      "y": -600,
+      "w": 470,
+      "text": "RULE A1: AN AISLE HEADING LOOKS LIKE A CATEGORY HEADING. The same h2, the same count, the same place. No aisle number, no icon, no colour of its own: the plan forbids a number, and a second heading style would ask the shopper to learn which kind they are reading.\nThe chips say it instead. Mercadona and By aisle sit side by side, so whoever is handed the phone can see why the headings are not the usual ones.\nThe name is data, read through inLocale, so a section named only in Spanish reads in Spanish for an English reader too.\nInside an aisle the rows keep the order they arrive in (0141's walk order). A row the shop does not list still sinks to the end of its own section (0078), as Tonic water does under Soft drinks."
+    },
+    {
+      "id": "notdrawn",
+      "x": 1590,
+      "y": -600,
+      "w": 470,
+      "text": "NOT DRAWN, ON PURPOSE. The shop's map (0121 is on hold). An aisle number. Sections on the zone list or on the catalog tab. Configuring sections from the phone (admin 0037). Any change to settling or to the walk order.\nA shop with its own section list (source LOCATION) looks the same as one on the chain's default: the only difference is the order of the headings.\nThe whole page moves nothing while the sections load. It is drawn by category, as today, and it recomposes by aisle when they land (plan target 3)."
+    },
+    {
+      "id": "a2",
+      "x": 1410,
+      "y": 0,
+      "w": 470,
+      "text": "RULE A2: A ROW IN TWO AISLES IS DRAWN IN BOTH, AND IT IS STILL ONE LINE. The frozen barbecue pizza carries two leaves, frozen-meals-and-pizzas and pizzas. The shop has a Pizzas section on the leaf and a Frozen section on the root, so the server answers both ids and the pizza is drawn under each heading, in its own place in each.\nSETTLING EITHER COPY SETTLES THE LINE. Tapped under Pizzas, both copies turn to got in the same frame, both headings move (Pizzas 1 of 2 got, Frozen 1 of 3 got), and the page count moves once: 15 to buy, 1 got this trip. The same holds for the reel, a partial settle and a revert.\nNothing new is built for it: this is what the pipeline already does for a product in two categories (0077 section 3). Changing how such a row settles is an action boundary of the plan."
+    },
+    {
+      "id": "questions",
+      "x": 1940,
+      "y": 0,
+      "w": 470,
+      "text": "OPEN QUESTIONS, ASSUMED AS DRAWN.\n1. A row in two aisles counts in both headings. Pizzas says 1 of 2 got and Frozen 1 of 3 got, although the page counts the line once. Each heading counts what is under it, as 0077 already does for two categories. Confirm.\n2. Group by List with a shop chosen is unchanged and never shows aisles. Confirm.\n3. When the shop changes while the page is grouped, the page recomposes with the new shop's aisles, or by category while they load. No message is shown. Confirm.\n4. A guest on a shared basket at a shop sees the same aisles: the sections read takes no account (backend 0167 section 4). Confirm."
+    },
+    {
+      "id": "decision",
+      "x": 1880,
+      "y": 964,
+      "w": 470,
+      "text": "THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART.\nOption A draws one band between the last aisle and the first category: The rest, by category / El resto, por categoría. Option B adds a hint to every category heading below the aisles, in the plan's words: not in an aisle here yet / aún sin pasillo en esta tienda.\nRECOMMENDED: A, with the copy drawn.\nWhy A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line. English just fits; the Spanish artboard beside it shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.\nWhy not the plan's words. Not in an aisle here yet can be read as not sold here, which is exactly what the rule never says (backend 0167 never infers availability). And yet invites a question the shopper cannot answer. The rest, by category says what the reader is looking at, in a word the filter sheet already uses."
+    },
+    {
+      "id": "a3",
+      "x": 2410,
+      "y": 964,
+      "w": 470,
+      "text": "RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.\nNo category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.\nThe band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries no control and cannot be collapsed.\nThe categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan."
+    },
+    {
+      "id": "copy",
+      "x": 940,
+      "y": 1928,
+      "w": 420,
+      "text": "COPY, ENGLISH AND SPANISH.\nRadio under Group by, with a shop: Aisle / Pasillo.\nIts note, new: this shop's order / el orden de esta tienda.\nRadio without a shop, unchanged: Category / Categoría.\nChip with a shop: By aisle / Por pasillo.\nChip without, unchanged: By category / Por categoría.\nThe band, new: The rest, by category / El resto, por categoría.\nOption B's hint, only if B is chosen: not in an aisle here yet / aún sin pasillo en esta tienda.\nHeading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.\nSection names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados."
+    },
+    {
+      "id": "radio",
+      "x": 1410,
+      "y": 1928,
+      "w": 470,
+      "text": "THE RADIO'S WORDS: A DEPARTURE FROM THE PLAN, TO CONFIRM. The plan says the radio reads Group by aisle. It sits under the legend Group by, so on screen that reads Group by, then Group by aisle. The mock draws Aisle / Pasillo, and a screen reader still hears the legend first: Group by, Aisle.\nRECOMMENDED: Aisle, with the note this shop's order. The radio's word changes because of a choice made further down, in Buying at, and the note is what ties the two together for somebody who did not notice the change.\nCategory and Aisle are one radio with two names, not two radios. So with a shop chosen there is no way to group by the app's categories. Confirm that this is wanted."
+    },
+    {
+      "id": "switch",
+      "x": 1940,
+      "y": 1928,
+      "w": 470,
+      "text": "WHEN THE WORDS SWITCH: A SECOND DEPARTURE, TO CONFIRM. The plan says the words follow the shop alone. RECOMMENDED: Aisle and By aisle only once the shop's sections have loaded and the list is not empty. While they load, and for a chain nobody has configured, the page is grouped by category and the words stay Category and By category, so a chip never names a grouping the headings do not show. The words then change in the same frame as the headings.\nThe sections are read once per shop per session, so after the first visit the switch is immediate."
+    }
+  ]
+}

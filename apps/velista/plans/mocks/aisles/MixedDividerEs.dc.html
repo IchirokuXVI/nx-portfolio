@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Mixed list, option A, in Spanish</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+body { margin: 0; }
+/* Tokens copied from libs/velista/ui/src/lib/styles, Day values (the one-field mock's set, plus the sheet and status roles). */
+.vel {
+  --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary);
+}
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+.appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+.title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+.ibtn.on { color: var(--app-action-quiet-fg); }
+.ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+.tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+.chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+.chip .x { font-size: var(--app-text-sm); line-height: 1; }
+.list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+/* the section heading of basket-page.scss: an h2 carrying the name and the count, the hint at the trailing edge */
+.ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+.ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+.ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+/* option A: one band between the shop's aisles and the app's categories */
+.rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
+.rest svg { flex: none; color: var(--app-text-muted); }
+/* a basket row: the status control, the body, the number */
+.row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+.st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+.st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+.st i.got { border: 0; background: var(--app-status-success-fg); }
+.body { flex: 1; min-width: 0; }
+.body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.body .unl { color: var(--app-text-secondary); }
+.row.done .body b { color: var(--app-text-muted); }
+.qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+.row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+.row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+/* the composer and the nav, as the one-field mock draws them */
+.composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+.send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+.nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+.tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+.badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+/* the filter sheet over the page */
+.scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+.handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+.sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+.shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+.reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+.legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+.card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+.ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+.ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+.ch.picked { background: var(--app-status-attention-bg); }
+.ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+.radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+.picked .radio { border: 4.5px solid #e8962e; }
+.box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+.cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ct { font-size: var(--app-text-sm); font-weight: 600; }
+.chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+.cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+.pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+.switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+.switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+.sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+.sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+.confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+</style>
+</helmet>
+<div class="vel phone">
+  <div class="appbar">
+    <span class="ibtn" aria-label="Historial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+    <span class="title">Todo por comprar</span>
+    <span class="ibtn" aria-label="Personas"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+    <span class="ibtn" aria-label="Compartir"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+  </div>
+  <div class="tools">
+    <span class="count">16 por comprar</span>
+    <span class="ibtn on" aria-label="Filtrar y ordenar, 2 activos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+  </div>
+  <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Quitar: Mercadona">&times;</span></span><span class="chip">Por pasillo<span class="x" aria-label="Quitar: Por pasillo">&times;</span></span></div>
+  <div class="list">
+    <div class="fade"></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+    <div class="rest"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span>El resto, por categoría</span></div>
+    <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Aceite y vinagre<span class="c">0 de 1 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Aceite de oliva"></i></span><span class="body"><b>Aceite de oliva</b><span>Aceite de oliva virgen extra, 1 L · 8,95 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Refrescos<span class="c">0 de 2 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2,15 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Tónica"></i></span><span class="body"><b>Tónica</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; no está en Mercadona · 3,20 € en Dia</span></span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Sin categoría</h2><span class="hint">líneas sin producto</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Algo para el gato"></i></span><span class="body"><b>Algo para el gato</b><span>de Fin de semana</span></span><span class="qty">1</span></div>
+  </div>
+  <div class="composer">
+    <span class="field">Añade o busca algo</span>
+    <span class="send" aria-label="Añadir la línea"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+  </div>
+  <nav class="nav">
+    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Inicio</span>
+    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catálogo</span>
+    <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Lista de la compra</span>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
