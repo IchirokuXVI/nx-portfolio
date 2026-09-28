@@ -529,7 +529,7 @@ export class UpdateItemDto {
     minItems: 1,
     maxItems: ITEM_CATEGORY_MAX,
     description:
-      'Replace the whole set of leaf categories, in the order meant (plan 0166, section 3). Absent leaves the set alone. An empty list is refused with `item_needs_a_category`, because a product always has one.',
+      'Replace the whole set of leaf categories, in the order meant (plan 0166, section 3). Absent leaves the set alone. An empty list is refused here with `validation_failed`, because a product always has one; catalog backs the rule with `item_needs_a_category` for any other writer.',
   })
   @IsOptional()
   @IsArray()

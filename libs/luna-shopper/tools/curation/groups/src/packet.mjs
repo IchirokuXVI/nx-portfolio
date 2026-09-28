@@ -45,7 +45,9 @@ export function buildItemPacket({ item, candidates }) {
       brand: item.brand ?? null,
       unitSize: item.unitSize ?? null,
       defaultUnit: item.defaultUnit ?? null,
-      category: item.category ?? null,
+      // The first of the product's categories, by slug (backend plan 0166):
+      // the one a row shows when it has room for one.
+      category: item.categories?.[0]?.slug ?? null,
       ean: item.ean ?? null,
     },
     candidates,

@@ -31,10 +31,13 @@ import {
 } from './ids';
 import { MERCADONA_ITEMS } from './mercadona';
 import { REFERENCE_STORES } from './stores';
+import { seedTaxonomy, writeItemCategories } from './taxonomy-seed';
 import type { AuthoredItem, ReferenceStore } from './types';
 
 /** What one run changed, so the caller can print it and a test can assert it. */
 export interface ReferenceSeedReport {
+  /** Rows of the category tree written, roots and leaves (plan 0166). */
+  categories: number;
   groups: number;
   stores: number;
   /** Products this run created. */
@@ -78,12 +81,16 @@ export async function seedReferenceCatalog(
 
   return dataSource.transaction(async (m: EntityManager) => {
     const report: ReferenceSeedReport = {
+      categories: 0,
       groups: 0,
       stores: 0,
       items: 0,
       prices: 0,
       adopted: 0,
     };
+
+    // --- 0. The category tree (plan 0166, section 5) ---------------------
+    report.categories = await seedTaxonomy(m);
 
     // --- 1. The groups ----------------------------------------------------
     const groupRows = REFERENCE_GROUPS.map((g) => ({
@@ -463,12 +470,18 @@ async function writeItems(
     sku: null,
     ean: it.ean ?? null,
     unitSize: it.unitSize ?? null,
-    category: it.category,
     defaultUnit: it.defaultUnit,
     productGroupId: groupId(it.group),
   }));
   await m.getRepository(Item).upsert(itemRows, ['id']);
   report.items += itemRows.length;
+  await writeItemCategories(
+    m,
+    items.map((it) => ({
+      itemId: authoredItemId(storeSlug, it),
+      slugs: it.categories,
+    }))
+  );
 
   const scope = await m.getRepository(PriceScope).findOneByOrFail({
     id: scopeId,
