@@ -1,3 +1,7 @@
+import {
+  seededLeaf,
+  type ProductCategory,
+} from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 
 /**
@@ -199,6 +203,22 @@ export const PRODUCT_GROUP_SEED: readonly Wire.CatalogProductGroupView[] = [
 ];
 
 /**
+ * A product's categories, by slug, as the seeded tree holds them (admin plan
+ * 0036). A slug the tree does not hold is a mistake in this file, so it fails
+ * loudly rather than seeding a product with no category, which catalog never
+ * answers.
+ */
+function categoriesOf(...slugs: string[]): ProductCategory[] {
+  return slugs.map((slug) => {
+    const category = seededLeaf(slug);
+    if (category === null) {
+      throw new Error(`The category seed holds no leaf ${slug}.`);
+    }
+    return category;
+  });
+}
+
+/**
  * Products.
  *
  * The last one belongs to no group on purpose. That is the resting state of a
@@ -215,7 +235,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000123459',
     unitSize: 1,
     packCount: null,
-    category: 'DAIRY',
+    categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
   },
@@ -228,7 +248,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000123466',
     unitSize: 6,
     packCount: 6,
-    category: 'DAIRY',
+    categories: categoriesOf('milk'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_whole_milk',
   },
@@ -244,7 +264,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000220011',
     unitSize: 1,
     packCount: null,
-    category: 'PANTRY',
+    categories: categoriesOf('oil-and-vinegar'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_olive_oil',
   },
@@ -257,7 +277,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000310071',
     unitSize: 750,
     packCount: null,
-    category: 'HOUSEHOLD',
+    categories: categoriesOf('dishwashing'),
     defaultUnit: 'MILLILITER',
     // Curation has not reached it. Nothing is wrong with this row.
     productGroupId: null,

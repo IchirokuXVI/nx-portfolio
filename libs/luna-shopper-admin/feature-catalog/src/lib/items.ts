@@ -4,18 +4,56 @@ import {
   CONTENT_LOCALES,
   defineResource,
   localizedTextValue,
+  type ResourceGateway,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import {
-  ITEM_CATEGORY_OPTIONS,
-  UNIT_OF_MEASURE_OPTIONS,
-} from './catalog-enums';
+import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { itemSource } from './catalog-sources';
 import { ItemFormPage } from './item-form-page';
+import { SetCategoriesPanel } from './set-categories-panel';
 import { SetGroupPanel } from './set-group-panel';
 
-/** A product, as the gateway describes it. */
-export type Item = Wire.CatalogItemView;
+/**
+ * A product, as the gateway describes it, plus the ids of its categories.
+ *
+ * The row carries its categories as objects, names included, because every
+ * reader of a product needs the names (backend plan 0166, section 3). The
+ * writes take ids, as `categoryIds`, in the order meant. So the ids are read
+ * off the objects as each row arrives, and the form edits the property the
+ * wire writes (admin plan 0036).
+ */
+export type Item = Wire.CatalogItemView & {
+  readonly categoryIds: readonly string[];
+};
+
+/** A product row with the ids its categories carry, in their order. */
+export function withCategoryIds(row: Wire.CatalogItemView): Item {
+  return {
+    ...row,
+    categoryIds: (row.categories ?? []).map((category) => category.id),
+  };
+}
+
+/**
+ * The item gateway, with {@link Item.categoryIds} on every row it answers.
+ *
+ * Nothing it sends changes: a form sends `categoryIds` only when the operator
+ * changed them, which is what the update route takes.
+ */
+export function itemGateway(
+  inner: ResourceGateway<Wire.CatalogItemView>
+): ResourceGateway<Item> {
+  return {
+    list: async (query) => {
+      const page = await inner.list(query);
+      return { ...page, items: page.items.map(withCategoryIds) };
+    },
+    read: async (id) => withCategoryIds(await inner.read(id)),
+    create: async (input) => withCategoryIds(await inner.create(input)),
+    update: async (id, input) => withCategoryIds(await inner.update(id, input)),
+    remove: (id) => inner.remove(id),
+  };
+}
 
 /**
  * The products.
@@ -84,11 +122,20 @@ export const ITEMS = defineResource<Item>({
       maxLength: 120,
     },
     {
-      kind: 'enum',
-      name: 'category',
-      label: 'catalog.items.category',
-      options: ITEM_CATEGORY_OPTIONS,
+      kind: 'references',
+      name: 'categoryIds',
+      label: 'catalog.items.categoryIds',
+      help: 'catalog.items.categoryIdsHelp',
+      resource: 'categories',
+      // The tree is a few dozen rows and a page of products repeats a handful
+      // of them, so one cached resolve per category names the column.
+      nameLookup: true,
       required: true,
+      // The first is the one a row shows when it has room for one, so putting
+      // another first is a change worth sending.
+      ordered: true,
+      // A product only goes on a category inside another.
+      scopeFrom: () => ({ kind: 'leaf' }),
     },
     {
       kind: 'enum',
@@ -129,7 +176,14 @@ export const ITEMS = defineResource<Item>({
   ],
 
   list: {
-    columns: ['name', 'brand', 'category', 'unitSize', 'ean', 'productGroupId'],
+    columns: [
+      'name',
+      'brand',
+      'categoryIds',
+      'unitSize',
+      'ean',
+      'productGroupId',
+    ],
     // A product is recognised by its name, its brand and its size, which is what
     // separates the 1 litre from the 1.5. The barcode is what you search for
     // rather than what you scan a screen for, and a group id is a uuid.
@@ -146,10 +200,12 @@ export const ITEMS = defineResource<Item>({
   filters: [
     { kind: 'search', param: 'query', label: 'catalog.items.filter.query' },
     {
-      kind: 'enum',
-      param: 'category',
-      label: 'catalog.items.filter.category',
-      options: ITEM_CATEGORY_OPTIONS,
+      // Any category: a root narrows to every product under its children,
+      // which is how the route reads it (backend plan 0166, section 4).
+      kind: 'reference',
+      param: 'categoryId',
+      label: 'catalog.items.filter.categoryId',
+      resource: 'categories',
     },
     {
       kind: 'reference',
@@ -173,8 +229,26 @@ export const ITEMS = defineResource<Item>({
         label: 'catalog.items.setGroup.action',
         panel: SetGroupPanel,
       },
+      // Many products onto other categories, through a review (admin plan
+      // 0036). It replaces each product's set: moving products off
+      // `other-frozen` means taking them off it.
+      {
+        name: 'setCategories',
+        label: 'catalog.items.setCategories.action',
+        panel: SetCategoriesPanel,
+      },
     ],
   },
 
-  gateway: () => inject(RESOURCE_GATEWAYS).for<Item>(itemSource()),
+  // What the server refuses about a product's categories is said under them.
+  errorFields: {
+    category_not_a_leaf: 'categoryIds',
+    item_needs_a_category: 'categoryIds',
+    category_not_found: 'categoryIds',
+  },
+
+  gateway: () =>
+    itemGateway(
+      inject(RESOURCE_GATEWAYS).for<Wire.CatalogItemView>(itemSource())
+    ),
 });
