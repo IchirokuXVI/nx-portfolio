@@ -14,11 +14,12 @@ import {
   carriesBrand,
   carriesGlitch,
   carriesSize,
+  categoryVocabulary,
   findBrand,
   findCanonicalBrand,
   indexBrands,
   loadPromptTemplate,
-  loadVocabularies,
+  loadUnits,
   normalizeName,
   printedUnit,
   privateLabelLines,
@@ -35,6 +36,7 @@ function fixture(name) {
 
 const BRANDS = fixture('brands.json').items;
 const SUPERMARKETS = fixture('supermarkets.json').items;
+const CATEGORY_TREE = fixture('categories.json').categories;
 
 test('normalizeName folds case, accents and punctuation', () => {
   assert.equal(normalizeName('Leche Semidesnatada'), 'leche semidesnatada');
@@ -237,29 +239,86 @@ test('findBrand still answers the row the spelling names, link or no link', () =
   assert.equal(findBrand(brands, 'DEBORAH 48H').key, 'deborah48h');
 });
 
-test('the vocabularies come from the committed OpenAPI document', () => {
-  const { categories, units } = loadVocabularies();
-  assert.ok(categories.includes('DAIRY'));
-  assert.ok(units.includes('LITER'));
+test('the units come from the committed OpenAPI document', () => {
+  assert.ok(loadUnits().includes('LITER'));
 });
 
-test('a document with no vocabulary names the command that regenerates it', () => {
+test('a document with no unit vocabulary names the command that regenerates it', () => {
   const empty = new URL('./fixtures/empty-openapi.json', import.meta.url);
-  assert.throws(
-    () => loadVocabularies(empty),
-    /luna-shopper-backend-gateway:openapi/
+  assert.throws(() => loadUnits(empty), /luna-shopper-backend-gateway:openapi/);
+});
+
+test('the categories are the leaf slugs of the tree, grouped under their root', () => {
+  // Shuffled, because the order is the tree's `position` and not the answer's.
+  const { categories, categoryGroups } = categoryVocabulary(
+    [...CATEGORY_TREE].reverse()
   );
+  assert.deepEqual(categoryGroups.slice(0, 2), [
+    { name: 'Dairy and eggs', slugs: ['milk', 'eggs', 'other-dairy'] },
+    { name: 'Bakery', slugs: ['bread', 'other-bakery'] },
+  ]);
+  assert.deepEqual(
+    categories,
+    categoryGroups.flatMap((group) => group.slugs)
+  );
+  // A root holds no product (backend plan 0166, rule R2), so it is not a word
+  // the model can answer.
+  assert.equal(categories.includes('dairy-and-eggs'), false);
+  assert.equal(categories.includes('uncategorised'), true);
+});
+
+test('a root with no leaf, and a leaf with no root, reach no prompt', () => {
+  const { categoryGroups } = categoryVocabulary([
+    {
+      id: 'r1',
+      parentId: null,
+      slug: 'baby',
+      name: { es: 'Bebé' },
+      position: 0,
+    },
+    {
+      id: 'r2',
+      parentId: null,
+      slug: 'pets',
+      name: { en: 'Pets' },
+      position: 1,
+    },
+    {
+      id: 'l1',
+      parentId: 'r2',
+      slug: 'dogs',
+      name: { en: 'Dogs' },
+      position: 0,
+    },
+    {
+      id: 'l2',
+      parentId: 'gone',
+      slug: 'cats',
+      name: { en: 'Cats' },
+      position: 0,
+    },
+  ]);
+  assert.deepEqual(categoryGroups, [{ name: 'Pets', slugs: ['dogs'] }]);
+});
+
+test('a tree with no leaf at all is refused before a run can start on it', () => {
+  assert.throws(
+    () => categoryVocabulary(CATEGORY_TREE.filter((row) => !row.parentId)),
+    /answered no leaf category/
+  );
+  assert.throws(() => categoryVocabulary(undefined), /no leaf category/);
 });
 
 test('the system prompt carries the rules, both vocabularies and the labels', () => {
   const prompt = buildSystemPrompt({
-    categories: ['DAIRY', 'PANTRY'],
+    ...categoryVocabulary(CATEGORY_TREE),
     units: ['LITER', 'UNIT'],
     brands: indexBrands(BRANDS),
     supermarkets: SUPERMARKETS,
   });
   assert.match(prompt, /## Category vocabulary/);
-  assert.match(prompt, /- `DAIRY`/);
+  assert.match(prompt, /- Dairy and eggs: `milk`, `eggs`, `other-dairy`/);
+  assert.match(prompt, /- Other: `uncategorised`/);
   assert.match(prompt, /## Unit vocabulary/);
   assert.match(prompt, /- `LITER`/);
   assert.match(prompt, /## Known private labels/);
@@ -297,7 +356,7 @@ test('the prompt names printedAs and what a linked spelling leaves behind', () =
 
 test('the decision schema takes its enums from the same two vocabularies', () => {
   const schema = buildDecisionSchema({
-    categories: ['DAIRY', 'PANTRY'],
+    categories: ['milk', 'oil-and-vinegar'],
     units: ['LITER', 'UNIT'],
   });
 
@@ -312,10 +371,11 @@ test('the decision schema takes its enums from the same two vocabularies', () =>
   // `null` is satisfied by `null`, and the checker refuses both of them null.
   // A product with no printed size is sold by the piece, so its unit is UNIT
   // and only `unitSize` stays nullable.
-  assert.deepEqual(schema.properties.item.properties.category.enum, [
-    'DAIRY',
-    'PANTRY',
-  ]);
+  // A CREATE names one or more leaf slugs (backend plan 0166).
+  const slugs = schema.properties.item.properties.categorySlugs;
+  assert.equal(slugs.type, 'array');
+  assert.equal(slugs.minItems, 1);
+  assert.deepEqual(slugs.items.enum, ['milk', 'oil-and-vinegar']);
   assert.deepEqual(schema.properties.item.properties.defaultUnit.enum, [
     'LITER',
     'UNIT',
@@ -334,7 +394,7 @@ test('the decision schema takes its enums from the same two vocabularies', () =>
 
 test('the decision schema leaves the semantics to the validators', () => {
   const schema = buildDecisionSchema({
-    categories: ['DAIRY'],
+    categories: ['milk'],
     units: ['UNIT'],
   });
 
@@ -370,6 +430,10 @@ const ALLOWED_KEYWORDS = new Set([
   'items',
   'maxLength',
   'maximum',
+  // llama.cpp turns an array's bounds into a repetition, and Anthropic's
+  // structured outputs take a `minItems` of 0 or 1. The category list of a
+  // CREATE is the one array bounded, at one (backend plan 0166).
+  'minItems',
   'minimum',
   'properties',
   'required',
@@ -436,8 +500,13 @@ function validates(schema, value) {
   if (actual === 'string' && typeof schema.maxLength === 'number') {
     return value.length <= schema.maxLength;
   }
-  if (actual === 'array' && schema.items) {
-    return value.every((entry) => validates(schema.items, entry));
+  if (actual === 'array') {
+    if (typeof schema.minItems === 'number' && value.length < schema.minItems) {
+      return false;
+    }
+    return (
+      !schema.items || value.every((entry) => validates(schema.items, entry))
+    );
   }
   if (actual !== 'object') {
     return true;
@@ -456,7 +525,7 @@ function validates(schema, value) {
 }
 
 const SCHEMA = buildDecisionSchema({
-  categories: ['DAIRY', 'PANTRY'],
+  categories: ['milk', 'plant-drinks'],
   units: ['LITER', 'UNIT'],
 });
 
@@ -468,7 +537,7 @@ const CREATE = {
     brand: 'Hacendado',
     unitSize: 1,
     defaultUnit: 'LITER',
-    category: 'DAIRY',
+    categorySlugs: ['milk'],
     ean: null,
   },
   confidence: 0.95,
@@ -528,7 +597,7 @@ test('a CREATE carrying no item is not a document the schema allows', () => {
 
   // The three fields the checker refuses a CREATE without are required here
   // too, for the same reason and at the same cost.
-  for (const field of ['nameEs', 'category', 'defaultUnit']) {
+  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(
@@ -537,6 +606,17 @@ test('a CREATE carrying no item is not a document the schema allows', () => {
       field
     );
   }
+});
+
+test('a CREATE names one or more leaf slugs, and nothing else', () => {
+  const withSlugs = (categorySlugs) => ({
+    ...CREATE,
+    item: { ...CREATE.item, categorySlugs },
+  });
+  assert.equal(validates(SCHEMA, withSlugs(['milk', 'plant-drinks'])), true);
+  assert.equal(validates(SCHEMA, withSlugs([])), false);
+  assert.equal(validates(SCHEMA, withSlugs('milk')), false);
+  assert.equal(validates(SCHEMA, withSlugs(['DAIRY'])), false);
 });
 
 test('a half filled item is refused by the loose root, with no alternation', () => {
@@ -549,7 +629,7 @@ test('a half filled item is refused by the loose root, with no alternation', () 
   assert.ok(anyOf);
 
   assert.equal(validates(root, CREATE), true);
-  for (const field of ['nameEs', 'category', 'defaultUnit']) {
+  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(validates(root, { ...CREATE, item: stripped }), false, field);
@@ -664,7 +744,7 @@ test('printedUnit reads the unit a sizeFormat ends in', () => {
 });
 
 test('every catalog unit has a base, and 420 g is 0.42 kg', () => {
-  for (const unit of loadVocabularies().units) {
+  for (const unit of loadUnits()) {
     assert.ok(UNIT_BASES[unit], `${unit} has no base`);
   }
   const grams = toBaseSize(420, 'GRAM');

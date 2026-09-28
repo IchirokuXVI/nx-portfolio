@@ -151,8 +151,19 @@ export function checkDecisionShape(value) {
     if (!isString(item.nameEs)) {
       return { ok: false, error: 'a CREATE needs "item.nameEs"' };
     }
-    if (!isString(item.category)) {
-      return { ok: false, error: 'a CREATE needs "item.category"' };
+    const categorySlugs = Array.isArray(item.categorySlugs)
+      ? [
+          ...new Set(
+            item.categorySlugs.filter(isString).map((slug) => slug.trim())
+          ),
+        ]
+      : [];
+    if (categorySlugs.length === 0) {
+      return {
+        ok: false,
+        error:
+          'a CREATE needs "item.categorySlugs", one or more category slugs',
+      };
     }
     if (!isString(item.defaultUnit)) {
       return { ok: false, error: 'a CREATE needs "item.defaultUnit"' };
@@ -173,7 +184,7 @@ export function checkDecisionShape(value) {
           ? null
           : item.unitSize,
       defaultUnit: item.defaultUnit.trim(),
-      category: item.category.trim(),
+      categorySlugs,
       ean: isString(item.ean) ? item.ean.trim() : null,
     };
   }
@@ -301,13 +312,18 @@ export function validateDecision({
       }
     }
 
-    if (!categories.includes(item.category)) {
-      issues.push(
-        issue(
-          'UNKNOWN_CATEGORY',
-          `"${item.category}" is not one of ${categories.join(', ')}.`
-        )
-      );
+    // `categories` is the leaf slugs `start` read from the category tree
+    // (backend plan 0166). The list is too long to repeat in a detail, and the
+    // prompt already carries it.
+    for (const slug of item.categorySlugs ?? []) {
+      if (!categories.includes(slug)) {
+        issues.push(
+          issue(
+            'UNKNOWN_CATEGORY',
+            `"${slug}" is not a leaf slug of the category tree this run read.`
+          )
+        );
+      }
     }
     if (!units.includes(item.defaultUnit)) {
       issues.push(

@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { brandMatchFor, buildEntryPacket } from './packet.mjs';
+import { brandMatchFor, buildEntryPacket, toCandidate } from './packet.mjs';
 import { indexBrands } from './rules.mjs';
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
@@ -176,4 +176,22 @@ test('the packet names the entries sharing its EAN, and null otherwise (plan 000
     });
     assert.equal(alone.entry.sharedEan, null);
   }
+});
+
+test('a candidate names its categories by slug, in the order it holds them', () => {
+  // An item answers its categories as rows (backend plan 0166), and the model
+  // names a category by slug, so the slug is all the packet carries.
+  const candidate = toCandidate({
+    id: 'i1',
+    name: { es: 'Pizza cuatro quesos' },
+    categories: [
+      { id: 'c1', parentId: 'r1', slug: 'frozen-meals-and-pizzas', name: {} },
+      { id: 'c2', parentId: 'r2', slug: 'pizzas', name: {} },
+    ],
+  });
+  assert.deepEqual(candidate.categorySlugs, [
+    'frozen-meals-and-pizzas',
+    'pizzas',
+  ]);
+  assert.deepEqual(toCandidate({ id: 'i2', name: {} }).categorySlugs, []);
 });

@@ -1,0 +1,279 @@
+{
+  "categories": [
+    {
+      "id": "cat-dairy-and-eggs",
+      "parentId": null,
+      "slug": "dairy-and-eggs",
+      "name": {
+        "en": "Dairy and eggs",
+        "es": "Lácteos y huevos"
+      },
+      "position": 0,
+      "itemCount": 2
+    },
+    {
+      "id": "cat-bakery",
+      "parentId": null,
+      "slug": "bakery",
+      "name": {
+        "en": "Bakery",
+        "es": "Panadería y bollería"
+      },
+      "position": 1,
+      "itemCount": 1
+    },
+    {
+      "id": "cat-pantry",
+      "parentId": null,
+      "slug": "pantry",
+      "name": {
+        "en": "Pantry",
+        "es": "Despensa"
+      },
+      "position": 2,
+      "itemCount": 1
+    },
+    {
+      "id": "cat-snacks",
+      "parentId": null,
+      "slug": "snacks",
+      "name": {
+        "en": "Snacks",
+        "es": "Aperitivos"
+      },
+      "position": 3,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-drinks",
+      "parentId": null,
+      "slug": "drinks",
+      "name": {
+        "en": "Drinks",
+        "es": "Bebidas"
+      },
+      "position": 4,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-household",
+      "parentId": null,
+      "slug": "household",
+      "name": {
+        "en": "Household",
+        "es": "Hogar y limpieza"
+      },
+      "position": 5,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other",
+      "parentId": null,
+      "slug": "other",
+      "name": {
+        "en": "Other",
+        "es": "Otros"
+      },
+      "position": 6,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-breakfast-and-sweets",
+      "parentId": null,
+      "slug": "breakfast-and-sweets",
+      "name": {
+        "en": "Breakfast and sweets",
+        "es": "Desayuno y dulces"
+      },
+      "position": 7,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-milk",
+      "parentId": "cat-dairy-and-eggs",
+      "slug": "milk",
+      "name": {
+        "en": "Milk",
+        "es": "Leche"
+      },
+      "position": 0,
+      "itemCount": 2
+    },
+    {
+      "id": "cat-eggs",
+      "parentId": "cat-dairy-and-eggs",
+      "slug": "eggs",
+      "name": {
+        "en": "Eggs",
+        "es": "Huevos"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other-dairy",
+      "parentId": "cat-dairy-and-eggs",
+      "slug": "other-dairy",
+      "name": {
+        "en": "Other dairy",
+        "es": "Otros lácteos"
+      },
+      "position": 2,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-bread",
+      "parentId": "cat-bakery",
+      "slug": "bread",
+      "name": {
+        "en": "Bread",
+        "es": "Pan"
+      },
+      "position": 0,
+      "itemCount": 1
+    },
+    {
+      "id": "cat-other-bakery",
+      "parentId": "cat-bakery",
+      "slug": "other-bakery",
+      "name": {
+        "en": "Other bakery",
+        "es": "Otra panadería"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-oil-and-vinegar",
+      "parentId": "cat-pantry",
+      "slug": "oil-and-vinegar",
+      "name": {
+        "en": "Oil and vinegar",
+        "es": "Aceite y vinagre"
+      },
+      "position": 0,
+      "itemCount": 1
+    },
+    {
+      "id": "cat-pasta-rice-and-legumes",
+      "parentId": "cat-pantry",
+      "slug": "pasta-rice-and-legumes",
+      "name": {
+        "en": "Pasta, rice and legumes",
+        "es": "Pasta, arroz y legumbres"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other-pantry",
+      "parentId": "cat-pantry",
+      "slug": "other-pantry",
+      "name": {
+        "en": "Other pantry",
+        "es": "Otra despensa"
+      },
+      "position": 2,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-crisps",
+      "parentId": "cat-snacks",
+      "slug": "crisps",
+      "name": {
+        "en": "Crisps",
+        "es": "Patatas fritas"
+      },
+      "position": 0,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other-snacks",
+      "parentId": "cat-snacks",
+      "slug": "other-snacks",
+      "name": {
+        "en": "Other snacks",
+        "es": "Otros aperitivos"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-water",
+      "parentId": "cat-drinks",
+      "slug": "water",
+      "name": {
+        "en": "Water",
+        "es": "Agua"
+      },
+      "position": 0,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-soft-drinks",
+      "parentId": "cat-drinks",
+      "slug": "soft-drinks",
+      "name": {
+        "en": "Soft drinks",
+        "es": "Refrescos"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other-drinks",
+      "parentId": "cat-drinks",
+      "slug": "other-drinks",
+      "name": {
+        "en": "Other drinks",
+        "es": "Otras bebidas"
+      },
+      "position": 2,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-cleaning",
+      "parentId": "cat-household",
+      "slug": "cleaning",
+      "name": {
+        "en": "Cleaning",
+        "es": "Limpieza del hogar"
+      },
+      "position": 0,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-other-household",
+      "parentId": "cat-household",
+      "slug": "other-household",
+      "name": {
+        "en": "Other household",
+        "es": "Otros de hogar"
+      },
+      "position": 1,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-uncategorised",
+      "parentId": "cat-other",
+      "slug": "uncategorised",
+      "name": {
+        "en": "Not yet categorised",
+        "es": "Sin categoría"
+      },
+      "position": 0,
+      "itemCount": 0
+    },
+    {
+      "id": "cat-biscuits",
+      "parentId": "cat-breakfast-and-sweets",
+      "slug": "biscuits",
+      "name": {
+        "en": "Biscuits",
+        "es": "Galletas"
+      },
+      "position": 0,
+      "itemCount": 0
+    }
+  ]
+}
