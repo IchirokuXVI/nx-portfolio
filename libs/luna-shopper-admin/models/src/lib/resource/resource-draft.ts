@@ -214,8 +214,15 @@ function isIdList(value: DraftValue): value is readonly string[] {
  * order (admin plan 0028, section 3). A shop's stack is ranked by each scope's
  * own priority, so the order the form holds them in is not something the
  * operator said.
+ *
+ * Unless `ordered` says the order is the answer too, which is what a
+ * product's categories are (admin plan 0036): the first one is first.
  */
-export function sameValue(left: DraftValue, right: DraftValue): boolean {
+export function sameValue(
+  left: DraftValue,
+  right: DraftValue,
+  ordered = false
+): boolean {
   if (typeof left !== 'object' || typeof right !== 'object') {
     return left === right;
   }
@@ -225,6 +232,12 @@ export function sameValue(left: DraftValue, right: DraftValue): boolean {
   if (isIdList(left) || isIdList(right)) {
     if (!isIdList(left) || !isIdList(right)) {
       return false;
+    }
+    if (ordered) {
+      return (
+        left.length === right.length &&
+        left.every((id, index) => id === right[index])
+      );
     }
     const held = new Set(left);
     const other = new Set(right);
@@ -240,22 +253,42 @@ export function sameValue(left: DraftValue, right: DraftValue): boolean {
   return true;
 }
 
-/** The field names whose value has changed since the form opened. */
+/** The names of the fields whose order is part of their answer. */
+export function orderedFieldNames<T extends ResourceRow>(
+  descriptor: ResourceDescriptor<T>
+): ReadonlySet<string> {
+  return new Set(
+    descriptor.fields
+      .filter((field) => field.kind === 'references' && field.ordered === true)
+      .map((field) => field.name)
+  );
+}
+
+const NOTHING_ORDERED: ReadonlySet<string> = new Set();
+
+/**
+ * The field names whose value has changed since the form opened.
+ *
+ * `ordered` names the lists whose order counts, from
+ * {@link orderedFieldNames}. Absent means none of them does.
+ */
 export function changedFields(
   draft: ResourceDraft,
-  original: ResourceDraft
+  original: ResourceDraft,
+  ordered: ReadonlySet<string> = NOTHING_ORDERED
 ): string[] {
   return Object.keys(draft).filter(
-    (name) => !sameValue(draft[name], original[name] ?? '')
+    (name) => !sameValue(draft[name], original[name] ?? '', ordered.has(name))
   );
 }
 
 /** Whether anything has been typed that would be lost by leaving. */
 export function isDirty(
   draft: ResourceDraft,
-  original: ResourceDraft
+  original: ResourceDraft,
+  ordered: ReadonlySet<string> = NOTHING_ORDERED
 ): boolean {
-  return changedFields(draft, original).length > 0;
+  return changedFields(draft, original, ordered).length > 0;
 }
 
 export const REQUIRED_KEY = 'resource.error.required';
@@ -284,7 +317,9 @@ export function validateDraft<T extends ResourceRow>(
   original: ResourceDraft
 ): Readonly<Record<string, FieldMessage[]>> {
   const problems: Record<string, FieldMessage[]> = {};
-  const changed = new Set(changedFields(draft, original));
+  const changed = new Set(
+    changedFields(draft, original, orderedFieldNames(descriptor))
+  );
 
   for (const field of descriptor.fields) {
     if (!isEditable(field, mode)) {
@@ -520,7 +555,9 @@ export function toInput<T extends ResourceRow>(
   original: ResourceDraft
 ): ResourceInput {
   const input: ResourceInput = {};
-  const changed = new Set(changedFields(draft, original));
+  const changed = new Set(
+    changedFields(draft, original, orderedFieldNames(descriptor))
+  );
 
   for (const field of descriptor.fields) {
     if (!isEditable(field, mode)) {

@@ -268,6 +268,16 @@ export interface ReferencesField<T extends ResourceRow> extends FieldBase<T> {
    */
   readonly nameLookup?: true;
   /**
+   * Whether the order of the ids is part of the answer.
+   *
+   * A shop's price scopes are ranked by each scope's own priority, so the order
+   * the form holds them in says nothing and two lists with the same ids are the
+   * same answer. A product's categories are the other kind (admin plan 0036):
+   * the first is the one a row shows when it has room for one, so moving a
+   * category to the front is a change the form has to send.
+   */
+  readonly ordered?: true;
+  /**
    * What the picker is limited to, read from the row as the form holds it.
    *
    * `null` when the form does not know enough yet to search at all, such as a
