@@ -323,6 +323,9 @@ const productView = object(
     atShop: {
       anyOf: [ref(BASKET_SCHEMA_IDS.productAtShopView), { type: 'null' }],
     },
+    // Plan 0167: deliberately NOT required. Present only on a read with a shop
+    // whose rule catalog answered; absent otherwise, never null.
+    sectionIds: array(nonEmptyString()),
   },
   [...itemViewRequired, 'atShop']
 );

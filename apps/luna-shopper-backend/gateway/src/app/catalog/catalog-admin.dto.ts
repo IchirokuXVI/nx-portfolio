@@ -10,6 +10,9 @@ import {
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -23,6 +26,7 @@ import {
   referenceFilterDescription,
 } from '../admin/reference-none';
 import {
+  asArray,
   asBoolean,
   CatalogListQueryDto,
   SearchOrderQueryDto,
@@ -298,4 +302,67 @@ export class AdminListCategoriesQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(120)
   query?: string;
+}
+
+// --- Shop sections (plan 0167, section 4) -----------------------------------
+
+/** One chain's sections, in `position` order. */
+export class AdminListSupermarketSectionsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    description:
+      'Only the sections whose name, in either content language, or whose slug contains this text.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+}
+
+/**
+ * The pins of one chain. Both filters are optional and combine as AND:
+ * `itemId` is one product's pins, `sectionId` the products pinned to one
+ * section, and neither is every pin in the chain.
+ */
+export class AdminListItemSectionPinsQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Only this product’s pins in the chain.',
+  })
+  @IsOptional()
+  @IsUUID('all')
+  itemId?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products pinned to this section, each with all of its pins in the chain.',
+  })
+  @IsOptional()
+  @IsUUID('all')
+  sectionId?: string;
+}
+
+/**
+ * How many products one preview may name. The back office previews one
+ * product at a time; the bound keeps the query string short.
+ */
+export const SECTION_PREVIEW_MAX_ITEMS = 50;
+
+/** The products the "where shoppers will find it" preview asks about. */
+export class AdminItemSectionsAtLocationQueryDto {
+  @ApiProperty({
+    name: 'itemIds',
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: SECTION_PREVIEW_MAX_ITEMS,
+    description:
+      'Repeatable. The products to answer the rule of plan 0167, section 3 for, at this shop.',
+  })
+  @Transform(asArray)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(SECTION_PREVIEW_MAX_ITEMS)
+  @IsUUID('all', { each: true })
+  itemIds!: string[];
 }

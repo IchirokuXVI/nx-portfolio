@@ -81,6 +81,21 @@ describe('gatewayErrorKey', () => {
     ]);
   });
 
+  /** The shop section refusals (backend plan 0167, admin plan 0037). */
+  it('names each shop section refusal apart', () => {
+    expect(
+      [
+        'section_not_found',
+        'section_of_another_chain',
+        'section_slug_taken',
+      ].map((code) => gatewayErrorKey(failure({ code })))
+    ).toEqual([
+      'resource.error.sectionNotFound',
+      'resource.error.sectionOfAnotherChain',
+      'resource.error.sectionSlugTaken',
+    ]);
+  });
+
   /**
    * A body that did not reach this app intact is what a proxy answering instead
    * of the gateway looks like, and the status is all that survives it.

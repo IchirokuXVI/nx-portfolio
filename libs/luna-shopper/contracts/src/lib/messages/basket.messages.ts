@@ -343,6 +343,17 @@ export interface BasketPriceScopeView extends PriceScopeChainView {
 export interface BasketProductView extends ItemView {
   /** Null when the read has no shop. */
   atShop: BasketProductAtShopView | null;
+  /**
+   * The read's shop's sections this product is in, in the shop's order, by the
+   * rule of backend plan 0167, section 3 (plan 0167, section 4).
+   *
+   * **Absent** on a read without a shop, and absent too when catalog could not
+   * answer the rule this time: both mean "draw it under its own categories",
+   * and neither is a claim about the shop. **Empty** means catalog answered
+   * and no section of this shop holds the product, which is drawn the same way
+   * but is an answer. Never an availability: an empty list is still sold there.
+   */
+  sectionIds?: string[];
 }
 
 /**

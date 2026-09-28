@@ -183,12 +183,25 @@ export const ERROR_CATALOG: Record<
     es: 'Un producto necesita al menos una categoría.',
   },
   [ERROR_CODES.CATEGORY_IN_USE]: {
-    en: 'This category still holds categories or products. Move them before deleting it.',
-    es: 'Esta categoría todavía contiene categorías o productos. Muévelos antes de borrarla.',
+    en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
+    es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',
   },
   [ERROR_CODES.CATEGORY_NOT_FOUND]: {
     en: 'That category does not exist.',
     es: 'Esa categoría no existe.',
+  },
+  // Shop sections (plan 0167).
+  [ERROR_CODES.SECTION_NOT_FOUND]: {
+    en: 'That section does not exist.',
+    es: 'Esa sección no existe.',
+  },
+  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: {
+    en: 'A section belongs to one chain. A shop or a pinned product can only use sections of its own chain.',
+    es: 'Una sección pertenece a una sola cadena. Una tienda o un producto fijado solo puede usar secciones de su propia cadena.',
+  },
+  [ERROR_CODES.SECTION_SLUG_TAKEN]: {
+    en: 'This chain already has a section with that slug.',
+    es: 'Esta cadena ya tiene una sección con ese identificador.',
   },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',

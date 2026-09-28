@@ -22,6 +22,7 @@ import {
   PRICE_SCOPE_PATTERNS,
   PriceSourceKind,
   PRODUCT_GROUP_PATTERNS,
+  SECTION_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
@@ -43,7 +44,13 @@ import {
   type ItemPricePage,
   type ItemPriceView,
   type ItemScopePricesPage,
+  type ItemSectionPinsPage,
+  type ItemSectionPinsView,
+  type ItemSectionsAtLocationRequest,
+  type ItemSectionsAtLocationView,
   type ItemView,
+  type LocationSectionsRequest,
+  type LocationSectionsView,
   type PricePolicyListView,
   type PricePolicyView,
   type PriceScopePage,
@@ -59,6 +66,8 @@ import {
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
+  type SupermarketSectionPage,
+  type SupermarketSectionView,
   type SupermarketView,
   type UpdateBrandResult,
   type UpdateItemsResult,
@@ -80,12 +89,15 @@ import {
 } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import {
+  AdminItemSectionsAtLocationQueryDto,
   AdminListBrandsQueryDto,
   AdminListBrandSuggestionsQueryDto,
   AdminListCategoriesQueryDto,
+  AdminListItemSectionPinsQueryDto,
   AdminListLocationItemsQueryDto,
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
+  AdminListSupermarketSectionsQueryDto,
   AdminListSupermarketsQueryDto,
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
@@ -100,11 +112,14 @@ import {
   CreateProductGroupDto,
   CreateSupermarketDto,
   CreateSupermarketLocationDto,
+  CreateSupermarketSectionDto,
   ListItemPricesQueryDto,
   ListPriceScopesQueryDto,
   ListProductGroupsQueryDto,
   RegisterBrandsDto,
   RegisterBrandSuggestionDto,
+  SetItemSectionPinsDto,
+  SetLocationSectionsDto,
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
   UpdateBrandDto,
@@ -116,6 +131,7 @@ import {
   UpdateProductGroupDto,
   UpdateSupermarketDto,
   UpdateSupermarketLocationDto,
+  UpdateSupermarketSectionDto,
   UpsertSupermarketLocationItemDto,
 } from './catalog.dto';
 
@@ -282,6 +298,88 @@ export class AdminCatalogSupermarketsController {
       }
     );
   }
+
+  /**
+   * Create a section on this chain (plan 0167, section 4): an aisle as the
+   * chain names it, and the categories it holds. A slug the chain already
+   * holds answers 409 `section_slug_taken`, and an unknown category 404
+   * `category_not_found`.
+   */
+  @Post(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  createSection(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: CreateSupermarketSectionDto
+  ): Promise<SupermarketSectionView> {
+    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.create, {
+      ...adminCredential(admin),
+      supermarketId: id,
+      ...dto,
+    });
+  }
+
+  /** This chain's sections, in `position` order, each with its shop count. */
+  @Get(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.list)
+  listSections(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Query() query: AdminListSupermarketSectionsQueryDto
+  ): Promise<SupermarketSectionPage> {
+    return this.nats.send<SupermarketSectionPage>(SECTION_PATTERNS.list, {
+      userId: admin.adminId,
+      supermarketId: id,
+      query: query.query,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * The pins of this chain (plan 0167, section 4): `?itemId=` for one
+   * product's, `?sectionId=` for the products pinned to one section. One entry
+   * per pinned product, carrying all of its pins in the chain.
+   */
+  @Get(':id/item-sections')
+  @ApiContractResponse(SECTION_PATTERNS.listPins)
+  listItemSections(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Query() query: AdminListItemSectionPinsQueryDto
+  ): Promise<ItemSectionPinsPage> {
+    return this.nats.send<ItemSectionPinsPage>(SECTION_PATTERNS.listPins, {
+      userId: admin.adminId,
+      supermarketId: id,
+      itemId: query.itemId,
+      sectionId: query.sectionId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Replace one product's pins in this chain. An empty list removes them. A
+   * section of another chain answers 409 `section_of_another_chain`.
+   */
+  @Put(':id/item-sections')
+  @ApiContractResponse(SECTION_PATTERNS.setPins)
+  @ApiProblemResponses({ body: true, conflict: true })
+  setItemSections(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: SetItemSectionPinsDto
+  ): Promise<ItemSectionPinsView> {
+    return this.nats.send<ItemSectionPinsView>(SECTION_PATTERNS.setPins, {
+      ...adminCredential(admin),
+      supermarketId: id,
+      itemId: dto.itemId,
+      sectionIds: dto.sectionIds,
+    });
+  }
 }
 
 @ApiTags('admin-catalog')
@@ -332,6 +430,121 @@ export class AdminCatalogLocationsController {
     return this.nats.send(SUPERMARKET_LOCATION_PATTERNS.delete, {
       ...adminCredential(admin),
       supermarketLocationId: id,
+    });
+  }
+
+  /**
+   * This shop's sections, in its order, and whether the list is its own or
+   * its chain's default (plan 0167, section 4). The same answer as the public
+   * `GET /v1/catalog/locations/:id/sections`, behind the operator's guard.
+   */
+  @Get(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.forLocation)
+  sections(@UuidParam('id') id: string): Promise<LocationSectionsView> {
+    const req: LocationSectionsRequest = { supermarketLocationId: id };
+    return this.nats.send<LocationSectionsView>(
+      SECTION_PATTERNS.forLocation,
+      req
+    );
+  }
+
+  /**
+   * Replace this shop's ordered section list, whole. An empty array deletes
+   * the shop's own list and returns it to its chain's default. A section of
+   * another chain answers 409 `section_of_another_chain`.
+   */
+  @Put(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.setForLocation)
+  @ApiProblemResponses({ body: true, conflict: true })
+  setSections(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: SetLocationSectionsDto
+  ): Promise<LocationSectionsView> {
+    return this.nats.send<LocationSectionsView>(
+      SECTION_PATTERNS.setForLocation,
+      {
+        ...adminCredential(admin),
+        supermarketLocationId: id,
+        sectionIds: dto.sectionIds,
+      }
+    );
+  }
+
+  /**
+   * Where shoppers will find these products in this shop: the rule of plan
+   * 0167, section 3, for the back office's preview, naming the step that
+   * answered for each. The subject the basket read at a shop calls too.
+   */
+  @Get(':id/item-sections')
+  @ApiContractResponse(SECTION_PATTERNS.itemsAtLocation)
+  @ApiProblemResponses({ body: true })
+  itemSections(
+    @UuidParam('id') id: string,
+    @Query() query: AdminItemSectionsAtLocationQueryDto
+  ): Promise<ItemSectionsAtLocationView> {
+    const req: ItemSectionsAtLocationRequest = {
+      supermarketLocationId: id,
+      itemIds: query.itemIds,
+    };
+    return this.nats.send<ItemSectionsAtLocationView>(
+      SECTION_PATTERNS.itemsAtLocation,
+      req
+    );
+  }
+}
+
+/**
+ * One shop section, read, edited and deleted at its own id (plan 0167,
+ * section 4). Created and listed under its chain, at
+ * `/supermarkets/:id/sections`, the way locations are.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/sections', version: '1' })
+export class AdminCatalogSectionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get(':id')
+  @ApiContractResponse(SECTION_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<SupermarketSectionView> {
+    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.get, {
+      ...adminCredential(admin),
+      sectionId: id,
+    });
+  }
+
+  /** Rename, reorder, or replace the categories. The slug is not editable. */
+  @Patch(':id')
+  @ApiContractResponse(SECTION_PATTERNS.update)
+  @ApiProblemResponses({ body: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: UpdateSupermarketSectionDto
+  ): Promise<SupermarketSectionView> {
+    return this.nats.send<SupermarketSectionView>(SECTION_PATTERNS.update, {
+      ...adminCredential(admin),
+      sectionId: id,
+      ...dto,
+    });
+  }
+
+  /** Cascades out of every shop's list and every pin (plan 0167, section 2). */
+  @Delete(':id')
+  @ApiContractResponse(SECTION_PATTERNS.delete)
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(SECTION_PATTERNS.delete, {
+      ...adminCredential(admin),
+      sectionId: id,
     });
   }
 }

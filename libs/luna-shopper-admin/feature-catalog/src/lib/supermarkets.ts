@@ -6,6 +6,7 @@ import {
   localizedTextValue,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { SupermarketFormPage } from './supermarket-form-page';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /** A chain, as the gateway describes it. */
@@ -136,6 +137,9 @@ export const SUPERMARKETS = defineResource<Supermarket>({
   ],
 
   actions: { create: true, edit: true, delete: true },
+
+  // The generic form, with a Sections tab beside it (admin plan 0037).
+  editor: SupermarketFormPage,
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<Supermarket>({

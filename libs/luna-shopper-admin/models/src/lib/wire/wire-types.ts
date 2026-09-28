@@ -335,6 +335,16 @@ export type CreateSupermarketLocationDto = {
 };
 
 /**
+ * `CreateSupermarketSectionDto` in the gateway's OpenAPI document.
+ */
+export type CreateSupermarketSectionDto = {
+  slug: string;
+  name: LocalizedTextDto;
+  categoryIds: string[];
+  position?: number;
+};
+
+/**
  * `CreateZoneDto` in the gateway's OpenAPI document.
  */
 export type CreateZoneDto = {
@@ -531,6 +541,9 @@ export type ProblemDetails = {
     | 'item_needs_a_category'
     | 'category_in_use'
     | 'category_not_found'
+    | 'section_not_found'
+    | 'section_of_another_chain'
+    | 'section_slug_taken'
     | 'internal';
   detail?: string;
   message: string;
@@ -736,10 +749,25 @@ export type SetBasketRowDemandDto = {
 };
 
 /**
+ * `SetItemSectionPinsDto` in the gateway's OpenAPI document.
+ */
+export type SetItemSectionPinsDto = {
+  itemId: string;
+  sectionIds: string[];
+};
+
+/**
  * `SetListAccessDto` in the gateway's OpenAPI document.
  */
 export type SetListAccessDto = {
   entries: ListAccessEntryDto[];
+};
+
+/**
+ * `SetLocationSectionsDto` in the gateway's OpenAPI document.
+ */
+export type SetLocationSectionsDto = {
+  sectionIds: string[];
 };
 
 /**
@@ -1102,6 +1130,15 @@ export type UpdateSupermarketLocationDto = {
   postalCode?: string | null;
   externalRef?: string | null;
   externalProvider?: string | null;
+};
+
+/**
+ * `UpdateSupermarketSectionDto` in the gateway's OpenAPI document.
+ */
+export type UpdateSupermarketSectionDto = {
+  name?: LocalizedTextDto;
+  position?: number;
+  categoryIds?: string[];
 };
 
 /**
@@ -1959,6 +1996,7 @@ export type BasketBasketProductView = {
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
   atShop: BasketBasketProductAtShopView | null;
+  sectionIds?: string[];
 };
 
 /**
@@ -2428,6 +2466,42 @@ export type CatalogItemScopePricesView = {
 };
 
 /**
+ * `catalog.ItemSectionPinsPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogItemSectionPinsPage = {
+  items: CatalogItemSectionPinsView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemSectionPinsView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionPinsView = {
+  supermarketId: string;
+  itemId: string;
+  sectionIds: string[];
+};
+
+/**
+ * `catalog.ItemSectionsAtLocationEntry` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionsAtLocationEntry = {
+  itemId: string;
+  sectionIds: string[];
+  step: EnumsSectionRuleStep;
+};
+
+/**
+ * `catalog.ItemSectionsAtLocationView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionsAtLocationView = {
+  source: EnumsLocationSectionsSource;
+  items: CatalogItemSectionsAtLocationEntry[];
+};
+
+/**
  * `catalog.ItemView` in the gateway's OpenAPI document.
  */
 export type CatalogItemView = {
@@ -2460,6 +2534,14 @@ export type CatalogLocalizedSynonyms = {
 export type CatalogLocalizedText = {
   en?: string;
   es?: string;
+};
+
+/**
+ * `catalog.LocationSectionsView` in the gateway's OpenAPI document.
+ */
+export type CatalogLocationSectionsView = {
+  sections: CatalogSupermarketSectionView[];
+  source: EnumsLocationSectionsSource;
 };
 
 /**
@@ -2823,6 +2905,29 @@ export type CatalogSupermarketPage = {
 };
 
 /**
+ * `catalog.SupermarketSectionPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogSupermarketSectionPage = {
+  items: CatalogSupermarketSectionView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.SupermarketSectionView` in the gateway's OpenAPI document.
+ */
+export type CatalogSupermarketSectionView = {
+  id: string;
+  supermarketId: string;
+  slug: string;
+  name: CatalogLocalizedText;
+  position: number;
+  categoryIds: string[];
+  locationCount?: number;
+};
+
+/**
  * `catalog.SupermarketView` in the gateway's OpenAPI document.
  */
 export type CatalogSupermarketView = {
@@ -3077,6 +3182,11 @@ export type EnumsListResolutionBranch =
   | 'ASKED';
 
 /**
+ * `enums.LocationSectionsSource` in the gateway's OpenAPI document.
+ */
+export type EnumsLocationSectionsSource = 'LOCATION' | 'CHAIN';
+
+/**
  * `enums.MembershipStatus` in the gateway's OpenAPI document.
  */
 export type EnumsMembershipStatus =
@@ -3156,6 +3266,11 @@ export type EnumsPriceSourceKind =
  * `enums.ProfilePostalCodeSource` in the gateway's OpenAPI document.
  */
 export type EnumsProfilePostalCodeSource = 'TYPED' | 'DEVICE' | 'NEARBY';
+
+/**
+ * `enums.SectionRuleStep` in the gateway's OpenAPI document.
+ */
+export type EnumsSectionRuleStep = 'PINNED' | 'COVERED' | 'NONE';
 
 /**
  * `enums.SettlementOutcome` in the gateway's OpenAPI document.

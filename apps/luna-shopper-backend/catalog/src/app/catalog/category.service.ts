@@ -63,7 +63,7 @@ interface CategoryListCursor extends Record<string, unknown> {
  * | R1 | a parent that is itself a child, or a parent given to a root that has children | `category_too_deep` |
  * | R2 | a product on a root, or a child holding products made a root | `category_not_a_leaf` |
  * | R3 | a product with no category | `item_needs_a_category` |
- * | R4 | deleting a category that has children or products | `category_in_use` |
+ * | R4 | deleting a category that has children or products, or that a shop section covers (plan 0167) | `category_in_use` |
  *
  * R1, R2 and R4 are held by the database too (the triggers and the two
  * `ON DELETE RESTRICT` keys of the migration), because the seed, the migration
@@ -249,7 +249,10 @@ export class CategoryService {
     return toCategoryView(saved, counts);
   }
 
-  /** Refused while the category has children or products (R4). */
+  /**
+   * Refused while the category has children or products, or while a shop
+   * section covers it (R4, and plan 0167, section 2).
+   */
   async delete(req: CategoryIdRequest): Promise<{ id: string }> {
     const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.categoryId);
@@ -257,12 +260,13 @@ export class CategoryService {
       `SELECT (
          EXISTS (SELECT 1 FROM "categories" c WHERE c."parentId" = $1)
          OR EXISTS (SELECT 1 FROM "item_categories" ic WHERE ic."categoryId" = $1)
+         OR EXISTS (SELECT 1 FROM "section_categories" sc WHERE sc."categoryId" = $1)
        ) AS "held"`,
       [row.id]
     )) as { held: boolean }[];
     if (held) {
       throw new CategoryInUseException(
-        'This category still holds categories or products.'
+        'This category still holds categories or products, or a shop section covers it.'
       );
     }
     try {
@@ -610,15 +614,17 @@ export function asTreeViolation(error: unknown): unknown {
   ) {
     return tooDeep('');
   }
+  // A shop section covering the category holds it too (plan 0167, section 2).
   const onCategory =
     constraint === 'fk_item_categories_category' ||
-    constraint === 'fk_categories_parent';
+    constraint === 'fk_categories_parent' ||
+    constraint === 'fk_section_categories_category';
   if (code === PG_FOREIGN_KEY_VIOLATION && onCategory) {
     // Postgres words the two directions differently: a delete of a row still
     // pointed at, or an insert naming a row that is not there.
     return /is still referenced/.test(driver?.detail ?? '')
       ? new CategoryInUseException(
-          'This category still holds categories or products.'
+          'This category still holds categories or products, or a shop section covers it.'
         )
       : notFound([]);
   }

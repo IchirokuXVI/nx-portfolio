@@ -14,6 +14,7 @@ import {
   PRICE_SCOPES,
   PRICES,
   PRODUCT_GROUPS,
+  SECTIONS,
   SUPERMARKETS,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
@@ -98,9 +99,9 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * opened to answer one question and never to change anything.
  *
  * Inside the catalog the order follows what an operator is holding in their head
- * rather than the alphabet. A chain, then the shops it has and the scopes it
- * prices against, because both belong to a chain and neither can be read without
- * naming one. Then the products, then the categories they sit in (admin plan
+ * rather than the alphabet. A chain, then the shops it has, the sections those
+ * shops are laid out in (admin plan 0037) and the scopes it prices against,
+ * because all three belong to a chain and none can be read without naming one. Then the products, then the categories they sit in (admin plan
  * 0036), then the groups that make two products comparable, then the prices,
  * which need a product and a scope to exist at all.
  * Backend plan 0080 puts the price policies straight after the prices they
@@ -128,6 +129,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     resources: [
       SUPERMARKETS,
       LOCATIONS,
+      SECTIONS,
       PRICE_SCOPES,
       ITEMS,
       CATEGORIES,

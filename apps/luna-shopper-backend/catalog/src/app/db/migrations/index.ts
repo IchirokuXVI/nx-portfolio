@@ -20,6 +20,7 @@ import { NormalizedItemSearch1757800000000 } from './1757800000000-NormalizedIte
 import { ItemPackCount1757900000000 } from './1757900000000-ItemPackCount';
 import { LocationCoordinatesIndex1758050000000 } from './1758050000000-LocationCoordinatesIndex';
 import { CategoryTree1758100000000 } from './1758100000000-CategoryTree';
+import { ShopSections1758200000000 } from './1758200000000-ShopSections';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -53,4 +54,5 @@ export const CATALOG_MIGRATIONS = [
   ItemPackCount1757900000000,
   LocationCoordinatesIndex1758050000000,
   CategoryTree1758100000000,
+  ShopSections1758200000000,
 ];
