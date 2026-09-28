@@ -1,7 +1,6 @@
 import {
   BrandBatchOutcome,
   BulkOperationErrorCode,
-  ItemCategory,
   ItemPriceWrittenBy,
   NearbyShopNoPick,
   PostalCodeSource,
@@ -18,6 +17,9 @@ import {
   BRAND_PATTERNS,
   BULK_DECISION_MAX_OPERATIONS,
   CATALOG_SUGGESTION_KINDS,
+  CATEGORY_KINDS,
+  CATEGORY_PATTERNS,
+  CATEGORY_SLUG_MAX_LENGTH,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   PACK_COUNT_FILL_MAX,
@@ -60,7 +62,6 @@ import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
  * prices. Writes are owner only; reads open. Localized text fields carry EN + ES.
  */
 export const CATALOG_SCHEMA_IDS = {
-  itemCategory: schemaId('enums/ItemCategory'),
   unitOfMeasure: schemaId('enums/UnitOfMeasure'),
   priceScopeKind: schemaId('enums/PriceScopeKind'),
   priceSourceKind: schemaId('enums/PriceSourceKind'),
@@ -148,6 +149,20 @@ export const CATALOG_SCHEMA_IDS = {
   createItemInput: schemaId('catalog/CreateItemInput'),
   createItemsRequest: schemaId('msg/item.createMany/request'),
   createItemsResult: schemaId('msg/item.createMany/response'),
+  // Plan 0166: the update op of the items batch.
+  updateItemInput: schemaId('catalog/UpdateItemInput'),
+  updateItemsRequest: schemaId('msg/item.updateMany/request'),
+  updateItemsResult: schemaId('msg/item.updateMany/response'),
+  // Plan 0166: the category tree, and a category as a product carries it.
+  categoryView: schemaId('catalog/CategoryView'),
+  categoryTreeView: schemaId('catalog/CategoryTreeView'),
+  categoryPage: schemaId('catalog/CategoryPage'),
+  itemCategoryView: schemaId('catalog/ItemCategoryView'),
+  categoryTreeRequest: schemaId('msg/category.tree/request'),
+  createCategoryRequest: schemaId('msg/category.create/request'),
+  updateCategoryRequest: schemaId('msg/category.update/request'),
+  categoryIdRequest: schemaId('msg/category.id/request'),
+  listCategoriesRequest: schemaId('msg/category.list/request'),
   createProductGroupOperation: schemaId('catalog/CreateProductGroupOperation'),
   assignItemToGroupOperation: schemaId('catalog/AssignItemToGroupOperation'),
   productGroupAssignmentOutcome: schemaId(
@@ -432,6 +447,67 @@ const itemOfferView = object(
 );
 
 /**
+ * One row of the category tree (plan 0166, section 3). A root has a null
+ * parent; a child names its root.
+ */
+const categoryView = object(
+  CATALOG_SCHEMA_IDS.categoryView,
+  {
+    id: nonEmptyString(),
+    parentId: nullableString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    itemCount: integer({
+      minimum: 0,
+      description:
+        'Distinct products under this row. A root counts the distinct products under its children, not the sum of the leaves.',
+    }),
+  },
+  ['id', 'parentId', 'slug', 'name', 'position', 'itemCount']
+);
+
+/** The whole tree, roots then children, each by position. Unpaged. */
+const categoryTreeView = object(
+  CATALOG_SCHEMA_IDS.categoryTreeView,
+  { categories: array(ref(CATALOG_SCHEMA_IDS.categoryView)) },
+  ['categories']
+);
+
+const categoryPage = paginated(
+  CATALOG_SCHEMA_IDS.categoryPage,
+  CATALOG_SCHEMA_IDS.categoryView
+);
+
+/**
+ * A category as a product carries it (plan 0166, section 3). Denormalized, so a
+ * guest reading a basket has the name without a catalog route. The parent is
+ * never null: a product is only ever on a leaf.
+ */
+const itemCategoryView = object(
+  CATALOG_SCHEMA_IDS.itemCategoryView,
+  {
+    id: nonEmptyString(),
+    parentId: nonEmptyString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  },
+  ['id', 'parentId', 'slug', 'name']
+);
+
+/** One or more leaf ids, in the order meant (plan 0166, section 3). */
+const categoryIds = (): JsonSchema => ({
+  ...array(nonEmptyString()),
+  minItems: 1,
+});
+
+/** One or more leaf slugs, for the harvest surfaces (plan 0166, section 3). */
+export const categorySlugs = (): JsonSchema => ({
+  ...array(nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })),
+  minItems: 1,
+});
+
+/**
  * A product's own fields, exported so that a view extending one (the basket's
  * product of plan 0163) lists the same fields rather than a copy of them.
  */
@@ -444,7 +520,11 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   ean: nullableString(),
   unitSize: numberOrNull(),
   packCount: packCountOrNull(),
-  category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+  // Plan 0166: position order and never empty, so a reader always has a first.
+  categories: {
+    ...array(ref(CATALOG_SCHEMA_IDS.itemCategoryView)),
+    minItems: 1,
+  },
   defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   productGroupId: nullableString(),
   // Deliberately NOT required: only the reads that take price scopes fill it,
@@ -467,7 +547,7 @@ export const itemViewRequired: string[] = [
   'ean',
   'unitSize',
   'packCount',
-  'category',
+  'categories',
   'defaultUnit',
   'productGroupId',
 ];
@@ -1020,29 +1100,109 @@ const createItemRequest = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    categoryIds: categoryIds(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['userId', 'name', 'category', 'defaultUnit']
+  ['userId', 'name', 'categoryIds', 'defaultUnit']
 );
+/**
+ * The fields one product's edit may carry, stated once and used by the single
+ * update and by the update op of the items batch (plan 0166, section 3).
+ */
+const updateItemFields = {
+  itemId: nonEmptyString(),
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  imageUrl: nullableString(),
+  sku: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  packCount: packCountOrNull(),
+  // Replaces the whole set. Never empty, because a product always has one.
+  categoryIds: categoryIds(),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  productGroupId: nullableString(),
+};
 const updateItemRequest = object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
+  { ...adminCredentialProperties, ...updateItemFields },
+  ['userId', 'itemId']
+);
+/** A product of a bulk update: {@link updateItemRequest} without the credential. */
+const updateItemInput = object(
+  CATALOG_SCHEMA_IDS.updateItemInput,
+  updateItemFields,
+  ['itemId']
+);
+const updateItemsRequest = object(
+  CATALOG_SCHEMA_IDS.updateItemsRequest,
   {
     ...adminCredentialProperties,
-    itemId: nonEmptyString(),
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
+    items: {
+      ...array(ref(CATALOG_SCHEMA_IDS.updateItemInput)),
+      minItems: 1,
+      maxItems: BULK_DECISION_MAX_OPERATIONS,
+    },
   },
-  ['userId', 'itemId']
+  ['userId', 'items']
+);
+/** One view per input, as it now stands, in the order the request named them. */
+const updateItemsResult = object(
+  CATALOG_SCHEMA_IDS.updateItemsResult,
+  { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
+  ['items']
+);
+
+// --- The category tree (plan 0166, sections 1 to 3) -------------------------
+
+const categoryTreeRequest = object(
+  CATALOG_SCHEMA_IDS.categoryTreeRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+const createCategoryRequest = object(
+  CATALOG_SCHEMA_IDS.createCategoryRequest,
+  {
+    ...adminCredentialProperties,
+    // Absent or null makes a root.
+    parentId: nullableString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+  },
+  ['userId', 'slug', 'name']
+);
+// No slug: it is an identity, written once on create.
+const updateCategoryRequest = object(
+  CATALOG_SCHEMA_IDS.updateCategoryRequest,
+  {
+    ...adminCredentialProperties,
+    categoryId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    parentId: nullableString(),
+  },
+  ['userId', 'categoryId']
+);
+const categoryIdRequest = object(
+  CATALOG_SCHEMA_IDS.categoryIdRequest,
+  { ...adminCredentialProperties, categoryId: nonEmptyString() },
+  ['userId', 'categoryId']
+);
+const listCategoriesRequest = object(
+  CATALOG_SCHEMA_IDS.listCategoriesRequest,
+  {
+    userId: nonEmptyString(),
+    parentId: nonEmptyString(),
+    withoutParent: boolean(),
+    kind: { type: 'string', enum: [...CATEGORY_KINDS] },
+    query: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
 );
 // --- The two bulk replays (plan 0100) ---------------------------------------
 
@@ -1073,11 +1233,11 @@ const createItemInput = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    categoryIds: categoryIds(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['name', 'category', 'defaultUnit']
+  ['name', 'categoryIds', 'defaultUnit']
 );
 
 const createItemsRequest = object(
@@ -1265,7 +1425,8 @@ const searchItemsRequest = object(
   {
     userId: nonEmptyString(),
     query: string(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    // Plan 0166: a leaf, or a root meaning any of its children.
+    categoryId: nonEmptyString(),
     // Plan 0048: the group filter, and the scopes a price may be quoted from. No
     // default is resolved when the scopes are absent; that is plan 0049.
     productGroupId: string(),
@@ -2258,7 +2419,6 @@ const shopsByIdView = object(
 );
 
 export const catalogSchemas: JsonSchema[] = [
-  enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
   enumOf(CATALOG_SCHEMA_IDS.priceScopeKind, Object.values(PriceScopeKind)),
   enumOf(CATALOG_SCHEMA_IDS.priceSourceKind, Object.values(PriceSourceKind)),
@@ -2286,6 +2446,10 @@ export const catalogSchemas: JsonSchema[] = [
   priceScopeView,
   productGroupView,
   itemOfferView,
+  categoryView,
+  categoryTreeView,
+  categoryPage,
+  itemCategoryView,
   itemView,
   productGroupOfferView,
   catalogSuggestion,
@@ -2336,6 +2500,14 @@ export const catalogSchemas: JsonSchema[] = [
   createItemInput,
   createItemsRequest,
   createItemsResult,
+  updateItemInput,
+  updateItemsRequest,
+  updateItemsResult,
+  categoryTreeRequest,
+  createCategoryRequest,
+  updateCategoryRequest,
+  categoryIdRequest,
+  listCategoriesRequest,
   createProductGroupOperation,
   assignItemToGroupOperation,
   productGroupAssignmentOutcome,
@@ -2513,9 +2685,37 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
   },
+  [ITEM_PATTERNS.updateMany]: {
+    request: CATALOG_SCHEMA_IDS.updateItemsRequest,
+    response: CATALOG_SCHEMA_IDS.updateItemsResult,
+  },
   [ITEM_PATTERNS.fillPackCounts]: {
     request: CATALOG_SCHEMA_IDS.fillPackCountsRequest,
     response: CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  },
+  [CATEGORY_PATTERNS.tree]: {
+    request: CATALOG_SCHEMA_IDS.categoryTreeRequest,
+    response: CATALOG_SCHEMA_IDS.categoryTreeView,
+  },
+  [CATEGORY_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createCategoryRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateCategoryRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.categoryIdRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [CATEGORY_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.categoryIdRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listCategoriesRequest,
+    response: CATALOG_SCHEMA_IDS.categoryPage,
   },
   [BRAND_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createBrandRequest,
