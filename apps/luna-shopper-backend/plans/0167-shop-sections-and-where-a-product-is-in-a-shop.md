@@ -1,3 +1,5 @@
+> **PR:** [#527](https://github.com/IchirokuXVI/nx-portfolio/pull/527)
+
 # 0167: shop sections, and where a product is in a shop
 
 > Needs `0166` first: a section covers categories, and a category has to be a row. Frontend
