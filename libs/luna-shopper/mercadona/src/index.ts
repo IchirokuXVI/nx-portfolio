@@ -4,15 +4,20 @@
  *
  * Framework free by hard constraint: no TypeORM entity, no repository, no Nest
  * decorator, no `Item`, no `SupermarketItem`, no database. It depends on
- * `contracts` for the two enums it maps onto, and on nothing else.
+ * `contracts` for the unit enum and the pack count rule, and on nothing else.
+ * A category is answered as a slug of the taxonomy (plan 0166), never an id.
  */
 
 export {
   CHEESE_CATEGORY_IDS,
-  MERCADONA_ROOT_CATEGORY_MAP,
+  MERCADONA_CATEGORY_TABLE,
+  mercadonaCategorySlugs,
   resolveCategory,
 } from './lib/categories';
-export type { CategoryPathNode } from './lib/categories';
+export type {
+  CategoryPathNode,
+  MercadonaSectionMapping,
+} from './lib/categories';
 export {
   MERCADONA_BASE_URL,
   MercadonaClient,

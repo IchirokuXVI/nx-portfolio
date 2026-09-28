@@ -1,8 +1,6 @@
 import {
   catalogPriceState,
   PRICE_UNIT_BASES,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_FALLBACK,
   UNIT_OF_MEASURE_FALLBACK,
   UNITS_OF_MEASURE,
   type CatalogBrowseContext,
@@ -13,6 +11,7 @@ import {
   type LocalizedName,
   type Supermarket,
 } from '@portfolio/velista/models';
+import { toProductCategories } from './category-mappers';
 import {
   toLocalizedName,
   toPostalCodeCoverage,
@@ -60,11 +59,7 @@ export function toCatalogProduct(raw: unknown): CatalogProduct | null {
     imageUrl: nullableStr(raw['imageUrl']),
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
-    category: oneOf(
-      raw['category'],
-      PRODUCT_CATEGORIES,
-      PRODUCT_CATEGORY_FALLBACK
-    ),
+    categories: toProductCategories(raw['categories']),
     offer,
     // Null with no offer, so a basis can never describe a price that is not there.
     unitBasis:

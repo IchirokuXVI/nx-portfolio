@@ -376,25 +376,44 @@ describe('toBasket: the product’s aisle', () => {
     return toBasket({ ...BASKET, products })?.products;
   }
 
-  it('reads the wire category into a one element list', () => {
+  const FROZEN_MEALS = {
+    id: 'cat-frozen-meals-and-pizzas',
+    parentId: 'cat-frozen',
+    slug: 'frozen-meals-and-pizzas',
+    name: {
+      en: 'Frozen meals and pizzas',
+      es: 'Platos preparados y pizzas congeladas',
+    },
+  };
+  const PIZZAS = {
+    id: 'cat-pizzas',
+    parentId: 'cat-ready-meals',
+    slug: 'pizzas',
+    name: { en: 'Pizzas', es: 'Pizzas' },
+  };
+
+  it('reads every category of a product, in the wire’s order (velista `0118`)', () => {
     expect(
-      productsOf([{ id: 'i-1', category: 'DAIRY' }])?.get('i-1')?.categories
-    ).toEqual(['DAIRY']);
+      productsOf([{ id: 'i-1', categories: [FROZEN_MEALS, PIZZAS] }])
+        ?.get('i-1')
+        ?.categories.map((category) => category.slug)
+    ).toEqual(['frozen-meals-and-pizzas', 'pizzas']);
   });
 
   /**
-   * A thirteenth category is a product this app cannot name, and the honest place
-   * for one is the heading that says exactly that. Dropping it would take a row off
-   * a screen somebody is shopping from.
+   * There is no constant to fold an unreadable category onto any more. A product
+   * whose categories none could be read has none, and the grouping puts its row in
+   * the last section; dropping the product would take a row off a screen somebody is
+   * shopping from.
    */
-  it('reads a category it has never heard of as OTHER, and keeps the product', () => {
+  it('reads unreadable categories as none, and keeps the product', () => {
     const read = productsOf([
-      { id: 'i-1', category: 'BABY_FOOD' },
-      { id: 'i-2' },
+      { id: 'i-1', categories: [{ id: 'cat-x', slug: 'x' }] },
+      { id: 'i-2', category: 'DAIRY' },
     ]);
 
-    expect(read?.get('i-1')?.categories).toEqual(['OTHER']);
-    expect(read?.get('i-2')?.categories).toEqual(['OTHER']);
+    expect(read?.get('i-1')?.categories).toEqual([]);
+    expect(read?.get('i-2')?.categories).toEqual([]);
   });
 });
 

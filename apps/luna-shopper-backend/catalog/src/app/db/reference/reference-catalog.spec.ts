@@ -1,7 +1,18 @@
+import { CATEGORY_SLUG_MAX_LENGTH } from '@portfolio/luna-shopper/contracts';
 import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
+import {
+  LANDING_LEAVES,
+  ROOTS,
+} from '../migrations/1758100000000-CategoryTree';
+import {
+  REFERENCE_CATEGORIES,
+  REFERENCE_LEAF_SLUGS,
+  referenceCategoryRows,
+} from './categories';
 import {
   MERCADONA_SUPERMARKET_ID,
   authoredItemId,
+  categoryId,
   groupId,
   itemId,
   nationalScopeId,
@@ -28,6 +39,128 @@ const EVERY_ITEM = ALL_ITEMS.flatMap(([store, items]) =>
 );
 
 describe('reference catalog', () => {
+  describe('the category taxonomy (plan 0166, section 5)', () => {
+    const rows = referenceCategoryRows();
+    const roots = rows.filter((row) => row.parentId === null);
+    const leaves = rows.filter((row) => row.parentId !== null);
+
+    it('holds the seventeen roots and eighty four leaves of appendix A', () => {
+      // The appendix's own text says eighty; its table holds eighty four, and
+      // the table is what is seeded.
+      expect(roots).toHaveLength(17);
+      expect(leaves).toHaveLength(84);
+      expect(REFERENCE_LEAF_SLUGS.size).toBe(84);
+    });
+
+    it('writes a slug in ascii kebab case, unique across the whole tree', () => {
+      const slugs = rows.map((row) => row.slug);
+      expect(new Set(slugs).size).toBe(slugs.length);
+      for (const slug of slugs) {
+        expect(slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+        expect(slug.length).toBeLessThanOrEqual(CATEGORY_SLUG_MAX_LENGTH);
+      }
+    });
+
+    it('names every row in both locales', () => {
+      for (const row of rows) {
+        expect(row.name.en?.trim()).toBeTruthy();
+        expect(row.name.es?.trim()).toBeTruthy();
+      }
+    });
+
+    it('gives every root children and a catch all among them', () => {
+      for (const root of REFERENCE_CATEGORIES) {
+        expect(root.children.length).toBeGreaterThan(0);
+        // No children page is longer than a phone holds.
+        expect(root.children.length).toBeLessThanOrEqual(8);
+        const catchAll =
+          root.slug === 'other'
+            ? root.children.some((c) => c.slug === 'uncategorised')
+            : root.children.some((c) => c.slug.startsWith('other-'));
+        expect(`${root.slug}: ${catchAll}`).toBe(`${root.slug}: true`);
+      }
+    });
+
+    it('numbers siblings from zero, in the order the file lists them', () => {
+      expect(roots.map((row) => row.position)).toEqual(
+        roots.map((_, index) => index)
+      );
+      for (const root of REFERENCE_CATEGORIES) {
+        const children = leaves.filter(
+          (row) => row.parentId === categoryId(root.slug)
+        );
+        expect(children.map((row) => row.slug)).toEqual(
+          root.children.map((child) => child.slug)
+        );
+        expect(children.map((row) => row.position)).toEqual(
+          root.children.map((_, index) => index)
+        );
+      }
+    });
+
+    it('agrees with the rows the migration inserted, id for id', () => {
+      // The migration froze the roots and the landing leaves it needed. The seed
+      // upserts over them by id, so the slugs and positions must match, or the
+      // first boot after the migration would move them.
+      expect(ROOTS.map((root) => root.slug)).toEqual(
+        REFERENCE_CATEGORIES.map((root) => root.slug)
+      );
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      for (const leaf of LANDING_LEAVES) {
+        const row = byId.get(categoryId(leaf.slug));
+        expect(row).toMatchObject({
+          slug: leaf.slug,
+          parentId: categoryId(leaf.root),
+          position: leaf.position,
+          name: leaf.name,
+        });
+      }
+    });
+
+    it('lands each of the twelve old values on a named leaf', () => {
+      expect(LANDING_LEAVES.map((leaf) => leaf.from).sort()).toEqual(
+        [
+          'BAKERY',
+          'BEVERAGES',
+          'DAIRY',
+          'FROZEN',
+          'HOUSEHOLD',
+          'MEAT',
+          'OTHER',
+          'PANTRY',
+          'PERSONAL_CARE',
+          'PRODUCE',
+          'SEAFOOD',
+          'SNACKS',
+        ].sort()
+      );
+      for (const leaf of LANDING_LEAVES) {
+        expect(REFERENCE_LEAF_SLUGS.has(leaf.slug)).toBe(true);
+      }
+    });
+
+    it('puts every reference product on one or more leaves that exist', () => {
+      const wrong = EVERY_ITEM.filter(
+        ({ it }) =>
+          it.categories.length === 0 ||
+          new Set(it.categories).size !== it.categories.length ||
+          it.categories.some((slug) => !REFERENCE_LEAF_SLUGS.has(slug))
+      ).map(({ store, it }) => `${store}/${it.slug}`);
+      expect(wrong).toEqual([]);
+    });
+
+    it('puts every demo world product on leaves that exist', () => {
+      const wrong = demoWorld.catalog.items
+        .filter(
+          (item) =>
+            item.categories.length === 0 ||
+            item.categories.some((slug) => !REFERENCE_LEAF_SLUGS.has(slug))
+        )
+        .map((item) => item.id);
+      expect(wrong).toEqual([]);
+    });
+  });
+
   describe('groups', () => {
     it('has a unique slug per group', () => {
       const slugs = REFERENCE_GROUPS.map((g) => g.slug);
@@ -182,6 +315,7 @@ describe('reference catalog', () => {
       );
       const ids = [
         ...REFERENCE_GROUPS.map((g) => groupId(g.slug)),
+        ...referenceCategoryRows().map((row) => row.id),
         ...productIds,
         ...EVERY_ITEM.map(({ store, it }) => supermarketItemId(store, it.slug)),
       ];
@@ -227,7 +361,7 @@ describe('reference catalog', () => {
         expect({
           name: it.name,
           group: it.group,
-          category: it.category,
+          categories: it.categories,
           defaultUnit: it.defaultUnit,
           unitSize: it.unitSize,
           brand: it.brand,
@@ -235,7 +369,7 @@ describe('reference catalog', () => {
         }).toEqual({
           name: target?.name,
           group: target?.group,
-          category: target?.category,
+          categories: target?.categories,
           defaultUnit: target?.defaultUnit,
           unitSize: target?.unitSize,
           brand: target?.brand,

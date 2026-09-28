@@ -15,7 +15,7 @@ every element MUST have exactly these keys:
   "price": 0.00,
   "unitPrice": 0.00,
   "unitPriceLabel": "the comparison figure, verbatim, or null",
-  "category": "PRODUCE",
+  "category": "the kind of product in a word or two, or null",
   "categoryPath": ["BANNER HEADLINE AS PRINTED"],
   "leaflet": {
     "format": "the pack as printed, or null",
@@ -28,15 +28,9 @@ every element MUST have exactly these keys:
   }
 }
 
-"category" MUST be one of exactly these values, and nothing else:
-PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
-HOUSEHOLD, PERSONAL_CARE, OTHER.
-Choose the one that fits the product itself. Cleaning products, laundry,
-kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies
-and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft drinks are
-BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS. Tinned food,
-pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER only when
-none of the twelve fits, for example a pot plant.
+"category" is optional free text: the kind of product in a word or two, in
+Spanish, as the page or the pack names it ("Leche", "Cerveza", "Detergente").
+It is not a fixed list of values. Write null when the page gives no clue.
 
 "leaflet.promotion" is either null or an object:
 
@@ -261,7 +255,7 @@ of you.
     "price": 2.49,
     "unitPrice": 9.96,
     "unitPriceLabel": "9,96 €/kg",
-    "category": "MEAT",
+    "category": "Jamón",
     "categoryPath": ["Prepara el mejor bocadillo"],
     "leaflet": {
       "format": "250 g",
@@ -281,7 +275,7 @@ of you.
     "price": 1.29,
     "unitPrice": 0.86,
     "unitPriceLabel": "0,86 €/l",
-    "category": "DAIRY",
+    "category": "Leche",
     "categoryPath": [],
     "leaflet": {
       "format": "1,5 L",
@@ -301,7 +295,7 @@ of you.
     "price": 1.79,
     "unitPrice": null,
     "unitPriceLabel": null,
-    "category": "PRODUCE",
+    "category": "Tomate",
     "categoryPath": ["Elige la mejor fruta"],
     "leaflet": {
       "format": "A granel",

@@ -10,6 +10,7 @@ export * from './lib/auth/session-service';
 export * from './lib/auth/session-storage';
 export * from './lib/auth/session-store';
 export * from './lib/bulk-operation-error';
+export * from './lib/categories/category-seed';
 export * from './lib/client-version-interceptor';
 export * from './lib/content-locale-interceptor';
 export * from './lib/content-locale-store';

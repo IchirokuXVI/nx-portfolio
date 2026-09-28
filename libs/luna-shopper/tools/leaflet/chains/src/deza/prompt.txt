@@ -15,7 +15,7 @@ every element MUST have exactly these keys:
   "price": 0.00,
   "unitPrice": 0.00,
   "unitPriceLabel": "the badge footer text, verbatim, or null",
-  "category": "PRODUCE",
+  "category": "the kind of product in a word or two, or null",
   "categoryPath": ["DEPARTMENT HEADING AS PRINTED"],
   "leaflet": {
     "format": "the pack as printed, or null",
@@ -28,15 +28,9 @@ every element MUST have exactly these keys:
   }
 }
 
-"category" MUST be one of exactly these values, and nothing else:
-PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
-HOUSEHOLD, PERSONAL_CARE, OTHER.
-Choose the one that fits the product itself. Cleaning products, laundry,
-kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies
-and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft drinks are
-BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS. Tinned food,
-pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER only when
-none of the twelve fits.
+"category" is optional free text: the kind of product in a word or two, in
+Spanish, as the page or the pack names it ("Leche", "Cerveza", "Detergente").
+It is not a fixed list of values. Write null when the page gives no clue.
 
 "leaflet.promotion" is either null or an object:
 
@@ -195,7 +189,7 @@ of you.
     "price": 1.45,
     "unitPrice": 1.45,
     "unitPriceLabel": "LITRO 1'45",
-    "category": "PANTRY",
+    "category": "Aceite",
     "categoryPath": ["ACEITES Y SALSAS"],
     "leaflet": {
       "format": "1 L",
@@ -215,7 +209,7 @@ of you.
     "price": 1.10,
     "unitPrice": 0.55,
     "unitPriceLabel": "LITRO 0'55",
-    "category": "BEVERAGES",
+    "category": "Refresco",
     "categoryPath": ["BEBIDAS"],
     "leaflet": {
       "format": "2 L",
@@ -235,7 +229,7 @@ of you.
     "price": 6.95,
     "unitPrice": null,
     "unitPriceLabel": "EUR/KILO",
-    "category": "MEAT",
+    "category": "Pollo",
     "categoryPath": ["CARNICERÍA"],
     "leaflet": {
       "format": "kilo",

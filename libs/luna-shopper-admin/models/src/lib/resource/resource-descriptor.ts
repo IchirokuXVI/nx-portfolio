@@ -250,10 +250,25 @@ export interface ResourceActions<T extends ResourceRow = ResourceRow> {
  * built where a resource is mounted rather than where it is declared.
  */
 export interface ErrorLink {
-  /** The `details` key the refusal publishes the row's id under. */
-  readonly detail: string;
-  /** The `name` of the resource that id belongs to. */
+  /**
+   * The `details` key the refusal publishes the row's id under.
+   *
+   * Absent means the row the refused act was about. A category that still
+   * holds products is refused with no details at all (admin plan 0036),
+   * because the category is the one the operator asked to delete and the
+   * screen already holds its id.
+   */
+  readonly detail?: string;
+  /** The `name` of the resource the link opens. */
   readonly resource: string;
+  /**
+   * A filter of that resource's list to open instead of one of its rows.
+   *
+   * The id goes out as this query parameter, so the link opens the list
+   * narrowed to it: a category in use links to its products, which are the
+   * rows the operator has to move before the delete can succeed.
+   */
+  readonly filter?: string;
   /**
    * A translation key for the link's own words.
    *
@@ -272,6 +287,8 @@ export interface ErrorLink {
  */
 export interface ErrorLinkTarget {
   readonly commands: readonly string[];
+  /** The list's filter, for a link that opens a narrowed list. */
+  readonly queryParams?: Readonly<Record<string, string>>;
   readonly labelKey: string;
 }
 
@@ -366,6 +383,16 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * alone, which is every code on every resource today but two.
    */
   readonly errorLinks?: Readonly<Record<string, ErrorLink>>;
+  /**
+   * Refusals that are about one field, by error code, and the field they are
+   * drawn under.
+   *
+   * A code the server enforces on a value the form holds reads best beside
+   * that value: a third level of the category tree is a fact about the parent
+   * picked, so it is said under the parent rather than at the foot of the form
+   * (admin plan 0036). A code named here is not also drawn as the banner.
+   */
+  readonly errorFields?: Readonly<Record<string, FieldName<T>>>;
   readonly filters?: readonly FilterDescriptor[];
   /**
    * Filter parameters this list cannot be read without.

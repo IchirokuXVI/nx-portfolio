@@ -143,7 +143,8 @@
       "clearFilters": "Clear the filter",
       "confirm": "Yes, do it",
       "working": "Working…",
-      "edit": "Edit"
+      "edit": "Edit",
+      "dismiss": "Dismiss"
     },
     "confirm": {
       "delete": {
@@ -186,6 +187,11 @@
       "brandLinkOwnsNoChain": "A spelling of another brand has no chain of its own. Set the chain on the brand it spells.",
       "brandLinkKeepsKey": "A spelling of another brand keeps its key. Register the other spelling as its own brand.",
       "brandNotLinked": "Only a spelling linked to another brand can be deleted.",
+      "categoryTooDeep": "Categories have two levels. A category inside another cannot hold categories of its own, so pick a top level category as the parent.",
+      "categoryNotALeaf": "A product goes in a category inside another, never in a top level category.",
+      "itemNeedsACategory": "A product needs at least one category.",
+      "categoryInUse": "This category still holds categories or products. Move them before deleting it.",
+      "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
       "openRow": "Open the row it names."
     },
     "bulk": {
@@ -288,7 +294,8 @@
       "ean": "Barcode",
       "eanHelp": "The only identifier that joins a product across chains. Unique across the catalog.",
       "sku": "Source code",
-      "category": "Category",
+      "categoryIds": "Categories",
+      "categoryIdsHelp": "Only categories inside another. The first is the one a row shows when it has room for one.",
       "defaultUnit": "Unit",
       "unitSize": "Size",
       "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
@@ -303,7 +310,7 @@
       },
       "filter": {
         "query": "Name or barcode contains",
-        "category": "Category",
+        "categoryId": "Category",
         "productGroupId": "Product group"
       },
       "setGroup": {
@@ -311,6 +318,51 @@
         "heading": "Set the group of {{count}} products",
         "group": "Group",
         "review": "Review"
+      },
+      "setCategories": {
+        "action": "Set categories",
+        "heading": "Set the categories of {{count}} products",
+        "help": "The categories you pick replace each product’s own, in the order you pick them.",
+        "categories": "Categories",
+        "review": "Review",
+        "reviewHeading": "Give {{count}} products the categories {{categories}}",
+        "lead": "Nothing has changed yet. Every product below will have exactly these categories once you confirm.",
+        "product": "Product",
+        "now": "Now",
+        "after": "After",
+        "result": "Now has",
+        "none": "None",
+        "alreadyThere": "Already has these, left alone",
+        "notChanged": "Not changed",
+        "confirm": "Set the categories of {{count}} products",
+        "back": "Back",
+        "applied": "{{count}} products now have the categories {{categories}}",
+        "refused": "Nothing was changed.",
+        "unknown": "Not found: {{names}}",
+        "close": "Done"
+      }
+    },
+    "categories": {
+      "one": "category",
+      "many": "Categories",
+      "id": "Identifier",
+      "name": "Name",
+      "slug": "Handle",
+      "slugHelp": "A stable handle that tools and decisions files name the category by: lower case words separated by single dashes. It cannot change once the category exists.",
+      "parentId": "Inside",
+      "parentIdHelp": "The top level category this one sits in. Leave it empty for a top level category. Products only go in a category inside another.",
+      "position": "Position",
+      "positionHelp": "The order among its siblings, lowest first. Empty puts a new category last.",
+      "itemCount": "Products",
+      "inUseOpen": "Show its products",
+      "kind": {
+        "root": "Top level",
+        "leaf": "Inside another"
+      },
+      "filter": {
+        "query": "Name or handle contains",
+        "parentId": "Inside",
+        "kind": "Level"
       }
     },
     "productGroups": {
@@ -495,20 +547,6 @@
       "filter": {
         "supermarketLocationId": "Shop"
       }
-    },
-    "itemCategory": {
-      "PRODUCE": "Fresh produce",
-      "DAIRY": "Dairy",
-      "BAKERY": "Bakery",
-      "MEAT": "Meat",
-      "SEAFOOD": "Seafood",
-      "FROZEN": "Frozen",
-      "BEVERAGES": "Drinks",
-      "SNACKS": "Snacks",
-      "PANTRY": "Pantry",
-      "HOUSEHOLD": "Household",
-      "PERSONAL_CARE": "Personal care",
-      "OTHER": "Other"
     },
     "unit": {
       "UNIT": "Unit",
@@ -705,20 +743,6 @@
       "FAILED": "Failed",
       "ABORTED": "Aborted",
       "STALE": "Stale"
-    },
-    "category": {
-      "PRODUCE": "Produce",
-      "DAIRY": "Dairy",
-      "BAKERY": "Bakery",
-      "MEAT": "Meat",
-      "SEAFOOD": "Seafood",
-      "FROZEN": "Frozen",
-      "BEVERAGES": "Beverages",
-      "SNACKS": "Snacks",
-      "PANTRY": "Pantry",
-      "HOUSEHOLD": "Household",
-      "PERSONAL_CARE": "Personal care",
-      "OTHER": "Other"
     },
     "absent": {
       "heading": "The harvester does not run here",
@@ -1148,7 +1172,8 @@
         "brand": "Brand",
         "ean": "Barcode",
         "unitSize": "Size",
-        "category": "Category",
+        "categories": "Categories",
+        "categoriesHelp": "Empty uses the categories the row’s own path resolves to. Pick one or more to override them, first one first.",
         "defaultUnit": "Sold by",
         "submit": "Create it and bind the row"
       },

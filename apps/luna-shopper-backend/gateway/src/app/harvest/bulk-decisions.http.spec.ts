@@ -3,7 +3,6 @@ import { APP_FILTER } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import {
   BULK_DECISION_MAX_OPERATIONS,
-  ItemCategory,
   SourceEntryStatus,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
@@ -35,6 +34,8 @@ import { bodyParserProblems, jsonBodyParsers } from './import-body';
 
 const ENTRY = '11111111-1111-4111-8111-111111111111';
 const ITEM = '22222222-2222-4222-8222-222222222222';
+// A leaf's id. Seeded categories carry version 5 ids, derived from the slug.
+const LEAF = '33333333-3333-5333-8333-333333333333';
 const SEEN = '2026-09-10T09:00:00.000Z';
 
 const IMPORT_CAP = 8 * 1024;
@@ -134,9 +135,14 @@ async function boot() {
   return { nest, send, origin: `http://127.0.0.1:${port}` };
 }
 
-function post(origin: string, path: string, body: unknown): Promise<Response> {
+function post(
+  origin: string,
+  path: string,
+  body: unknown,
+  method = 'POST'
+): Promise<Response> {
   return fetch(`${origin}${path}`, {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
@@ -227,7 +233,7 @@ describe('the bulk decision routes', () => {
     function product() {
       return {
         name: { es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: [LEAF],
         defaultUnit: UnitOfMeasure.LITER,
       };
     }
@@ -255,6 +261,51 @@ describe('the bulk decision routes', () => {
       });
 
       expect(response.status).toBe(400);
+      expect(context.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /v1/admin/catalog/items/batch (plan 0166)', () => {
+    const PATH = '/v1/admin/catalog/items/batch';
+
+    function edit(index: number) {
+      return { itemId: uuid(index), categoryIds: [LEAF] };
+    }
+
+    it('forwards the edits to the update op, not to a product id', async () => {
+      const response = await post(
+        context.origin,
+        PATH,
+        { items: [edit(1), edit(2)] },
+        'PATCH'
+      );
+
+      expect(response.status).toBe(200);
+      const [subject, payload] = context.send.mock.calls[0] as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(subject).toBe('item.updateMany');
+      expect(payload['items']).toEqual([edit(1), edit(2)]);
+      expect(payload['adminToken']).toBe('the-operators-own-token');
+    });
+
+    it('refuses an empty set of categories, an empty list and one over the cap', async () => {
+      const refused = async (body: unknown) =>
+        (await post(context.origin, PATH, body, 'PATCH')).status;
+
+      expect(
+        await refused({ items: [{ itemId: uuid(1), categoryIds: [] }] })
+      ).toBe(400);
+      expect(await refused({ items: [] })).toBe(400);
+      expect(
+        await refused({
+          items: Array.from(
+            { length: BULK_DECISION_MAX_OPERATIONS + 1 },
+            (_value, index) => edit(index)
+          ),
+        })
+      ).toBe(400);
       expect(context.send).not.toHaveBeenCalled();
     });
   });

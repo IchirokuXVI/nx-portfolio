@@ -15,7 +15,6 @@
 
 import type {
   AuthProvider,
-  ItemCategory,
   LineApprovalStatus,
   ListPermission,
   LocalizedSynonyms,
@@ -252,7 +251,13 @@ export interface SeedItem {
   sku: string | null;
   ean: string | null;
   unitSize: number | null;
-  category: ItemCategory;
+  /**
+   * The leaves this product sits on, by slug and in order (backend plan 0166,
+   * section 5). Slugs rather than ids because a slug is the identity the
+   * taxonomy is seeded by: the catalog seeder turns each into its id, and every
+   * slug named here must be a leaf of the reference taxonomy.
+   */
+  categories: string[];
   defaultUnit: UnitOfMeasure;
   /** The group this product belongs to, or null (plan 0048, section 1). */
   productGroupId: string | null;

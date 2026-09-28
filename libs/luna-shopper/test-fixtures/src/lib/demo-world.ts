@@ -40,7 +40,6 @@
 
 import {
   AuthProvider,
-  ItemCategory,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -576,14 +575,14 @@ const catalog: CatalogSeed = {
     makeItem({
       id: ITEM_MILK_ID,
       name: { en: 'Milk', es: 'Leche' },
-      category: ItemCategory.DAIRY,
+      categories: ['milk'],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: PRODUCT_GROUP_MILK_ID,
     }),
     makeItem({
       id: ITEM_BREAD_ID,
       name: { en: 'Bread', es: 'Pan' },
-      category: ItemCategory.BAKERY,
+      categories: ['bread'],
       defaultUnit: UnitOfMeasure.UNIT,
       productGroupId: PRODUCT_GROUP_BREAD_ID,
     }),

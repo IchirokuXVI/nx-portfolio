@@ -34,6 +34,7 @@ import {
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
+import { memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import type { BasketChangeContext } from '../mapping/basket-change-mappers';
 import type { BasketServiceI } from './basket-service';
@@ -154,7 +155,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     ),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
   },
   {
     id: 'item-milk-pascual',
@@ -170,7 +171,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     ),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
   },
   {
     id: 'item-milk-central',
@@ -186,7 +187,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     ...priced(),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
   },
   {
     id: 'item-eggs',
@@ -199,7 +200,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     ...priced(offer(2.85, 0.24, 'EUR/ud')),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('eggs')],
   },
 ];
 

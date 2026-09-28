@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { decide, end, next, start } from './commands.mjs';
 import { makeGateway } from './gateway.mjs';
+import { categoryVocabulary } from './rules.mjs';
 import { makeCatalog, makeFakeSession, makeQueue } from './test-fakes.mjs';
 
 function fixture(name) {
@@ -27,7 +28,7 @@ const CATALOG = fixture('catalog-items.json');
 const BRANDS = fixture('brands.json');
 
 const VOCABULARIES = {
-  categories: ['DAIRY', 'PANTRY', 'OTHER', 'SNACKS', 'BEVERAGES'],
+  ...categoryVocabulary(fixture('categories.json').categories),
   units: ['UNIT', 'LITER', 'GRAM', 'KILOGRAM', 'MILLILITER', 'PACK'],
 };
 
@@ -156,7 +157,7 @@ test('a leaflet row carrying its brand and size in the name is a REVIEW', async 
         brand: 'Hacendado',
         unitSize: 1,
         defaultUnit: 'LITER',
-        category: 'PANTRY',
+        categorySlugs: ['oil-and-vinegar'],
       },
     },
     gateways: world.gateways,

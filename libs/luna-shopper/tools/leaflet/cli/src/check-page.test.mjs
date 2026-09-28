@@ -13,7 +13,7 @@ const GOOD_ROW = {
   price: 0.39,
   unitPrice: 1.18,
   unitPriceLabel: 'el litro le sale a 1,18€',
-  category: 'BEVERAGES',
+  category: 'Cerveza',
   categoryPath: ['BEBIDAS'],
   leaflet: {
     format: 'lata 33 cl.',
@@ -107,6 +107,21 @@ test('a bad page names every problem with the line it sits on', () => {
     printed,
     /npx nx run luna-shopper\/leaflet-cli:read -- --out \/out --check-page 5/
   );
+});
+
+test('category is free text the page may leave out, and is never checked', () => {
+  // Backend plan 0166: the twelve values are gone, and whatever the model read
+  // off the page travels to extra.category as it is.
+  const { category, ...without } = GOOD_ROW;
+  assert.ok(category);
+  for (const row of [
+    GOOD_ROW,
+    { ...GOOD_ROW, category: 'BEVERAGES' },
+    { ...GOOD_ROW, category: null },
+    without,
+  ]) {
+    assert.deepEqual(rowProblems(row), [], JSON.stringify(row.category));
+  }
 });
 
 test('a page that is not JSON names the line the parser stopped on', () => {

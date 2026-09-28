@@ -1,3 +1,5 @@
+> **PR:** [#526](https://github.com/IchirokuXVI/nx-portfolio/pull/526)
+
 # 0118: categories are data
 
 > Client half of backend `0166`. No mock: this plan changes what a category **is** on the

@@ -1,5 +1,7 @@
 import { Brand } from './brand.entity';
 import { CatalogAudit } from './catalog-audit.entity';
+import { CategoryMember } from './category-member.entity';
+import { Category } from './category.entity';
 import { ItemPriceDetailsRow } from './item-price-details.entity';
 import { ItemPrice } from './item-price.entity';
 import { Item } from './item.entity';
@@ -20,6 +22,8 @@ export {
   AuditActorKind,
   CatalogAudit,
 } from './catalog-audit.entity';
+export { CategoryMember } from './category-member.entity';
+export { Category } from './category.entity';
 export { ItemPriceDetailsRow } from './item-price-details.entity';
 export { ItemPrice } from './item-price.entity';
 export { Item } from './item.entity';
@@ -46,6 +50,10 @@ export const CATALOG_ENTITIES = [
   // (plan 0115, section 3.2).
   Brand,
   Item,
+  // The category tree, and the products on its leaves (plan 0166). The tree
+  // comes after nothing it names; the membership after both sides.
+  Category,
+  CategoryMember,
   // Every price a source gave, and the policy that picks one (plan 0080). The
   // materialized row below them is derived from both.
   ItemPrice,

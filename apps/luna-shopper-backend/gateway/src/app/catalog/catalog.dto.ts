@@ -8,10 +8,10 @@ import {
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
+  CATEGORY_SLUG_MAX_LENGTH,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
   ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
-  ItemCategory,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   PriceScopeKind,
@@ -74,6 +74,14 @@ export class LookupItemsDto {
 }
 
 const LOCALIZED_TEXT_MAX_LENGTH = 200;
+
+/**
+ * How many categories one product may name (plan 0166, section 2).
+ *
+ * A bound rather than a rule of the plan: a product sits in two or three aisles
+ * at most, and the number is here so a write cannot carry the whole tree.
+ */
+const ITEM_CATEGORY_MAX = 10;
 
 /**
  * One language of a localized text (plan 0079): absent, or a non blank string
@@ -399,9 +407,20 @@ export class CreateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiProperty({ enum: ItemCategory })
-  @IsEnum(ItemCategory)
-  category!: ItemCategory;
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  // Any version: seeded categories carry version 5 ids derived from the slug.
+  @IsUUID('all', { each: true })
+  categoryIds!: string[];
 
   @ApiProperty({ enum: UnitOfMeasure })
   @IsEnum(UnitOfMeasure)
@@ -501,10 +520,20 @@ export class UpdateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiPropertyOptional({ enum: ItemCategory })
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'Replace the whole set of leaf categories, in the order meant (plan 0166, section 3). Absent leaves the set alone. An empty list is refused here with `validation_failed`, because a product always has one; catalog backs the rule with `item_needs_a_category` for any other writer.',
+  })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  @IsUUID('all', { each: true })
+  categoryIds?: string[];
 
   @ApiPropertyOptional({ enum: UnitOfMeasure })
   @IsOptional()
@@ -520,6 +549,103 @@ export class UpdateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+}
+
+/** One product of an {@link UpdateItemsDto}: the single edit, and which product. */
+export class UpdateItemBatchEntryDto extends UpdateItemDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('all')
+  itemId!: string;
+}
+
+/**
+ * The update op of the items batch (plan 0166, section 3): several products in
+ * one transaction, all or nothing.
+ *
+ * The back office's "Set categories" sends one entry per ticked row carrying
+ * `categoryIds`. The cap is stated here and in catalog, as it is for the create
+ * op beside it.
+ */
+export class UpdateItemsDto {
+  @ApiProperty({
+    type: [UpdateItemBatchEntryDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The edits to apply, all of them or none. Each is what `PATCH /v1/admin/catalog/items/{id}` takes, plus the product it is for. A longer list is refused rather than split.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateItemBatchEntryDto)
+  items!: UpdateItemBatchEntryDto[];
+}
+
+// --- Categories (plan 0166, sections 1 to 3) --------------------------------
+
+export class CreateCategoryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The root this category sits under. Absent or null makes a root. A parent that is itself inside another is refused with `category_too_deep`: the tree has two levels.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all')
+  parentId?: string | null;
+
+  @ApiProperty({
+    minLength: 1,
+    maxLength: CATEGORY_SLUG_MAX_LENGTH,
+    description:
+      'Ascii kebab case, unique across the whole tree, and written once: nothing changes a slug after it ships (plan 0166, section 5).',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(CATEGORY_SLUG_MAX_LENGTH)
+  slug!: string;
+
+  @ApiProperty({ type: LocalizedTextDto })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name!: LocalizedTextDto;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    minimum: 0,
+    description: 'Order among siblings. Absent appends after the last one.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+}
+
+/** An edit. No slug: it is an identity, written once on create. */
+export class UpdateCategoryDto {
+  @ApiPropertyOptional({ type: LocalizedTextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ type: 'integer', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Move the category under another root, or make it a root with null. A root with children cannot take a parent (`category_too_deep`), and a child holding products cannot become a root (`category_not_a_leaf`).',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all')
+  parentId?: string | null;
 }
 
 // --- Price scopes (plan 0038, section 5.1) ---------------------------------
@@ -1110,10 +1236,14 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @MaxLength(120)
   query?: string;
 
-  @ApiPropertyOptional({ enum: ItemCategory })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.',
+  })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  @IsUUID('all')
+  categoryId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',

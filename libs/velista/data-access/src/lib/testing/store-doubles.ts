@@ -31,7 +31,12 @@ import type {
   UserProfile,
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
-import { isOpenBasket } from '@portfolio/velista/models';
+import {
+  buildCategoryTree,
+  EMPTY_CATEGORY_TREE,
+  isOpenBasket,
+  type CategoryNode,
+} from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
 import {
@@ -44,6 +49,10 @@ import { SessionStore } from '../auth/session-store';
 import { BasketListStore } from '../baskets/basket-list-store';
 import { LiveBasketStore } from '../baskets/live-basket-store';
 import { SharedListStore } from '../baskets/shared-list-store';
+import {
+  CategoryStore,
+  type CategoryTreeState,
+} from '../catalog/category-store';
 import {
   GroupMembers,
   type GroupMembersEntry,
@@ -1321,6 +1330,54 @@ export function provideFakeItemNames(
   store: FakeItemNames = fakeItemNames()
 ): Provider {
   return { provide: ItemNames, useValue: store };
+}
+
+/**
+ * A `CategoryStore` that holds what you gave it (velista `0118`).
+ *
+ * Holds nothing by default, which is the state every screen is in before the tree
+ * lands: lookups miss and nothing is ranked. {@link land} is the tree arriving later,
+ * for a spec that asserts a list re-sorts. The real store's own behaviour, asking
+ * once and retrying after a failure, is covered against the real thing in its spec.
+ */
+export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
+  const tree = signal(
+    rows === null ? EMPTY_CATEGORY_TREE : buildCategoryTree(rows)
+  );
+  const state = signal<CategoryTreeState>(rows === null ? 'idle' : 'loaded');
+  let ensured = 0;
+
+  return {
+    state: state.asReadonly(),
+    tree: tree.asReadonly(),
+    loaded: computed(() => state() === 'loaded'),
+    roots: computed(() => tree().roots),
+    byId: (categoryId: string) => tree().byId.get(categoryId) ?? null,
+    bySlug: (slug: string) => tree().bySlug.get(slug) ?? null,
+    rank: (categoryId: string) => tree().ranks.get(categoryId) ?? null,
+    ensure: async () => {
+      ensured += 1;
+    },
+    prime: (next: readonly CategoryNode[]) => {
+      tree.set(buildCategoryTree(next));
+      state.set('loaded');
+    },
+    /** The tree arriving, as the real store's read landing would. */
+    land: (next: readonly CategoryNode[]) => {
+      tree.set(buildCategoryTree(next));
+      state.set('loaded');
+    },
+    /** How many times a screen asked for the tree. */
+    ensured: () => ensured,
+  };
+}
+
+export type FakeCategoryStore = ReturnType<typeof fakeCategoryStore>;
+
+export function provideFakeCategoryStore(
+  store: FakeCategoryStore = fakeCategoryStore()
+): Provider {
+  return { provide: CategoryStore, useValue: store };
 }
 
 /** What a fake catalog says a group is called (velista plan 0065, section 2.1). */

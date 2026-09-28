@@ -1,6 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
 import {
-  ItemCategory,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -11,12 +10,14 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource, Repository } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { categoryId } from '../db/reference/ids';
 import {
   AuditAction,
   AuditActorKind,
   Brand,
   CATALOG_ENTITIES,
   CatalogAudit,
+  Category,
   Item,
   ItemPrice,
   PriceScope,
@@ -26,6 +27,7 @@ import {
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
+import { CategoryService } from './category.service';
 import { EffectivePriceService } from './effective-price.service';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
@@ -126,7 +128,8 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       groups,
       admin,
       audit,
-      events
+      events,
+      new CategoryService(dataSource.getRepository(Category), admin, audit)
     );
     const effective = new EffectivePriceService();
     scopes = new PriceScopeService(
@@ -167,7 +170,7 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       userId: actorId,
       name: { en: 'Semi Skimmed 1L', es: 'Semidesnatada 1L' },
       brand: 'Pascual',
-      category: ItemCategory.DAIRY,
+      categoryIds: [categoryId('other-dairy')],
       defaultUnit: UnitOfMeasure.LITER,
     });
   }
@@ -187,7 +190,6 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
     });
     expect(history[0].after).toMatchObject({
       brand: 'Pascual',
-      category: ItemCategory.DAIRY,
     });
     // The id is the `entityId` column, so repeating it inside the diff would be
     // the same fact twice on the smallest row the table ever holds.

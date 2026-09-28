@@ -31,7 +31,10 @@ import {
   type ProductGroupOfferView,
   type SearchItemsRequest,
   type SearchOffersRequest,
+  type UpdateItemInput,
   type UpdateItemRequest,
+  type UpdateItemsRequest,
+  type UpdateItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
@@ -50,7 +53,13 @@ import {
   Repository,
   type SelectQueryBuilder,
 } from 'typeorm';
-import { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
+import {
+  Brand,
+  Item,
+  ProductGroup,
+  SupermarketItem,
+  type Category,
+} from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
@@ -61,7 +70,15 @@ import {
   toItemView,
   toProductGroupView,
 } from './catalog.mappers';
-import { PlatformAdminService } from './platform-admin.service';
+import {
+  CategoryService,
+  toCategoryOnItem,
+  type CategoryOnItem,
+} from './category.service';
+import {
+  PlatformAdminService,
+  type CatalogActor,
+} from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 import {
   brandTypedSql,
@@ -128,6 +145,25 @@ function soldByChainSql(placeholder: string): string {
 }
 
 /**
+ * The products under one category (plan 0166, section 4), written once for
+ * both branches of the search for the reason {@link soldByChainSql} is.
+ *
+ * A leaf's own products, or for a root the products under any of its children:
+ * `c.id` matches a leaf and `c."parentId"` matches a root, and a row can only
+ * ever match one of the two. An `EXISTS` so a product on two leaves of one root
+ * is still one row, planned on `ix_item_categories_category`.
+ */
+function underCategorySql(placeholder: string): string {
+  return `EXISTS (
+        SELECT 1
+        FROM "item_categories" ic
+        JOIN "categories" c ON c."id" = ic."categoryId"
+        WHERE ic."itemId" = i."id"
+          AND (c."id" = ${placeholder}::uuid OR c."parentId" = ${placeholder}::uuid)
+      )`;
+}
+
+/**
  * Global products (plan 0012), and the search over them (plan 0048).
  *
  * Writes are owner only; reads are open to any authenticated user.
@@ -181,7 +217,11 @@ export class ItemService {
     private readonly audit: CatalogAuditService,
     // Where a product's group moves is where plan 0070's fan out starts. Fire and
     // forget: an admin's write must not fail because nobody was listening.
-    private readonly events: CatalogEventsPublisher
+    private readonly events: CatalogEventsPublisher,
+    // The leaves a write names, and the categories every read answers with
+    // (plan 0166). Last, so the specs that build this positionally keep their
+    // earlier arguments where they were.
+    private readonly categories: CategoryService
   ) {}
 
   /**
@@ -195,6 +235,9 @@ export class ItemService {
    */
   async create(req: CreateItemRequest): Promise<ItemView> {
     const actor = await this.admin.requireAdmin(req);
+    // One or more leaves, checked before anything is written (plan 0166,
+    // rules R2 and R3): a product always has a category.
+    const leaves = await this.categories.requireLeaves(req.categoryIds ?? []);
     const draft = this.items.create({
       name: req.name,
       imageUrl: req.imageUrl ?? null,
@@ -202,7 +245,6 @@ export class ItemService {
       ean: req.ean ?? null,
       unitSize: req.unitSize ?? null,
       packCount: req.packCount ?? null,
-      category: req.category,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
@@ -216,14 +258,20 @@ export class ItemService {
     // which is what the route's own `conflict: true` already promised not to do.
     let saved: Item;
     try {
-      saved = await this.audit.write(actor, (tx) => tx.create(Item, draft));
+      saved = await this.audit.write(actor, async (tx) => {
+        const row = await tx.create(Item, draft);
+        // In the same transaction as the product, so there is never a product
+        // with no category to read.
+        await this.categories.setItemCategories(tx.manager, row.id, leaves);
+        return row;
+      });
     } catch (error) {
       throw asEanConflict(error, EAN_TAKEN_ON_CREATE);
     }
     if (saved.productGroupId !== null) {
       this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
     }
-    return toItemView(saved);
+    return toItemView(saved, leaves.map(toCategoryOnItem));
   }
 
   /**
@@ -270,9 +318,15 @@ export class ItemService {
     const registered = await this.registeredBrands(
       req.items.map((input) => input.brand)
     );
+    // Every leaf the batch names, in one query too (plan 0166), and each
+    // product's list checked against it before anything is written.
+    const leavesOf = await this.categories.leaveChecker(
+      req.items.map((input) => input.categoryIds ?? [])
+    );
 
-    const drafts: Item[] = [];
+    const drafts: { draft: Item; leaves: Category[] }[] = [];
     for (const input of req.items) {
+      const leaves = leavesOf(input.categoryIds ?? []);
       const draft = this.items.create({
         name: input.name,
         imageUrl: input.imageUrl ?? null,
@@ -280,20 +334,21 @@ export class ItemService {
         ean: input.ean ?? null,
         unitSize: input.unitSize ?? null,
         packCount: input.packCount ?? null,
-        category: input.category,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
       });
       this.applyBrand(draft, input.brand, registered);
-      drafts.push(draft);
+      drafts.push({ draft, leaves });
     }
 
-    let saved: Item[];
+    let saved: { row: Item; leaves: Category[] }[];
     try {
       saved = await this.audit.write(actor, async (tx) => {
-        const rows: Item[] = [];
-        for (const draft of drafts) {
-          rows.push(await tx.create(Item, draft));
+        const rows: { row: Item; leaves: Category[] }[] = [];
+        for (const { draft, leaves } of drafts) {
+          const row = await tx.create(Item, draft);
+          await this.categories.setItemCategories(tx.manager, row.id, leaves);
+          rows.push({ row, leaves });
         }
         return rows;
       });
@@ -301,12 +356,16 @@ export class ItemService {
       throw asEanConflict(error, eanTakenInBatch(takenEanOf(error)));
     }
 
-    for (const row of saved) {
+    for (const { row } of saved) {
       if (row.productGroupId !== null) {
         this.events.itemGroupChanged(row.id, null, row.productGroupId);
       }
     }
-    return { items: saved.map((row) => toItemView(row)) };
+    return {
+      items: saved.map(({ row, leaves }) =>
+        toItemView(row, leaves.map(toCategoryOnItem))
+      ),
+    };
   }
 
   /**
@@ -331,53 +390,57 @@ export class ItemService {
    */
   async update(req: UpdateItemRequest): Promise<ItemView> {
     const actor = await this.admin.requireAdmin(req);
-    const row = await this.load(req.itemId);
-    const before = { ...row };
-    const groupBefore = row.productGroupId;
-    if (req.name !== undefined) {
-      row.name = req.name;
-    }
-    if (req.brand !== undefined) {
-      this.applyBrand(row, req.brand, await this.registeredBrands([req.brand]));
-    }
-    if (req.imageUrl !== undefined) {
-      row.imageUrl = req.imageUrl;
-    }
-    if (req.sku !== undefined) {
-      row.sku = req.sku;
-    }
-    if (req.ean !== undefined) {
-      row.ean = req.ean;
-    }
-    if (req.unitSize !== undefined) {
-      row.unitSize = req.unitSize;
-    }
-    if (req.packCount !== undefined) {
-      row.packCount = req.packCount;
-    }
-    if (req.category !== undefined) {
-      row.category = req.category;
-    }
-    if (req.defaultUnit !== undefined) {
-      row.defaultUnit = req.defaultUnit;
-    }
-    if (req.productGroupId !== undefined) {
-      row.productGroupId = await this.resolveGroup(req.productGroupId);
-    }
-    // An edit reaches the same unique index a create does, because a barcode
-    // typed onto this product can be one another product already carries.
-    let saved: Item;
-    try {
-      saved = await this.audit.write(actor, (tx) =>
-        tx.update(Item, before, row)
+    const [view] = await this.applyUpdates(actor, [req], EAN_TAKEN_ON_UPDATE);
+    return view;
+  }
+
+  /**
+   * Several product edits in one transaction, all or nothing (plan 0166,
+   * section 3).
+   *
+   * Each entry is applied exactly as {@link update} applies one, which is why
+   * both go through {@link applyUpdates}; the difference is only that every
+   * entry shares one transaction, so the first refusal refuses the whole
+   * request and nothing is written. It is what the back office's "Set
+   * categories" action sends, one entry per ticked row, and a set applied to
+   * half the rows would leave the operator to work out which half.
+   *
+   * Capped and refused whole past the cap, for the reason {@link createMany}
+   * gives: two chunks are two transactions.
+   */
+  async updateMany(req: UpdateItemsRequest): Promise<UpdateItemsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.items.length === 0) {
+      throw new ValidationException(
+        'A bulk update needs at least one product.'
       );
-    } catch (error) {
-      throw asEanConflict(error, EAN_TAKEN_ON_UPDATE);
     }
-    if (saved.productGroupId !== groupBefore) {
-      this.events.itemGroupChanged(saved.id, groupBefore, saved.productGroupId);
+    if (req.items.length > BULK_DECISION_MAX_OPERATIONS) {
+      throw new ValidationException(
+        `A bulk update carries at most ${BULK_DECISION_MAX_OPERATIONS} ` +
+          `products, and this one carries ${req.items.length}. Split the ` +
+          'work: this request is refused whole rather than chunked, because ' +
+          'two chunks are two transactions and the first can land while the ' +
+          'second fails.'
+      );
     }
-    return toItemView(saved);
+    const seen = new Set<string>();
+    for (const input of req.items) {
+      if (seen.has(input.itemId)) {
+        throw new ValidationException(
+          `The product ${input.itemId} is named twice in one bulk update. ` +
+            'Send one entry per product with every change it needs.'
+        );
+      }
+      seen.add(input.itemId);
+    }
+    return {
+      items: await this.applyUpdates(
+        actor,
+        req.items,
+        EAN_TAKEN_IN_UPDATE_BATCH
+      ),
+    };
   }
 
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
@@ -388,7 +451,8 @@ export class ItemService {
   }
 
   async get(req: ItemIdRequest): Promise<ItemView> {
-    return toItemView(await this.load(req.itemId));
+    const row = await this.load(req.itemId);
+    return toItemView(row, (await this.categoriesOf([row])).get(row.id) ?? []);
   }
 
   /**
@@ -494,11 +558,14 @@ export class ItemService {
       return { items: [] };
     }
     const rows = await this.items.find({ where: { id: In(ids) } });
+    const categories = await this.categoriesOf(rows);
+    const view = (row: Item, offer?: ItemOfferView) =>
+      toItemView(row, categories.get(row.id) ?? [], offer);
     const scopeIds = req.priceScopeIds ?? [];
     if (scopeIds.length === 0) {
       // An arrow rather than a bare reference: `map` passes the index as the
-      // second argument, which `toItemView` reads as `bestOffer`.
-      return { items: rows.map((row) => toItemView(row)) };
+      // second argument, which `view` reads as the offer.
+      return { items: rows.map((row) => view(row)) };
     }
     const itemIds = rows.map((row) => row.id);
     if (req.offers === 'all') {
@@ -507,7 +574,7 @@ export class ItemService {
         items: rows.map((row) => {
           const offers = perItem.get(row.id) ?? [];
           return {
-            ...toItemView(row),
+            ...view(row),
             // Filled from the same array rather than from a second query, so
             // "the cheapest" and "the first of all of them" cannot disagree
             // (plan 0109, section 2).
@@ -520,7 +587,7 @@ export class ItemService {
     const offers = await this.offersFor(itemIds, scopeIds);
     return {
       items: rows.map((row) => ({
-        ...toItemView(row),
+        ...view(row),
         bestOffer: offers.get(row.id) ?? null,
       })),
     };
@@ -535,7 +602,12 @@ export class ItemService {
    */
   async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
     const row = await this.items.findOne({ where: { ean: req.ean } });
-    return { item: row ? toItemView(row) : null };
+    if (!row) {
+      return { item: null };
+    }
+    return {
+      item: toItemView(row, (await this.categoriesOf([row])).get(row.id) ?? []),
+    };
   }
 
   /**
@@ -560,7 +632,10 @@ export class ItemService {
       return { items: [] };
     }
     const rows = await this.items.find({ where: { ean: In(eans) } });
-    return { items: rows.map((row) => toItemView(row)) };
+    const categories = await this.categoriesOf(rows);
+    return {
+      items: rows.map((row) => toItemView(row, categories.get(row.id) ?? [])),
+    };
   }
 
   /**
@@ -586,6 +661,12 @@ export class ItemService {
    * all.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
+    if (req.categoryId !== undefined && !isUuid(req.categoryId)) {
+      // An id that is not a uuid names no category, so the filter matches
+      // nothing, as an unknown uuid does (plan 0166, section 3). Casting it
+      // would fail the query instead.
+      return { items: [], nextCursor: null };
+    }
     const limit = clampPageSize(req.limit);
     // The caller's language, off the request context the gateway propagated
     // (plan 0111, section 3).
@@ -608,6 +689,7 @@ export class ItemService {
         : this.nextCursor(order, locale, cursor, limit, last);
 
     const pageIds = page.map((row) => row.id);
+    const categories = await this.categoriesOf(page);
     const scopeIds = req.priceScopeIds ?? [];
     if (req.offers === 'all' && scopeIds.length > 0) {
       // Plan 0161, section 1: what `getMany` answers for `all`, for the same
@@ -617,14 +699,20 @@ export class ItemService {
       return {
         items: page.map((row) => {
           const offers = perItem.get(row.id) ?? [];
-          return { ...toItemView(row), bestOffer: offers[0] ?? null, offers };
+          return {
+            ...toItemView(row, categories.get(row.id) ?? []),
+            bestOffer: offers[0] ?? null,
+            offers,
+          };
         }),
         nextCursor,
       };
     }
     const offers = await this.offersFor(pageIds, req.priceScopeIds);
     return {
-      items: page.map((row) => toItemView(row, offers.get(row.id))),
+      items: page.map((row) =>
+        toItemView(row, categories.get(row.id) ?? [], offers.get(row.id))
+      ),
       nextCursor,
     };
   }
@@ -811,12 +899,14 @@ export class ItemService {
         : Promise.resolve(undefined),
     ]);
     const byId = new Map(members.map((item) => [item.id, item]));
+    const categories = await this.categoriesOf(members);
 
     return {
       items: page.map((row) =>
         this.toOfferView(row, byId, membership.get(row.id) ?? [], {
           offers,
           members: ranked ? (ranked.get(row.id) ?? []) : undefined,
+          categories,
         })
       ),
       nextCursor: hasMore
@@ -988,8 +1078,11 @@ export class ItemService {
       offers?: Map<string, ItemOfferView[]>;
       /** The ranked members, when `members` was asked for. */
       members?: RankedMemberRow[];
+      /** Every member's categories, loaded for the page in one query. */
+      categories?: ReadonlyMap<string, CategoryOnItem[]>;
     } = {}
   ): ProductGroupOfferView {
+    const categoriesOf = (item: Item) => extra.categories?.get(item.id) ?? [];
     const group = toProductGroupView({
       id: row.id,
       name: row.name,
@@ -1011,7 +1104,7 @@ export class ItemService {
             group,
             cheapestItem: extra.offers
               ? {
-                  ...toItemView(member, offer),
+                  ...toItemView(member, categoriesOf(member), offer),
                   // The group's own offer leads the array, so `bestOffer` is
                   // its first entry without being changed (plan 0161, section
                   // 1). The lateral ranks one product's rows by unit price
@@ -1025,7 +1118,7 @@ export class ItemService {
                     ),
                   ],
                 }
-              : toItemView(member, offer),
+              : toItemView(member, categoriesOf(member), offer),
             offer,
             itemIds,
           };
@@ -1045,9 +1138,10 @@ export class ItemService {
         // `members[0]` is `cheapestItem` exactly: the same product by the
         // ranking, and the same offer even where two of its scopes tie.
         offer && item.id === offer.itemId && ranked.length === 0
-          ? toItemView(item, offer)
+          ? toItemView(item, categoriesOf(item), offer)
           : toItemView(
               item,
+              categoriesOf(item),
               entry.offerScopeId
                 ? rawOfferView(item.id, entry.offerScopeId, entry)
                 : undefined
@@ -1198,8 +1292,8 @@ export class ItemService {
       : '';
 
     const filters: string[] = [];
-    if (req.category) {
-      filters.push(`i."category" = ${p.bind(req.category)}::"item_category"`);
+    if (req.categoryId) {
+      filters.push(underCategorySql(p.bind(req.categoryId)));
     }
     if (req.productGroupId) {
       filters.push(`i."productGroupId" = ${p.bind(req.productGroupId)}::uuid`);
@@ -1338,8 +1432,11 @@ export class ItemService {
         }
       );
     }
-    if (req.category) {
-      qb.andWhere('i.category = :category', { category: req.category });
+    if (req.categoryId) {
+      // The same rule the ranked branch applies, from the same function.
+      qb.andWhere(underCategorySql(':categoryId'), {
+        categoryId: req.categoryId,
+      });
     }
     if (req.productGroupId) {
       qb.andWhere('i."productGroupId" = :groupId', {
@@ -1432,6 +1529,158 @@ export class ItemService {
       throw new NotFoundException('Item not found');
     }
     return row;
+  }
+
+  /**
+   * Several products by id, in the order asked for, or a 404 naming the first
+   * that is missing. One product is the lookup {@link update} always made; more
+   * are one query, because a bulk edit of a thousand rows must not be a
+   * thousand round trips before it writes anything.
+   */
+  private async loadInOrder(ids: readonly string[]): Promise<Item[]> {
+    if (ids.length === 1) {
+      return [await this.load(ids[0])];
+    }
+    const found = await this.items.find({
+      where: { id: In(ids.filter((id) => isUuid(id))) },
+    });
+    const byId = new Map(found.map((row) => [row.id, row]));
+    return ids.map((id) => {
+      const row = byId.get(id);
+      if (!row) {
+        throw new NotFoundException(`Item ${id} not found`);
+      }
+      return row;
+    });
+  }
+
+  /** The categories of these products, for a read, in one query. */
+  private categoriesOf(
+    rows: readonly Pick<Item, 'id'>[]
+  ): Promise<Map<string, CategoryOnItem[]>> {
+    return this.categories.categoriesOf(rows.map((row) => row.id));
+  }
+
+  /**
+   * The one path every product edit takes, a single {@link update} and each
+   * entry of {@link updateMany} alike, in one transaction.
+   *
+   * Every validating read happens first and in as few queries as the request
+   * allows: the products, the brand keys and the leaves each in one. Then every
+   * edit is written, its categories replaced where it names them, and the group
+   * moves are announced after the commit, one per product whose group moved.
+   */
+  private async applyUpdates(
+    actor: CatalogActor,
+    inputs: readonly UpdateItemInput[],
+    eanTaken: string
+  ): Promise<ItemView[]> {
+    const rows = await this.loadInOrder(inputs.map((input) => input.itemId));
+    const branded = inputs.filter((input) => input.brand !== undefined);
+    const registered =
+      branded.length === 0
+        ? new Map<string, Brand>()
+        : await this.registeredBrands(branded.map((input) => input.brand));
+    const named = inputs
+      .map((input) => input.categoryIds)
+      .filter((ids): ids is string[] => ids !== undefined);
+    const leavesOf =
+      named.length === 0 ? null : await this.categories.leaveChecker(named);
+
+    const edits: {
+      row: Item;
+      before: Item;
+      groupBefore: string | null;
+      leaves: Category[] | null;
+    }[] = [];
+    for (const [index, input] of inputs.entries()) {
+      const row = rows[index];
+      const before = { ...row };
+      const groupBefore = row.productGroupId;
+      await this.applyEdits(row, input, registered);
+      const leaves =
+        input.categoryIds === undefined || leavesOf === null
+          ? null
+          : leavesOf(input.categoryIds);
+      edits.push({ row, before, groupBefore, leaves });
+    }
+
+    // An edit reaches the same unique index a create does, because a barcode
+    // typed onto this product can be one another product already carries.
+    let saved: Item[];
+    try {
+      saved = await this.audit.write(actor, async (tx) => {
+        const written: Item[] = [];
+        for (const edit of edits) {
+          written.push(await tx.update(Item, edit.before, edit.row));
+          if (edit.leaves !== null) {
+            await this.categories.setItemCategories(
+              tx.manager,
+              edit.row.id,
+              edit.leaves
+            );
+          }
+        }
+        return written;
+      });
+    } catch (error) {
+      throw asEanConflict(error, eanTaken);
+    }
+
+    for (const [index, row] of saved.entries()) {
+      const groupBefore = edits[index].groupBefore;
+      if (row.productGroupId !== groupBefore) {
+        this.events.itemGroupChanged(row.id, groupBefore, row.productGroupId);
+      }
+    }
+    // The products whose set did not change answer with the set they hold.
+    const held = await this.categoriesOf(
+      saved.filter((_, index) => edits[index].leaves === null)
+    );
+    return saved.map((row, index) => {
+      const leaves = edits[index].leaves;
+      return toItemView(
+        row,
+        leaves === null
+          ? (held.get(row.id) ?? [])
+          : leaves.map(toCategoryOnItem)
+      );
+    });
+  }
+
+  /** One product's edit onto its row, every field the request names. */
+  private async applyEdits(
+    row: Item,
+    input: UpdateItemInput,
+    registered: ReadonlyMap<string, Brand>
+  ): Promise<void> {
+    if (input.name !== undefined) {
+      row.name = input.name;
+    }
+    if (input.brand !== undefined) {
+      this.applyBrand(row, input.brand, registered);
+    }
+    if (input.imageUrl !== undefined) {
+      row.imageUrl = input.imageUrl;
+    }
+    if (input.sku !== undefined) {
+      row.sku = input.sku;
+    }
+    if (input.ean !== undefined) {
+      row.ean = input.ean;
+    }
+    if (input.unitSize !== undefined) {
+      row.unitSize = input.unitSize;
+    }
+    if (input.packCount !== undefined) {
+      row.packCount = input.packCount;
+    }
+    if (input.defaultUnit !== undefined) {
+      row.defaultUnit = input.defaultUnit;
+    }
+    if (input.productGroupId !== undefined) {
+      row.productGroupId = await this.resolveGroup(input.productGroupId);
+    }
   }
 
   /**
@@ -1641,6 +1890,11 @@ const EAN_TAKEN_ON_CREATE =
 const EAN_TAKEN_ON_UPDATE =
   'Another product in the catalog already holds this EAN, so nothing was ' +
   'changed. A barcode names one product, so take it off that product first.';
+
+const EAN_TAKEN_IN_UPDATE_BATCH =
+  'One of these edits types an EAN another product already holds, so none ' +
+  'of them were applied. A barcode names one product, so take it off that ' +
+  'product first.';
 
 /**
  * The one way writing a product fails that an operator can act on.

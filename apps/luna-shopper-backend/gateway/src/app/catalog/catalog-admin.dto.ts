@@ -1,10 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   BRAND_ORDERS,
-  ItemCategory,
+  CATEGORY_KINDS,
   PostalCodeSource,
   PriceSourceKind,
   type BrandOrder,
+  type CategoryKind,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform } from 'class-transformer';
@@ -47,10 +48,15 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @MaxLength(120)
   query?: string;
 
-  @ApiPropertyOptional({ enum: ItemCategory })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.',
+  })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  // Any version: seeded categories carry version 5 ids derived from the slug.
+  @IsUUID('all')
+  categoryId?: string;
 
   /**
    * One parameter for two questions (admin plan 0012, section 2). A uuid is
@@ -249,6 +255,44 @@ export class AdminListBrandSuggestionsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     description:
       'Keyed before matching, so `el pozo` finds `elpozo`. A query with no letters or digits answers every suggestion.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  query?: string;
+}
+
+/**
+ * The category tree as the back office lists it (plan 0166, section 3).
+ *
+ * `parentId=none` is the roots, spelled with the literal every other admin
+ * reference filter uses, and `kind=leaf` is what a product's picker asks for:
+ * a product goes on a leaf and only there. The two filters combine, so
+ * `parentId=<a root>` with `kind=root` answers nothing.
+ */
+export class AdminListCategoriesQueryDto extends PageQueryDto {
+  @ApiPropertyOptional({
+    description: referenceFilterDescription(
+      'Only the children of this root.',
+      'the roots, the categories with no parent.'
+    ),
+  })
+  @IsOptional()
+  @IsUuidOrNone()
+  parentId?: string;
+
+  @ApiPropertyOptional({
+    enum: CATEGORY_KINDS,
+    description:
+      '`root` is the categories with no parent, `leaf` the ones inside a root, which are the only ones a product can go on.',
+  })
+  @IsOptional()
+  @IsIn([...CATEGORY_KINDS])
+  kind?: CategoryKind;
+
+  @ApiPropertyOptional({
+    description:
+      'Only the categories whose name, in either content language, or whose slug contains this text.',
   })
   @IsOptional()
   @IsString()

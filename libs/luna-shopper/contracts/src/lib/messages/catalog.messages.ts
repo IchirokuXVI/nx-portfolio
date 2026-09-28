@@ -1,7 +1,6 @@
 import type {
   BrandBatchOutcome,
   BulkOperationErrorCode,
-  ItemCategory,
   ItemPriceWrittenBy,
   NearbyShopNoPick,
   PostalCodeSource,
@@ -188,6 +187,18 @@ export const ITEM_PATTERNS = {
    */
   createMany: 'item.createMany',
   /**
+   * Edit several products in one transaction, all or nothing (plan 0166,
+   * section 3).
+   *
+   * The update op of the items batch: each entry is what
+   * {@link ITEM_PATTERNS.update} takes for one product, and the back office's
+   * "Set categories" bulk action sends one per ticked row carrying
+   * `categoryIds`. All or nothing for the reason {@link ITEM_PATTERNS.createMany}
+   * gives: a set applied to half the rows leaves the operator to work out which
+   * half.
+   */
+  updateMany: 'item.updateMany',
+  /**
    * Write a pack count onto products that have none (plan 0162, section 3).
    *
    * The harvester's, after a catalog discovery run. **It never overwrites a
@@ -207,6 +218,46 @@ export const ITEM_PATTERNS = {
  * produces and small enough to validate and write inside one request.
  */
 export const BULK_DECISION_MAX_OPERATIONS = 1000;
+
+/**
+ * The category tree (plan 0166, sections 1 to 3): at most two levels, a root
+ * and its children, and a product attaches only to a child.
+ *
+ * Writes are owner curation through the platform admin gate, like every other
+ * catalog write. A product's categories are written through the item subjects
+ * (`categoryIds`), never through these: the set is a field of the product.
+ */
+export const CATEGORY_PATTERNS = {
+  /**
+   * The whole tree, roots then children, each by position, with a product count
+   * on every row.
+   *
+   * The subject behind `GET /v1/catalog/categories`, and also the harvester's:
+   * a run reads it once per batch to turn the leaf slugs its resolvers answer
+   * into ids. One subject for both, because both want every row and neither
+   * wants a page.
+   */
+  tree: 'category.tree',
+  create: 'category.create',
+  update: 'category.update',
+  /** Refused with `category_in_use` while the row has children or products. */
+  delete: 'category.delete',
+  get: 'category.get',
+  /** The back office's list: the same rows as the tree, paged and filtered. */
+  list: 'category.list',
+} as const;
+
+/**
+ * The two kinds of row a two level tree holds (plan 0166, section 1).
+ *
+ * A **leaf** is a row with a parent, not a row without children: a fresh root
+ * with no children yet is still a root, and still no place for a product.
+ */
+export const CATEGORY_KINDS = ['root', 'leaf'] as const;
+export type CategoryKind = (typeof CATEGORY_KINDS)[number];
+
+/** The longest a category slug may be. Ascii kebab case, checked by catalog. */
+export const CATEGORY_SLUG_MAX_LENGTH = 80;
 
 /**
  * Product groups (plan 0048, section 1): "milk as a thing you can buy", which is
@@ -794,6 +845,45 @@ export interface ItemOfferView {
   stale: boolean;
 }
 
+/**
+ * One row of the category tree (plan 0166, section 3).
+ *
+ * A root has `parentId` null and a child names its root. Two levels and no
+ * more: a child is never anybody's parent.
+ */
+export interface CategoryView {
+  id: string;
+  parentId: string | null;
+  /** Ascii kebab case, unique across the whole tree, and never renamed once shipped. */
+  slug: string;
+  name: LocalizedText;
+  /** Order among siblings. A new row appends. */
+  position: number;
+  /** Distinct products under this row. A root counts the distinct products under its children. */
+  itemCount: number;
+}
+
+/** The whole tree, roots then children, each by position (plan 0166, section 3). */
+export interface CategoryTreeView {
+  categories: CategoryView[];
+}
+
+/**
+ * A category as a product carries it (plan 0166, section 3).
+ *
+ * Denormalized onto every item rather than an id alone, because every consumer
+ * of an item needs the name, a guest reading a basket included, and a guest
+ * reaches no catalog route. The tree route is for the picker, not for
+ * resolving names.
+ */
+export interface ItemCategoryView {
+  id: string;
+  /** Never null: a product is only ever on a leaf. */
+  parentId: string;
+  slug: string;
+  name: LocalizedText;
+}
+
 export interface ItemView {
   id: string;
   name: LocalizedText;
@@ -818,7 +908,12 @@ export interface ItemView {
    * cartons from a six litre jug, which `unitSize` alone reads the same.
    */
   packCount: number | null;
-  category: ItemCategory;
+  /**
+   * The leaves this product sits on, in the order they were written, and never
+   * empty (plan 0166, section 2). The first is the one a row shows when it has
+   * room for one; grouping by category draws the product under every one.
+   */
+  categories: ItemCategoryView[];
   defaultUnit: UnitOfMeasure;
   /**
    * The group this product belongs to, or null (plan 0048, section 1). Owner
@@ -1529,7 +1624,12 @@ export interface CreateItemRequest extends AdminCredential {
   unitSize?: number | null;
   /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
   packCount?: number | null;
-  category: ItemCategory;
+  /**
+   * One or more leaf ids, in the order meant (plan 0166, section 3). An empty
+   * list is refused with `item_needs_a_category`, a root with
+   * `category_not_a_leaf` and an unknown id with `category_not_found`.
+   */
+  categoryIds: string[];
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
   productGroupId?: string | null;
@@ -1572,10 +1672,38 @@ export interface UpdateItemRequest extends AdminCredential {
    * correction.
    */
   packCount?: number | null;
-  category?: ItemCategory;
+  /**
+   * Replace the whole set of the product's leaves, in the order meant (plan
+   * 0166, section 3). Absent leaves the set alone; an empty list is refused with
+   * `item_needs_a_category`, because a product always has one.
+   */
+  categoryIds?: string[];
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+}
+
+/**
+ * One product of an {@link UpdateItemsRequest}: an update with no credential
+ * (plan 0166, section 3).
+ */
+export type UpdateItemInput = Omit<UpdateItemRequest, keyof AdminCredential>;
+
+/**
+ * Edit several products in one transaction (plan 0166, section 3).
+ *
+ * Capped at {@link BULK_DECISION_MAX_OPERATIONS}, and a longer list is refused
+ * rather than split, exactly as {@link CreateItemsRequest} is. Each entry is
+ * applied as {@link ITEM_PATTERNS.update} would apply it; the first refusal
+ * refuses the whole request, and nothing is written.
+ */
+export interface UpdateItemsRequest extends AdminCredential {
+  items: UpdateItemInput[];
+}
+
+export interface UpdateItemsResult {
+  /** One per requested product, as it now stands, in the requested order. */
+  items: ItemView[];
 }
 
 /**
@@ -1737,7 +1865,12 @@ export interface GetItemsResult {
 export interface SearchItemsRequest extends PageQuery {
   userId: string;
   query?: string;
-  category?: ItemCategory;
+  /**
+   * Only the products under this category (plan 0166, section 4): a leaf's own
+   * products, or for a root the products under any of its children. An unknown
+   * id answers an empty page rather than an error, as a filter does.
+   */
+  categoryId?: string;
   /** Only this group's members (plan 0048). What "show me every milk" asks. */
   productGroupId?: string;
   /**
@@ -1838,6 +1971,73 @@ export interface UpdateProductGroupRequest extends AdminCredential {
 
 export interface ProductGroupIdRequest extends AdminCredential {
   productGroupId: string;
+}
+
+// --- Category requests (plan 0166, sections 1 to 3) -------------------------
+
+/**
+ * The whole tree. Carries only the caller, like every other open catalog read:
+ * the gateway sends the user's id, and the harvester its own actor id.
+ */
+export interface CategoryTreeRequest {
+  userId: string;
+}
+
+/**
+ * Create a root, or a child of a root.
+ *
+ * `parentId` absent or null makes a root. A parent that itself has a parent is
+ * refused with `category_too_deep`. The slug is written here once and never
+ * changes afterwards.
+ */
+export interface CreateCategoryRequest extends AdminCredential {
+  parentId?: string | null;
+  slug: string;
+  name: LocalizedText;
+  /** Order among siblings. Absent appends after the last sibling. */
+  position?: number;
+}
+
+/**
+ * Edit a category. The slug is not a field: it is an identity (section 5).
+ *
+ * `parentId` moves the row. Setting one on a root that has children is refused
+ * with `category_too_deep`, and clearing it on a child that holds products with
+ * `category_not_a_leaf`.
+ */
+export interface UpdateCategoryRequest extends AdminCredential {
+  categoryId: string;
+  name?: LocalizedText;
+  position?: number;
+  parentId?: string | null;
+}
+
+/** Read or delete one category. Unknown answers `category_not_found`. */
+export interface CategoryIdRequest extends AdminCredential {
+  categoryId: string;
+}
+
+/**
+ * The back office's list of the tree, filtered (plan 0166, section 3).
+ *
+ * Ordered as {@link CATEGORY_PATTERNS.tree} orders the tree. Every filter is
+ * optional, and the empty request is every row. Filters combine as AND, so
+ * `parentId` beside `kind: 'root'` answers nothing, and the service answers
+ * exactly that rather than picking one.
+ */
+export interface ListCategoriesRequest extends PageQuery {
+  userId: string;
+  /** Only the children of this root. */
+  parentId?: string;
+  /**
+   * Only the rows with no parent. The gateway's `parentId=none`, translated
+   * where the literal stops, as `withoutProductGroup` is for groups.
+   */
+  withoutParent?: boolean;
+  /** Only roots, or only leaves: a picker limited to leaves is one query. */
+  kind?: CategoryKind;
+  /** Free text over the name in either content language and the slug. */
+  query?: string;
 }
 
 // --- Bulk group assignment (plan 0100) --------------------------------------
@@ -2597,6 +2797,7 @@ export type PriceScopePage = Paginated<PriceScopeView>;
 export type SupermarketLocationItemPage =
   Paginated<SupermarketLocationItemView>;
 export type ProductGroupPage = Paginated<ProductGroupView>;
+export type CategoryPage = Paginated<CategoryView>;
 export type ProductGroupOfferPage = Paginated<ProductGroupOfferView>;
 export type BrandPage = Paginated<BrandView>;
 

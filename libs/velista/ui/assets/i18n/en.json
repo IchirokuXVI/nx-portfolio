@@ -1513,20 +1513,6 @@
       "isWanted": "{{name}} is still to get",
       "isPartly": "{{name}} is partly got"
     },
-    "category": {
-      "PRODUCE": "Produce",
-      "DAIRY": "Dairy",
-      "BAKERY": "Bakery",
-      "MEAT": "Meat",
-      "SEAFOOD": "Seafood",
-      "FROZEN": "Frozen",
-      "BEVERAGES": "Beverages",
-      "SNACKS": "Snacks",
-      "PANTRY": "Pantry",
-      "HOUSEHOLD": "Household",
-      "PERSONAL_CARE": "Personal care",
-      "OTHER": "Other"
-    },
     "entries": {
       "title": "Lists that ask for this",
       "otherList": "Another list",

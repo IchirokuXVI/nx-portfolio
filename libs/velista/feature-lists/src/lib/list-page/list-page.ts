@@ -672,15 +672,18 @@ export class ListPage {
   /** Whether the reorder action is held with a sentence (section 7). */
   readonly reorderHeld = this._view.holdsReorder;
 
-  /** The heading's words, as a key: a category's label, or "No category". */
-  readonly headingKey = computed(() => {
+  /**
+   * The heading's words: "No category" as a key, or a category's own name from its
+   * data (velista `0118`), or null for no heading.
+   */
+  readonly heading = computed<ListCategoryHeading | null>(() => {
     const category = this.groups()?.category ?? null;
     if (category === null) {
       return null;
     }
     return category === NO_CATEGORY
-      ? 'list.view.noCategory'
-      : `basket.category.${category}`;
+      ? { kind: 'key', key: 'list.view.noCategory' }
+      : { kind: 'text', text: this._view.categoryName(category) };
   });
 
   // --- One field finds and adds (velista 0117) -------------------------------
@@ -1959,3 +1962,13 @@ export class ListPage {
  * about", and a ring that stayed would start saying something about the item itself.
  */
 const MARK_DURATION_MS = 4000;
+
+/**
+ * The words above a list shown one category at a time: this app's own for "No
+ * category", and the catalog's name for every other (velista `0118`). A union rather
+ * than a string, for the reason the basket's section heading gives: nothing may have
+ * to guess whether a category somebody named is a translation key.
+ */
+type ListCategoryHeading =
+  | { readonly kind: 'key'; readonly key: string }
+  | { readonly kind: 'text'; readonly text: string };

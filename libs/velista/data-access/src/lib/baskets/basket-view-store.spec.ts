@@ -86,7 +86,14 @@ function product(
     offers: [],
     atShop: null,
     productGroupId: null,
-    categories: ['OTHER'],
+    categories: [
+      {
+        id: 'cat-uncategorised',
+        parentId: 'cat-other',
+        slug: 'uncategorised',
+        name: { en: 'Not yet categorised', es: 'Sin categoría' },
+      },
+    ],
   };
 }
 
