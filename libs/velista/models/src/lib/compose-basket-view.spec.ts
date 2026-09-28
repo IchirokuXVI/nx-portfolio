@@ -87,7 +87,11 @@ function leaf(slug: string, en: string, es = en): ProductCategory {
   return { id: `cat-${slug}`, parentId: 'cat-root', slug, name: { en, es } };
 }
 
-const UNCATEGORISED = leaf('uncategorised', 'Not yet categorised', 'Sin categoría');
+const UNCATEGORISED = leaf(
+  'uncategorised',
+  'Not yet categorised',
+  'Sin categoría'
+);
 const MILK_LEAF = leaf('milk', 'Milk', 'Leche');
 const BREAD_LEAF = leaf('bread', 'Bread', 'Pan');
 const ICE_CREAM_LEAF = leaf('ice-cream', 'Ice cream', 'Helados');
@@ -510,7 +514,10 @@ describe('composeBasketView, grouped by category', () => {
 
   it('draws a line in every category it has, and counts it once', () => {
     const twoAisles = new Map([
-      ['p-both', product('p-both', 'Yoghurt', null, [MILK_LEAF, ICE_CREAM_LEAF])],
+      [
+        'p-both',
+        product('p-both', 'Yoghurt', null, [MILK_LEAF, ICE_CREAM_LEAF]),
+      ],
     ]);
 
     const sections = composeBasketView(

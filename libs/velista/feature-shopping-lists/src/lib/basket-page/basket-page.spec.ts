@@ -1048,7 +1048,14 @@ describe('the number on a row', () => {
           offers: [],
           atShop: null,
           productGroupId: null,
-          categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+          categories: [
+            {
+              id: 'cat-milk',
+              parentId: 'cat-dairy-and-eggs',
+              slug: 'milk',
+              name: { en: 'Milk', es: 'Leche' },
+            },
+          ],
         },
       ],
     ]);
@@ -1497,7 +1504,14 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
+      categories: [
+        {
+          id: 'cat-uncategorised',
+          parentId: 'cat-other',
+          slug: 'uncategorised',
+          name: { en: 'Not yet categorised', es: 'Sin categoría' },
+        },
+      ],
     };
   }
 
@@ -2056,7 +2070,14 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+      categories: [
+        {
+          id: 'cat-milk',
+          parentId: 'cat-dairy-and-eggs',
+          slug: 'milk',
+          name: { en: 'Milk', es: 'Leche' },
+        },
+      ],
       ...over,
     });
 
@@ -3071,7 +3092,14 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       size: 1,
       unit: 'LITER',
       productGroupId: null,
-      categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+      categories: [
+        {
+          id: 'cat-milk',
+          parentId: 'cat-dairy-and-eggs',
+          slug: 'milk',
+          name: { en: 'Milk', es: 'Leche' },
+        },
+      ],
       offer: null,
       chainPrices: [],
       imageUrl: null,
@@ -3269,7 +3297,14 @@ describe('similar products on the basket', () => {
     offers: [],
     atShop: null,
     productGroupId: 'g-milk',
-    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
   };
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
@@ -3279,7 +3314,14 @@ describe('similar products on the basket', () => {
     size: 1,
     unit: 'LITER',
     productGroupId: 'g-milk',
-    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: { ...OFFER, price: unitPrice, unitPrice },
     chainPrices: [],
     imageUrl: null,

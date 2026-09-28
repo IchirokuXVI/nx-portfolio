@@ -1124,9 +1124,10 @@ describe('toCatalogItem: the categories', () => {
     ];
 
     expect(
-      toCatalogItem({ ...item, categories: [...broken, PLANT] })?.categories.map(
-        (category) => category.id
-      )
+      toCatalogItem({
+        ...item,
+        categories: [...broken, PLANT],
+      })?.categories.map((category) => category.id)
     ).toEqual(['cat-plant-drinks']);
   });
 
@@ -1137,9 +1138,9 @@ describe('toCatalogItem: the categories', () => {
   });
 
   it('reads no categories as none, including the retired scalar', () => {
-    expect(toCatalogItem({ ...item, categories: undefined })?.categories).toEqual(
-      []
-    );
+    expect(
+      toCatalogItem({ ...item, categories: undefined })?.categories
+    ).toEqual([]);
     expect(
       toCatalogItem({ id: 'item-1', category: 'DAIRY' })?.categories
     ).toEqual([]);

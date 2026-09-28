@@ -74,6 +74,7 @@ import {
   type ZoneCounts,
   type ZonePresence,
 } from '@portfolio/velista/models';
+import { toProductCategories } from './category-mappers';
 import {
   date,
   isRecord,
@@ -86,7 +87,6 @@ import {
   str,
   strOr,
 } from './primitives';
-import { toProductCategories } from './category-mappers';
 
 /**
  * Every mapper in the app, and the **only** files that reference the wire shape.

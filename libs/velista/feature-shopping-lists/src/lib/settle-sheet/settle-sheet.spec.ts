@@ -895,7 +895,14 @@ describe('SettleSheet: the trip is finished', () => {
             offer: null,
             offers: [],
             productGroupId: null,
-            categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
+            categories: [
+              {
+                id: 'cat-uncategorised',
+                parentId: 'cat-other',
+                slug: 'uncategorised',
+                name: { en: 'Not yet categorised', es: 'Sin categoría' },
+              },
+            ],
           },
         ],
         [
@@ -909,7 +916,14 @@ describe('SettleSheet: the trip is finished', () => {
             offer: null,
             offers: [],
             productGroupId: null,
-            categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
+            categories: [
+              {
+                id: 'cat-uncategorised',
+                parentId: 'cat-other',
+                slug: 'uncategorised',
+                name: { en: 'Not yet categorised', es: 'Sin categoría' },
+              },
+            ],
           },
         ],
       ]),

@@ -12,6 +12,8 @@ import type { CategoryNode, ProductCategory } from '@portfolio/velista/models';
  * root counts the products under its children. `plant-drinks` holds none there, which
  * is the empty leaf a picker hides.
  */
+// One row per line, as the taxonomy table in backend 0166 reads.
+// prettier-ignore
 export const MEMORY_CATEGORIES: readonly CategoryNode[] = [
   root('dairy-and-eggs', 'Dairy and eggs', 'Lácteos y huevos', 4, 5),
   leaf('milk', 'dairy-and-eggs', 'Milk', 'Leche', 0, 3),

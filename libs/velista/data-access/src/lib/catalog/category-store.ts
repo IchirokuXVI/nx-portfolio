@@ -57,7 +57,9 @@ export class CategoryStore {
   readonly loaded = computed(() => this._state() === 'loaded');
 
   /** The roots, each with its children, both in `position` order. */
-  readonly roots = computed<readonly CategoryBranch[]>(() => this._tree().roots);
+  readonly roots = computed<readonly CategoryBranch[]>(
+    () => this._tree().roots
+  );
 
   /** One row by id, or null for an id the tree does not hold, or before it lands. */
   byId(categoryId: string): CategoryNode | null {

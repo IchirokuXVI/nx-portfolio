@@ -27,7 +27,14 @@ const OIL: CatalogProduct = {
   imageUrl: null,
   size: 1,
   unit: 'LITER',
-  categories: [{ id: 'cat-other-pantry', parentId: 'cat-pantry', slug: 'other-pantry', name: { en: 'Other pantry', es: 'Otra despensa' } }],
+  categories: [
+    {
+      id: 'cat-other-pantry',
+      parentId: 'cat-pantry',
+      slug: 'other-pantry',
+      name: { en: 'Other pantry', es: 'Otra despensa' },
+    },
+  ],
   offer: OFFER,
   unitBasis: 'LITER',
 };

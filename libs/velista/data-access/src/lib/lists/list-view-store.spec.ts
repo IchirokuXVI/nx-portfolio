@@ -1,7 +1,11 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
-import type { CatalogItem, CategoryNode, Line } from '@portfolio/velista/models';
+import type {
+  CatalogItem,
+  CategoryNode,
+  Line,
+} from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   StorageKeys,

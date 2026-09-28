@@ -48,7 +48,14 @@ function product(
     unit: null,
     offer: null,
     productGroupId: null,
-    categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
+    categories: [
+      {
+        id: 'cat-uncategorised',
+        parentId: 'cat-other',
+        slug: 'uncategorised',
+        name: { en: 'Not yet categorised', es: 'Sin categoría' },
+      },
+    ],
   };
 }
 

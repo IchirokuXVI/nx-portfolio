@@ -1218,7 +1218,12 @@ describe('ListPage: searching and viewing one category', () => {
       unit: 'UNIT',
       productGroupId: null,
       categories: [
-        { id: `cat-${slug}`, parentId: `cat-${parent}`, slug, name: { en, es } },
+        {
+          id: `cat-${slug}`,
+          parentId: `cat-${parent}`,
+          slug,
+          name: { en, es },
+        },
       ],
       offer: null,
       unitBasis: null,
@@ -2232,7 +2237,14 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
       size: 1,
       unit: 'LITER',
       productGroupId: null,
-      categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
+      categories: [
+        {
+          id: 'cat-uncategorised',
+          parentId: 'cat-other',
+          slug: 'uncategorised',
+          name: { en: 'Not yet categorised', es: 'Sin categoría' },
+        },
+      ],
       offer: null,
       chainPrices: [],
       imageUrl: null,

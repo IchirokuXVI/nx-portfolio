@@ -66,7 +66,9 @@ const ITEMS = [
   product('p-rice', 'pasta-rice-and-legumes'),
 ];
 
-function render(tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES)) {
+function render(
+  tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES)
+) {
   TestBed.resetTestingModule();
 
   const sheets = {

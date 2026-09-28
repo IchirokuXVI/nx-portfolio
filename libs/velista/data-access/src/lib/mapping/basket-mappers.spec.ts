@@ -380,7 +380,10 @@ describe('toBasket: the product’s aisle', () => {
     id: 'cat-frozen-meals-and-pizzas',
     parentId: 'cat-frozen',
     slug: 'frozen-meals-and-pizzas',
-    name: { en: 'Frozen meals and pizzas', es: 'Platos preparados y pizzas congeladas' },
+    name: {
+      en: 'Frozen meals and pizzas',
+      es: 'Platos preparados y pizzas congeladas',
+    },
   };
   const PIZZAS = {
     id: 'cat-pizzas',

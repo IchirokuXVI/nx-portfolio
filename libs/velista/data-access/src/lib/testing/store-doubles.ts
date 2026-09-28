@@ -50,14 +50,14 @@ import { BasketListStore } from '../baskets/basket-list-store';
 import { LiveBasketStore } from '../baskets/live-basket-store';
 import { SharedListStore } from '../baskets/shared-list-store';
 import {
+  CategoryStore,
+  type CategoryTreeState,
+} from '../catalog/category-store';
+import {
   GroupMembers,
   type GroupMembersEntry,
   type GroupMembersScope,
 } from '../catalog/group-members';
-import {
-  CategoryStore,
-  type CategoryTreeState,
-} from '../catalog/category-store';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
 import { LineStore, type LineLoadState } from '../lines/line-store';
@@ -1341,7 +1341,9 @@ export function provideFakeItemNames(
  * once and retrying after a failure, is covered against the real thing in its spec.
  */
 export function fakeCategoryStore(rows: readonly CategoryNode[] | null = null) {
-  const tree = signal(rows === null ? EMPTY_CATEGORY_TREE : buildCategoryTree(rows));
+  const tree = signal(
+    rows === null ? EMPTY_CATEGORY_TREE : buildCategoryTree(rows)
+  );
   const state = signal<CategoryTreeState>(rows === null ? 'idle' : 'loaded');
   let ensured = 0;
 

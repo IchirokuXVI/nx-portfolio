@@ -432,7 +432,12 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
       compose(
         [
           { id: 'yogurt', ...bought, category: 'milk', content: 'Yogurt' },
-          { id: 'coffee', ...bought, category: 'coffee-tea-and-cocoa', content: 'Coffee' },
+          {
+            id: 'coffee',
+            ...bought,
+            category: 'coffee-tea-and-cocoa',
+            content: 'Coffee',
+          },
           { id: 'butter', ...bought, category: 'milk', content: 'Butter' },
         ],
         {
