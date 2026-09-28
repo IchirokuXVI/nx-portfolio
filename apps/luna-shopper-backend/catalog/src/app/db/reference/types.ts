@@ -1,5 +1,4 @@
 import type {
-  ItemCategory,
   LocalizedSynonyms,
   LocalizedText,
   PriceScopeKind,
@@ -35,7 +34,12 @@ export interface AuthoredItem {
   slug: string;
   name: LocalizedText;
   group: string;
-  category: ItemCategory;
+  /**
+   * The leaves this product sits on, by slug and in the order meant (plan
+   * 0166, section 5). One or more, and every slug a leaf of
+   * `REFERENCE_CATEGORIES`, which `reference-catalog.spec.ts` asserts.
+   */
+  categories: string[];
   defaultUnit: UnitOfMeasure;
   /**
    * How much of `defaultUnit` one of these is: 1.5 for a 1.5 L bottle, 0.25 for
@@ -125,4 +129,18 @@ export interface ReferenceStore {
     postalCode: string;
     country: string;
   };
+}
+
+/** A leaf of the taxonomy: a row with a parent, where products go (plan 0166). */
+export interface ReferenceCategoryLeaf {
+  /** Ascii kebab case, unique across the whole tree, and never renamed. */
+  slug: string;
+  name: LocalizedText;
+}
+
+/** A root of the taxonomy and its children, in the order they are shown. */
+export interface ReferenceCategoryRoot {
+  slug: string;
+  name: LocalizedText;
+  children: ReferenceCategoryLeaf[];
 }
