@@ -44,7 +44,7 @@ import {
   string,
 } from '../builders';
 import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
-import { CATALOG_SCHEMA_IDS } from './catalog.schemas';
+import { CATALOG_SCHEMA_IDS, categorySlugs } from './catalog.schemas';
 
 /**
  * Harvester schemas (plan 0038). The harvester's own surface: runs and their
@@ -1135,7 +1135,8 @@ const createItemFromEntryRequest = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    // Plan 0166: leaf slugs. Absent resolves from the row's source path.
+    categorySlugs: categorySlugs(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   },
   ['userId', 'entryId']
@@ -1188,7 +1189,7 @@ const createItemEntryOperation = object(
         ean: nullableString(),
         unitSize: numberOrNull(),
         packCount: packCountOrNull(),
-        category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+        categorySlugs: categorySlugs(),
         defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
       },
     },

@@ -14,6 +14,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   BRAND_PATTERNS,
+  CATEGORY_PATTERNS,
   HARVEST_SCHEMA_IDS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
@@ -33,6 +34,8 @@ import {
   type BrandSpellingsResult,
   type BrandSuggestionPage,
   type BrandView,
+  type CategoryPage,
+  type CategoryView,
   type CreateBrandResult,
   type CreateItemsResult,
   type DeleteBrandResult,
@@ -58,6 +61,7 @@ import {
   type SupermarketPage,
   type SupermarketView,
   type UpdateBrandResult,
+  type UpdateItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   MAX_PAGE_SIZE,
@@ -78,6 +82,7 @@ import { NatsClient } from '../messaging/nats-client';
 import {
   AdminListBrandsQueryDto,
   AdminListBrandSuggestionsQueryDto,
+  AdminListCategoriesQueryDto,
   AdminListLocationItemsQueryDto,
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
@@ -88,6 +93,7 @@ import {
   AddItemPriceDto,
   ApplyProductGroupAssignmentsDto,
   CreateBrandDto,
+  CreateCategoryDto,
   CreateItemDto,
   CreateItemsDto,
   CreatePriceScopeDto,
@@ -102,7 +108,9 @@ import {
   SetSupermarketItemAvailabilityDto,
   SetSupermarketLocationItemAvailabilityDto,
   UpdateBrandDto,
+  UpdateCategoryDto,
   UpdateItemDto,
+  UpdateItemsDto,
   UpdatePricePolicyDto,
   UpdatePriceScopeDto,
   UpdateProductGroupDto,
@@ -376,6 +384,31 @@ export class AdminCatalogItemsController {
   }
 
   /**
+   * Edit several products in one transaction, all or nothing (plan 0166,
+   * section 3): the update op of the items batch.
+   *
+   * What the back office's "Set categories" sends, one entry per ticked row
+   * carrying `categoryIds`, and each entry is what `PATCH :id` takes. The first
+   * refusal refuses the whole request and nothing is written, so the answer is
+   * every product as it now stands, in the order the request named them.
+   *
+   * **Declared above `PATCH :id`**, so the literal segment is never read as a
+   * product id.
+   */
+  @Patch('batch')
+  @ApiContractResponse(ITEM_PATTERNS.updateMany)
+  @ApiProblemResponses({ body: true, conflict: true })
+  updateMany(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: UpdateItemsDto
+  ): Promise<UpdateItemsResult> {
+    return this.nats.send<UpdateItemsResult>(ITEM_PATTERNS.updateMany, {
+      ...adminCredential(admin),
+      items: dto.items,
+    });
+  }
+
+  /**
    * The product table, unscoped (plan 0073, section 4).
    *
    * **It names no price scopes, so every price field comes back null**, and that
@@ -401,7 +434,7 @@ export class AdminCatalogItemsController {
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: admin.adminId,
       query: query.query,
-      category: query.category,
+      categoryId: query.categoryId,
       productGroupId: group.id,
       withoutProductGroup: group.none,
       cursor: query.cursor,
@@ -581,6 +614,105 @@ export class AdminCatalogProductGroupsController {
     return this.nats.send(PRODUCT_GROUP_PATTERNS.delete, {
       ...adminCredential(admin),
       productGroupId: id,
+    });
+  }
+}
+
+/**
+ * The category tree (plan 0166, sections 1 to 3): two levels, a root and its
+ * children, and a product only ever on a child.
+ *
+ * Thin proxies like every route here. The four rules of the tree are catalog's
+ * to enforce, in the service and in the database: a third level answers 409
+ * `category_too_deep`, a product on a root 409 `category_not_a_leaf`, and a
+ * delete of a category that holds children or products 409 `category_in_use`.
+ * A product's categories are not written here: they are a field of the
+ * product, sent as `categoryIds` on the item routes.
+ */
+@ApiTags('admin-catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/catalog/categories', version: '1' })
+export class AdminCatalogCategoriesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Post()
+  @ApiContractResponse(CATEGORY_PATTERNS.create, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true })
+  create(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Body() dto: CreateCategoryDto
+  ): Promise<CategoryView> {
+    return this.nats.send<CategoryView>(CATEGORY_PATTERNS.create, {
+      ...adminCredential(admin),
+      ...dto,
+    });
+  }
+
+  /**
+   * The tree as a page, filtered. `parentId=none` is the roots, which catalog
+   * knows as `withoutParent`, and this is where the literal becomes the flag.
+   */
+  @Get()
+  @ApiContractResponse(CATEGORY_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @Query() query: AdminListCategoriesQueryDto
+  ): Promise<CategoryPage> {
+    const parent = referenceFilter(query.parentId);
+    return this.nats.send<CategoryPage>(CATEGORY_PATTERNS.list, {
+      userId: admin.adminId,
+      parentId: parent.id,
+      withoutParent: parent.none,
+      kind: query.kind,
+      query: query.query,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Get(':id')
+  @ApiContractResponse(CATEGORY_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<CategoryView> {
+    return this.nats.send<CategoryView>(CATEGORY_PATTERNS.get, {
+      userId: admin.adminId,
+      categoryId: id,
+    });
+  }
+
+  /** Rename, reorder or move a category. The slug is not editable. */
+  @Patch(':id')
+  @ApiContractResponse(CATEGORY_PATTERNS.update)
+  @ApiProblemResponses({ body: true, conflict: true })
+  update(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: UpdateCategoryDto
+  ): Promise<CategoryView> {
+    return this.nats.send<CategoryView>(CATEGORY_PATTERNS.update, {
+      ...adminCredential(admin),
+      categoryId: id,
+      ...dto,
+    });
+  }
+
+  /** Refused with 409 `category_in_use` while it holds children or products. */
+  @Delete(':id')
+  @ApiContractResponse(CATEGORY_PATTERNS.delete)
+  @ApiProblemResponses({ conflict: true })
+  remove(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<{ id: string }> {
+    return this.nats.send(CATEGORY_PATTERNS.delete, {
+      ...adminCredential(admin),
+      categoryId: id,
     });
   }
 }

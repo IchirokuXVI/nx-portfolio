@@ -5,7 +5,6 @@ import {
   BasketRowUsualState,
   BasketStatus,
   ITEM_PATTERNS,
-  ItemCategory,
   LineApprovalStatus,
   ParticipantKind,
   PriceSourceKind,
@@ -137,7 +136,14 @@ const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
   sku: null,
   ean: null,
   unitSize: 1,
-  category: ItemCategory.DAIRY,
+  categories: [
+    {
+      id: 'c-milk',
+      parentId: 'c-dairy-and-eggs',
+      slug: 'milk',
+      name: { en: 'Milk', es: 'Leche' },
+    },
+  ],
   defaultUnit: UnitOfMeasure.LITER,
   productGroupId: null,
   bestOffer: offer,

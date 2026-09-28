@@ -8,6 +8,7 @@ import { MessagingModule } from '../messaging/messaging.module';
 import {
   AdminCatalogBrandSuggestionsController,
   AdminCatalogBrandsController,
+  AdminCatalogCategoriesController,
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
@@ -20,6 +21,7 @@ import {
 } from './catalog-admin.controller';
 import { CatalogSuggestService } from './catalog-suggest.service';
 import {
+  CatalogCategoriesController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationsController,
@@ -53,6 +55,8 @@ import { ScopeResolutionService } from './scope-resolution.service';
     CatalogLocationsController,
     CatalogPriceScopesController,
     CatalogProductGroupsController,
+    // Plan 0166: the category tree, whole, for velista's picker.
+    CatalogCategoriesController,
     CatalogScopeController,
     CatalogShopsController,
     // Plan 0164: the shops near a point. A POST, so it cannot be swallowed by
@@ -71,6 +75,8 @@ import { ScopeResolutionService } from './scope-resolution.service';
     AdminCatalogLocationsController,
     AdminCatalogItemsController,
     AdminCatalogProductGroupsController,
+    // Plan 0166: the tree's two levels, and the four rules catalog enforces.
+    AdminCatalogCategoriesController,
     // Plan 0115: the registry a person fills, and the keys the queue is asking
     // for. The second is composed from catalog and the harvester, which is why
     // it is two controllers rather than one path with a child.
