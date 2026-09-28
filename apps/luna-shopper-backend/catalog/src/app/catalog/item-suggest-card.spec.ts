@@ -1,5 +1,4 @@
 import {
-  ItemCategory,
   PriceSourceKind,
   PRODUCT_GROUP_MEMBERS_MAX,
   UnitOfMeasure,
@@ -8,6 +7,7 @@ import type { Repository } from 'typeorm';
 import type { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
+import { fakeCategories } from './category.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -34,7 +34,7 @@ const item = (id: string, productGroupId: string | null = null) =>
     sku: null,
     ean: null,
     unitSize: '1',
-    category: ItemCategory.DAIRY,
+    categoryIds: ['other-dairy'],
     defaultUnit: UnitOfMeasure.LITER,
     productGroupId,
     createdAt: new Date(),
@@ -172,7 +172,8 @@ function build(world: World = {}) {
     {} as unknown as ProductGroupService,
     {} as unknown as PlatformAdminService,
     fakeAudit([]).service,
-    {} as unknown as CatalogEventsPublisher
+    {} as unknown as CatalogEventsPublisher,
+    fakeCategories().service
   );
   const memberQueries = () =>
     itemQueries.filter((q) => q.sql.includes('AS "itemId"'));

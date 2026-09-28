@@ -2,6 +2,7 @@ import type { Repository } from 'typeorm';
 import type { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
+import { fakeCategories } from './category.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -48,7 +49,8 @@ function build() {
     {} as unknown as ProductGroupService,
     {} as unknown as PlatformAdminService,
     fakeAudit([]).service,
-    {} as unknown as CatalogEventsPublisher
+    {} as unknown as CatalogEventsPublisher,
+    fakeCategories().service
   );
   return { service, query, qb };
 }

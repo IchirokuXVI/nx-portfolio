@@ -1,5 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
-import { ItemCategory, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import {
   BrandKeyTakenException,
   BrandLinkKeepsKeyException,
@@ -14,9 +14,11 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { categoryId } from '../db/reference/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
+  Category,
   Item,
   ProductGroup,
   Supermarket,
@@ -25,6 +27,7 @@ import {
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
+import { CategoryService } from './category.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -104,7 +107,8 @@ describeIntegration(
         ),
         admin,
         audit,
-        events
+        events,
+        new CategoryService(dataSource.getRepository(Category), admin, audit)
       );
     }, 180_000);
 
@@ -129,7 +133,7 @@ describeIntegration(
         userId: OWNER,
         name: { es: name },
         brand,
-        category: ItemCategory.OTHER,
+        categoryIds: [categoryId('uncategorised')],
         defaultUnit: UnitOfMeasure.UNIT,
       });
 

@@ -1,21 +1,24 @@
 import { JwtService } from '@nestjs/jwt';
-import { ItemCategory, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import {
   describeIntegration,
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource, Repository } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { categoryId } from '../db/reference/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
   CatalogAudit,
+  Category,
   Item,
   ProductGroup,
   SupermarketItem,
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
+import { CategoryService } from './category.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -91,7 +94,8 @@ describeIntegration('the pack count (real Postgres)', () => {
       groups,
       admin,
       audit,
-      events
+      events,
+      new CategoryService(dataSource.getRepository(Category), admin, audit)
     );
   }, 120_000);
 
@@ -106,7 +110,7 @@ describeIntegration('the pack count (real Postgres)', () => {
     return items.create({
       userId: HARVESTER,
       name: { es: 'Leche entera' },
-      category: ItemCategory.DAIRY,
+      categoryIds: [categoryId('other-dairy')],
       defaultUnit: UnitOfMeasure.LITER,
       unitSize: 6,
       ...(packCount === undefined ? {} : { packCount }),

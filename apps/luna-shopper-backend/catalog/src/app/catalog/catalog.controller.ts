@@ -118,6 +118,8 @@ import {
   type UpdateBrandRequest,
   type UpdateBrandResult,
   type UpdateItemRequest,
+  type UpdateItemsRequest,
+  type UpdateItemsResult,
   type UpdatePricePolicyRequest,
   type UpdatePriceScopeRequest,
   type UpdateProductGroupRequest,
@@ -375,6 +377,15 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.createMany)
   createItems(@Payload() req: CreateItemsRequest): Promise<CreateItemsResult> {
     return this.items.createMany(req);
+  }
+
+  /**
+   * Several product edits in one transaction, all or nothing (plan 0166,
+   * section 3): the back office's "Set categories" bulk action.
+   */
+  @MessagePattern(ITEM_PATTERNS.updateMany)
+  updateItems(@Payload() req: UpdateItemsRequest): Promise<UpdateItemsResult> {
+    return this.items.updateMany(req);
   }
 
   /**

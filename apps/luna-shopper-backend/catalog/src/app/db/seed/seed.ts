@@ -17,6 +17,7 @@ import {
   SupermarketLocationItem,
   SupermarketLocationPriceScope,
 } from '../../entities';
+import { seedTaxonomy, writeItemCategories } from '../reference/taxonomy-seed';
 
 /**
  * The catalog half of the demo world seeder (plan 0013, section 2).
@@ -123,7 +124,17 @@ export const CATALOG_INSERT_ORDER: {
     entity: ProductGroup,
     rows: catalog.productGroups,
   },
-  { name: 'Item', entity: Item, rows: catalog.items },
+  {
+    name: 'Item',
+    entity: Item,
+    // A product's categories are rows of their own table (plan 0166), written
+    // by `seedItemCategories` below, so the slugs the fixture states are
+    // stripped from the product row here.
+    rows: catalog.items.map(({ categories, ...row }) => {
+      void categories;
+      return row;
+    }),
+  },
   // The price rows before the materialized rows that point at them (plan 0080).
   { name: 'ItemPrice', entity: ItemPrice, rows: itemPrices },
   {
@@ -143,6 +154,9 @@ export async function seedCatalog(dataSource: DataSource): Promise<void> {
     await dataSource.initialize();
   }
   await dataSource.transaction(async (m: EntityManager) => {
+    // The whole taxonomy, before any product names a leaf of it (plan 0166).
+    // An upsert that never deletes, so it is safe beside the reference seed.
+    await seedTaxonomy(m);
     for (const step of [...CATALOG_INSERT_ORDER].reverse()) {
       const ids = step.rows.map((r) => r.id);
       if (ids.length) {
@@ -155,7 +169,23 @@ export async function seedCatalog(dataSource: DataSource): Promise<void> {
       }
     }
     await seedLocationScopes(m);
+    await seedItemCategories(m);
   });
+}
+
+/**
+ * The leaves each demo product sits on, by slug and in order (plan 0166,
+ * section 5).
+ *
+ * Outside {@link CATALOG_INSERT_ORDER} for the reason `seedLocationScopes` is:
+ * the table is keyed on the pair and has no `id`. The products were deleted
+ * above and their rows went with them on the cascade.
+ */
+async function seedItemCategories(m: EntityManager): Promise<void> {
+  await writeItemCategories(
+    m,
+    catalog.items.map((row) => ({ itemId: row.id, slugs: row.categories }))
+  );
 }
 
 /**
