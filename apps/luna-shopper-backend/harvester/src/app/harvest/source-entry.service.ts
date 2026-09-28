@@ -6,7 +6,6 @@ import {
   brandKey,
   HarvestRunMode,
   HarvestRunStatus,
-  ItemCategory,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
@@ -32,9 +31,10 @@ import {
 import {
   mapSizeFormat,
   MercadonaClient,
-  resolveCategory,
 } from '@portfolio/luna-shopper/mercadona';
 import {
+  CATEGORY_UNKNOWN_DETAIL,
+  CategoryNotFoundException,
   clampPageSize,
   ConflictException,
   decodeCursor,
@@ -47,6 +47,7 @@ import { In, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HarvestRun, SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import {
   buildHarvestDocument,
   type HarvestExportScope,
@@ -370,6 +371,13 @@ export class SourceEntryService {
       }
     }
 
+    // Slugs on the way in, ids on the way to catalog (plan 0166, section 7).
+    // Resolved before the English name is fetched, so a typo in an override
+    // costs no request to the chain.
+    const categoryIds = await this.categoryIdsOf(
+      categorySlugsFor(req.categorySlugs, entry.categoryPath)
+    );
+
     const source = await this.sources.findBySupermarket(entry.supermarketId);
     const name = acceptedName(req.name, entry.name, source?.adapterKey);
 
@@ -409,9 +417,7 @@ export class SourceEntryService {
       // own photography.
       imageUrl: null,
       sku: null,
-      category:
-        (req.category as ItemCategory | undefined) ??
-        resolveCategory((entry.categoryPath ?? []).map((name) => ({ name }))),
+      categoryIds,
       defaultUnit:
         (req.defaultUnit as UnitOfMeasure | undefined) ??
         mapSizeFormat(entry.sizeFormat) ??
@@ -848,6 +854,23 @@ export class SourceEntryService {
       );
       return null;
     }
+  }
+
+  /**
+   * The ids of `slugs`, through one read of the tree (plan 0166, section 7).
+   * A slug the tree does not hold is refused here with `category_not_found`,
+   * naming every such slug, before anything is written.
+   */
+  private async categoryIdsOf(slugs: readonly string[]): Promise<string[]> {
+    const index = new CategorySlugIndex(await this.catalog.categoryTree());
+    const resolved = index.resolve(slugs);
+    if (resolved.ids === null) {
+      throw new CategoryNotFoundException(
+        `No category has the slug ${resolved.unknown.join(', ')}.`,
+        { details: { [CATEGORY_UNKNOWN_DETAIL]: resolved.unknown } }
+      );
+    }
+    return resolved.ids;
   }
 
   private async load(id: string): Promise<SourceCatalogEntry> {
