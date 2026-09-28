@@ -33,20 +33,6 @@ const isObject = (value) =>
 /** The values every chain prompt allows, where it names a list. */
 const SIZE_FORMATS = ['kg', 'g', 'l', 'ml', 'ud', 'm'];
 const BASES = ['unit', 'pack', 'kg', 'l'];
-const CATEGORIES = [
-  'PRODUCE',
-  'DAIRY',
-  'BAKERY',
-  'MEAT',
-  'SEAFOOD',
-  'FROZEN',
-  'BEVERAGES',
-  'SNACKS',
-  'PANTRY',
-  'HOUSEHOLD',
-  'PERSONAL_CARE',
-  'OTHER',
-];
 const PROMOTION_TYPES = [
   'price_drop',
   'second_unit_discount',
@@ -60,6 +46,10 @@ const PROMOTION_TYPES = [
 /**
  * Every key a row carries, with what it may hold. `name` is the one that may
  * not be null, because a row with no name is not a product.
+ *
+ * `category` is not here, on purpose (backend plan 0166). It is optional free
+ * text the model reads off the page, and it travels to `extra.category`, where
+ * nothing reads it, so there is nothing to check it against.
  */
 const ROW_FIELDS = [
   ['name', 'text'],
@@ -69,7 +59,6 @@ const ROW_FIELDS = [
   ['price', 'number?'],
   ['unitPrice', 'number?'],
   ['unitPriceLabel', 'text?'],
-  ['category', CATEGORIES],
   ['categoryPath', 'texts'],
   ['leaflet', 'object'],
 ];

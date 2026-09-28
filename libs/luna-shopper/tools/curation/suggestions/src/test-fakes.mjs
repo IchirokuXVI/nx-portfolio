@@ -7,6 +7,16 @@
  * exactly what a `next` saw and when.
  */
 
+import { readFileSync } from 'node:fs';
+
+/**
+ * A few rows of the starting taxonomy (backend plan 0166, appendix A), as
+ * `GET /v1/catalog/categories` answers them: roots, then children.
+ */
+export const CATEGORY_TREE = JSON.parse(
+  readFileSync(new URL('./fixtures/categories.json', import.meta.url), 'utf8')
+).categories;
+
 export function makeCatalog(items = []) {
   const rows = items.map((item) => ({ ...item }));
   let nextId = 1;
@@ -52,7 +62,7 @@ export function makeCatalog(items = []) {
         brand: body.brand ?? null,
         ean: body.ean ?? null,
         unitSize: body.unitSize ?? null,
-        category: body.category,
+        categoryIds: body.categoryIds,
         defaultUnit: body.defaultUnit,
       };
       rows.push(row);
@@ -91,6 +101,7 @@ export function makeFakeSession({
   queue = makeQueue(),
   supermarkets = [],
   brands = [],
+  categories = CATEGORY_TREE,
   label = null,
   verifyFails = false,
 }) {
@@ -119,6 +130,9 @@ export function makeFakeSession({
       }
       if (path === '/v1/admin/catalog/brands') {
         return { items: brands, nextCursor: null };
+      }
+      if (path === '/v1/catalog/categories') {
+        return { categories };
       }
       if (path === '/v1/admin/harvest/entries') {
         return queue.page(init.query.supermarketId, {

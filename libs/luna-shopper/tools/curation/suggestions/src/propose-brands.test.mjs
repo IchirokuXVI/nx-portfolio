@@ -254,7 +254,7 @@ test('propose-brands reads the run a directory holds, and says when to split', a
     runDir: dir,
     allowEmptyRegistry: true,
     makeSession: sessions,
-    vocabularies: { categories: ['OTHER'], units: ['UNIT'] },
+    vocabularies: { categories: ['uncategorised'], units: ['UNIT'] },
   });
 
   // No url: the run directory names the gateway, the user and the chains.

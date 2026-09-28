@@ -12,10 +12,11 @@ import {
   buildSystemPrompt,
   carriesBrand,
   carriesSize,
+  categoryVocabulary,
   checkDecisionShape,
   indexPrivateLabels,
   loadPrivateLabels,
-  loadVocabularies,
+  loadUnits,
   normalizeName,
   reviewEntry,
   run,
@@ -36,8 +37,15 @@ const CATALOG_ITEMS = fixture('catalog-items.json');
 const QUEUE_PAGE = fixture('queue-page.json');
 const SUPERMARKETS = fixture('supermarkets.json');
 const REPLIES = fixture('model-replies.json');
+const CATEGORY_TREE = fixture('categories.json');
 
-const { categories, units } = loadVocabularies();
+// The categories are read from the category tree (backend plan 0166), stubbed
+// here with a few rows of its starting taxonomy. The units still come from
+// the committed OpenAPI document.
+const { categories, categoryGroups } = categoryVocabulary(
+  CATEGORY_TREE.categories
+);
+const units = loadUnits();
 const PRIVATE_LABELS = loadPrivateLabels();
 const MERCADONA = SUPERMARKETS.items[0];
 const EL_JAMON = SUPERMARKETS.items[1];
@@ -141,6 +149,9 @@ function makeFakeFetch({ reply, calls = [], apiStatus = null }) {
 
     if (method === 'GET' && path === '/v1/admin/catalog/supermarkets') {
       return jsonResponse(200, SUPERMARKETS);
+    }
+    if (method === 'GET' && path === '/v1/catalog/categories') {
+      return jsonResponse(200, CATEGORY_TREE);
     }
     if (method === 'GET' && path === '/v1/admin/harvest/entries') {
       const chain = parsed.searchParams.get('supermarketId');
@@ -290,7 +301,7 @@ const goodCreate = {
     brand: 'Hacendado',
     unitSize: 800,
     defaultUnit: 'GRAM',
-    category: 'SNACKS',
+    categorySlugs: ['biscuits'],
     ean: '8480000111111',
   },
   confidence: 0.95,
@@ -358,15 +369,56 @@ test('NAME_CARRIES_SIZE fires on a name holding its size', () => {
   assert.deepEqual(codes(check({ decision })), ['NAME_CARRIES_SIZE']);
 });
 
-test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the openapi vocabularies', () => {
+test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the two vocabularies', () => {
+  // `SNACKS` is the retired enum value and `snacks` a root, which holds no
+  // product: neither is a leaf slug the tree answered.
   const decision = {
     ...goodCreate,
-    item: { ...goodCreate.item, category: 'BISCUITS', defaultUnit: 'BOX' },
+    item: {
+      ...goodCreate.item,
+      categorySlugs: ['biscuits', 'SNACKS', 'snacks'],
+      defaultUnit: 'BOX',
+    },
   };
   assert.deepEqual(codes(check({ decision })), [
     'UNKNOWN_CATEGORY',
+    'UNKNOWN_CATEGORY',
     'UNKNOWN_UNIT',
   ]);
+});
+
+test('the schema check wants one or more category slugs on a CREATE', () => {
+  const create = (categorySlugs) =>
+    checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      item: { nameEs: 'Galletas', categorySlugs, defaultUnit: 'GRAM' },
+    });
+  for (const categorySlugs of [undefined, 'biscuits', [], ['  ']]) {
+    assert.match(
+      create(categorySlugs).error,
+      /needs "item.categorySlugs", one or more category slugs/
+    );
+  }
+  assert.deepEqual(
+    create([' biscuits ', 'biscuits', 'cereals']).decision.item.categorySlugs,
+    ['biscuits', 'cereals']
+  );
+});
+
+test('the categories are the leaf slugs of the tree, grouped under their root', () => {
+  assert.deepEqual(categoryGroups[0], {
+    name: 'Dairy and eggs',
+    slugs: ['milk', 'eggs', 'other-dairy'],
+  });
+  assert.equal(categories.includes('dairy-and-eggs'), false);
+  assert.throws(
+    () =>
+      categoryVocabulary(
+        CATEGORY_TREE.categories.filter((row) => !row.parentId)
+      ),
+    /answered no leaf category/
+  );
 });
 
 test('EAN_CONFLICT fires when a CREATE would duplicate a barcode', () => {
@@ -435,6 +487,7 @@ test('the system prompt carries the six rules and both vocabularies', () => {
       'utf8'
     ),
     categories,
+    categoryGroups,
     units,
     privateLabels: PRIVATE_LABELS,
   });
@@ -443,6 +496,7 @@ test('the system prompt carries the six rules and both vocabularies', () => {
   for (const value of [...categories, ...units]) {
     assert.ok(system.includes(`\`${value}\``), `${value} is missing`);
   }
+  assert.ok(system.includes('- Dairy and eggs: `milk`, `eggs`, `other-dairy`'));
   assert.ok(system.includes('Hacendado'));
 });
 
@@ -452,7 +506,7 @@ test('the create body names the fields CreateItemFromEntryDto names', () => {
     brand: 'Hacendado',
     ean: '8480000111111',
     unitSize: 800,
-    category: 'SNACKS',
+    categorySlugs: ['biscuits'],
     defaultUnit: 'GRAM',
   });
   assert.deepEqual(
@@ -642,7 +696,7 @@ test('--apply writes through accept and the item route, and never rejects', asyn
     brand: 'Hacendado',
     ean: '8480000111111',
     unitSize: 800,
-    category: 'SNACKS',
+    categorySlugs: ['biscuits'],
     defaultUnit: 'GRAM',
   });
 

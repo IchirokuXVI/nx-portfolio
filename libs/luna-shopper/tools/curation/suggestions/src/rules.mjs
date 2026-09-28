@@ -291,30 +291,69 @@ function readJson(url) {
 }
 
 /**
- * The category and unit vocabularies, read from the committed OpenAPI document.
+ * The unit vocabulary, read from the committed OpenAPI document.
  *
  * Never hand copied. The document is generated from the contracts and a stale
  * copy of it fails the gateway's own suite, so reading it here is the one way
- * these two lists cannot drift from the enums the routes accept.
+ * this list cannot drift from the enum the routes accept.
  */
-export function loadVocabularies(docUrl = OPENAPI_URL) {
+export function loadUnits(docUrl = OPENAPI_URL) {
   const doc = readJson(docUrl);
-  const schemas = doc?.components?.schemas ?? {};
-  const categories = schemas['enums.ItemCategory']?.enum;
-  const units = schemas['enums.UnitOfMeasure']?.enum;
-  if (!Array.isArray(categories) || categories.length === 0) {
-    throw new Error(
-      `enums.ItemCategory is missing from ${fileURLToPath(docUrl)}. Regenerate it with ` +
-        '`npx nx run luna-shopper-backend-gateway:openapi`.'
-    );
-  }
+  const units = doc?.components?.schemas?.['enums.UnitOfMeasure']?.enum;
   if (!Array.isArray(units) || units.length === 0) {
     throw new Error(
       `enums.UnitOfMeasure is missing from ${fileURLToPath(docUrl)}. Regenerate it with ` +
         '`npx nx run luna-shopper-backend-gateway:openapi`.'
     );
   }
-  return { categories: [...categories], units: [...units] };
+  return [...units];
+}
+
+/** A category's name as the prompt shows it: English, else Spanish, else the slug. */
+function categoryName(row) {
+  return row?.name?.en ?? row?.name?.es ?? row?.slug ?? '';
+}
+
+function byPosition(a, b) {
+  return (a?.position ?? 0) - (b?.position ?? 0);
+}
+
+/**
+ * The category vocabulary, from what `GET /v1/catalog/categories` answered
+ * (backend plan 0166).
+ *
+ * A category is a row now, not an enum value, so the list is read from the
+ * catalog the decisions are written to and never from the OpenAPI document. A
+ * product sits only on a leaf, a row with a parent, so the vocabulary is the
+ * leaf slugs: `categories` is the flat list the validators and the schema
+ * check a slug against, and `categoryGroups` is the same slugs grouped under
+ * their root's name, in the tree's own order, which is what the prompt shows.
+ *
+ * A leaf whose root the answer does not hold cannot be placed in a group, and
+ * a root with no leaf holds no product, so neither reaches the prompt.
+ */
+export function categoryVocabulary(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter(
+    (row) => typeof row?.slug === 'string' && row.slug !== ''
+  );
+  const groups = list
+    .filter((row) => !row.parentId)
+    .sort(byPosition)
+    .map((root) => ({ id: root.id, name: categoryName(root), slugs: [] }));
+  const byRootId = new Map(groups.map((group) => [group.id, group]));
+  for (const leaf of list.filter((row) => row.parentId).sort(byPosition)) {
+    byRootId.get(leaf.parentId)?.slugs.push(leaf.slug);
+  }
+  const categoryGroups = groups
+    .filter((group) => group.slugs.length > 0)
+    .map(({ name, slugs }) => ({ name, slugs }));
+  const categories = categoryGroups.flatMap((group) => group.slugs);
+  if (categories.length === 0) {
+    throw new Error(
+      'GET /v1/catalog/categories answered no leaf category, so a CREATE could name none. Seed the category tree first.'
+    );
+  }
+  return { categories, categoryGroups };
 }
 
 /**
@@ -491,6 +530,7 @@ export function loadPromptTemplate(url = PROMPT_URL) {
 export function buildSystemPrompt({
   template = loadPromptTemplate(),
   categories,
+  categoryGroups = null,
   units,
   brands = new Map(),
   supermarkets = [],
@@ -498,14 +538,24 @@ export function buildSystemPrompt({
   const labels = privateLabelLines(brands, supermarkets)
     .map((entry) => `- \`${entry.label}\` belongs to ${entry.chain}.`)
     .join('\n');
+  // One line per root, which is 17 lines for the whole tree rather than one
+  // per leaf, and every line of this prompt is billed on every row of the run.
+  const categoryLines = categoryGroups
+    ? categoryGroups.map(
+        (group) =>
+          `- ${group.name}: ${group.slugs.map((slug) => `\`${slug}\``).join(', ')}`
+      )
+    : categories.map((value) => `- \`${value}\``);
   return [
     template.trimEnd(),
     '',
     '## Category vocabulary',
     '',
-    'One of these, exactly as written:',
+    categoryGroups
+      ? 'One or more of these slugs, exactly as written. Each line is one section of the tree and the slugs it holds:'
+      : 'One or more of these slugs, exactly as written:',
     '',
-    categories.map((value) => `- \`${value}\``).join('\n'),
+    categoryLines.join('\n'),
     '',
     '## Unit vocabulary',
     '',
@@ -622,10 +672,17 @@ export function buildDecisionSchema({ categories, units }) {
       brand: nullableString,
       unitSize: { type: ['number', 'null'] },
       defaultUnit: { type: 'string', enum: [...units] },
-      category: { type: 'string', enum: [...categories] },
+      // One or more leaf slugs (backend plan 0166), most fitting first. A
+      // product in two aisles names both, and an empty list is ungrammatical
+      // rather than refused a second later.
+      categorySlugs: {
+        type: 'array',
+        items: { type: 'string', enum: [...categories] },
+        minItems: 1,
+      },
       ean: nullableString,
     },
-    required: ['nameEs', 'category', 'defaultUnit'],
+    required: ['nameEs', 'categorySlugs', 'defaultUnit'],
   };
 
   /**
