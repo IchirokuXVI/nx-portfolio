@@ -6,4 +6,6 @@
  * lazy loads through this barrel, so a component that is not in it cannot be a page.
  */
 export * from './lib/catalog-page/catalog-page';
+export * from './lib/categories-page/categories-page';
+export * from './lib/category-children-page/category-children-page';
 export * from './lib/product-sheet/product-sheet';

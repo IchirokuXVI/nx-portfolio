@@ -1225,6 +1225,22 @@ describe('the bottom bar', () => {
   });
 
   /**
+   * The category picker (velista `0119`): two pages under the tab, with its guards,
+   * lazy, and with the bar, which a page carrying no flag gets.
+   */
+  it.each(['catalog/categories', 'catalog/categories/:parentSlug'])(
+    'gives the picker page %s the tab guards and the bar',
+    (path) => {
+      const page = pages.find((route) => route.path === path);
+
+      expect(page?.loadComponent).toBeDefined();
+      expect(page?.canActivate).toEqual(SIGNED_IN);
+      expect(page?.data?.[NAV_CHROME]).toBeUndefined();
+      expect(page?.children).toBeUndefined();
+    }
+  );
+
+  /**
    * One product's prices (velista `0100`, section 5): a sheet over the catalog,
    * addressed under the sheet segment and carrying the fall guard like every other,
    * so back dismisses it and the URL says which product is open.

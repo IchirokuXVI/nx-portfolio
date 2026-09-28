@@ -370,6 +370,29 @@
       "failed": "No se han podido cargar los productos similares.",
       "change": "Cambiar",
       "changeLabel": "Cambiar por {{label}}"
+    },
+    "categories": {
+      "title": "Categorías",
+      "open": "Categorías",
+      "back": "Volver al catálogo",
+      "backToRoots": "Volver a las categorías",
+      "everything": "Todo en {{name}}",
+      "count_one": "{{shown}} producto",
+      "count_other": "{{shown}} productos",
+      "row": "{{name}}, {{amount}}",
+      "rowChosen": "{{name}}, {{amount}}, elegida",
+      "chip": "{{root}}, {{leaf}}. Cambiar la categoría",
+      "chipRoot": "{{root}}. Cambiar la categoría",
+      "clear": "Quitar la categoría",
+      "search": "Buscar en {{category}}",
+      "searchChain": "Buscar en {{category}} en {{chain}}",
+      "loading": "Cargando las categorías",
+      "failed": "Las categorías no se han cargado. Revisa la conexión e inténtalo de nuevo.",
+      "none": "Todavía no hay categorías que mostrar.",
+      "emptyTitle": "Todavía no hay nada en {{category}}",
+      "emptyBody": "Velista aún no ha encontrado nada. Quita la categoría para verlo todo.",
+      "emptyChainTitle": "Todavía no hay nada en {{category}} en {{chain}}",
+      "emptyChainBody": "Velista aún no ha encontrado nada en esta tienda. Elige Todas las tiendas, o quita la categoría para ver todo lo de {{chain}}."
     }
   },
   "home": {

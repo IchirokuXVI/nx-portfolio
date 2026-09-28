@@ -236,6 +236,12 @@ $app-content-max: 480px;
   // token rather than a reuse of --app-line-row-height, which happens to be the same
   // number today and is about a shopping line.
   --app-member-row-height: 56px;
+  // A row of the category picker (velista 0119, rule P1): a place to go, one line of
+  // name and count, and a whole row that is one link.
+  --app-category-row-height: 52px;
+  // Where the chosen category chip stops (rule P4). The longest leaf of the tree fits
+  // with room for its root, and the chain chips still show beside it on a phone.
+  --app-category-chip-max-width: 320px;
   // The edge on the leading side of a line waiting for approval (plan 0012,
   // section 3.4). Not a hairline and deliberately not exempt from the pixel rule: it
   // has to read as a coloured bar at arm's length in a supermarket, which is a
