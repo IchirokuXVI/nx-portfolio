@@ -13,6 +13,12 @@ import { SupermarketItem } from './supermarket-item.entity';
 import { SupermarketLocationItem } from './supermarket-location-item.entity';
 import { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
 import { SupermarketLocation } from './supermarket-location.entity';
+import {
+  LocationSection,
+  SectionCategory,
+  SupermarketItemSection,
+  SupermarketSection,
+} from './supermarket-section.entity';
 import { Supermarket } from './supermarket.entity';
 
 export { BaseEntity } from './base.entity';
@@ -35,6 +41,12 @@ export { SupermarketItem } from './supermarket-item.entity';
 export { SupermarketLocationItem } from './supermarket-location-item.entity';
 export { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
 export { SupermarketLocation } from './supermarket-location.entity';
+export {
+  LocationSection,
+  SectionCategory,
+  SupermarketItemSection,
+  SupermarketSection,
+} from './supermarket-section.entity';
 export { Supermarket } from './supermarket.entity';
 
 /** Every catalog entity, for TypeOrmModule registration and the CLI data source. */
@@ -63,6 +75,13 @@ export const CATALOG_ENTITIES = [
   PricePolicy,
   SupermarketItem,
   SupermarketLocationItem,
+  // A chain's aisles, the categories each covers, a shop's list of them and
+  // the pins (plan 0167), after the chains, shops, items and categories they
+  // name.
+  SupermarketSection,
+  SectionCategory,
+  LocationSection,
+  SupermarketItemSection,
   // Reference data, loaded by a migration and never written by a service
   // (plan 0060, section 2).
   PostalCodePoint,
