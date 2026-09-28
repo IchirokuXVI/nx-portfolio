@@ -190,7 +190,7 @@
       "categoryTooDeep": "Categories have two levels. A category inside another cannot hold categories of its own, so pick a top level category as the parent.",
       "categoryNotALeaf": "A product goes in a category inside another, never in a top level category.",
       "itemNeedsACategory": "A product needs at least one category.",
-      "categoryInUse": "This category still holds categories or products. Move them before deleting it.",
+      "categoryInUse": "This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.",
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
       "sectionOfAnotherChain": "That section belongs to another chain. A shop and a product's pins can only use their own chain's sections. Read the screen again and try once more.",

@@ -183,8 +183,8 @@ export const ERROR_CATALOG: Record<
     es: 'Un producto necesita al menos una categoría.',
   },
   [ERROR_CODES.CATEGORY_IN_USE]: {
-    en: 'This category still holds categories or products. Move them before deleting it.',
-    es: 'Esta categoría todavía contiene categorías o productos. Muévelos antes de borrarla.',
+    en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
+    es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',
   },
   [ERROR_CODES.CATEGORY_NOT_FOUND]: {
     en: 'That category does not exist.',
