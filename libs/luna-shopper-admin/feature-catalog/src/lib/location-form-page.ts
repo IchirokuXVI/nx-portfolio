@@ -4,42 +4,26 @@ import {
   computed,
   inject,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   RESOURCE_ID_PARAM,
   ResourceFormPage,
-  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
-import { ItemSectionsPanel } from './item-sections-panel';
-import { ItemSourceEntries } from './item-source-entries';
+import { LocationSections } from './location-sections';
 
 /**
- * The product screen: the generic form, and below it what the product is
- * bound to and priced at (admin plan 0033).
+ * The shop screen: the generic form, and under it the sections this shop has
+ * (admin plan 0037, target 2).
  *
- * Everything the form does is inherited, exactly as the price editor inherits
- * it. What is added is only on an existing product: a way to its prices at
- * every scope, where it is in each chain's shops (admin plan 0037), and the
- * source products panel. A product being created has no
- * prices and nothing bound to it, so neither is drawn there.
- *
- * **The panel is drawn whatever the form's read did.** It reads the harvester
- * and the form reads catalog, so a product whose row cannot be read can still
- * show which chain rows name it, and a harvester that does not answer costs the
- * panel and not the form.
+ * The panel needs the shop's chain, which only the row read can say, so it is
+ * drawn once the form has read the shop. A shop being created has no sections
+ * of its own yet and gets no panel.
  */
 @Component({
-  selector: 'lib-item-form-page',
-  imports: [
-    ResourceForm,
-    ConfirmDialog,
-    ItemSourceEntries,
-    ItemSectionsPanel,
-    RouterLink,
-    RokuTranslatorPipe,
-  ],
+  selector: 'lib-location-form-page',
+  imports: [ResourceForm, ConfirmDialog, LocationSections, RokuTranslatorPipe],
   template: `
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
@@ -68,16 +52,12 @@ import { ItemSourceEntries } from './item-source-entries';
       />
     }
 
-    @if (itemId(); as id) {
-      <div class="beside">
-        @if (pricesLink(); as link) {
-          <a [routerLink]="link" class="prices">{{
-            'catalog.items.pricesLink' | rokuT
-          }}</a>
-        }
-        <lib-item-sections-panel [itemId]="id" />
-        <lib-item-source-entries [itemId]="id" />
-      </div>
+    @if (locationId(); as id) {
+      @if (chainId(); as chain) {
+        <div class="beside">
+          <lib-location-sections [locationId]="id" [supermarketId]="chain" />
+        </div>
+      }
     }
 
     @if (confirmingLeave()) {
@@ -113,35 +93,25 @@ import { ItemSourceEntries } from './item-source-entries';
     }
 
     .beside {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-4);
       padding-block-start: var(--admin-space-4);
       border-block-start: 1px solid var(--admin-border);
-    }
-
-    .prices {
-      align-self: flex-start;
-      color: var(--admin-accent);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ItemFormPage extends ResourceFormPage {
-  private readonly _itemRoute = inject(ActivatedRoute);
-  private readonly _itemRegistry = inject(ResourceRegistry);
+export class LocationFormPage extends ResourceFormPage {
+  private readonly _shopRoute = inject(ActivatedRoute);
 
-  /** The product being edited, or `null` on a create. */
-  readonly itemId = computed(() =>
+  /** The shop being edited, or `null` on a create. */
+  readonly locationId = computed(() =>
     this.mode === 'edit'
-      ? (this._itemRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
+      ? (this._shopRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
       : null
   );
 
-  /** The product at every scope, under wherever the registry mounted items. */
-  readonly pricesLink = computed(() => {
-    const id = this.itemId();
-    const path = this._itemRegistry.pathOf('items');
-    return id === null || path === null ? null : [...path, id, 'prices'];
+  /** The shop's chain, once the row has been read. */
+  readonly chainId = computed(() => {
+    const chain = this.store.row()?.['supermarketId'];
+    return typeof chain === 'string' && chain !== '' ? chain : null;
   });
 }

@@ -9,6 +9,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { POSTAL_CODE_SOURCE_OPTIONS } from './catalog-enums';
 import { locationSource } from './catalog-sources';
+import { LocationFormPage } from './location-form-page';
 
 /** One shop of one chain, as the gateway describes it. */
 export type Location = Wire.CatalogSupermarketLocationView;
@@ -287,6 +288,9 @@ export const LOCATIONS = defineResource<Location>({
   requires: ['supermarketId'],
 
   actions: { create: true, edit: true, delete: true },
+
+  // The generic form, with the shop's sections under it (admin plan 0037).
+  editor: LocationFormPage,
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<Location>(locationSource()),
 });

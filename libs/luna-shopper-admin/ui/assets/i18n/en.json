@@ -192,6 +192,9 @@
       "itemNeedsACategory": "A product needs at least one category.",
       "categoryInUse": "This category still holds categories or products. Move them before deleting it.",
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
+      "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
+      "sectionOfAnotherChain": "That section belongs to another chain. A shop and a product's pins can only use their own chain's sections. Read the screen again and try once more.",
+      "sectionSlugTaken": "This chain already has a section with that slug. Choose another one.",
       "openRow": "Open the row it names."
     },
     "bulk": {
@@ -249,6 +252,75 @@
         "supermarketId": "Chain",
         "postalCodeSource": "Postal code source",
         "priceScopeId": "Price scope"
+      }
+    },
+    "sections": {
+      "one": "section",
+      "many": "Shop sections",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "name": "Name",
+      "slug": "Slug",
+      "slugHelp": "Lowercase letters, digits and hyphens, unique within the chain. Written once: it cannot be changed after the section is created.",
+      "position": "Position",
+      "positionHelp": "The chain's default order. A shop with no list of its own walks its sections in this order. Leave it empty to add the section after the last one.",
+      "categoryIds": "Categories it holds",
+      "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then only the products pinned to it are in it.",
+      "locationCount": "Shops",
+      "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
+      "note": "Sections are read one chain at a time. Choose a chain to begin, or open the chain and use its Sections tab.",
+      "filter": {
+        "query": "Name or slug contains",
+        "supermarketId": "Chain"
+      }
+    },
+    "chainTabs": {
+      "label": "Chain screens",
+      "details": "Details",
+      "sections": "Sections"
+    },
+    "chainSections": {
+      "heading": "Sections of this chain",
+      "says": "The chain's own aisles, in the order a shop with no list of its own walks them, and the categories each one holds.",
+      "add": "Add a section",
+      "empty": "This chain has no sections yet. Its shops show products under their own categories.",
+      "actions": "Actions",
+      "coversAll": "{{name}} (all)",
+      "coversNothing": "Pinned products only",
+      "deleteHeading": "Delete this section?",
+      "deleteBody": "{{name}} leaves every shop's list and every pin. Products pinned only to it go back to being placed by their categories. There is no undo.",
+      "deleteConfirm": "Delete the section"
+    },
+    "locationSections": {
+      "heading": "Sections in this shop",
+      "fromChain": "This shop has no list of its own, so it has every section of its chain, in the chain's order. Change the list below to give it its own.",
+      "own": "This shop has its own list, in its own order.",
+      "noSections": "This shop's chain has no sections yet. Add them on the chain's Sections tab.",
+      "noneTicked": "Tick at least one section to save a list. To go back to the chain's list, use the chain's default.",
+      "up": "Move {{name}} up",
+      "down": "Move {{name}} down",
+      "upShort": "Up",
+      "downShort": "Down",
+      "save": "Save this order",
+      "discard": "Discard changes",
+      "useChain": "Use the chain's default",
+      "saved": "Saved."
+    },
+    "itemSections": {
+      "heading": "Where it is, per chain",
+      "notSold": "No chain sells this product yet, so it is in no shop's sections.",
+      "noSections": "This chain has no sections, so its shops show the product under its own categories.",
+      "pinnedTo": "Pinned to {{sections}}.",
+      "byCategories": "By its categories: in whichever of a shop's sections hold one of them.",
+      "edit": "Change the pins",
+      "pickLegend": "The sections it is in, in this chain",
+      "pickHelp": "Pinned, the product is in these sections and in no other. Tick none to remove the pins.",
+      "save": "Save the pins",
+      "previewAt": "Where shoppers find it at a shop",
+      "preview": {
+        "pinned": "In {{sections}}, because it is pinned there.",
+        "covered": "In {{sections}}, because the section holds one of its categories.",
+        "none": "No section of this shop holds it, so it is shown under its own categories."
       }
     },
     "priceScopes": {
@@ -539,8 +611,8 @@
       "id": "Identifier",
       "itemId": "Product",
       "supermarketLocationId": "Shop",
-      "positionInStore": "Position in the shop",
-      "positionInStoreHelp": "Where the product sits, such as an aisle. Per shop, because a warehouse cannot answer it.",
+      "positionInStore": "Shelf note",
+      "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
       "available": "Available in this shop",
       "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
       "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
