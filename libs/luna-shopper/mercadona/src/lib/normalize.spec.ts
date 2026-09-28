@@ -1,4 +1,4 @@
-import { ItemCategory, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
 import categoriesTree from './__fixtures__/categories-tree.json';
@@ -7,7 +7,6 @@ import noEan from './__fixtures__/product-no-ean.json';
 import oliveOil from './__fixtures__/product-detail-es.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
-import { MERCADONA_ROOT_CATEGORY_MAP, resolveCategory } from './categories';
 import {
   normalizeCategories,
   normalizeCategoryProducts,
@@ -19,9 +18,10 @@ import { isImportableSizeFormat, mapSizeFormat } from './units';
 const OBSERVED_AT = new Date('2026-08-30T09:00:00.000Z');
 
 describe('normalizeProduct', () => {
-  it('maps the ordinary product whole, climbing to a mapped parent category', () => {
-    // The deepest node ("Aceite, vinagre y sal") has no rule, so the walk climbs
-    // to its parent rather than dropping the product in OTHER.
+  it('maps the ordinary product whole, its category read from the deepest node', () => {
+    // The deepest node ("Aceite, vinagre y sal") is a child the table lists
+    // under its section, so the product lands on that leaf rather than on the
+    // section's catch all (plan 0166, section 7).
     expect(normalizeProduct(oliveOil, { observedAt: OBSERVED_AT })).toEqual({
       externalId: '4241',
       ean: '8480000135636',
@@ -30,7 +30,7 @@ describe('normalizeProduct', () => {
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
-      category: ItemCategory.PANTRY,
+      categorySlug: 'oil-and-vinegar',
       categoryPath: ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
       price: 8.75,
       unitPrice: 8.75,
@@ -216,7 +216,7 @@ describe('the category tree', () => {
   it('starts the path at the ancestors it is given, so the walk can supply the root', () => {
     // The response for a level 2 category does not contain its level 1 parent,
     // and the category map is keyed on the 26 level 1 names. The walk passes the
-    // root down; without it every product resolves to OTHER.
+    // root down; without it every product resolves to null.
     const [product] = normalizeCategoryProducts(categoryExpanded, [
       { id: 4, name: 'Charcutería y quesos' },
     ]);
@@ -224,50 +224,6 @@ describe('the category tree', () => {
       id: 4,
       name: 'Charcutería y quesos',
     });
-  });
-});
-
-describe('the category map (section 5.6)', () => {
-  it.each(MERCADONA_ROOT_CATEGORY_MAP)(
-    'maps %s to %s',
-    (name, expected) => {
-      expect(resolveCategory([{ name }])).toBe(expected);
-    }
-  );
-
-  it('sends the three cheese subcategories of Charcutería to DAIRY', () => {
-    for (const id of [53, 54, 56]) {
-      expect(
-        resolveCategory([
-          { id: 51, name: 'Charcutería y quesos' },
-          { id, name: 'Queso curado, semicurado y tierno' },
-        ])
-      ).toBe(ItemCategory.DAIRY);
-    }
-  });
-
-  it('leaves the rest of Charcutería under MEAT', () => {
-    expect(
-      resolveCategory([
-        { id: 51, name: 'Charcutería y quesos' },
-        { id: 55, name: 'Jamón serrano' },
-      ])
-    ).toBe(ItemCategory.MEAT);
-  });
-
-  it('falls back to OTHER for a branch nothing maps', () => {
-    expect(resolveCategory([{ name: 'Sección que no existe' }])).toBe(
-      ItemCategory.OTHER
-    );
-  });
-
-  it('ignores case and accents, which the source does not keep stable', () => {
-    expect(resolveCategory([{ name: 'FRUTA Y VERDURA' }])).toBe(
-      ItemCategory.PRODUCE
-    );
-    expect(resolveCategory([{ name: 'panaderia y pasteleria' }])).toBe(
-      ItemCategory.BAKERY
-    );
   });
 });
 

@@ -1,5 +1,4 @@
 import type {
-  ItemCategory,
   LocalizedText,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
@@ -39,7 +38,12 @@ export interface MercadonaProduct {
    * section 1). Null for a product that is not a pack.
    */
   packCount: number | null;
-  category: ItemCategory;
+  /**
+   * The taxonomy leaf the path resolves to (plan 0166, section 7), or null when
+   * the table names no node of it. A slug and never an id: the harvester turns
+   * it into a row, and null into `uncategorised`.
+   */
+  categorySlug: string | null;
   /** The path the walk took to reach it, deepest last. Drives the category map. */
   categoryPath: string[];
   /** `unit_price`: the price of the pack. This is the price. */

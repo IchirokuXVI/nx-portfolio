@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
+  CATEGORY_PATTERNS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   POSTAL_CODE_PATTERNS,
@@ -12,6 +13,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddItemPriceBatchResult,
+  type CategoryTreeView,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsResult,
@@ -350,6 +352,14 @@ export class CatalogClient {
       userId: this.actor(),
       ...input,
     });
+  }
+
+  /**
+   * The whole category tree (plan 0166, section 7), read once per request so
+   * every slug a create names can be answered with an id from memory.
+   */
+  categoryTree(): Promise<CategoryTreeView> {
+    return this.send(CATEGORY_PATTERNS.tree, { userId: this.actor() });
   }
 
   createItem(input: Omit<CreateItemRequest, 'userId'>): Promise<ItemView> {

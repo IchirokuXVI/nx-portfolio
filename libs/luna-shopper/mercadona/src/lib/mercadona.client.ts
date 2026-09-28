@@ -346,7 +346,7 @@ export class MercadonaClient {
       // 2 category does not contain it, and the category map in section 5.6 is
       // keyed on the 26 level 1 names. Without it every product arrives with a
       // path starting at level 2, nothing matches, and the whole assortment
-      // resolves to OTHER.
+      // resolves to null, which the harvester writes as `uncategorised`.
       const rootNode: CategoryPathNode = { id: root.id, name: root.name };
       for (const child of root.children) {
         for (const product of await this.listCategoryProducts(child.id, lang, [

@@ -1,5 +1,4 @@
 import {
-  ItemCategory,
   ItemSourceMatch,
   SourceEntryStatus,
   UnitOfMeasure,
@@ -27,7 +26,14 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
     ean: null,
     unitSize: 1,
     packCount: null,
-    category: ItemCategory.PANTRY,
+    categories: [
+      {
+        id: 'category-oil',
+        parentId: 'category-pantry',
+        slug: 'oil-and-vinegar',
+        name: { en: 'Oil and vinegar', es: 'Aceite y vinagre' },
+      },
+    ],
     defaultUnit: UnitOfMeasure.LITER,
     ...overrides,
   };

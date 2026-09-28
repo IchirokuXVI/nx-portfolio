@@ -1,4 +1,4 @@
-import { ItemCategory, packCountOf } from '@portfolio/luna-shopper/contracts';
+import { packCountOf } from '@portfolio/luna-shopper/contracts';
 import { resolveCategory, type CategoryPathNode } from './categories';
 import {
   isRecord,
@@ -131,7 +131,7 @@ export function normalizeProduct(
     unitSize: readNumber(price, 'unit_size'),
     unit: mapSizeFormat(sizeFormat),
     packCount: readPackCount(price),
-    category: path.length > 0 ? resolveCategory(path) : ItemCategory.OTHER,
+    categorySlug: resolveCategory(path),
     categoryPath: path.map((node) => node.name),
     price: readNumber(price, 'unit_price'),
     unitPrice: readNumber(price, 'bulk_price'),
@@ -212,7 +212,7 @@ export function unavailableProduct(
     unitSize: null,
     unit: null,
     packCount: null,
-    category: ItemCategory.OTHER,
+    categorySlug: null,
     categoryPath: [],
     price: null,
     unitPrice: null,
