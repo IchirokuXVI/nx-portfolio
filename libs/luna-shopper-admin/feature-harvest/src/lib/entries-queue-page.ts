@@ -38,6 +38,7 @@ import {
   HarvestNotice,
   QueueFrame,
   ReferencePicker,
+  ReferencesControl,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
@@ -59,21 +60,11 @@ import {
 /** One entry off the wire, which is what the queue holds. */
 type Entry = Wire.HarvestSourceCatalogEntryView;
 
-/** The categories a created item may be given. */
-const CATEGORIES: readonly Wire.EnumsItemCategory[] = [
-  'PRODUCE',
-  'DAIRY',
-  'BAKERY',
-  'MEAT',
-  'SEAFOOD',
-  'FROZEN',
-  'BEVERAGES',
-  'SNACKS',
-  'PANTRY',
-  'HOUSEHOLD',
-  'PERSONAL_CARE',
-  'OTHER',
-];
+/**
+ * What the category picker offers: only categories inside another, because a
+ * product never goes on a root (backend plan 0166).
+ */
+const LEAVES = { kind: 'leaf' } as const;
 
 /** The units it may be sold by. */
 const UNITS: readonly Wire.EnumsUnitOfMeasure[] = [
@@ -139,6 +130,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
     QueueFrame,
     HarvestNotice,
     ReferencePicker,
+    ReferencesControl,
     ConfirmDialog,
     DecisionsFilePanel,
   ],
@@ -441,19 +433,23 @@ const BRAND_SEARCH_DELAY_MS = 250;
               <span>{{ 'harvest.entries.create.unitSize' | rokuT }}</span>
               <input [(ngModel)]="unitSize" name="unitSize" type="text" />
             </label>
-            <label>
-              <span>{{ 'harvest.entries.create.category' | rokuT }}</span>
-              <select [(ngModel)]="category" name="category">
-                <option value="">
-                  {{ 'harvest.entries.create.fromRow' | rokuT }}
-                </option>
-                @for (option of categories; track option) {
-                  <option [value]="option">
-                    {{ 'harvest.category.' + option | rokuT }}
-                  </option>
-                }
-              </select>
-            </label>
+            <div class="field categories">
+              <label for="entries-categories">{{
+                'harvest.entries.create.categories' | rokuT
+              }}</label>
+              <lib-references-control
+                (valueChange)="categoryIds.set($event)"
+                [controlId]="'entries-categories'"
+                [disabled]="queue!.busy()"
+                [lookup]="references"
+                [resource]="'categories'"
+                [scope]="leaves"
+                [value]="categoryIds()"
+              />
+              <p class="hint">
+                {{ 'harvest.entries.create.categoriesHelp' | rokuT }}
+              </p>
+            </div>
             <label>
               <span>{{ 'harvest.entries.create.defaultUnit' | rokuT }}</span>
               <select [(ngModel)]="defaultUnit" name="defaultUnit">
@@ -579,6 +575,12 @@ const BRAND_SEARCH_DELAY_MS = 250;
          buttons afterwards. Both are wider than a select, and neither may push
          the two selects off the row. */
       min-inline-size: 16rem;
+    }
+
+    /* A list of chips and a search box, so it takes the row's whole width
+       rather than squeezing the selects beside it. */
+    .categories {
+      flex-basis: 100%;
     }
 
     h2 {
@@ -809,7 +811,7 @@ export class EntriesQueuePage implements OnDestroy {
   readonly shell = inject(HarvestShell);
   readonly references = inject(ResourceReferences);
 
-  readonly categories = CATEGORIES;
+  readonly leaves = LEAVES;
   readonly units = UNITS;
   readonly statuses = SOURCE_ENTRY_STATUSES;
   readonly kinds = OFFICIAL_SOURCE_KINDS;
@@ -852,13 +854,17 @@ export class EntriesQueuePage implements OnDestroy {
   /**
    * Empty means "whatever the row says".
    *
-   * The backend derives a category from `categoryPath` and a unit from
+   * The backend derives the categories from `categoryPath` and a unit from
    * `sizeFormat`, and the plan asks for a create that sends only the fields the
-   * operator changed. An empty first option is how a select says "unchanged":
-   * preselecting a real value would send that value on every create, and the
-   * operator would be overriding a derivation they never looked at.
+   * operator changed. An empty pick and an empty first option are how these
+   * controls say "unchanged": preselecting a real value would send it on every
+   * create, and the operator would be overriding a derivation they never
+   * looked at.
+   *
+   * The categories are held as ids, which is what the picker holds, and sent as
+   * slugs, which is what the harvest route takes (backend plan 0166, section 3).
    */
-  readonly category = signal<Wire.EnumsItemCategory | ''>('');
+  readonly categoryIds = signal<readonly string[]>([]);
   readonly defaultUnit = signal<Wire.EnumsUnitOfMeasure | ''>('');
 
   /** Whether the rejection confirmation is up. Nothing is decided until it is. */
@@ -1260,10 +1266,14 @@ export class EntriesQueuePage implements OnDestroy {
       return;
     }
 
-    const input = this._changes(decided, es);
+    const changes = this._changes(decided, es);
+    const categoryIds = this.categoryIds();
 
     void queue
       .decide(async (entry) => {
+        const categorySlugs = await this._slugsOf(categoryIds);
+        const input =
+          categorySlugs.length === 0 ? changes : { ...changes, categorySlugs };
         const result = await this._service.createItemFromEntry(entry.id, input);
         this.written.set(accepted(decided, result.pricesWritten));
         return result;
@@ -1399,9 +1409,9 @@ export class EntriesQueuePage implements OnDestroy {
    * What the operator changed about the row, and nothing else.
    *
    * A value equal to the row's is left out, which is what makes the create send
-   * only changes. The two selects say "from the row" with an empty value, so a
-   * category the backend derives is never overridden by a default this screen
-   * chose.
+   * only changes. The unit select and the category picker say "from the row"
+   * when empty, so what the backend derives is never overridden by a default
+   * this screen chose.
    */
   /**
    * Run a bulk action and put the report up, then point the controls again.
@@ -1431,7 +1441,6 @@ export class EntriesQueuePage implements OnDestroy {
     const brand = this.brand().trim();
     const ean = this.ean().trim();
     const unitSize = this.unitSize().trim();
-    const category = this.category();
     const defaultUnit = this.defaultUnit();
     const size = Number(unitSize);
 
@@ -1444,9 +1453,25 @@ export class EntriesQueuePage implements OnDestroy {
       ...(unitSize === this._sizeAsRead() || Number.isNaN(size)
         ? {}
         : { unitSize: unitSize === '' ? null : size }),
-      ...(category === '' ? {} : { category }),
       ...(defaultUnit === '' ? {} : { defaultUnit }),
     };
+  }
+
+  /**
+   * The slugs of the picked categories, in the order picked.
+   *
+   * Read through the same lookup the picker names them with. One that no
+   * longer resolves is left out rather than sent as an id the route would
+   * refuse as a slug.
+   */
+  private async _slugsOf(ids: readonly string[]): Promise<string[]> {
+    const options = await Promise.all(
+      ids.map((id) => this.references.resolve('categories', id))
+    );
+    return options.flatMap((option) => {
+      const slug = option?.row?.['slug'];
+      return typeof slug === 'string' && slug !== '' ? [slug] : [];
+    });
   }
 
   /**
@@ -1471,7 +1496,7 @@ export class EntriesQueuePage implements OnDestroy {
       raw === null || raw.unitSize === null ? '' : String(raw.unitSize);
     this.unitSize.set(size);
     this._sizeAsRead.set(size);
-    this.category.set('');
+    this.categoryIds.set([]);
     this.defaultUnit.set('');
   }
 

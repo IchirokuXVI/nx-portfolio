@@ -1,6 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
 import {
-  ItemCategory,
   UnitOfMeasure,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
@@ -14,9 +13,11 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { categoryId } from '../db/reference/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
+  Category,
   Item,
   PriceScope,
   ProductGroup,
@@ -25,6 +26,7 @@ import {
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
+import { CategoryService } from './category.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
@@ -120,7 +122,8 @@ describeIntegration('localized name paging (real Postgres)', () => {
       groups,
       admin,
       audit,
-      events
+      events,
+      new CategoryService(dataSource.getRepository(Category), admin, audit)
     );
     chains = new SupermarketService(
       dataSource.getRepository(Supermarket),
@@ -168,7 +171,7 @@ describeIntegration('localized name paging (real Postgres)', () => {
       const item = await items.create({
         userId: OWNER,
         name,
-        category: ItemCategory.OTHER,
+        categoryIds: [categoryId('uncategorised')],
         defaultUnit: UnitOfMeasure.UNIT,
       });
       created.push(item.id);
@@ -255,7 +258,7 @@ describeIntegration('localized name paging (real Postgres)', () => {
         const item = await items.create({
           userId: OWNER,
           name,
-          category: ItemCategory.OTHER,
+          categoryIds: [categoryId('uncategorised')],
           defaultUnit: UnitOfMeasure.UNIT,
         });
         mine.push(item.id);

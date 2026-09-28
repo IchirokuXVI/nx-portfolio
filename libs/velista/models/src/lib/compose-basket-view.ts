@@ -11,7 +11,8 @@ import type {
   BasketShop,
 } from './basket-view';
 import { basketRowPick, basketShelfMark } from './basket-view';
-import type { BasketRowState, ProductCategory } from './enums';
+import type { BasketRowState } from './enums';
+import { categoryName, type ProductCategory } from './product-category';
 import { inLocale } from './shopping-profile';
 
 /**
@@ -257,12 +258,12 @@ export interface BasketViewRow {
  * name**. A household calls its list what it likes and no key can hold that, so the
  * two kinds are a tagged union rather than a string the page guesses at: a page that
  * had to decide whether "Dairy" was a key or a name would get it wrong for a
- * household that named its list `basket.category.DAIRY`, and would more usually get
+ * household that named its list `basket.group.noCategory`, and would more usually get
  * it wrong for one whose list is called "Dairy".
  */
 export type BasketViewHeading =
   /**
-   * Words this app wrote, resolved by the page: the categories and every sink.
+   * Words this app wrote, resolved by the page: every sink.
    *
    * {@link args} is what the sentence interpolates, and it exists for `0078`'s
    * sink alone: "Not listed at Mercadona" names a chain, which is data, inside a
@@ -273,7 +274,10 @@ export type BasketViewHeading =
       readonly key: string;
       readonly args?: Readonly<Record<string, string>>;
     }
-  /** Words somebody else wrote, drawn as they are: a list's own name. */
+  /**
+   * Words somebody else wrote, drawn as they are: a list's own name, and since
+   * velista `0118` a category's, which the catalog names in data.
+   */
   | { readonly kind: 'text'; readonly text: string };
 
 /**
@@ -324,7 +328,10 @@ const ALL_SECTION_KEY = 'all';
  */
 const OTHER_LISTS_SECTION_KEY = 'other-lists';
 
-/** The sink holding every row with no product to take a category from (`0077`). */
+/**
+ * The sink holding every row with no category to go under (`0077`): no product, or a
+ * product whose categories none could be read (`0118`).
+ */
 const NO_CATEGORY_SECTION_KEY = 'no-category';
 
 /** The sink holding the rows the chosen shop does not list (`0078`, section 5). */
@@ -801,8 +808,12 @@ function ungrouped(
  * in that order, which is the whole ordering rule and it needs no second one. Under
  * "The way you shop" the aisles then order the categories, which is the point of
  * that order; under A to Z the sections follow their first row's name, which reads
- * as alphabetical enough. `OTHER` is a category like the others and takes its place
- * by the same rule rather than being pushed anywhere.
+ * as alphabetical enough. The tree's order is deliberately **not** used here (velista
+ * `0118`): the shopper's walk is the better order, and it is the one `0077` chose.
+ *
+ * A section is keyed on the category's id and headed by its name in the reader's
+ * language. "Not yet categorised" is a leaf like any other and takes its place by
+ * the same rule.
  *
  * ## A row can be in two places
  *
@@ -815,7 +826,8 @@ function ungrouped(
  * It holds every row with no resolved product: something somebody typed in an
  * aisle, and a row whose product the catalog can no longer name because the basket
  * has outlived it. Both are things to buy and neither has an aisle, so the heading
- * says why rather than inventing one.
+ * says why rather than inventing one. A product whose categories none could be read
+ * joins them, which the server's "never empty" makes a defence rather than a state.
  */
 function byCategory(
   rows: readonly BasketRow[],
@@ -824,34 +836,38 @@ function byCategory(
 ): readonly BasketViewSection[] {
   // Insertion ordered, which is what makes a section's place its first row's
   // place. A `Map` guarantees that; an object keyed on the same strings would not.
-  const aisles = new Map<ProductCategory, BasketRow[]>();
+  const aisles = new Map<
+    string,
+    { readonly category: ProductCategory; readonly rows: BasketRow[] }
+  >();
   const noCategory: BasketRow[] = [];
 
   for (const row of rows) {
     const product = basketRowPick(row, context.products);
-    if (product === undefined) {
+    if (product === undefined || product.categories.length === 0) {
       noCategory.push(row);
       continue;
     }
 
     for (const category of product.categories) {
-      const held = aisles.get(category);
+      const held = aisles.get(category.id);
       if (held === undefined) {
-        aisles.set(category, [row]);
-      } else {
-        held.push(row);
+        aisles.set(category.id, { category, rows: [row] });
+      } else if (!held.rows.includes(row)) {
+        // A product listing one category twice is still one row under it.
+        held.rows.push(row);
       }
     }
   }
 
   const sections: BasketViewSection[] = [];
-  for (const [category, held] of aisles) {
+  for (const [id, held] of aisles) {
     sections.push(
       section(
-        `category:${category}`,
-        { kind: 'key', key: `basket.category.${category}` },
+        `category:${id}`,
+        { kind: 'text', text: categoryName(held.category, context.locale) },
         null,
-        rowsOf(held, notes),
+        rowsOf(held.rows, notes),
         true
       )
     );

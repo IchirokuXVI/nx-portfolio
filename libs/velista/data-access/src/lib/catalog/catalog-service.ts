@@ -3,6 +3,7 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   CatalogItem,
   CatalogSuggestion,
+  CategoryNode,
   ProductGroup,
 } from '@portfolio/velista/models';
 import { CatalogApi } from './catalog-api';
@@ -124,6 +125,19 @@ export interface CatalogServiceI {
     groupId: string,
     options?: { profileId?: string; priceScopeIds?: readonly string[] }
   ): Promise<readonly CatalogItem[] | null>;
+
+  /**
+   * The catalog's whole category tree (velista `0118`, backend `0166` section 3).
+   *
+   * `GET /v1/catalog/categories`, roots and children with their `position` and
+   * `itemCount`. Read once per session by `CategoryStore`, which is the only caller.
+   * Every row, in whatever order the wire sent it: arranging it is the tree's job.
+   *
+   * `null` for a read that did not answer, and **never throws**, because nothing
+   * waits on this: a screen drawn before the tree arrives sorts its categories in
+   * first appearance order and re-sorts when it lands.
+   */
+  categories(): Promise<readonly CategoryNode[] | null>;
 }
 
 /**

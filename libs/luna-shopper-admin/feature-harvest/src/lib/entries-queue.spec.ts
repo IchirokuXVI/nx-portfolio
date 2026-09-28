@@ -3,6 +3,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  CATEGORY_SEED,
   ContentLocaleStore,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
@@ -94,10 +95,17 @@ async function render(queryParams: Record<string, string> = {}) {
         provide: ResourceReferences,
         useValue: {
           search: async () => [],
-          resolve: async (resource: string, id: string) =>
-            resource === 'supermarkets' && CHAIN_NAMES[id] !== undefined
-              ? { id, title: CHAIN_NAMES[id] }
-              : null,
+          resolve: async (resource: string, id: string) => {
+            if (resource === 'supermarkets' && CHAIN_NAMES[id] !== undefined) {
+              return { id, title: CHAIN_NAMES[id] };
+            }
+            // The category picker's rows, which carry the slug the create
+            // sends (admin plan 0036).
+            const category = CATEGORY_SEED.find((row) => row.id === id);
+            return resource === 'categories' && category !== undefined
+              ? { id, title: category.slug, row: category }
+              : null;
+          },
         },
       },
       {
@@ -521,14 +529,48 @@ describe('the one queue, deciding a row', () => {
     const { page, calls } = await opened(MERCADONA);
 
     page.nameEs.set('Leche entera de vaca');
-    page.category.set('DAIRY');
+    page.categoryIds.set(['cat_milk', 'cat_other-dairy']);
     page.createItem();
     await drain();
 
+    // The picker holds ids and the harvest route takes slugs, in the order
+    // picked (backend plan 0166, section 3).
     expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({
       name: { es: 'Leche entera de vaca' },
-      category: 'DAIRY',
+      categorySlugs: ['milk', 'other-dairy'],
     });
+  });
+
+  /**
+   * No pick means "resolve from the source path", which the memory twin
+   * answers the way catalog answers a path nothing maps.
+   */
+  it('lands a product created with no pick on uncategorised', async () => {
+    const { page, calls } = await opened(MERCADONA);
+
+    page.createItem();
+    await drain();
+
+    const call = named(calls, 'createItemFromEntry')[0];
+    expect(call[1]).not.toHaveProperty('categorySlugs');
+    const service = new HarvestMemory();
+    const result = await service.createItemFromEntry(
+      call[0] as string,
+      call[1] as Record<string, never>
+    );
+    expect(result.createdItem?.categories.map((row) => row.slug)).toEqual([
+      'uncategorised',
+    ]);
+  });
+
+  it('clears the picked categories once the row is decided', async () => {
+    const { page } = await opened(MERCADONA);
+
+    page.categoryIds.set(['cat_milk']);
+    page.createItem();
+    await drain();
+
+    expect(page.categoryIds()).toEqual([]);
   });
 
   it('sends nothing at all when the operator changed nothing', async () => {

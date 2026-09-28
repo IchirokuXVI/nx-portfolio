@@ -12,6 +12,8 @@ import {
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
+import { CategoriesController } from './categories.controller';
+import { CategoryService } from './category.service';
 import { CatalogDashboardService } from './dashboard.service';
 import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
@@ -60,8 +62,9 @@ import { SupermarketService } from './supermarket.service';
       },
     ]),
   ],
-  // Plan 0164: the shops near a point, and the shops by id.
-  controllers: [CatalogController, NearbyShopsController],
+  // Plan 0164: the shops near a point, and the shops by id. Plan 0166: the
+  // category tree.
+  controllers: [CatalogController, NearbyShopsController, CategoriesController],
   providers: [
     CatalogEventsPublisher,
     PlatformAdminService,
@@ -82,6 +85,8 @@ import { SupermarketService } from './supermarket.service';
     // The registry a person fills, and the keys an item is written against
     // (plan 0115).
     BrandService,
+    // The category tree, and the leaves a product write names (plan 0166).
+    CategoryService,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

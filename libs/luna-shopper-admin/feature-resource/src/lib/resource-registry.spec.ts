@@ -178,6 +178,32 @@ describe('ResourceRegistry pathOf', () => {
     ]);
   });
 
+  /**
+   * A refusal's link: a row of the target, or its list narrowed to the id
+   * when the link names a filter (admin plan 0036).
+   */
+  it('builds a refusal link to a row, or to a narrowed list', () => {
+    const registry = TestBed.inject(ResourceRegistry);
+
+    expect(
+      registry.linkFor({ resource: 'price-scopes', detail: 'scopeId' }, 'ps_1')
+    ).toEqual({
+      commands: ['/', 'catalog', 'price-scopes', 'ps_1'],
+      labelKey: 'resource.error.openRow',
+    });
+    expect(
+      registry.linkFor(
+        { resource: 'price-scopes', filter: 'categoryId', label: 'open' },
+        'cat_milk'
+      )
+    ).toEqual({
+      commands: ['/', 'catalog', 'price-scopes'],
+      queryParams: { categoryId: 'cat_milk' },
+      labelKey: 'open',
+    });
+    expect(registry.linkFor({ resource: 'items' }, 'x')).toBeNull();
+  });
+
   it('registers every resource a section mounted', () => {
     expect(
       TestBed.inject(ResourceRegistry)

@@ -1,3 +1,5 @@
+> **PR:** [#525](https://github.com/IchirokuXVI/nx-portfolio/pull/525)
+
 # 0166: a category is a row, and a product has several
 
 > Frontend halves: velista `0118` (categories are data on the client) and `0119` (the

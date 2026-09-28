@@ -1,4 +1,7 @@
-import type { ResourceSource } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  CATEGORY_SEED,
+  type ResourceSource,
+} from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ITEM_PRICE_SEED,
@@ -12,6 +15,7 @@ import {
   PRODUCT_GROUP_SEED,
   type ItemScopePrices,
 } from './catalog-seed';
+import { categoryMemoryRules, itemMemoryRules } from './category-rules';
 import { SUPERMARKETS_PATH } from './supermarkets';
 
 /**
@@ -46,6 +50,16 @@ export const PRICE_SCOPES_PATH = '/v1/admin/catalog/price-scopes';
 
 /** Where the back office reads and writes products. */
 export const ITEMS_PATH = '/v1/admin/catalog/items';
+
+/**
+ * Where several products are changed in one transaction, all or nothing
+ * (backend plan 0166, section 3). What "Set categories" sends (admin plan
+ * 0036): one entry per ticked product, each what `PATCH items/{id}` takes.
+ */
+export const ITEMS_BATCH_PATH = `${ITEMS_PATH}/batch`;
+
+/** Where the back office reads and writes the category tree (backend plan 0166). */
+export const CATEGORIES_PATH = '/v1/admin/catalog/categories';
 
 /**
  * Where the back office reads one product at every scope (backend plan 0160),
@@ -131,8 +145,28 @@ export function priceScopeSource(): ResourceSource<Wire.CatalogPriceScopeView> {
   };
 }
 
+/**
+ * Products. In memory, a product's `categoryIds` become the `categories` its
+ * row carries, and the tree's rules refuse what catalog refuses.
+ */
 export function itemSource(): ResourceSource<Wire.CatalogItemView> {
-  return { path: ITEMS_PATH, seed: ITEM_SEED };
+  return {
+    path: ITEMS_PATH,
+    seed: ITEM_SEED,
+    memory: itemMemoryRules(categorySource),
+  };
+}
+
+/**
+ * The category tree: ordinary CRUD, two levels, and a list filtered by
+ * `parentId` (with `none` for the roots) and by `kind`.
+ */
+export function categorySource(): ResourceSource<Wire.CatalogCategoryView> {
+  return {
+    path: CATEGORIES_PATH,
+    seed: CATEGORY_SEED,
+    memory: categoryMemoryRules(categorySource, itemSource),
+  };
 }
 
 export function productGroupSource(): ResourceSource<Wire.CatalogProductGroupView> {

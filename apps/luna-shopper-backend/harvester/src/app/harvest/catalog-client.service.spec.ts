@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import type { ClientProxy } from '@nestjs/microservices';
 import {
+  CATEGORY_PATTERNS,
   ITEM_PRICE_PATTERNS,
   PriceSourceKind,
   SUPERMARKET_ITEM_PATTERNS,
@@ -81,5 +82,25 @@ describe('CatalogClient price writes (plan 0080)', () => {
     expect(() => client.addPrices('scope-1', [], RUN)).toThrow(
       /HARVESTER_ACTOR_ID/
     );
+  });
+});
+
+describe('CatalogClient category tree (plan 0166, section 7)', () => {
+  it('reads the tree as the harvester, carrying nothing but its actor id', async () => {
+    const send = jest.fn(() => of({ categories: [] }));
+    const client = new CatalogClient(
+      { send } as unknown as ClientProxy,
+      { getOrThrow: () => ({ actorId: ACTOR }) } as unknown as ConfigService
+    );
+
+    const tree = await client.categoryTree();
+
+    expect(tree).toEqual({ categories: [] });
+    const [pattern, record] = send.mock.calls[0] as unknown as [
+      string,
+      { data: unknown },
+    ];
+    expect(pattern).toBe(CATEGORY_PATTERNS.tree);
+    expect(record.data).toEqual({ userId: ACTOR });
   });
 });

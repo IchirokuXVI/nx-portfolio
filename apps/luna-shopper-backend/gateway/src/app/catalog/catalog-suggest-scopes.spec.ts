@@ -1,7 +1,6 @@
 import {
   BASKET_PATTERNS,
   ITEM_PATTERNS,
-  ItemCategory,
   ParticipantKind,
   PriceSourceKind,
   PRODUCT_GROUP_MEMBERS_MAX,
@@ -70,7 +69,14 @@ const item = (id: string, extra: Partial<ItemView> = {}): ItemView => ({
   sku: null,
   ean: null,
   unitSize: 1,
-  category: ItemCategory.DAIRY,
+  categories: [
+    {
+      id: 'c-milk',
+      parentId: 'c-dairy-and-eggs',
+      slug: 'milk',
+      name: { en: 'Milk', es: 'Leche' },
+    },
+  ],
   defaultUnit: UnitOfMeasure.LITER,
   productGroupId: null,
   ...extra,

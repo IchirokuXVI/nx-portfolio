@@ -10,8 +10,6 @@ import {
   BASKET_USUAL_STATES,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_FALLBACK,
   type Basket,
   type BasketLinkPreview,
   type BasketListRef,
@@ -35,6 +33,7 @@ import {
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
+import { toProductCategories } from './category-mappers';
 import { toLocalizedName, toProductOffer } from './mappers';
 import {
   date,
@@ -586,14 +585,11 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         // and null from a gateway without backend `0163` behind it, which draws
         // exactly as "any of your shops" does.
         atShop: toBasketProductAtShop(raw['atShop']),
-        // One wire value into a one element list (velista `0077`, section 2). The
-        // field is required on `ItemView` and has been since the catalog existed, so
-        // the fallback covers a thirteenth category rather than an older backend,
-        // and it folds onto `OTHER` rather than dropping the product: a line whose
-        // aisle this build cannot name is still a line to buy.
-        categories: [
-          oneOf(raw['category'], PRODUCT_CATEGORIES, PRODUCT_CATEGORY_FALLBACK),
-        ],
+        // Rows of the catalog's tree, in its order (velista `0118`, backend
+        // `0166`). An unreadable one is dropped rather than folded onto a
+        // constant, and a product left with none goes under "No category": a line
+        // whose aisle this build cannot name is still a line to buy.
+        categories: toProductCategories(raw['categories']),
       };
 }
 

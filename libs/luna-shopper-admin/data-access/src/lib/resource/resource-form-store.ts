@@ -2,6 +2,7 @@ import { computed, signal } from '@angular/core';
 import {
   draftFor,
   isDirty,
+  orderedFieldNames,
   toInput,
   validateDraft,
   type DraftValue,
@@ -80,7 +81,13 @@ export class ResourceFormStore<T extends ResourceRow> {
   readonly row = this._row.asReadonly();
 
   /** Whether leaving now would lose something the operator typed. */
-  readonly dirty = computed(() => isDirty(this._draft(), this._original()));
+  readonly dirty = computed(() =>
+    isDirty(
+      this._draft(),
+      this._original(),
+      orderedFieldNames(this._descriptor)
+    )
+  );
 
   /** Everything this app's own rules object to, by field. */
   private readonly _problems = computed(() =>

@@ -212,8 +212,14 @@
           level below the list's name, so the view is navigable and not only visible
           (section 10).
         -->
-        @if (headingKey(); as key) {
-          <h2 class="category-heading">{{ key | rokuT }}</h2>
+        @if (heading(); as words) {
+          <h2 class="category-heading">
+            @if (words.kind === 'key') {
+              {{ words.key | rokuT }}
+            } @else {
+              {{ words.text }}
+            }
+          </h2>
         }
 
         <!--

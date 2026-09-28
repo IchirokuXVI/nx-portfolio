@@ -15,7 +15,7 @@ every element MUST have exactly these keys:
   "price": 0.00,
   "unitPrice": 0.00,
   "unitPriceLabel": "the comparison figure, verbatim by rule 4, or null",
-  "category": "PRODUCE",
+  "category": "the kind of product in a word or two, or null",
   "categoryPath": [],
   "leaflet": {
     "format": "the pack as printed, or null",
@@ -28,15 +28,9 @@ every element MUST have exactly these keys:
   }
 }
 
-"category" MUST be one of exactly these values, and nothing else:
-PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
-HOUSEHOLD, PERSONAL_CARE, OTHER.
-Choose the one that fits the product itself. Cleaning products, laundry,
-kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies,
-deodorant and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft
-drinks are BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS.
-Tinned food, pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER
-only when none of the twelve fits.
+"category" is optional free text: the kind of product in a word or two, in
+Spanish, as the page or the pack names it ("Leche", "Cerveza", "Detergente").
+It is not a fixed list of values. Write null when the page gives no clue.
 
 "leaflet.promotion" is either null or an object:
 
@@ -221,7 +215,7 @@ of you.
     "price": 1.99,
     "unitPrice": 3.98,
     "unitPriceLabel": "3,98 €/kg",
-    "category": "DAIRY",
+    "category": "Yogur",
     "categoryPath": [],
     "leaflet": {
       "format": "pack-4 x 125 g",
@@ -241,7 +235,7 @@ of you.
     "price": 12.99,
     "unitPrice": 0.32,
     "unitPriceLabel": "0,32 €/lavado",
-    "category": "HOUSEHOLD",
+    "category": "Detergente",
     "categoryPath": [],
     "leaflet": {
       "format": "40 lavados",
@@ -261,7 +255,7 @@ of you.
     "price": 2.49,
     "unitPrice": null,
     "unitPriceLabel": "€/kg",
-    "category": "PRODUCE",
+    "category": "Fruta",
     "categoryPath": [],
     "leaflet": {
       "format": null,

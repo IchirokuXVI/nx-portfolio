@@ -22,6 +22,7 @@ import {
   fakeZoneStore,
   GatewayError,
   ListViewStore,
+  provideFakeCategoryStore,
   provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
@@ -306,6 +307,9 @@ async function render(options: Options = {}): Promise<{
       // app's, answered here by the spec.
       { provide: DUE_LINE_SERVICE, useValue: dueService },
       provideFakeItemNames(itemNames),
+      // The tree has not landed, so the category view is in first appearance order
+      // and named from the products (velista `0118`).
+      provideFakeCategoryStore(),
       provideFakeMemberNames(
         fakeMemberNames(
           { 'user-toni': 'Toni', ...options.names },
@@ -1199,7 +1203,13 @@ function rows(fixture: ComponentFixture<ListPage>) {
  * one category at a time.
  */
 describe('ListPage: searching and viewing one category', () => {
-  function product(id: string, category: CatalogItem['category']): CatalogItem {
+  function product(
+    id: string,
+    slug: string,
+    parent: string,
+    en: string,
+    es: string
+  ): CatalogItem {
     return {
       id,
       name: { es: id, en: id },
@@ -1207,12 +1217,32 @@ describe('ListPage: searching and viewing one category', () => {
       size: null,
       unit: 'UNIT',
       productGroupId: null,
-      category,
+      categories: [
+        {
+          id: `cat-${slug}`,
+          parentId: `cat-${parent}`,
+          slug,
+          name: { en, es },
+        },
+      ],
       offer: null,
+      unitBasis: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
     };
   }
 
-  const ITEMS = [product('milk', 'DAIRY'), product('carrot', 'PRODUCE')];
+  const ITEMS = [
+    product('milk', 'milk', 'dairy-and-eggs', 'Milk', 'Leche'),
+    product(
+      'carrot',
+      'vegetables',
+      'fruit-and-vegetables',
+      'Vegetables',
+      'Verduras y hortalizas'
+    ),
+  ];
 
   const LINES = [
     line('ln-milk', { content: 'Leche', position: 1, itemIds: ['milk'] }),
@@ -1275,20 +1305,20 @@ describe('ListPage: searching and viewing one category', () => {
     fixture.detectChanges();
     expect(tools(fixture)?.activeCount()).toBe(1);
 
-    view.pickCategory('DAIRY');
+    view.pickCategory('cat-milk');
     fixture.detectChanges();
     expect(tools(fixture)?.activeCount()).toBe(2);
   });
 
-  it('draws only the picked category, under an h2 naming it', async () => {
+  it('draws only the picked category, under an h2 naming it from its data', async () => {
     const { fixture, view } = await render({ lines: LINES, items: ITEMS });
 
-    view.pickCategory('PRODUCE');
+    view.pickCategory('cat-vegetables');
     fixture.detectChanges();
 
     expect(rows(fixture).map((row) => row.id)).toEqual(['ln-carrot']);
     const heading = query(fixture, 'h2.category-heading');
-    expect(heading?.textContent?.trim()).toBe('basket.category.PRODUCE');
+    expect(heading?.textContent?.trim()).toBe('Vegetables');
   });
 
   it('puts a line with no products under No category', async () => {
@@ -1348,7 +1378,9 @@ describe('ListPage: searching and viewing one category', () => {
     it('draws the lines and no catalog for two characters, and both from three, lines first', async () => {
       const { fixture } = await render({ lines: LINES, items: ITEMS });
 
-      typeInto(fixture, 'le');
+      // Not "le", which the carrot's category, "Vegetables", holds too: the search
+      // matches a category's name since velista `0118`.
+      typeInto(fixture, 'ch');
 
       expect(query(fixture, '.results-heading')?.textContent).toContain(
         'list.add.resultsOnList'
@@ -1582,7 +1614,7 @@ describe('ListPage: searching and viewing one category', () => {
       items: ITEMS,
     });
 
-    view.pickCategory('PRODUCE');
+    view.pickCategory('cat-vegetables');
     fixture.detectChanges();
 
     expect(query(fixture, 'lib-line-list')).toBeNull();
@@ -1606,7 +1638,7 @@ describe('ListPage: searching and viewing one category', () => {
       expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
       view.setOrder('list');
 
-      view.pickCategory('DAIRY');
+      view.pickCategory('cat-milk');
       fixture.detectChanges();
       expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
       view.reset();
@@ -1659,7 +1691,7 @@ describe('ListPage: searching and viewing one category', () => {
   it('gives the view store back when the page is left', async () => {
     const { fixture, view } = await render({ lines: LINES, items: ITEMS });
     view.search('leche');
-    view.pickCategory('DAIRY');
+    view.pickCategory('cat-milk');
 
     fixture.destroy();
 
@@ -2205,7 +2237,14 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
       size: 1,
       unit: 'LITER',
       productGroupId: null,
-      category: 'OTHER',
+      categories: [
+        {
+          id: 'cat-uncategorised',
+          parentId: 'cat-other',
+          slug: 'uncategorised',
+          name: { en: 'Not yet categorised', es: 'Sin categoría' },
+        },
+      ],
       offer: null,
       chainPrices: [],
       imageUrl: null,

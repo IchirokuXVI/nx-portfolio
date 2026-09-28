@@ -10,6 +10,7 @@ import {
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   CATALOG_SCHEMA_IDS,
+  CATEGORY_PATTERNS,
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
@@ -19,6 +20,7 @@ import {
   SUPERMARKET_PATTERNS,
   type CatalogScopeView,
   type CatalogSuggestResponse,
+  type CategoryTreeView,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemPage,
@@ -367,7 +369,7 @@ export class CatalogItemsController {
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: user.userId,
       query: query.query,
-      category: query.category,
+      categoryId: query.categoryId,
       productGroupId: query.productGroupId,
       priceScopeIds: await this.scopes.forRead(
         user.userId,
@@ -495,6 +497,32 @@ export class CatalogItemsController {
         limit: query.limit,
       }
     );
+  }
+}
+
+/**
+ * The category tree, whole (plan 0166, section 3): what velista's picker draws,
+ * a page of roots and a page of each root's children.
+ *
+ * Unscoped and unpaged. The tree is reference data and the same for everybody,
+ * and at two levels of a supermarket's aisles it is under a hundred rows. The
+ * counts are catalog wide. A product's own categories come on the product,
+ * named, so nothing needs this route to resolve a name.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/categories', version: '1' })
+export class CatalogCategoriesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(CATEGORY_PATTERNS.tree)
+  tree(@AuthUser() user: CurrentUser): Promise<CategoryTreeView> {
+    return this.nats.send<CategoryTreeView>(CATEGORY_PATTERNS.tree, {
+      userId: user.userId,
+    });
   }
 }
 

@@ -162,30 +162,64 @@ function readJson(url) {
 }
 
 /**
- * The category and unit vocabularies, read from the committed OpenAPI document.
+ * The unit vocabulary, read from the committed OpenAPI document.
  *
  * Never hand copied. The document is generated from the contracts and a stale
  * copy of it fails the gateway's own suite, so reading it here is the one way
- * these two lists cannot drift from the enums the routes accept.
+ * this list cannot drift from the enum the routes accept.
  */
-export function loadVocabularies(docUrl = OPENAPI_URL) {
+export function loadUnits(docUrl = OPENAPI_URL) {
   const doc = readJson(docUrl);
-  const schemas = doc?.components?.schemas ?? {};
-  const categories = schemas['enums.ItemCategory']?.enum;
-  const units = schemas['enums.UnitOfMeasure']?.enum;
-  if (!Array.isArray(categories) || categories.length === 0) {
-    throw new Error(
-      `enums.ItemCategory is missing from ${fileURLToPath(docUrl)}. Regenerate it with ` +
-        '`npx nx run luna-shopper-backend-gateway:openapi`.'
-    );
-  }
+  const units = doc?.components?.schemas?.['enums.UnitOfMeasure']?.enum;
   if (!Array.isArray(units) || units.length === 0) {
     throw new Error(
       `enums.UnitOfMeasure is missing from ${fileURLToPath(docUrl)}. Regenerate it with ` +
         '`npx nx run luna-shopper-backend-gateway:openapi`.'
     );
   }
-  return { categories: [...categories], units: [...units] };
+  return [...units];
+}
+
+function byPosition(a, b) {
+  return (a?.position ?? 0) - (b?.position ?? 0);
+}
+
+/**
+ * The category vocabulary, from what `GET /v1/catalog/categories` answered
+ * (backend plan 0166).
+ *
+ * A category is a row now, so the list is read from the gateway the tool
+ * writes to. A product sits only on a leaf, a row with a parent: `categories`
+ * is the leaf slugs the validator checks, and `categoryGroups` the same slugs
+ * under their root's name, in the tree's order, for the prompt. The twin of
+ * `categoryVocabulary` in `libs/luna-shopper/tools/curation/suggestions`.
+ */
+export function categoryVocabulary(rows) {
+  const list = (Array.isArray(rows) ? rows : []).filter(
+    (row) => typeof row?.slug === 'string' && row.slug !== ''
+  );
+  const groups = list
+    .filter((row) => !row.parentId)
+    .sort(byPosition)
+    .map((root) => ({
+      id: root.id,
+      name: root.name?.en ?? root.name?.es ?? root.slug,
+      slugs: [],
+    }));
+  const byRootId = new Map(groups.map((group) => [group.id, group]));
+  for (const leaf of list.filter((row) => row.parentId).sort(byPosition)) {
+    byRootId.get(leaf.parentId)?.slugs.push(leaf.slug);
+  }
+  const categoryGroups = groups
+    .filter((group) => group.slugs.length > 0)
+    .map(({ name, slugs }) => ({ name, slugs }));
+  const categories = categoryGroups.flatMap((group) => group.slugs);
+  if (categories.length === 0) {
+    throw new Error(
+      'GET /v1/catalog/categories answered no leaf category, so a CREATE could name none. Seed the category tree first.'
+    );
+  }
+  return { categories, categoryGroups };
 }
 
 /**
@@ -215,20 +249,29 @@ export function indexPrivateLabels(raw) {
 export function buildSystemPrompt({
   template,
   categories,
+  categoryGroups = null,
   units,
   privateLabels,
 }) {
   const labels = [...privateLabels.values()]
     .map((entry) => `- \`${entry.brand}\` belongs to ${entry.chain}.`)
     .join('\n');
+  const categoryLines = categoryGroups
+    ? categoryGroups.map(
+        (group) =>
+          `- ${group.name}: ${group.slugs.map((slug) => `\`${slug}\``).join(', ')}`
+      )
+    : categories.map((value) => `- \`${value}\``);
   return [
     template.trimEnd(),
     '',
     '## Category vocabulary',
     '',
-    'One of these, exactly as written:',
+    categoryGroups
+      ? 'One or more of these slugs, exactly as written. Each line is one section of the tree and the slugs it holds:'
+      : 'One or more of these slugs, exactly as written:',
     '',
-    categories.map((value) => `- \`${value}\``).join('\n'),
+    categoryLines.join('\n'),
     '',
     '## Unit vocabulary',
     '',
@@ -270,7 +313,10 @@ function toCandidate(item, proposedByLadder = false) {
     unitSize: item.unitSize ?? null,
     defaultUnit: item.defaultUnit ?? null,
     ean: item.ean ?? null,
-    category: item.category ?? null,
+    // An item answers its categories as rows now (backend plan 0166).
+    categorySlugs: (item.categories ?? [])
+      .map((category) => category?.slug)
+      .filter(Boolean),
     ...(proposedByLadder ? { proposedByLadder: true } : {}),
   };
 }
@@ -381,8 +427,19 @@ export function checkDecisionShape(value) {
     if (!isString(item.nameEs)) {
       return { ok: false, error: 'a CREATE needs "item.nameEs"' };
     }
-    if (!isString(item.category)) {
-      return { ok: false, error: 'a CREATE needs "item.category"' };
+    const categorySlugs = Array.isArray(item.categorySlugs)
+      ? [
+          ...new Set(
+            item.categorySlugs.filter(isString).map((slug) => slug.trim())
+          ),
+        ]
+      : [];
+    if (categorySlugs.length === 0) {
+      return {
+        ok: false,
+        error:
+          'a CREATE needs "item.categorySlugs", one or more category slugs',
+      };
     }
     if (!isString(item.defaultUnit)) {
       return { ok: false, error: 'a CREATE needs "item.defaultUnit"' };
@@ -403,7 +460,7 @@ export function checkDecisionShape(value) {
           ? null
           : item.unitSize,
       defaultUnit: item.defaultUnit.trim(),
-      category: item.category.trim(),
+      categorySlugs,
       ean: isString(item.ean) ? item.ean.trim() : null,
     };
   }
@@ -484,13 +541,16 @@ export function validateDecision({
       }
     }
 
-    if (!categories.includes(item.category)) {
-      issues.push(
-        issue(
-          'UNKNOWN_CATEGORY',
-          `"${item.category}" is not one of ${categories.join(', ')}.`
-        )
-      );
+    // The leaf slugs the run read from the category tree (backend plan 0166).
+    for (const slug of item.categorySlugs ?? []) {
+      if (!categories.includes(slug)) {
+        issues.push(
+          issue(
+            'UNKNOWN_CATEGORY',
+            `"${slug}" is not a leaf slug of the category tree this run read.`
+          )
+        );
+      }
     }
     if (!units.includes(item.defaultUnit)) {
       issues.push(
@@ -819,6 +879,12 @@ export function makeGatewayClient({ fetchImpl, baseUrl, token = null }) {
       return pageThrough('/v1/admin/catalog/supermarkets', { order: 'name' });
     },
 
+    /** GET /v1/catalog/categories, the whole tree in one answer (backend plan 0166). */
+    async listCategories() {
+      const answer = await request('GET', '/v1/catalog/categories');
+      return answer?.categories ?? [];
+    },
+
     /**
      * GET /v1/admin/harvest/entries, every page of one chain's queue.
      *
@@ -886,7 +952,10 @@ export function makeGatewayClient({ fetchImpl, baseUrl, token = null }) {
   };
 }
 
-/** The body the create route's DTO actually names (CreateItemFromEntryDto). */
+/**
+ * The body the create route's DTO actually names (CreateItemFromEntryDto). The
+ * harvest routes take category slugs as they are (backend plan 0166).
+ */
 export function toCreateItemBody(item) {
   return {
     name: item.nameEn
@@ -895,7 +964,7 @@ export function toCreateItemBody(item) {
     brand: item.brand,
     ean: item.ean,
     unitSize: item.unitSize,
-    category: item.category,
+    categorySlugs: item.categorySlugs,
     defaultUnit: item.defaultUnit,
   };
 }
@@ -1195,14 +1264,9 @@ export async function run({
     );
   }
 
-  const { categories, units } = loadVocabularies(openapiUrl);
+  const units = loadUnits(openapiUrl);
   const privateLabels = loadPrivateLabels(privateLabelsUrl);
-  const system = buildSystemPrompt({
-    template: readFileSync(promptUrl, 'utf8'),
-    categories,
-    units,
-    privateLabels,
-  });
+  const template = readFileSync(promptUrl, 'utf8');
 
   const gateway = makeGatewayClient({
     fetchImpl,
@@ -1219,6 +1283,19 @@ export async function run({
     }
     await gateway.login(username, password);
   }
+
+  // The category vocabulary is the tree this gateway answers (backend plan
+  // 0166), read once, before the first row.
+  const { categories, categoryGroups } = categoryVocabulary(
+    await gateway.listCategories()
+  );
+  const system = buildSystemPrompt({
+    template,
+    categories,
+    categoryGroups,
+    units,
+    privateLabels,
+  });
 
   const startedAt = now();
   const supermarkets = await gateway.listSupermarkets();

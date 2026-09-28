@@ -5,13 +5,13 @@ import type {
   ListPermission,
   MembershipStatus,
   PriceSourceKind,
-  ProductCategory,
   SettlementOutcome,
   UnitOfMeasure,
   UserKind,
   ZoneRole,
   ZoneStatus,
 } from './enums';
+import type { ProductCategory } from './product-category';
 import type { LocalizedName, Supermarket } from './shopping-profile';
 
 /**
@@ -483,12 +483,13 @@ export interface CatalogItem {
   readonly unit: UnitOfMeasure;
   readonly productGroupId: string | null;
   /**
-   * The aisle the catalog files it under (velista `0082`, section 3).
+   * The aisles the catalog files it under, in the catalog's order (velista `0082`,
+   * section 3, and `0118`).
    *
-   * Read so the zone list page can show one category at a time. Never null: a value
-   * this build has never heard of reads as `OTHER`, the rule the basket mapper uses.
+   * Read so the zone list page can show one category at a time. Empty when the wire
+   * held none this build could read, which the page draws as "No category".
    */
-  readonly category: ProductCategory;
+  readonly categories: readonly ProductCategory[];
   /**
    * The cheapest price this product has at the scopes the reader was resolved to,
    * or null where nothing has been harvested for it.

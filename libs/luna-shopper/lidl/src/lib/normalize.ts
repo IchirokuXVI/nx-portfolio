@@ -138,7 +138,7 @@ export function normalizeProduct(
     ian: firstString(readArray(state, 'ians')) ?? row.ian,
     siteCategory: readString(state, 'category') ?? row.siteCategory,
     categoryPath,
-    category: resolveCategory(categoryPath),
+    categorySlug: resolveCategory(categoryPath),
     unitSize: size?.unitSize ?? null,
     unit: size?.unit ?? null,
     sizeFormat,

@@ -3,6 +3,7 @@ import {
   changedFields,
   draftFor,
   isDirty,
+  orderedFieldNames,
   toInput,
   validateDraft,
   type ResourceDraft,
@@ -535,6 +536,31 @@ describe('a references field', () => {
     expect(changedFields(draft, original)).toEqual([]);
     expect(isDirty(draft, original)).toBe(false);
     expect(toInput(shops, draft, 'edit', original)).toEqual({});
+  });
+
+  /**
+   * A product's categories are the other kind (admin plan 0036): the first is
+   * first, so a new order is a change the form sends.
+   */
+  it('counts a new order as a change when the field says order matters', () => {
+    const ranked: ResourceDescriptor<Shop> = {
+      ...shops,
+      fields: [
+        shops.fields[0],
+        { ...shops.fields[1], kind: 'references', ordered: true } as never,
+      ],
+    };
+    const original = draftFor(ranked, shop, 'edit');
+    const draft = { priceScopeIds: ['region', 'store'] };
+
+    expect(changedFields(draft, original)).toEqual([]);
+    expect(changedFields(draft, original, orderedFieldNames(ranked))).toEqual([
+      'priceScopeIds',
+    ]);
+    expect(isDirty(draft, original, orderedFieldNames(ranked))).toBe(true);
+    expect(toInput(ranked, draft, 'edit', original)).toEqual({
+      priceScopeIds: ['region', 'store'],
+    });
   });
 
   it('sends a changed list whole', () => {

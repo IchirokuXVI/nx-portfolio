@@ -59,7 +59,14 @@ function product(overrides: Partial<CatalogItem> = {}): CatalogItem {
     size: 1,
     unit: 'LITER',
     productGroupId: null,
-    category: 'DAIRY',
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: null,
     chainPrices: [],
     imageUrl: null,

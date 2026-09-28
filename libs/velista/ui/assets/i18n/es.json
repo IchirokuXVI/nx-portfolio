@@ -1513,20 +1513,6 @@
       "isWanted": "{{name}} está aún por conseguir",
       "isPartly": "{{name}} está conseguido en parte"
     },
-    "category": {
-      "PRODUCE": "Frutas y verduras",
-      "DAIRY": "Lácteos",
-      "BAKERY": "Panadería",
-      "MEAT": "Carne",
-      "SEAFOOD": "Pescado",
-      "FROZEN": "Congelados",
-      "BEVERAGES": "Bebidas",
-      "SNACKS": "Aperitivos",
-      "PANTRY": "Despensa",
-      "HOUSEHOLD": "Hogar",
-      "PERSONAL_CARE": "Cuidado personal",
-      "OTHER": "Otros"
-    },
     "entries": {
       "title": "Listas que lo piden",
       "otherList": "Otra lista",

@@ -19,16 +19,23 @@ import {
   sharedEanIssue,
   validateDecision,
 } from './decision.mjs';
-import { CANDIDATE_LIMIT, makeGateway, toCreateItemBody } from './gateway.mjs';
+import {
+  CANDIDATE_LIMIT,
+  makeGateway,
+  toBulkCreateItem,
+  toCreateItemBody,
+  withCategoryIds,
+} from './gateway.mjs';
 import { buildEntryPacket, toCandidate } from './packet.mjs';
 import {
   PRIVATE_LABEL_WARN_LINES,
   brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
+  categoryVocabulary,
   chainName,
   indexBrands,
-  loadVocabularies,
+  loadUnits,
   normalizeName,
   privateLabelLines,
   suggestBrandLabel,
@@ -39,15 +46,27 @@ import {
   decisionsPath,
   loadRun,
   readBrands,
+  readCategories,
   readJsonl,
   readSharedEans,
   statePath,
   writeBrands,
   writeBrandsToRegister,
+  writeCategories,
   writeReport,
   writeSharedEans,
   writeState,
 } from './run-dir.mjs';
+
+/**
+ * The vocabularies a run applies: the categories `start` read from the tree
+ * and wrote into the run directory (backend plan 0166), and the units of the
+ * committed OpenAPI document.
+ */
+function loadRunVocabularies(runDir) {
+  const { categories, categoryGroups = null } = readCategories(runDir);
+  return { categories, categoryGroups, units: loadUnits() };
+}
 
 /**
  * The bulk route plan 0100 adds beside the per row queue routes.
@@ -185,7 +204,9 @@ export async function start({
   // Walk against an empty brand registry rather than stop (plan 0006).
   allowEmptyRegistry = false,
   makeSession = defaultMakeSession,
-  vocabularies = loadVocabularies(),
+  // `{ categories, categoryGroups, units }`. Absent, the categories are read
+  // from the main gateway's category tree once both logins are verified.
+  vocabularies = null,
 }) {
   const main = makeGateway(
     makeSession({
@@ -208,6 +229,15 @@ export async function start({
   await rehearsal.session.verify();
 
   const supermarkets = await main.listSupermarkets();
+
+  // The category vocabulary, read once, from the main gateway, like the brand
+  // registry below (backend plan 0166). A category is a row now, so the tree
+  // the decisions are written against is the only list that can say which
+  // slugs exist. Every later step reads the file this writes.
+  const vocabulary = vocabularies ?? {
+    ...categoryVocabulary(await main.listCategories()),
+    units: loadUnits(),
+  };
 
   // The registry, read once, from the main gateway, which is the environment
   // the decisions are written to (plan 0004). Every later step reads the file
@@ -299,6 +329,11 @@ export async function start({
   });
   writeBrands(runDir, { readAt, brands: registry });
   writeSharedEans(runDir, { readAt, entries: sharedEans });
+  writeCategories(runDir, {
+    readAt,
+    categories: vocabulary.categories,
+    categoryGroups: vocabulary.categoryGroups ?? null,
+  });
 
   return {
     runId,
@@ -317,14 +352,15 @@ export async function start({
     // and nobody has measured how often two of its rows collide.
     batches: MAX_BATCH,
     prompt: buildSystemPrompt({
-      categories: vocabularies.categories,
-      units: vocabularies.units,
+      categories: vocabulary.categories,
+      categoryGroups: vocabulary.categoryGroups ?? null,
+      units: vocabulary.units,
       brands,
       supermarkets,
     }),
     schema: buildDecisionSchema({
-      categories: vocabularies.categories,
-      units: vocabularies.units,
+      categories: vocabulary.categories,
+      units: vocabulary.units,
     }),
   };
 }
@@ -658,7 +694,10 @@ export async function decide({
   mainPassword,
   makeSession = defaultMakeSession,
   gateways = null,
-  vocabularies = loadVocabularies(),
+  // Absent, the `categories.json` `start` wrote, read only once an answer
+  // reaches the validators, so a row that is already decided is refused for
+  // that before anything else is read.
+  vocabularies = null,
   // The same file `next` read. No step after `start` asks the gateway for a
   // brand, which is what makes a resumed run one run (plan 0004).
   brands = loadBrands(runDir),
@@ -834,6 +873,7 @@ export async function decide({
     eanOwner = await main.findByEan(proposal.item.ean);
   }
 
+  const vocabulary = vocabularies ?? loadRunVocabularies(runDir);
   found.push(
     ...validateDecision({
       decision: proposal,
@@ -844,8 +884,8 @@ export async function decide({
       eanOwner,
       brands,
       supermarkets: state.supermarkets ?? [],
-      categories: vocabularies.categories,
-      units: vocabularies.units,
+      categories: vocabulary.categories,
+      units: vocabulary.units,
       // What the run was started against, not what is running now. A run
       // directory is walked by many invocations and the answer has to be the
       // same in all of them.
@@ -897,9 +937,13 @@ export async function decide({
   // the next row's search sees this product the way production would.
   const ref = refFor(entry.id);
   let rehearsalItemId = null;
+  let item = proposal.item;
   const issues = [...proposal.issues, ...found];
   try {
-    const created = await rehearsal.createItem(toCreateItemBody(proposal.item));
+    // The slot's own ids for the slugs, because the catalog create route takes
+    // ids (backend plan 0166). The recorded item keeps them for a resume.
+    item = withCategoryIds(proposal.item, await rehearsal.listCategories());
+    const created = await rehearsal.createItem(toCreateItemBody(item));
     rehearsalItemId = created?.id ?? null;
   } catch (error) {
     issues.push(
@@ -930,7 +974,7 @@ export async function decide({
     expect,
     decision: 'CREATE',
     proposedDecision: null,
-    item: proposal.item,
+    item,
     ref,
     rehearsalItemId,
     confidence: proposal.confidence,
@@ -1401,7 +1445,7 @@ export function buildOperations(records) {
         op: 'createItem',
         entryId: row.entryId,
         ref: row.ref,
-        item: toCreateItemBody(row.item),
+        item: toBulkCreateItem(row.item),
         expect: row.expect,
       });
     } else if (row.decision === 'LINK') {

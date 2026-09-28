@@ -2,7 +2,6 @@ import type { HarvestDocument } from '../../schemas/harvest-document';
 import {
   DEFAULT_SCOPE_PRIORITY,
   PriceScopeKind,
-  type ItemCategory,
   type PostalCodeSource,
   type PriceSourceKind,
   type UnitOfMeasure,
@@ -1309,8 +1308,13 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   unitSize?: number | null;
   /** Override the pack count the row read (plan 0162). Null creates a product with none. */
   packCount?: number | null;
-  /** Override the category the source's own tree mapped to. */
-  category?: ItemCategory;
+  /**
+   * Override the categories the source's own path resolves to, as one or more
+   * leaf slugs in the order meant (plan 0166, section 3). Absent resolves from
+   * the row's `categoryPath`. Slugs rather than ids, because a decisions file is
+   * read by a person; an unknown slug is refused with `category_not_found`.
+   */
+  categorySlugs?: string[];
   /** Override the unit the source's own size text mapped to. */
   defaultUnit?: UnitOfMeasure;
 }
@@ -1384,7 +1388,11 @@ export interface CreateItemFromSourceEntryOperation {
     unitSize?: number | null;
     /** Plan 0162. Absent takes the row's own count. */
     packCount?: number | null;
-    category?: ItemCategory;
+    /**
+     * Plan 0166. One or more leaf slugs; absent resolves from the row's
+     * `categoryPath`, as on the per row route.
+     */
+    categorySlugs?: string[];
     defaultUnit?: UnitOfMeasure;
   };
   expect: SourceEntryExpectation;

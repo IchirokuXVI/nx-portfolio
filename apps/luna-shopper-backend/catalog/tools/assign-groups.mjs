@@ -223,7 +223,6 @@ export function buildItemPacket(item) {
     brand: item.brand ?? null,
     unitSize: item.unitSize ?? null,
     defaultUnit: item.defaultUnit ?? null,
-    category: item.category ?? null,
     ean: item.ean ?? null,
   };
 }

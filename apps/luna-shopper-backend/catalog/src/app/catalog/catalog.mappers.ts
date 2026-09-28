@@ -204,12 +204,22 @@ export function toProductGroupView(row: ProductGroup): ProductGroupView {
 /**
  * An item on the wire.
  *
+ * `categories` is handed in rather than read off the row, because a product's
+ * categories are rows of their own table (plan 0166, section 2): the caller
+ * loads them for a whole page in one query and passes each product its own.
+ * Required, so a read that forgot to load them fails to compile rather than
+ * answering a product with none.
+ *
  * `bestOffer` is added **only when there is one**, rather than always written as
  * null: the field is optional in the contract precisely so the reads with no
  * scopes to price against say nothing about price at all, and a literal `null`
  * on `item.get` would be a claim that this product has no price anywhere.
  */
-export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
+export function toItemView(
+  row: Item,
+  categories: ItemView['categories'],
+  bestOffer?: ItemOfferView
+): ItemView {
   const view: ItemView = {
     id: row.id,
     name: row.name,
@@ -219,7 +229,7 @@ export function toItemView(row: Item, bestOffer?: ItemOfferView): ItemView {
     ean: row.ean,
     unitSize: toNumber(row.unitSize),
     packCount: row.packCount ?? null,
-    category: row.category,
+    categories,
     defaultUnit: row.defaultUnit,
     productGroupId: row.productGroupId,
   };

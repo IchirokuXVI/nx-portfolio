@@ -11,7 +11,6 @@
 import {
   AuthProvider,
   DEFAULT_SCOPE_PRIORITY,
-  ItemCategory,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -271,7 +270,9 @@ export function makeItem(overrides: Partial<SeedItem> = {}): SeedItem {
     sku: null,
     ean: null,
     unitSize: null,
-    category: ItemCategory.OTHER,
+    // The catch all leaf of the `other` root, where a product with nothing
+    // better known lands (backend plan 0166, appendix A).
+    categories: ['uncategorised'],
     defaultUnit: UnitOfMeasure.UNIT,
     // Unassigned, which is the ordinary state of a product: joining a group is
     // owner curation and nothing does it automatically (plan 0048, section 1).
