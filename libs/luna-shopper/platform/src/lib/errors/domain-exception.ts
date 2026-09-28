@@ -380,6 +380,66 @@ export class ScopeNotFoundException extends DomainException {
 export const SCOPE_KEY_DETAIL = 'scopeKey';
 
 /**
+ * The write would make a third level of the category tree (plan 0166, rule
+ * R1). It publishes the row that breaks the rule under
+ * {@link CATEGORY_DETAIL}: the parent that is itself a child, or the root whose
+ * children stop it becoming one.
+ */
+export class CategoryTooDeepException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_TOO_DEEP;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A product named a root, or a child holding products was made a root (plan
+ * 0166, rule R2). It publishes the root under {@link CATEGORY_DETAIL}, so a
+ * refusal of a list of ids can say which one.
+ */
+export class CategoryNotALeafException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_NOT_A_LEAF;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A product with no category (plan 0166, rule R3). No details: the product is
+ * the one the request is about, and the fix is to name a leaf.
+ */
+export class ItemNeedsACategoryException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_NEEDS_A_CATEGORY;
+}
+
+/**
+ * A category with children or products cannot be deleted (plan 0166, rule R4).
+ * No details: the category is the one the client asked to delete, and the back
+ * office links to its products from the id it already holds.
+ */
+export class CategoryInUseException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_IN_USE;
+}
+
+/**
+ * An id or a slug named no category (plan 0166, section 3). It publishes what
+ * matched nothing under {@link CATEGORY_UNKNOWN_DETAIL}, a list, because a
+ * product write names several and a decisions file is read by a person.
+ */
+export class CategoryNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_NOT_FOUND;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` key a {@link CategoryTooDeepException} or a
+ * {@link CategoryNotALeafException} names the offending category under.
+ */
+export const CATEGORY_DETAIL = 'categoryId';
+
+/**
+ * The `details` key a {@link CategoryNotFoundException} lists the ids or slugs
+ * that matched nothing under.
+ */
+export const CATEGORY_UNKNOWN_DETAIL = 'unknown';
+
+/**
  * The `details` key a {@link BrandLinkTooDeepException} names the brand that
  * breaks the one level rule under.
  *
