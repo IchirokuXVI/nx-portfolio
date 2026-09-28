@@ -1,11 +1,13 @@
 import {
-  ItemCategory,
   UnitOfMeasure,
   type CreateItemInput,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  CategoryNotALeafException,
+  CategoryNotFoundException,
   ConflictException,
   ForbiddenException,
+  ItemNeedsACategoryException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -22,6 +24,7 @@ import {
 } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
+import { fakeCategories } from './category.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -64,6 +67,8 @@ function build(overrides: {
   prices?: Partial<Repository<SupermarketItem>>;
   /** The registry the brand write step looks a key up in (plan 0115). */
   brands?: Brand[];
+  /** Which ids are roots or unknown to the category double (plan 0166). */
+  categories?: Parameters<typeof fakeCategories>[0];
 }) {
   const admin = makeAdmin();
   // The lookup answers the whole registry rather than narrowing it the way the
@@ -89,6 +94,8 @@ function build(overrides: {
   const audit = fakeAudit([
     [Item, { name: 'items', repository: overrides.items ?? {} }],
   ]);
+  // Plan 0166: the leaves a write names, and what every read answers.
+  const categories = fakeCategories(overrides.categories);
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
@@ -97,9 +104,10 @@ function build(overrides: {
     groups,
     admin,
     audit.service,
-    events
+    events,
+    categories.service
   );
-  return { service, admin, groups, events, audit, brands };
+  return { service, admin, groups, events, audit, brands, categories };
 }
 
 describe('ItemService', () => {
@@ -114,7 +122,7 @@ describe('ItemService', () => {
       service.create({
         userId: 'intruder',
         name: { en: 'Milk', es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: ['other-dairy'],
         defaultUnit: UnitOfMeasure.LITER,
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -124,7 +132,7 @@ describe('ItemService', () => {
       service.create({
         userId: ADMIN,
         name: { en: 'Milk', es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: ['other-dairy'],
         defaultUnit: UnitOfMeasure.LITER,
       })
     ).resolves.toMatchObject({ name: { en: 'Milk', es: 'Leche' } });
@@ -140,7 +148,7 @@ describe('ItemService', () => {
     await service.create({
       userId: ADMIN,
       name: { en: 'Milk', es: 'Leche' },
-      category: ItemCategory.DAIRY,
+      categoryIds: ['other-dairy'],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: 'g1',
     });
@@ -160,7 +168,6 @@ describe('ItemService', () => {
         sku: null,
         ean: null,
         unitSize: null,
-        category: ItemCategory.DAIRY,
         defaultUnit: UnitOfMeasure.LITER,
         productGroupId: null,
         createdAt: new Date(),
@@ -300,7 +307,6 @@ describe('ItemService', () => {
         sku: null,
         ean: null,
         unitSize: null,
-        category: ItemCategory.DAIRY,
         defaultUnit: UnitOfMeasure.LITER,
         productGroupId: null,
         createdAt: new Date(),
@@ -341,7 +347,7 @@ describe('ItemService', () => {
     function milk(overrides: Partial<CreateItemInput> = {}): CreateItemInput {
       return {
         name: { es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: ['other-dairy'],
         defaultUnit: UnitOfMeasure.LITER,
         ...overrides,
       };
@@ -455,7 +461,6 @@ describe('ItemService', () => {
       ean: null,
       unitSize: 6,
       packCount: 6,
-      category: ItemCategory.DAIRY,
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: null,
     };
@@ -473,7 +478,7 @@ describe('ItemService', () => {
       const created = await service.create({
         userId: ADMIN,
         name: { es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: ['other-dairy'],
         defaultUnit: UnitOfMeasure.LITER,
       });
       expect(created.packCount).toBeNull();
@@ -487,7 +492,7 @@ describe('ItemService', () => {
       const created = await service.create({
         userId: ADMIN,
         name: { es: 'Leche' },
-        category: ItemCategory.DAIRY,
+        categoryIds: ['other-dairy'],
         defaultUnit: UnitOfMeasure.LITER,
         packCount: 6,
       });
@@ -497,7 +502,7 @@ describe('ItemService', () => {
         items: [
           {
             name: { es: 'Atún' },
-            category: ItemCategory.PANTRY,
+            categoryIds: ['other-pantry'],
             defaultUnit: UnitOfMeasure.GRAM,
             packCount: 8,
           },
@@ -613,7 +618,6 @@ describe('ItemService', () => {
           sku: null,
           ean: null,
           unitSize: 1,
-          category: ItemCategory.DAIRY,
           defaultUnit: UnitOfMeasure.LITER,
           productGroupId: null,
         })),
@@ -627,7 +631,7 @@ describe('ItemService', () => {
         service.create({
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
-          category: ItemCategory.DAIRY,
+          categoryIds: ['other-dairy'],
           defaultUnit: UnitOfMeasure.LITER,
           ean: '8480000123456',
         })
@@ -655,7 +659,7 @@ describe('ItemService', () => {
           items: [
             {
               name: { es: 'Leche' },
-              category: ItemCategory.DAIRY,
+              categoryIds: ['other-dairy'],
               defaultUnit: UnitOfMeasure.LITER,
               ean: '8480000123456',
             },
@@ -675,7 +679,7 @@ describe('ItemService', () => {
           items: [
             {
               name: { es: 'Leche' },
-              category: ItemCategory.DAIRY,
+              categoryIds: ['other-dairy'],
               defaultUnit: UnitOfMeasure.LITER,
               ean: '8480000123456',
             },
@@ -697,7 +701,7 @@ describe('ItemService', () => {
         service.create({
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
-          category: ItemCategory.DAIRY,
+          categoryIds: ['other-dairy'],
           defaultUnit: UnitOfMeasure.LITER,
         })
       ).rejects.toThrow('the database went away');
@@ -736,7 +740,7 @@ describe('ItemService', () => {
     const draft = {
       userId: ADMIN,
       name: { es: 'Cerveza' },
-      category: ItemCategory.OTHER,
+      categoryIds: ['uncategorised'],
       defaultUnit: UnitOfMeasure.UNIT,
     };
 
@@ -842,6 +846,184 @@ describe('ItemService', () => {
       // One lookup for the whole file, not one per product: a thousand row
       // decisions file would otherwise be a thousand round trips.
       expect(brands.find).toHaveBeenCalledTimes(1);
+    });
+  });
+  /**
+   * A product's categories (plan 0166, sections 2 and 3). The rules the
+   * database holds are proven in `category.integration.spec.ts`; this is the
+   * order of work: what is refused before anything is written, and what is
+   * written in which order.
+   */
+  describe('the categories a product sits on (plan 0166)', () => {
+    const saving = () =>
+      ({
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: x.id ?? 'i1', ...x })),
+        findOne: jest.fn(async () => ({ id: 'i1', name: { es: 'Leche' } })),
+        find: jest.fn(async () => [
+          { id: 'i1', name: { es: 'Uno' } },
+          { id: 'i2', name: { es: 'Dos' } },
+        ]),
+      }) as unknown as Repository<Item>;
+
+    const draft = {
+      userId: ADMIN,
+      name: { es: 'Leche' },
+      defaultUnit: UnitOfMeasure.LITER,
+    };
+
+    it('writes the leaves in the order meant, and answers them', async () => {
+      const items = saving();
+      const { service, categories } = build({ items });
+
+      const created = await service.create({
+        ...draft,
+        categoryIds: ['milk', 'plant-drinks', 'milk'],
+      });
+
+      expect(categories.written).toEqual([
+        { itemId: 'i1', categoryIds: ['milk', 'plant-drinks'] },
+      ]);
+      expect(created.categories.map((c) => c.id)).toEqual([
+        'milk',
+        'plant-drinks',
+      ]);
+    });
+
+    it('refuses an empty list, a root and an unknown id before writing anything', async () => {
+      const items = saving();
+      const { service, categories } = build({
+        items,
+        categories: { roots: ['dairy'], unknown: ['gone'] },
+      });
+
+      await expect(
+        service.create({ ...draft, categoryIds: [] })
+      ).rejects.toBeInstanceOf(ItemNeedsACategoryException);
+      await expect(
+        service.create({ ...draft, categoryIds: ['milk', 'dairy'] })
+      ).rejects.toBeInstanceOf(CategoryNotALeafException);
+      await expect(
+        service.create({ ...draft, categoryIds: ['gone'] })
+      ).rejects.toBeInstanceOf(CategoryNotFoundException);
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [
+            { ...draft, categoryIds: ['milk'] },
+            { ...draft, categoryIds: [] },
+          ],
+        })
+      ).rejects.toBeInstanceOf(ItemNeedsACategoryException);
+
+      expect(items.save).not.toHaveBeenCalled();
+      expect(categories.written).toEqual([]);
+    });
+
+    it('leaves the set alone on an update that does not name it', async () => {
+      const items = saving();
+      const { service, categories } = build({ items });
+
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        name: { es: 'Leche entera' },
+      });
+
+      expect(categories.written).toEqual([]);
+      // Read back rather than invented: the double answers its own leaf.
+      expect(updated.categories).toHaveLength(1);
+    });
+
+    it('replaces the set on an update that names it, and refuses emptying it', async () => {
+      const items = saving();
+      const { service, categories } = build({ items });
+
+      await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        categoryIds: ['plant-drinks'],
+      });
+      expect(categories.written).toEqual([
+        { itemId: 'i1', categoryIds: ['plant-drinks'] },
+      ]);
+
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', categoryIds: [] })
+      ).rejects.toBeInstanceOf(ItemNeedsACategoryException);
+    });
+
+    describe('updateMany', () => {
+      it('is gated, and refuses an empty list, a repeat and one over the cap', async () => {
+        const items = saving();
+        const { service } = build({ items });
+
+        await expect(
+          service.updateMany({ userId: 'intruder', items: [{ itemId: 'i1' }] })
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(
+          service.updateMany({ userId: ADMIN, items: [] })
+        ).rejects.toBeInstanceOf(ValidationException);
+        await expect(
+          service.updateMany({
+            userId: ADMIN,
+            items: [{ itemId: 'i1' }, { itemId: 'i1' }],
+          })
+        ).rejects.toBeInstanceOf(ValidationException);
+        await expect(
+          service.updateMany({
+            userId: ADMIN,
+            items: Array.from({ length: 1001 }, (_, i) => ({
+              itemId: `i${i}`,
+            })),
+          })
+        ).rejects.toBeInstanceOf(ValidationException);
+        expect(items.save).not.toHaveBeenCalled();
+      });
+
+      it('checks every entry before writing any, and answers in the order asked', async () => {
+        const items = saving();
+        const { service, categories } = build({
+          items,
+          categories: { roots: ['drinks'] },
+        });
+
+        await expect(
+          service.updateMany({
+            userId: ADMIN,
+            items: [
+              { itemId: 'i1', categoryIds: ['juices'] },
+              { itemId: 'i2', categoryIds: ['drinks'] },
+            ],
+          })
+        ).rejects.toBeInstanceOf(CategoryNotALeafException);
+        expect(items.save).not.toHaveBeenCalled();
+        expect(categories.written).toEqual([]);
+
+        const done = await service.updateMany({
+          userId: ADMIN,
+          items: [
+            { itemId: 'i2', categoryIds: ['water'] },
+            { itemId: 'i1', name: { es: 'Uno nuevo' } },
+          ],
+        });
+        expect(done.items.map((item) => item.id)).toEqual(['i2', 'i1']);
+        expect(categories.written).toEqual([
+          { itemId: 'i2', categoryIds: ['water'] },
+        ]);
+      });
+
+      it('names a product that does not exist', async () => {
+        const items = saving();
+        const { service } = build({ items });
+
+        await expect(
+          service.updateMany({
+            userId: ADMIN,
+            items: [{ itemId: 'i1' }, { itemId: 'i9' }],
+          })
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
     });
   });
 });

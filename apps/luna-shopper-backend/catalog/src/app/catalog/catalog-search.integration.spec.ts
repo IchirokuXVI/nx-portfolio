@@ -1,6 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
 import {
-  ItemCategory,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -11,9 +10,11 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { categoryId } from '../db/reference/ids';
 import {
   Brand,
   CATALOG_ENTITIES,
+  Category,
   Item,
   PriceScope,
   ProductGroup,
@@ -22,6 +23,7 @@ import {
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
+import { CategoryService } from './category.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -143,7 +145,8 @@ describeIntegration('catalog search (real Postgres)', () => {
       groups,
       admin,
       audit,
-      events
+      events,
+      new CategoryService(dataSource.getRepository(Category), admin, audit)
     );
 
     await seed();
@@ -188,7 +191,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       // The only carton with a barcode, so "finds the one carrying it" is a
       // claim about the code and not about there being a single milk.
       ean: PASCUAL_EAN,
-      category: ItemCategory.DAIRY,
+      categoryIds: [categoryId('other-dairy')],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
     });
@@ -198,7 +201,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Whole 1L', es: 'Entera 1L' },
       brand: 'Hacendado',
-      category: ItemCategory.DAIRY,
+      categoryIds: [categoryId('other-dairy')],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
     });
@@ -208,7 +211,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Sliced Bread', es: 'Pan de molde' },
       brand: 'Bimbo',
-      category: ItemCategory.BAKERY,
+      categoryIds: [categoryId('other-bakery')],
       defaultUnit: UnitOfMeasure.UNIT,
       productGroupId: breadGroup.id,
     });
@@ -342,7 +345,7 @@ describeIntegration('catalog search (real Postgres)', () => {
         await items.create({
           userId: OWNER,
           name: { en, es },
-          category: ItemCategory.OTHER,
+          categoryIds: [categoryId('uncategorised')],
           defaultUnit: UnitOfMeasure.UNIT,
           productGroupId: group.id,
         })
@@ -462,7 +465,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       const impostor = await items.create({
         userId: OWNER,
         name: { en: PASCUAL_EAN, es: PASCUAL_EAN },
-        category: ItemCategory.OTHER,
+        categoryIds: [categoryId('uncategorised')],
         defaultUnit: UnitOfMeasure.UNIT,
       });
 
@@ -885,7 +888,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       const orphan = await items.create({
         userId: OWNER,
         name: { en: 'An orphan', es: 'Un huérfano' },
-        category: ItemCategory.OTHER,
+        categoryIds: [categoryId('uncategorised')],
         defaultUnit: UnitOfMeasure.UNIT,
         productGroupId: doomed.id,
       });
@@ -920,25 +923,25 @@ describeIntegration('catalog search (real Postgres)', () => {
         items.create({
           userId: OWNER,
           name: { en: 'Iceberg lettuce', es: 'Lechuga iceberg' },
-          category: ItemCategory.OTHER,
+          categoryIds: [categoryId('uncategorised')],
           defaultUnit: UnitOfMeasure.UNIT,
         }),
         items.create({
           userId: OWNER,
           name: { en: 'Chicken sausages', es: 'Salchichas de pollo' },
-          category: ItemCategory.MEAT,
+          categoryIds: [categoryId('other-meat')],
           defaultUnit: UnitOfMeasure.UNIT,
         }),
         items.create({
           userId: OWNER,
           name: { en: 'Fine salt', es: 'Sal fina' },
-          category: ItemCategory.OTHER,
+          categoryIds: [categoryId('uncategorised')],
           defaultUnit: UnitOfMeasure.GRAM,
         }),
         items.create({
           userId: OWNER,
           name: { en: 'Smoked salmon', es: 'Salmón ahumado' },
-          category: ItemCategory.OTHER,
+          categoryIds: [categoryId('uncategorised')],
           defaultUnit: UnitOfMeasure.GRAM,
         }),
       ]);
@@ -1025,7 +1028,7 @@ describeIntegration('catalog search (real Postgres)', () => {
             userId: OWNER,
             name: { en: es, es },
             brand,
-            category: ItemCategory.OTHER,
+            categoryIds: [categoryId('uncategorised')],
             defaultUnit: UnitOfMeasure.UNIT,
             productGroupId,
           })
