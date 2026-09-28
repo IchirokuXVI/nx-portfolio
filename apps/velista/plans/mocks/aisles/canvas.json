@@ -1,6 +1,6 @@
 {
   "title": "Velista: the aisles of the shop you are in",
-  "lede": "The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes, each with a recommendation, and they need answers before any code. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes. The user approved option A and every recommendation, with one change: the band names what we could not find, and an info control beside it explains what that means. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     {
       "file": "Aisles.dc.html",
@@ -32,7 +32,7 @@
       "y": 964,
       "w": 390,
       "h": 844,
-      "title": "Mixed list, option A: one band (recommended)"
+      "title": "Mixed list, option A: one band (chosen)"
     },
     {
       "file": "MixedHint.dc.html",
@@ -40,7 +40,7 @@
       "y": 964,
       "w": 390,
       "h": 844,
-      "title": "Mixed list, option B: a hint on every heading"
+      "title": "Mixed list, option B: a hint on every heading (not chosen)"
     },
     {
       "file": "MixedDividerEs.dc.html",
@@ -48,7 +48,7 @@
       "y": 964,
       "w": 390,
       "h": 844,
-      "title": "Option A in Spanish"
+      "title": "Option A in Spanish (chosen)"
     },
     {
       "file": "MixedHintEs.dc.html",
@@ -56,7 +56,7 @@
       "y": 964,
       "w": 390,
       "h": 844,
-      "title": "Option B in Spanish"
+      "title": "Option B in Spanish (not chosen)"
     },
     {
       "file": "SheetNoShop.dc.html",
@@ -73,6 +73,22 @@
       "w": 390,
       "h": 844,
       "title": "The filter sheet, a shop chosen: Aisle"
+    },
+    {
+      "file": "MixedDividerInfo.dc.html",
+      "x": 0,
+      "y": 2892,
+      "w": 390,
+      "h": 844,
+      "title": "Option A, the info control pressed: the explanation"
+    },
+    {
+      "file": "MixedDividerInfoEs.dc.html",
+      "x": 470,
+      "y": 2892,
+      "w": 390,
+      "h": 844,
+      "title": "The explanation in Spanish"
     }
   ],
   "annotations": [
@@ -123,21 +139,21 @@
       "x": 1880,
       "y": 964,
       "w": 470,
-      "text": "THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART.\nOption A draws one band between the last aisle and the first category: The rest, by category / El resto, por categoría. Option B adds a hint to every category heading below the aisles, in the plan's words: not in an aisle here yet / aún sin pasillo en esta tienda.\nRECOMMENDED: A, with the copy drawn.\nWhy A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line. English just fits; the Spanish artboard beside it shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.\nWhy not the plan's words. Not in an aisle here yet can be read as not sold here, which is exactly what the rule never says (backend 0167 never infers availability). And yet invites a question the shopper cannot answer. The rest, by category says what the reader is looking at, in a word the filter sheet already uses."
+      "text": "THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART. DECIDED: OPTION A.\nOption A draws one band between the last aisle and the first category. Option B, not chosen, added a hint to every category heading below the aisles: not in an aisle here yet / aún sin pasillo en esta tienda.\nWhy A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line; the Spanish artboard shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.\nTHE BAND'S WORDS, CHANGED ON REVIEW. The first draft read The rest, by category. The user asked for words that say what happened: Categories we could not find in this shop / Categorías que no encontramos en esta tienda. It says we could not find them, not that the shop lacks them, which is the line backend 0167 never crosses: nothing here infers availability. An info control at the band's trailing edge says so in full (the row below)."
     },
     {
       "id": "a3",
       "x": 2410,
       "y": 964,
       "w": 470,
-      "text": "RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.\nNo category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.\nThe band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries no control and cannot be collapsed.\nThe categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan."
+      "text": "RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.\nNo category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.\nThe band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries one control, the info button, and cannot be collapsed.\nThe categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan."
     },
     {
       "id": "copy",
       "x": 940,
       "y": 1928,
       "w": 420,
-      "text": "COPY, ENGLISH AND SPANISH.\nRadio under Group by, with a shop: Aisle / Pasillo.\nIts note, new: this shop's order / el orden de esta tienda.\nRadio without a shop, unchanged: Category / Categoría.\nChip with a shop: By aisle / Por pasillo.\nChip without, unchanged: By category / Por categoría.\nThe band, new: The rest, by category / El resto, por categoría.\nOption B's hint, only if B is chosen: not in an aisle here yet / aún sin pasillo en esta tienda.\nHeading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.\nSection names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados."
+      "text": "COPY, ENGLISH AND SPANISH.\nRadio under Group by, with a shop: Aisle / Pasillo.\nIts note, new: this shop's order / el orden de esta tienda.\nRadio without a shop, unchanged: Category / Categoría.\nChip with a shop: By aisle / Por pasillo.\nChip without, unchanged: By category / Por categoría.\nThe band, new: Categories we could not find in this shop / Categorías que no encontramos en esta tienda.\nThe info control's name: About these categories / Sobre estas categorías.\nThe explanation: These products are grouped by their category. This shop may carry these categories, or similar ones, but we have no information about where they are. / Estos productos están agrupados por su categoría. Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.\nHeading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.\nSection names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados."
     },
     {
       "id": "radio",
@@ -152,6 +168,13 @@
       "y": 1928,
       "w": 470,
       "text": "WHEN THE WORDS SWITCH: A SECOND DEPARTURE, TO CONFIRM. The plan says the words follow the shop alone. RECOMMENDED: Aisle and By aisle only once the shop's sections have loaded and the list is not empty. While they load, and for a chain nobody has configured, the page is grouped by category and the words stay Category and By category, so a chip never names a grouping the headings do not show. The words then change in the same frame as the headings.\nThe sections are read once per shop per session, so after the first visit the switch is immediate."
+    },
+    {
+      "id": "info",
+      "x": 940,
+      "y": 2892,
+      "w": 470,
+      "text": "RULE A4: THE INFO CONTROL OPENS A POPOVER, NOT A SHEET. Beside the band's words, a 44 px target with the glyph at 20, named About these categories. Pressed, it holds a small popover under itself: two short sentences and nothing to do, which is what the anchored popover of the list picker and the group help already carry. A sheet would be a route and a scrim for two sentences, and would take the reader away from the rows the sentences are about.\nIt closes on a second press, on Escape and on a press anywhere outside it, and focus goes back to the control. The popover is labelled by the band's words. The glyph is the app's info icon, the one the create group sheet and the setup already draw.\nThe band's words take one line on a 390 px phone in both languages; a longer translation wraps to a second line inside the band rather than being cut."
     }
   ]
 }

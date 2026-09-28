@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Mixed list, option A: one band (chosen)</title>
+<title>Option A, the explanation open</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -54,7 +54,7 @@ body { margin: 0; }
 .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
 /* the anchored popover of the list picker and the group help, held under the control */
 .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
-.pop b { color: var(--app-text-primary); font-size: var(--app-text-sm); font-weight: 600; }
+
 /* a basket row: the status control, the body, the number */
 .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
 .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
@@ -120,8 +120,9 @@ body { margin: 0; }
   <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
   <div class="list">
     <div class="fade"></div>
+    <div class="pop" role="dialog" aria-labelledby="rest-label" style="top: 130px"><span>These products are grouped by their category.</span><span>This shop may carry these categories, or similar ones, but we have no information about where they are.</span></div>
     <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
-    <div class="rest"><span class="lbl" id="rest-label">Categories we could not find in this shop</span><span class="info" role="button" aria-label="About these categories" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
+    <div class="rest"><span class="lbl" id="rest-label">Categories we could not find in this shop</span><span class="info open" role="button" aria-label="About these categories" aria-expanded="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
     <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
     <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
     <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>

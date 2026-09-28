@@ -339,8 +339,12 @@
 #ab-MixedDivider .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
 #ab-MixedDivider .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
 #ab-MixedDivider .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
-#ab-MixedDivider .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
-#ab-MixedDivider .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedDivider .rest { display: flex; align-items: center; gap: 4px; margin-top: 18px; padding: 0 4px 0 16px; min-height: 44px; box-sizing: border-box; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: var(--app-text-xs); font-weight: 600; line-height: 1.3; color: var(--app-text-secondary); }
+#ab-MixedDivider .rest .lbl { flex: 1; min-width: 0; }
+#ab-MixedDivider .rest .info { position: relative; flex: none; width: var(--app-touch-target); height: var(--app-touch-target); display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); color: var(--app-text-muted); }
+#ab-MixedDivider .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
+#ab-MixedDivider .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
+#ab-MixedDivider .pop b { color: var(--app-text-primary); font-size: var(--app-text-sm); font-weight: 600; }
 #ab-MixedDivider .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
 #ab-MixedDivider .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
 #ab-MixedDivider .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
@@ -497,8 +501,12 @@
 #ab-MixedDividerEs .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
 #ab-MixedDividerEs .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
 #ab-MixedDividerEs .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
-#ab-MixedDividerEs .rest { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 0 16px; height: 40px; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: 13px; font-weight: 600; color: var(--app-text-secondary); }
-#ab-MixedDividerEs .rest svg { flex: none; color: var(--app-text-muted); }
+#ab-MixedDividerEs .rest { display: flex; align-items: center; gap: 4px; margin-top: 18px; padding: 0 4px 0 16px; min-height: 44px; box-sizing: border-box; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: var(--app-text-xs); font-weight: 600; line-height: 1.3; color: var(--app-text-secondary); }
+#ab-MixedDividerEs .rest .lbl { flex: 1; min-width: 0; }
+#ab-MixedDividerEs .rest .info { position: relative; flex: none; width: var(--app-touch-target); height: var(--app-touch-target); display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); color: var(--app-text-muted); }
+#ab-MixedDividerEs .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
+#ab-MixedDividerEs .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
+#ab-MixedDividerEs .pop b { color: var(--app-text-primary); font-size: var(--app-text-sm); font-weight: 600; }
 #ab-MixedDividerEs .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
 #ab-MixedDividerEs .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
 #ab-MixedDividerEs .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
@@ -782,11 +790,175 @@
 #ab-SheetShop .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
 #ab-SheetShop .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
 #ab-SheetShop .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedDividerInfo .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedDividerInfo .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfo .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedDividerInfo .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedDividerInfo .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfo .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedDividerInfo .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfo .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedDividerInfo .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedDividerInfo .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedDividerInfo .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedDividerInfo .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedDividerInfo .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfo .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedDividerInfo .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfo .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerInfo .rest { display: flex; align-items: center; gap: 4px; margin-top: 18px; padding: 0 4px 0 16px; min-height: 44px; box-sizing: border-box; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: var(--app-text-xs); font-weight: 600; line-height: 1.3; color: var(--app-text-secondary); }
+#ab-MixedDividerInfo .rest .lbl { flex: 1; min-width: 0; }
+#ab-MixedDividerInfo .rest .info { position: relative; flex: none; width: var(--app-touch-target); height: var(--app-touch-target); display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); color: var(--app-text-muted); }
+#ab-MixedDividerInfo .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
+#ab-MixedDividerInfo .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
+#ab-MixedDividerInfo .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfo .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedDividerInfo .body { flex: 1; min-width: 0; }
+#ab-MixedDividerInfo .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerInfo .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerInfo .body .unl { color: var(--app-text-secondary); }
+#ab-MixedDividerInfo .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedDividerInfo .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfo .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedDividerInfo .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedDividerInfo .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerInfo .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedDividerInfo .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedDividerInfo .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerInfo .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedDividerInfo .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfo .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedDividerInfo .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedDividerInfo .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedDividerInfo .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedDividerInfo .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedDividerInfo .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedDividerInfo .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedDividerInfo .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedDividerInfo .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedDividerInfo .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedDividerInfo .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfo .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedDividerInfo .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedDividerInfo .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedDividerInfo .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedDividerInfo .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfo .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedDividerInfo .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedDividerInfo .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerInfo .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedDividerInfo .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedDividerInfo .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfo .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedDividerInfo .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedDividerInfo .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedDividerInfo .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfo .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-display: Marcellus, Georgia, 'Times New Roman', serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px; --app-chip-height: 30px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.10); --app-action-quiet-border: rgba(255, 180, 84, 0.26);
+  --app-status-attention-bg: rgba(124, 58, 237, 0.10);
+  --app-status-success-fg: #047857;
+  --app-scrim: rgba(17, 20, 31, 0.42); --app-sheet-shadow: 0 -12px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-MixedDividerInfoEs .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-MixedDividerInfoEs .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 12px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .title { flex: 1; font-family: var(--app-font-display); font-size: 20px; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-MixedDividerInfoEs .ibtn { position: relative; width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); }
+#ab-MixedDividerInfoEs .ibtn.on { color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfoEs .ibtn .n { position: absolute; top: 5px; right: 4px; min-width: 17px; height: 17px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
+#ab-MixedDividerInfoEs .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfoEs .chips { flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px 10px; white-space: nowrap; overflow: hidden; }
+#ab-MixedDividerInfoEs .chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: var(--app-chip-height); box-sizing: border-box; padding: 0 8px 0 10px; border: 1px solid var(--app-action-quiet-border); border-radius: var(--app-radius-full); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-xs); font-weight: 600; }
+#ab-MixedDividerInfoEs .chip .x { font-size: var(--app-text-sm); line-height: 1; }
+#ab-MixedDividerInfoEs .list { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+#ab-MixedDividerInfoEs .fade { position: absolute; z-index: 1; left: 0; right: 0; top: 0; height: 22px; background: linear-gradient(180deg, var(--app-surface-ground), rgba(247, 248, 252, 0)); }
+#ab-MixedDividerInfoEs .ghead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 12px 4px 16px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .ghead h2 { margin: 0; font-size: var(--app-text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-secondary); }
+#ab-MixedDividerInfoEs .ghead h2 .c { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfoEs .ghead .hint { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .rest { display: flex; align-items: center; gap: 4px; margin-top: 18px; padding: 0 4px 0 16px; min-height: 44px; box-sizing: border-box; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); border-bottom: 1px solid var(--app-border-subtle); font-size: var(--app-text-xs); font-weight: 600; line-height: 1.3; color: var(--app-text-secondary); }
+#ab-MixedDividerInfoEs .rest .lbl { flex: 1; min-width: 0; }
+#ab-MixedDividerInfoEs .rest .info { position: relative; flex: none; width: var(--app-touch-target); height: var(--app-touch-target); display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
+#ab-MixedDividerInfoEs .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
+#ab-MixedDividerInfoEs .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .st i { width: 24px; height: 24px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .st i.got { border: 0; background: var(--app-status-success-fg); }
+#ab-MixedDividerInfoEs .body { flex: 1; min-width: 0; }
+#ab-MixedDividerInfoEs .body b { display: block; font-size: var(--app-text-base); font-weight: 400; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerInfoEs .body span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ab-MixedDividerInfoEs .body .unl { color: var(--app-text-secondary); }
+#ab-MixedDividerInfoEs .row.done .body b { color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); font-size: var(--app-text-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+#ab-MixedDividerInfoEs .row.done .qty { border-color: transparent; background: none; color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .row.just { box-shadow: inset 3px 0 0 var(--app-action-bg); background: rgba(255, 180, 84, 0.06); }
+#ab-MixedDividerInfoEs .composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerInfoEs .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); }
+#ab-MixedDividerInfoEs .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-MixedDividerInfoEs .tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+#ab-MixedDividerInfoEs .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfoEs .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: var(--app-radius-full); background: var(--app-action-quiet-fg); color: #ffffff; font-size: var(--app-text-xs); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .scrim { position: absolute; inset: 0; background: var(--app-scrim); }
+#ab-MixedDividerInfoEs .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 726px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--app-surface-raised); border-radius: 22px 22px 0 0; box-shadow: var(--app-sheet-shadow); }
+#ab-MixedDividerInfoEs .handle { flex: none; width: 48px; height: 5px; margin: 10px auto 12px; border-radius: var(--app-radius-full); background: var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .sbody { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 0 20px; }
+#ab-MixedDividerInfoEs .shead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+#ab-MixedDividerInfoEs .shead h2 { margin: 0; font-family: var(--app-font-display); font-weight: 400; font-size: 24px; }
+#ab-MixedDividerInfoEs .reset { font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); padding: 12px 0 12px 12px; }
+#ab-MixedDividerInfoEs .legend { padding: 0 0 4px; font-size: var(--app-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .card { margin: 0 0 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); overflow: hidden; }
+#ab-MixedDividerInfoEs .ch { display: flex; align-items: center; gap: 8px; min-height: 44px; box-sizing: border-box; padding: 4px 8px 4px 12px; }
+#ab-MixedDividerInfoEs .ch + .ch { border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .ch.picked { background: var(--app-status-attention-bg); }
+#ab-MixedDividerInfoEs .ch.new { box-shadow: inset 0 0 0 2px rgba(255, 180, 84, 0.9); }
+#ab-MixedDividerInfoEs .radio { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); background: #ffffff; }
+#ab-MixedDividerInfoEs .picked .radio { border: 4.5px solid #e8962e; }
+#ab-MixedDividerInfoEs .box { flex: none; width: 16px; height: 16px; box-sizing: border-box; border-radius: 4px; background: #e8962e; display: flex; align-items: center; justify-content: center; }
+#ab-MixedDividerInfoEs .cb { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+#ab-MixedDividerInfoEs .ct { font-size: var(--app-text-sm); font-weight: 600; }
+#ab-MixedDividerInfoEs .chint { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .cnote { flex: none; font-size: var(--app-text-xs); color: var(--app-text-muted); padding-right: 4px; }
+#ab-MixedDividerInfoEs .cnote.newcopy { color: var(--app-action-quiet-fg); font-weight: 600; }
+#ab-MixedDividerInfoEs .pick { flex: none; padding: 12px 4px 12px 12px; font-size: var(--app-text-xs); font-weight: 600; color: var(--app-action-quiet-fg); }
+#ab-MixedDividerInfoEs .switch { flex: none; width: 36px; height: 22px; box-sizing: border-box; margin-right: 4px; border-radius: var(--app-radius-full); border: 1px solid var(--app-border-strong); background: var(--app-surface-sunken); position: relative; }
+#ab-MixedDividerInfoEs .switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: var(--app-radius-full); background: var(--app-text-muted); }
+#ab-MixedDividerInfoEs .sfade { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, rgba(255, 255, 255, 0), #ffffff); }
+#ab-MixedDividerInfoEs .sfoot { flex: none; padding: 12px 20px 24px; border-top: 1px solid var(--app-border-subtle); }
+#ab-MixedDividerInfoEs .confirm { height: 52px; border-radius: 14px; background: var(--app-action-bg); color: var(--app-action-fg); font-size: 16px; font-weight: 650; display: flex; align-items: center; justify-content: center; }
 </style>
 
 <header>
   <h1>Velista: the aisles of the shop you are in</h1>
-  <p class="lede">The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes, each with a recommendation, and they need answers before any code. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+  <p class="lede">The mock for plan <code>0120</code>, with backend <code>0167</code> behind it. With a shop chosen in Buying at, grouping by category becomes grouping by aisle: the shop's sections in the shop's order, then the app's categories for the products no section covers, then the rows with no product. Drawn on Day, on the chrome the app has on slot 0, as the <code>one-field</code> mock draws it. The decisions the plan left open are in the notes. The user approved option A and every recommendation, with one change: the band names what we could not find, and an info control beside it explains what that means. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
 </header>
 
 <div class="controls">
@@ -797,7 +969,7 @@
 </div>
 
 <div class="viewport">
-  <div class="canvas" id="canvas" style="width: 2880px; height: 3372px;">
+  <div class="canvas" id="canvas" style="width: 2880px; height: 4336px;">
       <figure class="board" style="left: 0px; top: 600px; width: 390px;">
         <figcaption>Grouped by aisle at Mercadona, Calle Mayor 3</figcaption>
         <div class="frame" id="ab-Aisles" style="width: 390px; height: 844px;">
@@ -916,7 +1088,7 @@
         </div>
       </figure>
       <figure class="board" style="left: 0px; top: 1564px; width: 390px;">
-        <figcaption>Mixed list, option A: one band (recommended)</figcaption>
+        <figcaption>Mixed list, option A: one band (chosen)</figcaption>
         <div class="frame" id="ab-MixedDivider" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <div class="appbar">
@@ -933,7 +1105,7 @@
             <div class="list">
               <div class="fade"></div>
               <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
-              <div class="rest"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span>The rest, by category</span></div>
+              <div class="rest"><span class="lbl" id="rest-label">Categories we could not find in this shop</span><span class="info" role="button" aria-label="About these categories" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
               <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
               <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
               <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
@@ -958,7 +1130,7 @@
         </div>
       </figure>
       <figure class="board" style="left: 470px; top: 1564px; width: 390px;">
-        <figcaption>Mixed list, option B: a hint on every heading</figcaption>
+        <figcaption>Mixed list, option B: a hint on every heading (not chosen)</figcaption>
         <div class="frame" id="ab-MixedHint" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <div class="appbar">
@@ -999,7 +1171,7 @@
         </div>
       </figure>
       <figure class="board" style="left: 940px; top: 1564px; width: 390px;">
-        <figcaption>Option A in Spanish</figcaption>
+        <figcaption>Option A in Spanish (chosen)</figcaption>
         <div class="frame" id="ab-MixedDividerEs" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <div class="appbar">
@@ -1016,7 +1188,7 @@
             <div class="list">
               <div class="fade"></div>
               <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
-              <div class="rest"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"></path></svg><span>El resto, por categoría</span></div>
+              <div class="rest"><span class="lbl" id="rest-label">Categorías que no encontramos en esta tienda</span><span class="info" role="button" aria-label="Sobre estas categorías" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
               <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2></div>
               <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
               <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
@@ -1041,7 +1213,7 @@
         </div>
       </figure>
       <figure class="board" style="left: 1410px; top: 1564px; width: 390px;">
-        <figcaption>Option B in Spanish</figcaption>
+        <figcaption>Option B in Spanish (not chosen)</figcaption>
         <div class="frame" id="ab-MixedHintEs" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <div class="appbar">
@@ -1204,17 +1376,104 @@
           </div>
         </div>
       </figure>
+      <figure class="board" style="left: 0px; top: 3492px; width: 390px;">
+        <figcaption>Option A, the info control pressed: the explanation</figcaption>
+        <div class="frame" id="ab-MixedDividerInfo" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Everything to buy</span>
+              <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 to buy</span>
+              <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="pop" role="dialog" aria-labelledby="rest-label" style="top: 130px"><span>These products are grouped by their category.</span><span>This shop may carry these categories, or similar ones, but we have no information about where they are.</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="rest"><span class="lbl" id="rest-label">Categories we could not find in this shop</span><span class="info open" role="button" aria-label="About these categories" aria-expanded="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
+              <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Oil and vinegar<span class="c">0 of 1 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Olive oil"></i></span><span class="body"><b>Olive oil</b><span>Aceite de oliva virgen extra, 1 L · 8.95 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Soft drinks<span class="c">0 of 2 got</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2.15 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Tonic water"></i></span><span class="body"><b>Tonic water</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; not listed at Mercadona · 3.20 € at Dia</span></span><span>from Weekly shop</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>No category</h2><span class="hint">lines with no product</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Settle Something for the cat"></i></span><span class="body"><b>Something for the cat</b><span>from Groceries</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Add or find something</span>
+              <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 3492px; width: 390px;">
+        <figcaption>The explanation in Spanish</figcaption>
+        <div class="frame" id="ab-MixedDividerInfoEs" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <div class="appbar">
+              <span class="ibtn" aria-label="Historial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+              <span class="title">Todo por comprar</span>
+              <span class="ibtn" aria-label="Personas"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+              <span class="ibtn" aria-label="Compartir"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+            </div>
+            <div class="tools">
+              <span class="count">16 por comprar</span>
+              <span class="ibtn on" aria-label="Filtrar y ordenar, 2 activos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+            </div>
+            <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Quitar: Mercadona">&times;</span></span><span class="chip">Por pasillo<span class="x" aria-label="Quitar: Por pasillo">&times;</span></span></div>
+            <div class="list">
+              <div class="fade"></div>
+              <div class="pop" role="dialog" aria-labelledby="rest-label" style="top: 130px"><span>Estos productos están agrupados por su categoría.</span><span>Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="rest"><span class="lbl" id="rest-label">Categorías que no encontramos en esta tienda</span><span class="info open" role="button" aria-label="Sobre estas categorías" aria-expanded="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
+              <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Aceite y vinagre<span class="c">0 de 1 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Aceite de oliva"></i></span><span class="body"><b>Aceite de oliva</b><span>Aceite de oliva virgen extra, 1 L · 8,95 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Refrescos<span class="c">0 de 2 conseguidos</span></h2></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2,15 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Tónica"></i></span><span class="body"><b>Tónica</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; no está en Mercadona · 3,20 € en Dia</span></span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+              <div class="ghead"><h2>Sin categoría</h2><span class="hint">líneas sin producto</span></div>
+              <div class="row"><span class="st"><i class="" aria-label="Marcar Algo para el gato"></i></span><span class="body"><b>Algo para el gato</b><span>de Fin de semana</span></span><span class="qty">1</span></div>
+            </div>
+            <div class="composer">
+              <span class="field">Añade o busca algo</span>
+              <span class="send" aria-label="Añadir la línea"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+            </div>
+            <nav class="nav">
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Inicio</span>
+              <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catálogo</span>
+              <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Lista de la compra</span>
+            </nav>
+          </div>
+        </div>
+      </figure>
       <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. Plan 0077 called grouping by category the aisle view, and it is, until the person stands in a shop whose aisles are not the taxonomy's. With Buying at set to one shop (0102), the basket read says which of that shop's sections every product is in (backend 0167), and the page is drawn in those sections, in the order the shop is walked.</p><p>A product no section covers keeps its own categories, after the aisles. The rows with no product stay last. Without a shop nothing changes, and a shop nobody has configured looks exactly as it does today.</p><p>The shop drawn here is Mercadona, Calle Mayor 3. Its chain has eight sections mapped, which is about half of the taxonomy of backend 0166 appendix A, so one basket shows all three parts.</p></aside>
       <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>THE SHOP'S SECTIONS IN THIS MOCK, in its walk order, with what each covers (the chain's default, source CHAIN).</p><p>1. Fruit and vegetables / Fruta y verdura: the root fruit-and-vegetables</p><p>2. Bakery / Horno: the root bakery</p><p>3. Deli and cheese / Charcutería y quesos: the root cold-cuts-and-cheese</p><p>4. Meat / Carnicería: the root meat</p><p>5. Fish / Pescadería: the root fish-and-seafood</p><p>6. Dairy and eggs / Huevos, leche y mantequilla: the root dairy-and-eggs</p><p>7. Pizzas / Pizzas: the leaf pizzas</p><p>8. Frozen / Congelados: the root frozen</p><p>Nothing covers pantry, drinks, household or the rest, so those products keep their own leaves: Pasta, rice and legumes, Oil and vinegar, Soft drinks. A section with no row in the basket draws nothing, which is why Meat and Fish are absent.</p></aside>
       <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE A1: AN AISLE HEADING LOOKS LIKE A CATEGORY HEADING. The same h2, the same count, the same place. No aisle number, no icon, no colour of its own: the plan forbids a number, and a second heading style would ask the shopper to learn which kind they are reading.</p><p>The chips say it instead. Mercadona and By aisle sit side by side, so whoever is handed the phone can see why the headings are not the usual ones.</p><p>The name is data, read through inLocale, so a section named only in Spanish reads in Spanish for an English reader too.</p><p>Inside an aisle the rows keep the order they arrive in (0141's walk order). A row the shop does not list still sinks to the end of its own section (0078), as Tonic water does under Soft drinks.</p></aside>
       <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>NOT DRAWN, ON PURPOSE. The shop's map (0121 is on hold). An aisle number. Sections on the zone list or on the catalog tab. Configuring sections from the phone (admin 0037). Any change to settling or to the walk order.</p><p>A shop with its own section list (source LOCATION) looks the same as one on the chain's default: the only difference is the order of the headings.</p><p>The whole page moves nothing while the sections load. It is drawn by category, as today, and it recomposes by aisle when they land (plan target 3).</p></aside>
       <aside class="note" style="left: 1410px; top: 600px; width: 470px;"><p>RULE A2: A ROW IN TWO AISLES IS DRAWN IN BOTH, AND IT IS STILL ONE LINE. The frozen barbecue pizza carries two leaves, frozen-meals-and-pizzas and pizzas. The shop has a Pizzas section on the leaf and a Frozen section on the root, so the server answers both ids and the pizza is drawn under each heading, in its own place in each.</p><p>SETTLING EITHER COPY SETTLES THE LINE. Tapped under Pizzas, both copies turn to got in the same frame, both headings move (Pizzas 1 of 2 got, Frozen 1 of 3 got), and the page count moves once: 15 to buy, 1 got this trip. The same holds for the reel, a partial settle and a revert.</p><p>Nothing new is built for it: this is what the pipeline already does for a product in two categories (0077 section 3). Changing how such a row settles is an action boundary of the plan.</p></aside>
       <aside class="note" style="left: 1940px; top: 600px; width: 470px;"><p>OPEN QUESTIONS, ASSUMED AS DRAWN.</p><p>1. A row in two aisles counts in both headings. Pizzas says 1 of 2 got and Frozen 1 of 3 got, although the page counts the line once. Each heading counts what is under it, as 0077 already does for two categories. Confirm.</p><p>2. Group by List with a shop chosen is unchanged and never shows aisles. Confirm.</p><p>3. When the shop changes while the page is grouped, the page recomposes with the new shop's aisles, or by category while they load. No message is shown. Confirm.</p><p>4. A guest on a shared basket at a shop sees the same aisles: the sections read takes no account (backend 0167 section 4). Confirm.</p></aside>
-      <aside class="note" style="left: 1880px; top: 1564px; width: 470px;"><p>THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART.</p><p>Option A draws one band between the last aisle and the first category: The rest, by category / El resto, por categoría. Option B adds a hint to every category heading below the aisles, in the plan's words: not in an aisle here yet / aún sin pasillo en esta tienda.</p><p>RECOMMENDED: A, with the copy drawn.</p><p>Why A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line. English just fits; the Spanish artboard beside it shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.</p><p>Why not the plan's words. Not in an aisle here yet can be read as not sold here, which is exactly what the rule never says (backend 0167 never infers availability). And yet invites a question the shopper cannot answer. The rest, by category says what the reader is looking at, in a word the filter sheet already uses.</p></aside>
-      <aside class="note" style="left: 2410px; top: 1564px; width: 470px;"><p>RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.</p><p>No category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.</p><p>The band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries no control and cannot be collapsed.</p><p>The categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan.</p></aside>
-      <aside class="note" style="left: 940px; top: 2528px; width: 420px;"><p>COPY, ENGLISH AND SPANISH.</p><p>Radio under Group by, with a shop: Aisle / Pasillo.</p><p>Its note, new: this shop's order / el orden de esta tienda.</p><p>Radio without a shop, unchanged: Category / Categoría.</p><p>Chip with a shop: By aisle / Por pasillo.</p><p>Chip without, unchanged: By category / Por categoría.</p><p>The band, new: The rest, by category / El resto, por categoría.</p><p>Option B's hint, only if B is chosen: not in an aisle here yet / aún sin pasillo en esta tienda.</p><p>Heading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.</p><p>Section names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados.</p></aside>
+      <aside class="note" style="left: 1880px; top: 1564px; width: 470px;"><p>THE DECISION THE PLAN LEFT TO THE MOCK: HOW THE SECOND HALF IS TOLD APART. DECIDED: OPTION A.</p><p>Option A draws one band between the last aisle and the first category. Option B, not chosen, added a hint to every category heading below the aisles: not in an aisle here yet / aún sin pasillo en esta tienda.</p><p>Why A. It is said once, where the change happens, and the headings under it stay plain. B repeats the same words on every heading, and a phone cannot hold a long name, a count and a hint on one line; the Spanish artboard shows every heading wrapping to two lines. B also takes the hint slot that No category uses for its own reason.</p><p>THE BAND'S WORDS, CHANGED ON REVIEW. The first draft read The rest, by category. The user asked for words that say what happened: Categories we could not find in this shop / Categorías que no encontramos en esta tienda. It says we could not find them, not that the shop lacks them, which is the line backend 0167 never crosses: nothing here infers availability. An info control at the band's trailing edge says so in full (the row below).</p></aside>
+      <aside class="note" style="left: 2410px; top: 1564px; width: 470px;"><p>RULE A3: WHEN THE BAND IS DRAWN. Only when the page has at least one aisle section and at least one category section after it. A shop that covers everything has no band, and a shop that covers nothing has none either, because there is nothing to tell apart.</p><p>No category stays last and below the band, with its own hint, lines with no product. When every product is in an aisle and only free text lines are left, No category follows the aisles directly and no band is drawn: its hint already says why.</p><p>The band is a paragraph in document order, not a heading, so moving by heading still reads one flat run of groups. It carries one control, the info button, and cannot be collapsed.</p><p>The categories under it take the order of their first row, as 0077 decided. Any other order is an action boundary of the plan.</p></aside>
+      <aside class="note" style="left: 940px; top: 2528px; width: 420px;"><p>COPY, ENGLISH AND SPANISH.</p><p>Radio under Group by, with a shop: Aisle / Pasillo.</p><p>Its note, new: this shop's order / el orden de esta tienda.</p><p>Radio without a shop, unchanged: Category / Categoría.</p><p>Chip with a shop: By aisle / Por pasillo.</p><p>Chip without, unchanged: By category / Por categoría.</p><p>The band, new: Categories we could not find in this shop / Categorías que no encontramos en esta tienda.</p><p>The info control's name: About these categories / Sobre estas categorías.</p><p>The explanation: These products are grouped by their category. This shop may carry these categories, or similar ones, but we have no information about where they are. / Estos productos están agrupados por su categoría. Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.</p><p>Heading counts, unchanged keys: 1 of 2 got / 1 de 2 conseguidos.</p><p>Section names are data, not keys: Fruta y verdura, Horno, Charcutería y quesos, Carnicería, Pescadería, Huevos, leche y mantequilla, Pizzas, Congelados.</p></aside>
       <aside class="note" style="left: 1410px; top: 2528px; width: 470px;"><p>THE RADIO'S WORDS: A DEPARTURE FROM THE PLAN, TO CONFIRM. The plan says the radio reads Group by aisle. It sits under the legend Group by, so on screen that reads Group by, then Group by aisle. The mock draws Aisle / Pasillo, and a screen reader still hears the legend first: Group by, Aisle.</p><p>RECOMMENDED: Aisle, with the note this shop's order. The radio's word changes because of a choice made further down, in Buying at, and the note is what ties the two together for somebody who did not notice the change.</p><p>Category and Aisle are one radio with two names, not two radios. So with a shop chosen there is no way to group by the app's categories. Confirm that this is wanted.</p></aside>
       <aside class="note" style="left: 1940px; top: 2528px; width: 470px;"><p>WHEN THE WORDS SWITCH: A SECOND DEPARTURE, TO CONFIRM. The plan says the words follow the shop alone. RECOMMENDED: Aisle and By aisle only once the shop's sections have loaded and the list is not empty. While they load, and for a chain nobody has configured, the page is grouped by category and the words stay Category and By category, so a chip never names a grouping the headings do not show. The words then change in the same frame as the headings.</p><p>The sections are read once per shop per session, so after the first visit the switch is immediate.</p></aside>
+      <aside class="note" style="left: 940px; top: 3492px; width: 470px;"><p>RULE A4: THE INFO CONTROL OPENS A POPOVER, NOT A SHEET. Beside the band's words, a 44 px target with the glyph at 20, named About these categories. Pressed, it holds a small popover under itself: two short sentences and nothing to do, which is what the anchored popover of the list picker and the group help already carry. A sheet would be a route and a scrim for two sentences, and would take the reader away from the rows the sentences are about.</p><p>It closes on a second press, on Escape and on a press anywhere outside it, and focus goes back to the control. The popover is labelled by the band's words. The glyph is the app's info icon, the one the create group sheet and the setup already draw.</p><p>The band's words take one line on a 390 px phone in both languages; a longer translation wraps to a second line inside the band rather than being cut.</p></aside>
   </div>
 </div>
 
@@ -1224,7 +1483,7 @@
   (function () {
     var canvas = document.getElementById('canvas');
     var w = 2880;
-    var h = 3372;
+    var h = 4336;
     var buttons = document.querySelectorAll('.controls button');
     buttons.forEach(function (button) {
       button.addEventListener('click', function () {

@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Mixed list, option A: one band (chosen)</title>
+<title>Option A, the explanation open, in Spanish</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -54,7 +54,7 @@ body { margin: 0; }
 .rest .info.open { color: var(--app-action-quiet-fg); background: var(--app-action-quiet-bg); }
 /* the anchored popover of the list picker and the group help, held under the control */
 .pop { position: absolute; z-index: 3; right: 12px; width: 288px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); background: var(--app-surface-raised); box-shadow: 0 8px 24px rgba(17, 20, 31, 0.14); color: var(--app-text-secondary); font-size: var(--app-text-xs); line-height: 1.4; }
-.pop b { color: var(--app-text-primary); font-size: var(--app-text-sm); font-weight: 600; }
+
 /* a basket row: the status control, the body, the number */
 .row { display: flex; align-items: center; gap: 10px; min-height: 64px; box-sizing: border-box; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--app-border-subtle); }
 .st { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
@@ -108,39 +108,40 @@ body { margin: 0; }
 </helmet>
 <div class="vel phone">
   <div class="appbar">
-    <span class="ibtn" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
-    <span class="title">Everything to buy</span>
-    <span class="ibtn" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
-    <span class="ibtn" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
+    <span class="ibtn" aria-label="Historial"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></span>
+    <span class="title">Todo por comprar</span>
+    <span class="ibtn" aria-label="Personas"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></span>
+    <span class="ibtn" aria-label="Compartir"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></span>
   </div>
   <div class="tools">
-    <span class="count">16 to buy</span>
-    <span class="ibtn on" aria-label="Filter and order, 2 on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
+    <span class="count">16 por comprar</span>
+    <span class="ibtn on" aria-label="Filtrar y ordenar, 2 activos"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg><span class="n">2</span></span>
   </div>
-  <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Remove: Mercadona">&times;</span></span><span class="chip">By aisle<span class="x" aria-label="Remove: By aisle">&times;</span></span></div>
+  <div class="chips"><span class="chip">Mercadona<span class="x" aria-label="Quitar: Mercadona">&times;</span></span><span class="chip">Por pasillo<span class="x" aria-label="Quitar: Por pasillo">&times;</span></span></div>
   <div class="list">
     <div class="fade"></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Vanilla ice cream"></i></span><span class="body"><b>Vanilla ice cream</b><span>Helado de vainilla Hacendado, 1 L · 2.25 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
-    <div class="rest"><span class="lbl" id="rest-label">Categories we could not find in this shop</span><span class="info" role="button" aria-label="About these categories" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
-    <div class="ghead"><h2>Pasta, rice and legumes<span class="c">0 of 2 got</span></h2></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Macaroni"></i></span><span class="body"><b>Macaroni</b><span>Macarrones Hacendado, 1 kg · 1.10 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Round rice"></i></span><span class="body"><b>Round rice</b><span>Arroz redondo Hacendado, 1 kg · 1.35 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
-    <div class="ghead"><h2>Oil and vinegar<span class="c">0 of 1 got</span></h2></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Olive oil"></i></span><span class="body"><b>Olive oil</b><span>Aceite de oliva virgen extra, 1 L · 8.95 €</span><span>from Groceries</span></span><span class="qty">1</span></div>
-    <div class="ghead"><h2>Soft drinks<span class="c">0 of 2 got</span></h2></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2.15 €</span><span>from Weekly shop</span></span><span class="qty">1</span></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Tonic water"></i></span><span class="body"><b>Tonic water</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; not listed at Mercadona · 3.20 € at Dia</span></span><span>from Weekly shop</span></span><span class="qty">1</span></div>
-    <div class="ghead"><h2>No category</h2><span class="hint">lines with no product</span></div>
-    <div class="row"><span class="st"><i class="" aria-label="Settle Something for the cat"></i></span><span class="body"><b>Something for the cat</b><span>from Groceries</span></span><span class="qty">1</span></div>
+    <div class="pop" role="dialog" aria-labelledby="rest-label" style="top: 130px"><span>Estos productos están agrupados por su categoría.</span><span>Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Helado de vainilla"></i></span><span class="body"><b>Helado de vainilla</b><span>Helado de vainilla Hacendado, 1 L · 2,25 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+    <div class="rest"><span class="lbl" id="rest-label">Categorías que no encontramos en esta tienda</span><span class="info open" role="button" aria-label="Sobre estas categorías" aria-expanded="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke-width="1.7"></circle><path d="M12 11v5.4" stroke-width="1.9"></path><circle cx="12" cy="7.9" r="1.05" fill="currentColor" stroke="none"></circle></svg></span></div>
+    <div class="ghead"><h2>Pasta, arroz y legumbres<span class="c">0 de 2 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Macarrones"></i></span><span class="body"><b>Macarrones</b><span>Macarrones Hacendado, 1 kg · 1,10 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Arroz redondo"></i></span><span class="body"><b>Arroz redondo</b><span>Arroz redondo Hacendado, 1 kg · 1,35 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Aceite y vinagre<span class="c">0 de 1 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Aceite de oliva"></i></span><span class="body"><b>Aceite de oliva</b><span>Aceite de oliva virgen extra, 1 L · 8,95 €</span><span>de Fin de semana</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Refrescos<span class="c">0 de 2 conseguidos</span></h2></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Cola zero"></i></span><span class="body"><b>Cola zero</b><span>Coca-Cola Zero, 2 L · 2,15 €</span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Tónica"></i></span><span class="body"><b>Tónica</b><span>Schweppes tónica, 6 × 25 cl <span class="unl" style="display:inline">&middot; no está en Mercadona · 3,20 € en Dia</span></span><span>de Compra semanal</span></span><span class="qty">1</span></div>
+    <div class="ghead"><h2>Sin categoría</h2><span class="hint">líneas sin producto</span></div>
+    <div class="row"><span class="st"><i class="" aria-label="Marcar Algo para el gato"></i></span><span class="body"><b>Algo para el gato</b><span>de Fin de semana</span></span><span class="qty">1</span></div>
   </div>
   <div class="composer">
-    <span class="field">Add or find something</span>
-    <span class="send" aria-label="Add the line"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
+    <span class="field">Añade o busca algo</span>
+    <span class="send" aria-label="Añadir la línea"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg></span>
   </div>
   <nav class="nav">
-    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span>
-    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span>
-    <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span>
+    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Inicio</span>
+    <span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catálogo</span>
+    <span class="tab on"><span class="badge">16</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Lista de la compra</span>
   </nav>
 </div>
 </x-dc>
