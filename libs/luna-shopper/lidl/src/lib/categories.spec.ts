@@ -1,4 +1,4 @@
-import { ItemCategory } from '@portfolio/luna-shopper/contracts';
+import { CATEGORY_LEAF_SLUGS } from './category-leaves';
 import {
   categoryPathOf,
   isGroceryCategory,
@@ -46,50 +46,66 @@ describe('categoryPathOf', () => {
 });
 
 describe('resolveCategory', () => {
-  const cases: ReadonlyArray<readonly [string, ItemCategory]> = [
+  const cases: ReadonlyArray<readonly [string, string]> = [
     [
       'Mundos de necesidad/Comida y cerca de la comida/Frutas y hortalizas/Fruta',
-      ItemCategory.PRODUCE,
+      'fruit',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Pescado y marisco',
-      ItemCategory.SEAFOOD,
+      'other-seafood',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Carne y aves/Embutidos y fiambres',
-      ItemCategory.MEAT,
+      'cured-ham-and-sausages',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso',
-      ItemCategory.DAIRY,
+      'cheese',
+    ],
+    [
+      'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Leche y nata',
+      'milk',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Panadería/Pasteles',
-      ItemCategory.BAKERY,
+      'pastries-and-cakes',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Dulces y aperitivos/Aperitivos salados',
-      ItemCategory.SNACKS,
+      'salty-snacks',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Café, té y cacao',
-      ItemCategory.PANTRY,
+      'coffee-tea-and-cocoa',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Papel higiénico',
-      ItemCategory.HOUSEHOLD,
+      'paper-and-wipes',
+    ],
+    [
+      'Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Detergentes y cuidado de la ropa',
+      'laundry',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Productos de droguería y cuidado personal/Cuidado del cabello',
-      ItemCategory.PERSONAL_CARE,
+      'hair',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Bebidas/Refrescos',
-      ItemCategory.BEVERAGES,
+      'soft-drinks',
     ],
     [
       'Mundos de necesidad/Vino, cerveza y licores/Cerveza y sidra',
-      ItemCategory.BEVERAGES,
+      'beer',
+    ],
+    [
+      'Mundos de necesidad/Comida y cerca de la comida/Platos precocinados/Platos preparados refrigerados',
+      'prepared-dishes',
+    ],
+    [
+      'Mundos de necesidad/Comida y cerca de la comida/Artículos para mascotas/Comida para gatos',
+      'cats',
     ],
   ];
 
@@ -97,38 +113,52 @@ describe('resolveCategory', () => {
     expect(resolveCategory(categoryPathOf(path))).toBe(expected);
   });
 
-  it('reaches a mapped parent through a leaf nobody mapped', () => {
-    // `Helado` has no entry of its own, and it is frozen food because its
-    // parent is. That climb is what keeps the table at twenty rows.
+  it('reaches a mapped parent through a node nobody mapped', () => {
+    // `Congelados varios` has no entry of its own, and it is frozen food
+    // because its parent is. That climb is what keeps the table short.
+    expect(
+      resolveCategory(
+        categoryPathOf(
+          'Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Congelados varios'
+        )
+      )
+    ).toBe('other-frozen');
     expect(
       resolveCategory(
         categoryPathOf(
           'Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Helado'
         )
       )
-    ).toBe(ItemCategory.FROZEN);
+    ).toBe('ice-cream');
   });
 
   it('falls back rather than guessing when LIDL files a product wrongly', () => {
     // Eight of one week's 153 grocery products carry this path and one carries
     // the second. Both are real products in a real shop, and neither path says
-    // what aisle they are in, so they reach the admin queue as OTHER.
+    // what aisle they are in, so they reach the admin queue as null.
     expect(
       resolveCategory(
         categoryPathOf('Mundos de necesidad/Vivir y amueblar/Decoración')
       )
-    ).toBe(ItemCategory.OTHER);
+    ).toBeNull();
     expect(
       resolveCategory(
         categoryPathOf('Mundos de necesidad/Deporte y ocio/Suministros para mascotas')
       )
-    ).toBe(ItemCategory.OTHER);
-    expect(resolveCategory([])).toBe(ItemCategory.OTHER);
+    ).toBeNull();
+    expect(resolveCategory([])).toBeNull();
   });
 
   it('resolves every node the table names', () => {
     for (const [name, expected] of LIDL_CATEGORY_MAP) {
       expect(resolveCategory(['Mundos de necesidad', name])).toBe(expected);
     }
+  });
+
+  it('answers nothing that is not a leaf, so a typo in the table fails here', () => {
+    const unknown = LIDL_CATEGORY_MAP.map(([, slug]) => slug).filter(
+      (slug) => !CATEGORY_LEAF_SLUGS.has(slug)
+    );
+    expect(unknown).toEqual([]);
   });
 });

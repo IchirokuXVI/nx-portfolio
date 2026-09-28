@@ -1,4 +1,4 @@
-import { ItemCategory, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import searchPage from './__fixtures__/search-page.json';
 import productShortCode from './__fixtures__/product-short-code.json';
 import productSinglePrice from './__fixtures__/product-single-price.json';
@@ -154,7 +154,7 @@ describe('normalizeProduct', () => {
     // real EAN and no price, which the catalog is allowed to hold.
     expect(product?.prices).toEqual([]);
     expect(product?.ean).toBe('8410436428972');
-    expect(product?.category).toBe(ItemCategory.HOUSEHOLD);
+    expect(product?.categorySlug).toBe('laundry');
   });
 
   it('never reads an eight digit code as an EAN', () => {
@@ -168,7 +168,7 @@ describe('normalizeProduct', () => {
     expect(product?.sizeFormat).toBe('400 g');
     // A single size is not a pack (plan 0162).
     expect(product?.packCount).toBeNull();
-    expect(product?.category).toBe(ItemCategory.PRODUCE);
+    expect(product?.categorySlug).toBe('fruit');
   });
 
   it('falls back to the index row for what the page does not state', () => {

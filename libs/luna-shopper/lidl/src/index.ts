@@ -4,7 +4,8 @@
  *
  * Framework free by hard constraint: no TypeORM entity, no repository, no Nest
  * decorator, no `Item`, no `SupermarketItem`, no database. It depends on
- * `contracts` for the two enums it maps onto, and on nothing else.
+ * `contracts` for the unit enum it maps onto, and on nothing else. A category
+ * is answered as a slug of the taxonomy (plan 0166), never an id.
  *
  * **What this source gives that the other two do not**: an EAN-13 on most
  * products, a price with a validity window, and 730 shops each naming the price

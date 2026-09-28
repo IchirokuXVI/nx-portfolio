@@ -1,7 +1,4 @@
-import type {
-  ItemCategory,
-  UnitOfMeasure,
-} from '@portfolio/luna-shopper/contracts';
+import type { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 
 /**
  * The library's public shapes (plan 0089, section 6). Nothing here is a TypeORM
@@ -113,8 +110,11 @@ export interface LidlProduct {
   ian: string | null;
   siteCategory: string;
   categoryPath: string[];
-  /** The need world path mapped onto our own enum, `OTHER` when it does not. */
-  category: ItemCategory;
+  /**
+   * The need world path mapped onto a taxonomy leaf (plan 0166, section 7), or
+   * null when the table names no node of it. A slug and never an id.
+   */
+  categorySlug: string | null;
   unitSize: number | null;
   unit: UnitOfMeasure | null;
   /** The printed size, verbatim, so nothing is lost when the parse gives up. */
