@@ -1,0 +1,77 @@
+{
+  "title": "Velista: the category picker",
+  "lede": "Plan <code>0119</code>, with <code>0118</code> and backend <code>0166</code> behind it. The catalog tab gains a Categories link at the head of its chip row. It opens a page of the seventeen roots, a root opens a page of its children, and a child brings you back to the tab narrowed to it, beside the field, the chain chips and the order. The choice is <code>?category=&lt;slug&gt;</code> in the URL. Drawn on Day, on the tab as PR <code>#472</code> built it, in English with Spanish product names. Category names are appendix A of backend <code>0166</code>; every count and price is made up. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Tab.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Catalog tab, nothing chosen" },
+    { "file": "Parents.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "The page of parents" },
+    { "file": "Children.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "The page of children: Frozen" },
+    { "file": "Chosen.dc.html", "x": 1410, "y": 0, "w": 390, "h": 844, "title": "Catalog tab, Ice cream chosen" },
+    { "file": "EmptyLeaf.dc.html", "x": 1880, "y": 0, "w": 390, "h": 844, "title": "Ice cream at Mercadona: nothing yet" },
+    { "file": "Anatomy.dc.html", "x": 2350, "y": 0, "w": 860, "h": 1010, "title": "Chips and rows, up close" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -620,
+      "w": 470,
+      "text": "THE BRIEF. Narrow the catalog by category without a chip row: 0100 left that row out because twelve chips above a list is most of a phone, and there are now eighty leaves under seventeen roots. A page of parents, a page of one parent's children, and a tap on a child that returns to the tab narrowed to it. The narrowing composes with the field, the chain chip and the order.\nRead left to right, the five phones are one walk: the tab, Categories, Frozen, Ice cream chosen, then Mercadona chosen as well. The board on the right is the chips and rows up close, with the accessible name of each."
+    },
+    {
+      "id": "p1",
+      "x": 530,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P1: A ROW IS A NAME, A COUNT AND A CHEVRON, AND THE WHOLE ROW IS ONE LINK. 52 pixels tall: the name in the body size on the left, the count muted on the right, a chevron because every row goes somewhere. The rows sit in one raised card with hairlines between them, not a card each, so the page reads as a list of places and not as more product rows.\nThe parents page does not fit a phone. Twelve rows show and the page scrolls; no children page is longer than eight rows including its first. A row with a count of zero is not drawn, and a root whose children are all zero is not drawn either."
+    },
+    {
+      "id": "p2",
+      "x": 1060,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P2: THE COUNT IS WORDS. '412 products', '1 product', '1,143 products', formatted with Intl for the reader's locale. Never a bare number and never a badge: a number alone beside a name reads as a price or a code.\nEvery row's accessible name is 'name, count', for example 'Frozen, 412 products', and the chevron is hidden.\nThe counts are catalog wide, not for the chosen chain (backend 0166, section 11), and a root counts distinct products. So a root's leaves can add up to more than the root when a product sits in two of them: Frozen says 412 and its leaves say 419. That is correct, and nothing on the page adds them up."
+    },
+    {
+      "id": "p3",
+      "x": 1590,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P3: CATEGORIES LEADS THE CHIP ROW, AND IT IS A LINK, NOT A CHIP. It comes before All shops with a hairline between them. It wears the list glyph and a chevron, because it opens a page, where every chain chip switches something in place. It sits outside the Shops group, so a screen reader never counts it as a chain.\nIt scrolls with the row rather than being pinned. Pinned, a chosen 'Frozen · Ice cream' would leave room for All shops and nothing after it. The row always opens at its start, and the field names the choice as well, so the choice is not hidden. The cost is on the Mercadona board: with a category and a chain both chosen, the chosen chain starts past the edge, and only the placeholder and the note under the order name it.\nlib-chain-chips does not change: the page puts the link, or the chosen chip, and the component side by side in one scroller of its own."
+    },
+    {
+      "id": "p4",
+      "x": 2120,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P4: THE CHOSEN CHIP READS ROOT · LEAF, AND IT IS TWO CONTROLS. With a leaf chosen it reads 'Frozen · Ice cream', the leaf in the heavier weight. With Everything in Frozen chosen it reads 'Frozen' alone. It is filled like a chosen chain, because both narrow the list.\nThe body is a link to that root's children page, so changing the leaf is one tap and one page. The cross is its own 44 by 44 button behind a hairline. Clearing is a navigation to the tab without the parameter, not a pop, and the chain chip survives it.\nA long pair gives way on the root and never on the leaf: the root is held to about ten letters, so 'Breakfast and sweets · Coffee, tea and cocoa' reads 'Breakfast… · Coffee, tea and cocoa'. The chip stops at 320 pixels, and its accessible name keeps both names whole."
+    },
+    {
+      "id": "p5",
+      "x": 2650,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P5: THE FIELD SAYS WHERE IT SEARCHES. Today it reads 'Search every supermarket' or 'Search Mercadona'. With a leaf chosen it reads 'Search in Ice cream', with a chain as well 'Search in Ice cream at Mercadona', and with a root 'Search in Frozen'.\nThe name is data and is used exactly as it arrives, never lowercased. That is why the sentence says 'in' and places the name, rather than folding it into the grammar around it."
+    },
+    {
+      "id": "p6",
+      "x": 3180,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P6: AN EMPTY LEAF NAMES BOTH HALVES. 'Nothing in Ice cream at Mercadona yet', one sentence with the two ways out, and one button, Clear the category, which keeps Mercadona. All shops is already one tap away in the chip row above, so it is not a second button.\nThe state exists because the counts are catalog wide: Ice cream says 86 products on the children page, and none of them need be at the chosen chain. A count per chain would remove it and is out of scope (0119, section 3)."
+    },
+    {
+      "id": "p7",
+      "x": 3710,
+      "y": -620,
+      "w": 470,
+      "text": "RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, a back chevron and the title in the display face, never sheets. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.\nEach step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.\nNeither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row."
+    },
+    {
+      "id": "review",
+      "x": 4240,
+      "y": -620,
+      "w": 470,
+      "text": "FOR YOU TO DECIDE.\n1. 'Everything in Frozen' in place of 'All frozen'. The plan says 'All <root>', but lowercasing a name that is data breaks proper nouns and Spanish agreement ('Todas las frutas y verduras', 'Todos los congelados'). 'Everything in Frozen' and 'Todo en Congelados' use the name as it is.\n2. The Categories link scrolls with the chip row rather than being pinned (P3).\n3. No app bar on the two pages (P7).\n4. The root Other, whose one leaf is Not yet categorised, is drawn like any root while it has products. Hiding it is one more rule if shoppers should never see it.\n5. Reopened from the chip, the children page marks the current leaf with a tick, the quiet amber and aria-current (the board on the right). The plan does not ask for it."
+    }
+  ]
+}
