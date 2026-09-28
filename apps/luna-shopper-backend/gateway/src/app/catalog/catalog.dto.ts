@@ -16,6 +16,8 @@ import {
   PACK_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
+  SECTION_LIMITS,
+  SECTION_SLUG_MAX_LENGTH,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
@@ -23,6 +25,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -648,6 +651,122 @@ export class UpdateCategoryDto {
   parentId?: string | null;
 }
 
+// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+
+const SECTION_CATEGORY_IDS_DESCRIPTION =
+  'The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty, for a section that holds only pinned products. An unknown id is refused with `category_not_found`.';
+
+/** Create a section on the chain the route names. */
+export class CreateSupermarketSectionDto {
+  @ApiProperty({
+    minLength: 1,
+    maxLength: SECTION_SLUG_MAX_LENGTH,
+    description:
+      'Ascii kebab case, unique within the chain (`section_slug_taken` otherwise), and written once: an edit cannot change it.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(SECTION_SLUG_MAX_LENGTH)
+  slug!: string;
+
+  @ApiProperty({ type: LocalizedTextDto })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name!: LocalizedTextDto;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxCategoriesPerSection,
+    uniqueItems: true,
+    description: SECTION_CATEGORY_IDS_DESCRIPTION,
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxCategoriesPerSection)
+  @ArrayUnique()
+  // Any version: seeded categories carry version 5 ids derived from the slug.
+  @IsUUID('all', { each: true })
+  categoryIds!: string[];
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    minimum: 0,
+    description:
+      'The chain’s default order. Absent appends after the last section.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+}
+
+/** Edit a section. No slug: it is an identity, written once on create. */
+export class UpdateSupermarketSectionDto {
+  @ApiPropertyOptional({ type: LocalizedTextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ type: 'integer', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxCategoriesPerSection,
+    uniqueItems: true,
+    description: `Replaces the whole set. Absent leaves it alone. ${SECTION_CATEGORY_IDS_DESCRIPTION}`,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxCategoriesPerSection)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  categoryIds?: string[];
+}
+
+/** A shop's ordered section list, saved whole (plan 0167, section 2). */
+export class SetLocationSectionsDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxSectionsPerLocation,
+    uniqueItems: true,
+    description:
+      'The sections this shop has, in the order it is walked. An empty array deletes the shop’s own list and returns it to its chain’s default. A section of another chain is refused with `section_of_another_chain`, an unknown one with `section_not_found`.',
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxSectionsPerLocation)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  sectionIds!: string[];
+}
+
+/** One product's pins in the chain the route names (plan 0167, section 2). */
+export class SetItemSectionPinsDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('all')
+  itemId!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxPinsPerItem,
+    uniqueItems: true,
+    description:
+      'Replaces the product’s pins in this chain: "in this chain, this product is in these sections and no other". An empty array removes them, and the product returns to the rule’s other steps. A section of another chain is refused with `section_of_another_chain`.',
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxPinsPerItem)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  sectionIds!: string[];
+}
+
 // --- Price scopes (plan 0038, section 5.1) ---------------------------------
 
 export class CreatePriceScopeDto {
@@ -1078,7 +1197,7 @@ export class CatalogListQueryDto extends PageQueryDto {
  * answered 400 to the one parameter they document.
  */
 /** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
-const asArray = ({ value }: { value: unknown }) =>
+export const asArray = ({ value }: { value: unknown }) =>
   value === undefined || Array.isArray(value) ? value : [value];
 
 export class ListPriceScopesQueryDto extends PageQueryDto {

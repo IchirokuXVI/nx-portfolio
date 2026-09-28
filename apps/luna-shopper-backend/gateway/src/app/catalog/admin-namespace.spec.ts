@@ -18,12 +18,14 @@ import {
   AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogProductGroupsController,
+  AdminCatalogSectionsController,
   AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 import {
   CatalogItemsController,
   CatalogLocationItemsController,
+  CatalogLocationSectionsController,
   CatalogLocationsController,
   CatalogPriceScopesController,
   CatalogProductGroupsController,
@@ -165,6 +167,8 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogLocationItemsController,
+  // Plan 0167: a section at its own id.
+  AdminCatalogSectionsController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
   // One queue over one table since plan 0086. `AdminHarvestItemRefsController`
@@ -273,6 +277,26 @@ describe('the admin API is its own namespace', () => {
         const guards = guardsOf(controller);
         expect(guards).toHaveLength(1);
       }
+    });
+
+    /**
+     * Plan 0167, section 4: a shop's aisle list is not private, and a guest
+     * reading a shared basket at a shop has no token to present. It is the one
+     * catalog read with no guard, on a controller of its own, and it reads only.
+     */
+    it('leaves a shop’s sections public, and nothing else on that controller', () => {
+      expect(guardsOf(CatalogLocationSectionsController)).toEqual([]);
+      expect(has('get', '/v1/catalog/locations/{id}/sections')).toBe(true);
+      expect(
+        Object.keys(document.paths['/v1/catalog/locations/{id}/sections'])
+      ).toEqual(['get']);
+      // Its admin twin, and the writes, are behind the operator's guard.
+      expect(has('get', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
+      expect(has('put', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
     });
   });
 });

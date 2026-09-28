@@ -260,6 +260,111 @@ export type CategoryKind = (typeof CATEGORY_KINDS)[number];
 export const CATEGORY_SLUG_MAX_LENGTH = 80;
 
 /**
+ * Shop sections, and where a product is in a shop (plan 0167, sections 1 to 4).
+ *
+ * A **section** is a chain's own aisle name, mapped onto the app's categories.
+ * A **location list** says which of its chain's sections a shop has, and in
+ * what order. A **pin** says that in one chain a product is in these sections
+ * and no others. The rule of section 3 reads all three.
+ *
+ * Writes are owner curation through the platform admin gate, like every other
+ * catalog write. The reads of a shop's sections carry no `userId`: a shop's
+ * aisle list is not private, and a guest reading a shared basket at a shop is
+ * who asks.
+ */
+export const SECTION_PATTERNS = {
+  /**
+   * Create a section on a chain. A slug the chain already holds is refused
+   * with `section_slug_taken`, and a category id that names nothing with
+   * `category_not_found`.
+   */
+  create: 'section.create',
+  /** One chain's sections, in `position` order, paged. */
+  list: 'section.list',
+  get: 'section.get',
+  /** `categoryIds` replaces the whole set. The slug is not a field. */
+  update: 'section.update',
+  /** Cascades out of every shop's list and every pin (section 2). */
+  delete: 'section.delete',
+  /**
+   * The sections a shop has, in its order, and whether that list is the
+   * shop's own or the chain's default (step 1 of the rule of section 3).
+   *
+   * The subject behind the public `GET /v1/catalog/locations/:id/sections`
+   * and its admin twin. Carries no `userId`, like
+   * {@link SUPERMARKET_LOCATION_PATTERNS.shopAvailability}. An unknown shop is
+   * the ordinary 404 for a location.
+   */
+  forLocation: 'section.forLocation',
+  /**
+   * Replace a shop's ordered list. An empty list deletes the rows, and the
+   * shop returns to its chain's default. A section of another chain is
+   * refused with `section_of_another_chain`.
+   */
+  setForLocation: 'section.setForLocation',
+  /**
+   * The pins of one chain, one entry per pinned product, filtered by product
+   * or by section. What `GET .../supermarkets/:id/item-sections` reads.
+   */
+  listPins: 'section.listPins',
+  /**
+   * Replace one product's pins in one chain. An empty list removes them and
+   * the product returns to the rule's other steps. A section of another chain
+   * is refused with `section_of_another_chain`.
+   */
+  setPins: 'section.setPins',
+  /**
+   * The rule of section 3 for several products at one shop, in one call.
+   *
+   * The one subject behind both the basket read at a shop (which fills
+   * `BasketProductView.sectionIds` from it, one call per read and never one
+   * per product) and the back office's "where shoppers will find it" preview.
+   * Carries no `userId`, for the reason {@link SECTION_PATTERNS.forLocation}
+   * gives.
+   */
+  itemsAtLocation: 'section.itemsAtLocation',
+} as const;
+
+/** The longest a section slug may be. Ascii kebab case, checked by catalog. */
+export const SECTION_SLUG_MAX_LENGTH = 80;
+
+/**
+ * The bounds of the section writes and reads (plan 0167).
+ *
+ * Bounds rather than rules of the plan: they are here so one request cannot
+ * carry the whole tree or the whole catalog.
+ */
+export const SECTION_LIMITS = {
+  /** Categories one section may cover. A shop's aisle holds a handful. */
+  maxCategoriesPerSection: 50,
+  /** Sections one shop's list may name. */
+  maxSectionsPerLocation: 200,
+  /** Sections one product may be pinned to in one chain. */
+  maxPinsPerItem: 20,
+} as const;
+
+/**
+ * Where a shop's section list comes from (plan 0167, section 3, step 1).
+ *
+ * `LOCATION` when the shop has rows of its own, `CHAIN` when it has none and
+ * inherits every section of its chain in the chain's order.
+ */
+export const LOCATION_SECTIONS_SOURCES = ['LOCATION', 'CHAIN'] as const;
+export type LocationSectionsSource = (typeof LOCATION_SECTIONS_SOURCES)[number];
+
+/**
+ * Which step of the rule of section 3 answered for a product.
+ *
+ * `PINNED` is step 2: the chain pins the product and at least one pinned
+ * section is present at this shop. `COVERED` is step 3: a present section
+ * covers one of its leaves, or the root of one. `NONE` is step 4: nothing
+ * answered, the list is empty, and a client shows the product under its own
+ * categories. The back office's preview says which one it was.
+ */
+export const SECTION_RULE_STEPS = ['PINNED', 'COVERED', 'NONE'] as const;
+export type SectionRuleStep = (typeof SECTION_RULE_STEPS)[number];
+
+/**
  * Product groups (plan 0048, section 1): "milk as a thing you can buy", which is
  * a different concept from a browsing category and needs its own entity.
  *
@@ -882,6 +987,86 @@ export interface ItemCategoryView {
   parentId: string;
   slug: string;
   name: LocalizedText;
+}
+
+/**
+ * One section of a chain (plan 0167, section 4): an aisle as the chain names
+ * it, and the categories it holds.
+ */
+export interface SupermarketSectionView {
+  id: string;
+  supermarketId: string;
+  /** Ascii kebab case, unique within the chain, and written once on create. */
+  slug: string;
+  name: LocalizedText;
+  /** The chain's default order. A shop with a list of its own overrides it. */
+  position: number;
+  /**
+   * The categories this section covers, roots and leaves, as written. A root
+   * means every one of its children; the rule expands it on read, never here.
+   * May be empty: a section that holds only pinned products covers nothing.
+   */
+  categoryIds: string[];
+  /**
+   * How many of the chain's shops this section is present at by step 1 of the
+   * rule: the shops whose own list names it, plus the shops with no list of
+   * their own, which inherit every section of the chain.
+   *
+   * Present on the back office's reads of a section (`section.create`, `list`,
+   * `get` and `update`), and absent inside a {@link LocationSectionsView},
+   * which is about one shop and would answer 1 for every row.
+   */
+  locationCount?: number;
+}
+
+/**
+ * The sections a shop has, in its order (plan 0167, section 4). Step 1 of the
+ * rule of section 3.
+ */
+export interface LocationSectionsView {
+  /** In this shop's order. Empty only when its chain has no sections at all. */
+  sections: SupermarketSectionView[];
+  /** `LOCATION` when the shop has rows of its own, `CHAIN` when it inherits the chain's list. */
+  source: LocationSectionsSource;
+}
+
+/**
+ * One product's pins in one chain (plan 0167, section 2): "in this chain, this
+ * product is in these aisles and no other".
+ */
+export interface ItemSectionPinsView {
+  supermarketId: string;
+  itemId: string;
+  /**
+   * In the chain's `position` order. Empty only as the answer to a write that
+   * removed every pin: a listing never carries an entry with no pins.
+   */
+  sectionIds: string[];
+}
+
+/** The rule of section 3 for one product at one shop (plan 0167). */
+export interface ItemSectionsAtLocationEntry {
+  itemId: string;
+  /**
+   * The present sections the product is in, in the shop's order. Empty means
+   * no section answered, and a client shows the product under its own
+   * categories. Never an availability: an empty list is still sold here.
+   */
+  sectionIds: string[];
+  /** Which step of the rule answered. */
+  step: SectionRuleStep;
+}
+
+/** The rule of section 3 for several products at one shop (plan 0167). */
+export interface ItemSectionsAtLocationView {
+  /** Where the shop's present sections came from, as {@link LocationSectionsView.source}. */
+  source: LocationSectionsSource;
+  /**
+   * One entry per distinct product asked about, in the order first asked. A
+   * product catalog does not hold answers `NONE` with no sections rather than
+   * an error, because the basket read must not fail over one stale id.
+   */
+  items: ItemSectionsAtLocationEntry[];
 }
 
 export interface ItemView {
@@ -2040,6 +2225,119 @@ export interface ListCategoriesRequest extends PageQuery {
   query?: string;
 }
 
+// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+
+/**
+ * Create a section on a chain.
+ *
+ * Refused with `section_slug_taken` when the chain already holds the slug, and
+ * with `category_not_found` when a category id names nothing. An unknown chain
+ * is the ordinary 404 for a supermarket.
+ */
+export interface CreateSupermarketSectionRequest extends AdminCredential {
+  supermarketId: string;
+  slug: string;
+  name: LocalizedText;
+  /** Roots and leaves, as meant. May be empty; duplicates are refused. */
+  categoryIds: string[];
+  /** The chain's default order. Absent appends after the last section. */
+  position?: number;
+}
+
+/**
+ * Edit a section. The slug is not a field: it is an identity, written once.
+ * `categoryIds` replaces the whole set, and absent leaves it alone.
+ */
+export interface UpdateSupermarketSectionRequest extends AdminCredential {
+  sectionId: string;
+  name?: LocalizedText;
+  position?: number;
+  categoryIds?: string[];
+}
+
+/** Read or delete one section. Unknown answers `section_not_found`. */
+export interface SupermarketSectionIdRequest extends AdminCredential {
+  sectionId: string;
+}
+
+/**
+ * One chain's sections, in `position` order (plan 0167, section 4).
+ *
+ * `query` is free text over the name in either content language and the
+ * slug, so the back office's section picker can search.
+ */
+export interface ListSupermarketSectionsRequest extends PageQuery {
+  userId: string;
+  supermarketId: string;
+  query?: string;
+}
+
+/**
+ * A shop's sections (step 1 of the rule of section 3). No `userId`: see
+ * {@link SECTION_PATTERNS.forLocation}.
+ */
+export interface LocationSectionsRequest {
+  supermarketLocationId: string;
+}
+
+/**
+ * Replace a shop's ordered section list (plan 0167, section 2).
+ *
+ * The order of `sectionIds` is the shop's order. An empty list deletes the
+ * shop's rows, and it returns to its chain's default. A section of another
+ * chain is refused with `section_of_another_chain`, and an id that names no
+ * section with `section_not_found`. Duplicates are refused as a malformed
+ * request. Answers the list as it now stands.
+ */
+export interface SetLocationSectionsRequest extends AdminCredential {
+  supermarketLocationId: string;
+  sectionIds: string[];
+}
+
+/**
+ * The pins of one chain (plan 0167, section 4).
+ *
+ * Filters combine as AND and both are optional: `itemId` alone is one
+ * product's pins (one entry or none), `sectionId` alone the products pinned to
+ * that section, each entry carrying all of that product's pins in the chain,
+ * and neither is every pin in the chain. Ordered by `itemId`.
+ */
+export interface ListItemSectionPinsRequest extends PageQuery {
+  userId: string;
+  supermarketId: string;
+  itemId?: string;
+  sectionId?: string;
+}
+
+/**
+ * Replace one product's pins in one chain (plan 0167, section 2).
+ *
+ * An empty list removes them, which is not a state of its own but the product
+ * returning to the default rule. A section of another chain is refused with
+ * `section_of_another_chain`, an unknown section with `section_not_found`,
+ * and an unknown product with the ordinary 404 for an item. Whether the chain
+ * sells the product is not checked: a pin says where it would be.
+ */
+export interface SetItemSectionPinsRequest extends AdminCredential {
+  supermarketId: string;
+  itemId: string;
+  sectionIds: string[];
+}
+
+/**
+ * The rule of section 3 for several products at one shop, in one statement.
+ * No `userId`: see {@link SECTION_PATTERNS.itemsAtLocation}.
+ */
+export interface ItemSectionsAtLocationRequest {
+  supermarketLocationId: string;
+  /**
+   * Duplicates are harmless. Unbounded on the wire, like
+   * {@link ShopAvailabilityRequest.itemIds}: the basket read sends every
+   * product its rows name. The back office's preview route caps its own.
+   */
+  itemIds: string[];
+}
+
 // --- Bulk group assignment (plan 0100) --------------------------------------
 
 /**
@@ -2798,6 +3096,8 @@ export type SupermarketLocationItemPage =
   Paginated<SupermarketLocationItemView>;
 export type ProductGroupPage = Paginated<ProductGroupView>;
 export type CategoryPage = Paginated<CategoryView>;
+export type SupermarketSectionPage = Paginated<SupermarketSectionView>;
+export type ItemSectionPinsPage = Paginated<ItemSectionPinsView>;
 export type ProductGroupOfferPage = Paginated<ProductGroupOfferView>;
 export type BrandPage = Paginated<BrandView>;
 
