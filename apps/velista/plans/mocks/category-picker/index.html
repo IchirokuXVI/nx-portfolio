@@ -192,7 +192,8 @@
 #ab-Parents .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 #ab-Parents .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
 #ab-Parents .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Parents .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Parents .phead { flex: none; display: flex; align-items: center; gap: 4px; }
+#ab-Parents .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
 #ab-Parents .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Parents .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Parents .group li:first-child { border-top: 0; }
@@ -264,7 +265,8 @@
 #ab-Children .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 #ab-Children .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
 #ab-Children .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Children .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Children .phead { flex: none; display: flex; align-items: center; gap: 4px; }
+#ab-Children .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
 #ab-Children .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Children .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Children .group li:first-child { border-top: 0; }
@@ -575,8 +577,10 @@
         <div class="frame" id="ab-Parents" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <main class="page">
-              <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
-              <h1 class="ptitle">Categories</h1>
+              <header class="phead">
+                <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                <h1 class="ptitle">Categories</h1>
+              </header>
               <ul class="group">
                 <li><a class="crow" href="#" aria-label="Fruit and vegetables, 486 products"><span class="cname">Fruit and vegetables</span><span class="count">486 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
                 <li><a class="crow" href="#" aria-label="Meat, 392 products"><span class="cname">Meat</span><span class="count">392 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
@@ -610,8 +614,10 @@
         <div class="frame" id="ab-Children" style="width: 390px; height: 844px;">
           <div class="vel phone">
             <main class="page">
-              <button class="back" type="button" aria-label="Back to categories"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
-              <h1 class="ptitle">Frozen</h1>
+              <header class="phead">
+                <button class="back" type="button" aria-label="Back to categories"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                <h1 class="ptitle">Frozen</h1>
+              </header>
               <ul class="group">
                 <li><a class="crow all" href="Chosen.dc.html" aria-label="Everything in Frozen, 412 products"><span class="cname">Everything in Frozen</span><span class="count">412 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
               </ul>
@@ -746,7 +752,7 @@
       <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE P4: THE CHOSEN CHIP READS ROOT · LEAF, AND IT IS TWO CONTROLS. With a leaf chosen it reads 'Frozen · Ice cream', the leaf in the heavier weight. With Everything in Frozen chosen it reads 'Frozen' alone. It is filled like a chosen chain, because both narrow the list.</p><p>The body is a link to that root's children page, so changing the leaf is one tap and one page. The cross is its own 44 by 44 button behind a hairline. Clearing is a navigation to the tab without the parameter, not a pop, and the chain chip survives it.</p><p>A long pair gives way on the root and never on the leaf: the root is held to about ten letters, so 'Breakfast and sweets · Coffee, tea and cocoa' reads 'Breakfast… · Coffee, tea and cocoa'. The chip stops at 320 pixels, and its accessible name keeps both names whole.</p></aside>
       <aside class="note" style="left: 2650px; top: 0px; width: 470px;"><p>RULE P5: THE FIELD SAYS WHERE IT SEARCHES. Today it reads 'Search every supermarket' or 'Search Mercadona'. With a leaf chosen it reads 'Search in Ice cream', with a chain as well 'Search in Ice cream at Mercadona', and with a root 'Search in Frozen'.</p><p>The name is data and is used exactly as it arrives, never lowercased. That is why the sentence says 'in' and places the name, rather than folding it into the grammar around it.</p></aside>
       <aside class="note" style="left: 3180px; top: 0px; width: 470px;"><p>RULE P6: AN EMPTY LEAF NAMES BOTH HALVES. 'Nothing in Ice cream at Mercadona yet', one sentence with the two ways out, and one button, Clear the category, which keeps Mercadona. All shops is already one tap away in the chip row above, so it is not a second button.</p><p>The state exists because the counts are catalog wide: Ice cream says 86 products on the children page, and none of them need be at the chosen chain. A count per chain would remove it and is out of scope (0119, section 3).</p></aside>
-      <aside class="note" style="left: 3710px; top: 0px; width: 470px;"><p>RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, a back chevron and the title in the display face, never sheets. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.</p><p>Each step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.</p><p>Neither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row.</p></aside>
+      <aside class="note" style="left: 3710px; top: 0px; width: 470px;"><p>RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, never sheets: one row, the back chevron and then the title in the display face beside it, so the head costs one line and not two. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.</p><p>Each step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.</p><p>Neither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row.</p></aside>
       <aside class="note" style="left: 4240px; top: 0px; width: 470px;"><p>FOR YOU TO DECIDE.</p><p>1. 'Everything in Frozen' in place of 'All frozen'. The plan says 'All &lt;root&gt;', but lowercasing a name that is data breaks proper nouns and Spanish agreement ('Todas las frutas y verduras', 'Todos los congelados'). 'Everything in Frozen' and 'Todo en Congelados' use the name as it is.</p><p>2. The Categories link scrolls with the chip row rather than being pinned (P3).</p><p>3. No app bar on the two pages (P7).</p><p>4. The root Other, whose one leaf is Not yet categorised, is drawn like any root while it has products. Hiding it is one more rule if shoppers should never see it.</p><p>5. Reopened from the chip, the children page marks the current leaf with a tick, the quiet amber and aria-current (the board on the right). The plan does not ask for it.</p></aside>
   </div>
 </div>

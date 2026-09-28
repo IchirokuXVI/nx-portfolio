@@ -64,7 +64,7 @@
       "x": 3710,
       "y": -620,
       "w": 470,
-      "text": "RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, a back chevron and the title in the display face, never sheets. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.\nEach step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.\nNeither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row."
+      "text": "RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, never sheets: one row, the back chevron and then the title in the display face beside it, so the head costs one line and not two. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.\nEach step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.\nNeither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row."
     },
     {
       "id": "review",

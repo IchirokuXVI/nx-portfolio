@@ -67,7 +67,8 @@ body { margin: 0; }
 /* the two picker pages: the page head, then one card of rows */
 .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
 .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-.ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+.phead { flex: none; display: flex; align-items: center; gap: 4px; }
+.ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
 .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 .group li { border-top: 1px solid var(--app-border-subtle); }
 .group li:first-child { border-top: 0; }
@@ -96,8 +97,10 @@ body { margin: 0; }
 </helmet>
 <div class="vel phone">
   <main class="page">
-    <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
-    <h1 class="ptitle">Categories</h1>
+    <header class="phead">
+      <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+      <h1 class="ptitle">Categories</h1>
+    </header>
     <ul class="group">
       <li><a class="crow" href="#" aria-label="Fruit and vegetables, 486 products"><span class="cname">Fruit and vegetables</span><span class="count">486 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
       <li><a class="crow" href="#" aria-label="Meat, 392 products"><span class="cname">Meat</span><span class="count">392 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
