@@ -4,12 +4,14 @@ import {
   SUGGEST_LIMIT_PER_KIND,
   type CatalogItem,
   type CatalogSuggestion,
+  type CategoryNode,
   type ProductGroup,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import { GatewayError } from '../errors';
+import { toCategoryNodes } from '../mapping/category-mappers';
 import {
   toCatalogItem,
   toCatalogSuggestions,
@@ -187,6 +189,25 @@ export class CatalogApi implements CatalogServiceI {
       return error instanceof GatewayError && error.code === 'not_found'
         ? []
         : null;
+    }
+  }
+
+  /**
+   * The whole tree, in one request (velista `0118`).
+   *
+   * Null on any failure, a refusal included: a guest on a shared basket reaches no
+   * catalog route, and the screens that sort by the tree draw without it.
+   */
+  async categories(): Promise<readonly CategoryNode[] | null> {
+    try {
+      const body = await firstValueFrom(
+        this._http.get<unknown>(this._urls.gateway('/v1/catalog/categories'), {
+          context: operation('catalog.categories'),
+        })
+      );
+      return toCategoryNodes(body);
+    } catch {
+      return null;
     }
   }
 

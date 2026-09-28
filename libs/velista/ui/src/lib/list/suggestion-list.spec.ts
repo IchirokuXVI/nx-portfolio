@@ -26,7 +26,7 @@ function item(
     size,
     unit,
     productGroupId: null,
-    category: 'OTHER',
+    categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
     // Unpriced by default, which is what staging and production are: the tests
     // that want a price say so, and every other one asserts the row a cluster
     // with the harvester off draws.

@@ -1048,7 +1048,7 @@ describe('the number on a row', () => {
           offers: [],
           atShop: null,
           productGroupId: null,
-          categories: ['DAIRY'],
+          categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
         },
       ],
     ]);
@@ -1497,7 +1497,7 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: ['OTHER'],
+      categories: [{ id: 'cat-uncategorised', parentId: 'cat-other', slug: 'uncategorised', name: { en: 'Not yet categorised', es: 'Sin categoría' } }],
     };
   }
 
@@ -2056,7 +2056,7 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: ['DAIRY'],
+      categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
       ...over,
     });
 
@@ -2134,12 +2134,12 @@ describe('searching the basket', () => {
     it('heads each aisle with an h2 carrying the name and the count together', async () => {
       const { fixture } = await renderGrouped('category');
 
-      const [dairy] = headings(fixture);
-      expect(dairy.tagName).toBe('H2');
+      const [milk] = headings(fixture);
+      expect(milk.tagName).toBe('H2');
       // One accessible name, because a reader moving by heading hears the `h2` and
       // nothing else inside it (section 6). The visible spans are `aria-hidden`.
-      expect(dairy.getAttribute('aria-label')).toBe(
-        'basket.category.DAIRY, basket.group.progress'
+      expect(milk.getAttribute('aria-label')).toBe(
+        'Milk, basket.group.progress'
       );
     });
 
@@ -2194,7 +2194,7 @@ describe('searching the basket', () => {
       // Two keys, as the page's own sentence keeps them apart: a shop that had none
       // is not shopping done.
       expect(headings(fixture)[0].getAttribute('aria-label')).toBe(
-        'basket.category.DAIRY, basket.group.progress · basket.group.unavailable'
+        'Milk, basket.group.progress · basket.group.unavailable'
       );
     });
 
@@ -3071,7 +3071,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       size: 1,
       unit: 'LITER',
       productGroupId: null,
-      category: 'DAIRY',
+      categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
       offer: null,
       chainPrices: [],
       imageUrl: null,
@@ -3269,7 +3269,7 @@ describe('similar products on the basket', () => {
     offers: [],
     atShop: null,
     productGroupId: 'g-milk',
-    categories: ['DAIRY'],
+    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
   };
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
@@ -3279,7 +3279,7 @@ describe('similar products on the basket', () => {
     size: 1,
     unit: 'LITER',
     productGroupId: 'g-milk',
-    category: 'DAIRY',
+    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
     offer: { ...OFFER, price: unitPrice, unitPrice },
     chainPrices: [],
     imageUrl: null,

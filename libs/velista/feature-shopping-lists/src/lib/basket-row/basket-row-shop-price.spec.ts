@@ -93,7 +93,7 @@ const MILK: BasketProduct = {
     available: null,
   },
   productGroupId: null,
-  categories: ['DAIRY'],
+  categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
 };
 
 /** The same product with no price at the shop: what an "unlisted" mark is about. */

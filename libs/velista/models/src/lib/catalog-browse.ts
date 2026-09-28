@@ -1,5 +1,6 @@
 import type { ProductOffer } from './domain';
-import type { ProductCategory, UnitOfMeasure } from './enums';
+import type { UnitOfMeasure } from './enums';
+import type { ProductCategory } from './product-category';
 import {
   inLocale,
   type LocalizedName,
@@ -77,7 +78,8 @@ export interface CatalogProduct {
   readonly imageUrl: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
-  readonly category: ProductCategory;
+  /** The aisles the catalog files it under, in its order. Empty when none was readable. */
+  readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */
   readonly offer: ProductOffer | null;
   /** What {@link ProductOffer.unitPrice} is counted in, or null when unknown. */

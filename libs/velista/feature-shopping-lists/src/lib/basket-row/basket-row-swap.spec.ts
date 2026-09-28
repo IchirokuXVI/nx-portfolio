@@ -19,7 +19,7 @@ const MILK: BasketProduct = {
   offer: null,
   offers: [],
   atShop: null,
-  categories: ['DAIRY'],
+  categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
 };
 
 function row(): BasketRow {

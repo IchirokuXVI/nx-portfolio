@@ -1,21 +1,20 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import {
-  RokuLocaleStore,
-  RokuTranslatorService,
-} from '@portfolio/localization/rokutranslator-angular';
-import type {
-  CatalogItem,
-  Line,
-  ProductCategory,
-} from '@portfolio/velista/models';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
+import type { CatalogItem, CategoryNode, Line } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   StorageKeys,
 } from '@portfolio/velista/platform';
+import { memoryCategory } from '../catalog/category-memory';
+import { CategoryStore } from '../catalog/category-store';
 import { ItemNames } from '../catalog/item-names';
 import { LineStore } from '../lines/line-store';
-import { fakeItemNames } from '../testing/store-doubles';
+import {
+  fakeCategoryStore,
+  fakeItemNames,
+  type FakeCategoryStore,
+} from '../testing/store-doubles';
 import { parseListViewMemory } from './list-view-memory';
 import { ListViewStore } from './list-view-store';
 
@@ -23,11 +22,7 @@ function line(id: string, content: string, itemIds: string[] = []): Line {
   return { id, content, itemIds } as unknown as Line;
 }
 
-function product(
-  id: string,
-  en: string,
-  category: ProductCategory
-): CatalogItem {
+function product(id: string, en: string, ...slugs: string[]): CatalogItem {
   return {
     id,
     name: { es: en, en },
@@ -35,8 +30,12 @@ function product(
     size: null,
     unit: 'UNIT',
     productGroupId: null,
-    category,
+    categories: slugs.map(memoryCategory),
     offer: null,
+    unitBasis: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
   };
 }
 
@@ -47,26 +46,54 @@ const LINES = [
 ];
 
 const CATALOG = [
-  product('carrot', 'Carrots', 'PRODUCE'),
-  product('milk', 'Whole milk', 'DAIRY'),
-  product('oat', 'Oat drink', 'BEVERAGES'),
+  product('carrot', 'Carrots', 'canned-food'),
+  product('milk', 'Whole milk', 'milk'),
+  product('oat', 'Oat drink', 'plant-drinks', 'milk'),
 ];
 
+/** Three rows of the tree, in an order that is not the order the list meets them. */
+const TREE: readonly CategoryNode[] = [
+  root('dairy-and-eggs', 0),
+  leaf('plant-drinks', 'dairy-and-eggs', 0),
+  leaf('milk', 'dairy-and-eggs', 1),
+  root('pantry', 1),
+  leaf('canned-food', 'pantry', 0),
+];
+
+function root(slug: string, position: number): CategoryNode {
+  return { ...node(slug, position), parentId: null };
+}
+
+function leaf(slug: string, parent: string, position: number): CategoryNode {
+  return { ...node(slug, position), parentId: `cat-${parent}` };
+}
+
+function node(slug: string, position: number): CategoryNode {
+  return {
+    id: `cat-${slug}`,
+    parentId: null,
+    slug,
+    name: { en: slug, es: slug },
+    position,
+    itemCount: 1,
+  };
+}
+
 /** A store over one list, on a storage the spec owns, so a reload is a new store. */
-function harness(storage: Map<string, string>) {
+function harness(
+  storage: Map<string, string>,
+  tree: FakeCategoryStore = fakeCategoryStore(),
+  locale = 'en'
+) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       ListViewStore,
       provideFakeBrowserFacade(storage),
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
-      {
-        provide: RokuTranslatorService,
-        // "basket.category.DAIRY" answers "dairy", which is enough for a search.
-        useValue: { t: (key: string) => key.split('.').pop()?.toLowerCase() },
-      },
+      { provide: RokuLocaleStore, useValue: { locale: signal(locale) } },
       { provide: LineStore, useValue: { linesIn: () => LINES } },
       { provide: ItemNames, useValue: fakeItemNames({ items: CATALOG }) },
+      { provide: CategoryStore, useValue: tree },
     ],
   });
 
@@ -78,25 +105,61 @@ function harness(storage: Map<string, string>) {
 const ids = (lines: readonly { id: string }[]) => lines.map((row) => row.id);
 
 describe('ListViewStore', () => {
-  it('counts the categories on the list, with No category for a line with no products', () => {
+  it('counts the categories on the list, named from the data, with No category for a line with no products', () => {
     const view = harness(new Map());
 
+    // First appearance order, because the tree has not landed.
     expect(view.categoryCounts()).toEqual([
-      { category: 'PRODUCE', lines: 1 },
-      { category: 'DAIRY', lines: 1 },
-      { category: 'BEVERAGES', lines: 1 },
-      { category: 'NONE', lines: 1 },
+      { category: 'cat-canned-food', lines: 1, name: 'Canned food' },
+      { category: 'cat-milk', lines: 1, name: 'Milk' },
+      { category: 'cat-plant-drinks', lines: 1, name: 'Plant based drinks' },
+      { category: 'NONE', lines: 1, name: null },
     ]);
   });
 
-  it('searches product names and category labels', () => {
+  it('names the radios in the reader’s language', () => {
+    const view = harness(new Map(), fakeCategoryStore(), 'es');
+
+    expect(view.categoryCounts().map((row) => row.name)).toEqual([
+      'Conservas',
+      'Leche',
+      'Bebidas vegetales',
+      null,
+    ]);
+    expect(view.categoryName('cat-milk')).toBe('Leche');
+    expect(view.categoryName('NONE')).toBe('');
+  });
+
+  it('asks for the tree when a list opens, and re-sorts when it lands', () => {
+    const tree = fakeCategoryStore();
+    const view = harness(new Map(), tree);
+    expect(tree.ensured()).toBe(1);
+
+    tree.land(TREE);
+
+    expect(view.categoryCounts().map((row) => row.category)).toEqual([
+      'cat-plant-drinks',
+      'cat-milk',
+      'cat-canned-food',
+      'NONE',
+    ]);
+  });
+
+  it('searches product names and category names', () => {
     const view = harness(new Map());
 
     view.search('oat drink');
     expect(ids(view.compose(LINES).lines)).toEqual(['l2']);
 
-    view.search('produce');
+    view.search('canned');
     expect(ids(view.compose(LINES).lines)).toEqual(['l1']);
+  });
+
+  it('searches the category name in the reader’s language, folded', () => {
+    const view = harness(new Map(), fakeCategoryStore(), 'es');
+
+    view.search('BEBIDAS');
+    expect(ids(view.compose(LINES).lines)).toEqual(['l2']);
   });
 
   it('changes nothing for One category until one is picked, and settles back to all lines', () => {
@@ -110,7 +173,7 @@ describe('ListViewStore', () => {
     expect(view.view()).toBe('all');
 
     view.setView('category');
-    view.pickCategory('DAIRY');
+    view.pickCategory('cat-milk');
     view.settle();
     expect(view.view()).toBe('category');
     expect(ids(view.compose(LINES).lines)).toEqual(['l2']);
@@ -141,7 +204,7 @@ describe('ListViewStore', () => {
       const storage = new Map<string, string>();
       const view = harness(storage);
       view.setView('category');
-      view.pickCategory('DAIRY');
+      view.pickCategory('cat-milk');
 
       const reloaded = harness(storage);
 
@@ -186,7 +249,7 @@ describe('ListViewStore', () => {
   it('gives the instance back on leave, unsearched and on all lines', () => {
     const view = harness(new Map());
     view.search('milk');
-    view.pickCategory('DAIRY');
+    view.pickCategory('cat-milk');
 
     view.leave();
 

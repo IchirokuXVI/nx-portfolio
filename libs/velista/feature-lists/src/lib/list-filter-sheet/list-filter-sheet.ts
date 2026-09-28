@@ -12,7 +12,6 @@ import {
 import { ListViewStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
-  NO_CATEGORY,
   type ListCategoryPick,
   type ListViewMode,
   type ListViewOrder,
@@ -59,8 +58,6 @@ export class ListFilterSheet {
 
   private readonly _zoneId = zoneIdOf(this._route);
   private readonly _listId = listIdOf(this._route);
-
-  protected readonly noCategory = NO_CATEGORY;
 
   protected readonly order = this._view.order;
   protected readonly view = this._view.view;

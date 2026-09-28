@@ -62,7 +62,7 @@ function product(
     size: 1,
     unit: 'LITER',
     productGroupId: null,
-    category: 'DAIRY',
+    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
     offer: offer(1.19),
     chainPrices: [chain('Mercadona', 1.19), chain('Dia', 1.29)],
     imageUrl: null,

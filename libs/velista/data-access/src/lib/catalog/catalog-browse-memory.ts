@@ -8,11 +8,11 @@ import type {
   CatalogScopeOffer,
   Page,
   PriceUnitBasis,
-  ProductCategory,
   ProductOffer,
   UnitOfMeasure,
 } from '@portfolio/velista/models';
 import type { CatalogBrowseServiceI } from './catalog-browse-service';
+import { memoryCategory } from './category-memory';
 
 /**
  * The catalog tab with no backend. Asked for by name, never a default.
@@ -144,7 +144,8 @@ interface Fixture {
   readonly brand: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
-  readonly category: ProductCategory;
+  /** A leaf slug of the memory tree. */
+  readonly category: string;
   readonly basis: PriceUnitBasis | null;
   /** Price per chain. Null is stocked with no price, absent is not sold. */
   readonly prices: Partial<Record<ChainKey, number | null>>;
@@ -159,7 +160,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     1,
     'LITER',
-    'PANTRY',
+    'oil-and-vinegar',
     'LITER',
     { 'chain-mercadona': 8.45, 'chain-deza': 8.95 }
   ),
@@ -170,7 +171,7 @@ const PRODUCTS: readonly Fixture[] = [
     'SOS',
     1,
     'KILOGRAM',
-    'PANTRY',
+    'pasta-rice-and-legumes',
     'KILOGRAM',
     { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 }
   ),
@@ -181,7 +182,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Calvo',
     0.24,
     'KILOGRAM',
-    'PANTRY',
+    'canned-food',
     'KILOGRAM',
     { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 }
   ),
@@ -192,7 +193,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Azucarera',
     1,
     'KILOGRAM',
-    'PANTRY',
+    'flour-sugar-and-baking',
     'KILOGRAM',
     { 'chain-mercadona': 1.05, 'chain-deza': 1.15 }
   ),
@@ -203,7 +204,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Marcilla',
     0.25,
     'KILOGRAM',
-    'BEVERAGES',
+    'coffee-tea-and-cocoa',
     'KILOGRAM',
     { 'chain-deza': 2.19, 'chain-carrefour': 2.39 }
   ),
@@ -214,7 +215,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     12,
     'UNIT',
-    'DAIRY',
+    'eggs',
     'DOZEN',
     { 'chain-mercadona': 2.2 }
   ),
@@ -225,7 +226,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     1,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-mercadona': 0.89, 'chain-deza': 0.95 }
   ),
@@ -236,7 +237,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Puleva',
     6,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-carrefour': 6.42 }
   ),
@@ -247,7 +248,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Kaiku',
     1,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-deza': 1.35 },
     true
@@ -259,7 +260,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Bimbo',
     0.45,
     'KILOGRAM',
-    'BAKERY',
+    'bread',
     'KILOGRAM',
     { 'chain-mercadona': null, 'chain-carrefour': 1.99 }
   ),
@@ -270,7 +271,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Danone',
     0.5,
     'KILOGRAM',
-    'DAIRY',
+    'yogurts-and-desserts',
     'KILOGRAM',
     { 'chain-mercadona': 1.1, 'chain-deza': 1.25, 'chain-carrefour': 1.19 }
   ),
@@ -282,7 +283,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Alvalle',
     1,
     'LITER',
-    'PANTRY',
+    'soups-and-stock',
     'LITER',
     {}
   ),
@@ -295,7 +296,7 @@ function fixture(
   brand: string | null,
   size: number | null,
   unit: UnitOfMeasure,
-  category: ProductCategory,
+  category: string,
   basis: PriceUnitBasis | null,
   prices: Partial<Record<ChainKey, number | null>>,
   stale = false
@@ -360,7 +361,7 @@ function toProduct(row: Fixture, scopes: ReadonlySet<string>): CatalogProduct {
     imageUrl: null,
     size: row.size,
     unit: row.unit,
-    category: row.category,
+    categories: [memoryCategory(row.category)],
     offer: best,
     unitBasis: best === null ? null : row.basis,
   };

@@ -1035,8 +1035,8 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       size: 0.5,
       unit: 'LITER',
       productGroupId: 'group-milk',
-      // Absent on this fixture, so it falls back (velista `0082`).
-      category: 'OTHER',
+      // Absent on this fixture, so it has none (velista `0118`).
+      categories: [],
       offer: null,
       chainPrices: [],
       imageUrl: null,
@@ -1084,26 +1084,65 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
 
 /**
  * Velista `0082`, section 3: the zone list page shows one category at a time, so the
- * catalog's category is read rather than dropped, by the basket mapper's rule.
+ * catalog's categories are read rather than dropped, by the basket mapper's rule
+ * (velista `0118`: rows of the tree, several per product, in the catalog's order).
  */
-describe('toCatalogItem: the category', () => {
+describe('toCatalogItem: the categories', () => {
+  const MILK = {
+    id: 'cat-milk',
+    parentId: 'cat-dairy-and-eggs',
+    slug: 'milk',
+    name: { en: 'Milk', es: 'Leche' },
+  };
+  const PLANT = {
+    id: 'cat-plant-drinks',
+    parentId: 'cat-dairy-and-eggs',
+    slug: 'plant-drinks',
+    name: { es: 'Bebidas vegetales' },
+  };
   const item = {
     id: 'item-milk-1l',
     name: { es: 'Leche entera', en: 'Whole milk' },
-    category: 'DAIRY',
+    categories: [MILK, PLANT],
   };
 
-  it('reads the category off the wire', () => {
-    expect(toCatalogItem(item)?.category).toBe('DAIRY');
+  it('reads every category off the wire, in the wire’s order', () => {
+    expect(toCatalogItem(item)?.categories).toEqual([
+      MILK,
+      { ...PLANT, name: { en: '', es: 'Bebidas vegetales' } },
+    ]);
   });
 
-  it('reads a category it has never heard of, or none, as OTHER', () => {
-    expect(toCatalogItem({ ...item, category: 'BABY_FOOD' })?.category).toBe(
-      'OTHER'
+  it('drops a category with no id, parent, slug or readable name', () => {
+    const broken = [
+      { ...MILK, id: undefined },
+      { ...MILK, parentId: null },
+      { ...MILK, slug: 7 },
+      { ...MILK, name: { en: '', es: '' } },
+      'milk',
+      null,
+    ];
+
+    expect(
+      toCatalogItem({ ...item, categories: [...broken, PLANT] })?.categories.map(
+        (category) => category.id
+      )
+    ).toEqual(['cat-plant-drinks']);
+  });
+
+  it('keeps a repeated category once', () => {
+    expect(
+      toCatalogItem({ ...item, categories: [MILK, MILK] })?.categories
+    ).toHaveLength(1);
+  });
+
+  it('reads no categories as none, including the retired scalar', () => {
+    expect(toCatalogItem({ ...item, categories: undefined })?.categories).toEqual(
+      []
     );
-    expect(toCatalogItem({ ...item, category: undefined })?.category).toBe(
-      'OTHER'
-    );
+    expect(
+      toCatalogItem({ id: 'item-1', category: 'DAIRY' })?.categories
+    ).toEqual([]);
   });
 });
 

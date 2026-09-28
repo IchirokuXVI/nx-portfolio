@@ -2,11 +2,12 @@ import { Injectable } from '@angular/core';
 import type {
   CatalogItem,
   CatalogSuggestion,
-  ProductCategory,
+  CategoryNode,
   ProductGroup,
   UnitOfMeasure,
 } from '@portfolio/velista/models';
 import type { CatalogServiceI } from './catalog-service';
+import { MEMORY_CATEGORIES, memoryCategory } from './category-memory';
 
 /**
  * A handful of products, in memory. Asked for by name, never a default.
@@ -26,22 +27,22 @@ import type { CatalogServiceI } from './catalog-service';
  * Hacendado, 6 x 1 L" is a real product name and it is the case a row has to survive.
  */
 const MILK: readonly CatalogItem[] = [
-  item('item-milk-hacendado', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 1, 'LITER', 'group-milk', 'DAIRY'),
-  item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk', 'DAIRY'),
-  item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk', 'DAIRY'),
-  item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'DAIRY'),
-  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'DAIRY'),
+  item('item-milk-hacendado', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 1, 'LITER', 'group-milk', 'milk'),
+  item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk', 'milk'),
+  item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk', 'milk'),
+  item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'milk'),
+  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'plant-drinks'),
 ];
 
 const BREAD: readonly CatalogItem[] = [
-  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread', 'BAKERY'),
+  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread', 'bread'),
   // No size at all, which is an ordinary state for a harvested product and the one
   // case the row has to draw nothing for rather than guessing a packet.
-  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread', 'BAKERY'),
+  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread', 'bread'),
 ];
 
 const OIL: readonly CatalogItem[] = [
-  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil', 'PANTRY'),
+  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil', 'oil-and-vinegar'),
 ];
 
 const EGGS: readonly CatalogItem[] = [
@@ -49,8 +50,8 @@ const EGGS: readonly CatalogItem[] = [
   // partner below is the case the size is suppressed for: one of a thing is what
   // every product is, so "1 unit" would appear on half the catalog and tell nobody
   // anything.
-  item('item-eggs-dozen', 'Huevos frescos Hacendado', 'Free range eggs', 'Hacendado', 12, 'UNIT', 'group-eggs', 'DAIRY'),
-  item('item-eggs-single', 'Huevo de codorniz', 'Quail egg', null, 1, 'UNIT', 'group-eggs', 'DAIRY'),
+  item('item-eggs-dozen', 'Huevos frescos Hacendado', 'Free range eggs', 'Hacendado', 12, 'UNIT', 'group-eggs', 'eggs'),
+  item('item-eggs-single', 'Huevo de codorniz', 'Quail egg', null, 1, 'UNIT', 'group-eggs', 'eggs'),
 ];
 
 const GROUPS: readonly ProductGroup[] = [
@@ -149,6 +150,14 @@ export class CatalogMemory implements CatalogServiceI {
   ): Promise<readonly CatalogItem[] | null> {
     return ITEMS.filter((row) => row.productGroupId === groupId);
   }
+
+  /**
+   * The slice of the tree every memory store names its products from (velista
+   * `0118`). Never null: a fake has no transport to fail.
+   */
+  async categories(): Promise<readonly CategoryNode[] | null> {
+    return MEMORY_CATEGORIES;
+  }
 }
 
 /** The products of one group, for a composer choosing it whole. */
@@ -176,7 +185,7 @@ function item(
   size: number | null,
   unit: UnitOfMeasure,
   productGroupId: string,
-  category: ProductCategory
+  categorySlug: string
 ): CatalogItem {
   // No offer, on every row. There is one catalog here and no scopes to price it
   // against, so a number would be invented rather than modelled, and unpriced is
@@ -188,7 +197,7 @@ function item(
     size,
     unit,
     productGroupId,
-    category,
+    categories: [memoryCategory(categorySlug)],
     offer: null,
     chainPrices: [],
     imageUrl: null,

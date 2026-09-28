@@ -37,7 +37,7 @@ function product(
     offers,
     atShop,
     productGroupId: null,
-    categories: ['DAIRY'],
+    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
   };
 }
 

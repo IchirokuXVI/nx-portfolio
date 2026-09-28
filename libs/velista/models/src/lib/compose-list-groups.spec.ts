@@ -95,7 +95,7 @@ function compose(
       seeds.find((seed) => seed.id === lineId)?.category ?? NO_CATEGORY,
     ],
     productNamesOf: () => [],
-    categoryLabel: (category) => category,
+    categoryName: (categoryId) => categoryId,
   };
 
   return composeListGroups(
@@ -317,9 +317,9 @@ describe('composeListGroups (velista 0088)', () => {
       const view = groups(
         compose(
           [
-            { id: 'milk', category: 'DAIRY' },
-            { id: 'bread', category: 'BAKERY' },
-            { id: 'cheese', category: 'DAIRY', quantity: 0, boughtCount: 1 },
+            { id: 'milk', category: 'milk' },
+            { id: 'bread', category: 'bread' },
+            { id: 'cheese', category: 'milk', quantity: 0, boughtCount: 1 },
           ],
           {
             past: [dairy, bakery],
@@ -327,12 +327,12 @@ describe('composeListGroups (velista 0088)', () => {
               [tripKey(dairy)]: [tripRow('cheese'), tripRow('bread')],
               [tripKey(bakery)]: [tripRow('bread')],
             },
-            state: { view: 'category', category: 'DAIRY' },
+            state: { view: 'category', category: 'milk' },
           }
         )
       );
 
-      expect(view.category).toBe('DAIRY');
+      expect(view.category).toBe('milk');
       expect(ids(view.toBuy)).toEqual(['milk']);
       expect(view.trips.map((group) => group.trip.id)).toEqual(['b-dairy']);
       expect(view.trips[0].rows?.map((joined) => joined.line.id)).toEqual([
@@ -431,13 +431,13 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
     const view = groups(
       compose(
         [
-          { id: 'yogurt', ...bought, category: 'DAIRY', content: 'Yogurt' },
-          { id: 'coffee', ...bought, category: 'PANTRY', content: 'Coffee' },
-          { id: 'butter', ...bought, category: 'DAIRY', content: 'Butter' },
+          { id: 'yogurt', ...bought, category: 'milk', content: 'Yogurt' },
+          { id: 'coffee', ...bought, category: 'coffee-tea-and-cocoa', content: 'Coffee' },
+          { id: 'butter', ...bought, category: 'milk', content: 'Butter' },
         ],
         {
           due: ['yogurt', 'coffee', 'butter'],
-          state: { view: 'category', category: 'DAIRY', order: 'alpha' },
+          state: { view: 'category', category: 'milk', order: 'alpha' },
         }
       )
     );

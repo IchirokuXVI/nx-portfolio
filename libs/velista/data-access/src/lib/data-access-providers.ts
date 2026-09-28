@@ -15,6 +15,7 @@ import { BasketStore } from './baskets/basket-store';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
 import { GroupMembers } from './catalog/group-members';
+import { CategoryStore } from './catalog/category-store';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
 import { CommentMemory } from './comments/comment-memory';
@@ -151,6 +152,9 @@ import { ZoneStore } from './zones/zone-store';
  * same resolver for the group a line follows rather than for the products on it.
  * `GroupMembers` joins for the same reasons: the line page, the product sheet and the
  * basket ask for the same group's members, and it primes `ItemNames` as they arrive.
+ * `CategoryStore` (velista `0118`) joins for `ItemNames`' first reason, and is app
+ * scoped for a stronger version of its second: the tree is read once per session, and
+ * the zone list, the category picker and the aisles of a shop all sort by the one copy.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -200,6 +204,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  CategoryStore,
   GroupMembers,
   GroupNames,
   ItemNames,

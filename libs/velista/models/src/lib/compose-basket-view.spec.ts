@@ -22,7 +22,7 @@ import {
   type BasketViewState,
 } from './compose-basket-view';
 import type { ProductOffer } from './domain';
-import type { ProductCategory } from './enums';
+import type { ProductCategory } from './product-category';
 
 /**
  * One row, with one entry unless the test says otherwise.
@@ -82,11 +82,21 @@ function ref(listId: string, name: string): BasketListRef {
   return { listId, name, zoneId: 'z1', zoneName: 'Home' };
 }
 
+/** A leaf of the tree, by slug, with the id derived from it as a seed would. */
+function leaf(slug: string, en: string, es = en): ProductCategory {
+  return { id: `cat-${slug}`, parentId: 'cat-root', slug, name: { en, es } };
+}
+
+const UNCATEGORISED = leaf('uncategorised', 'Not yet categorised', 'Sin categoría');
+const MILK_LEAF = leaf('milk', 'Milk', 'Leche');
+const BREAD_LEAF = leaf('bread', 'Bread', 'Pan');
+const ICE_CREAM_LEAF = leaf('ice-cream', 'Ice cream', 'Helados');
+
 function product(
   id: string,
   name: string,
   brand: string | null,
-  categories: readonly ProductCategory[] = ['OTHER']
+  categories: readonly ProductCategory[] = [UNCATEGORISED]
 ): BasketProduct {
   return {
     id,
@@ -413,10 +423,13 @@ describe('composeBasketView', () => {
  */
 describe('composeBasketView, grouped by category', () => {
   const CATALOG = new Map([
-    ['p-milk', product('p-milk', 'Milk', null, ['DAIRY'])],
-    ['p-bread', product('p-bread', 'Bread', null, ['BAKERY'])],
-    ['p-cheese', product('p-cheese', 'Cheese', null, ['DAIRY'])],
-    ['p-odd', product('p-odd', 'Batteries', null, ['OTHER'])],
+    ['p-milk', product('p-milk', 'Milk', null, [MILK_LEAF])],
+    ['p-bread', product('p-bread', 'Bread', null, [BREAD_LEAF])],
+    ['p-cheese', product('p-cheese', 'Cheese', null, [MILK_LEAF])],
+    ['p-odd', product('p-odd', 'Batteries', null, [UNCATEGORISED])],
+    // The server never sends an empty list; a product whose every category was
+    // unreadable arrives as one anyway.
+    ['p-unread', product('p-unread', 'Mystery', null, [])],
   ]);
 
   function grouped(
@@ -429,7 +442,7 @@ describe('composeBasketView, grouped by category', () => {
     });
   }
 
-  it('puts every line under its product’s category', () => {
+  it('puts every line under its product’s category, named from the data', () => {
     const sections = grouped([
       row('a', 'Milk', { optionIds: ['p-milk'] }),
       row('b', 'Bread', { optionIds: ['p-bread'] }),
@@ -442,9 +455,38 @@ describe('composeBasketView, grouped by category', () => {
         part.rows.map((row) => row.row.rowKey),
       ])
     ).toEqual([
-      [{ kind: 'key', key: 'basket.category.DAIRY' }, ['a', 'c']],
-      [{ kind: 'key', key: 'basket.category.BAKERY' }, ['b']],
+      [{ kind: 'text', text: 'Milk' }, ['a', 'c']],
+      [{ kind: 'text', text: 'Bread' }, ['b']],
     ]);
+  });
+
+  it('names a section in the reader’s language', () => {
+    const sections = composeBasketView(
+      [row('a', 'Leche', { optionIds: ['p-milk'] })],
+      state({ grouping: 'category' }),
+      { ...CONTEXT, locale: 'es', products: CATALOG }
+    );
+
+    expect(sections[0].heading).toEqual({ kind: 'text', text: 'Leche' });
+  });
+
+  it('names a section in the other language when the reader’s is missing', () => {
+    const spanishOnly = leaf('pates-and-spreads', '', 'Patés y untables');
+    const sections = composeBasketView(
+      [row('a', 'Paté', { optionIds: ['p-pate'] })],
+      state({ grouping: 'category' }),
+      {
+        ...CONTEXT,
+        products: new Map([
+          ['p-pate', product('p-pate', 'Paté', null, [spanishOnly])],
+        ]),
+      }
+    );
+
+    expect(sections[0].heading).toEqual({
+      kind: 'text',
+      text: 'Patés y untables',
+    });
   });
 
   /**
@@ -452,7 +494,7 @@ describe('composeBasketView, grouped by category', () => {
    * the aisles order the categories, which is the entire point of that order; a
    * pipeline that sorted the sections by name, or by the enum, would throw it away.
    */
-  it('gives a section the place of its first line, OTHER included', () => {
+  it('gives a section the place of its first line, Not yet categorised included', () => {
     const sections = grouped([
       row('a', 'Batteries', { optionIds: ['p-odd'] }),
       row('b', 'Bread', { optionIds: ['p-bread'] }),
@@ -460,15 +502,15 @@ describe('composeBasketView, grouped by category', () => {
     ]);
 
     expect(sections.map((part) => part.key)).toEqual([
-      'category:OTHER',
-      'category:BAKERY',
-      'category:DAIRY',
+      'category:cat-uncategorised',
+      'category:cat-bread',
+      'category:cat-milk',
     ]);
   });
 
   it('draws a line in every category it has, and counts it once', () => {
     const twoAisles = new Map([
-      ['p-both', product('p-both', 'Yoghurt', null, ['DAIRY', 'SNACKS'])],
+      ['p-both', product('p-both', 'Yoghurt', null, [MILK_LEAF, ICE_CREAM_LEAF])],
     ]);
 
     const sections = composeBasketView(
@@ -478,8 +520,8 @@ describe('composeBasketView, grouped by category', () => {
     );
 
     expect(sections.map((part) => part.key)).toEqual([
-      'category:DAIRY',
-      'category:SNACKS',
+      'category:cat-milk',
+      'category:cat-ice-cream',
     ]);
     expect(basketViewRows(sections)).toHaveLength(1);
   });
@@ -494,6 +536,7 @@ describe('composeBasketView, grouped by category', () => {
       row('free', 'Something for dinner'),
       row('milk', 'Milk', { optionIds: ['p-milk'] }),
       row('gone', 'Old thing', { optionIds: ['p-deleted'] }),
+      row('unread', 'Mystery', { optionIds: ['p-unread'] }),
     ]);
 
     const last = sections[sections.length - 1];
@@ -503,7 +546,11 @@ describe('composeBasketView, grouped by category', () => {
       key: 'basket.group.noCategory',
     });
     expect(last.hint).toBe('basket.group.noCategoryHint');
-    expect(last.rows.map((row) => row.row.rowKey)).toEqual(['free', 'gone']);
+    expect(last.rows.map((row) => row.row.rowKey)).toEqual([
+      'free',
+      'gone',
+      'unread',
+    ]);
   });
 
   it('counts each section over its own lines, with a close that bought nothing apart', () => {
@@ -560,7 +607,7 @@ describe('composeBasketView, grouped by category', () => {
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].key).toBe('category:BAKERY');
+    expect(sections[0].key).toBe('category:cat-bread');
   });
 });
 
@@ -985,8 +1032,8 @@ describe('composeBasketView: prices from one shop', () => {
       priced()
     );
 
-    // One category, because every product here is `OTHER`: the two sunk lines are
-    // last inside it, in the order they arrived in.
+    // One category, because every product here is on "Not yet categorised": the two
+    // sunk lines are last inside it, in the order they arrived in.
     expect(sections).toHaveLength(1);
     expect(sections[0].rows.map((row) => row.row.rowKey)).toEqual([
       'a',
