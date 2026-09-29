@@ -301,6 +301,22 @@ $app-content-max: 480px;
   // target grows to the touch target with a pseudo element, as a chip's does.
   --app-chain-mark: 18px;
   --app-chain-mark-radius: 5px;
+  // A chain's logo in the shop picker (velista 0124, the `Rows` artboard of
+  // `mocks/shop-picker/`): a sheet's title row and the catalog's Supermarket button,
+  // a shop row, a chain button, and a chain page's head. The typeahead's mark above,
+  // at four bigger sizes.
+  --app-chain-logo-sm: 32px;
+  --app-chain-logo-md: 36px;
+  --app-chain-logo-lg: 48px;
+  --app-chain-logo-xl: 56px;
+  // A chain button: two to a row, tall enough for the logo, the name and the count.
+  --app-chain-button-height: 108px;
+  // The catalog's one Supermarket button, which is the logo and two lines of type.
+  --app-supermarket-button-height: 60px;
+  // One of a shop's sections under its row: small enough that five share a line.
+  --app-section-chip-height: 24px;
+  // A pick row's radio, a native one in the action colour, the mock's size.
+  --app-pick-radio: 22px;
   // One product inside an opened group: name, brand and price on a single line.
   --app-suggestion-inside-row: 22px;
   // The group popover, wide enough for its two sentences at four lines each.

@@ -45,6 +45,7 @@ function shop(
     address,
     city,
     postalCode,
+    sections: [],
   };
 }
 
@@ -55,6 +56,8 @@ function scope(
 ): BasketPriceScope {
   return {
     priceScopeId,
+    supermarketId: `sm-${chain}`,
+    logoUrl: null,
     supermarketName: { en: chain, es: chain },
     locations,
   };
@@ -297,16 +300,16 @@ describe('ShopPickerSheet', () => {
       expect(rows(fixture).length).toBeGreaterThan(0);
     });
 
-    it('lists the matches flat, across every chain', () => {
+    it('lists the matches flat, across every chain, in place of the buttons', () => {
       const { fixture } = render(OWNER_SCOPES);
 
       type(fixture, 'Córdoba');
 
-      // Every shop is in Córdoba: three rows, no headings, and the chain buttons
-      // still above them, which is what the supermarkets page does.
+      // Every shop is in Córdoba: three rows, no headings, and no chain buttons
+      // while the field holds something (velista 0124, decided in review).
       expect(rows(fixture)).toHaveLength(3);
       expect(headings(fixture)).toHaveLength(0);
-      expect(chains(fixture)).toHaveLength(2);
+      expect(chains(fixture)).toHaveLength(0);
     });
 
     it('says how many matched, and says so when none did', () => {
@@ -323,17 +326,95 @@ describe('ShopPickerSheet', () => {
       ).toContain('shops.empty.noMatch');
     });
 
-    it('clears itself when a chain is tapped', () => {
+    it('brings the buttons back once the field is emptied', () => {
       const { fixture } = render(OWNER_SCOPES);
       type(fixture, 'Córdoba');
 
-      tapChain(fixture, 1);
+      type(fixture, '');
 
-      // The buttons and the flat matches are two answers to the same question,
-      // and leaving the query behind would draw one over the other.
       expect(fixture.debugElement.query(By.css('.result-count'))).toBeNull();
-      expect(rows(fixture)).toHaveLength(1);
+      expect(chains(fixture)).toHaveLength(2);
+      expect(rows(fixture)).toHaveLength(0);
     });
+  });
+
+  /**
+   * A chain opens inside the sheet (velista 0124): a sheet cannot push a page, so
+   * the title row shows a back chevron, the chain's logo and its name, and hides
+   * Near me. Back returns to the root and never leaves the sheet.
+   */
+  describe('a chain opened inside the sheet', () => {
+    it('draws the chain in the title row, keeps the sheet’s name, and hides Near me', () => {
+      const { fixture } = render(OWNER_SCOPES);
+
+      tapChain(fixture, 0);
+
+      const title = fixture.nativeElement.querySelector(
+        '#shop-picker-title'
+      ) as HTMLElement;
+      expect(title.textContent).toContain('Mercadona');
+      expect(title.textContent).toContain('basket.view.shop.title');
+      expect(
+        fixture.nativeElement.querySelector('.head lib-chain-logo')
+      ).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('lib-near-me-button')
+      ).toBeNull();
+      expect(fixture.nativeElement.querySelector('.search-input')).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('.count')?.textContent
+      ).toContain('shops.chain.inAreas');
+    });
+
+    it('goes back to the root with the chevron, and never leaves the sheet', () => {
+      const { fixture, sheets } = render(OWNER_SCOPES);
+      tapChain(fixture, 0);
+
+      (
+        fixture.nativeElement.querySelector('.back') as HTMLButtonElement
+      ).click();
+      fixture.detectChanges();
+
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+      expect(chains(fixture)).toHaveLength(2);
+      expect(
+        fixture.nativeElement.querySelector('lib-near-me-button')
+      ).not.toBeNull();
+    });
+
+    it('leaves the sheet from the root’s chevron', () => {
+      const { fixture, sheets } = render(OWNER_SCOPES);
+
+      (
+        fixture.nativeElement.querySelector('.back') as HTMLButtonElement
+      ).click();
+
+      expect(sheets.dismiss).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('keys the chains by id, so two scopes of one chain are one button', () => {
+    const { fixture } = render([
+      ...OWNER_SCOPES,
+      scope('s-merca-2', 'Mercadona', [
+        shop('loc-mayor', null, 'Calle Mayor 3', 'Córdoba', '14001'),
+      ]),
+    ]);
+
+    expect(chains(fixture)).toHaveLength(2);
+    tapChain(fixture, 0);
+    expect(rows(fixture)).toHaveLength(3);
+  });
+
+  it('ticks the chain of the shop being bought at', () => {
+    const { fixture, view } = render(OWNER_SCOPES);
+    view.setShop('loc-victoria');
+    fixture.detectChanges();
+
+    const pressed = fixture.debugElement
+      .queryAll(By.css('lib-franchise-buttons .chip'))
+      .map((node) => node.nativeElement.getAttribute('aria-pressed'));
+    expect(pressed).toEqual(['false', 'true']);
   });
 
   /**

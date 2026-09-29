@@ -4,158 +4,180 @@
   region that is always there, so the reason line, the failure line and the
   candidates are heard when they arrive rather than only seen.
 -->
-<div aria-live="polite" class="near-region">
-  @switch (near().state) {
-    @case ('locating') {
-      <section aria-busy="true" class="section">
-        <h3 class="section-heading">
-          {{ 'basket.view.shop.near.heading' | rokuT }}
-        </h3>
-        <!--
-          Two rows in the shape of the answer, so the list does not jump when it
-          arrives. Nothing to read in them, so nothing is announced.
-        -->
-        <div aria-hidden="true" class="card skeleton">
-          @for (row of [0, 1]; track row) {
-            <div class="skeleton-row">
-              <span class="skeleton-dot"></span>
-              <span class="skeleton-lines">
-                <span class="skeleton-line is-title"></span>
-                <span class="skeleton-line is-where"></span>
-              </span>
-              <span class="skeleton-line is-aside"></span>
-            </div>
-          }
-        </div>
-      </section>
-    }
-    @case ('answered') {
-      <section class="section">
-        <h3 class="section-heading">
-          {{ 'basket.view.shop.near.heading' | rokuT }}
-          <span class="section-hint">
-            {{
-              'basket.view.shop.near.headingHint'
-                | rokuT: { distance: radius() }
-            }}
-          </span>
-        </h3>
-
-        @if (reason(); as why) {
-          <p class="line">
-            <lib-info-icon class="line-glyph" />
-            <span>
+@if (openKey() === null) {
+  <div aria-live="polite" class="near-region">
+    @switch (near().state) {
+      @case ('locating') {
+        <section aria-busy="true" class="section">
+          <h3 class="section-heading">
+            {{ 'basket.view.shop.near.heading' | rokuT }}
+          </h3>
+          <!--
+            Two rows in the shape of the answer, so the list does not jump when it
+            arrives. Nothing to read in them, so nothing is announced.
+          -->
+          <div aria-hidden="true" class="card skeleton">
+            @for (row of [0, 1]; track row) {
+              <div class="skeleton-row">
+                <span class="skeleton-dot"></span>
+                <span class="skeleton-lines">
+                  <span class="skeleton-line is-title"></span>
+                  <span class="skeleton-line is-where"></span>
+                </span>
+                <span class="skeleton-line is-aside"></span>
+              </div>
+            }
+          </div>
+        </section>
+      }
+      @case ('answered') {
+        <section class="section">
+          <h3 class="section-heading">
+            {{ 'basket.view.shop.near.heading' | rokuT }}
+            <span class="section-hint">
               {{
-                'basket.view.shop.near.reason.' + why
+                'basket.view.shop.near.headingHint'
                   | rokuT: { distance: radius() }
               }}
             </span>
-          </p>
-        }
+          </h3>
 
-        @if (nearGroups().length > 0) {
-          <lib-shop-list
-            (pick)="picked.emit($event)"
-            [grouped]="false"
-            [groups]="nearGroups()"
-            [mode]="'pick'"
-            [pickedId]="pickedId()"
-            groupName="shop-pick-near"
-          />
-        }
-      </section>
-    }
-    @case ('denied') {
-      <p class="line is-alone">
-        <lib-info-icon class="line-glyph" />
-        <span>{{ 'basket.view.shop.near.denied' | rokuT }}</span>
-      </p>
-    }
-    @case ('timed-out') {
-      <p class="line is-alone">
-        <lib-info-icon class="line-glyph" />
-        <span>{{ 'basket.view.shop.near.timedOut' | rokuT }}</span>
-      </p>
-    }
-    @case ('failed') {
-      <p class="line is-alone">
-        <lib-info-icon class="line-glyph" />
-        <span>{{ 'basket.view.shop.near.failed' | rokuT }}</span>
-      </p>
-    }
-  }
-</div>
+          @if (reason(); as why) {
+            <p class="line">
+              <lib-info-icon class="line-glyph" />
+              <span>
+                {{
+                  'basket.view.shop.near.reason.' + why
+                    | rokuT: { distance: radius() }
+                }}
+              </span>
+            </p>
+          }
 
-<!--
-  The shops this person bought at recently, newest first (velista 0103). Not
-  drawn when there are none, and never for a guest, whom nobody asks.
--->
-@if (recentGroups().length > 0) {
-  <section class="section">
-    <h3 class="section-heading">
-      {{ 'basket.view.shop.recent.heading' | rokuT }}
-      <span class="section-hint">
-        {{ 'basket.view.shop.recent.headingHint' | rokuT }}
-      </span>
-    </h3>
-    <lib-shop-list
-      (pick)="picked.emit($event)"
-      [grouped]="false"
-      [groups]="recentGroups()"
-      [mode]="'pick'"
-      [pickedId]="pickedId()"
-      groupName="shop-pick-recent"
-    />
-  </section>
+          @if (nearGroups().length > 0) {
+            <lib-shop-list
+              (pick)="picked.emit($event)"
+              [grouped]="false"
+              [groups]="nearGroups()"
+              [mixed]="true"
+              [mode]="'pick'"
+              [pickedId]="pickedId()"
+              groupName="shop-pick-near"
+            />
+          }
+        </section>
+      }
+      @case ('denied') {
+        <p class="line is-alone">
+          <lib-info-icon class="line-glyph" />
+          <span>{{ 'basket.view.shop.near.denied' | rokuT }}</span>
+        </p>
+      }
+      @case ('timed-out') {
+        <p class="line is-alone">
+          <lib-info-icon class="line-glyph" />
+          <span>{{ 'basket.view.shop.near.timedOut' | rokuT }}</span>
+        </p>
+      }
+      @case ('failed') {
+        <p class="line is-alone">
+          <lib-info-icon class="line-glyph" />
+          <span>{{ 'basket.view.shop.near.failed' | rokuT }}</span>
+        </p>
+      }
+    }
+  </div>
 }
 
-<!--
-  The search, across every chain, and always drawn: somebody typing a street name
-  is looking for a shop and not for a shop of a particular brand (`0059`, section
-  3.1). The label is visible, as it is on the supermarkets page.
--->
-<div class="search">
-  <label [attr.for]="fieldId()" class="field-label">
-    {{ 'shops.search.label' | rokuT }}
-  </label>
-  <span class="search-field">
-    <lib-search-icon class="search-glyph" />
-    <input
-      (input)="onQuery($event)"
-      [id]="fieldId()"
-      [placeholder]="'basket.view.shop.search' | rokuT"
-      [value]="query()"
-      autocapitalize="none"
-      autocomplete="off"
-      class="search-input"
-      enterkeyhint="search"
-      type="search"
-    />
-  </span>
-</div>
-
-@if (state() === 'loading') {
-  <p aria-live="polite" class="note" role="status">
-    <lib-spinner-icon class="spinner" />
-    {{ 'shops.loading' | rokuT }}
-  </p>
-} @else if (state() === 'failed') {
-  <p class="note" role="alert">{{ 'shops.error.load' | rokuT }}</p>
-} @else {
+@if (openKey() === null) {
   <!--
-    One button per chain, with the count of its shops under it. They stay while a
-    query is typed, exactly as they do on the supermarkets page: the search narrows
-    what is below them and not what they are.
+    The catalog's any row (velista 0124): All supermarkets. Under the Near me
+    answer, because a person pressing Near me is asking where they are, and gone
+    while a search is typed, when the matches are the whole answer.
   -->
-  <lib-franchise-buttons
-    (chosen)="chosen.emit($event)"
-    [chains]="chains()"
-    [openKey]="openKey()"
-  />
+  @if (!searching()) {
+    @if (anyRow(); as any) {
+      <div class="card any-card">
+        <label class="any">
+          <lib-chain-logo [logo]="any.logo" class="any-logo" />
+          <span class="any-text">
+            <span class="any-title">{{ any.title }}</span>
+            <span class="any-detail">{{ any.detail }}</span>
+          </span>
+          <input
+            (change)="anyChosen.emit()"
+            [attr.name]="anyName()"
+            [checked]="any.checked"
+            class="any-radio"
+            type="radio"
+          />
+        </label>
+      </div>
+    }
 
-  @if (searching()) {
     <!--
-      The count, announced. A search that silently empties the screen is
+      The shops this person bought at recently, newest first (velista 0103), which
+      are also the usual shops (0124). Not drawn when there are none, and never for
+      a guest, whom nobody asks.
+    -->
+    @if (recentGroups().length > 0) {
+      <section class="section">
+        <h3 class="section-heading">
+          {{ 'basket.view.shop.recent.heading' | rokuT }}
+          <span class="section-hint">
+            {{ 'basket.view.shop.recent.headingHint' | rokuT }}
+          </span>
+        </h3>
+        <lib-shop-list
+          (pick)="picked.emit($event)"
+          [grouped]="false"
+          [groups]="recentGroups()"
+          [mixed]="true"
+          [mode]="'pick'"
+          [pickedId]="pickedId()"
+          groupName="shop-pick-recent"
+        />
+      </section>
+    }
+  }
+
+  <!--
+    The search, across every chain: somebody typing a street name is looking for a
+    shop and not for a shop of a particular brand (0059, section 3.1). The label is
+    visible, as it is on the supermarkets page.
+  -->
+  <div class="search">
+    <label [attr.for]="fieldId()" class="field-label">
+      {{ 'shops.search.label' | rokuT }}
+    </label>
+    <span class="search-field">
+      <lib-search-icon class="search-glyph" />
+      <input
+        (input)="onQuery($event)"
+        [id]="fieldId()"
+        [placeholder]="'basket.view.shop.search' | rokuT"
+        [value]="query()"
+        autocapitalize="none"
+        autocomplete="off"
+        class="search-input"
+        enterkeyhint="search"
+        type="search"
+      />
+    </span>
+  </div>
+
+  @if (state() === 'loading') {
+    <p aria-live="polite" class="note" role="status">
+      <lib-spinner-icon class="spinner" />
+      {{ 'shops.loading' | rokuT }}
+    </p>
+  } @else if (state() === 'failed') {
+    <p class="note" role="alert">{{ 'shops.error.load' | rokuT }}</p>
+  } @else if (searching()) {
+    <!--
+      While the field holds something the chain buttons go and the matches take
+      their place (decided in review); they come back when the field is emptied.
+      The count is announced: a search that silently empties the screen is
       indistinguishable from one that broke.
     -->
     <p aria-live="polite" class="result-count" role="status">
@@ -169,26 +191,58 @@
         (pick)="picked.emit($event)"
         [grouped]="false"
         [groups]="matches()"
+        [mixed]="true"
         [mode]="'pick'"
         [pickedId]="pickedId()"
       />
     }
-  } @else if (openKey() !== null) {
-    <section class="chain">
-      @if (openName(); as name) {
-        <h3 class="chain-title">{{ name }}</h3>
-      }
+  } @else {
+    <!-- One big button per chain, two to a row, with its logo and its count. -->
+    <lib-franchise-buttons
+      (chosen)="chosen.emit($event)"
+      [chains]="chains()"
+      [openKey]="pickedChain()"
+    />
+  }
+} @else {
+  <!--
+    One chain's screen: the host draws its head, and this draws the any row, if
+    the host asked for one, then the chain's shops under their postal codes. No
+    logo on the rows, because the head carries it.
+  -->
+  @if (anyRow(); as any) {
+    <div class="card any-card">
+      <label class="any">
+        <lib-chain-logo [logo]="any.logo" class="any-logo" />
+        <span class="any-text">
+          <span class="any-title">{{ any.title }}</span>
+          <span class="any-detail">{{ any.detail }}</span>
+        </span>
+        <input
+          (change)="anyChosen.emit()"
+          [attr.name]="anyName()"
+          [checked]="any.checked"
+          class="any-radio"
+          type="radio"
+        />
+      </label>
+    </div>
+  }
 
-      <!--
-        The open chain's shops, under their postal codes. A radio each, because the
-        question is which one door the person is standing at.
-      -->
-      <lib-shop-list
-        (pick)="picked.emit($event)"
-        [groups]="groups()"
-        [mode]="'pick'"
-        [pickedId]="pickedId()"
-      />
-    </section>
+  @if (state() === 'loading') {
+    <p aria-live="polite" class="note" role="status">
+      <lib-spinner-icon class="spinner" />
+      {{ 'shops.loading' | rokuT }}
+    </p>
+  } @else if (state() === 'failed') {
+    <p class="note" role="alert">{{ 'shops.error.load' | rokuT }}</p>
+  } @else {
+    <lib-shop-list
+      (pick)="picked.emit($event)"
+      [groups]="groups()"
+      [mode]="'pick'"
+      [pickedId]="pickedId()"
+      class="chain-shops"
+    />
   }
 }

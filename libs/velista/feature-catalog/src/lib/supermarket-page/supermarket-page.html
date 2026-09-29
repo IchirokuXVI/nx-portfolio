@@ -1,0 +1,66 @@
+<main class="page">
+  <header class="head">
+    <div class="crumb">
+      <button
+        (click)="back()"
+        [attr.aria-label]="
+          (openKey === null
+            ? 'catalog.supermarket.back'
+            : 'catalog.supermarket.backToChains'
+          ) | rokuT
+        "
+        class="back"
+        type="button"
+      >
+        <lib-chevron-left-icon class="back-glyph" />
+      </button>
+    </div>
+
+    @if (openKey === null) {
+      <!-- The root: the title, and Near me beside it (velista 0103). -->
+      <div class="title-row">
+        <h1 class="title">{{ 'catalog.supermarket.title' | rokuT }}</h1>
+        <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+      </div>
+    } @else {
+      <!--
+        One chain's head (the PickerChain artboard): the logo at 56px, the name and
+        how many of its shops are in the person's areas. No Near me and no search:
+        a chain's screen lists its shops and nothing else.
+      -->
+      <div class="chain-head">
+        @if (head(); as chain) {
+          <lib-chain-logo [logo]="chain.logo" size="xl" />
+          <div class="chain-text">
+            <h1 class="title">{{ chain.name }}</h1>
+            <p class="chain-count">
+              {{ 'shops.chain.inAreas' | rokuT: { count: chain.count } }}
+            </p>
+          </div>
+        } @else {
+          <h1 class="title">{{ 'catalog.supermarket.title' | rokuT }}</h1>
+        }
+      </div>
+    }
+  </header>
+
+  <lib-shop-picker
+    (anyChosen)="chooseAny()"
+    (chosen)="openChain($event)"
+    (picked)="pick($event)"
+    (queried)="onQuery($event)"
+    [anyRow]="anyRow()"
+    [chains]="chains()"
+    [groups]="groups()"
+    [matchCount]="matchCount()"
+    [matches]="matches()"
+    [near]="near()"
+    [openKey]="openKey"
+    [pickedChain]="pickedChain"
+    [pickedId]="pickedId"
+    [query]="query()"
+    [recent]="recent()"
+    [state]="state()"
+    fieldId="catalog-shop-search"
+  />
+</main>

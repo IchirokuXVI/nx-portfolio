@@ -40,6 +40,10 @@ interface Harness {
 interface RenderOptions {
   /** The slug in `?category=` on arrival. */
   readonly category?: string;
+  /** The chain in `?chain=` on arrival (velista 0124). */
+  readonly chain?: string;
+  /** The shop in `?shop=` on arrival (velista 0124). */
+  readonly shop?: string;
   /** The tree the store holds; null is a tree that has not landed. */
   readonly tree?: FakeCategoryStore;
 }
@@ -65,9 +69,11 @@ async function render(
   memory.state = state;
   const browse = jest.spyOn(memory, 'browse');
   const query = new BehaviorSubject<ParamMap>(
-    convertToParamMap(
-      options.category === undefined ? {} : { category: options.category }
-    )
+    convertToParamMap({
+      ...(options.category === undefined ? {} : { category: options.category }),
+      ...(options.chain === undefined ? {} : { chain: options.chain }),
+      ...(options.shop === undefined ? {} : { shop: options.shop }),
+    })
   );
   const tree = options.tree ?? fakeCategoryStore(MEMORY_CATEGORIES);
 
@@ -129,17 +135,13 @@ function pills(fixture: ComponentFixture<CatalogPage>): {
   };
 }
 
-function chip(
-  fixture: ComponentFixture<CatalogPage>,
-  name: string
-): HTMLButtonElement {
-  const found = [
-    ...host(fixture).querySelectorAll<HTMLButtonElement>(
-      'lib-chain-chips button'
-    ),
-  ].find((button) => button.textContent?.trim() === name);
-  if (found === undefined) {
-    throw new Error(`no chip ${name}`);
+/** The Supermarket button's body (velista 0124). */
+function supermarket(fixture: ComponentFixture<CatalogPage>): HTMLElement {
+  const found = host(fixture).querySelector<HTMLElement>(
+    'lib-supermarket-button'
+  );
+  if (found === null) {
+    throw new Error('no Supermarket button');
   }
   return found;
 }
@@ -222,38 +224,108 @@ describe('CatalogPage', () => {
     expect(lastQuery(browse)).toMatchObject({ query: '', order: 'name' });
   });
 
-  it('narrows to one chain, prices from its scopes, and names it in the placeholder', async () => {
-    const { fixture, browse } = await render();
-    expect(field(fixture).placeholder).toBe('catalog.search.all');
+  it('draws one Supermarket button, reading All supermarkets, and no chain chips', async () => {
+    const { fixture } = await render();
 
-    chip(fixture, 'Deza').click();
-    await settle(fixture);
+    expect(host(fixture).querySelector('lib-chain-chips')).toBeNull();
+    const button = supermarket(fixture);
+    expect(button.textContent).toContain('catalog.supermarket.label');
+    expect(button.textContent).toContain('catalog.supermarket.all');
+    // Nothing chosen: a chevron, and no x.
+    expect(button.querySelector('.clear')).toBeNull();
+    expect(field(fixture).placeholder).toBe('catalog.search.all');
+  });
+
+  it('opens the picker page with the choice it holds', async () => {
+    const { fixture } = await render('priced', {
+      category: 'milk',
+      chain: 'chain-deza',
+    });
+    const navigate = jest
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
+
+    supermarket(fixture).querySelector<HTMLButtonElement>('.body')?.click();
+
+    expect(lastUrl(navigate)).toBe(
+      '/velista/en/catalog/supermarket?category=milk&chain=chain-deza'
+    );
+  });
+
+  it('narrows to the chain in the URL, prices from its scopes, and names it', async () => {
+    const { fixture, browse } = await render('priced', { chain: 'chain-deza' });
 
     expect(lastQuery(browse)).toMatchObject({
       soldBy: 'chain-deza',
       priceScopeIds: ['scope-chain-deza'],
+      locationId: null,
     });
     expect(field(fixture).placeholder).toBe('catalog.search.chain');
-    expect(chip(fixture, 'Deza').getAttribute('aria-pressed')).toBe('true');
+    // "Deza · any shop", with the x in place of the chevron.
+    const button = supermarket(fixture);
+    expect(button.textContent).toContain('Deza');
+    expect(button.textContent).toContain('catalog.supermarket.anyShop');
+    expect(button.querySelector('.clear')?.getAttribute('aria-label')).toBe(
+      'catalog.supermarket.clear'
+    );
     expect(host(fixture).textContent).toContain('catalog.chain.shops');
   });
 
-  it('puts every chain back when the chosen chip is pressed again', async () => {
-    const { fixture, browse } = await render();
+  it('goes back to every supermarket with the x, pushed, keeping the category', async () => {
+    const { fixture, browse, query } = await render('priced', {
+      category: 'milk',
+      chain: 'chain-deza',
+    });
+    const navigate = jest
+      .spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
 
-    chip(fixture, 'Deza').click();
+    supermarket(fixture).querySelector<HTMLButtonElement>('.clear')?.click();
+    expect(lastUrl(navigate)).toBe('/velista/en/catalog?category=milk');
+    expect(
+      navigate.mock.calls[navigate.mock.calls.length - 1][1]
+    ).toBeUndefined();
+
+    // The navigation lands on this page, which reads the URL again.
+    query.next(convertToParamMap({ category: 'milk' }));
     await settle(fixture);
-    chip(fixture, 'Deza').click();
+    expect(lastQuery(browse)).toMatchObject({
+      soldBy: null,
+      priceScopeIds: [],
+      categoryId: 'cat-milk',
+    });
+    expect(field(fixture).placeholder).toBe('catalog.categories.search');
+  });
+
+  it('prices at one shop with locationId alone, and says where', async () => {
+    const { fixture, browse } = await render('priced', {
+      chain: 'chain-mercadona',
+      shop: 'location-mercadona-mayor',
+    });
     await settle(fixture);
 
     expect(lastQuery(browse)).toMatchObject({
       soldBy: null,
       priceScopeIds: [],
+      locationId: 'location-mercadona-mayor',
     });
-    expect(field(fixture).placeholder).toBe('catalog.search.all');
-    expect(
-      chip(fixture, 'catalog.chips.all').getAttribute('aria-pressed')
-    ).toBe('true');
+    expect(supermarket(fixture).textContent).toContain('Calle Mayor 3');
+    expect(host(fixture).querySelector('.note')?.textContent).toContain(
+      'catalog.supermarket.pricesAt'
+    );
+  });
+
+  it('says a product has no price at the shop rather than dropping it', async () => {
+    const { fixture } = await render('noPlace', {
+      chain: 'chain-mercadona',
+      shop: 'location-mercadona-mayor',
+    });
+    await settle(fixture);
+
+    const missing = host(fixture).querySelectorAll('.no-price');
+    expect(missing.length).toBeGreaterThan(0);
+    expect(missing[0].textContent).toContain('catalog.row.noPrice');
+    expect(missing[0].textContent).toContain('catalog.supermarket.notPriced');
   });
 
   it('announces how many products are drawn, politely', async () => {
@@ -353,13 +425,13 @@ describe('CatalogPage', () => {
       );
     });
 
-    it('keeps the choice through a chain chip and a search, and the chain through the choice', async () => {
+    it('keeps the choice through a chain and a search, and the chain through the choice', async () => {
       const { fixture, browse, query } = await render('priced', {
         category: 'milk',
       });
       jest.useFakeTimers();
 
-      chip(fixture, 'Deza').click();
+      query.next(convertToParamMap({ category: 'milk', chain: 'chain-deza' }));
       await settle(fixture);
       expect(lastQuery(browse)).toMatchObject({
         categoryId: 'cat-milk',
@@ -379,7 +451,7 @@ describe('CatalogPage', () => {
       });
 
       // The chip cleared: the URL loses the parameter and the chain stays.
-      query.next(convertToParamMap({}));
+      query.next(convertToParamMap({ chain: 'chain-deza' }));
       await settle(fixture);
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',
@@ -398,7 +470,7 @@ describe('CatalogPage', () => {
         .querySelector<HTMLButtonElement>('.category-chip-clear')
         ?.click();
 
-      expect(navigate).toHaveBeenCalledWith('/velista/en/catalog');
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog');
       expect(
         host(fixture)
           .querySelector('.category-chip-clear')
@@ -407,10 +479,10 @@ describe('CatalogPage', () => {
     });
 
     it('names the leaf and the chain when the chain has nothing in it', async () => {
-      const { fixture } = await render('priced', { category: 'eggs' });
-
-      chip(fixture, 'Deza').click();
-      await settle(fixture);
+      const { fixture } = await render('priced', {
+        category: 'eggs',
+        chain: 'chain-deza',
+      });
 
       expect(rows(fixture)).toBe(0);
       const text = host(fixture).textContent ?? '';
@@ -431,7 +503,8 @@ describe('CatalogPage', () => {
         category: 'not-a-category',
       });
 
-      expect(navigate).toHaveBeenCalledWith('/velista/en/catalog', {
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog');
+      expect(navigate.mock.calls[navigate.mock.calls.length - 1][1]).toEqual({
         replaceUrl: true,
       });
       expect(browse).not.toHaveBeenCalled();
@@ -464,6 +537,25 @@ describe('CatalogPage', () => {
 
       expect(lastUrl(navigate)).toMatch(
         /^\/velista\/en\/catalog\/sheet\/products\/item-milk[a-z-]*\?category=milk$/
+      );
+    });
+
+    it('keeps the chain and the shop in the URL of the product sheet too (velista 0124)', async () => {
+      const { fixture } = await render('priced', {
+        category: 'milk',
+        chain: 'chain-mercadona',
+        shop: 'location-mercadona-mayor',
+      });
+      const navigate = jest
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      host(fixture)
+        .querySelector<HTMLButtonElement>('lib-product-row button')
+        ?.click();
+
+      expect(lastUrl(navigate)).toMatch(
+        /\?category=milk&chain=chain-mercadona&shop=location-mercadona-mayor$/
       );
     });
   });

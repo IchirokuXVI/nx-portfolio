@@ -1,6 +1,19 @@
 import type { LocalizedName } from './shopping-profile';
 
 /**
+ * One of a shop's sections, by name only, as a picker row draws it (velista `0124`;
+ * `LocationSectionNameView` on the wire, backend `0170`).
+ *
+ * Names and ids and nothing else: the row draws the names in the shop's own order,
+ * and the id keys the chip. The full section, with its categories, stays behind the
+ * per shop read the basket's aisles use (velista `0120`).
+ */
+export interface ShopSectionName {
+  readonly id: string;
+  readonly name: LocalizedName;
+}
+
+/**
  * One shop in a profile's postal codes, as the screen that picks them sees it
  * (plan 0059; backend plan 0068 section 3.2).
  *
@@ -42,6 +55,13 @@ export interface Shop {
   readonly excluded: boolean;
   /** The profile refuses the whole chain, which covers shops it opens later. */
   readonly excludedChain: boolean;
+  /**
+   * The chain's logo, or null for none yet (backend `0170`, section 3), which
+   * draws the chain's initial instead.
+   */
+  readonly logoUrl: string | null;
+  /** The shop's sections in its own order, empty when the chain has none. */
+  readonly sections: readonly ShopSectionName[];
 }
 
 /**
@@ -70,6 +90,8 @@ export interface ShopChainSummary {
   readonly excluded: number;
   /** The profile refused the brand itself, which is the durable statement. */
   readonly excludedChain: boolean;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
 }
 
 /**
@@ -118,6 +140,11 @@ export interface FranchiseButton {
   readonly locations: number;
   readonly excluded: number;
   readonly state: ChainState;
+  /**
+   * The chain's logo, or null: none yet, and always for OTHER, which draws the
+   * store glyph rather than a brand (velista `0124`).
+   */
+  readonly logoUrl: string | null;
 }
 
 /**

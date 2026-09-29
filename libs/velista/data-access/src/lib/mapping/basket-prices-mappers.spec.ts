@@ -45,6 +45,7 @@ const SCOPE = {
   priceScopeId: 'scope-a',
   supermarketId: 'mercadona',
   supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+  supermarketLogoUrl: 'https://example.com/mercadona.png',
   locations: [
     {
       supermarketLocationId: 'loc-1',
@@ -52,6 +53,11 @@ const SCOPE = {
       address: 'Ronda de los Tejares 32',
       city: 'Córdoba',
       postalCode: '14008',
+      sections: [
+        { id: 'sec-fruit', name: { en: 'Fruit and veg', es: 'Frutería' } },
+        { id: 'sec-bad', name: { en: '', es: '' } },
+        { id: 'sec-fruit', name: { en: 'Again', es: 'Otra vez' } },
+      ],
     },
   ],
 };
@@ -114,8 +120,12 @@ describe('toBasket: prices and places (velista 0062)', () => {
   it('maps a scope with its chain and shops', () => {
     const view = basket();
 
+    // The chain's id and logo, and each shop's sections in its order, an unnamed
+    // or repeated one dropped (velista 0124, backend 0170).
     expect(view?.scopes.get('scope-a')).toEqual({
       priceScopeId: 'scope-a',
+      supermarketId: 'mercadona',
+      logoUrl: 'https://example.com/mercadona.png',
       supermarketName: { en: 'Mercadona', es: 'Mercadona' },
       locations: [
         {
@@ -124,6 +134,9 @@ describe('toBasket: prices and places (velista 0062)', () => {
           address: 'Ronda de los Tejares 32',
           city: 'Córdoba',
           postalCode: '14008',
+          sections: [
+            { id: 'sec-fruit', name: { en: 'Fruit and veg', es: 'Frutería' } },
+          ],
         },
       ],
     });

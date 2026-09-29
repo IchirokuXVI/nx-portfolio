@@ -36,4 +36,26 @@
   font-size: var(--app-text-xl);
   line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
+
+  // A chain's screen (velista 0124): the chain's name beside its logo, one line.
+  &.is-chain {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.head-logo {
+  margin-inline-end: var(--app-space-2);
+}
+
+// How many shops the open chain has, under the title row.
+.count {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.visually-hidden {
+  @include shared.visually-hidden;
 }

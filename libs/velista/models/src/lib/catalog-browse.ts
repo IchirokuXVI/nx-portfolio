@@ -103,8 +103,27 @@ export interface CatalogBrowseQuery {
    * which is what every read without a chain chosen wants.
    */
   readonly priceScopeIds: readonly string[];
+  /**
+   * Price at exactly this shop (backend `0170`, section 4), or null for none.
+   * Sent alone: the server picks the shop's scope and chain itself and refuses
+   * scopes or another chain beside it, so a read with a shop sends neither.
+   */
+  readonly locationId: string | null;
   readonly cursor: string | null;
   readonly limit: number;
+}
+
+/**
+ * One shop, as the catalog tab names the shop it is priced at (velista `0124`;
+ * `GET /v1/catalog/locations/:id`).
+ */
+export interface CatalogLocation {
+  readonly id: string;
+  readonly supermarketId: string;
+  /** The shop's own name, which most shops of a chain do not have. */
+  readonly label: LocalizedName | null;
+  readonly address: string | null;
+  readonly city: string | null;
 }
 
 /**
@@ -131,6 +150,8 @@ export interface CatalogChain {
   readonly name: LocalizedName;
   /** How many of its shops are in the person's postal codes. */
   readonly locations: number;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
 }
 
 /** One price scope the person's read resolves to, and whose it is. */

@@ -3,6 +3,7 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   CatalogBrowseContext,
   CatalogBrowseQuery,
+  CatalogLocation,
   CatalogProduct,
   CatalogScopeOffer,
   Page,
@@ -43,6 +44,12 @@ export interface CatalogBrowseServiceI {
    * (`GET /v1/catalog/items/:id/offers`). The sheet keeps the person's own.
    */
   scopeOffers(itemId: string): Promise<readonly CatalogScopeOffer[] | null>;
+
+  /**
+   * One shop, named (`GET /v1/catalog/locations/:id`), for the note that says
+   * where the tab is priced (velista `0124`). Null when it did not answer.
+   */
+  location(locationId: string): Promise<CatalogLocation | null>;
 }
 
 /**

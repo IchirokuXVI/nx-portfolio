@@ -8,7 +8,8 @@
 
   <!--
     The tools, all on the screen (rule C1), held at the top while the list scrolls
-    under them. The title scrolls away; the field, the chips and the order do not.
+    under them. The title scrolls away; the field, the Supermarket button, the
+    category and the order do not.
   -->
   <div class="tools">
     <label class="visually-hidden" for="catalog-search">
@@ -41,11 +42,20 @@
     </span>
 
     <!--
-      One scroller for the way into the categories and the chain chips (rule P3).
-      Categories leads it and scrolls with it rather than being pinned, so a chosen
-      "Frozen · Ice cream" never leaves room for All shops alone. It is a link, not a
-      chip, and sits outside the Shops group, so it is never counted as a chain.
+      The one Supermarket button (velista 0124), where the chain chips were: the
+      body opens the picker page, and once a chain or a shop is chosen an x beside
+      it goes back to every supermarket.
     -->
+    <lib-supermarket-button
+      (cleared)="clearSupermarket()"
+      (opened)="openSupermarket()"
+      [chosen]="supermarket().chosen"
+      [detail]="supermarket().detail"
+      [logo]="supermarket().logo"
+      [value]="supermarket().value"
+    />
+
+    <!-- The way into the categories, or the chosen category (velista 0119). -->
     <div class="chip-row">
       @if (choice(); as chosen) {
         <span class="category-chip">
@@ -77,16 +87,6 @@
           <lib-chevron-right-icon class="categories-link-chevron" />
         </a>
       }
-
-      @if (chips().length > 0) {
-        <span aria-hidden="true" class="chip-separator"></span>
-        <lib-chain-chips
-          (chosen)="chooseChain($event)"
-          [chains]="chips()"
-          [selected]="chain()"
-          class="chips"
-        />
-      }
     </div>
 
     <lib-order-pills
@@ -95,7 +95,11 @@
       [selected]="order()"
     />
 
-    @if (chosenChain(); as chosen) {
+    @if (shop() !== null && shopPlace() !== '') {
+      <p class="note">
+        {{ 'catalog.supermarket.pricesAt' | rokuT: { shop: shopPlace() } }}
+      </p>
+    } @else if (shop() === null && chosenChain(); as chosen) {
       <p class="note">
         {{
           'catalog.chain.shops'

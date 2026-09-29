@@ -716,13 +716,15 @@ export class BasketViewStore {
       if (location !== undefined) {
         return {
           id,
-          supermarketId: null,
+          supermarketId: scope.supermarketId,
           chain: scope.supermarketName,
           label: location.label,
           address: location.address,
           city: location.city,
           postalCode: location.postalCode,
           inProfile: null,
+          logoUrl: scope.logoUrl,
+          sections: location.sections,
         };
       }
     }

@@ -9,3 +9,4 @@ export * from './lib/catalog-page/catalog-page';
 export * from './lib/categories-page/categories-page';
 export * from './lib/category-children-page/category-children-page';
 export * from './lib/product-sheet/product-sheet';
+export * from './lib/supermarket-page/supermarket-page';

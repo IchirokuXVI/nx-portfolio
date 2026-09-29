@@ -141,3 +141,98 @@
   line-height: var(--app-leading-body);
   color: var(--app-status-danger-fg);
 }
+
+// ---- the pick row (velista 0124, the `Rows` artboard of `mocks/shop-picker/`)
+
+// One shop: the label above, and its sections under it as the label's sibling. The
+// rule between two shops is drawn here, because the label is no longer the whole
+// shop.
+.pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4);
+  border-block-start: 1px solid var(--app-border-subtle);
+
+  &:first-child {
+    border-block-start: none;
+  }
+
+  &.is-picked {
+    background: var(--app-action-quiet-bg);
+  }
+}
+
+// The target. A grid so the radio holds the right edge and the title can give way
+// by ellipsis: title and detail in the middle, the logo before them where the chains
+// are mixed.
+.pick .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+}
+
+.pick.is-mixed .row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.pick-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.pick-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+}
+
+.pick-title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pick-detail {
+  overflow: hidden;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// A distance is drawn strongly at the end of the title line, a day quietly.
+.pick .aside.is-distance {
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.pick-radio.checkbox {
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  margin: var(--app-space-2) 0 0;
+}
+
+// Under the text column: past the logo where there is one, and short of the radio,
+// so the chips line up with the words above them.
+.pick-sections {
+  margin-inline-end: calc(var(--app-pick-radio) + var(--app-space-4));
+}
+
+.pick.is-mixed .pick-sections {
+  margin-inline-start: calc(var(--app-chain-logo-md) + var(--app-space-4));
+}

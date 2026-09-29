@@ -1,6 +1,7 @@
 import type { Shop, ShopChainSummary } from '@portfolio/velista/models';
 import { toLocalizedName } from './mappers';
 import { isRecord, nullableStr, numOr, str } from './primitives';
+import { toShopSectionNames } from './shop-section-mappers';
 
 /**
  * The supermarkets screen's two reads, mapped (plan 0059; backend plan 0068).
@@ -66,6 +67,8 @@ export function toShop(raw: unknown): Shop | null {
     // refused out rather than flagging them, so their absence is the honest reading.
     excluded: raw['excluded'] === true,
     excludedChain: raw['excludedChain'] === true,
+    logoUrl: nullableStr(supermarket['logoUrl']),
+    sections: toShopSectionNames(location['sections']),
   };
 }
 
@@ -94,5 +97,6 @@ export function toShopChainSummary(raw: unknown): ShopChainSummary | null {
     locations: numOr(raw['locations'], 0),
     excluded: numOr(raw['excluded'], 0),
     excludedChain: raw['excludedChain'] === true,
+    logoUrl: nullableStr(raw['logoUrl']),
   };
 }

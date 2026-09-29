@@ -21,7 +21,8 @@ export interface ProductRowView {
   readonly price: string | null;
   /**
    * Under the price: the chain's name, or the price per litre or kilo while one
-   * chain is chosen. Null draws the price alone.
+   * chain is chosen. Under `no price` at one shop: that the shop has none
+   * (velista `0124`). Null draws the price, or `no price`, alone.
    */
   readonly caption: string | null;
   /** The server judged the price old. Drawn muted, with no badge (section 3). */
@@ -91,7 +92,12 @@ export interface ProductRowView {
           }
         </span>
       } @else {
-        <span class="no-price">{{ 'catalog.row.noPrice' | rokuT }}</span>
+        <span class="no-price">
+          <span class="no-price-word">{{ 'catalog.row.noPrice' | rokuT }}</span>
+          @if (row().caption; as caption) {
+            <span class="caption">{{ caption }}</span>
+          }
+        </span>
       }
 
       @if (verb(); as key) {

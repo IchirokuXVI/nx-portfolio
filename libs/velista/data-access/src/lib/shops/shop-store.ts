@@ -106,6 +106,7 @@ export class ShopStore {
         locations: summary.locations,
         excluded: summary.excluded,
         state: chainState(summary),
+        logoUrl: summary.logoUrl,
       }));
 
     const other = this._otherSummaries();
@@ -121,6 +122,7 @@ export class ShopStore {
       {
         key: OTHER_CHAINS,
         name: null,
+        logoUrl: null,
         locations,
         excluded,
         // The bucket is refused outright only when **every** independent in it is, which
