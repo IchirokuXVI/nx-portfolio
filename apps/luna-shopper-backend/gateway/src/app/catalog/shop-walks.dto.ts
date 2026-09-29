@@ -123,6 +123,11 @@ export class AppendShopWalkEntryDto {
   logTo!: number;
 
   @ApiProperty({ type: 'array', items: componentRef(EVENT_SCHEMA) })
+  // The raw value, past the pipe's implicit conversion, which rebuilds an
+  // element typed as a union into something that is no longer the event it
+  // was. Only the list is checked here; catalog checks every event against
+  // the contract.
+  @Transform(({ obj }) => (obj as { events?: unknown }).events)
   @IsArray()
   @IsObject({ each: true })
   events!: ShopWalkEvent[];
