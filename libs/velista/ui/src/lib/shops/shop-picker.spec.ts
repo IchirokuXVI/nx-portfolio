@@ -71,6 +71,7 @@ async function render(options: {
   readonly pickedChain?: string | null;
   readonly state?: ShopPickerState;
   readonly anyRow?: ShopPickerAny | null;
+  readonly searchPending?: boolean;
 }): Promise<ComponentFixture<ShopPicker>> {
   TestBed.resetTestingModule();
 
@@ -89,6 +90,10 @@ async function render(options: {
   fixture.componentRef.setInput('pickedChain', options.pickedChain ?? null);
   fixture.componentRef.setInput('state', options.state ?? 'ready');
   fixture.componentRef.setInput('anyRow', options.anyRow ?? null);
+  fixture.componentRef.setInput(
+    'searchPending',
+    options.searchPending ?? false
+  );
   fixture.detectChanges();
 
   return fixture;
@@ -200,6 +205,30 @@ describe('ShopPicker', () => {
     expect(
       element(fixture).querySelector('.pick lib-chain-logo')
     ).not.toBeNull();
+  });
+
+  it('says nothing about the matches while the answer for the typed text is pending', async () => {
+    const fixture = await render({
+      query: 'Mayor',
+      matchCount: 0,
+      searchPending: true,
+    });
+
+    // The buttons have gone, but neither "0 results" nor "no match" is drawn or
+    // announced: the search for this text has not answered yet.
+    expect(element(fixture).querySelector('lib-franchise-buttons')).toBeNull();
+    const count = element(fixture).querySelector('.result-count');
+    expect(count).not.toBeNull();
+    expect(count?.textContent?.trim()).toBe('');
+    expect(element(fixture).querySelector('.empty')).toBeNull();
+
+    // The answer lands: now the count is heard, and the empty line drawn.
+    fixture.componentRef.setInput('searchPending', false);
+    fixture.detectChanges();
+    expect(
+      element(fixture).querySelector('.result-count')?.textContent?.trim()
+    ).toBe('shops.search.results');
+    expect(element(fixture).querySelector('.empty')).not.toBeNull();
   });
 
   it('brings the buttons back once the field is emptied', async () => {

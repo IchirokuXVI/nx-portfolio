@@ -181,10 +181,14 @@
       indistinguishable from one that broke.
     -->
     <p aria-live="polite" class="result-count" role="status">
-      {{ 'shops.search.results' | rokuT: { count: matchCount() } }}
+      @if (!searchPending()) {
+        {{ 'shops.search.results' | rokuT: { count: matchCount() } }}
+      }
     </p>
 
-    @if (matchCount() === 0) {
+    @if (searchPending()) {
+      <!-- Nothing yet: the answer for this text has not arrived (see searchPending). -->
+    } @else if (matchCount() === 0) {
       <p class="empty">{{ 'shops.empty.noMatch' | rokuT }}</p>
     } @else {
       <lib-shop-list

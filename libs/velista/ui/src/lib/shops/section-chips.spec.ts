@@ -4,6 +4,8 @@ import { SectionChips, type SectionChip } from './section-chips';
 
 /** The widths a browser would measure, which jsdom never does. */
 const CHIP_WIDTH = 60;
+/** A chip whose name begins "Wide", which a longer translation stands for. */
+const WIDE_CHIP_WIDTH = 150;
 const MORE_WIDTH = 30;
 
 /**
@@ -46,12 +48,15 @@ beforeEach(() => {
     }
   } as unknown as typeof ResizeObserver;
 
-  // Every ruler chip is 60 wide and the `+X` ruler 30, whatever it says.
+  // Every ruler chip is 60 wide, 150 when its name begins "Wide", and the `+X`
+  // ruler 30.
   HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
     const width = this.classList.contains('more')
       ? MORE_WIDTH
       : this.classList.contains('chip')
-        ? CHIP_WIDTH
+        ? this.textContent?.trim().startsWith('Wide')
+          ? WIDE_CHIP_WIDTH
+          : CHIP_WIDTH
         : 0;
     return {
       width,
@@ -149,12 +154,52 @@ describe('SectionChips', () => {
     (line(fixture).querySelector('.more') as HTMLButtonElement).click();
     fixture.detectChanges();
 
-    fixture.componentRef.setInput('sections', [...NINE]);
+    fixture.componentRef.setInput('sections', NINE.slice(1));
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
     expect(line(fixture).classList).not.toContain('is-open');
     expect(drawn(fixture)).toHaveLength(5);
+  });
+
+  it('stays open when the parent rebuilds the same sections into a new array', async () => {
+    const fixture = await render(NINE);
+    (line(fixture).querySelector('.more') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    // What a parent row's recompute hands down: the same sections, a new array,
+    // here renamed as a locale switch would.
+    fixture.componentRef.setInput(
+      'sections',
+      NINE.map((section) => ({ ...section, name: `${section.name}!` }))
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(line(fixture).classList).toContain('is-open');
+    expect(drawn(fixture)).toHaveLength(9);
+  });
+
+  it('measures again when the same sections are renamed, as a locale switch does', async () => {
+    const fixture = await render(NINE);
+    expect(line(fixture).querySelector('.more')?.textContent?.trim()).toBe(
+      '+4'
+    );
+
+    // Same ids, longer names: 30 + 2 × (4 + 150) = 338 fits two, not three.
+    fixture.componentRef.setInput(
+      'sections',
+      NINE.map((section) => ({ ...section, name: `Wide ${section.name}` }))
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(drawn(fixture)).toHaveLength(2);
+    expect(line(fixture).querySelector('.more')?.textContent?.trim()).toBe(
+      '+7'
+    );
   });
 });
