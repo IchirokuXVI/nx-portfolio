@@ -113,6 +113,17 @@ export const SUPERMARKET_LOCATION_PATTERNS = {
    */
   shopAvailability: 'supermarketLocation.shopAvailability',
   /**
+   * One shop's chain and scope stack, and nothing else (plan 0170, section 4).
+   *
+   * What the catalog read at one shop (`GET /v1/catalog/items?locationId=`)
+   * needs to price and narrow itself. Not {@link SUPERMARKET_LOCATION_PATTERNS.get},
+   * whose view carries the shop's section names and so would run the sections
+   * query on every such read for an answer the gateway throws away. Service to
+   * service and carrying no `userId`, like `shopAvailability`. An unknown shop
+   * is the ordinary 404 for a location.
+   */
+  priceStack: 'supermarketLocation.priceStack',
+  /**
    * The shops near a point, and whether one of them is clearly the shop the
    * person is standing in (plan 0164, sections 1 to 3).
    *
@@ -1598,6 +1609,19 @@ export interface UpdateSupermarketLocationRequest extends AdminCredential {
 
 export interface SupermarketLocationIdRequest extends AdminCredential {
   supermarketLocationId: string;
+}
+
+/** One shop, by id, for {@link SUPERMARKET_LOCATION_PATTERNS.priceStack}. */
+export interface SupermarketLocationPriceStackRequest {
+  supermarketLocationId: string;
+}
+
+/** A shop's chain and scope stack (plan 0170, section 4). */
+export interface SupermarketLocationPriceStackView {
+  id: string;
+  supermarketId: string;
+  /** The whole stack, most specific first, as on the location view. */
+  priceScopeIds: string[];
 }
 
 /**

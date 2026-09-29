@@ -39,6 +39,8 @@ import {
   type SupermarketLocationChainSummariesView,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
@@ -52,6 +54,7 @@ import {
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { errorCodeOf } from '../auth/remote-problem';
 import {
   ApiContractResponse,
   ApiProblemResponses,
@@ -138,18 +141,6 @@ function refuseBesideLocation(query: PriceScopedQueryDto): void {
       `locationId cannot be combined with ${named.join(', ')}`
     );
   }
-}
-
-/**
- * Whether catalog answered "no such thing". NATS nests a service's error
- * envelope under `error`, and the client sometimes rejects with the envelope
- * itself, so both are read.
- */
-function isNotFound(error: unknown): boolean {
-  return [error, (error as { error?: unknown })?.error].some(
-    (candidate) =>
-      (candidate as { code?: unknown })?.code === ERROR_CODES.NOT_FOUND
-  );
 }
 
 /**
@@ -447,7 +438,7 @@ export class CatalogItemsController {
     const atShop =
       query.locationId === undefined
         ? null
-        : await this.atLocation(user.userId, query, query.locationId);
+        : await this.atLocation(query, query.locationId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: user.userId,
       query: query.query,
@@ -476,19 +467,22 @@ export class CatalogItemsController {
    * request is a 400 whether or not the shop exists.
    */
   private async atLocation(
-    userId: string,
     query: SearchItemsQueryDto,
     locationId: string
   ): Promise<{ priceScopeIds: string[]; soldBy: string[] }> {
     refuseBesideLocation(query);
-    let location: SupermarketLocationView;
+    let location: SupermarketLocationPriceStackView;
     try {
-      location = await this.nats.send<SupermarketLocationView>(
-        SUPERMARKET_LOCATION_PATTERNS.get,
-        { userId, supermarketLocationId: locationId }
-      );
+      // The chain and the stack alone: `get` would also read the shop's
+      // section names, which nothing here uses.
+      location = await this.nats.send<
+        SupermarketLocationPriceStackView,
+        SupermarketLocationPriceStackRequest
+      >(SUPERMARKET_LOCATION_PATTERNS.priceStack, {
+        supermarketLocationId: locationId,
+      });
     } catch (error) {
-      throw isNotFound(error)
+      throw errorCodeOf(error) === ERROR_CODES.NOT_FOUND
         ? new SupermarketLocationNotFoundException(
             'Supermarket location not found'
           )
@@ -503,7 +497,7 @@ export class CatalogItemsController {
         'soldBy names another chain than the shop’s'
       );
     }
-    const quoted = location.priceScopeIds[0] ?? location.priceScopeId;
+    const quoted = location.priceScopeIds[0];
     return {
       priceScopeIds: quoted ? [quoted] : [],
       soldBy: [location.supermarketId],
