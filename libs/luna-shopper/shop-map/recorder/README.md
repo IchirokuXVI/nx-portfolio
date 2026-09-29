@@ -93,6 +93,11 @@ plan says nothing, and the Kotlin port makes the same ones.
     Coordinates are rounded to seven decimals, `distanceMetres` to two. Without an
     origin the projection is centred on `[0, 0]`. The file name takes the date and
     time digits as written in `startedAt`, with no time zone conversion.
+15. **A deleted mark.** An event `{ kind: 'mark-deleted', detail: <the mark's t> }`
+    takes back a mark that was already saved (velista plan 0127). The reader applies
+    these events in file order, and each one drops the last mark still standing whose
+    `t` equals the detail read as a number. An event that matches no mark drops nothing,
+    and the events themselves are kept.
 
 ## Plan 0001 against plan 0002
 

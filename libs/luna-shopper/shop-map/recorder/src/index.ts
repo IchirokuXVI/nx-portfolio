@@ -29,9 +29,11 @@ export type {
 } from './lib/track-types';
 export type { StreamName, WalkFile, WalkMark } from './lib/walk-file';
 export {
+  MARK_DELETED,
   WalkFileError,
   parseWalkImport,
   readWalkFile,
   walkFileName,
+  withoutDeletedMarks,
 } from './lib/walk-import';
 export type { WalkFileErrorCode, WalkImport } from './lib/walk-import';

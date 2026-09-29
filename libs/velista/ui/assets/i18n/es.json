@@ -1896,6 +1896,7 @@
       "distance": "Metros",
       "liveOff": "Recorrido en directo no disponible",
       "lastMark": "{{kind}} {{label}} a los {{time}}",
+      "deleteLastMark": "Borrar última marca",
       "checkpointTitle": "Nombre del punto de control",
       "checkpointHelp": "Usa el mismo nombre cada vez que pases por el mismo sitio.",
       "noteTitle": "Nota",

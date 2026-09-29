@@ -41,6 +41,42 @@ describe('parseWalkImport', () => {
     expect(result.walk.events).toEqual([]);
   });
 
+  it('drops a mark taken back by a mark-deleted event, and keeps the event', () => {
+    const marked: WalkFile = {
+      ...walk,
+      marks: [
+        { t: 1000, kind: 'entrance' },
+        { t: 2500.5, kind: 'checkpoint', label: 'door' },
+        { t: 4000, kind: 'checkpoint', label: 'fish' },
+      ],
+      events: [
+        { t: 3000, kind: 'hidden' },
+        { t: 4100, kind: 'mark-deleted', detail: '4000' },
+        { t: 4200, kind: 'mark-deleted', detail: '2500.5' },
+        { t: 4300, kind: 'mark-deleted', detail: '9999' },
+        { t: 4400, kind: 'mark-deleted', detail: 'nonsense' },
+      ],
+    };
+    const result = parseWalkImport(JSON.stringify(marked));
+    if (result.kind !== 'walk') throw new Error('not a walk');
+    expect(result.walk.marks).toEqual([{ t: 1000, kind: 'entrance' }]);
+    expect(result.walk.events).toEqual(marked.events);
+  });
+
+  it('drops only the last of two marks at the same t for one event', () => {
+    const twice: WalkFile = {
+      ...walk,
+      marks: [
+        { t: 1000, kind: 'checkpoint', label: 'first' },
+        { t: 1000, kind: 'checkpoint', label: 'second' },
+      ],
+      events: [{ t: 1100, kind: 'mark-deleted', detail: '1000' }],
+    };
+    const result = parseWalkImport(JSON.stringify(twice));
+    if (result.kind !== 'walk') throw new Error('not a walk');
+    expect(result.walk.marks.map((m) => m.label)).toEqual(['first']);
+  });
+
   it('draws a plain GeoJSON as tracks in metres, with no replay', () => {
     const k = 111320 * Math.cos((40 * Math.PI) / 180);
     const geo = {
