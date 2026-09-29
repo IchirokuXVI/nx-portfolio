@@ -159,3 +159,32 @@ also holds the tracking stop at 920.5 s, the turned frame after it as an automat
 that is then discarded, and a manual resume from 1013.4 s. Two rewinds are authored: the
 first goes back before the last two marks, the tail is replayed as a new session, and the
 second goes to 15 s into that replay. One edit, also authored, draws the areas.
+
+## The live map: suggestions and section runs while walking
+
+`libs/luna-shopper/shop-map/plans/0003` adds `createLiveMap({ document, settings })`. The
+recording screen feeds it one tracked point or one mark at a time. `snapshot()` answers the
+walked cells, the shelf suggestions, the section run in progress and the events for the walk
+log since the last snapshot. The rules decide on 0.5 m cells, and every area they make is a
+rectangle snapped to its cells. Nothing is painted while tracking is not `good`.
+
+| Rule            | What it does                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| Walked          | every cell within 0.5 m of a good point, and of the step from the good point before when under 2 m       |
+| Suggestion      | a strip nobody walked, 1 to 4 cells across and at least 4 long, walked on both long sides, under no area |
+| Tapping         | `acceptSuggestion(id)` puts a `shelf` with origin `suggested`. Nothing else makes a shelf by itself      |
+| Walking across  | a good point inside a `suggested` shelf cuts the cells within 0.5 m of it into a `path` area             |
+| Section start   | a section mark fills the open cells beside the person on the side the phone faced, within 1.5 m          |
+| Section extends | each point moves the run's end beside the person, and walking back shortens it                           |
+| Section ends    | a turn of more than 45 degrees held for 2 m, 2 m away from the shelf, another mark, or `sectionLeft()`   |
+| Counter mark    | a 2 by 1 m `counter`, its long side facing the person, 0.5 m away                                        |
+
+Suggestions are computed and never stored, so a suggestion's id is its cells
+(`suggestion:i0,j0,i1,j1`). The ids of the areas the live map makes come from the caller's
+`idPrefix` and `idSeed`. The live map emits `mark-put`, `area-put`, `area-removed` and
+`section-left`, never a path: the recording screen appends the points the tracking guard
+keeps. No rule changes an area it did not make, except a `suggested` shelf walked across.
+
+`src/lib/__fixtures__/el-jamon/expected-live.json` is what replaying the El Jamón log
+answers. `tools/shop-map/replay-el-jamon-live.ts` writes it and draws it to
+`tmp/el-jamon-live.html` for checking by eye. Never edit it by hand.
