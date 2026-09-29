@@ -124,6 +124,8 @@ interface Run {
   turned: number;
   /** Metres walked while farther from the band than a mark looks. */
   away: number;
+  /** An adopted shelf's own cells along the axis, which walking back never takes away. */
+  base: [number, number] | null;
 }
 
 interface Strip {
@@ -149,6 +151,8 @@ class LiveMap implements LiveMapHandle {
   /** Good points since tracking was last good, enough to read the walking direction. */
   private recent: LivePoint[] = [];
   private lastLogMs = 0;
+  /** Section marks, from the document and as they are saved, for naming a tapped shelf. */
+  private readonly sectionMarks: MapMark[] = [];
   private coveredCache: Set<string> | null = null;
   private suggestionCache: LiveSnapshot['suggestions'] | null = null;
   private readonly makesPath: boolean;
@@ -160,6 +164,8 @@ class LiveMap implements LiveMapHandle {
     this.makesPath = options.settings.walkingAcrossMakesPath ?? true;
     const start = options.document;
     for (const a of start.areas) this.areas.set(a.id, a);
+    for (const m of start.marks)
+      if (m.kind === 'section') this.sectionMarks.push(m);
     for (const line of start.path) {
       let last: [number, number] | null = null;
       for (const p of line.points) {
@@ -201,9 +207,11 @@ class LiveMap implements LiveMapHandle {
     this.emit({ type: 'mark-put', mark });
     this.lastLogMs = Math.max(this.lastLogMs, mark.logMs);
     if (mark.kind === 'note') return;
+    if (mark.kind === 'section') this.sectionMarks.push(mark);
+    const ended = this.run;
     this.run = null;
     if (this.tracking !== 'good') return;
-    if (mark.kind === 'section') this.startRun(mark);
+    if (mark.kind === 'section') this.startRun(mark, ended);
     else this.placeCounter(mark);
   }
 
@@ -215,7 +223,7 @@ class LiveMap implements LiveMapHandle {
   acceptSuggestion(id: string): void {
     const s = this.suggestions().find((x) => x.id === id);
     if (!s) return;
-    this.putArea({
+    const shelf: MapArea = {
       id: this.newId(),
       kind: 'shelf',
       x: s.x,
@@ -224,7 +232,9 @@ class LiveMap implements LiveMapHandle {
       h: s.h,
       colour: { mode: 'default' },
       origin: 'suggested',
-    });
+    };
+    const section = this.sectionNear(shelf);
+    this.putArea(section ? { ...shelf, section } : shelf);
   }
 
   dismissSuggestion(id: string): void {
@@ -532,6 +542,39 @@ class LiveMap implements LiveMapHandle {
 
   // Section runs.
 
+  /**
+   * The section a tapped shelf takes: the run in progress when the person is
+   * within 1.5 m of the shelf, else the latest section mark within 1.5 m of it.
+   */
+  private sectionNear(shelf: MapArea): string | null {
+    const reach = SECTION_REACH_CELLS * CELL + EPS;
+    const near = (x: number, y: number) =>
+      Math.hypot(
+        Math.max(shelf.x - x, 0, x - (shelf.x + shelf.w)),
+        Math.max(shelf.y - y, 0, y - (shelf.y + shelf.h))
+      ) <= reach;
+    if (this.run && this.prev && near(this.prev.x, this.prev.y)) {
+      return this.run.section;
+    }
+    for (let k = this.sectionMarks.length - 1; k >= 0; k--) {
+      const m = this.sectionMarks[k];
+      if (m.text.trim() !== '' && near(m.x, m.y)) return m.text;
+    }
+    return null;
+  }
+
+  /** A shelf a section mark may name: a tapped suggestion or an earlier run, never one drawn by hand. */
+  private adoptable(i: number, j: number): MapArea | null | undefined {
+    for (const a of this.areas.values()) {
+      if (!covers(a, i, j)) continue;
+      return a.kind === 'shelf' &&
+        (a.origin === 'suggested' || a.origin === 'section-run')
+        ? a
+        : null;
+    }
+    return undefined;
+  }
+
   /** The walking direction over the last metre, or null while standing still. */
   private walkingDirection(x: number, y: number): [number, number] | null {
     for (let k = this.recent.length - 1; k >= 0; k--) {
@@ -542,7 +585,7 @@ class LiveMap implements LiveMapHandle {
     return null;
   }
 
-  private startRun(mark: MapMark): void {
+  private startRun(mark: MapMark, ended: Run | null = null): void {
     const phone = headingVector(mark.heading);
     const walking = this.walkingDirection(mark.x, mark.y);
     const axis: Axis = walking
@@ -567,8 +610,31 @@ class LiveMap implements LiveMapHandle {
     };
     let first: number | null = null;
     for (let k = 1; k <= SECTION_REACH_CELLS; k++) {
-      if (free(person + k * side)) {
-        first = person + k * side;
+      const c = person + k * side;
+      const [ci, cj] = at(along, c);
+      const shelf = this.adoptable(ci, cj);
+      if (shelf) {
+        const named = shelf.section?.trim().toLowerCase() ?? '';
+        if (
+          shelf.origin === 'suggested' ||
+          named === '' ||
+          named === mark.text.trim().toLowerCase()
+        ) {
+          this.adoptRun(mark, shelf, axis, along, walking);
+          return;
+        }
+        // The run just ended overshot into this section: cut it at the
+        // person and look again. Any other named run is left alone.
+        if (ended && ended.area.id === shelf.id && ended.base === null) {
+          this.cutRun(ended, mark);
+          this.startRun(mark);
+        }
+        return;
+      }
+      // Any other area, a drawn shelf among them, ends the search.
+      if (shelf === null) return;
+      if (free(c)) {
+        first = c;
         break;
       }
     }
@@ -610,14 +676,57 @@ class LiveMap implements LiveMapHandle {
       c1: Math.max(first, last),
       turned: 0,
       away: 0,
+      base: null,
     };
     this.run = run;
     this.putRun(run);
   }
 
+  /** Ends a run at the cell before the person along its axis, or removes it when nothing is left. */
+  private cutRun(run: Run, mark: MapMark): void {
+    const along = cellOf(run.axis === 'x' ? mark.x : mark.y);
+    const dir = run.dir !== 0 ? run.dir : Math.sign(run.end - run.start) || 1;
+    const end = along - dir;
+    if ((end - run.start) * dir < 0) {
+      this.removeArea(run.area.id);
+      return;
+    }
+    run.end = end;
+    this.putRun(run);
+  }
+
+  /** A section mark facing a tapped or earlier run shelf names it, and the run grows from it. */
+  private adoptRun(
+    mark: MapMark,
+    shelf: MapArea,
+    axis: Axis,
+    along: number,
+    walking: [number, number] | null
+  ): void {
+    const r = cellsOfArea(shelf);
+    const [lo, hi] = axis === 'x' ? [r.i0, r.i1] : [r.j0, r.j1];
+    const [c0, c1] = axis === 'x' ? [r.j0, r.j1] : [r.i0, r.i1];
+    const at = Math.max(lo, Math.min(hi, along));
+    const area: MapArea = { ...shelf, section: mark.text };
+    this.run = {
+      section: mark.text,
+      area,
+      axis,
+      dir: walking ? Math.sign(axis === 'x' ? walking[0] : walking[1]) : 0,
+      start: at,
+      end: at,
+      c0,
+      c1,
+      turned: 0,
+      away: 0,
+      base: [lo, hi],
+    };
+    this.putArea(area);
+  }
+
   private runRect(run: Run): CellRect {
-    const a0 = Math.min(run.start, run.end);
-    const a1 = Math.max(run.start, run.end);
+    const a0 = Math.min(run.start, run.end, run.base?.[0] ?? Infinity);
+    const a1 = Math.max(run.start, run.end, run.base?.[1] ?? -Infinity);
     return run.axis === 'x'
       ? { i0: a0, i1: a1, j0: run.c0, j1: run.c1 }
       : { i0: run.c0, i1: run.c1, j0: a0, j1: a1 };
@@ -648,23 +757,21 @@ class LiveMap implements LiveMapHandle {
   private followRun(p: LivePoint, prev: LivePoint | null): void {
     const run = this.run as Run;
     const unit = run.axis === 'x' ? [run.dir, 0] : [0, run.dir];
-    if (prev && run.dir !== 0) {
-      const vx = p.x - prev.x;
-      const vy = p.y - prev.y;
-      const len = Math.hypot(vx, vy);
-      if (len > EPS) {
-        const cos = (vx * unit[0] + vy * unit[1]) / len;
-        const angle =
-          (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
-        if (angle > TURN_DEGREES && angle < 180 - TURN_DEGREES) {
-          run.turned += len;
-          if (run.turned >= TURN_HELD_METRES) {
-            this.run = null;
-            return;
-          }
-        } else {
-          run.turned = 0;
+    // The turn is read over the last metre of walking, so dense points and a
+    // single step of jitter neither end a run nor keep one alive.
+    const walking = this.walkingDirection(p.x, p.y);
+    const step = prev ? Math.hypot(p.x - prev.x, p.y - prev.y) : 0;
+    if (walking && run.dir !== 0 && step > EPS) {
+      const cos = walking[0] * unit[0] + walking[1] * unit[1];
+      const angle = (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+      if (angle > TURN_DEGREES && angle < 180 - TURN_DEGREES) {
+        run.turned += step;
+        if (run.turned >= TURN_HELD_METRES) {
+          this.run = null;
+          return;
         }
+      } else {
+        run.turned = 0;
       }
     }
     const along = cellOf(run.axis === 'x' ? p.x : p.y);
@@ -744,8 +851,9 @@ class LiveMap implements LiveMapHandle {
  * It emits `mark-put` for every mark, `area-put` and `area-removed` for what
  * the rules make and change, and `section-left`. It emits no path: the
  * recording screen appends the points the tracking guard keeps. Nothing is
- * painted while tracking is not `good`, and no rule changes an area it did
- * not make, except a `suggested` shelf walked across.
+ * painted while tracking is not `good`. No rule changes a shelf drawn by
+ * hand: a `suggested` shelf is cut when walked across, and a section mark
+ * names the `suggested` or `section-run` shelf it faces.
  */
 export function createLiveMap(options: LiveMapOptions): LiveMapHandle {
   return new LiveMap(options);

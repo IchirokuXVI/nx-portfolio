@@ -169,7 +169,7 @@
         "kind": "shelf",
         "x": 38.5,
         "y": -21,
-        "w": 0.5,
+        "w": 2,
         "h": 1,
         "section": "Hogar",
         "colour": {
@@ -260,6 +260,7 @@
         "y": -17,
         "w": 4.5,
         "h": 0.5,
+        "section": "Mascotas",
         "colour": {
           "mode": "default"
         },
@@ -369,6 +370,7 @@
         "y": -8.5,
         "w": 2,
         "h": 0.5,
+        "section": "Agua",
         "colour": {
           "mode": "default"
         },
@@ -381,6 +383,7 @@
         "y": -7.5,
         "w": 4.5,
         "h": 0.5,
+        "section": "Agua",
         "colour": {
           "mode": "default"
         },
@@ -467,35 +470,9 @@
       {
         "id": "live-33",
         "kind": "shelf",
-        "x": 32.5,
-        "y": -20.5,
-        "w": 0.5,
-        "h": 1,
-        "section": "Mascotas",
-        "colour": {
-          "mode": "default"
-        },
-        "origin": "section-run"
-      },
-      {
-        "id": "live-34",
-        "kind": "shelf",
-        "x": 38.5,
-        "y": -22,
-        "w": 1.5,
-        "h": 1,
-        "section": "Hogar",
-        "colour": {
-          "mode": "default"
-        },
-        "origin": "section-run"
-      },
-      {
-        "id": "live-35",
-        "kind": "shelf",
-        "x": 22.5,
+        "x": 23,
         "y": -7.5,
-        "w": 3.5,
+        "w": 3,
         "h": 1,
         "section": "Abrir y comer",
         "colour": {
@@ -504,7 +481,20 @@
         "origin": "section-run"
       },
       {
-        "id": "live-36",
+        "id": "live-34",
+        "kind": "shelf",
+        "x": 22,
+        "y": -7,
+        "w": 1,
+        "h": 1,
+        "section": "Lácteos",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-35",
         "kind": "shelf",
         "x": 25,
         "y": -4.5,
@@ -517,7 +507,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-37",
+        "id": "live-36",
         "kind": "shelf",
         "x": 37.5,
         "y": -7,
@@ -530,7 +520,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-38",
+        "id": "live-37",
         "kind": "shelf",
         "x": 41,
         "y": -8,
@@ -543,7 +533,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-39",
+        "id": "live-38",
         "kind": "path",
         "x": 42,
         "y": -10,
@@ -553,6 +543,19 @@
           "mode": "default"
         },
         "origin": "suggested"
+      },
+      {
+        "id": "live-39",
+        "kind": "shelf",
+        "x": 10,
+        "y": -12,
+        "w": 2,
+        "h": 1,
+        "section": "Bodega",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
       },
       {
         "id": "live-4",
@@ -570,32 +573,6 @@
       {
         "id": "live-40",
         "kind": "shelf",
-        "x": 10,
-        "y": -12,
-        "w": 2,
-        "h": 1,
-        "section": "Bodega",
-        "colour": {
-          "mode": "default"
-        },
-        "origin": "section-run"
-      },
-      {
-        "id": "live-41",
-        "kind": "shelf",
-        "x": 3,
-        "y": -23.5,
-        "w": 1,
-        "h": 0.5,
-        "section": "Menaje",
-        "colour": {
-          "mode": "default"
-        },
-        "origin": "section-run"
-      },
-      {
-        "id": "live-42",
-        "kind": "shelf",
         "x": -0.5,
         "y": -24,
         "w": 0.5,
@@ -607,7 +584,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-43",
+        "id": "live-41",
         "kind": "counter",
         "x": 0,
         "y": -10,
@@ -620,7 +597,7 @@
         "origin": "counter-mark"
       },
       {
-        "id": "live-44",
+        "id": "live-42",
         "kind": "shelf",
         "x": 11,
         "y": 0,
@@ -633,7 +610,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-45",
+        "id": "live-43",
         "kind": "shelf",
         "x": 23,
         "y": -5,
@@ -646,7 +623,7 @@
         "origin": "section-run"
       },
       {
-        "id": "live-46",
+        "id": "live-44",
         "kind": "shelf",
         "x": 20.5,
         "y": -8.5,
@@ -659,26 +636,13 @@
         "origin": "section-run"
       },
       {
-        "id": "live-47",
+        "id": "live-45",
         "kind": "shelf",
         "x": 21,
         "y": -14,
         "w": 1,
         "h": 0.5,
         "section": "Congelados",
-        "colour": {
-          "mode": "default"
-        },
-        "origin": "section-run"
-      },
-      {
-        "id": "live-48",
-        "kind": "shelf",
-        "x": 22,
-        "y": -7,
-        "w": 0.5,
-        "h": 1,
-        "section": "Lácteos",
         "colour": {
           "mode": "default"
         },
@@ -1223,7 +1187,7 @@
   },
   "eventCounts": {
     "mark-put": 52,
-    "area-put": 49,
+    "area-put": 57,
     "section-left": 1
   }
 }
