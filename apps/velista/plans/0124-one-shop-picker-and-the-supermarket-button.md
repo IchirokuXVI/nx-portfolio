@@ -1,3 +1,5 @@
+> **PR:** [#534](https://github.com/IchirokuXVI/nx-portfolio/pull/534)
+
 # 0124: one shop picker, and the Supermarket button
 
 > Mock: `mocks/shop-picker/`, reviewed and approved on 2026-09-29, published at
