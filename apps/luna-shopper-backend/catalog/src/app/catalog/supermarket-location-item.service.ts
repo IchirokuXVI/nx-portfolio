@@ -28,6 +28,7 @@ import {
   SupermarketLocation,
   SupermarketLocationItem,
 } from '../entities';
+import { shopsWithMap } from '../shop-walks/has-map';
 import { AuditedWrite, CatalogAuditService } from './catalog-audit.service';
 import {
   toSupermarketLocationItemView,
@@ -438,7 +439,7 @@ export class SupermarketLocationItemService {
       0,
       ITEM_LOOKUP_LIMITS.maxIds
     );
-    const [stacks, rows, sections] = await Promise.all([
+    const [stacks, rows, sections, mapped] = await Promise.all([
       this.stacks.stacksFor(this.locations.manager, [location.id]),
       itemIds.length === 0
         ? Promise.resolve([] as SupermarketLocationItem[])
@@ -449,12 +450,15 @@ export class SupermarketLocationItemService {
       // Plan 0170: the shop's section names, which the basket read's shop and
       // its scopes carry.
       sectionNamesOf(this.locations, [location.id]),
+      // Plan 0168: whether the shop has a map.
+      shopsWithMap(this.locations, [location.id]),
     ]);
     return {
       location: toSupermarketLocationView(
         location,
         idsOf(stacks.get(location.id)),
-        sections.get(location.id) ?? []
+        sections.get(location.id) ?? [],
+        mapped.has(location.id.toLowerCase())
       ),
       supermarket: toSupermarketView(location.supermarket),
       availability: rows.map((row) => ({

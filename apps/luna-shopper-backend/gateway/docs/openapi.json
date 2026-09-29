@@ -11735,6 +11735,755 @@
         ]
       }
     },
+    "/v1/catalog/locations/{id}/map": {
+      "get": {
+        "operationId": "CatalogLocationMapController_map_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The walk shown to shoppers, drawn for a shopper: the walkway, the areas, the notes and the bounds, plus the chain sections its section names resolved to in walk order. `map` is null when the shop has no shown walk. An unknown shop is a 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.LocationShopMapView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/locations/{id}/walks": {
+      "get": {
+        "operationId": "CatalogLocationWalksController_list_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The shop’s walks that are not deleted: the shown one first, then the rest by last change, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopWalkListView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "CatalogLocationWalksController_create_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateShopWalkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A new empty walk, not shown to shoppers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopWalkSummaryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/walks/{walkId}": {
+      "get": {
+        "operationId": "CatalogWalksController_get_v1",
+        "parameters": [
+          {
+            "name": "walkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The walk, its folded document, and its timeline: one row per entry, without events, in `seq` order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopWalkView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      },
+      "patch": {
+        "operationId": "CatalogWalksController_update_v1",
+        "parameters": [
+          {
+            "name": "walkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShopWalkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rename the walk, show it or stop showing it. Showing it stops showing the shop’s other walk and rewrites the shop’s section list in this walk’s order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopWalkSummaryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      },
+      "delete": {
+        "operationId": "CatalogWalksController_delete_v1",
+        "parameters": [
+          {
+            "name": "walkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sets `deletedAt` and keeps every entry. A shown walk stops being shown, and the shop has no map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/common.IdResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/walks/{walkId}/log": {
+      "get": {
+        "operationId": "CatalogWalksController_log_v1",
+        "parameters": [
+          {
+            "name": "walkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromSeq",
+            "required": false,
+            "in": "query",
+            "description": "The entries after the latest snapshot at or before this `seq` are answered, with that snapshot. Absent or 0 answers the whole log with no snapshot.",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entries with their events after the latest snapshot at or before `fromSeq`, with that snapshot, for a rewind preview folded on the phone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.ShopWalkLogView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/walks/{walkId}/entries": {
+      "post": {
+        "operationId": "CatalogWalksController_append_v1",
+        "parameters": [
+          {
+            "name": "walkId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendShopWalkEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The entry as stored and the walk after it. A retried id answers the first result with `replayed: true`. A `baseSeq` that is not the walk’s `lastSeq` is `walk_changed` with `details.lastSeq`; a fold that does not validate is `shop_map_invalid` with `details.problems`; an entry over 256 KB or a document over 2 MB is `shop_map_too_large`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.AppendShopWalkEntryResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`permission_required` — Your account is not allowed to do that.\n\n`permission_required` — Your account is not allowed to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`walk_changed` — This walk was saved from somewhere else. Reload it and try again.\n\n`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`shop_map_invalid` — That change would leave the shop map in a state it cannot be saved in.\n\n`shop_map_too_large` — That save is too large to store.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.\n\n`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/v1/catalog/price-scopes": {
       "get": {
         "operationId": "CatalogPriceScopesController_list_v1",
@@ -26806,6 +27555,105 @@
           "accuracyMetres"
         ]
       },
+      "CreateShopWalkDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateShopWalkDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "shown": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AppendShopWalkEntryDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Given by the client, so a retried save is the same entry and answers what the first one stored."
+          },
+          "baseSeq": {
+            "type": "number",
+            "minimum": 0,
+            "description": "The walk’s `lastSeq` this entry was built on. Anything else is refused with `walk_changed`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "started",
+              "resumed",
+              "continued",
+              "stopped",
+              "edited",
+              "rewound",
+              "confirmed",
+              "discarded"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Wall clock, ISO."
+          },
+          "logFrom": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Log milliseconds."
+          },
+          "logTo": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Log milliseconds."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopWalkEvent"
+            }
+          },
+          "rewoundTo": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Kind `rewound` only: the point of the log the map returns to."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "button",
+              "left-page",
+              "tracking-lost",
+              "frame-moved"
+            ],
+            "description": "Kind `stopped` only: why."
+          }
+        },
+        "required": [
+          "id",
+          "baseSeq",
+          "kind",
+          "at",
+          "logFrom",
+          "logTo",
+          "events"
+        ]
+      },
       "NearbyShopsDto": {
         "type": "object",
         "properties": {
@@ -32526,6 +33374,27 @@
         ],
         "additionalProperties": false
       },
+      "catalog.AppendShopWalkEntryResult": {
+        "type": "object",
+        "properties": {
+          "walk": {
+            "$ref": "#/components/schemas/catalog.ShopWalkSummaryView"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/catalog.ShopWalkTimelineEntry"
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "True when this entry id was already stored: nothing was written and `entry` is what the first save stored."
+          }
+        },
+        "required": [
+          "walk",
+          "entry",
+          "replayed"
+        ],
+        "additionalProperties": false
+      },
       "catalog.BrandPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -33679,6 +34548,26 @@
         ],
         "additionalProperties": false
       },
+      "catalog.LocationShopMapView": {
+        "type": "object",
+        "properties": {
+          "map": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ShopMapView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the shop has no walk shown to shoppers."
+          }
+        },
+        "required": [
+          "map"
+        ],
+        "additionalProperties": false
+      },
       "catalog.NearbyPostalCodesView": {
         "type": "object",
         "properties": {
@@ -34436,6 +35325,239 @@
         ],
         "additionalProperties": false
       },
+      "catalog.ShopMapArea": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ShopMapAreaKind"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          },
+          "h": {
+            "type": "number"
+          },
+          "section": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "colour": {
+            "$ref": "#/components/schemas/catalog.ShopMapAreaColour"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/enums.ShopMapAreaOrigin"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "x",
+          "y",
+          "w",
+          "h",
+          "colour",
+          "origin"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopMapAreaColour": {
+        "description": "The colour of an area: the one default, the category colour, or a custom `#rrggbb` the mapper picked.",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "category"
+                ]
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "custom"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 7
+              }
+            },
+            "required": [
+              "mode",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "catalog.ShopMapDocument": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              2
+            ]
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopMapArea"
+            }
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopMapMark"
+            }
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopMapPolyline"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "areas",
+          "marks",
+          "path"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopMapMark": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ShopMapMarkKind"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "heading": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "logMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "x",
+          "y",
+          "heading",
+          "text",
+          "logMs"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopMapPolyline": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopMapSectionView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sectionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "name",
+          "sectionId"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopMapView": {
+        "type": "object",
+        "properties": {
+          "walkId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "savedAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "view": {
+            "$ref": "#/components/schemas/catalog.ShopperMapView"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopMapSectionView"
+            },
+            "description": "The chain sections the walk’s section names resolved to, in walk order."
+          }
+        },
+        "required": [
+          "walkId",
+          "savedAt",
+          "view",
+          "sections"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ShopPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -34459,6 +35581,147 @@
           }
         }
       },
+      "catalog.ShopperMapArea": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "shelf",
+              "counter",
+              "checkout",
+              "entrance",
+              "blocked"
+            ]
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          },
+          "h": {
+            "type": "number"
+          },
+          "section": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "colour": {
+            "$ref": "#/components/schemas/catalog.ShopMapAreaColour"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "x",
+          "y",
+          "w",
+          "h",
+          "colour"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopperMapBounds": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "w": {
+            "type": "number"
+          },
+          "h": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopperMapNote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopperMapView": {
+        "type": "object",
+        "properties": {
+          "walkway": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "description": "Closed rings of `[x, y]` metres with no repeated last point. Outer rings run clockwise as drawn and holes the other way; draw them together with the even odd rule."
+          },
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopperMapArea"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopperMapNote"
+            }
+          },
+          "bounds": {
+            "$ref": "#/components/schemas/catalog.ShopperMapBounds"
+          }
+        },
+        "required": [
+          "walkway",
+          "areas",
+          "notes",
+          "bounds"
+        ],
+        "additionalProperties": false
+      },
       "catalog.ShopView": {
         "type": "object",
         "properties": {
@@ -34480,6 +35743,399 @@
           "supermarket",
           "excluded",
           "excludedChain"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkAreaPutEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "area-put"
+            ]
+          },
+          "area": {
+            "$ref": "#/components/schemas/catalog.ShopMapArea"
+          }
+        },
+        "required": [
+          "type",
+          "area"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkAreaRemovedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "area-removed"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "type",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkEntryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ShopWalkEntryKind"
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1,
+            "format": "date-time"
+          },
+          "logFrom": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "logTo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rewoundTo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "$ref": "#/components/schemas/enums.ShopWalkStopReason"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopWalkEvent"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "kind",
+          "at",
+          "logFrom",
+          "logTo",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkEvent": {
+        "description": "One event of a walk entry, told apart by `type`.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkPathEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkMarkPutEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkMarkRemovedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkAreaPutEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkAreaRemovedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/catalog.ShopWalkSectionLeftEvent"
+          }
+        ]
+      },
+      "catalog.ShopWalkListView": {
+        "type": "object",
+        "properties": {
+          "walks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopWalkSummaryView"
+            }
+          }
+        },
+        "required": [
+          "walks"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkLogView": {
+        "type": "object",
+        "properties": {
+          "walkId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.ShopWalkSnapshotView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopWalkEntryView"
+            }
+          },
+          "lastSeq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "walkId",
+          "snapshot",
+          "entries",
+          "lastSeq"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkMarkPutEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "mark-put"
+            ]
+          },
+          "mark": {
+            "$ref": "#/components/schemas/catalog.ShopMapMark"
+          }
+        },
+        "required": [
+          "type",
+          "mark"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkMarkRemovedEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "mark-removed"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "type",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkPathEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "path"
+            ]
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        },
+        "required": [
+          "type",
+          "points"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkSectionLeftEvent": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "section-left"
+            ]
+          },
+          "logMs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "type",
+          "logMs"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkSnapshotView": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "document": {
+            "$ref": "#/components/schemas/catalog.ShopMapDocument"
+          }
+        },
+        "required": [
+          "seq",
+          "document"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkSummaryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "lastSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entryCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "markCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "lastChangedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "supermarketLocationId",
+          "name",
+          "shown",
+          "lastSeq",
+          "entryCount",
+          "markCount",
+          "createdAt",
+          "lastChangedAt"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkTimelineEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "$ref": "#/components/schemas/enums.ShopWalkEntryKind"
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1,
+            "format": "date-time"
+          },
+          "logFrom": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "logTo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rewoundTo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "$ref": "#/components/schemas/enums.ShopWalkStopReason"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "logMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "kind",
+          "at",
+          "logMs",
+          "logFrom",
+          "logTo"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.ShopWalkView": {
+        "type": "object",
+        "properties": {
+          "walk": {
+            "$ref": "#/components/schemas/catalog.ShopWalkSummaryView"
+          },
+          "document": {
+            "$ref": "#/components/schemas/catalog.ShopMapDocument"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ShopWalkTimelineEntry"
+            }
+          }
+        },
+        "required": [
+          "walk",
+          "document",
+          "timeline"
         ],
         "additionalProperties": false
       },
@@ -34847,6 +36503,9 @@
             "items": {
               "$ref": "#/components/schemas/catalog.LocationSectionNameView"
             }
+          },
+          "hasMap": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -34864,7 +36523,8 @@
           "longitude",
           "externalRef",
           "externalProvider",
-          "sections"
+          "sections",
+          "hasMap"
         ],
         "additionalProperties": false
       },
@@ -35495,6 +37155,56 @@
         "enum": [
           "BOUGHT",
           "NOT_AVAILABLE"
+        ]
+      },
+      "enums.ShopMapAreaKind": {
+        "type": "string",
+        "enum": [
+          "shelf",
+          "counter",
+          "checkout",
+          "entrance",
+          "blocked",
+          "path"
+        ]
+      },
+      "enums.ShopMapAreaOrigin": {
+        "type": "string",
+        "enum": [
+          "suggested",
+          "section-run",
+          "counter-mark",
+          "drawn"
+        ]
+      },
+      "enums.ShopMapMarkKind": {
+        "type": "string",
+        "enum": [
+          "section",
+          "counter",
+          "note"
+        ]
+      },
+      "enums.ShopWalkEntryKind": {
+        "type": "string",
+        "enum": [
+          "started",
+          "resumed",
+          "continued",
+          "stopped",
+          "edited",
+          "rewound",
+          "confirmed",
+          "discarded"
+        ]
+      },
+      "enums.ShopWalkStopReason": {
+        "type": "string",
+        "enum": [
+          "button",
+          "left-page",
+          "tracking-lost",
+          "frame-moved"
         ]
       },
       "enums.SourceEntryStatus": {
@@ -38743,6 +40453,9 @@
               "supermarket_location_not_found",
               "permission_required",
               "guest_has_no_roles",
+              "walk_changed",
+              "shop_map_invalid",
+              "shop_map_too_large",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

@@ -411,6 +411,8 @@ const supermarketLocationView = object(
     externalProvider: nullableString(),
     // Plan 0170: the shop's section names in its order, always present.
     sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
+    // Plan 0168: the shop has a walk shown to shoppers, so it has a map.
+    hasMap: boolean(),
   },
   [
     'id',
@@ -428,6 +430,7 @@ const supermarketLocationView = object(
     'externalRef',
     'externalProvider',
     'sections',
+    'hasMap',
   ]
 );
 

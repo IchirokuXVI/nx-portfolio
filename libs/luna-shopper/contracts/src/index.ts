@@ -41,6 +41,7 @@ export * from './lib/messages/profile.messages';
 export * from './lib/messages/purchase.messages';
 export * from './lib/messages/realtime.messages';
 export * from './lib/messages/reconciliation.messages';
+export * from './lib/messages/shop-walk.messages';
 export * from './lib/messages/stats.messages';
 export * from './lib/messages/zone.messages';
 

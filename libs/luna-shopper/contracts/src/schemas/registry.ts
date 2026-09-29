@@ -52,6 +52,10 @@ import {
   basketChangeSchemas,
 } from './messages/basket-changes.schemas';
 import {
+  basketSharingMessageContracts,
+  basketSharingSchemas,
+} from './messages/basket-sharing.schemas';
+import {
   basketMessageContracts,
   basketSchemas,
 } from './messages/basket.schemas';
@@ -59,10 +63,6 @@ import {
   catalogMessageContracts,
   catalogSchemas,
 } from './messages/catalog.schemas';
-import {
-  basketSharingMessageContracts,
-  basketSharingSchemas,
-} from './messages/basket-sharing.schemas';
 import {
   harvestMessageContracts,
   harvestSchemas,
@@ -81,6 +81,10 @@ import {
   realtimeMessageContracts,
   realtimeSchemas,
 } from './messages/realtime.schemas';
+import {
+  shopWalkMessageContracts,
+  shopWalkSchemas,
+} from './messages/shop-walk.schemas';
 import { statsMessageContracts, statsSchemas } from './messages/stats.schemas';
 import { zoneMessageContracts, zoneSchemas } from './messages/zone.schemas';
 
@@ -104,6 +108,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...profileMessageContracts,
   ...realtimeMessageContracts,
   ...catalogMessageContracts,
+  ...shopWalkMessageContracts,
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
@@ -138,6 +143,7 @@ export const allSchemas: JsonSchema[] = [
   ...profileSchemas,
   ...realtimeSchemas,
   ...catalogSchemas,
+  ...shopWalkSchemas,
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,

@@ -83,6 +83,12 @@ export interface ProblemResponseOptions {
    * its own code.
    */
   atLocation?: boolean;
+  /**
+   * The route appends an entry to a walk (plan 0168, section 2): a stale base
+   * is a 409 of its own code, a fold that does not validate or is too large a
+   * 422, and an entry id already stored on another walk a plain 409.
+   */
+  shopWalk?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -173,6 +179,14 @@ export function ApiProblemResponses(
     codes.push(
       ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE,
       ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND
+    );
+  }
+  if (options.shopWalk) {
+    codes.push(
+      ERROR_CODES.WALK_CHANGED,
+      ERROR_CODES.CONFLICT,
+      ERROR_CODES.SHOP_MAP_INVALID,
+      ERROR_CODES.SHOP_MAP_TOO_LARGE
     );
   }
   if (options.throttled !== false) {

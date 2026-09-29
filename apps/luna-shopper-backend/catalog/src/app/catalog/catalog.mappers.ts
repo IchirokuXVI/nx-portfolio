@@ -157,7 +157,9 @@ export function toSupermarketLocationView(
   row: SupermarketLocation,
   priceScopeIds: readonly string[],
   /** The shop's section names in its order (plan 0170), read in a batch too. */
-  sections: readonly LocationSectionNameView[]
+  sections: readonly LocationSectionNameView[],
+  /** Whether the shop has a walk shown to shoppers (plan 0168), read in a batch too. */
+  hasMap: boolean
 ): SupermarketLocationView {
   return {
     id: row.id,
@@ -175,6 +177,7 @@ export function toSupermarketLocationView(
     externalRef: row.externalRef,
     externalProvider: row.externalProvider,
     sections: [...sections],
+    hasMap,
   };
 }
 

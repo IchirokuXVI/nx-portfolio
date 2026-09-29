@@ -9,6 +9,7 @@ import { PostalCodePoint } from './postal-code-point.entity';
 import { PricePolicy } from './price-policy.entity';
 import { PriceScope } from './price-scope.entity';
 import { ProductGroup } from './product-group.entity';
+import { ShopWalk, ShopWalkEntry } from './shop-walk.entity';
 import { SupermarketItem } from './supermarket-item.entity';
 import { SupermarketLocationItem } from './supermarket-location-item.entity';
 import { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
@@ -37,6 +38,7 @@ export { PostalCodePoint } from './postal-code-point.entity';
 export { PricePolicy } from './price-policy.entity';
 export { PriceScope } from './price-scope.entity';
 export { ProductGroup } from './product-group.entity';
+export { ShopWalk, ShopWalkEntry } from './shop-walk.entity';
 export { SupermarketItem } from './supermarket-item.entity';
 export { SupermarketLocationItem } from './supermarket-location-item.entity';
 export { SupermarketLocationPriceScope } from './supermarket-location-price-scope.entity';
@@ -82,6 +84,9 @@ export const CATALOG_ENTITIES = [
   SectionCategory,
   LocationSection,
   SupermarketItemSection,
+  // A shop's walks and their append only log (plan 0168), after the shops.
+  ShopWalk,
+  ShopWalkEntry,
   // Reference data, loaded by a migration and never written by a service
   // (plan 0060, section 2).
   PostalCodePoint,

@@ -19,11 +19,13 @@ import {
   type SectionRuleStep,
   type SetItemSectionPinsRequest,
   type SetLocationSectionsRequest,
+  type ShopMapSectionView,
   type SupermarketSectionIdRequest,
   type SupermarketSectionPage,
   type SupermarketSectionView,
   type UpdateSupermarketSectionRequest,
 } from '@portfolio/luna-shopper/contracts';
+import type { SupportedLocale } from '@portfolio/luna-shopper/platform';
 import {
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotFoundException,
@@ -539,6 +541,189 @@ export class SectionService {
   }
 
   /**
+   * The shop's list follows the shown walk (backend plan 0168, section 4).
+   *
+   * Each of `names`, in walk order, resolves to the chain's section whose
+   * localized name matches it after trimming and case folding, in any locale.
+   * A name with no match creates a chain section named in `locale`, with a slug
+   * from the name, covering no category. The shop's list is then replaced by
+   * the resolved sections in that order; a section two names resolve to keeps
+   * its first place.
+   *
+   * Runs inside the caller's transaction (the walk write), and **outside the
+   * admin gate and the audit trail**: the caller is an account holding
+   * `shopMap.record`, which the gateway checked, and the audit trail records
+   * operators and services only. The chain's row is locked before a section
+   * is created, so two shops of one chain saving the same new name at once
+   * create it once.
+   */
+  async followWalk(
+    manager: EntityManager,
+    supermarketLocationId: string,
+    names: readonly string[],
+    locale: SupportedLocale
+  ): Promise<ShopMapSectionView[]> {
+    const shop = await this.requireShopIn(manager, supermarketLocationId);
+    let resolved = await this.matchWalkNames(
+      manager,
+      shop.supermarketId,
+      names
+    );
+    if (resolved.some((entry) => entry.sectionId === null)) {
+      await manager.query(
+        `SELECT 1 FROM "supermarkets" WHERE "id" = $1 FOR NO KEY UPDATE`,
+        [shop.supermarketId]
+      );
+      // Read again under the lock: another shop may have created one since.
+      resolved = await this.matchWalkNames(manager, shop.supermarketId, names);
+      await this.createWalkSections(
+        manager,
+        shop.supermarketId,
+        resolved,
+        locale
+      );
+    }
+    const sections = resolved.filter(
+      (entry): entry is ShopMapSectionView => entry.sectionId !== null
+    );
+    const ids = [...new Set(sections.map((entry) => entry.sectionId))];
+    await manager.query(
+      `DELETE FROM "location_sections" WHERE "supermarketLocationId" = $1`,
+      [shop.id]
+    );
+    if (ids.length > 0) {
+      await manager.query(
+        `INSERT INTO "location_sections" ("supermarketLocationId", "sectionId", "position")
+         SELECT $1, v."sectionId", v."position" - 1
+           FROM unnest($2::uuid[]) WITH ORDINALITY AS v("sectionId", "position")`,
+        [shop.id, ids]
+      );
+    }
+    return sections;
+  }
+
+  /**
+   * The chain sections a walk's section names resolve to, by the match
+   * {@link followWalk} uses, creating nothing. A name its chain does not have
+   * is left out. What the public map read answers beside the map.
+   */
+  async resolveWalkNames(
+    supermarketLocationId: string,
+    names: readonly string[]
+  ): Promise<ShopMapSectionView[]> {
+    const shop = await this.requireShop(supermarketLocationId);
+    const resolved = await this.matchWalkNames(
+      this.sections.manager,
+      shop.supermarketId,
+      names
+    );
+    return resolved.filter(
+      (entry): entry is ShopMapSectionView => entry.sectionId !== null
+    );
+  }
+
+  /** Each name with the chain section it matches, or null. */
+  private async matchWalkNames(
+    manager: EntityManager,
+    supermarketId: string,
+    names: readonly string[]
+  ): Promise<{ name: string; sectionId: string | null }[]> {
+    const rows = (await manager.query(
+      `SELECT s."id"::text AS "id", s."name" AS "name"
+         FROM "supermarket_sections" s
+        WHERE s."supermarketId" = $1
+        ORDER BY s."position", s."id"`,
+      [supermarketId]
+    )) as { id: string; name: LocalizedText }[];
+    const byKey = new Map<string, string>();
+    for (const row of rows) {
+      for (const value of Object.values(row.name ?? {})) {
+        if (typeof value === 'string' && value.trim() !== '') {
+          const key = walkNameKey(value);
+          if (!byKey.has(key)) {
+            byKey.set(key, row.id);
+          }
+        }
+      }
+    }
+    return names.map((name) => ({
+      name: name.trim(),
+      sectionId: byKey.get(walkNameKey(name)) ?? null,
+    }));
+  }
+
+  /**
+   * One chain section per distinct unmatched name, appended after the chain's
+   * last, and each entry pointed at it. Mutates `resolved`.
+   */
+  private async createWalkSections(
+    manager: EntityManager,
+    supermarketId: string,
+    resolved: { name: string; sectionId: string | null }[],
+    locale: SupportedLocale
+  ): Promise<void> {
+    const taken = new Set(
+      (
+        (await manager.query(
+          `SELECT s."slug" FROM "supermarket_sections" s WHERE s."supermarketId" = $1`,
+          [supermarketId]
+        )) as { slug: string }[]
+      ).map((row) => row.slug)
+    );
+    const [{ next }] = (await manager.query(
+      `SELECT coalesce(max(s."position") + 1, 0)::int AS "next"
+         FROM "supermarket_sections" s WHERE s."supermarketId" = $1`,
+      [supermarketId]
+    )) as { next: number }[];
+    let position = Number(next);
+    const created = new Map<string, string>();
+    for (const entry of resolved) {
+      if (entry.sectionId !== null) {
+        continue;
+      }
+      const key = walkNameKey(entry.name);
+      const known = created.get(key);
+      if (known) {
+        entry.sectionId = known;
+        continue;
+      }
+      const slug = uniqueSlug(slugFromName(entry.name), taken);
+      taken.add(slug);
+      const [row] = (await manager.query(
+        `INSERT INTO "supermarket_sections" ("supermarketId", "slug", "name", "position")
+         VALUES ($1, $2, $3::jsonb, $4)
+         RETURNING "id"::text AS "id"`,
+        [
+          supermarketId,
+          slug,
+          JSON.stringify({ [locale]: entry.name }),
+          position,
+        ]
+      )) as { id: string }[];
+      position += 1;
+      created.set(key, row.id);
+      entry.sectionId = row.id;
+    }
+  }
+
+  private async requireShopIn(
+    manager: EntityManager,
+    id: string
+  ): Promise<ShopRow> {
+    const rows = isUuid(id)
+      ? ((await manager.query(
+          `SELECT l."id"::text AS "id", l."supermarketId"::text AS "supermarketId"
+             FROM "supermarket_locations" l WHERE l."id" = $1`,
+          [id]
+        )) as ShopRow[])
+      : [];
+    if (rows.length === 0) {
+      throw locationNotFound();
+    }
+    return rows[0];
+  }
+
+  /**
    * Step 1 of the rule: the shop's own rows in its order, else every section
    * of its chain in `position` order. {@link PRESENT_SECTIONS_SQL} for one
    * shop, the statement {@link namesForLocations} runs for many.
@@ -886,6 +1071,48 @@ function validateName(name: LocalizedText): void {
 
 function lower(id: string): string {
   return id.toLowerCase();
+}
+
+/**
+ * How a walk's section name compares with a chain section's (plan 0168,
+ * section 4): trimmed and case folded, as `walkOrderV2` groups them.
+ */
+export function walkNameKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * A slug from a section name: ascii kebab case, accents dropped, at most
+ * {@link SECTION_SLUG_MAX_LENGTH}. A name with no letter or digit in it gives
+ * `section`.
+ */
+export function slugFromName(name: string): string {
+  const slug = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, SECTION_SLUG_MAX_LENGTH)
+    .replace(/-+$/g, '');
+  return slug === '' ? 'section' : slug;
+}
+
+/** `slug`, or `slug-2`, `slug-3` and so on, whichever the chain does not hold. */
+export function uniqueSlug(slug: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(slug)) {
+    return slug;
+  }
+  for (let n = 2; ; n++) {
+    const suffix = `-${n}`;
+    const head = slug
+      .slice(0, SECTION_SLUG_MAX_LENGTH - suffix.length)
+      .replace(/-+$/g, '');
+    const candidate = `${head}${suffix}`;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
+  }
 }
 
 function compare(a: string, b: string): number {
