@@ -68,3 +68,14 @@ export type {
 export { PROBLEM_ORDER_V2, validateShopMapV2 } from './lib/v2/validate';
 export { foldWalk, stateAt, walkTimeline } from './lib/v2/walk-log';
 export { walkOrderV2 } from './lib/v2/walk-order';
+
+/** The live map (shop-map plan 0003): suggestions and section runs while walking. */
+export { createLiveMap } from './lib/v2/live-map';
+export type {
+  LiveMapHandle,
+  LiveMapOptions,
+  LiveMapSettings,
+  LivePoint,
+  LiveSnapshot,
+  LiveTracking,
+} from './lib/v2/live-types';
