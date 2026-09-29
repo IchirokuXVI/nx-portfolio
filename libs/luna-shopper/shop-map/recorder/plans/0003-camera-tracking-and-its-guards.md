@@ -1,3 +1,5 @@
+> **PR:** [#545](https://github.com/IchirokuXVI/nx-portfolio/pull/545)
+
 # 0003: camera tracking, and its guards
 
 > Third plan of the recorder library. Needs `0002` (the walk file, the `vio` mode and the
