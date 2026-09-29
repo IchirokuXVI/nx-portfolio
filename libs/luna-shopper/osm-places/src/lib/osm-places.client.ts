@@ -92,8 +92,14 @@ export class OsmPlacesClient {
   /**
    * Every `shop=supermarket` within `radiusMetres` of a point, in one query.
    *
-   * `nwr` covers nodes, ways and relations, and `out center tags` is what makes a
-   * way usable: it has no position of its own, only member nodes.
+   * `nwr` covers nodes, ways and relations, and `out geom` is what makes a way
+   * usable: it has no position of its own, only member nodes. It answers each
+   * outline with its bounds, so the centre and the shop's footprint both come
+   * out of this one request (backend plan 0176).
+   *
+   * **`out geom` and not `out tags geom`.** The `tags` verbosity leaves out a
+   * relation's members, and a multipolygon's outline is its members, so under
+   * it a shop mapped as a relation answers bounds and no area.
    *
    * **It does not filter by brand.** Filtering happens after, in the harvester,
    * because the run is chain agnostic by design: one query answers "what
@@ -107,7 +113,7 @@ export class OsmPlacesClient {
     const query =
       `[out:json][timeout:60];` +
       `nwr["shop"="supermarket"](around:${radiusMetres},${centre.lat},${centre.lon});` +
-      `out center tags;`;
+      `out geom;`;
     const payload = await this.request(this.overpassUrl, {
       method: 'POST',
       headers: {

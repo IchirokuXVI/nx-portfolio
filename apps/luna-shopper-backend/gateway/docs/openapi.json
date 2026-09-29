@@ -34681,6 +34681,13 @@
               "null"
             ]
           },
+          "footprintM2": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
           "sections": {
             "type": "array",
             "items": {
@@ -34703,6 +34710,7 @@
           "longitude",
           "externalRef",
           "externalProvider",
+          "footprintM2",
           "sections"
         ],
         "additionalProperties": false

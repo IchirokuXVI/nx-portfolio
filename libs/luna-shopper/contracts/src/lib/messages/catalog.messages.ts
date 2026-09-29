@@ -711,6 +711,15 @@ export interface SupermarketLocationView {
   externalRef: string | null;
   externalProvider: string | null;
   /**
+   * The area of the shop's building outline in whole square metres, as
+   * OpenStreetMap maps it (plan 0176). A client shows it as an approximate size.
+   *
+   * Null when it is not known, which is most shops: one mapped as a point has no
+   * outline, and a shop inside a larger building (a node within a mall) is never
+   * given a guessed size.
+   */
+  footprintM2: number | null;
+  /**
    * The shop's section names in its order (plan 0170, section 2), by the rule
    * {@link SECTION_PATTERNS.forLocation} applies: its own list, else its
    * chain's default. Always present, and empty when the chain has no sections.
@@ -1582,6 +1591,11 @@ export interface CreateSupermarketLocationRequest extends AdminCredential {
   longitude?: number | null;
   externalRef?: string | null;
   externalProvider?: string | null;
+  /**
+   * The area of the shop's mapped outline in whole square metres (plan 0176),
+   * when the place it was imported from carried one.
+   */
+  footprintM2?: number;
 }
 
 export interface UpdateSupermarketLocationRequest extends AdminCredential {
@@ -1605,6 +1619,12 @@ export interface UpdateSupermarketLocationRequest extends AdminCredential {
   longitude?: number | null;
   externalRef?: string | null;
   externalProvider?: string | null;
+  /**
+   * The outline's area in whole square metres (plan 0176). Absent leaves what
+   * the shop holds. There is no null: a place that carries no size never
+   * overwrites one that another run measured.
+   */
+  footprintM2?: number;
 }
 
 export interface SupermarketLocationIdRequest extends AdminCredential {

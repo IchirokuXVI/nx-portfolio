@@ -52,9 +52,9 @@ describe('geocodePostalCode', () => {
     await expect(
       client(fetchImpl).geocodePostalCode('14013', 'es')
     ).resolves.toEqual({
-      lat: 37.8587,
-      lon: -4.7863,
-      displayName: '14013, Córdoba, Andalucía, España',
+      lat: 37.8589573,
+      lon: -4.7860875,
+      displayName: '14013, Distrito Sur, Córdoba, Andalucía, España',
     });
     expect(calls[0].url).toContain('postalcode=14013');
     expect(calls[0].url).toContain('country=es');
@@ -89,10 +89,13 @@ describe('findSupermarkets', () => {
     expect(query).toContain(
       'nwr["shop"="supermarket"](around:3000,37.8587,-4.7863)'
     );
-    // `out center` is what makes a way usable; without it every mapped building
-    // comes back with no position and gets dropped.
-    expect(query).toContain('out center tags;');
-    expect(places).toHaveLength(5);
+    // `out geom` is what makes a way usable and what measures it (plan 0176):
+    // without geometry every mapped building comes back with no position and
+    // gets dropped. Not `out tags geom`, which leaves out a relation's members.
+    expect(query).toContain('out geom;');
+    expect(query).not.toContain('out tags');
+    expect(places.filter((p) => p.footprintM2 !== null)).toHaveLength(3);
+    expect(places).toHaveLength(26);
   });
 
   it('does not filter by brand: the run is chain agnostic by design', async () => {
@@ -103,7 +106,7 @@ describe('findSupermarkets', () => {
     );
     expect(overpassQuery(calls[0].init)).not.toContain('brand');
     // One query answers "what supermarkets are near me" for every chain at once.
-    expect(new Set(places.map((p) => p.brandKey)).size).toBe(3);
+    expect(new Set(places.map((p) => p.brandKey)).size).toBe(9);
   });
 
   it('retries a 429 and then succeeds', async () => {
@@ -115,7 +118,7 @@ describe('findSupermarkets', () => {
         slept.push(ms);
       },
     }).findSupermarkets({ lat: 37.8587, lon: -4.7863 }, 3000);
-    expect(places).toHaveLength(5);
+    expect(places).toHaveLength(26);
     expect(slept).toHaveLength(1);
   });
 

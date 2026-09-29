@@ -124,4 +124,16 @@ export class SupermarketLocation extends BaseEntity {
   /** Whose ref that is (`OSM`). Meaningless to store a ref without saying. */
   @Column({ type: 'varchar', nullable: true })
   externalProvider!: string | null;
+
+  /**
+   * The area of the shop's building outline in whole square metres, from
+   * OpenStreetMap (plan 0176). Null for a shop mapped as a point, which is most
+   * of them, and nothing estimates one.
+   *
+   * **Only a measured number ever replaces it.** A run that meets the shop
+   * again as a point carries no size, and that is not a reason to forget the
+   * one an earlier run measured. Only the number is stored, never the outline.
+   */
+  @Column({ type: 'int', nullable: true })
+  footprintM2!: number | null;
 }
