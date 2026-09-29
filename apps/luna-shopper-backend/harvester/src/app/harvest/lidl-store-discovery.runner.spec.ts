@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
 import type { SupermarketSource } from '../entities';
+import type { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
@@ -350,10 +351,12 @@ describe('StoreDiscoveryRunner', () => {
   const osm = { run: jest.fn(async () => undefined) };
   const lidl = { run: jest.fn(async () => undefined) };
   const mercadona = { run: jest.fn(async () => undefined) };
+  const elJamon = { run: jest.fn(async () => undefined) };
   const dispatcher = new StoreDiscoveryRunner(
     osm as unknown as OsmStoreDiscoveryRunner,
     lidl as unknown as LidlStoreDiscoveryRunner,
-    mercadona as unknown as MercadonaStoreDiscoveryRunner
+    mercadona as unknown as MercadonaStoreDiscoveryRunner,
+    elJamon as unknown as ElJamonStoreDiscoveryRunner
   );
   const input = { postalCode: '14013', country: 'es', radiusMetres: 3000 };
 
@@ -361,6 +364,18 @@ describe('StoreDiscoveryRunner', () => {
     osm.run.mockClear();
     lidl.run.mockClear();
     mercadona.run.mockClear();
+    elJamon.run.mockClear();
+  });
+
+  it('reads El Jamón from its own store locator (plan 0169)', async () => {
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('eljamon-web')
+    );
+    expect(elJamon.run).toHaveBeenCalledTimes(1);
+    expect(osm.run).not.toHaveBeenCalled();
   });
 
   it('reads a chain that names its own shops from that chain', async () => {

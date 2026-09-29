@@ -72,7 +72,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`).',
+      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`, `eljamon-web`).',
   })
   @IsOptional()
   @IsUUID()
@@ -81,7 +81,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`, and `eljamon-web`, whose one chain wide price list goes to the chain’s NATIONAL scope). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead.',
   })
   @IsOptional()
   @IsUUID()
@@ -180,7 +180,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     enum: HarvestDetailFetch,
     description:
-      'Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run.',
+      'Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`, `eljamon-web`), where it defaults to `NEW`: for `mercadona-api` the detail of a product whose row has no EAN yet, or has no row, and for `eljamon-web`, which has no EAN, the product page of a product with no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run.',
   })
   @IsOptional()
   @IsEnum(HarvestDetailFetch)

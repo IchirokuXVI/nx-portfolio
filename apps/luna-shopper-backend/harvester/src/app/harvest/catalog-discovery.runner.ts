@@ -5,6 +5,7 @@ import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
@@ -34,7 +35,8 @@ export class CatalogDiscoveryRunner {
     private readonly deza: DezaCatalogRunner,
     private readonly carrefour: CarrefourCatalogRunner,
     private readonly carrefourDetail: CarrefourDetailRunner,
-    private readonly lidl: LidlCatalogRunner
+    private readonly lidl: LidlCatalogRunner,
+    private readonly elJamon: ElJamonCatalogRunner
   ) {}
 
   // `async` so a refusal is a rejected promise rather than a synchronous throw
@@ -87,6 +89,11 @@ export class CatalogDiscoveryRunner {
         // map every product carries (plan 0089, section 4). The spawn refuses
         // a run that names one, rather than writing 59 regions into it.
         return this.lidl;
+      case 'eljamon-web':
+        // One price list for every shop (plan 0169, section 2): every price
+        // goes to the default scope the spawn gave the run, which is why the
+        // spawn refuses a run with none.
+        return this.elJamon;
       default:
         throw new Error(
           `The adapter "${adapterKey}" has no catalog discovery. Set this ` +

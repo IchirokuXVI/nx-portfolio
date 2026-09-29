@@ -12,6 +12,8 @@ import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
+import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
+import { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunPresetStore } from './harvest-run-preset.store';
@@ -80,6 +82,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     OsmStoreDiscoveryRunner,
     LidlStoreDiscoveryRunner,
     MercadonaStoreDiscoveryRunner,
+    ElJamonStoreDiscoveryRunner,
     StoreDiscoveryRunner,
     // The second half of every run, whatever the first half was (plan 0086, D5).
     //
@@ -95,6 +98,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     CarrefourCatalogRunner,
     CarrefourDetailRunner,
     LidlCatalogRunner,
+    ElJamonCatalogRunner,
     CatalogDiscoveryRunner,
     // The one runner that fetches nothing at all (plan 0086, D6): its input is
     // an uploaded document rather than a storefront.

@@ -1,0 +1,27 @@
+{
+  "name": "luna-shopper/eljamon",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/luna-shopper/eljamon/src",
+  "prefix": "lib",
+  "projectType": "library",
+  "tags": [],
+  "targets": {
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/luna-shopper/eljamon/jest.config.cts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "capture-fixtures": {
+      "//": "Refreshes the checked in fixtures from the live site (plan 0169, section 10). Never run by CI: it makes real requests, and the fixtures are what keeps every other test off the network.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/eljamon/tools/capture-fixtures.ts"
+      }
+    }
+  }
+}

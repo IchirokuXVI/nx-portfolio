@@ -54,9 +54,10 @@ type SourceAdapterKey = Wire.UpsertSupermarketSourceDto['adapterKey'];
 const ADAPTER_ORDER: Record<SourceAdapterKey, number> = {
   'mercadona-api': 1,
   'deza-web': 2,
-  'carrefour-web': 3,
-  'lidl-api': 4,
-  manual: 5,
+  'eljamon-web': 3,
+  'carrefour-web': 4,
+  'lidl-api': 5,
+  manual: 6,
 };
 
 const ADAPTERS: readonly SourceAdapterKey[] = (
