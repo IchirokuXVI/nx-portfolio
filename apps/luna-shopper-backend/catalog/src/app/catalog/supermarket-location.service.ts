@@ -15,6 +15,8 @@ import {
   type SupermarketLocationChainSummariesView,
   type SupermarketLocationIdRequest,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -251,11 +253,15 @@ export class SupermarketLocationService {
   private async viewsOf(
     rows: readonly SupermarketLocation[]
   ): Promise<SupermarketLocationView[]> {
-    const stacks = await this.stacksOf(rows);
-    const sections = await sectionNamesOf(
-      this.locations,
-      rows.map((row) => row.id)
-    );
+    // Independent reads on the pool rather than one transaction, so they run
+    // side by side.
+    const [stacks, sections] = await Promise.all([
+      this.stacksOf(rows),
+      sectionNamesOf(
+        this.locations,
+        rows.map((row) => row.id)
+      ),
+    ]);
     return rows.map((row) =>
       toSupermarketLocationView(
         row,
@@ -366,6 +372,22 @@ export class SupermarketLocationService {
   ): Promise<SupermarketLocationView> {
     const row = await this.load(req.supermarketLocationId);
     return this.viewOf(row);
+  }
+
+  /**
+   * One shop's chain and scope stack (plan 0170, section 4): what the catalog
+   * read at one shop needs, without the section names {@link get} reads.
+   */
+  async priceStack(
+    req: SupermarketLocationPriceStackRequest
+  ): Promise<SupermarketLocationPriceStackView> {
+    const row = await this.load(req.supermarketLocationId);
+    const stacks = await this.stacksOf([row]);
+    return {
+      id: row.id,
+      supermarketId: row.supermarketId,
+      priceScopeIds: stacks.get(row.id) ?? [],
+    };
   }
 
   /**

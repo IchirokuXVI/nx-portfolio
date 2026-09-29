@@ -289,6 +289,13 @@ export const CATALOG_SCHEMA_IDS = {
   ),
   shopAvailabilityView: schemaId('catalog/ShopAvailabilityView'),
   shopItemAvailabilityView: schemaId('catalog/ShopItemAvailabilityView'),
+  // A shop's chain and stack alone, for the read at one shop (plan 0170).
+  locationPriceStackRequest: schemaId(
+    'msg/supermarketLocation.priceStack/request'
+  ),
+  supermarketLocationPriceStackView: schemaId(
+    'catalog/SupermarketLocationPriceStackView'
+  ),
   // The shops near a point and the automatic pick (plan 0164).
   nearbyShopsRequest: schemaId('msg/supermarketLocation.nearby/request'),
   nearbyShopNoPick: schemaId('enums/NearbyShopNoPick'),
@@ -1430,9 +1437,10 @@ const setItemSectionPinsRequest = object(
   },
   ['userId', 'supermarketId', 'itemId', 'sectionIds']
 );
-// No userId: the basket read of a guest asks it. Unbounded, like the
-// shopAvailability request beside it: the basket read sends every product its
-// rows name, and a cap here would drop the sections of a large basket whole.
+// No userId, for the reason section.forLocation gives. Capped, unlike the
+// per shop read below: it is asked about a page of shops rather than a
+// basket's products, and a page never holds more than
+// maxLocationsPerNamesRead shops (plan 0170, section 2).
 const locationSectionNamesRequest = object(
   CATALOG_SCHEMA_IDS.locationSectionNamesRequest,
   {
@@ -1443,6 +1451,9 @@ const locationSectionNamesRequest = object(
   },
   ['supermarketLocationIds']
 );
+// No userId: the basket read of a guest asks it. Unbounded, like the
+// shopAvailability request beside it: the basket read sends every product its
+// rows name, and a cap here would drop the sections of a large basket whole.
 const itemSectionsAtLocationRequest = object(
   CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,
   {
@@ -2565,6 +2576,27 @@ const shopAvailabilityView = object(
 );
 
 /**
+ * A shop's chain and scope stack (plan 0170, section 4). No `userId`, like
+ * `shopAvailability`: the gateway has already decided the reader may ask.
+ */
+const locationPriceStackRequest = object(
+  CATALOG_SCHEMA_IDS.locationPriceStackRequest,
+  { supermarketLocationId: nonEmptyString() },
+  ['supermarketLocationId']
+);
+
+const supermarketLocationPriceStackView = object(
+  CATALOG_SCHEMA_IDS.supermarketLocationPriceStackView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    // The whole stack, most specific first, as on the location view.
+    priceScopeIds: array(nonEmptyString()),
+  },
+  ['id', 'supermarketId', 'priceScopeIds']
+);
+
+/**
  * The shop view of plan 0163, by id rather than by import: basket.schemas
  * imports this file, and a ref names a schema by its id alone.
  */
@@ -2865,6 +2897,8 @@ export const catalogSchemas: JsonSchema[] = [
   shopAvailabilityRequest,
   shopItemAvailabilityView,
   shopAvailabilityView,
+  locationPriceStackRequest,
+  supermarketLocationPriceStackView,
   enumOf(CATALOG_SCHEMA_IDS.nearbyShopNoPick, Object.values(NearbyShopNoPick)),
   nearbyShopsRequest,
   nearbyShopView,
@@ -3209,6 +3243,10 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_LOCATION_PATTERNS.shopAvailability]: {
     request: CATALOG_SCHEMA_IDS.shopAvailabilityRequest,
     response: CATALOG_SCHEMA_IDS.shopAvailabilityView,
+  },
+  [SUPERMARKET_LOCATION_PATTERNS.priceStack]: {
+    request: CATALOG_SCHEMA_IDS.locationPriceStackRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketLocationPriceStackView,
   },
   [SUPERMARKET_LOCATION_PATTERNS.nearby]: {
     request: CATALOG_SCHEMA_IDS.nearbyShopsRequest,

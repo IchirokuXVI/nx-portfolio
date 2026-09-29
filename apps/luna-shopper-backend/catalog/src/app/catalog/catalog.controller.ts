@@ -112,6 +112,8 @@ import {
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
@@ -246,6 +248,17 @@ export class CatalogController {
     @Payload() req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
     return this.locations.get(req);
+  }
+
+  /**
+   * One shop's chain and scope stack (plan 0170, section 4), for the catalog
+   * read at one shop. Carries no `userId`, like `shopAvailability`.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.priceStack)
+  locationPriceStack(
+    @Payload() req: SupermarketLocationPriceStackRequest
+  ): Promise<SupermarketLocationPriceStackView> {
+    return this.locations.priceStack(req);
   }
 
   @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.list)

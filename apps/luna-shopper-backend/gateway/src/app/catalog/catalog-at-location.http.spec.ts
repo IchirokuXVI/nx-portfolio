@@ -2,12 +2,12 @@ import { Test } from '@nestjs/testing';
 import {
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
-  type SupermarketLocationView,
+  type SupermarketLocationPriceStackView,
 } from '@portfolio/luna-shopper/contracts';
 import {
   createValidationPipe,
+  ERROR_CODES,
   GlobalExceptionFilter,
-  NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -33,30 +33,37 @@ interface SentMessage {
 /** Version 5, as seeded shops and chains are: any version is accepted. */
 const SHOP = '4b0f2e79-72e0-5f6c-bc20-3633663abafc';
 const UNKNOWN_SHOP = 'dd000000-0000-4000-a000-000000000404';
+const BROKEN_SHOP = 'dd000000-0000-4000-a000-000000000500';
 const MERCADONA = 'cf000000-0000-4000-a000-000000000001';
 const DEZA = 'cf000000-0000-4000-a000-000000000002';
 const STORE_SCOPE = 'aa000000-0000-4000-a000-0000000000a1';
 const REGION_SCOPE = 'aa000000-0000-4000-a000-0000000000a2';
 const RESOLVED_SCOPE = 'aa000000-0000-4000-a000-0000000000ff';
 
-const location: SupermarketLocationView = {
+const location: SupermarketLocationPriceStackView = {
   id: SHOP,
   supermarketId: MERCADONA,
-  priceScopeId: STORE_SCOPE,
   // The stack, most specific first: the read is priced at the head alone.
   priceScopeIds: [STORE_SCOPE, REGION_SCOPE],
-  label: null,
-  address: 'Calle Mayor 3',
-  city: 'Córdoba',
-  country: 'ES',
-  postalCode: '14001',
-  postalCodeSource: null,
-  latitude: null,
-  longitude: null,
-  externalRef: null,
-  externalProvider: null,
-  sections: [],
 };
+
+/**
+ * How a NATS call rejects when catalog refuses: the service's filter throws an
+ * `RpcException` around the house envelope, the transport serializes that
+ * exception, and the client rejects with it, so the envelope arrives nested
+ * under `error` beside the exception's own `message`.
+ */
+function wireProblem(status: number, code: string): unknown {
+  return {
+    error: {
+      status,
+      code,
+      message: 'Refused by catalog',
+      correlationId: 'corr-1',
+    },
+    message: 'Refused by catalog',
+  };
+}
 
 async function boot() {
   const sent: SentMessage[] = [];
@@ -74,9 +81,12 @@ async function boot() {
               payload: Record<string, unknown>
             ) => {
               sent.push({ subject, payload });
-              if (subject === SUPERMARKET_LOCATION_PATTERNS.get) {
+              if (subject === SUPERMARKET_LOCATION_PATTERNS.priceStack) {
+                if (payload['supermarketLocationId'] === BROKEN_SHOP) {
+                  throw wireProblem(500, ERROR_CODES.INTERNAL);
+                }
                 if (payload['supermarketLocationId'] !== SHOP) {
-                  throw new NotFoundException('Supermarket location not found');
+                  throw wireProblem(404, ERROR_CODES.NOT_FOUND);
                 }
                 return location;
               }
@@ -212,7 +222,25 @@ describe('GET /v1/catalog/items?locationId (plan 0170)', () => {
     expect(searchPayload()?.['priceScopeIds']).toEqual([RESOLVED_SCOPE]);
     expect(searchPayload()?.['soldBy']).toEqual([DEZA]);
     expect(
-      app.sent.some((m) => m.subject === SUPERMARKET_LOCATION_PATTERNS.get)
+      app.sent.some(
+        (m) => m.subject === SUPERMARKET_LOCATION_PATTERNS.priceStack
+      )
     ).toBe(false);
+  });
+
+  it('asks for the shop’s stack alone, never its full view', async () => {
+    await get(`locationId=${SHOP}`);
+
+    const subjects = app.sent.map((m) => m.subject);
+    expect(subjects).toContain(SUPERMARKET_LOCATION_PATTERNS.priceStack);
+    // `get` would also run the section names query for nothing.
+    expect(subjects).not.toContain(SUPERMARKET_LOCATION_PATTERNS.get);
+  });
+
+  it('keeps a failure other than not found as it came', async () => {
+    const response = await get(`locationId=${BROKEN_SHOP}`);
+
+    expect(response.status).toBe(500);
+    expect(await codeOf(response)).toBe('internal');
   });
 });

@@ -711,3 +711,43 @@ describe('SupermarketLocationService.list postal code filter', () => {
     expect(qb.andWhere).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The shop's chain and stack alone, for the catalog read at one shop (plan
+ * 0170, section 4): what `get` answers without the section names.
+ */
+describe('SupermarketLocationService.priceStack', () => {
+  it('answers the chain and the stack, most specific first', async () => {
+    const { service, stored, stacks } = build();
+    stored.push({
+      id: 'shop-1',
+      supermarketId: CHAIN,
+    } as SupermarketLocation);
+    await stacks.setStack(null as never, 'shop-1', ['store-1', 'region-1']);
+
+    await expect(
+      service.priceStack({ supermarketLocationId: 'shop-1' })
+    ).resolves.toEqual({
+      id: 'shop-1',
+      supermarketId: CHAIN,
+      priceScopeIds: ['store-1', 'region-1'],
+    });
+  });
+
+  it('reads no section names', async () => {
+    const { service, stored, locations } = build();
+    stored.push({ id: 'shop-1', supermarketId: CHAIN } as SupermarketLocation);
+
+    await service.priceStack({ supermarketLocationId: 'shop-1' });
+
+    expect(locations.query).not.toHaveBeenCalled();
+  });
+
+  it('is the ordinary not found for a shop that does not exist', async () => {
+    const { service } = build();
+
+    await expect(
+      service.priceStack({ supermarketLocationId: 'missing' })
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
+});
