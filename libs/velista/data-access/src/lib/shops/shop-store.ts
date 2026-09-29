@@ -74,6 +74,15 @@ export class ShopStore {
    */
   private _seq = 0;
 
+  /**
+   * A search typed before {@link open} named the profile, run once it does.
+   *
+   * The field is live from the first frame and the profile arrives a beat later, so a
+   * word debounced in between would otherwise be dropped and the field would stay
+   * pending until the next keystroke.
+   */
+  private _waiting: string | null = null;
+
   /** How the franchise read has got on. */
   readonly state = this._state.asReadonly();
 
@@ -142,6 +151,22 @@ export class ShopStore {
     () => this._state() === 'loaded' && this._summaries().length === 0
   );
 
+  /**
+   * Whether a field holding `typed` has text this store has not answered yet: the
+   * debounce has not fired, or the read it started is still out. A picker then draws
+   * no count and no "no match", which would otherwise be seen and announced for the
+   * 250 ms before anybody has searched for what was typed (velista `0124`).
+   *
+   * It reads signals, so a `computed` that calls it follows the store.
+   */
+  searchPending(typed: string): boolean {
+    const trimmed = typed.trim();
+    return (
+      trimmed !== '' &&
+      (trimmed !== this._query() || this._shopState() === 'loading')
+    );
+  }
+
   /** Whether one shop's last toggle failed. */
   failed(shopId: string): boolean {
     return this._failed().has(shopId);
@@ -158,12 +183,18 @@ export class ShopStore {
     this._profileId.set(profileId);
     this._state.set('loading');
 
+    const waiting = this._waiting;
+    this._waiting = null;
+    const searched = waiting === null ? null : this.search(waiting);
+
     try {
       this._summaries.set(await this._service.summarizeChains(profileId));
       this._state.set('loaded');
     } catch {
       this._state.set('failed');
     }
+
+    await searched;
   }
 
   /** Read the franchises again, which is what the retry line does. */
@@ -222,6 +253,7 @@ export class ShopStore {
   async search(query: string): Promise<void> {
     const profileId = this._profileId();
     if (profileId === null) {
+      this._waiting = query;
       return;
     }
 

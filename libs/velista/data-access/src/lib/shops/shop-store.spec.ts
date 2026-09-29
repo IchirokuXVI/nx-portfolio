@@ -173,6 +173,58 @@ describe('ShopStore', () => {
 
     expect(store.shops().map((row) => row.id)).toEqual(['fast-shop']);
   });
+
+  it('runs a search typed before the profile was known once it is', async () => {
+    // The field is live before open() names the profile, and a debounced word landing
+    // in that beat used to be dropped, leaving the field pending for good.
+    const asked: ShopQuery[] = [];
+    const memory = new ShopMemory();
+    const { store } = build({
+      summarizeChains: (profileId) => memory.summarizeChains(profileId),
+      searchShops: (query) => {
+        asked.push(query);
+        return memory.searchShops(query);
+      },
+      setLocationPreferences: async () => undefined,
+    });
+
+    await store.search('tejares');
+    expect(asked).toHaveLength(0);
+    expect(store.searchPending('tejares')).toBe(true);
+
+    await store.open(PROFILE);
+
+    expect(asked).toEqual([
+      expect.objectContaining({ profileId: PROFILE, query: 'tejares' }),
+    ]);
+    expect(store.query()).toBe('tejares');
+    expect(store.shopState()).toBe('loaded');
+    expect(store.searchPending('tejares')).toBe(false);
+  });
+
+  it('calls a search pending until the store has answered the words typed', async () => {
+    let answer: (page: Page<Shop>) => void = () => undefined;
+    const memory = new ShopMemory();
+    const { store } = build({
+      summarizeChains: (profileId) => memory.summarizeChains(profileId),
+      searchShops: () =>
+        new Promise<Page<Shop>>((resolve) => {
+          answer = resolve;
+        }),
+      setLocationPreferences: async () => undefined,
+    });
+    await store.open(PROFILE);
+
+    // Nothing typed is never pending; typed but not yet asked, or asked and out, is.
+    expect(store.searchPending('  ')).toBe(false);
+    expect(store.searchPending('dia')).toBe(true);
+    const searched = store.search('dia');
+    expect(store.searchPending('dia ')).toBe(true);
+
+    answer({ items: [shop('shop-dia')], nextCursor: null });
+    await searched;
+    expect(store.searchPending('dia ')).toBe(false);
+  });
 });
 
 /** A shop with nothing on it but an id, for the ordering test. */

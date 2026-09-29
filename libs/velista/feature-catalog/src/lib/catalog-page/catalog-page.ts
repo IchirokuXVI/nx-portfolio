@@ -185,6 +185,9 @@ export class CatalogPage {
   /** Whether the URL has been read once, so its first emission always reads. */
   private _urlRead = false;
 
+  /** Set when the tab is left, so an answer arriving later writes no URL. */
+  private _destroyed = false;
+
   private readonly _products = signal<readonly CatalogProduct[]>([]);
   private readonly _cursor = signal<string | null>(null);
   protected readonly status = signal<ListStatus>('loading');
@@ -448,6 +451,7 @@ export class CatalogPage {
       this._readChoice(catalogChoiceOf(map))
     );
     inject(DestroyRef).onDestroy(() => {
+      this._destroyed = true;
       params.unsubscribe();
       this._clearDebounce();
     });
@@ -610,7 +614,8 @@ export class CatalogPage {
       return;
     }
     void this._browse.location(shopId).then((location) => {
-      if (location === null || this.shop() !== shopId) {
+      // A tab left before the answer must not replace whatever page came next.
+      if (this._destroyed || location === null || this.shop() !== shopId) {
         return;
       }
       this.location.set(location);

@@ -22,6 +22,7 @@ import {
 } from '@portfolio/velista/data-access';
 import type {
   CatalogBrowseQuery,
+  CatalogLocation,
   CatalogPriceState,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
@@ -345,6 +346,40 @@ describe('CatalogPage', () => {
       expect(browse.mock.calls.length).toBe(reads);
       expect(supermarket(fixture).textContent).toContain('Calle Mayor 3');
     } finally {
+      navigate.mockRestore();
+    }
+  });
+
+  it('writes no URL when the tab is left before the shop answers', async () => {
+    // The shop's real answer, held back until after the page is gone.
+    const found = await new CatalogBrowseMemory().location(
+      'location-mercadona-mayor'
+    );
+    let answer: (location: CatalogLocation | null) => void = () => undefined;
+    const location = jest
+      .spyOn(CatalogBrowseMemory.prototype, 'location')
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+    const navigate = jest
+      .spyOn(Router.prototype, 'navigateByUrl')
+      .mockResolvedValue(true);
+    try {
+      const { fixture } = await render('priced', {
+        shop: 'location-mercadona-mayor',
+      });
+      expect(location).toHaveBeenCalledWith('location-mercadona-mayor');
+
+      fixture.destroy();
+      answer(found);
+      await settle(fixture);
+
+      expect(navigate).not.toHaveBeenCalled();
+    } finally {
+      location.mockRestore();
       navigate.mockRestore();
     }
   });
