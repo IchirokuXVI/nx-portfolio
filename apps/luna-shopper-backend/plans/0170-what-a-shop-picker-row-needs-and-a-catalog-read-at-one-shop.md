@@ -1,3 +1,5 @@
+> **PR:** [#533](https://github.com/IchirokuXVI/nx-portfolio/pull/533)
+
 # 0170: what a shop picker row needs, and a catalog read at one shop
 
 > Needed by velista `0124` (one shop picker, and the catalog's Supermarket button). Mock:
