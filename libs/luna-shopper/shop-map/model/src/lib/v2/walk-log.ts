@@ -13,25 +13,29 @@ import type {
  * The walk log (shop-map plan 0002, section 3). Every entry is flattened into
  * operations that carry a log time, and a fold applies them in `seq` order.
  *
- * - A recording entry (`started`, `resumed`, `stopped`) gives each event its
- *   own log time: a path point its `logMs`, a mark its `logMs`, a
- *   `section-left` its `logMs`. An event without one (an area put or removed,
- *   a mark removed) takes the time of the event before it in the same entry,
- *   or the entry's `logFrom` when it is the first.
+ * - A recording entry (`started`, `resumed`, `continued`, `stopped`) gives
+ *   each event its own log time: a path point its `logMs`, a mark its
+ *   `logMs`, a `section-left` its `logMs`. An event without one (an area put
+ *   or removed, a mark removed) takes the time of the event before it in the
+ *   same entry, or the entry's `logFrom` when it is the first.
  * - Every other entry happens at its `logTo`, all of it.
  * - The first path point of a `started` or `resumed` entry begins a new
- *   polyline. Every other point continues the last one, so a `stopped` entry
- *   may carry the tail of the path before the stop.
+ *   polyline. Every other point continues the last one, so the `continued`
+ *   saves of a session extend its polyline, and a `stopped` entry may carry
+ *   the tail of the path before the stop.
  * - `rewound` replaces the state with `stateAt(the entries before it,
  *   rewoundTo)`, and `discarded` replaces it with the fold of the entries
- *   before it without the events of the entry just before it whose log time
+ *   before it without the events of the unconfirmed segment whose log time
  *   is at or after its `logFrom` (the automatic resume): that segment's path,
- *   marks and areas. `confirmed` changes nothing.
+ *   marks and areas. The segment is the entry just before the discard, and
+ *   when that is a `continued` save, every save back to the `started` or
+ *   `resumed` entry that opened the session. `confirmed` changes nothing.
  */
 
 const RECORDING: ReadonlySet<WalkEntryKind> = new Set([
   'started',
   'resumed',
+  'continued',
   'stopped',
 ]);
 
@@ -210,8 +214,15 @@ class Folder {
       }
       state = this.run(i, op.target);
     } else if (op.type === 'discard') {
-      const before = op.entry - 1;
-      if (this.start && before < 0) {
+      // The unconfirmed segment: the entry just before the discard, and when
+      // that is a `continued` save, every save back to the entry that opened
+      // the session.
+      let first = op.entry - 1;
+      while (first > 0 && this.entries[first].kind === 'continued') first--;
+      if (
+        this.start &&
+        (first < 0 || this.entries[first]?.kind === 'continued')
+      ) {
         throw new Error(
           `The discard of entry ${this.entries[op.entry].id} names an entry before the starting document: fold from an earlier snapshot.`
         );
@@ -220,7 +231,8 @@ class Folder {
         i,
         op.t,
         (o) =>
-          o.entry === before &&
+          o.entry >= first &&
+          o.entry < op.entry &&
           (o.type === 'point' || o.type === 'event') &&
           o.t >= op.from
       );
