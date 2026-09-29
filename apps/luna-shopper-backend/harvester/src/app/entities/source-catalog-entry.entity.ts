@@ -140,6 +140,10 @@ export class SourceCatalogEntry extends BaseEntity {
    * person decide a row the import could not. A rule that wanted to read
    * something out of it would make that thing a field of the file schema, in a
    * new version, rather than reaching in here.
+   *
+   * The one key a run reads back is its own, `DETAIL_FAILED_KEY`: a walk wrote
+   * it when a product page failed, and the next walk reads that page again
+   * (plan 0169, section 5.3). It decides a request, never a row.
    */
   @Column({ type: 'jsonb', nullable: true })
   extra!: Record<string, unknown> | null;

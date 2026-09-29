@@ -12,7 +12,11 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
-import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import {
+  DETAIL_FAILED_KEY,
+  type CatalogDiscoveryInput,
+  type CatalogRunner,
+} from './catalog-runner';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
@@ -249,25 +253,33 @@ export class ElJamonCatalogRunner implements CatalogRunner {
  * reading the page again would answer the same category path. So a row in
  * either set is known here. `ALL` reads every page, as it does for Mercadona.
  *
- * **Except a row whose category path has one level or none.** That is what a
- * product whose page failed was written with (section 5.3), and counting it as
- * known would keep that one level forever. Its page is read again, which is
- * how a failed detail is retried here, as the missing EAN is for Mercadona.
+ * **Except a row written from a page that failed**, which carries
+ * {@link DETAIL_FAILED_KEY} (section 5.3). Counting it as known would keep the
+ * listing's top level category forever, so its page is read again, which is
+ * how a failed detail is retried here, as the missing EAN is for Mercadona. A
+ * page that was read and whose breadcrumb has one level is not a failure, and
+ * is not read again.
  */
 function knownIds(input: CatalogDiscoveryInput): ReadonlySet<string> {
   if ((input.details ?? HarvestDetailFetch.ALL) !== HarvestDetailFetch.NEW) {
     return new Set();
   }
-  const shallow = input.externalIdsWithShallowPath ?? new Set<string>();
+  const failed = input.externalIdsWithFailedDetail ?? new Set<string>();
   return new Set(
     [
       ...(input.knownExternalIds ?? []),
       ...(input.externalIdsWithoutEan ?? []),
-    ].filter((id) => !shallow.has(id))
+    ].filter((id) => !failed.has(id))
   );
 }
 
-/** One product as the listing and, when it was read, its page describe it. */
+/**
+ * One product as the listing and, when it was read, its page describe it.
+ *
+ * Every product this is called for had its page asked for, so a missing detail
+ * is a page that failed, and the observation says so in its `extra` for the
+ * next walk to read the page again.
+ */
 function observationOf(
   listed: ListedRow,
   detail: ElJamonProduct | undefined,
@@ -277,6 +289,9 @@ function observationOf(
   const extra: Record<string, unknown> = {};
   if (listed.row.previousPrice !== null) {
     extra['previousPrice'] = listed.row.previousPrice;
+  }
+  if (!detail) {
+    extra[DETAIL_FAILED_KEY] = true;
   }
   return {
     externalId: listed.row.code,

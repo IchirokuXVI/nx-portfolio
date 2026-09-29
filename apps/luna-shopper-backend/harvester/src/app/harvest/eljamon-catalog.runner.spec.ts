@@ -312,6 +312,8 @@ describe('ElJamonCatalogRunner', () => {
     );
     expect(bacon?.categoryPath).toEqual(['FRESCOS']);
     expect(bacon?.prices[0].price).toBe(8.95);
+    // Marked, so the next walk reads its page again.
+    expect(bacon?.extra).toEqual({ detailFailed: true });
   });
 
   it('asks for page 2 with a POST, as the listing form does', async () => {
@@ -324,7 +326,7 @@ describe('ElJamonCatalogRunner', () => {
     expect(second?.method).toBe('POST');
   });
 
-  it('reads the page again of a known product stored with one category level, which is what a failed page left', async () => {
+  it('reads the page again of a known product whose page failed on an earlier walk', async () => {
     const runner = new TestRunner(storefront);
     await runner.run(
       context(),
@@ -332,8 +334,8 @@ describe('ElJamonCatalogRunner', () => {
       {
         ...input,
         externalIdsWithoutEan: new Set(['101', '200']),
-        // 200's page failed on an earlier walk, so it holds only BEBIDAS.
-        externalIdsWithShallowPath: new Set(['200']),
+        // 200's page failed on an earlier walk, so its row carries the mark.
+        externalIdsWithFailedDetail: new Set(['200']),
       },
       source
     );
@@ -342,6 +344,22 @@ describe('ElJamonCatalogRunner', () => {
       runner.sent.some((request) => request.url.endsWith(`/p/${code}`));
     expect(read('101')).toBe(false);
     expect(read('200')).toBe(true);
+  });
+
+  it('does not mark a page that was read and whose breadcrumb has one level', async () => {
+    const report = new RecordingRunReport();
+    await new TestRunner((url) =>
+      url.pathname.endsWith('/p/101')
+        ? new Response(productPage('101', '3.49', ['Frescos']))
+        : storefront(url)
+    ).run(context(), report, input, source);
+
+    const rice = report.products.find(
+      (product) => product.externalId === '101'
+    );
+    expect(rice?.categoryPath).toEqual(['Frescos']);
+    // Only a failed page is read again, so this one stays known next walk.
+    expect(rice?.extra).toEqual({ previousPrice: 3.99 });
   });
 
   it('skips a failed page after the first and goes on reading the category', async () => {
