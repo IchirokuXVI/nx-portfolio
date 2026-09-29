@@ -1,3 +1,5 @@
+> **PR:** [#555](https://github.com/IchirokuXVI/nx-portfolio/pull/555)
+
 # 0168: a shop has walks, and one of them is its map
 
 > Rewritten on 2026-09-29. The first version stored map documents that any shopper
