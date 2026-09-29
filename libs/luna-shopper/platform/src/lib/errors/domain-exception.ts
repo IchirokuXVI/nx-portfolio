@@ -471,6 +471,19 @@ export class SectionSlugTakenException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/**
+ * The catalog read was sent `locationId` beside another selector of where a
+ * price comes from, or beside a `soldBy` naming another chain (plan 0170).
+ */
+export class CatalogLocationExclusiveException extends DomainException {
+  readonly code = ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE;
+}
+
+/** A shop id named no shop (plan 0170), on a read where it is a parameter. */
+export class SupermarketLocationNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND;
+}
+
 /** The `details` key a {@link SectionNotFoundException} lists the unknown ids under. */
 export const SECTION_UNKNOWN_DETAIL = 'unknown';
 

@@ -401,6 +401,7 @@ export class CatalogItemsController {
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
+  @ApiProblemResponses({ auth: true, membership: true, atLocation: true })
   async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto

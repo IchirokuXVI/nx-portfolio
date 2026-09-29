@@ -189,6 +189,12 @@ export const CATALOG_SCHEMA_IDS = {
   itemSectionsAtLocationRequest: schemaId(
     'msg/section.itemsAtLocation/request'
   ),
+  // Plan 0170: a shop row's section names, and several shops' in one read.
+  locationSectionNameView: schemaId('catalog/LocationSectionNameView'),
+  locationSectionNamesView: schemaId('catalog/LocationSectionNamesView'),
+  locationSectionNamesRequest: schemaId(
+    'msg/section.namesForLocations/request'
+  ),
   createProductGroupOperation: schemaId('catalog/CreateProductGroupOperation'),
   assignItemToGroupOperation: schemaId('catalog/AssignItemToGroupOperation'),
   productGroupAssignmentOutcome: schemaId(
@@ -396,6 +402,8 @@ const supermarketLocationView = object(
     longitude: numberOrNull(),
     externalRef: nullableString(),
     externalProvider: nullableString(),
+    // Plan 0170: the shop's section names in its order, always present.
+    sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
   },
   [
     'id',
@@ -412,6 +420,7 @@ const supermarketLocationView = object(
     'longitude',
     'externalRef',
     'externalProvider',
+    'sections',
   ]
 );
 
@@ -634,8 +643,10 @@ const priceScopeChainView = object(
     priceScopeId: nonEmptyString(),
     supermarketId: nonEmptyString(),
     supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    // Plan 0170: the chain's logo, null until an operator sets one.
+    supermarketLogoUrl: nullableString(),
   },
-  ['priceScopeId', 'supermarketId', 'supermarketName']
+  ['priceScopeId', 'supermarketId', 'supermarketName', 'supermarketLogoUrl']
 );
 
 // Stated once and used by both views below, so the admin view cannot drift
@@ -1280,6 +1291,30 @@ const locationSectionsView = object(
   ['sections', 'source']
 );
 
+/** One section of a shop, as a shop row draws it (plan 0170). */
+const locationSectionNameView = object(
+  CATALOG_SCHEMA_IDS.locationSectionNameView,
+  {
+    id: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  },
+  ['id', 'name']
+);
+
+/** Each shop's section names, keyed by shop id (plan 0170). */
+const locationSectionNamesView = object(
+  CATALOG_SCHEMA_IDS.locationSectionNamesView,
+  {
+    locations: {
+      type: 'object',
+      additionalProperties: array(
+        ref(CATALOG_SCHEMA_IDS.locationSectionNameView)
+      ),
+    },
+  },
+  ['locations']
+);
+
 const itemSectionPinsView = object(
   CATALOG_SCHEMA_IDS.itemSectionPinsView,
   {
@@ -1398,6 +1433,16 @@ const setItemSectionPinsRequest = object(
 // No userId: the basket read of a guest asks it. Unbounded, like the
 // shopAvailability request beside it: the basket read sends every product its
 // rows name, and a cap here would drop the sections of a large basket whole.
+const locationSectionNamesRequest = object(
+  CATALOG_SCHEMA_IDS.locationSectionNamesRequest,
+  {
+    supermarketLocationIds: {
+      ...array(nonEmptyString()),
+      maxItems: SECTION_LIMITS.maxLocationsPerNamesRead,
+    },
+  },
+  ['supermarketLocationIds']
+);
 const itemSectionsAtLocationRequest = object(
   CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,
   {
@@ -2551,7 +2596,7 @@ const nearbyShopsRequest = object(
 
 /**
  * The shop view of plan 0163 with its distance and whether the profile
- * refuses it. The eight fields are listed rather than extended, because a
+ * refuses it. The shop view's fields are listed rather than extended, because a
  * contract schema is one flat object.
  */
 const nearbyShopView = object(
@@ -2560,11 +2605,13 @@ const nearbyShopView = object(
     id: nonEmptyString(),
     supermarketId: nonEmptyString(),
     supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    supermarketLogoUrl: nullableString(),
     label: nullableLocalized(),
     address: nullableString(),
     city: nullableString(),
     postalCode: nullableString(),
     inProfile: boolean(),
+    sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
     distanceMetres: integer({ minimum: 0 }),
     excluded: boolean(),
   },
@@ -2572,11 +2619,13 @@ const nearbyShopView = object(
     'id',
     'supermarketId',
     'supermarketName',
+    'supermarketLogoUrl',
     'label',
     'address',
     'city',
     'postalCode',
     'inProfile',
+    'sections',
     'distanceMetres',
     'excluded',
   ]
@@ -2658,6 +2707,8 @@ export const catalogSchemas: JsonSchema[] = [
   supermarketSectionView,
   supermarketSectionPage,
   locationSectionsView,
+  locationSectionNameView,
+  locationSectionNamesView,
   itemSectionPinsView,
   itemSectionPinsPage,
   itemSectionsAtLocationEntry,
@@ -2729,6 +2780,7 @@ export const catalogSchemas: JsonSchema[] = [
   listItemSectionPinsRequest,
   setItemSectionPinsRequest,
   itemSectionsAtLocationRequest,
+  locationSectionNamesRequest,
   createProductGroupOperation,
   assignItemToGroupOperation,
   productGroupAssignmentOutcome,
@@ -2977,6 +3029,10 @@ export const catalogMessageContracts: Record<
   [SECTION_PATTERNS.itemsAtLocation]: {
     request: CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,
     response: CATALOG_SCHEMA_IDS.itemSectionsAtLocationView,
+  },
+  [SECTION_PATTERNS.namesForLocations]: {
+    request: CATALOG_SCHEMA_IDS.locationSectionNamesRequest,
+    response: CATALOG_SCHEMA_IDS.locationSectionNamesView,
   },
   [BRAND_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createBrandRequest,

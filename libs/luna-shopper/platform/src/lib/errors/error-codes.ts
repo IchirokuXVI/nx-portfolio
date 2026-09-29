@@ -304,6 +304,23 @@ export const ERROR_CODES = {
    * office can offer to open it rather than only say no.
    */
   SECTION_SLUG_TAKEN: 'section_slug_taken',
+  /**
+   * `GET /v1/catalog/items` was sent `locationId` beside another way of saying
+   * where a price comes from, or beside a `soldBy` naming another chain (plan
+   * 0170, section 4).
+   *
+   * A read at one shop is priced at that shop's scope alone and lists that
+   * shop's chain alone, so a `priceScopeId`, `postalCode`, `supermarketId`,
+   * `profileId` or foreign `soldBy` beside it asks two questions at once, and
+   * answering either would ignore the other.
+   */
+  CATALOG_LOCATION_EXCLUSIVE: 'catalog_location_exclusive',
+  /**
+   * An id names no shop (plan 0170, section 4). Its own code rather than a
+   * plain {@link NOT_FOUND}, because on the catalog read the missing thing is
+   * a query parameter and not the route's resource.
+   */
+  SUPERMARKET_LOCATION_NOT_FOUND: 'supermarket_location_not_found',
   INTERNAL: 'internal',
 } as const;
 
@@ -423,5 +440,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
+  // Plan 0170: a malformed combination of query parameters, and a shop that
+  // does not exist.
+  [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

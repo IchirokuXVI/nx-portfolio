@@ -68,6 +68,12 @@ export interface ProblemResponseOptions {
    * number.
    */
   lineMerge?: boolean;
+  /**
+   * The route reads the catalog at one shop (plan 0170): `locationId` beside
+   * another selector is a 400 of its own code, and an unknown shop a 404 of
+   * its own code.
+   */
+  atLocation?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -146,6 +152,12 @@ export function ApiProblemResponses(
       ERROR_CODES.LINE_MERGE_REQUIRED,
       ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL,
       ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS
+    );
+  }
+  if (options.atLocation) {
+    codes.push(
+      ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE,
+      ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND
     );
   }
   if (options.throttled !== false) {
