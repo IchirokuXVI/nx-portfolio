@@ -1,0 +1,1499 @@
+[
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 3,
+   "codigoTienda": 1443,
+   "idTienda": 1443,
+   "posicionX": "38.246076",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-0.800414"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "ESTACIÓN",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "09:30 - 15:00",
+    "",
+    "09:00 - 21:30"
+   ],
+   "documentoFolletoId": 20859,
+   "localidad": "Crevillent",
+   "tiendaId": 1443,
+   "telefono": 682617079,
+   "horariosTienda": {
+    "1": "09:00 - 21:30",
+    "2": "09:00 - 21:30",
+    "3": "09:00 - 21:30",
+    "4": "09:00 - 21:30",
+    "5": "09:00 - 21:30",
+    "6": "09:00 - 21:30"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "03330",
+   "tipoVia": "PS",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-10-05",
+    "2026-10-09",
+    "2026-10-12"
+   ],
+   "folletoId": 1863376,
+   "tiendaCodigo": 1443,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "PS. ESTACIÓN 15",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "15",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 25,
+   "codigoTienda": 60851,
+   "idTienda": 60851,
+   "posicionX": "42.41446578",
+   "posicionY": "1.131832219"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "CARLES POL 35",
+   "codigoPostal": "25560",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-11",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 60851,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. CARLES POL 35",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    "",
+    ""
+   ],
+   "localidad": "Sort",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 60851,
+   "telefono": 616262850,
+   "horariosTienda": {
+    "1": "09:00 - 20:00",
+    "2": "09:00 - 20:00",
+    "3": "09:00 - 20:00",
+    "4": "09:00 - 20:00",
+    "5": "09:00 - 20:00",
+    "6": "09:00 - 20:00"
+   },
+   "numeroVia": " ",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 11,
+   "codigoTienda": 69207,
+   "idTienda": 1003857,
+   "posicionX": "36.52761",
+   "posicionY": "-6.18887"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "DE LA PLAZA",
+   "codigoPostal": "11510",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 69207,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. DE LA PLAZA 70-74",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    ""
+   ],
+   "localidad": "Puerto Real",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003857,
+   "telefono": 672740941,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00"
+   },
+   "numeroVia": "70-74",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 12,
+   "codigoTienda": 1509,
+   "idTienda": 1509,
+   "posicionX": "40.21778",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "0.19247"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "TORRE ESQ. CL ERA",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 21:00",
+    "09:00 - 14:00",
+    "09:00 - 21:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00"
+   ],
+   "documentoFolletoId": 20855,
+   "localidad": "Torreblanca",
+   "tiendaId": 1509,
+   "telefono": 682616887,
+   "horariosTienda": {
+    "1": "08:30 - 21:00",
+    "2": "08:30 - 21:00",
+    "3": "08:30 - 21:00",
+    "4": "08:30 - 21:00",
+    "5": "08:30 - 21:00",
+    "6": "08:30 - 21:00",
+    "7": "09:00 - 14:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "12596",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-09-06",
+    "2026-09-13",
+    "2026-09-20",
+    "2026-09-27",
+    "2026-10-04",
+    "2026-10-09",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-18",
+    "2026-10-25"
+   ],
+   "folletoId": 1864118,
+   "tiendaCodigo": 1509,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. TORRE ESQ. CL ERA S/N",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "S/N",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 24,
+   "codigoTienda": 39053,
+   "idTienda": 1002918,
+   "posicionX": "42.599206",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-5.572588"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "PADRE ISLA",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "",
+    ""
+   ],
+   "documentoFolletoId": 20861,
+   "localidad": "León",
+   "tiendaId": 1002918,
+   "toolTipServicioDomicilio": "Servicio a domicilio",
+   "telefono": 699651591,
+   "horariosTienda": {
+    "1": "09:00 - 21:30",
+    "2": "09:00 - 21:30",
+    "3": "09:00 - 21:30",
+    "4": "09:00 - 21:30",
+    "5": "09:00 - 21:30",
+    "6": "09:00 - 21:30"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "24002",
+   "servicioDomicilio": 1,
+   "tipoVia": "AV",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-10-05",
+    "2026-10-12"
+   ],
+   "folletoId": 1864576,
+   "tiendaCodigo": 39053,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "AV. PADRE ISLA 10",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "10",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 40,
+   "codigoTienda": 7814,
+   "idTienda": 7814,
+   "posicionX": "41.15461",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-4.49196"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "PICASSO",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "",
+    "",
+    ""
+   ],
+   "documentoFolletoId": 20861,
+   "localidad": "Nava de la Asunción",
+   "tiendaId": 7814,
+   "telefono": 696810554,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "40450",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-09-21",
+    "2026-09-22",
+    "2026-10-12"
+   ],
+   "folletoId": 1863814,
+   "tiendaCodigo": 7814,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. PICASSO 7",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "7",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 50,
+   "codigoTienda": 41094,
+   "idTienda": 1003402,
+   "posicionX": "41.68386",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-0.87206"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "EL GLOBO",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    ""
+   ],
+   "documentoFolletoId": 20861,
+   "localidad": "Zaragoza",
+   "tiendaId": 1003402,
+   "telefono": 618560888,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "50015",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-10-12"
+   ],
+   "folletoId": 1864546,
+   "tiendaCodigo": 41094,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. EL GLOBO 8",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "8",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 23,
+   "codigoTienda": 7639,
+   "idTienda": 1001047,
+   "posicionX": "38.176960284",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-3.771700859"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "CANTUESO",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "09:00 - 14:00",
+    ""
+   ],
+   "documentoFolletoId": 20861,
+   "localidad": "Baños de la Encina",
+   "tiendaId": 1001047,
+   "telefono": 696704852,
+   "horariosTienda": {
+    "1": "09:00 - 14:30 | 17:00 - 21:00",
+    "2": "09:00 - 14:30 | 17:00 - 21:00",
+    "3": "09:00 - 14:30 | 17:00 - 21:00",
+    "4": "09:00 - 14:30 | 17:00 - 21:00",
+    "5": "09:00 - 14:30 | 17:00 - 21:00",
+    "6": "09:00 - 14:30 | 17:00 - 21:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "23711",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-10-12",
+    "2026-10-30"
+   ],
+   "folletoId": 1864496,
+   "tiendaCodigo": 7639,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. CANTUESO 5",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "    5",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 16,
+   "codigoTienda": 16084,
+   "idTienda": 1001719,
+   "posicionX": "39.378735",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-2.57329"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "JUAN CRISÓSTOMO",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00",
+    "09:00 - 14:00"
+   ],
+   "documentoFolletoId": 20845,
+   "localidad": "Provencio (El)",
+   "tiendaId": 1001719,
+   "telefono": 620329667,
+   "horariosTienda": {
+    "1": "09:00 - 14:00 | 17:00 - 20:30",
+    "2": "09:00 - 14:00 | 17:00 - 20:30",
+    "3": "09:00 - 14:00 | 17:00 - 20:30",
+    "4": "09:00 - 14:00 | 17:00 - 20:30",
+    "5": "09:00 - 14:00 | 17:00 - 20:30",
+    "6": "09:00 - 14:00 | 17:00 - 20:30",
+    "7": "10:00 - 14:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "16670",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-09-06",
+    "2026-09-13",
+    "2026-09-20",
+    "2026-09-27",
+    "2026-10-04",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-18",
+    "2026-10-25"
+   ],
+   "folletoId": 1862560,
+   "tiendaCodigo": 16084,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. JUAN CRISÓSTOMO 11",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "   11",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": true,
+   "especial": false,
+   "codigoProvincia": 28,
+   "codigoTienda": 9374,
+   "idTienda": 9374,
+   "posicionX": "40.359084",
+   "fechaVigenciaFolleto": "29/09/2026",
+   "posicionY": "-3.780116"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "SAN JOSE",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Venta de pescado",
+    "Obrador punto caliente"
+   ],
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00",
+    "10:00 - 20:00"
+   ],
+   "documentoFolletoId": 20861,
+   "localidad": "Leganés",
+   "tiendaId": 9374,
+   "telefono": 696711881,
+   "horariosTienda": {
+    "1": "09:00 - 21:30",
+    "2": "09:00 - 21:30",
+    "3": "09:00 - 21:30",
+    "4": "09:00 - 21:30",
+    "5": "09:00 - 21:30",
+    "6": "09:00 - 21:30",
+    "7": "10:00 - 20:00"
+   },
+   "validezFolleto2": "Válido de 23-09 a 29-09",
+   "codigoPostal": "28917",
+   "tipoVia": "CL",
+   "validezFolleto": "V&aacute;lido del 23 al 29 de septiembre de 2026",
+   "festivosTienda": [
+    "2026-09-06",
+    "2026-09-13",
+    "2026-09-20",
+    "2026-09-27",
+    "2026-10-04",
+    "2026-10-09",
+    "2026-10-10",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-18",
+    "2026-10-25"
+   ],
+   "folletoId": 1864201,
+   "tiendaCodigo": 9374,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. SAN JOSE 11",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "MWXGy1M7Vok",
+    "kgz1U6q8Jhc"
+   ],
+   "numeroVia": "11",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 46,
+   "codigoTienda": 61011,
+   "idTienda": 61011,
+   "posicionX": "39.494684424",
+   "posicionY": "-0.684403606"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "JULIO TARIN SABATER",
+   "codigoPostal": "46380",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-10-09",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 61011,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. JULIO TARIN SABATER 4",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    "",
+    ""
+   ],
+   "localidad": "Cheste",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 61011,
+   "telefono": 628587162,
+   "horariosTienda": {
+    "1": "09:00 - 14:00 | 16:30 - 20:00",
+    "2": "09:00 - 14:00 | 16:30 - 20:00",
+    "3": "09:00 - 14:00 | 16:30 - 20:00",
+    "4": "09:00 - 14:00 | 16:30 - 20:00",
+    "5": "09:00 - 14:00 | 16:30 - 20:00",
+    "6": "09:00 - 14:00 | 16:30 - 20:00"
+   },
+   "numeroVia": "4",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 8,
+   "codigoTienda": 60787,
+   "idTienda": 60787,
+   "posicionX": "41.340463204",
+   "posicionY": "1.69658265"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "TOSSA DE MAR 22",
+   "codigoPostal": "08720",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-01",
+    "2026-09-11",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 60787,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. TOSSA DE MAR 22",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    "",
+    "",
+    ""
+   ],
+   "localidad": "Vilafranca del Penedès",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 60787,
+   "telefono": 616657196,
+   "horariosTienda": {
+    "1": "08:30 - 20:30",
+    "2": "08:30 - 20:30",
+    "3": "08:30 - 20:30",
+    "4": "08:30 - 20:30",
+    "5": "08:30 - 20:30",
+    "6": "08:30 - 20:30"
+   },
+   "numeroVia": " ",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 41,
+   "codigoTienda": 66209,
+   "idTienda": 66209,
+   "posicionX": "37.933454",
+   "posicionY": "-5.759464"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "LLANA",
+   "codigoPostal": "41370",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 66209,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. LLANA 32",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    ""
+   ],
+   "localidad": "Cazalla de la Sierra",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 66209,
+   "telefono": 648955818,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00"
+   },
+   "numeroVia": "32",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 8,
+   "codigoTienda": 70758,
+   "idTienda": 1003578,
+   "posicionX": "41.42784",
+   "posicionY": "2.17442"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "COSTA I CUXART",
+   "codigoPostal": "08031",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-11",
+    "2026-09-24",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 70758,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. COSTA I CUXART S/N",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    "",
+    "",
+    ""
+   ],
+   "localidad": "Barcelona",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003578,
+   "telefono": 628930177,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00",
+    "7": "10:00 - 14:00"
+   },
+   "numeroVia": "S/N",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 48,
+   "codigoTienda": 76729,
+   "idTienda": 1003214,
+   "posicionX": "43.355503041",
+   "posicionY": "-2.849052804"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "ERREKATXU",
+   "codigoPostal": "48100",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 76729,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. ERREKATXU 1",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    ""
+   ],
+   "localidad": "Mungia",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003214,
+   "telefono": 638761445,
+   "horariosTienda": {
+    "1": "09:00 - 21:00",
+    "2": "09:00 - 21:00",
+    "3": "09:00 - 21:00",
+    "4": "09:00 - 21:00",
+    "5": "09:00 - 21:00",
+    "6": "09:00 - 21:00"
+   },
+   "numeroVia": "1",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 1,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 8,
+   "codigoTienda": 60750,
+   "idTienda": 60750,
+   "posicionX": "41.732787328",
+   "posicionY": "1.515279228"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolletoClarel",
+   "nombreVia": "ISIDRO VILARO 17",
+   "codigoPostal": "08280",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-11",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 60750,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. ISIDRO VILARO 17",
+   "tipoTienda": "clarel",
+   "horariosAperturaFestivo": [
+    "",
+    ""
+   ],
+   "localidad": "Calaf",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 60750,
+   "telefono": 616520792,
+   "horariosTienda": {
+    "1": "09:00 - 20:30",
+    "2": "09:00 - 20:30",
+    "3": "09:00 - 20:30",
+    "4": "09:00 - 20:30",
+    "5": "09:00 - 20:30",
+    "6": "09:00 - 20:30"
+   },
+   "numeroVia": " ",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 8,
+   "codigoTienda": 959,
+   "idTienda": 1003553,
+   "posicionX": "41.325102",
+   "posicionY": "2.109942"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "L'ESTRUCH, CARRER 6",
+   "codigoPostal": "08820",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "PG",
+   "festivosTienda": [
+    "2026-09-11",
+    "2026-09-28",
+    "2026-10-12"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 959,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "PG. L'ESTRUCH, CARRER 6 7",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "06:00 - 15:00",
+    "06:00 - 15:00",
+    "06:00 - 15:00"
+   ],
+   "inicioCierreTemp": "12 de diciembre",
+   "fechaApertura": "31/12/2026",
+   "finCierreTemp": "31 de diciembre",
+   "localidad": "Prat de Llobregat (El)",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003553,
+   "telefono": 629226712,
+   "horariosTienda": {
+    "1": "07:00 - 21:00",
+    "2": "07:00 - 21:00",
+    "3": "07:00 - 21:00",
+    "4": "07:00 - 21:00",
+    "5": "07:00 - 21:00",
+    "6": "07:00 - 21:00"
+   },
+   "numeroVia": "7",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 41,
+   "codigoTienda": 2354,
+   "idTienda": 1003560,
+   "posicionX": "37.351365098",
+   "posicionY": "-6.000746431"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "DE LA ESCLUSA,POLIGONO INSTRIAL ZAL,NAVE 2",
+   "codigoPostal": "41011",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CR",
+   "festivosTienda": [],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 2354,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CR. DE LA ESCLUSA,POLIGONO INSTRIAL ZAL,NAVE 2",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [],
+   "inicioCierreTemp": "24 de noviembre",
+   "fechaApertura": "31/12/2026",
+   "finCierreTemp": "31 de diciembre",
+   "localidad": "Sevilla",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003560,
+   "telefono": 672606023,
+   "horariosTienda": {
+    "1": "09:00 - 21:30",
+    "2": "09:00 - 21:30",
+    "3": "09:00 - 21:30",
+    "4": "09:00 - 21:30",
+    "5": "09:00 - 21:30",
+    "6": "09:00 - 21:30"
+   },
+   "numeroVia": " ",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 28,
+   "codigoTienda": 13835,
+   "idTienda": 1003554,
+   "posicionX": "40.362457",
+   "posicionY": "-3.701544"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "EDUARDO BARREIROS",
+   "codigoPostal": "28041",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-06",
+    "2026-09-13",
+    "2026-09-20",
+    "2026-09-27",
+    "2026-10-04",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-18",
+    "2026-10-25"
+   ],
+   "toolTipsPerecederos": [],
+   "tiendaCodigo": 13835,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. EDUARDO BARREIROS 104",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "09:00 - 15:00",
+    "09:00 - 15:00",
+    "09:00 - 15:00",
+    "09:00 - 15:00",
+    "06:00 - 15:00",
+    "06:00 - 15:00",
+    "06:00 - 15:00",
+    "06:00 - 15:00",
+    "06:00 - 15:00"
+   ],
+   "inicioCierreTemp": "21 de octubre",
+   "fechaApertura": "31/12/2026",
+   "finCierreTemp": "31 de diciembre",
+   "localidad": "Madrid",
+   "codigosLogosPerecederos": [],
+   "tiendaId": 1003554,
+   "telefono": 616719948,
+   "horariosTienda": {
+    "1": "06:00 - 22:00",
+    "2": "06:00 - 22:00",
+    "3": "06:00 - 22:00",
+    "4": "06:00 - 22:00",
+    "5": "06:00 - 22:00",
+    "6": "06:00 - 22:00",
+    "7": "06:00 - 22:00"
+   },
+   "numeroVia": "104",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 11,
+   "codigoTienda": 10111,
+   "idTienda": 10111,
+   "posicionX": "36.472357",
+   "posicionY": "-6.206275"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "CARPINTEROS, Nº 3B, POL. INDUSTRIAL DE FADRICAS",
+   "codigoPostal": "11100",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente",
+    "Obrador punto caliente"
+   ],
+   "tiendaCodigo": 10111,
+   "especial": false,
+   "tipoTiendaId": 4,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. CARPINTEROS, Nº 3B, POL. INDUSTRIAL DE FADRICAS",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [],
+   "inicioCierreTemp": "17 de abril",
+   "fechaApertura": "31/12/2026",
+   "finCierreTemp": "31 de diciembre",
+   "localidad": "San Fernando",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98",
+    "kgz1U6q8Jhc"
+   ],
+   "tiendaId": 10111,
+   "telefono": 682617697,
+   "horariosTienda": {
+    "1": "09:00 - 21:30",
+    "2": "09:00 - 21:30",
+    "3": "09:00 - 21:30",
+    "4": "09:00 - 21:30",
+    "5": "09:00 - 21:30",
+    "6": "09:00 - 21:30"
+   },
+   "numeroVia": " ",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 28,
+   "codigoTienda": 14126,
+   "idTienda": 1001720,
+   "posicionX": "40.426657",
+   "posicionY": "-3.700085"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "CHURRUCA 2 C/V BARCELO",
+   "codigoPostal": "28004",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+   ],
+   "servicioDomicilio": 1,
+   "tipoVia": "CL",
+   "festivosTienda": [
+    "2026-09-06",
+    "2026-09-13",
+    "2026-09-20",
+    "2026-09-27",
+    "2026-10-04",
+    "2026-10-11",
+    "2026-10-12",
+    "2026-10-18",
+    "2026-10-25"
+   ],
+   "toolTipsPerecederos": [
+    "Venta de pollo",
+    "Venta de carne",
+    "Venta de fruta",
+    "Venta punto caliente"
+   ],
+   "tiendaCodigo": 14126,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. CHURRUCA 2 C/V BARCELO 2",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00",
+    "10:00 - 22:00"
+   ],
+   "localidad": "Madrid",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U",
+    "cT1eUGzwuak",
+    "Vi5e9mCXatc",
+    "109TFg7sV98"
+   ],
+   "tiendaId": 1001720,
+   "toolTipServicioDomicilio": "Servicio a domicilio",
+   "telefono": 626048859,
+   "horariosTienda": {
+    "1": "08:30 - 22:00",
+    "2": "08:30 - 22:00",
+    "3": "08:30 - 22:00",
+    "4": "08:30 - 22:00",
+    "5": "08:30 - 22:00",
+    "6": "08:30 - 22:00",
+    "7": "10:00 - 22:00"
+   },
+   "numeroVia": "2",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ },
+ {
+  "file": {
+   "tipoTienda": 0,
+   "tieneFolleto": false,
+   "especial": false,
+   "codigoProvincia": 31,
+   "codigoTienda": 6409,
+   "idTienda": 6409,
+   "posicionX": "42.218242664",
+   "posicionY": "-1.695931195"
+  },
+  "status": 200,
+  "detail": {
+   "clasePreviewFolleto": "imgFolleto",
+   "nombreVia": "SAN MIGUEL",
+   "codigoPostal": "31515",
+   "keys": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6"
+   ],
+   "tipoVia": "CL",
+   "festivosTienda": [],
+   "toolTipsPerecederos": [
+    "Venta de pollo"
+   ],
+   "tiendaCodigo": 6409,
+   "especial": false,
+   "tipoTiendaId": 3,
+   "permalinkFolleto": "folletos",
+   "direccionPostal": "CL. SAN MIGUEL 6",
+   "tipoTienda": "dia",
+   "horariosAperturaFestivo": [],
+   "inicioCierreTemp": "6 de agosto",
+   "fechaApertura": "27/10/2026",
+   "finCierreTemp": "27 de octubre",
+   "localidad": "Cadreita",
+   "codigosLogosPerecederos": [
+    "BetjHuUJR-U"
+   ],
+   "tiendaId": 6409,
+   "telefono": 696687102,
+   "horariosTienda": {
+    "1": "07:30 - 13:00 | 17:30 - 19:30",
+    "2": "07:30 - 13:00 | 17:30 - 19:30",
+    "3": "07:30 - 13:00 | 17:30 - 19:30",
+    "4": "07:30 - 13:00 | 17:30 - 19:30",
+    "5": "07:30 - 13:00 | 17:30 - 19:30",
+    "6": "07:30 - 13:00"
+   },
+   "numeroVia": "6",
+   "tipoTiendaDescripcion": "DIA"
+  }
+ }
+]
