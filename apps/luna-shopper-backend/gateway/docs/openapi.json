@@ -12945,6 +12945,16 @@
                 "format": "uuid"
               }
             }
+          },
+          {
+            "name": "locationId",
+            "required": false,
+            "in": "query",
+            "description": "Read the catalog at one shop (plan 0170): priced at that shop’s own scope alone, and listing its chain’s products, priced or not. Refused with catalog_location_exclusive beside priceScopeId, postalCode, supermarketId, profileId or a soldBy naming another chain, and with supermarket_location_not_found for a shop that does not exist.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -12954,6 +12964,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/catalog.ItemPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`catalog_location_exclusive` — A read at one shop is priced at that shop and lists its chain alone. Send the shop without other scopes, places, profiles or chains.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -12979,7 +12999,7 @@
             }
           },
           "404": {
-            "description": "`not_found` — The requested resource was not found.",
+            "description": "`not_found` — The requested resource was not found.\n\n`supermarket_location_not_found` — That shop does not exist.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31359,6 +31379,12 @@
           "supermarketName": {
             "$ref": "#/components/schemas/catalog.LocalizedText"
           },
+          "supermarketLogoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "locations": {
             "type": "array",
             "items": {
@@ -31370,6 +31396,7 @@
           "priceScopeId",
           "supermarketId",
           "supermarketName",
+          "supermarketLogoUrl",
           "locations"
         ],
         "additionalProperties": false
@@ -31914,6 +31941,12 @@
               "string",
               "null"
             ]
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.LocationSectionNameView"
+            }
           }
         },
         "required": [
@@ -31921,7 +31954,8 @@
           "label",
           "address",
           "city",
-          "postalCode"
+          "postalCode",
+          "sections"
         ],
         "additionalProperties": false
       },
@@ -31938,6 +31972,12 @@
           },
           "supermarketName": {
             "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "supermarketLogoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "label": {
             "anyOf": [
@@ -31969,17 +32009,25 @@
           },
           "inProfile": {
             "type": "boolean"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.LocationSectionNameView"
+            }
           }
         },
         "required": [
           "id",
           "supermarketId",
           "supermarketName",
+          "supermarketLogoUrl",
           "label",
           "address",
           "city",
           "postalCode",
-          "inProfile"
+          "inProfile",
+          "sections"
         ],
         "additionalProperties": false
       },
@@ -33433,6 +33481,23 @@
         "additionalProperties": false,
         "minProperties": 1
       },
+      "catalog.LocationSectionNameView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
       "catalog.LocationSectionsView": {
         "type": "object",
         "properties": {
@@ -33550,6 +33615,12 @@
           "supermarketName": {
             "$ref": "#/components/schemas/catalog.LocalizedText"
           },
+          "supermarketLogoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "label": {
             "anyOf": [
               {
@@ -33581,6 +33652,12 @@
           "inProfile": {
             "type": "boolean"
           },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.LocationSectionNameView"
+            }
+          },
           "distanceMetres": {
             "type": "integer",
             "minimum": 0
@@ -33593,11 +33670,13 @@
           "id",
           "supermarketId",
           "supermarketName",
+          "supermarketLogoUrl",
           "label",
           "address",
           "city",
           "postalCode",
           "inProfile",
+          "sections",
           "distanceMetres",
           "excluded"
         ],
@@ -33694,12 +33773,19 @@
           },
           "supermarketName": {
             "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "supermarketLogoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "priceScopeId",
           "supermarketId",
-          "supermarketName"
+          "supermarketName",
+          "supermarketLogoUrl"
         ],
         "additionalProperties": false
       },
@@ -34593,6 +34679,12 @@
               "string",
               "null"
             ]
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.LocationSectionNameView"
+            }
           }
         },
         "required": [
@@ -34609,7 +34701,8 @@
           "latitude",
           "longitude",
           "externalRef",
-          "externalProvider"
+          "externalProvider",
+          "sections"
         ],
         "additionalProperties": false
       },
@@ -38454,6 +38547,8 @@
               "section_not_found",
               "section_of_another_chain",
               "section_slug_taken",
+              "catalog_location_exclusive",
+              "supermarket_location_not_found",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

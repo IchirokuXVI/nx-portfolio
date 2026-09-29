@@ -323,6 +323,15 @@ export const SECTION_PATTERNS = {
    * gives.
    */
   itemsAtLocation: 'section.itemsAtLocation',
+  /**
+   * The section names of several shops in one statement (plan 0170, section
+   * 2): the ids and names of {@link forLocation}'s answer, keyed by shop, by
+   * the same query. At most {@link SECTION_LIMITS.maxLocationsPerNamesRead}
+   * ids. A shop that does not exist is absent from the map rather than an
+   * error, because a list must not fail over one stale id. Carries no
+   * `userId`, for the reason {@link forLocation} gives.
+   */
+  namesForLocations: 'section.namesForLocations',
 } as const;
 
 /** The longest a section slug may be. Ascii kebab case, checked by catalog. */
@@ -341,6 +350,8 @@ export const SECTION_LIMITS = {
   maxSectionsPerLocation: 200,
   /** Sections one product may be pinned to in one chain. */
   maxPinsPerItem: 20,
+  /** Shops one `section.namesForLocations` may ask about (plan 0170). */
+  maxLocationsPerNamesRead: 200,
 } as const;
 
 /**
@@ -688,6 +699,12 @@ export interface SupermarketLocationView {
    */
   externalRef: string | null;
   externalProvider: string | null;
+  /**
+   * The shop's section names in its order (plan 0170, section 2), by the rule
+   * {@link SECTION_PATTERNS.forLocation} applies: its own list, else its
+   * chain's default. Always present, and empty when the chain has no sections.
+   */
+  sections: LocationSectionNameView[];
 }
 
 /**
@@ -1028,6 +1045,30 @@ export interface LocationSectionsView {
   sections: SupermarketSectionView[];
   /** `LOCATION` when the shop has rows of its own, `CHAIN` when it inherits the chain's list. */
   source: LocationSectionsSource;
+}
+
+/**
+ * One section of a shop, as much of it as a shop row draws (plan 0170, section
+ * 2): the name, and the id that keys it. The full {@link SupermarketSectionView}
+ * stays behind `section.forLocation`.
+ */
+export interface LocationSectionNameView {
+  id: string;
+  name: LocalizedText;
+}
+
+/** Several shops' section names, in one statement (plan 0170). */
+export interface LocationSectionNamesRequest {
+  /** At most {@link SECTION_LIMITS.maxLocationsPerNamesRead}. */
+  supermarketLocationIds: string[];
+}
+
+/**
+ * Each shop's section names, keyed by shop id. A shop that exists and has none
+ * maps to an empty list; a shop that does not exist is absent.
+ */
+export interface LocationSectionNamesView {
+  locations: Record<string, LocationSectionNameView[]>;
 }
 
 /**
@@ -3161,6 +3202,8 @@ export interface PriceScopeChainView {
   supermarketId: string;
   /** The chain, both locales, resolved by the client. */
   supermarketName: LocalizedText;
+  /** The chain's `supermarkets.logoUrl` (plan 0170), null until one is set. */
+  supermarketLogoUrl: string | null;
 }
 
 /**

@@ -186,11 +186,14 @@ describeIntegration('the shops near a point (real Postgres)', () => {
       id: ids['near'],
       supermarketId: chainId,
       supermarketName: { en: 'Nearby Mart', es: 'Nearby Mart' },
+      // Plan 0170: the chain has no logo and no sections, and says so.
+      supermarketLogoUrl: null,
       label: { en: 'near', es: 'near' },
       address: 'Calle near',
       city: 'Córdoba',
       postalCode: '14001',
       inProfile: true,
+      sections: [],
       distanceMetres: 100,
       excluded: false,
     });

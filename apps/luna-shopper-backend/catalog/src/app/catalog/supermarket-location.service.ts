@@ -36,6 +36,7 @@ import {
 } from './catalog.mappers';
 import { EffectivePriceService } from './effective-price.service';
 import { idsOf, LocationScopeService } from './location-scopes';
+import { sectionNamesOf } from './location-sections';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -162,7 +163,7 @@ export class SupermarketLocationService {
       );
       return row;
     });
-    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
+    return this.viewOf(saved);
   }
 
   /**
@@ -236,12 +237,32 @@ export class SupermarketLocationService {
     }
   }
 
-  /** One shop's stack, most specific first. */
-  private async stackOf(supermarketLocationId: string): Promise<string[]> {
-    const stacks = await this.stacks.stacksFor(this.locations.manager, [
-      supermarketLocationId,
-    ]);
-    return idsOf(stacks.get(supermarketLocationId));
+  /** One shop's view, with its stack and its section names. */
+  private async viewOf(
+    row: SupermarketLocation
+  ): Promise<SupermarketLocationView> {
+    return (await this.viewsOf([row]))[0];
+  }
+
+  /**
+   * A page of shops' views: the stacks in one read, and the section names in
+   * one statement (plan 0170, section 2), never one per shop.
+   */
+  private async viewsOf(
+    rows: readonly SupermarketLocation[]
+  ): Promise<SupermarketLocationView[]> {
+    const stacks = await this.stacksOf(rows);
+    const sections = await sectionNamesOf(
+      this.locations,
+      rows.map((row) => row.id)
+    );
+    return rows.map((row) =>
+      toSupermarketLocationView(
+        row,
+        stacks.get(row.id) ?? [],
+        sections.get(row.id) ?? []
+      )
+    );
   }
 
   /** The stacks of a page of shops, in one read, keyed by shop. */
@@ -330,7 +351,7 @@ export class SupermarketLocationService {
       }
       return updated;
     });
-    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
+    return this.viewOf(saved);
   }
 
   async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
@@ -344,7 +365,7 @@ export class SupermarketLocationService {
     req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
     const row = await this.load(req.supermarketLocationId);
-    return toSupermarketLocationView(row, await this.stackOf(row.id));
+    return this.viewOf(row);
   }
 
   /**
@@ -407,11 +428,8 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
         : null;
 
-    const stacks = await this.stacksOf(page);
     return {
-      items: page.map((row) =>
-        toSupermarketLocationView(row, stacks.get(row.id) ?? [])
-      ),
+      items: await this.viewsOf(page),
       nextCursor,
     };
   }
@@ -615,10 +633,10 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.postalCode ?? '', id: last.id })
         : null;
 
-    const stacks = await this.stacksOf(page);
+    const views = await this.viewsOf(page);
     return {
-      items: page.map((row) => ({
-        location: toSupermarketLocationView(row, stacks.get(row.id) ?? []),
+      items: page.map((row, index) => ({
+        location: views[index],
         supermarket: toSupermarketView(row.supermarket),
         excluded: refusedLocations.has(row.id),
         excludedChain: refusedChains.has(row.supermarketId),

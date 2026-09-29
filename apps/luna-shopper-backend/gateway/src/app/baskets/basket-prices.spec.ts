@@ -783,10 +783,12 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
       longitude: null,
       externalRef: null,
       externalProvider: null,
+      sections: [],
     },
     supermarket: {
       id: 'lidl',
       name: { en: 'Lidl', es: 'Lidl' },
+      logoUrl: null,
     } as ShopAvailabilityView['supermarket'],
     availability,
   });
@@ -845,6 +847,7 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
       priceScopeId: FAR_STORE,
       supermarketId: 'lidl',
       supermarketName: { en: 'Lidl', es: 'Lidl' },
+      supermarketLogoUrl: null,
       locations: [
         {
           supermarketLocationId: FAR_SHOP,
@@ -852,6 +855,7 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
           address: 'Gran Vía 1',
           city: 'Madrid',
           postalCode: '28013',
+          sections: [],
         },
       ],
     });
@@ -948,12 +952,14 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
       id: FAR_SHOP,
       supermarketId: 'lidl',
       supermarketName: { en: 'Lidl', es: 'Lidl' },
+      supermarketLogoUrl: null,
       label: { en: 'Lidl Gran Vía', es: 'Lidl Gran Vía' },
       address: 'Gran Vía 1',
       city: 'Madrid',
       postalCode: '14008',
       // The profile's codes are 14008, so this shop is in it (section 3).
       inProfile: true,
+      sections: [],
     });
   });
 
@@ -1154,6 +1160,7 @@ describe('GET /v1/baskets/:id at a shop: its sections (plan 0167)', () => {
       longitude: null,
       externalRef: null,
       externalProvider: null,
+      sections: [],
     },
     supermarket: {
       id: 'mercadona',

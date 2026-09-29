@@ -203,6 +203,15 @@ export const ERROR_CATALOG: Record<
     en: 'This chain already has a section with that slug.',
     es: 'Esta cadena ya tiene una sección con ese identificador.',
   },
+  // The catalog read at one shop (plan 0170).
+  [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: {
+    en: 'A read at one shop is priced at that shop and lists its chain alone. Send the shop without other scopes, places, profiles or chains.',
+    es: 'Una consulta en una tienda usa los precios de esa tienda y solo lista su cadena. Envía la tienda sin otros ámbitos, lugares, perfiles ni cadenas.',
+  },
+  [ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND]: {
+    en: 'That shop does not exist.',
+    es: 'Esa tienda no existe.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

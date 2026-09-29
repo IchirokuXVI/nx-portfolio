@@ -142,6 +142,8 @@ export class CatalogSuggestService {
           priceScopeId,
           supermarketId: chain.id,
           supermarketName: chain.name,
+          // Plan 0170: the logo travels where the name does.
+          supermarketLogoUrl: chain.logoUrl,
         });
       }
     }

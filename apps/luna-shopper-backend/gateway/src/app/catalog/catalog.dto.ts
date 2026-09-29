@@ -1388,6 +1388,16 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   // ids, and a version 4 check refused every chain but one (velista 0100).
   @IsUUID(undefined, { each: true })
   soldBy?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Read the catalog at one shop (plan 0170): priced at that shop’s own scope alone, and listing its chain’s products, priced or not. Refused with catalog_location_exclusive beside priceScopeId, postalCode, supermarketId, profileId or a soldBy naming another chain, and with supermarket_location_not_found for a shop that does not exist.',
+  })
+  @IsOptional()
+  // Any version, like soldBy above (velista 0100).
+  @IsUUID('all')
+  locationId?: string;
 }
 
 /** The composer's own read: ranked groups, priced (plan 0048, section 3). */

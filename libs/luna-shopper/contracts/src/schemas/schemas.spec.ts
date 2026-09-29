@@ -545,6 +545,7 @@ describe('contract schemas', () => {
             longitude: null,
             externalRef: null,
             externalProvider: null,
+            sections: [{ id: 'sec-1', name: { es: 'Frescos' } }],
           },
           supermarket: {
             id: 's-1',
@@ -1860,11 +1861,13 @@ describe('the shops near a point and the recent shops (plan 0164)', () => {
     id: 'loc-1',
     supermarketId: 's-1',
     supermarketName: { en: 'Lidl', es: 'Lidl' },
+    supermarketLogoUrl: null,
     label: null,
     address: 'Calle Mayor 3',
     city: 'Córdoba',
     postalCode: '14001',
     inProfile: true,
+    sections: [],
     distanceMetres: 120,
     excluded: false,
   };
@@ -1958,5 +1961,51 @@ describe('the shops near a point and the recent shops (plan 0164)', () => {
         ],
       }).valid
     ).toBe(true);
+  });
+});
+
+describe('what a shop picker row needs (plan 0170)', () => {
+  it('section.namesForLocations takes up to 200 shops and answers a map of names', () => {
+    expect(
+      validateMessageRequest('section.namesForLocations', {
+        supermarketLocationIds: ['loc-1', 'loc-2'],
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('section.namesForLocations', {
+        supermarketLocationIds: Array.from({ length: 201 }, (_, i) => `l${i}`),
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageResponse('section.namesForLocations', {
+        locations: {
+          'loc-1': [{ id: 'sec-1', name: { es: 'Frescos' } }],
+          'loc-2': [],
+        },
+      }).valid
+    ).toBe(true);
+  });
+
+  it('refuses a shop view with no sections or no logo, because both are always present', () => {
+    const shop = {
+      id: 'loc-1',
+      supermarketId: 's-1',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      supermarketLogoUrl: null,
+      label: null,
+      address: null,
+      city: null,
+      postalCode: null,
+      inProfile: false,
+      sections: [],
+    };
+    const { sections: _sections, ...noSections } = shop;
+    const { supermarketLogoUrl: _logo, ...noLogo } = shop;
+    const answer = (shops: object[]) =>
+      validateMessageResponse('supermarketLocation.shopsById', { shops })
+        .valid;
+    expect(answer([shop])).toBe(true);
+    expect(answer([noSections])).toBe(false);
+    expect(answer([noLogo])).toBe(false);
   });
 });

@@ -544,6 +544,8 @@ export type ProblemDetails = {
     | 'section_not_found'
     | 'section_of_another_chain'
     | 'section_slug_taken'
+    | 'catalog_location_exclusive'
+    | 'supermarket_location_not_found'
     | 'internal';
   detail?: string;
   message: string;
@@ -1965,6 +1967,7 @@ export type BasketBasketPriceScopeView = {
   priceScopeId: string;
   supermarketId: string;
   supermarketName: CatalogLocalizedText;
+  supermarketLogoUrl: string | null;
   locations: BasketBasketScopeLocationView[];
 };
 
@@ -2103,6 +2106,7 @@ export type BasketBasketScopeLocationView = {
   address: string | null;
   city: string | null;
   postalCode: string | null;
+  sections: CatalogLocationSectionNameView[];
 };
 
 /**
@@ -2112,11 +2116,13 @@ export type BasketBasketShopView = {
   id: string;
   supermarketId: string;
   supermarketName: CatalogLocalizedText;
+  supermarketLogoUrl: string | null;
   label: CatalogLocalizedText | null;
   address: string | null;
   city: string | null;
   postalCode: string | null;
   inProfile: boolean;
+  sections: CatalogLocationSectionNameView[];
 };
 
 /**
@@ -2537,6 +2543,14 @@ export type CatalogLocalizedText = {
 };
 
 /**
+ * `catalog.LocationSectionNameView` in the gateway's OpenAPI document.
+ */
+export type CatalogLocationSectionNameView = {
+  id: string;
+  name: CatalogLocalizedText;
+};
+
+/**
  * `catalog.LocationSectionsView` in the gateway's OpenAPI document.
  */
 export type CatalogLocationSectionsView = {
@@ -2569,11 +2583,13 @@ export type CatalogNearbyShopView = {
   id: string;
   supermarketId: string;
   supermarketName: CatalogLocalizedText;
+  supermarketLogoUrl: string | null;
   label: CatalogLocalizedText | null;
   address: string | null;
   city: string | null;
   postalCode: string | null;
   inProfile: boolean;
+  sections: CatalogLocationSectionNameView[];
   distanceMetres: number;
   excluded: boolean;
 };
@@ -2627,6 +2643,7 @@ export type CatalogPriceScopeChainView = {
   priceScopeId: string;
   supermarketId: string;
   supermarketName: CatalogLocalizedText;
+  supermarketLogoUrl: string | null;
 };
 
 /**
@@ -2892,6 +2909,7 @@ export type CatalogSupermarketLocationView = {
   longitude: number | null;
   externalRef: string | null;
   externalProvider: string | null;
+  sections: CatalogLocationSectionNameView[];
 };
 
 /**

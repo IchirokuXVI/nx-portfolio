@@ -263,8 +263,17 @@ const scopeLocationView = object(
     address: nullableString(),
     city: nullableString(),
     postalCode: nullableString(),
+    // Plan 0170: the shop's section names, always present.
+    sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
   },
-  ['supermarketLocationId', 'label', 'address', 'city', 'postalCode']
+  [
+    'supermarketLocationId',
+    'label',
+    'address',
+    'city',
+    'postalCode',
+    'sections',
+  ]
 );
 
 const priceScopeView = object(
@@ -273,9 +282,16 @@ const priceScopeView = object(
     priceScopeId: nonEmptyString(),
     supermarketId: nonEmptyString(),
     supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    supermarketLogoUrl: nullableString(),
     locations: array(ref(BASKET_SCHEMA_IDS.scopeLocationView)),
   },
-  ['priceScopeId', 'supermarketId', 'supermarketName', 'locations']
+  [
+    'priceScopeId',
+    'supermarketId',
+    'supermarketName',
+    'supermarketLogoUrl',
+    'locations',
+  ]
 );
 
 const shopView = object(
@@ -284,21 +300,26 @@ const shopView = object(
     id: nonEmptyString(),
     supermarketId: nonEmptyString(),
     supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    // Plan 0170: the chain's logo, and the shop's section names.
+    supermarketLogoUrl: nullableString(),
     label: { anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }] },
     address: nullableString(),
     city: nullableString(),
     postalCode: nullableString(),
     inProfile: boolean(),
+    sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
   },
   [
     'id',
     'supermarketId',
     'supermarketName',
+    'supermarketLogoUrl',
     'label',
     'address',
     'city',
     'postalCode',
     'inProfile',
+    'sections',
   ]
 );
 

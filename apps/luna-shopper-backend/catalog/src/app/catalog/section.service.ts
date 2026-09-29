@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  SECTION_LIMITS,
   SECTION_SLUG_MAX_LENGTH,
   type CreateSupermarketSectionRequest,
   type ItemSectionPinsPage,
@@ -11,8 +12,9 @@ import {
   type ListItemSectionPinsRequest,
   type ListSupermarketSectionsRequest,
   type LocalizedText,
+  type LocationSectionNamesRequest,
+  type LocationSectionNamesView,
   type LocationSectionsRequest,
-  type LocationSectionsSource,
   type LocationSectionsView,
   type SectionRuleStep,
   type SetItemSectionPinsRequest,
@@ -39,8 +41,13 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
-import { LocationSection, SupermarketSection } from '../entities';
+import { SupermarketSection } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
+import {
+  presentSectionsOf,
+  sectionNamesOf,
+  type PresentSections,
+} from './location-sections';
 import { PlatformAdminService } from './platform-admin.service';
 
 /** The ascii kebab case a slug is written in, as a category's is. */
@@ -343,6 +350,26 @@ export class SectionService {
   }
 
   /**
+   * Several shops' section names, keyed by shop, in one statement (plan
+   * 0170): the ids and names {@link forLocation} would answer for each. A
+   * shop that does not exist is absent, and one whose chain has no sections
+   * maps to an empty list.
+   */
+  async namesForLocations(
+    req: LocationSectionNamesRequest
+  ): Promise<LocationSectionNamesView> {
+    const asked = [...new Set(req.supermarketLocationIds)];
+    if (asked.length > SECTION_LIMITS.maxLocationsPerNamesRead) {
+      throw new ValidationException(
+        `supermarketLocationIds must name at most ${SECTION_LIMITS.maxLocationsPerNamesRead} shops`,
+        { messageArgs: { field: 'supermarketLocationIds' } }
+      );
+    }
+    const names = await sectionNamesOf(this.sections, asked);
+    return { locations: Object.fromEntries(names) };
+  }
+
+  /**
    * Replace a shop's ordered list, whole. An empty list deletes its rows and
    * the shop returns to its chain's default.
    */
@@ -513,25 +540,12 @@ export class SectionService {
 
   /**
    * Step 1 of the rule: the shop's own rows in its order, else every section
-   * of its chain in `position` order.
+   * of its chain in `position` order. {@link PRESENT_SECTIONS_SQL} for one
+   * shop, the statement {@link namesForLocations} runs for many.
    */
-  private async presentSections(
-    shop: ShopRow
-  ): Promise<{ rows: SupermarketSection[]; source: LocationSectionsSource }> {
-    const own = await this.sections
-      .createQueryBuilder('s')
-      .innerJoin(LocationSection, 'ls', 'ls."sectionId" = s."id"')
-      .where('ls."supermarketLocationId" = :id', { id: shop.id })
-      .orderBy('ls."position"', 'ASC')
-      .getMany();
-    if (own.length > 0) {
-      return { rows: own, source: 'LOCATION' };
-    }
-    const chain = await this.sections.find({
-      where: { supermarketId: shop.supermarketId },
-      order: { position: 'ASC', id: 'ASC' },
-    });
-    return { rows: chain, source: 'CHAIN' };
+  private async presentSections(shop: ShopRow): Promise<PresentSections> {
+    const present = await presentSectionsOf(this.sections, [shop.id]);
+    return present.get(shop.id.toLowerCase()) ?? { rows: [], source: 'CHAIN' };
   }
 
   /** The back office's views: each section with its categories and shop count. */
@@ -818,7 +832,10 @@ async function writeCoverage(
 }
 
 export function toSectionView(
-  row: SupermarketSection,
+  row: Pick<
+    SupermarketSection,
+    'id' | 'supermarketId' | 'slug' | 'name' | 'position'
+  >,
   categoryIds: string[]
 ): SupermarketSectionView {
   return {

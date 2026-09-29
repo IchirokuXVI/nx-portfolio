@@ -85,6 +85,9 @@ function build(points: PostalCodePoint[] = CENTROIDS) {
       async (options: { where: { id: string } }) =>
         stored.find((row) => row.id === options.where.id) ?? null
     ),
+    // Plan 0170: the section names every view carries. No shop here has a
+    // chain with sections, which the statement answers with no section rows.
+    query: jest.fn(async () => []),
   } as unknown as Repository<SupermarketLocation>;
 
   const supermarkets = {

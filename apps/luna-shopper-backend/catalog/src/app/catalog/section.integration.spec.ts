@@ -424,6 +424,59 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     });
   });
 
+  describe('names for several shops (plan 0170)', () => {
+    it('agrees with the per shop read for a configured and an unconfigured shop of one chain', async () => {
+      const names = await sections.namesForLocations({
+        supermarketLocationIds: [configured, bare],
+      });
+      for (const shopId of [configured, bare]) {
+        const one = await sections.forLocation({
+          supermarketLocationId: shopId,
+        });
+        expect(names.locations[shopId]).toEqual(
+          one.sections.map((row) => ({ id: row.id, name: row.name }))
+        );
+      }
+      expect(names.locations[configured].map((row) => row.id)).toEqual([
+        frozen,
+        pizzas,
+        bakery,
+      ]);
+      expect(names.locations[bare].map((row) => row.id)).toEqual([
+        pizzas,
+        frozen,
+        bakery,
+        promo,
+      ]);
+      expect(names.locations[configured][0].name).toEqual({
+        es: 'frozen',
+        en: 'frozen',
+      });
+    });
+
+    it('maps a shop whose chain has no sections to an empty list, and leaves out what names no shop', async () => {
+      const emptyChain = await chain('Empty Mart');
+      const emptyShop = await shop(emptyChain, 'empty');
+      const names = await sections.namesForLocations({
+        supermarketLocationIds: [emptyShop, foreignShop, UNKNOWN_ITEM, 'nope'],
+      });
+      expect(names.locations).toEqual({
+        [emptyShop]: [],
+        [foreignShop]: [{ id: foreignSection, name: expect.any(Object) }],
+      });
+    });
+
+    it('refuses more shops than one read may name', async () => {
+      const ids = Array.from(
+        { length: 201 },
+        (_, i) => `ac700000-0000-4000-a000-${String(i).padStart(12, '0')}`
+      );
+      await expect(
+        sections.namesForLocations({ supermarketLocationIds: ids })
+      ).rejects.toThrow(/at most 200/);
+    });
+  });
+
   describe('the triggers', () => {
     it('refuse a shop list naming a section of another chain', async () => {
       expect(
