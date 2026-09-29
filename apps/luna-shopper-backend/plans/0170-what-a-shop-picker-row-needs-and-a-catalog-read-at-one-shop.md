@@ -1,4 +1,4 @@
-# 0169: what a shop picker row needs, and a catalog read at one shop
+# 0170: what a shop picker row needs, and a catalog read at one shop
 
 > Needed by velista `0124` (one shop picker, and the catalog's Supermarket button). Mock:
 > `apps/velista/plans/mocks/shop-picker/`, reviewed and approved on 2026-09-29, published at

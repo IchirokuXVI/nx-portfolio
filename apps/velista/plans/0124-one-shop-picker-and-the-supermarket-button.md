@@ -4,7 +4,7 @@
 > https://claude.ai/artifact/DbDzEKYhHZ6UdfuxAP1L9W. Read its notes before any code: they
 > carry the decisions this plan builds.
 >
-> Needs backend `0169` (a logo and section names on every shop view, and
+> Needs backend `0170` (a logo and section names on every shop view, and
 > `GET /v1/catalog/items?locationId=`). Prerequisite reading: `0100` (the catalog tab, rules C1
 > and C3), `0078` section 4 and `0102` (the picker and Buying at), `0103` (Near me and Recent),
 > `0059` section 3 (the supermarkets page, whose buttons this plan redraws), `0120` (a shop's
@@ -68,7 +68,7 @@ the row and the section chips.
 
 1. **Models.** `logoUrl: string | null` on `BasketShop`, `FranchiseButton`, `ShopChainSummary`
    and `CatalogChain`, and `sections: readonly ShopSectionName[]` (`{ id, name: LocalizedName }`)
-   on `BasketShop` and `Shop`, mapped in the existing mappers from backend `0169`'s fields.
+   on `BasketShop` and `Shop`, mapped in the existing mappers from backend `0170`'s fields.
    The basket's chains key by `supermarketId`, which `PriceScopeChainView` carries, and
    `chainKeyOf` goes.
 2. **The chain button.** `FranchiseButtons` becomes the mock's grid: two columns, a 108px
@@ -122,7 +122,7 @@ the row and the section chips.
      and **replaces** the picker's entry, so back from the catalog does not reopen the picker.
      The chevron uses `PageNavigation.back(fallbackUrl)` with the catalog as the fallback.
    - With a chain, the read is today's. With a shop, the read sends `locationId` (backend
-     `0169`) and no scopes, the note under the button reads "Prices at Calle Mayor 3, Córdoba",
+     `0170`) and no scopes, the note under the button reads "Prices at Calle Mayor 3, Córdoba",
      and a product with no price there reads "No price" over "not priced here". The shop's
      words come from `GET /v1/catalog/locations/:id`.
 9. **Copy**, en and es, every string a key: Supermarket, All supermarkets, Every product from
@@ -169,7 +169,7 @@ not send, changing `ShopFinder`'s pick rule, or deleting a locale key some other
 Per target, the files changed and the spec run, including a spec of `SectionChips` that stubs
 the measured widths and asserts `+4` for nine sections with five drawn. At the end:
 `npx nx test` and `npx nx lint` for every touched library, `npx nx build velista`, the three
-e2e specs against a slot serving backend `0169`, and a walk at 390 by 844 on Day through the
+e2e specs against a slot serving backend `0170`, and a walk at 390 by 844 on Day through the
 catalog, the Buying at sheet and the get a list sheet, compared with the mock's artboards.
 
 ## 1. Why the catalog's picker is a page and the basket's is a sheet
@@ -187,6 +187,6 @@ did, pushes the shops below the fold, and the person sees no change after a tap.
 ## 3. Not in this plan
 
 - Filling in the chains' logos: an operator sets them in the back office, and the initial is
-  drawn until then (backend `0169` section 3).
+  drawn until then (backend `0170` section 3).
 - Availability at a shop in the catalog.
 - The chain page's own search, and Near me inside a chain.

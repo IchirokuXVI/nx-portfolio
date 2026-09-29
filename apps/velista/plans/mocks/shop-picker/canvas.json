@@ -1,6 +1,6 @@
 {
   "title": "Velista: one shop picker",
-  "lede": "The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. Reviewed and approved. Plan <code>0124</code>, with backend <code>0169</code> behind it. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. Reviewed and approved. Plan <code>0124</code>, with backend <code>0170</code> behind it. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     {
       "file": "Catalog.dc.html",
