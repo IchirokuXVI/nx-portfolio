@@ -1,3 +1,5 @@
+> **PR:** [#535](https://github.com/IchirokuXVI/nx-portfolio/pull/535)
+
 # 0169: El Jamón, one price list for every shop
 
 > Prerequisite reading: `0085` (a catalog read from HTML with no EAN), `0089` (a chain that
