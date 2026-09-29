@@ -134,7 +134,7 @@ test.describe('the Supermarket button', () => {
     });
 
     await test.step('3. any Mercadona shop: its products, and the chain in the URL', async () => {
-      await page.getByRole('radio', { name: /Any Mercadona shop/ }).check();
+      await page.getByRole('radio', { name: /Any Mercadona shop/ }).click();
 
       await expect(page).toHaveURL(/\/en\/catalog\?chain=[0-9a-f-]{36}$/);
       await expect(button).toContainText('Mercadona');
