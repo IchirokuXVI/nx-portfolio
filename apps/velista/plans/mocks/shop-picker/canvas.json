@@ -1,17 +1,87 @@
 {
   "title": "Velista: one shop picker",
-  "lede": "The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. No plan or code yet: this canvas is for review first. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. Reviewed and approved. Plan <code>0124</code>, with backend <code>0169</code> behind it. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
-    { "file": "Catalog.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Catalog, every supermarket" },
-    { "file": "CatalogChain.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "Catalog, one chain" },
-    { "file": "CatalogShop.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "Catalog, one shop" },
-    { "file": "Picker.dc.html", "x": 0, "y": 964, "w": 390, "h": 844, "title": "The picker page" },
-    { "file": "PickerChain.dc.html", "x": 470, "y": 964, "w": 390, "h": 844, "title": "A chain's shops, one row opened" },
-    { "file": "PickerSearch.dc.html", "x": 940, "y": 964, "w": 390, "h": 844, "title": "Searching every chain" },
-    { "file": "PickerNear.dc.html", "x": 1410, "y": 964, "w": 390, "h": 844, "title": "Near me answered" },
-    { "file": "Basket.dc.html", "x": 0, "y": 1928, "w": 390, "h": 844, "title": "Buying at, over the basket" },
-    { "file": "BasketChain.dc.html", "x": 470, "y": 1928, "w": 390, "h": 844, "title": "Buying at, one chain open" },
-    { "file": "Rows.dc.html", "x": 940, "y": 1928, "w": 860, "h": 844, "title": "The row and the chain button, state by state" }
+    {
+      "file": "Catalog.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Catalog, every supermarket"
+    },
+    {
+      "file": "CatalogChain.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Catalog, one chain"
+    },
+    {
+      "file": "CatalogShop.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Catalog, one shop"
+    },
+    {
+      "file": "Picker.dc.html",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "The picker page"
+    },
+    {
+      "file": "PickerChain.dc.html",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "A chain's shops, one row opened"
+    },
+    {
+      "file": "PickerSearch.dc.html",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Searching every chain"
+    },
+    {
+      "file": "PickerNear.dc.html",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Near me answered"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 0,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "Buying at, over the basket"
+    },
+    {
+      "file": "BasketChain.dc.html",
+      "x": 470,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "Buying at, one chain open"
+    },
+    {
+      "file": "Rows.dc.html",
+      "x": 940,
+      "y": 1928,
+      "w": 860,
+      "h": 844,
+      "title": "The row and the chain button, state by state"
+    }
   ],
   "annotations": [
     {
@@ -19,7 +89,7 @@
       "x": 0,
       "y": -560,
       "w": 440,
-      "text": "THE BRIEF, in the user's words. In the catalog, a button to select a supermarket replaces the chain filter. It has its own page, with big buttons that show the chain name and icon, and a tap gives that chain's shops. It is the same design as the current shop picker, recent and usual shops included.\nOne component, not two: two very similar pickers would confuse people. So the basket's picker changes too, to the bigger buttons with the chain icon.\nThe row shows the shop's name if it has one, its address and its sections. Sections that overflow fold into +X, which shows them all.\nIn the catalog a chain is enough. A shop is optional."
+      "text": "THE BRIEF, in the user's words. In the catalog, a button to select a supermarket replaces the chain filter. It has its own page, with big buttons that show the chain name and icon, and a tap gives that chain's shops. It is the same design as the current shop picker, recent and usual shops included. Usual means the Recent section the picker already has (decided).\nOne component, not two: two very similar pickers would confuse people. So the basket's picker changes too, to the bigger buttons with the chain icon.\nThe row shows the shop's name if it has one, its address and its sections. Sections that overflow fold into +X, which shows them all.\nIn the catalog a chain is enough. A shop is optional."
     },
     {
       "id": "catalog",
@@ -40,7 +110,7 @@
       "x": 1470,
       "y": -560,
       "w": 440,
-      "text": "THE ROW. The logo leads, where the chains are mixed (Recent, Near you, a search). Inside one chain the head carries the logo and the rows do not, which gives the sections the width.\nThe title is the shop's own name when it has one, else its street. Under it: the chain and the address, or the chain and the town when the street is already the title. Under that, the sections in the shop's own order, on one line.\nWhat does not fit folds into +X, a button of its own beside the chips. Pressed, the chips wrap and end in Show fewer. It is outside the row's label, so it opens the list and never picks the shop.\nA chain with no sections yet draws no line at all, rather than an empty one."
+      "text": "THE ROW. The logo leads, where the chains are mixed (Recent, Near you, a search). Inside one chain the head carries the logo and the rows do not, which gives the sections the width.\nThe title is the shop's own name when it has one, else its street. Under it: the chain and the address, or the chain and the town when the street is already the title. Under that, the sections in the shop's own order, on one line.\nWhat does not fit folds into +X, a button of its own beside the chips. X counts only what is not drawn: nine sections with five on the line reads +4 (decided). The count is measured on the row, never a fixed number. Pressed, the chips wrap and end in Show fewer. It is outside the row's label, so it opens the list and never picks the shop.\nA chain with no sections yet draws no line at all, rather than an empty one."
     },
     {
       "id": "same",
@@ -61,7 +131,7 @@
       "x": 980,
       "y": 2860,
       "w": 440,
-      "text": "OPEN QUESTIONS, FOR REVIEW.\n1. SEARCH WHILE TYPING. Today the chain buttons stay above the matches. At 108px each they push the matches under the keyboard, so the mock hides them while something is typed. Confirm.\n2. +X COUNTS WHAT DOES NOT FIT, measured on the row, rather than a fixed three. A fixed count is simpler and overflows on long names. Confirm.\n3. THE CHAIN'S SCREEN has no search of its own, and no Near me. A chain has at most a few dozen shops in your areas, under their postal codes. Confirm.\n4. THE CATALOG REMEMBERS NOTHING. The choice lives in the URL and resets on the next visit, as the chip does today. Or should it keep the last shop?\n5. USUAL. The brief says recent and usual shops. The picker has one section, Recent, the shops you bought at in 60 days. Is usual a second section, ranked by how often, or is Recent what was meant?\n6. NEW COPY: Supermarket, All supermarkets, Every product from every chain, Any Mercadona shop, Every Mercadona product, Prices at, not priced here, Show fewer."
+      "text": "DECIDED IN REVIEW, 2026-09-29.\n1. USUAL SHOPS are the existing Recent section: the shops you bought at in the last 60 days, newest first. No second section.\n2. SEARCH WHILE TYPING hides the chain buttons. The matches take their place, and the buttons come back when the field is empty.\n3. +X COUNTS WHAT DOES NOT FIT on the row: nine sections with five drawn is +4. Measured, not a fixed count.\nSTILL ASSUMED, as drawn: the chain screen has no search and no Near me of its own, and the catalog keeps the choice in its URL (?chain, ?shop), because the picker is a page of its own. Today the chip lives only in the page, which a page of its own cannot reach. Nothing is remembered on the next visit.\nNEW COPY: Supermarket, All supermarkets, Every product from every chain, Any Mercadona shop, Every Mercadona product, Prices at, not priced here, Show fewer."
     },
     {
       "id": "nearme",
