@@ -9,6 +9,8 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import {
   ContentLocaleStore,
   DIRECTORY_SERVICE,
+  orderedRoles,
+  type AccountRole,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource';
 import { idOf } from '@portfolio/luna-shopper-admin/models';
@@ -17,6 +19,7 @@ import { DetailFacts, DetailFrame, type DetailFact } from './detail-frame';
 import { DetailPage } from './detail-page';
 import { instant } from './people-format';
 import type { UserRow } from './people-seed';
+import { USER_ROLE_OPTIONS } from './user-roles';
 
 /** One zone this person is in, as this screen links to it. */
 interface UserZone {
@@ -62,6 +65,42 @@ const ZONE_LIMIT = 50;
     >
       @if (row(); as user) {
         <lib-detail-facts [facts]="facts()" />
+
+        <section aria-labelledby="user-roles-heading">
+          <h2 id="user-roles-heading">
+            {{ 'people.users.roles.label' | rokuT }}
+          </h2>
+          @if (isGuest()) {
+            <p class="muted">{{ 'people.users.roles.guest' | rokuT }}</p>
+          }
+          <ul class="roles">
+            @for (role of roleOptions; track role.value) {
+              <li>
+                <button
+                  (click)="askToSwitch(user, role.value)"
+                  [attr.aria-checked]="holds(user, role.value)"
+                  [disabled]="busy() || isGuest()"
+                  class="role"
+                  role="switch"
+                  type="button"
+                >
+                  <span aria-hidden="true" class="track"></span>
+                  <span class="role-text">
+                    <span class="role-name">{{ role.label | rokuT }}</span>
+                    <span class="role-grants">{{
+                      grantsKey(role.value) | rokuT
+                    }}</span>
+                  </span>
+                </button>
+              </li>
+            }
+          </ul>
+          @if (rolesSaved()) {
+            <p class="saved" role="status">
+              {{ 'people.users.roles.saved' | rokuT }}
+            </p>
+          }
+        </section>
 
         <section>
           <h2>{{ 'people.users.zones' | rokuT }}</h2>
@@ -166,6 +205,79 @@ const ZONE_LIMIT = 50;
       background: var(--admin-danger-wash);
     }
 
+    .roles {
+      flex-direction: column;
+      flex-wrap: nowrap;
+    }
+
+    button.role {
+      display: flex;
+      align-items: center;
+      gap: var(--admin-space-3);
+      inline-size: 100%;
+      max-inline-size: 32rem;
+      text-align: start;
+    }
+
+    .track {
+      position: relative;
+      flex: none;
+      inline-size: 2.5rem;
+      block-size: 1.5rem;
+      border-radius: 999px;
+      background: var(--admin-border);
+      transition: background-color 150ms ease;
+    }
+
+    .track::after {
+      content: '';
+      position: absolute;
+      inset-block-start: 0.1875rem;
+      inset-inline-start: 0.1875rem;
+      inline-size: 1.125rem;
+      block-size: 1.125rem;
+      border-radius: 50%;
+      background: var(--admin-surface-raised);
+      transition: transform 150ms ease;
+    }
+
+    button.role[aria-checked='true'] .track {
+      background: var(--admin-accent);
+    }
+
+    button.role[aria-checked='true'] .track::after {
+      transform: translateX(1rem);
+    }
+
+    .role-text {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .role-name {
+      font-weight: 600;
+    }
+
+    .role-grants {
+      font-size: 0.875rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .saved {
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .track,
+      .track::after {
+        transition: none;
+      }
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -216,6 +328,21 @@ export class UserDetailPage extends DetailPage<UserRow> {
   readonly zonesFailed = signal(false);
 
   readonly heading = computed(() => this.row()?.username ?? this.id);
+
+  /** Every role, in the order the server lists them (backend plan 0175). */
+  readonly roleOptions = USER_ROLE_OPTIONS;
+
+  /**
+   * Whether a role change went through on this visit.
+   *
+   * It stays up after the reload that follows, because what it says is still
+   * true then: the account itself sees the change only at its next token
+   * refresh, which is up to 15 minutes away.
+   */
+  readonly rolesSaved = signal(false);
+
+  /** A guest holds no roles, and the server refuses to give it any. */
+  readonly isGuest = computed(() => this.row()?.kind === 'TEMPORARY');
 
   readonly canResend = computed(() => {
     const user = this.row();
@@ -286,6 +413,48 @@ export class UserDetailPage extends DetailPage<UserRow> {
       confirm: 'people.users.confirm.resendVerification.confirm',
       args: { name: user.username, email: user.email ?? '' },
       run: () => this._directory.resendVerification(user.userId),
+    });
+  }
+
+  holds(user: UserRow, role: AccountRole): boolean {
+    return user.roles.includes(role);
+  }
+
+  /** The line under a role's name saying what it grants. */
+  grantsKey(role: AccountRole): string {
+    return `people.users.roles.${role}.grants`;
+  }
+
+  /**
+   * One switch flipped, confirmed before anything is sent (admin plan 0038).
+   *
+   * What is sent is the whole set with this one role changed, which is what
+   * the route takes: the switches describe the set, so the request does too.
+   * The switch itself does not move until the operator says yes and the row
+   * is read again.
+   */
+  askToSwitch(user: UserRow, role: AccountRole): void {
+    const granting = !this.holds(user, role);
+    const next = granting
+      ? orderedRoles([...user.roles, role])
+      : user.roles.filter((held) => held !== role);
+    const verb = granting ? 'grantRole' : 'removeRole';
+
+    this.rolesSaved.set(false);
+    this.ask({
+      heading: `people.users.confirm.${verb}.heading`,
+      body: `people.users.confirm.${verb}.body`,
+      confirm: `people.users.confirm.${verb}.confirm`,
+      args: {
+        name: user.username,
+        role: this.translator.t(`people.users.roles.${role}.name`),
+        grants: this.translator.t(this.grantsKey(role)),
+      },
+      refusals: { guest_has_no_roles: 'people.users.roles.guestRefused' },
+      run: async () => {
+        await this._directory.setUserRoles(user.userId, next);
+        this.rolesSaved.set(true);
+      },
     });
   }
 

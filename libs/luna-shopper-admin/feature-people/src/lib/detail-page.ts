@@ -17,6 +17,11 @@ export interface PendingConfirm {
   readonly confirm: string;
   /** What to interpolate into the body, which is what makes it specific. */
   readonly args: Readonly<Record<string, string | number>>;
+  /**
+   * A sentence of this screen's own for a refusal code, where the generic one
+   * would not say what to do. Codes not named here take `gatewayErrorKey`.
+   */
+  readonly refusals?: Readonly<Record<string, string>>;
   run(): Promise<void>;
 }
 
@@ -145,7 +150,7 @@ export abstract class DetailPage<T extends ResourceRow> {
       this.asking.set(null);
       this.actionErrorKey.set(
         error instanceof GatewayError
-          ? gatewayErrorKey(error)
+          ? (pending.refusals?.[error.code] ?? gatewayErrorKey(error))
           : 'resource.error.unknown'
       );
     } finally {
