@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AdapterKey } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
+import { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
 import { OsmStoreDiscoveryRunner } from './osm-store-discovery.runner';
@@ -41,9 +42,14 @@ export class StoreDiscoveryRunner {
   constructor(
     private readonly osm: OsmStoreDiscoveryRunner,
     lidl: LidlStoreDiscoveryRunner,
-    mercadona: MercadonaStoreDiscoveryRunner
+    mercadona: MercadonaStoreDiscoveryRunner,
+    elJamon: ElJamonStoreDiscoveryRunner
   ) {
-    this.cases = { 'lidl-api': lidl, 'mercadona-api': mercadona };
+    this.cases = {
+      'lidl-api': lidl,
+      'mercadona-api': mercadona,
+      'eljamon-web': elJamon,
+    };
   }
 
   // `async` so a refusal is a rejected promise rather than a synchronous throw

@@ -1178,6 +1178,7 @@ export type UpsertSupermarketSourceDto = {
     | 'deza-web'
     | 'carrefour-web'
     | 'lidl-api'
+    | 'eljamon-web'
     | 'manual';
   enabled?: boolean;
   autoImportPlaces?: boolean;
@@ -3011,6 +3012,7 @@ export type EnumsAdapterKey =
   | 'deza-web'
   | 'carrefour-web'
   | 'lidl-api'
+  | 'eljamon-web'
   | 'osm-places'
   | 'manual';
 
@@ -3404,6 +3406,15 @@ export const HarvestAdapterCapabilityTable = {
     listsItsOwnStores: true,
     hasProductPages: true,
     skipsKnownDetails: false,
+    printedLocale: 'es',
+    walkablePriorities: null,
+  },
+  'eljamon-web': {
+    writesPrices: true,
+    scopesItsOwn: false,
+    listsItsOwnStores: true,
+    hasProductPages: false,
+    skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: null,
   },

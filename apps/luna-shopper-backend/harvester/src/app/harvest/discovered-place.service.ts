@@ -70,6 +70,7 @@ const PROVIDER_ADAPTERS: Readonly<Record<string, string>> = {
   OSM: 'osm-places',
   LIDL: 'lidl-api',
   MERCADONA: 'mercadona-api',
+  ELJAMON: 'eljamon-web',
 };
 
 function adapterKeyFor(provider: string): string | null {

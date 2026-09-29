@@ -28221,12 +28221,12 @@
           "supermarketId": {
             "type": "string",
             "format": "uuid",
-            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`)."
+            "description": "Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`, `eljamon-web`)."
           },
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
+            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`, and `eljamon-web`, whose one chain wide price list goes to the chain’s NATIONAL scope). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
           },
           "priceScopeIds": {
             "description": "The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.",
@@ -28295,7 +28295,7 @@
               "NEW",
               "ALL"
             ],
-            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
+            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`, `eljamon-web`), where it defaults to `NEW`: for `mercadona-api` the detail of a product whose row has no EAN yet, or has no row, and for `eljamon-web`, which has no EAN, the product page of a product with no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
           }
         },
         "required": [
@@ -28316,7 +28316,7 @@
           "priceScopeId": {
             "type": "string",
             "format": "uuid",
-            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
+            "description": "The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`, and `eljamon-web`, whose one chain wide price list goes to the chain’s NATIONAL scope). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead."
           },
           "priceScopeIds": {
             "description": "The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.",
@@ -28385,7 +28385,7 @@
               "NEW",
               "ALL"
             ],
-            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`), where it defaults to `NEW`: the detail of a product whose row has no EAN yet, or has no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
+            "description": "Which products a walk fetches the detail of (plan 0119). CATALOG_DISCOVERY only, and only for an adapter whose capability `skipsKnownDetails` is true (`mercadona-api`, `eljamon-web`), where it defaults to `NEW`: for `mercadona-api` the detail of a product whose row has no EAN yet, or has no row, and for `eljamon-web`, which has no EAN, the product page of a product with no row. `ALL` fetches every detail, which is what a walk of ten warehouses where every product is known costs about 5,700 requests for instead of 1,510. Stating it for any other adapter is refused, and leaving it out resolves to `ALL`. The resolved value is stored on the run."
           }
         },
         "required": [
@@ -28757,6 +28757,7 @@
               "deza-web",
               "carrefour-web",
               "lidl-api",
+              "eljamon-web",
               "manual"
             ],
             "description": "`osm-places` is refused with 400: OpenStreetMap is asked for every postal code, so a source row for it switches nothing on."
@@ -34985,6 +34986,7 @@
           "deza-web",
           "carrefour-web",
           "lidl-api",
+          "eljamon-web",
           "osm-places",
           "manual"
         ]
@@ -35471,6 +35473,15 @@
             "listsItsOwnStores": true,
             "hasProductPages": true,
             "skipsKnownDetails": false,
+            "printedLocale": "es",
+            "walkablePriorities": null
+          },
+          "eljamon-web": {
+            "writesPrices": true,
+            "scopesItsOwn": false,
+            "listsItsOwnStores": true,
+            "hasProductPages": false,
+            "skipsKnownDetails": true,
             "printedLocale": "es",
             "walkablePriorities": null
           },

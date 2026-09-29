@@ -4,6 +4,7 @@ import type { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import type { CatalogDiscoveryInput } from './catalog-runner';
 import type { DezaCatalogRunner } from './deza-catalog.runner';
+import type { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import type { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { MercadonaCatalogRunner } from './mercadona-catalog.runner';
 import type { RunContext } from './run-context';
@@ -28,14 +29,16 @@ describe('CatalogDiscoveryRunner', () => {
     const carrefour = { run: jest.fn(async () => undefined) };
     const carrefourDetail = { run: jest.fn(async () => undefined) };
     const lidl = { run: jest.fn(async () => undefined) };
+    const elJamon = { run: jest.fn(async () => undefined) };
     const runner = new CatalogDiscoveryRunner(
       mercadona as unknown as MercadonaCatalogRunner,
       deza as unknown as DezaCatalogRunner,
       carrefour as unknown as CarrefourCatalogRunner,
       carrefourDetail as unknown as CarrefourDetailRunner,
-      lidl as unknown as LidlCatalogRunner
+      lidl as unknown as LidlCatalogRunner,
+      elJamon as unknown as ElJamonCatalogRunner
     );
-    return { runner, mercadona, deza, lidl };
+    return { runner, mercadona, deza, lidl, elJamon };
   }
 
   const source = (adapterKey: string): SupermarketSource =>
@@ -66,6 +69,16 @@ describe('CatalogDiscoveryRunner', () => {
 
     expect(lidl.run).toHaveBeenCalledTimes(1);
     expect(mercadona.run).not.toHaveBeenCalled();
+  });
+
+  it('sends an eljamon-web source down the El Jamón path', async () => {
+    const { runner, mercadona, deza, elJamon } = build();
+
+    await runner.run(context, report, input, source('eljamon-web'));
+
+    expect(elJamon.run).toHaveBeenCalledTimes(1);
+    expect(mercadona.run).not.toHaveBeenCalled();
+    expect(deza.run).not.toHaveBeenCalled();
   });
 
   it('refuses an adapter that has no assortment to walk', async () => {
