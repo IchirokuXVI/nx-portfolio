@@ -1,0 +1,74 @@
+{
+  "title": "Velista: one shop picker",
+  "lede": "The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. No plan or code yet: this canvas is for review first. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    { "file": "Catalog.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Catalog, every supermarket" },
+    { "file": "CatalogChain.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "Catalog, one chain" },
+    { "file": "CatalogShop.dc.html", "x": 940, "y": 0, "w": 390, "h": 844, "title": "Catalog, one shop" },
+    { "file": "Picker.dc.html", "x": 0, "y": 964, "w": 390, "h": 844, "title": "The picker page" },
+    { "file": "PickerChain.dc.html", "x": 470, "y": 964, "w": 390, "h": 844, "title": "A chain's shops, one row opened" },
+    { "file": "PickerSearch.dc.html", "x": 940, "y": 964, "w": 390, "h": 844, "title": "Searching every chain" },
+    { "file": "PickerNear.dc.html", "x": 1410, "y": 964, "w": 390, "h": 844, "title": "Near me answered" },
+    { "file": "Basket.dc.html", "x": 0, "y": 1928, "w": 390, "h": 844, "title": "Buying at, over the basket" },
+    { "file": "BasketChain.dc.html", "x": 470, "y": 1928, "w": 390, "h": 844, "title": "Buying at, one chain open" },
+    { "file": "Rows.dc.html", "x": 940, "y": 1928, "w": 860, "h": 844, "title": "The row and the chain button, state by state" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -560,
+      "w": 440,
+      "text": "THE BRIEF, in the user's words. In the catalog, a button to select a supermarket replaces the chain filter. It has its own page, with big buttons that show the chain name and icon, and a tap gives that chain's shops. It is the same design as the current shop picker, recent and usual shops included.\nOne component, not two: two very similar pickers would confuse people. So the basket's picker changes too, to the bigger buttons with the chain icon.\nThe row shows the shop's name if it has one, its address and its sections. Sections that overflow fold into +X, which shows them all.\nIn the catalog a chain is enough. A shop is optional."
+    },
+    {
+      "id": "catalog",
+      "x": 490,
+      "y": -560,
+      "w": 440,
+      "text": "THE CATALOG. The chip row goes. In its place, one button under the search, the full width, 60px: the logo, the word SUPERMARKET and the choice. All supermarkets at rest, Mercadona · any shop with a chain, Mercadona · Calle Mayor 3 with a shop. The chevron becomes an x once something is chosen: the x goes back to every supermarket, the rest of the button opens the picker.\nOne chain behaves exactly as the chip did (0100 rule C3): its products only, and the right column is the price per litre or kilo. One shop narrows further: prices at that shop, and a product it has no price for says so rather than vanishing, the same as the basket at a shop (0078)."
+    },
+    {
+      "id": "page",
+      "x": 980,
+      "y": -560,
+      "w": 440,
+      "text": "THE PICKER PAGE is the current picker body, top to bottom: Near me in the title row, Recent, the search, and the chains. Two changes. The chain buttons are big: two columns, the logo at 48px, the name and the shop count under it. And a tap opens the chain on its own screen instead of below the buttons, because six 108px buttons would push the shops out of sight.\nOnly the catalog puts a first row above it all, All supermarkets, and a first row on a chain's screen, Any Mercadona shop. Those two rows are how a chain is enough. The basket has neither: Buying at is a door, so its answer is always one shop, and Any of your shops stays in the filter sheet where it is today."
+    },
+    {
+      "id": "row",
+      "x": 1470,
+      "y": -560,
+      "w": 440,
+      "text": "THE ROW. The logo leads, where the chains are mixed (Recent, Near you, a search). Inside one chain the head carries the logo and the rows do not, which gives the sections the width.\nThe title is the shop's own name when it has one, else its street. Under it: the chain and the address, or the chain and the town when the street is already the title. Under that, the sections in the shop's own order, on one line.\nWhat does not fit folds into +X, a button of its own beside the chips. Pressed, the chips wrap and end in Show fewer. It is outside the row's label, so it opens the list and never picks the shop.\nA chain with no sections yet draws no line at all, rather than an empty one."
+    },
+    {
+      "id": "same",
+      "x": 0,
+      "y": 2860,
+      "w": 440,
+      "text": "ONE COMPONENT. lib-shop-picker in velista/ui stays the only picker, and all four hosts get the new design at once: the catalog's page, the basket's Buying at sheet, the get a list sheet and the Bought it pane. What differs per host is an input: whether the any row is drawn, and its words.\nFranchiseButtons becomes the big grid. Its exclusion states (chain excluded, some shops excluded) belong to the areas page, which keeps them on the same buttons.\nA sheet cannot push a page, so over the basket the chain opens inside the sheet, with a back chevron in the sheet's title row. Same rows, same order."
+    },
+    {
+      "id": "wire",
+      "x": 490,
+      "y": 2860,
+      "w": 440,
+      "text": "WHAT THE WIRE HAS, checked in code.\n1. LOGOS. SupermarketView.logoUrl and SupermarketLocationChainSummaryView.logoUrl exist, and every row holds null. velista reads neither. The tiles here stand in for that image. With no logo the tile is the chain's initial in the app's own colours, the typeahead's chain mark at a bigger size. The colours drawn are placeholders, not a palette to keep.\n2. SECTIONS. They exist (backend 0167, PR #527), but only per shop: GET /v1/catalog/locations/:id/sections. BasketShopView, NearbyShopView and RecentShopView carry none. Twenty rows would be twenty reads. The ask: the section names, in order, on each shop view.\n3. ONE SHOP IN THE CATALOG. GET /v1/catalog/items takes soldBy for a chain and nothing for a shop. The ask: a shop parameter that prices at that shop and marks what it has no price for."
+    },
+    {
+      "id": "questions",
+      "x": 980,
+      "y": 2860,
+      "w": 440,
+      "text": "OPEN QUESTIONS, FOR REVIEW.\n1. SEARCH WHILE TYPING. Today the chain buttons stay above the matches. At 108px each they push the matches under the keyboard, so the mock hides them while something is typed. Confirm.\n2. +X COUNTS WHAT DOES NOT FIT, measured on the row, rather than a fixed three. A fixed count is simpler and overflows on long names. Confirm.\n3. THE CHAIN'S SCREEN has no search of its own, and no Near me. A chain has at most a few dozen shops in your areas, under their postal codes. Confirm.\n4. THE CATALOG REMEMBERS NOTHING. The choice lives in the URL and resets on the next visit, as the chip does today. Or should it keep the last shop?\n5. USUAL. The brief says recent and usual shops. The picker has one section, Recent, the shops you bought at in 60 days. Is usual a second section, ranked by how often, or is Recent what was meant?\n6. NEW COPY: Supermarket, All supermarkets, Every product from every chain, Any Mercadona shop, Every Mercadona product, Prices at, not priced here, Show fewer."
+    },
+    {
+      "id": "nearme",
+      "x": 1470,
+      "y": 2860,
+      "w": 440,
+      "text": "NEAR ME is unchanged in what it decides (0103): the server picks or answers candidates, the phone draws what it was told. Only the rows are new. A distance is drawn strongly at the end of the title line, a day quietly.\nIn the catalog a pick sets the shop and returns to the catalog, with the button naming it. The candidates are drawn above the any row, because a person pressing Near me is asking where they are, not what exists."
+    }
+  ]
+}
