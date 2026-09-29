@@ -39,6 +39,7 @@ import {
   atShopOf,
   quotedScopeOf,
   toBasketShopView,
+  toScopeLocationView,
   withShopInScopes,
 } from './basket-shop';
 
@@ -520,15 +521,11 @@ export class BasketCatalogService {
       req
     );
     const refused = new Set(excludedLocationIds);
+    // The same shape the read's own shop is drawn in, section names included
+    // (plan 0170): catalog answers the page with them.
     return page.items
       .filter((location) => !refused.has(location.id))
-      .map((location) => ({
-        supermarketLocationId: location.id,
-        label: location.label,
-        address: location.address,
-        city: location.city,
-        postalCode: location.postalCode,
-      }));
+      .map(toScopeLocationView);
   }
 
   /**

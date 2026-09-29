@@ -238,4 +238,42 @@ describe('GET /v1/catalog/shops', () => {
       includeExcluded: true,
     });
   });
+
+  it('answers thirty shops with their section names in one catalog message (plan 0170)', async () => {
+    const page = {
+      items: Array.from({ length: 30 }, (_, i) => ({
+        location: {
+          id: `shop-${i}`,
+          sections: [{ id: `sec-${i}`, name: { es: `Pasillo ${i}` } }],
+        },
+        supermarket: { id: MERCADONA, logoUrl: null },
+        excluded: false,
+        excludedChain: false,
+      })),
+      nextCursor: null,
+    };
+    const { controller, send } = build({});
+    send.mockImplementation(async (pattern: string) =>
+      pattern === PROFILE_PATTERNS.resolveScopes ? selector() : page
+    );
+
+    const answer = await controller.search(
+      { userId: USER } as never,
+      new SearchShopsQueryDto()
+    );
+
+    // Catalog names every shop's sections in the page it answers, by the
+    // statement `section.forLocation` uses, so the gateway asks nothing per
+    // row: one message for the shops, and none for their sections.
+    const catalogCalls = send.mock.calls.filter(
+      ([pattern]) => pattern !== PROFILE_PATTERNS.resolveScopes
+    );
+    expect(catalogCalls.map(([pattern]) => pattern)).toEqual([
+      SUPERMARKET_LOCATION_PATTERNS.search,
+    ]);
+    expect(answer.items).toHaveLength(30);
+    expect(answer.items[29].location.sections).toEqual([
+      { id: 'sec-29', name: { es: 'Pasillo 29' } },
+    ]);
+  });
 });

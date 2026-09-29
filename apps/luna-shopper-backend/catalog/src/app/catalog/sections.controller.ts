@@ -9,6 +9,8 @@ import {
   type ItemSectionsAtLocationView,
   type ListItemSectionPinsRequest,
   type ListSupermarketSectionsRequest,
+  type LocationSectionNamesRequest,
+  type LocationSectionNamesView,
   type LocationSectionsRequest,
   type LocationSectionsView,
   type SetItemSectionPinsRequest,
@@ -98,5 +100,13 @@ export class SectionsController {
     @Payload() req: ItemSectionsAtLocationRequest
   ): Promise<ItemSectionsAtLocationView> {
     return this.sections.itemsAtLocation(req);
+  }
+
+  /** Several shops' section names in one statement (plan 0170). */
+  @MessagePattern(SECTION_PATTERNS.namesForLocations)
+  namesForLocations(
+    @Payload() req: LocationSectionNamesRequest
+  ): Promise<LocationSectionNamesView> {
+    return this.sections.namesForLocations(req);
   }
 }

@@ -35,6 +35,7 @@ import {
   toSupermarketView,
 } from './catalog.mappers';
 import { idsOf, LocationScopeService } from './location-scopes';
+import { sectionNamesOf } from './location-sections';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface LocationItemCursor {
@@ -437,7 +438,7 @@ export class SupermarketLocationItemService {
       0,
       ITEM_LOOKUP_LIMITS.maxIds
     );
-    const [stacks, rows] = await Promise.all([
+    const [stacks, rows, sections] = await Promise.all([
       this.stacks.stacksFor(this.locations.manager, [location.id]),
       itemIds.length === 0
         ? Promise.resolve([] as SupermarketLocationItem[])
@@ -445,11 +446,15 @@ export class SupermarketLocationItemService {
             select: { itemId: true, available: true },
             where: { supermarketLocationId: location.id, itemId: In(itemIds) },
           }),
+      // Plan 0170: the shop's section names, which the basket read's shop and
+      // its scopes carry.
+      sectionNamesOf(this.locations, [location.id]),
     ]);
     return {
       location: toSupermarketLocationView(
         location,
-        idsOf(stacks.get(location.id))
+        idsOf(stacks.get(location.id)),
+        sections.get(location.id) ?? []
       ),
       supermarket: toSupermarketView(location.supermarket),
       availability: rows.map((row) => ({

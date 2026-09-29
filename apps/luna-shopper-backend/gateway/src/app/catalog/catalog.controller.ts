@@ -43,7 +43,12 @@ import {
   type SupermarketPage,
   type SupermarketView,
 } from '@portfolio/luna-shopper/contracts';
-import { UuidParam } from '@portfolio/luna-shopper/platform';
+import {
+  CatalogLocationExclusiveException,
+  ERROR_CODES,
+  SupermarketLocationNotFoundException,
+  UuidParam,
+} from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
@@ -114,6 +119,37 @@ function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
     supermarketIds: query.supermarketId,
     profileId: query.profileId,
   };
+}
+
+/**
+ * `locationId` says where a price comes from on its own (plan 0170), so any
+ * other way of saying it beside it is refused rather than one of the two
+ * quietly ignored. An empty repeatable parameter says nothing and passes.
+ */
+function refuseBesideLocation(query: PriceScopedQueryDto): void {
+  const named = [
+    query.priceScopeId?.length ? 'priceScopeId' : null,
+    query.postalCode?.length ? 'postalCode' : null,
+    query.supermarketId?.length ? 'supermarketId' : null,
+    query.profileId !== undefined ? 'profileId' : null,
+  ].filter((name): name is string => name !== null);
+  if (named.length > 0) {
+    throw new CatalogLocationExclusiveException(
+      `locationId cannot be combined with ${named.join(', ')}`
+    );
+  }
+}
+
+/**
+ * Whether catalog answered "no such thing". NATS nests a service's error
+ * envelope under `error`, and the client sometimes rejects with the envelope
+ * itself, so both are read.
+ */
+function isNotFound(error: unknown): boolean {
+  return [error, (error as { error?: unknown })?.error].some(
+    (candidate) =>
+      (candidate as { code?: unknown })?.code === ERROR_CODES.NOT_FOUND
+  );
 }
 
 /**
@@ -406,23 +442,72 @@ export class CatalogItemsController {
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
   ): Promise<ItemPage> {
+    // Plan 0170: a read at one shop names its scope and its chain itself, and
+    // nothing is resolved from the caller's profile.
+    const atShop =
+      query.locationId === undefined
+        ? null
+        : await this.atLocation(user.userId, query, query.locationId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: user.userId,
       query: query.query,
       categoryId: query.categoryId,
       productGroupId: query.productGroupId,
-      priceScopeIds: await this.scopes.forRead(
-        user.userId,
-        toScopeQuery(query)
-      ),
+      priceScopeIds: atShop
+        ? atShop.priceScopeIds
+        : await this.scopes.forRead(user.userId, toScopeQuery(query)),
       // Plan 0146: which chains sell the products, passed through untouched. It
       // is deliberately not resolved through `toScopeQuery` above: that answers
       // where a price comes from, and this answers what is listed.
-      soldBy: query.soldBy,
+      soldBy: atShop ? atShop.soldBy : query.soldBy,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
     });
+  }
+
+  /**
+   * The read at one shop (plan 0170, section 4): priced at the most specific
+   * scope of the shop's stack alone, as the basket prices a shop, and listing
+   * its chain's products. A product the chain sells with no price there stays
+   * in the page with no offer, as any unpriced product does.
+   *
+   * The combination is checked before the shop is looked up, so a malformed
+   * request is a 400 whether or not the shop exists.
+   */
+  private async atLocation(
+    userId: string,
+    query: SearchItemsQueryDto,
+    locationId: string
+  ): Promise<{ priceScopeIds: string[]; soldBy: string[] }> {
+    refuseBesideLocation(query);
+    let location: SupermarketLocationView;
+    try {
+      location = await this.nats.send<SupermarketLocationView>(
+        SUPERMARKET_LOCATION_PATTERNS.get,
+        { userId, supermarketLocationId: locationId }
+      );
+    } catch (error) {
+      throw isNotFound(error)
+        ? new SupermarketLocationNotFoundException(
+            'Supermarket location not found'
+          )
+        : error;
+    }
+    if (
+      query.soldBy?.some(
+        (chain) => chain.toLowerCase() !== location.supermarketId.toLowerCase()
+      )
+    ) {
+      throw new CatalogLocationExclusiveException(
+        'soldBy names another chain than the shop’s'
+      );
+    }
+    const quoted = location.priceScopeIds[0] ?? location.priceScopeId;
+    return {
+      priceScopeIds: quoted ? [quoted] : [],
+      soldBy: [location.supermarketId],
+    };
   }
 
   /**

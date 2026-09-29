@@ -25,11 +25,13 @@ function shop(id: string, inProfile = true): BasketShopView {
     id,
     supermarketId: 'chain-1',
     supermarketName: { en: 'Mart', es: 'Mart' },
+    supermarketLogoUrl: null,
     label: null,
     address: `Calle ${id}`,
     city: 'Córdoba',
     postalCode: '14001',
     inProfile,
+    sections: [],
   };
 }
 

@@ -6,6 +6,7 @@ import {
   type ItemPriceView,
   type ItemView,
   type LocalizedText,
+  type LocationSectionNameView,
   type PricePolicyView,
   type PriceScopeView,
   type ProductGroupView,
@@ -154,7 +155,9 @@ export function toSupermarketView(row: Supermarket): SupermarketView {
  */
 export function toSupermarketLocationView(
   row: SupermarketLocation,
-  priceScopeIds: readonly string[]
+  priceScopeIds: readonly string[],
+  /** The shop's section names in its order (plan 0170), read in a batch too. */
+  sections: readonly LocationSectionNameView[]
 ): SupermarketLocationView {
   return {
     id: row.id,
@@ -171,6 +174,7 @@ export function toSupermarketLocationView(
     longitude: row.longitude,
     externalRef: row.externalRef,
     externalProvider: row.externalProvider,
+    sections: [...sections],
   };
 }
 
