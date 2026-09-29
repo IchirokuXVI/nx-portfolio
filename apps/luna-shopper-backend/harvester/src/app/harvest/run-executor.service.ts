@@ -137,20 +137,33 @@ export class RunExecutor implements OnApplicationShutdown {
   ): Promise<{
     knownExternalIds: Set<string>;
     externalIdsWithoutEan: Set<string>;
+    externalIdsWithShallowPath: Set<string>;
   }> {
     const knownExternalIds = new Set<string>();
     const externalIdsWithoutEan = new Set<string>();
+    const externalIdsWithShallowPath = new Set<string>();
     if (details !== HarvestDetailFetch.NEW || detailBackfill) {
-      return { knownExternalIds, externalIdsWithoutEan };
+      return {
+        knownExternalIds,
+        externalIdsWithoutEan,
+        externalIdsWithShallowPath,
+      };
     }
     const rows = await this.entries.find({
-      select: { externalId: true, ean: true },
+      select: { externalId: true, ean: true, categoryPath: true },
       where: { supermarketId },
     });
     for (const row of rows) {
       (row.ean ? knownExternalIds : externalIdsWithoutEan).add(row.externalId);
+      if ((row.categoryPath ?? []).length <= 1) {
+        externalIdsWithShallowPath.add(row.externalId);
+      }
     }
-    return { knownExternalIds, externalIdsWithoutEan };
+    return {
+      knownExternalIds,
+      externalIdsWithoutEan,
+      externalIdsWithShallowPath,
+    };
   }
 
   /**

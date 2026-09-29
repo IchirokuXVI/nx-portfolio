@@ -99,6 +99,16 @@ export interface CatalogDiscoveryInput {
    * large number is visible in the report (plan 0119, section 8).
    */
   externalIdsWithoutEan?: ReadonlySet<string>;
+  /**
+   * The external ids whose stored category path has one level or none, loaded
+   * beside the two sets above and overlapping them.
+   *
+   * For a source with no EAN it is what a failed detail leaves behind: El Jamón
+   * writes the top level category a listing row carries when the product page
+   * could not be read (plan 0169, section 5.3), so a runner that fetches only
+   * new details reads these again rather than keeping that one level forever.
+   */
+  externalIdsWithShallowPath?: ReadonlySet<string>;
 }
 
 /**

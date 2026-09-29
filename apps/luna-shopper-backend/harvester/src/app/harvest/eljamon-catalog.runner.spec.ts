@@ -323,4 +323,63 @@ describe('ElJamonCatalogRunner', () => {
     );
     expect(second?.method).toBe('POST');
   });
+
+  it('reads the page again of a known product stored with one category level, which is what a failed page left', async () => {
+    const runner = new TestRunner(storefront);
+    await runner.run(
+      context(),
+      new RecordingRunReport(),
+      {
+        ...input,
+        externalIdsWithoutEan: new Set(['101', '200']),
+        // 200's page failed on an earlier walk, so it holds only BEBIDAS.
+        externalIdsWithShallowPath: new Set(['200']),
+      },
+      source
+    );
+
+    const read = (code: string) =>
+      runner.sent.some((request) => request.url.endsWith(`/p/${code}`));
+    expect(read('101')).toBe(false);
+    expect(read('200')).toBe(true);
+  });
+
+  it('skips a failed page after the first and goes on reading the category', async () => {
+    const third: Row[] = [
+      {
+        code: '300',
+        description: 'zumo, 1l',
+        brand: 'DON SIMON',
+        price: '1,20',
+        unit: '1,20 €/Litro',
+      },
+    ];
+    const ctx = context();
+    const report = new RecordingRunReport();
+    await new TestRunner((url) => {
+      if (url.pathname === '/categorias/bebidas/06') {
+        const page = url.searchParams.get(
+          '_ProductosFoodPortlet_WAR_comerzziaportletsfood_pagina'
+        );
+        if (page === null) {
+          return new Response(listing(BEBIDAS_PAGE_1, 41, '06'));
+        }
+        return page === '3'
+          ? new Response(listing(third, 41, '06'))
+          : new Response('', { status: 403 });
+      }
+      return storefront(url);
+    }).run(ctx, report, input, source);
+
+    const written = ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+    expect(written['failedPages']).toEqual([
+      expect.objectContaining({ category: '06', page: 2 }),
+    ]);
+    expect(written['categories']).toContainEqual(
+      expect.objectContaining({ code: '06', rowsRead: 21 })
+    );
+    expect(
+      report.products.some((product) => product.externalId === '300')
+    ).toBe(true);
+  });
 });

@@ -126,10 +126,19 @@ export class ElJamonClient {
    * **A page whose rows repeat a code already seen in this category ends it**,
    * as a guard against a page number the server clamps. So does a page with no
    * rows.
+   *
+   * **A page after the first that fails, retries included, can be skipped.**
+   * Page N + 1 is asked for with the filters of the last page read and only
+   * `page` changed, so it does not need page N. With `onPageError` the failure
+   * is handed over and the walk goes on; without it the failure throws, as it
+   * always did. Two failures in a row still throw, because by then the session
+   * is the likelier fault than the page, and page 1 always throws, because
+   * without it there are no filters to ask for page 2 with.
    */
   async *walkCategory(
     category: ElJamonCategory,
-    onPage?: (page: ElJamonListingPage, index: number) => void
+    onPage?: (page: ElJamonListingPage, index: number) => void,
+    onPageError?: (index: number, error: unknown) => void
   ): AsyncIterable<ElJamonListingRow> {
     await this.ensureSession();
     const url = `${this.baseUrl}${category.path}`;
@@ -144,6 +153,7 @@ export class ElJamonClient {
 
     const pages = pageCountOf(first.articleCount);
     let filters = first.filters;
+    let previousFailed = false;
     for (let index = 2; index <= pages; index += 1) {
       this.options.signal?.throwIfAborted();
       if (!filters) {
@@ -152,9 +162,20 @@ export class ElJamonClient {
             `${index} cannot be asked for.`
         );
       }
-      const page = parseListingPage(
-        await this.post(pageUrl(url, index), pageBody(filters, index))
-      );
+      let page: ElJamonListingPage;
+      try {
+        page = parseListingPage(
+          await this.post(pageUrl(url, index), pageBody(filters, index))
+        );
+      } catch (error) {
+        if (!onPageError || previousFailed || this.options.signal?.aborted) {
+          throw error;
+        }
+        onPageError(index, error);
+        previousFailed = true;
+        continue;
+      }
+      previousFailed = false;
       onPage?.(page, index);
       if (
         page.rows.length === 0 ||
@@ -281,6 +302,11 @@ export class ElJamonClient {
   /**
    * One request, gated, retried and abortable. Everything that is not 2xx either
    * retries (429, 5xx) or throws.
+   *
+   * **A request that never gets an answer retries too**, with the same backoff:
+   * a reset connection, a socket hang up, a DNS hiccup or the transport's idle
+   * timeout. Anything the transport throws is one of those, since a status is
+   * an answer; the one exception is an abort, which ends the run.
    */
   private async request(
     url: string,
@@ -305,29 +331,49 @@ export class ElJamonClient {
       }
 
       this.requests += 1;
-      const response = await this.fetchImpl(url, {
-        method: body ? 'POST' : 'GET',
-        headers,
-        body: body?.toString(),
-        signal: this.options.signal,
-      });
-      if (session) {
-        this.rememberCookies(response);
+      let response: Response;
+      let text: string | null = null;
+      try {
+        response = await this.fetchImpl(url, {
+          method: body ? 'POST' : 'GET',
+          headers,
+          body: body?.toString(),
+          signal: this.options.signal,
+        });
+        if (session) {
+          this.rememberCookies(response);
+        }
+        if (response.ok) {
+          // Read inside the try: a connection can drop halfway through a body.
+          text = await response.text();
+        }
+      } catch (error) {
+        if (this.options.signal?.aborted || attempt >= this.retries) {
+          throw error;
+        }
+        await this.backOff(attempt);
+        attempt += 1;
+        continue;
       }
 
-      if (response.ok) {
-        return await response.text();
+      if (text !== null) {
+        return text;
       }
       if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.retries) {
         throw new ElJamonHttpError(response.status, url);
       }
-
-      // Exponential backoff with jitter. Jitter matters at concurrency: without
-      // it every worker that hit the same 429 retries in the same millisecond.
-      const backoff = this.backoffBaseMs * 2 ** attempt;
-      await this.sleep(backoff + Math.floor(Math.random() * backoff));
+      await this.backOff(attempt);
       attempt += 1;
     }
+  }
+
+  /**
+   * Exponential backoff with jitter. Jitter matters at concurrency: without it
+   * every worker that hit the same 429 retries in the same millisecond.
+   */
+  private async backOff(attempt: number): Promise<void> {
+    const backoff = this.backoffBaseMs * 2 ** attempt;
+    await this.sleep(backoff + Math.floor(Math.random() * backoff));
   }
 
   /**

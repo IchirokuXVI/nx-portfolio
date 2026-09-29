@@ -14,7 +14,13 @@ import { RunExecutor, readDetails, readWrites } from './run-executor.service';
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
 
-function build(rows: Array<{ externalId: string; ean: string | null }>) {
+function build(
+  rows: Array<{
+    externalId: string;
+    ean: string | null;
+    categoryPath?: string[];
+  }>
+) {
   const entries = {
     find: jest.fn(async () => rows as SourceCatalogEntry[]),
   } as unknown as Repository<SourceCatalogEntry>;
@@ -57,6 +63,24 @@ describe('RunExecutor, what a walk already knows (plan 0119)', () => {
     expect(answer.externalIdsWithoutEan).toEqual(new Set(['7012']));
     expect(entries.find).toHaveBeenCalledWith(
       expect.objectContaining({ where: { supermarketId: CHAIN } })
+    );
+  });
+
+  it('names the products stored with one category level or none', async () => {
+    const { known, entries } = build([
+      { externalId: 'a', ean: null, categoryPath: ['FRESCOS'] },
+      { externalId: 'b', ean: null, categoryPath: ['Frescos', 'Arroz'] },
+      { externalId: 'c', ean: '8480000900107', categoryPath: [] },
+    ]);
+
+    const answer = await known(HarvestDetailFetch.NEW);
+
+    // What a failed detail leaves behind on a source with no EAN (plan 0169).
+    expect(answer.externalIdsWithShallowPath).toEqual(new Set(['a', 'c']));
+    expect(entries.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ categoryPath: true }),
+      })
     );
   });
 

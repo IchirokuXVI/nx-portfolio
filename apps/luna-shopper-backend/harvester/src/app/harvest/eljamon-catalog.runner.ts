@@ -156,8 +156,10 @@ export class ElJamonCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * One top level category, every page of it. A page that fails ends the
-   * category, is named on the report, and the walk moves to the next one.
+   * One top level category, every page of it. Every page that fails, retries
+   * included, is named on the report. One after the first is skipped and the
+   * walk goes on to the next page; page 1, or a second failure in a row, ends
+   * the category and the walk moves to the next one.
    */
   private async listCategory(
     context: RunContext,
@@ -173,13 +175,24 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     };
     walk.categories.push(summary);
     let page = 0;
+    /** Every page that failed, named on the report, in the order they failed. */
+    const skipped: Array<{ page: number; error: unknown }> = [];
     try {
-      for await (const row of client.walkCategory(category, (read, index) => {
-        page = index;
-        if (index === 1) {
-          summary.printedCount = read.articleCount;
+      for await (const row of client.walkCategory(
+        category,
+        (read, index) => {
+          page = index;
+          if (index === 1) {
+            summary.printedCount = read.articleCount;
+          }
+        },
+        (index, error) => {
+          // A page after the first is skipped rather than ending the
+          // category: the next one is asked for with the last filters read.
+          page = index;
+          skipped.push({ page: index, error });
         }
-      })) {
+      )) {
         summary.rowsRead += 1;
         walk.record(category, row);
         await context.heartbeat();
@@ -188,15 +201,18 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       if (context.signal.aborted) {
         throw error;
       }
+      skipped.push({ page: page + 1, error });
+    }
+    for (const failure of skipped) {
       this.logger.warn(
-        `Run ${context.runId}: ${category.path} page ${page + 1} failed: ` +
-          String(error)
+        `Run ${context.runId}: ${category.path} page ${failure.page} failed: ` +
+          String(failure.error)
       );
       walk.failedPages.push({
         category: category.code,
         path: category.path,
-        page: page + 1,
-        error: String(error),
+        page: failure.page,
+        error: String(failure.error),
       });
       await context.report({ failed: 1 });
     }
@@ -232,15 +248,23 @@ export class ElJamonCatalogRunner implements CatalogRunner {
  * **This source has no EAN**, so every row it wrote is in the second set, and
  * reading the page again would answer the same category path. So a row in
  * either set is known here. `ALL` reads every page, as it does for Mercadona.
+ *
+ * **Except a row whose category path has one level or none.** That is what a
+ * product whose page failed was written with (section 5.3), and counting it as
+ * known would keep that one level forever. Its page is read again, which is
+ * how a failed detail is retried here, as the missing EAN is for Mercadona.
  */
 function knownIds(input: CatalogDiscoveryInput): ReadonlySet<string> {
   if ((input.details ?? HarvestDetailFetch.ALL) !== HarvestDetailFetch.NEW) {
     return new Set();
   }
-  return new Set([
-    ...(input.knownExternalIds ?? []),
-    ...(input.externalIdsWithoutEan ?? []),
-  ]);
+  const shallow = input.externalIdsWithShallowPath ?? new Set<string>();
+  return new Set(
+    [
+      ...(input.knownExternalIds ?? []),
+      ...(input.externalIdsWithoutEan ?? []),
+    ].filter((id) => !shallow.has(id))
+  );
 }
 
 /** One product as the listing and, when it was read, its page describe it. */

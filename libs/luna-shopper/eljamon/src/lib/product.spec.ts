@@ -26,6 +26,19 @@ describe('parseProductPage', () => {
     expect(product?.categoryPath).not.toContain(product?.name);
   });
 
+  it('leaves a double quoted value alone although it holds a colon and a quote', () => {
+    const page =
+      '<script type="application/ld+json">{"@type": "Product", ' +
+      `"name": "Jamón: 'el bueno', 100 g", "sku": "7", ` +
+      `"offers": {"price": "2.5", "availability": 'InStock'}}</script>`;
+
+    expect(parseProductPage(page)).toMatchObject({
+      code: '7',
+      name: "Jamón: 'el bueno', 100 g",
+      price: 2.5,
+    });
+  });
+
   it('answers null for a page with no product JSON-LD, and does not throw', () => {
     expect(parseProductPage(fixture('home.html'))).toBeNull();
     expect(
