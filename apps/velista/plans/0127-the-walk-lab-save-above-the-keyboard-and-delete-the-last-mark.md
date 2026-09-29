@@ -1,8 +1,9 @@
 # 0127: the walk lab, Save above the keyboard, and deleting the last mark
 
 > Asked for on 2026-09-29 after the second El Jamón walk, and held until the plans were
-> written. Small and independent of the rest of the shop map series. The Android app's half
-> is `apps/shop-walk-android/plans/0001`.
+> written. Small and independent of the rest of the shop map series. The user asked for the
+> same button in the Android walk app, then decided to delete that app instead
+> (`libs/luna-shopper/shop-map/recorder/plans/0004`).
 >
 > Prerequisite reading: `libs/velista/feature-walk-lab/src/lib/pages/record-page.html`
 > (the checkpoint and note panel, a `<form class="panel">` under the map), `record-page.ts`
@@ -34,8 +35,8 @@ most recent mark from the walk being recorded and from what is stored.
 - **Marks** are appended to `WalkBuilder._marks` and drained into IndexedDB in batches
   (`#marks` in `_drained`), so the last mark can already be stored when the person deletes
   it.
-- **The walk file** (`recorder/plans/0002`) has `marks` and `events`. The TS reader and the
-  Kotlin reader both read it, and the recorder README lists the rules both follow.
+- **The walk file** (`recorder/plans/0002`) has `marks` and `events`. `readWalkFile` reads it,
+  and the recorder README lists the rules it follows.
 
 ### Target state
 
@@ -49,14 +50,14 @@ most recent mark from the walk being recorded and from what is stored.
 3. **Stored walks agree.** A mark not yet drained is removed from the builder. A mark
    already drained is cancelled with an event `{ kind: 'mark-deleted', detail: <the mark's
    t> }`, and `readWalkFile` drops a mark with a matching `mark-deleted` event. The rule is
-   added to the recorder README beside the other rules both readers follow.
+   added to the recorder README beside its other rules.
 
 ### Scope
 
 Work only in `libs/velista/feature-walk-lab/**`, `libs/luna-shopper/shop-map/recorder`
 (the reader rule, its spec and the README line), and the lab's locale strings.
 
-Do not touch: anything outside the lab, the Android app (its own plan), the walk file's
+Do not touch: anything outside the lab, the Android app (deleted by recorder `0004`), the walk file's
 shape beyond the one event kind.
 
 ### Constraints

@@ -11,7 +11,7 @@
 > `admin-app` notes on descriptors.
 
 A velista account now has roles (`admin`, `premium`), and a role grants permissions
-(`shopMap.record`, `prices.trusted`). Nobody holds a role until an operator grants it, and
+(today only `shopMap.record`). Nobody holds a role until an operator grants it, and
 the only place to do that is the account's page in the back office.
 
 ## Brief for the agent
@@ -35,8 +35,7 @@ with a confirmation, through `PUT /v1/admin/users/:id/roles`. Use the
 ### Target state
 
 1. **The account page** has a Roles section: each role with a switch and one line on what
-   it grants ("Admin: can map shops, and its prices will count above other users'
-   prices." and "Premium: nothing yet."). Changing a switch asks for confirmation, then
+   it grants ("Admin: can map shops." and "Premium: nothing yet."). Changing a switch asks for confirmation, then
    sends the whole set. A guest shows the section disabled with why.
 2. **The users list** shows the roles as a column in the table and a line on the card, and
    filters by role.

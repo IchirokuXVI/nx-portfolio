@@ -7,7 +7,7 @@
 > reviewed by the user. The boards of the group "A shop, and the map every shopper sees" are
 > this plan: "Opening the map from the basket", "The shop picker opens a shop", "A shop",
 > "The shop map" and "One section", in Day and Night. "The shop map with drawn assets" is
-> not this plan (the user decides later), and "The shop map, for somebody who maps" is
+> `0128`, built last, and "The shop map, for somebody who maps" is
 > `0122`.
 >
 > Needs backend `0168` (`hasMap` and the map read), `0176` (the shop's size), `0170`
@@ -109,7 +109,7 @@ behaviour, the aisle grouping of `0120`.
 
 ### Action boundaries
 
-Stop and ask before: drawing the drawn assets, drawing the map inside the basket page,
+Stop and ask before: drawing the drawn assets of `0128`, drawing the map inside the basket page,
 fetching a map for a shop the person did not open, or creating the Angular adapter library.
 
 ### Progress evidence
@@ -124,4 +124,4 @@ the basket, in Day and Night, with screenshots beside the mock's boards.
 - The Walks button and everything behind it: `0122`.
 - Editing and recording: `0123` and `0126`.
 - Where you are standing on the map: backlog `0001`.
-- Drawn assets for shelves, counters, tills and the door.
+- Drawn assets for shelves, counters, tills and the door: `0128`.

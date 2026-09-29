@@ -8,18 +8,21 @@
 > Prerequisite reading: `apps/luna-shopper-backend/auth/src/app/entities/user.entity.ts`,
 > `tokens/token.service.ts` (`signAccessToken`), the gateway's `auth/jwt.strategy.ts`
 > (`CurrentUser`), `GET /v1/account/me`, the back office users screen
-> (`/v1/admin/users`), `auth_audit` (plan 0077 section 8), and backlog `0001` section 2.6
-> (prices that users submit).
+> (`/v1/admin/users`) and `auth_audit` (plan 0077 section 8).
 
 Velista accounts have no roles today. The only admins are the back office's operators, who
 live in their own table with their own token, and who never walk into a shop with velista.
-The user decided on 2026-09-29 that mapping stays in velista, because in the end every
-account will map, and that a few roles are fine: an admin, a premium account for the paid
-version later, and admins whose submitted prices outrank other users' prices.
+The user decided on 2026-09-29 that mapping stays in velista and that a few roles are fine:
+an admin, and a premium account for the paid version later.
 
 So a velista account gets roles, and a role is only a name for a set of permissions. Code
-checks permissions, never role names. Opening mapping to every account later is then a
-change to one table in the contracts, not to every guard.
+checks permissions, never role names. Two later steps then change one table in the
+contracts and no guard. Both are backlog today:
+
+- **Mapping by every account** (backend backlog `0017` for what that needs first).
+- **Prices that users send from velista**, where an admin's price outranks other users'
+  prices (backend backlog `0001` section 2.6). That adds a permission of its own when it is
+  built.
 
 ## Brief for the agent
 
@@ -45,8 +48,8 @@ on `GET /v1/account/me`, and let the back office set an account's roles with an 
 
 - `users.roles text[] NOT NULL DEFAULT '{}'`, holding values of `AccountRole`.
 - In `libs/luna-shopper/contracts`: `AccountRole = 'admin' | 'premium'`,
-  `Permission = 'shopMap.record' | 'prices.trusted'`, and `PERMISSIONS_OF: Record<AccountRole,
-  Permission[]>` with `admin: ['shopMap.record', 'prices.trusted']` and `premium: []`.
+  `Permission = 'shopMap.record'`, and `PERMISSIONS_OF: Record<AccountRole, Permission[]>`
+  with `admin: ['shopMap.record']` and `premium: []`.
 - The access token carries `perms: Permission[]`, computed at signing from the account's
   roles. `CurrentUser` gains `permissions`.
 - `@RequirePermission('shopMap.record')` on a route answers 403 `PERMISSION_REQUIRED`
@@ -75,9 +78,7 @@ Do not touch: `admin_users` and the operator token, velista, the back office scr
   and an upgrade from guest keeps an empty set.
 - **Permissions are derived, never stored.** The token and `me` compute them from roles
   with `PERMISSIONS_OF`, so changing the table changes every account.
-- **`prices.trusted` is reserved.** Nothing reads it in this plan. Backlog `0001` section
-  2.6 names it as what ranks an admin's submitted price above other users' prices when
-  submissions are built.
+- **One permission.** Nothing for prices is reserved: user price submissions are backlog.
 - **`premium` grants nothing yet.** It exists so the paid version has a role to grant.
 - Only make changes directly requested.
 
@@ -98,4 +99,5 @@ the refusal for a guest, and the regenerated documents.
 
 - Screens: admin `0038` (granting), velista `0122` (showing the Walks button).
 - Prices that users submit, and ranking them: backlog `0001` section 2.6.
+- Mapping by every account: backlog `0017`.
 - Paying for premium.

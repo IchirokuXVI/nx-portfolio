@@ -119,4 +119,4 @@ the recording screen applies to every later pose.
 
 - The WebXR session, the sounds, the purple path and the dialogs: velista `0126`.
 - Relocalizing against a saved camera map (ARCore cloud anchors or similar).
-- The Android app, which records walks for research and keeps its own guard, if any.
+- The Android app, which `0004` deletes.

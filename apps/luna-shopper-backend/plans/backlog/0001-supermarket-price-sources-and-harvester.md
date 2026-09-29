@@ -272,9 +272,9 @@ section 8), abuse handling, and a moderation queue. They are also user generated
 stored exactly as entered (0004 section 12).
 
 **Trusted submitters (added 2026-09-29).** The user decided that a price submitted by an
-admin account outranks other users' prices. Plan `0175` reserves the `prices.trusted`
-permission for this, granted by the `admin` role. When the writers are built, a submission
-from an account with that permission ranks above the consensus of other users'
+admin account outranks other users' prices. Submissions stay in this backlog. When the
+writers are built, they add a permission to plan `0175`'s table, granted by the `admin`
+role, and a submission from an account with it ranks above the consensus of other users'
 submissions for its item and scope. Whether it also skips moderation is decided then.
 
 **This plan reserves the table and the aggregation rule; it does not build the writers.** The

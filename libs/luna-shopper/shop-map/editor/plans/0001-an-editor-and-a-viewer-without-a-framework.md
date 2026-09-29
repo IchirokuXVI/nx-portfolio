@@ -96,8 +96,7 @@ office.
 ### Action boundaries
 
 Stop and ask before: adding a dependency, drawing any control inside the canvas, a canvas
-element instead of SVG, rotation by angle, or the drawn assets of the mock's "drawn assets"
-board (section 4).
+element instead of SVG, rotation by angle, or the drawn assets of velista `0128` (section 4).
 
 ### Progress evidence
 
@@ -180,6 +179,6 @@ not committed.
 ## 4. Not in this plan
 
 - Menus, sheets, the colour picker, the mark sheet and every word: the hosts.
-- **Drawn assets** (shelves with products, tills, a door), which the mock shows on one board
-  so the user can decide whether they are worth building. The plain look ships until then.
+- **Drawn assets** (shelves with products, tills, a door): velista `0128`, low priority and
+  built last, adds them as a second shopper look. The plain look ships first.
 - Rotation by angle, multi selection, copy and paste, levels.
