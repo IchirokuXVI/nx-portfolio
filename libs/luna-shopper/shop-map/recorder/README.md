@@ -9,6 +9,8 @@ inside `src/`, because velista compiles it under Angular.
 - Recorder plan 0002 (`plans/0002-the-walk-file-and-the-positioning-modes.md`): the
   walk file, every positioning mode as a pure function over it, the metrics and the
   GeoJSON file on disk.
+- Recorder plan 0003 (`plans/0003-camera-tracking-and-its-guards.md`): the tracking
+  guard, `keepPathPoint` and `alignSession`. See the last section.
 
 ```sh
 npx nx test luna-shopper/shop-map/recorder
@@ -104,3 +106,54 @@ four kinds, so `trackToWalk` can carry a walk file's checkpoints over. They draw
 nothing. `walkToDocument` flips the walk's `y` (north up) into the document's rows (top
 down), and makes the draft valid by construction: entrances are carried to the border
 through a corridor, and any free cell no entrance reaches becomes shelf.
+
+## Plan 0003: the tracking guard
+
+`createTrackingGuard` takes camera poses and compass samples and answers `good`, `lost`
+or `suspect`, plus the events it decided (`lost`, `suspect`, `stopped`, `baseline`,
+`confirmed`, `discarded`). It touches no sensor. Every threshold is a named constant in
+`src/lib/tracking-guard.ts`, with the field test number it comes from.
+
+The fixture is real: `src/__fixtures__/tracking/el-jamon-2.tracking.json` is cut from the
+second El Jamón walk by `tools/cut-tracking-fixture.ts` (the `cut-tracking-fixture`
+target, with the walk file passed in `--args`). The walk itself is 18 MB and is not
+committed. Never edit the fixture by hand. Recut it.
+
+Over the fixture, left alone, the guard answers:
+
+| Time | Event |
+| ---- | ----- |
+| 62.0 s | baseline 316.6 degrees (compass minus camera heading) |
+| 920.5 s | `lost`, the pose is not tracked |
+| 922.0 s | `suspect`, poses returned, automatic resume |
+| 923.8 s | `suspect` by the heading rule (drift 162 degrees), and a `frame-moved` stop |
+| 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame |
+
+These are the choices the guard makes where the plan says nothing.
+
+1. **Headings.** A heading is degrees, 0 along map `+y`, clockwise as seen from above,
+   so heading `h` points along `(-sin h, cos h)`. That is the compass's sense, so
+   compass minus camera heading stays put while the person turns. `cameraHeading` reads
+   the camera's `-z`, or its `+y` when the phone lies flat, by the same 45 degree rule
+   as plan 0002's `forwardBearing`, which `compassHeading` uses.
+2. **Pairing.** Each tracked pose pairs with the latest compass sample. With no compass
+   yet, the heading rule and the baseline wait.
+3. **The clock.** Both streams advance it. No tracked pose for 0.5 s is `lost` from the
+   last pose plus 0.5 s, and a stop for a loss is stamped at the loss plus 3 s.
+4. **After a stop.** Poses that return after a loss short of 3 s are an automatic
+   resume. Poses that return after a `tracking-lost` stop are `suspect` without one,
+   because the walk stopped and only the person resumes it.
+5. **A rule firing while `suspect`.** The heading or the jump rule fires again while
+   `suspect`, including during an automatic resume, and it stops the walk with
+   `frame-moved` unless a stop is already waiting for an answer. A stop ends the
+   automatic resume, so no path point is kept after it.
+6. **The heading rule** fires when the 5 s median crosses 45 degrees from the baseline,
+   not on every sample past it. `confirm` rearms it, so confirming while the compass
+   still disagrees suspects again at the next pose.
+7. **The jump rule** compares consecutive tracked poses only, never the two sides of a
+   loss.
+8. **`discard`** ends the guard: it reads nothing more, and the host stops the walk.
+9. **Resuming.** `alignSession` takes the walk's `baseline` beside the plan's three
+   inputs. The host reads the new session's `compassOffset` from `state().offset` of a
+   guard fed the new session's raw poses, then feeds a guard created with the walk's
+   baseline the poses passed through `alignPose`.
