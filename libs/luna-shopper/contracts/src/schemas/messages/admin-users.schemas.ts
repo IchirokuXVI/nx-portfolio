@@ -46,6 +46,7 @@ export const ADMIN_USERS_SCHEMA_IDS = {
     'msg/adminUser.resendVerification/request'
   ),
   updateRequest: schemaId('msg/adminUser.update/request'),
+  setRolesRequest: schemaId('msg/adminUser.setRoles/request'),
 } as const;
 
 const userFields = {
@@ -55,6 +56,7 @@ const userFields = {
   displayName: nullableString(),
   email: nullableString(),
   emailVerifiedAt: nullableString(),
+  roles: array(ref(ENUM_IDS.accountRole)),
   createdAt: string({ format: 'date-time' }),
   updatedAt: string({ format: 'date-time' }),
 };
@@ -65,6 +67,7 @@ const userKeys = [
   'displayName',
   'email',
   'emailVerifiedAt',
+  'roles',
   'createdAt',
   'updatedAt',
 ];
@@ -117,6 +120,7 @@ const listRequest = object(
     email: string(),
     kind: ref(ENUM_IDS.userKind),
     verified: boolean(),
+    role: ref(ENUM_IDS.accountRole),
     createdAfter: string({ format: 'date-time' }),
     createdBefore: string({ format: 'date-time' }),
     cursor: string(),
@@ -179,6 +183,20 @@ const updateRequest = object(
   ['userId', 'targetUserId']
 );
 
+/**
+ * The whole new set of roles (plan 0175). An empty array is allowed, and is how
+ * every role is taken away.
+ */
+const setRolesRequest = object(
+  ADMIN_USERS_SCHEMA_IDS.setRolesRequest,
+  {
+    ...adminCredentialProperties,
+    targetUserId: nonEmptyString(),
+    roles: array(ref(ENUM_IDS.accountRole)),
+  },
+  ['userId', 'targetUserId', 'roles']
+);
+
 export const adminUsersSchemas: JsonSchema[] = [
   adminUserView,
   adminUserDetailView,
@@ -191,6 +209,7 @@ export const adminUsersSchemas: JsonSchema[] = [
   deleteRequest,
   resendVerificationRequest,
   updateRequest,
+  setRolesRequest,
 ];
 
 export const adminUsersMessageContracts: Record<
@@ -224,6 +243,11 @@ export const adminUsersMessageContracts: Record<
   // why the person cannot sign in.
   [ADMIN_USER_PATTERNS.update]: {
     request: ADMIN_USERS_SCHEMA_IDS.updateRequest,
+    response: ADMIN_USERS_SCHEMA_IDS.adminUserDetailView,
+  },
+  // The detail view again: the page that changed the roles redraws from it.
+  [ADMIN_USER_PATTERNS.setRoles]: {
+    request: ADMIN_USERS_SCHEMA_IDS.setRolesRequest,
     response: ADMIN_USERS_SCHEMA_IDS.adminUserDetailView,
   },
 };

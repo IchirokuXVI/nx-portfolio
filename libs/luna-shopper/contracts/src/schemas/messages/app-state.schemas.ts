@@ -1,5 +1,6 @@
 import { APP_STATE_PATTERNS } from '../../lib/messages/app-state.messages';
 import {
+  array,
   boolean,
   JsonSchema,
   nonEmptyString,
@@ -8,6 +9,7 @@ import {
   ref,
   schemaId,
 } from '../builders';
+import { ENUM_IDS } from '../enums.schemas';
 import {
   USER_PROFILE_VIEW_PROPERTIES,
   USER_PROFILE_VIEW_REQUIRED,
@@ -77,8 +79,9 @@ const accountMeView = object(
   {
     ...USER_PROFILE_VIEW_PROPERTIES,
     appState: ref(APP_STATE_SCHEMA_IDS.userAppStateView),
+    permissions: array(ref(ENUM_IDS.permission)),
   },
-  [...USER_PROFILE_VIEW_REQUIRED, 'appState']
+  [...USER_PROFILE_VIEW_REQUIRED, 'appState', 'permissions']
 );
 
 export const appStateSchemas: JsonSchema[] = [

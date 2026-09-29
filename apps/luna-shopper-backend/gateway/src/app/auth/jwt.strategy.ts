@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import {
+  isPermission,
   UserKind,
   type AccessTokenClaims,
+  type Permission,
 } from '@portfolio/luna-shopper/contracts';
 import { setRequestContext } from '@portfolio/luna-shopper/platform';
 import { ExtractJwt, Strategy } from 'passport-jwt';
@@ -13,6 +15,12 @@ import type { GatewayConfig } from '../config/app-config';
 export interface CurrentUser {
   userId: string;
   kind: UserKind;
+  /**
+   * What the account may do beyond the ordinary, read from the token's `perms`
+   * claim (plan 0175). `@RequirePermission` checks this, and `me` answers it.
+   * Empty for a token signed before the claim existed, and for a guest.
+   */
+  permissions: readonly Permission[];
 }
 
 /**
@@ -36,6 +44,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   validate(payload: AccessTokenClaims): CurrentUser {
     setRequestContext({ userId: payload.sub });
-    return { userId: payload.sub, kind: payload.kind };
+    return {
+      userId: payload.sub,
+      kind: payload.kind,
+      permissions: permissionsFromClaim(payload.perms),
+    };
   }
+}
+
+/**
+ * The `perms` claim as the gateway trusts it: absent reads as none, and a value
+ * that names no known permission is dropped rather than carried, so a token
+ * signed by a newer auth cannot grant this gateway something it has never heard
+ * of. The signature already proves auth wrote it.
+ */
+export function permissionsFromClaim(claim: unknown): Permission[] {
+  return Array.isArray(claim) ? claim.filter(isPermission) : [];
 }

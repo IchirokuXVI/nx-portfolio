@@ -20,6 +20,15 @@ export interface ProblemResponseOptions {
   participant?: boolean;
   /** The route resolves a zone membership, so it can be a 403 or a 404. */
   membership?: boolean;
+  /**
+   * The route carries `@RequirePermission`, so an account without the
+   * permission is a 403 of its own code (plan 0175). The decorator already
+   * documents this; a route that also documents another 403 of its own must
+   * pass it again, because Swagger keeps one response per status.
+   */
+  permission?: boolean;
+  /** The route sets an account's roles, which a guest cannot hold (plan 0175). */
+  guestRoles?: boolean;
   /** The route takes a request body, so validation can reject it with a 400. */
   body?: boolean;
   /**
@@ -128,6 +137,12 @@ export function ApiProblemResponses(
   }
   if (options.membership) {
     codes.push(ERROR_CODES.FORBIDDEN, ERROR_CODES.NOT_FOUND);
+  }
+  if (options.permission) {
+    codes.push(ERROR_CODES.PERMISSION_REQUIRED);
+  }
+  if (options.guestRoles) {
+    codes.push(ERROR_CODES.GUEST_HAS_NO_ROLES);
   }
   if (options.notFound && !options.membership) {
     codes.push(ERROR_CODES.NOT_FOUND);

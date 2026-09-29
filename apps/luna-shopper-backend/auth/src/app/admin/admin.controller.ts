@@ -24,6 +24,8 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type SetAdminUserRolesRequest,
+  type SetAdminUserRolesResult,
   type UpdateAdminUserRequest,
   type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
@@ -126,6 +128,13 @@ export class AdminController {
     @Payload() req: UpdateAdminUserRequest
   ): Promise<UpdateAdminUserResult> {
     return this.directory.update(req);
+  }
+
+  @MessagePattern(ADMIN_USER_PATTERNS.setRoles)
+  setUserRoles(
+    @Payload() req: SetAdminUserRolesRequest
+  ): Promise<SetAdminUserRolesResult> {
+    return this.directory.setRoles(req);
   }
 
   @MessagePattern(ADMIN_USER_PATTERNS.delete)
