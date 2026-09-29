@@ -302,9 +302,19 @@
       "label": "Search the catalog",
       "clear": "Clear the search"
     },
-    "chips": {
-      "label": "Shops",
-      "all": "All shops"
+    "supermarket": {
+      "label": "Supermarket",
+      "title": "Supermarket",
+      "back": "Back to the catalog",
+      "backToChains": "Back to every chain",
+      "all": "All supermarkets",
+      "allDetail": "Every product from every chain",
+      "any": "Any {{chain}} shop",
+      "anyDetail": "Every {{chain}} product",
+      "anyShop": "any shop",
+      "pricesAt": "Prices at {{shop}}",
+      "notPriced": "not priced here",
+      "clear": "Show every supermarket"
     },
     "order": {
       "label": "Order",
@@ -1145,11 +1155,17 @@
     "chain": {
       "count_one": "{{count}} shop",
       "count_other": "{{count}} shops",
+      "inAreas_one": "{{count}} shop in your areas",
+      "inAreas_other": "{{count}} shops in your areas",
       "exclude": "Exclude this brand",
       "include": "Include this brand",
       "excludeAll": "Exclude these brands",
       "includeAll": "Include these brands",
       "hint": "Excluding the brand also covers shops it opens later. Switching off single shops does not"
+    },
+    "sections": {
+      "more": "Show all {{count}} sections",
+      "fewer": "Show fewer"
     },
     "state": {
       "chain": "Brand excluded",

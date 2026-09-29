@@ -180,6 +180,7 @@ export class ShopMemory implements ShopServiceI {
         locations: (held?.locations ?? 0) + 1,
         excluded: (held?.excluded ?? 0) + refused,
         excludedChain: refusedChains.has(shop.supermarketId),
+        logoUrl: null,
       });
     }
 
@@ -212,6 +213,8 @@ export class ShopMemory implements ShopServiceI {
       provider: 'OSM',
       excluded: refusedShops.has(shop.id),
       excludedChain: refusedChains.has(shop.supermarketId),
+      logoUrl: null,
+      sections: [],
     }));
 
     // One page. The sample is five shops, and a cursor a spec has to follow would be

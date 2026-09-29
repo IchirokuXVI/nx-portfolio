@@ -1046,6 +1046,29 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
+             * The catalog's supermarket picker (velista `0124`): the shop picker as a
+             * page of its own, where a chain is enough and a shop is optional. A
+             * sibling of the tab like the category pages, for their reason: the tab
+             * renders its children into the product sheet's outlet.
+             */
+            path: 'catalog/supermarket',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CatalogSupermarketPage
+              ),
+          },
+          {
+            /** One chain's shops (velista `0124`), by the chain's id. */
+            path: 'catalog/supermarket/:supermarketId',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CatalogSupermarketPage
+              ),
+          },
+          {
+            /**
              * The third tab (velista `0097`, section 7).
              *
              * **Declared before `shopping-lists/:basketId`**, so the word is not

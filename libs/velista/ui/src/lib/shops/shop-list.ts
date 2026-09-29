@@ -5,7 +5,9 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { ChainLogo, type ChainLogoView } from './chain-logo';
 import { OutsideAreas } from './outside-areas';
+import { SectionChips, type SectionChip } from './section-chips';
 
 /** One shop, with every string already chosen in the reader's language. */
 export interface ShopRow {
@@ -33,6 +35,43 @@ export interface ShopRow {
    * there for a recent one. Absent everywhere else.
    */
   readonly aside?: ShopRowAside;
+  /**
+   * The street and the town apart, which a pick row needs (velista `0124`): the
+   * street is the title of a shop with no name of its own, and then only the town
+   * is left for the line under it. Absent on the supermarkets page's rows.
+   */
+  readonly street?: string | null;
+  readonly town?: string | null;
+  /** The chain's logo, drawn on a pick row where the chains are mixed. */
+  readonly logo?: ChainLogoView;
+  /** The shop's sections in its own order, under a pick row. Empty draws no line. */
+  readonly sections?: readonly SectionChip[];
+}
+
+/**
+ * What a pick row says, worked out once (velista `0124`, target 3).
+ *
+ * The title is the shop's own name when it has one, else its street, else its
+ * town. Under it the chain, where the chains are mixed, and then the address, or
+ * only the town when the street is already the title.
+ */
+export function pickRowLines(
+  shop: ShopRow,
+  mixed: boolean
+): { readonly title: string; readonly detail: string } {
+  const street = shop.street ?? null;
+  const town = shop.town ?? null;
+  const title = shop.name ?? street ?? town ?? shop.chain;
+  const place =
+    shop.name !== null
+      ? shop.where
+      : street !== null && title === street
+        ? town
+        : null;
+  const parts = [mixed ? shop.chain : null, place].filter(
+    (part): part is string => part !== null && part.trim() !== ''
+  );
+  return { title, detail: parts.join(' · ') };
 }
 
 /**
@@ -106,7 +145,7 @@ export interface ShopGroup {
  */
 @Component({
   selector: 'lib-shop-list',
-  imports: [OutsideAreas, RokuTranslatorPipe],
+  imports: [ChainLogo, OutsideAreas, RokuTranslatorPipe, SectionChips],
   templateUrl: './shop-list.html',
   styleUrl: './shop-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -139,6 +178,14 @@ export class ShopList {
   readonly groupName = input('shop-pick');
 
   /**
+   * Whether the rows are of several chains (velista `0124`): the shops near the
+   * device, the recent ones and a search. Each row then leads with its chain's
+   * logo and names the chain under the title. Inside one chain the head carries
+   * the logo and the rows do not, which gives the sections the width.
+   */
+  readonly mixed = input(false);
+
+  /**
    * A row's checkbox was tapped under `exclude`.
    *
    * Named `toggled` and not `toggle`, which is a DOM event a `<details>` fires:
@@ -162,6 +209,10 @@ export class ShopList {
     return this.mode() === 'pick'
       ? shop.id === this.pickedId()
       : !shop.excluded && !shop.excludedChain;
+  }
+
+  protected lines(shop: ShopRow) {
+    return pickRowLines(shop, this.mixed());
   }
 
   /** Report the tap as whichever act this mode's control performs. */

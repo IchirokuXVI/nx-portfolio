@@ -3,6 +3,7 @@ import type {
   CatalogBrowseContext,
   CatalogBrowseQuery,
   CatalogChain,
+  CatalogLocation,
   CatalogPriceState,
   CatalogProduct,
   CatalogScopeOffer,
@@ -64,13 +65,22 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
     query: CatalogBrowseQuery
   ): Promise<Page<CatalogProduct> | null> {
     const needle = query.query.trim().toLocaleLowerCase();
+    // A shop prices at its chain's one scope and lists that chain, as the server
+    // does with `locationId` (backend `0170`).
+    const shop =
+      query.locationId === null
+        ? null
+        : (LOCATIONS.find((row) => row.id === query.locationId) ?? null);
+    const soldBy = shop?.supermarketId ?? query.soldBy;
     const scopes =
       this.state !== 'priced'
         ? new Set<string>()
         : new Set(
-            query.priceScopeIds.length > 0
-              ? query.priceScopeIds
-              : CHAINS.map((chain) => scopeOf(chain.supermarketId))
+            shop !== null
+              ? [scopeOf(shop.supermarketId)]
+              : query.priceScopeIds.length > 0
+                ? query.priceScopeIds
+                : CHAINS.map((chain) => scopeOf(chain.supermarketId))
           );
 
     const matched = PRODUCTS.filter(
@@ -78,8 +88,7 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
         (needle === '' ||
           row.es.toLocaleLowerCase().includes(needle) ||
           row.en.toLocaleLowerCase().includes(needle)) &&
-        (query.soldBy === null ||
-          row.prices[query.soldBy as ChainKey] !== undefined) &&
+        (soldBy === null || row.prices[soldBy as ChainKey] !== undefined) &&
         inCategory(row, query.categoryId)
     );
 
@@ -116,7 +125,29 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
       available: true,
     }));
   }
+
+  async location(locationId: string): Promise<CatalogLocation | null> {
+    return LOCATIONS.find((row) => row.id === locationId) ?? null;
+  }
 }
+
+/** The shops a spec can price the tab at, one per chain. */
+const LOCATIONS: readonly CatalogLocation[] = [
+  {
+    id: 'location-mercadona-mayor',
+    supermarketId: 'chain-mercadona',
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+  },
+  {
+    id: 'location-deza-jardin',
+    supermarketId: 'chain-deza',
+    label: { es: 'Deza Ciudad Jardín', en: 'Deza Ciudad Jardín' },
+    address: 'Av. de Vallellano 20',
+    city: 'Córdoba',
+  },
+];
 
 type ChainKey = 'chain-mercadona' | 'chain-deza' | 'chain-carrefour';
 
@@ -125,16 +156,19 @@ const CHAINS: readonly CatalogChain[] = [
     supermarketId: 'chain-mercadona',
     name: { es: 'Mercadona', en: 'Mercadona' },
     locations: 7,
+    logoUrl: null,
   },
   {
     supermarketId: 'chain-deza',
     name: { es: 'Deza', en: 'Deza' },
     locations: 3,
+    logoUrl: null,
   },
   {
     supermarketId: 'chain-carrefour',
     name: { es: 'Carrefour', en: 'Carrefour' },
     locations: 2,
+    logoUrl: null,
   },
 ];
 

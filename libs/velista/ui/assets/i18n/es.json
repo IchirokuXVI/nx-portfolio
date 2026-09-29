@@ -302,9 +302,19 @@
       "label": "Buscar en el catálogo",
       "clear": "Borrar la búsqueda"
     },
-    "chips": {
-      "label": "Tiendas",
-      "all": "Todas las tiendas"
+    "supermarket": {
+      "label": "Supermercado",
+      "title": "Supermercado",
+      "back": "Volver al catálogo",
+      "backToChains": "Volver a todas las cadenas",
+      "all": "Todos los supermercados",
+      "allDetail": "Todos los productos de todas las cadenas",
+      "any": "Cualquier tienda de {{chain}}",
+      "anyDetail": "Todos los productos de {{chain}}",
+      "anyShop": "cualquier tienda",
+      "pricesAt": "Precios en {{shop}}",
+      "notPriced": "sin precio aquí",
+      "clear": "Ver todos los supermercados"
     },
     "order": {
       "label": "Orden",
@@ -1145,11 +1155,17 @@
     "chain": {
       "count_one": "{{count}} tienda",
       "count_other": "{{count}} tiendas",
+      "inAreas_one": "{{count}} tienda en tus zonas",
+      "inAreas_other": "{{count}} tiendas en tus zonas",
       "exclude": "Excluir esta marca",
       "include": "Incluir esta marca",
       "excludeAll": "Excluir estas marcas",
       "includeAll": "Incluir estas marcas",
       "hint": "Excluir la marca también cubre las tiendas que abra más adelante. Apagar tiendas sueltas no"
+    },
+    "sections": {
+      "more": "Ver las {{count}} secciones",
+      "fewer": "Ver menos"
     },
     "state": {
       "chain": "Marca excluida",

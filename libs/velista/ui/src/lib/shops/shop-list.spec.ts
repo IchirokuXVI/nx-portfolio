@@ -1,6 +1,12 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { ShopList, type ShopGroup, type ShopListMode } from './shop-list';
+import {
+  pickRowLines,
+  ShopList,
+  type ShopGroup,
+  type ShopListMode,
+  type ShopRow,
+} from './shop-list';
 
 function shop(id: string, chain: string, name: string | null) {
   return {
@@ -127,5 +133,102 @@ describe('ShopList', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('.mark')).toBeNull();
     expect(element.querySelector('.row.excluded')).toBeNull();
+  });
+});
+
+/**
+ * The pick row (velista `0124`, target 3): the title is the shop's own name or
+ * its street, the chain and the address go under it, the logo leads only where
+ * the chains are mixed, and the sections sit outside the label.
+ */
+describe('pickRowLines', () => {
+  const base: ShopRow = {
+    ...shop('loc-1', 'Mercadona', null),
+    where: 'Calle Mayor 3, Córdoba',
+    street: 'Calle Mayor 3',
+    town: 'Córdoba',
+  };
+
+  it('leads with the street, and names the town under it, when the shop has no name', () => {
+    expect(pickRowLines(base, true)).toEqual({
+      title: 'Calle Mayor 3',
+      detail: 'Mercadona · Córdoba',
+    });
+    expect(pickRowLines(base, false)).toEqual({
+      title: 'Calle Mayor 3',
+      detail: 'Córdoba',
+    });
+  });
+
+  it('leads with the shop’s own name, and puts the whole address under it', () => {
+    expect(pickRowLines({ ...base, name: 'Deza Ciudad Jardín' }, true)).toEqual(
+      {
+        title: 'Deza Ciudad Jardín',
+        detail: 'Mercadona · Calle Mayor 3, Córdoba',
+      }
+    );
+  });
+});
+
+describe('ShopList, the pick row', () => {
+  async function renderRow(
+    row: ShopRow,
+    mixed: boolean
+  ): Promise<ComponentFixture<ShopList>> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ShopList, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ShopList);
+    fixture.componentRef.setInput('groups', [
+      { key: 'one', heading: '', code: null, shops: [row] },
+    ]);
+    fixture.componentRef.setInput('mode', 'pick');
+    fixture.componentRef.setInput('grouped', false);
+    fixture.componentRef.setInput('mixed', mixed);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const row: ShopRow = {
+    ...shop('loc-1', 'Mercadona', null),
+    street: 'Calle Mayor 3',
+    town: 'Córdoba',
+    logo: { logoUrl: null, name: 'Mercadona', store: false },
+    sections: [
+      { id: 's1', name: 'Fruit and veg' },
+      { id: 's2', name: 'Butcher' },
+    ],
+  };
+
+  it('leads with the logo where the chains are mixed, and not inside one chain', async () => {
+    const mixed = await renderRow(row, true);
+    expect(
+      (mixed.nativeElement as HTMLElement).querySelector(
+        'label.row lib-chain-logo'
+      )
+    ).not.toBeNull();
+
+    const single = await renderRow(row, false);
+    expect(
+      (single.nativeElement as HTMLElement).querySelector('lib-chain-logo')
+    ).toBeNull();
+  });
+
+  it('draws the sections beside the label, never inside it', async () => {
+    const fixture = await renderRow(row, true);
+    const element = fixture.nativeElement as HTMLElement;
+
+    expect(element.querySelector('label.row lib-section-chips')).toBeNull();
+    expect(element.querySelector('.pick > lib-section-chips')).not.toBeNull();
+  });
+
+  it('draws no line of sections for a shop with none', async () => {
+    const fixture = await renderRow({ ...row, sections: [] }, true);
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('lib-section-chips')
+    ).toBeNull();
   });
 });

@@ -1,9 +1,10 @@
 <ul class="grid">
   @for (row of rows(); track row.key) {
-    <li>
+    <li class="cell">
       <!--
         A real button with real text, and its state announced by `aria-pressed` rather
-        than by the shade it is drawn in (section 7).
+        than by the shade it is drawn in (section 7). The logo leads, the chevron says
+        a tap goes somewhere, and the chosen chain trades it for a tick (velista 0124).
       -->
       <button
         (click)="chosen.emit(row.key)"
@@ -14,37 +15,49 @@
         class="chip"
         type="button"
       >
-        <span class="name">
-          @if (row.other) {
-            {{ 'shops.other' | rokuT }}
-          } @else {
-            {{ row.label }}
+        <lib-chain-logo [logo]="row.logo" class="logo" size="lg" />
+
+        @if (row.open) {
+          <span aria-hidden="true" class="tick">
+            <lib-check-icon class="tick-glyph" />
+          </span>
+        } @else {
+          <lib-chevron-right-icon class="go" />
+        }
+
+        <span class="text">
+          <span class="name">
+            @if (row.other) {
+              {{ 'shops.other' | rokuT }}
+            } @else {
+              {{ row.label }}
+            }
+          </span>
+
+          <span class="count">
+            {{ 'shops.chain.count' | rokuT: { count: row.locations } }}
+          </span>
+
+          <!--
+            The two exclusion states, in words and with a glyph each. They are
+            different promises and must not look the same: the chain covers shops
+            that do not exist yet, the other covers exactly the rows underneath.
+          -->
+          @if (row.state === 'chain') {
+            <span class="state">
+              <lib-slash-circle-icon class="state-glyph" />
+              {{ 'shops.state.chain' | rokuT }}
+            </span>
+          } @else if (row.state === 'some') {
+            <span class="state">
+              <lib-half-circle-icon class="state-glyph" />
+              {{
+                'shops.state.some'
+                  | rokuT: { count: row.excluded, total: row.locations }
+              }}
+            </span>
           }
         </span>
-
-        <span class="count">
-          {{ 'shops.chain.count' | rokuT: { count: row.locations } }}
-        </span>
-
-        <!--
-          The two exclusion states, in words and with a glyph each. They are different
-          promises and must not look the same: the chain covers shops that do not exist
-          yet, the other covers exactly the rows underneath.
-        -->
-        @if (row.state === 'chain') {
-          <span class="state">
-            <lib-slash-circle-icon class="state-glyph" />
-            {{ 'shops.state.chain' | rokuT }}
-          </span>
-        } @else if (row.state === 'some') {
-          <span class="state">
-            <lib-half-circle-icon class="state-glyph" />
-            {{
-              'shops.state.some'
-                | rokuT: { count: row.excluded, total: row.locations }
-            }}
-          </span>
-        }
       </button>
     </li>
   }

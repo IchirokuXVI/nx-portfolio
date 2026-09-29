@@ -235,6 +235,8 @@ function atShopOf(
 const SCOPES: readonly BasketPriceScope[] = [
   {
     priceScopeId: SCOPE_MERCADONA,
+    supermarketId: 'chain-mercadona',
+    logoUrl: null,
     supermarketName: { en: 'Mercadona', es: 'Mercadona' },
     locations: [
       {
@@ -243,6 +245,7 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Ronda de los Tejares 32',
         city: 'Córdoba',
         postalCode: '14008',
+        sections: [],
       },
       {
         id: 'loc-barcelona',
@@ -250,11 +253,14 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Avenida de Barcelona 4',
         city: 'Córdoba',
         postalCode: '14001',
+        sections: [],
       },
     ],
   },
   {
     priceScopeId: SCOPE_DIA,
+    supermarketId: 'chain-dia',
+    logoUrl: null,
     supermarketName: { en: 'Dia', es: 'Dia' },
     locations: [
       {
@@ -263,6 +269,7 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Paseo de la Victoria 21',
         city: 'Córdoba',
         postalCode: '14004',
+        sections: [],
       },
     ],
   },

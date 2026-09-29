@@ -47,7 +47,7 @@ import {
   str,
   strOr,
 } from './primitives';
-import { toSectionIds } from './shop-section-mappers';
+import { toSectionIds, toShopSectionNames } from './shop-section-mappers';
 
 /**
  * The basket, from the wire (velista `0044`; backend `0050` and `0051`).
@@ -652,6 +652,8 @@ export function toBasketShop(raw: unknown): BasketShop | null {
     city: nullableStr(raw['city']),
     postalCode: nullableStr(raw['postalCode']),
     inProfile: typeof inProfile === 'boolean' ? inProfile : null,
+    logoUrl: nullableStr(raw['supermarketLogoUrl']),
+    sections: toShopSectionNames(raw['sections']),
   };
 }
 
@@ -670,6 +672,7 @@ function toScopeLocation(raw: unknown): ScopeLocation | null {
         address: nullableStr(raw['address']),
         city: nullableStr(raw['city']),
         postalCode: nullableStr(raw['postalCode']),
+        sections: toShopSectionNames(raw['sections']),
       };
 }
 
@@ -691,6 +694,8 @@ function toBasketPriceScope(raw: unknown): BasketPriceScope | null {
     ? null
     : {
         priceScopeId,
+        supermarketId: str(raw['supermarketId']),
+        logoUrl: nullableStr(raw['supermarketLogoUrl']),
         supermarketName: toLocalizedName(raw['supermarketName']),
         locations: mapArray(raw['locations'], toScopeLocation),
       };

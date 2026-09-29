@@ -91,6 +91,93 @@ test.describe('the category picker', () => {
   });
 });
 
+/**
+ * The Supermarket button (velista plan 0124), walked once: the picker page, a
+ * chain chosen whole through its any row, every supermarket again through the x,
+ * and one shop, which prices the tab there. The demo world has one chain,
+ * Mercadona, with one shop, Colón, which sells Milk and Bread.
+ */
+test.describe('the Supermarket button', () => {
+  test('narrows the catalog to a chain, clears it, then prices it at one shop', async ({
+    page,
+  }) => {
+    const button = page.locator('lib-supermarket-button');
+
+    await test.step('1. the tab draws one button, for every supermarket', async () => {
+      await signIn(page, ALICE_EMAIL);
+      await page
+        .getByRole('navigation', { name: 'Main sections' })
+        .getByRole('link', { name: 'Catalog' })
+        .click();
+      await expect(page).toHaveURL(/\/en\/catalog$/);
+      await expect(button).toContainText('All supermarkets');
+      await expect(products(page, 'Bread')).toBeVisible();
+    });
+
+    await test.step('2. the picker page, and Mercadona on its own screen', async () => {
+      await button.locator('button.body').click();
+      await expect(page).toHaveURL(/\/en\/catalog\/supermarket$/);
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Supermarket' })
+      ).toBeVisible();
+      await expectCatalogLit(page);
+
+      await page
+        .locator('lib-franchise-buttons button', { hasText: 'Mercadona' })
+        .click();
+      await expect(page).toHaveURL(
+        /\/en\/catalog\/supermarket\/[0-9a-f-]{36}$/
+      );
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Mercadona' })
+      ).toBeVisible();
+    });
+
+    await test.step('3. any Mercadona shop: its products, and the chain in the URL', async () => {
+      await page.getByRole('radio', { name: /Any Mercadona shop/ }).click();
+
+      await expect(page).toHaveURL(/\/en\/catalog\?chain=[0-9a-f-]{36}$/);
+      await expect(button).toContainText('Mercadona');
+      await expect(button).toContainText('any shop');
+      await expect(page.getByRole('searchbox')).toHaveAttribute(
+        'placeholder',
+        'Search Mercadona'
+      );
+      await expect(products(page, 'Milk')).toBeVisible();
+      await expect(products(page, 'Bread')).toBeVisible();
+    });
+
+    await test.step('4. the x: every supermarket again', async () => {
+      await page
+        .getByRole('button', { name: 'Show every supermarket' })
+        .click();
+
+      await expect(page).toHaveURL(/\/en\/catalog$/);
+      await expect(button).toContainText('All supermarkets');
+    });
+
+    await test.step('5. one shop: Colón, and the prices are that shop’s', async () => {
+      await button.locator('button.body').click();
+      await page
+        .locator('lib-franchise-buttons button', { hasText: 'Mercadona' })
+        .click();
+      await page.locator('label.row', { hasText: 'Colón' }).first().click();
+
+      await expect(page).toHaveURL(
+        /\/en\/catalog\?chain=[0-9a-f-]{36}&shop=[0-9a-f-]{36}$/
+      );
+      await expect(button).toContainText('Colón');
+      await expect(page.locator('.tools .note')).toContainText('Prices at');
+      await expect(products(page, 'Milk')).toBeVisible();
+
+      // The pick replaced the picker's entry, so back leaves the catalog's
+      // narrowing rather than reopening the picker.
+      await page.goBack();
+      await expect(page).not.toHaveURL(/\/catalog\/supermarket/);
+    });
+  });
+});
+
 /** One product row on the catalog tab, by the name it draws. */
 function products(page: Page, name: string) {
   return page

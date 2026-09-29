@@ -77,6 +77,8 @@ export function boughtShopRecord(shop: BasketShop, now: number): string {
         city: shop.city,
         postalCode: shop.postalCode,
         inProfile: shop.inProfile,
+        supermarketLogoUrl: shop.logoUrl,
+        sections: shop.sections,
       },
       until: untilFor(BOUGHT_SHOP_LIFETIME_MS, now),
     },

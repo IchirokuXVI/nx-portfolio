@@ -28,6 +28,8 @@ const SHOP: BasketShop = {
   city: 'Córdoba',
   postalCode: '14008',
   inProfile: false,
+  logoUrl: 'https://example.com/mercadona.png',
+  sections: [{ id: 'sec-1', name: { es: 'Fruta', en: 'Fruit' } }],
 };
 
 describe('parseBoughtShop', () => {

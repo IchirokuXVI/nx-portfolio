@@ -11,6 +11,7 @@ import type {
 } from './enums';
 import { isOpenBasket } from './enums';
 import type { ProductCategory } from './product-category';
+import type { ShopSectionName } from './shop';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -400,6 +401,14 @@ export interface BasketProduct {
  */
 export interface BasketPriceScope {
   readonly priceScopeId: string;
+  /**
+   * The chain's id (`PriceScopeChainView.supermarketId`), which is what the shop
+   * picker groups a basket's shops by (velista `0124`). Null only from a server
+   * that did not send it.
+   */
+  readonly supermarketId: string | null;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
   /** Both locales, resolved with `inLocale` where drawn. Never flattened in the mapper. */
   readonly supermarketName: LocalizedName;
   /**
@@ -465,6 +474,13 @@ export interface BasketShop {
    * shops, and the server states the fact only for a shop it was asked about.
    */
   readonly inProfile: boolean | null;
+  /**
+   * The chain's logo, or null for none yet (backend `0170`), which draws the
+   * chain's initial wherever the shop is drawn.
+   */
+  readonly logoUrl: string | null;
+  /** The shop's sections in its own order, empty when the chain has none. */
+  readonly sections: readonly ShopSectionName[];
 }
 
 /** One shop of a scope, as much of it as the pick sheet draws. */
@@ -475,6 +491,8 @@ export interface ScopeLocation {
   readonly address: string | null;
   readonly city: string | null;
   readonly postalCode: string | null;
+  /** The shop's sections in its own order, empty when the chain has none. */
+  readonly sections: readonly ShopSectionName[];
 }
 
 /**

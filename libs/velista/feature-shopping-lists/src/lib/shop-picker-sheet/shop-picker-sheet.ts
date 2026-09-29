@@ -22,21 +22,25 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  catalogName,
   foldForSearch,
-  inLocale,
   nearbyPickedShop,
   type BasketPriceScope,
   type FranchiseButton,
-  type ScopeLocation,
+  type ShopSectionName,
 } from '@portfolio/velista/models';
 import { SheetNavigation } from '@portfolio/velista/platform';
 import {
+  ChainLogo,
   ChevronLeftIcon,
+  groupByPostalCode,
   nearbyShopRow,
   NearMeButton,
+  pickRowOf,
   recentShopRow,
   SheetShell,
   ShopPicker,
+  type ChainLogoView,
   type ShopGroup,
   type ShopPickerNear,
   type ShopRow,
@@ -57,8 +61,11 @@ interface PickerShop {
   readonly chainKey: string;
   readonly chain: string;
   readonly name: string | null;
-  readonly where: string | null;
+  readonly address: string | null;
+  readonly city: string | null;
   readonly postalCode: string | null;
+  readonly logoUrl: string | null;
+  readonly sections: readonly ShopSectionName[];
 }
 
 /**
@@ -106,6 +113,7 @@ interface PickerShop {
 @Component({
   selector: 'lib-shop-picker-sheet',
   imports: [
+    ChainLogo,
     ChevronLeftIcon,
     NearMeButton,
     RokuTranslatorPipe,
@@ -227,14 +235,18 @@ export class ShopPickerSheet {
           continue;
         }
         seen.add(location.id);
+        const name =
+          location.label === null ? '' : catalogName(location.label, locale);
         shops.push({
           id: location.id,
           chainKey: chainKeyOf(scope),
-          chain: inLocale(scope.supermarketName, locale),
-          name:
-            location.label === null ? null : inLocale(location.label, locale),
-          where: whereOf(location),
+          chain: catalogName(scope.supermarketName, locale),
+          name: name === '' ? null : name,
+          address: location.address,
+          city: location.city,
           postalCode: location.postalCode,
+          logoUrl: scope.logoUrl,
+          sections: location.sections,
         });
       }
     }
@@ -249,30 +261,34 @@ export class ShopPickerSheet {
    * A chain none of whose scopes names a shop has no button, because there is no
    * door under it to choose.
    *
-   * Keyed on the chain's **name** rather than on an id, because a scope carries no
-   * supermarket id: it carries the name the read resolved, which is the only thing
-   * two scopes of one chain have in common here.
+   * Keyed on the chain's id, which every scope carries (velista `0124`).
    */
   protected readonly chains = computed<readonly FranchiseButton[]>(() => {
     const buttons = new Map<string, FranchiseButton>();
-    const names = new Map(
-      this._view
-        .priceScopes()
-        .map((scope) => [chainKeyOf(scope), scope.supermarketName])
+    const scopes = new Map(
+      this._view.priceScopes().map((scope) => [chainKeyOf(scope), scope])
     );
 
     for (const shop of this._shops()) {
       const held = buttons.get(shop.chainKey);
+      const scope = scopes.get(shop.chainKey);
       buttons.set(shop.chainKey, {
         key: shop.chainKey,
-        name: held?.name ?? names.get(shop.chainKey) ?? null,
+        name: held?.name ?? scope?.supermarketName ?? null,
         locations: (held?.locations ?? 0) + 1,
         excluded: 0,
         state: 'none',
+        logoUrl: held?.logoUrl ?? scope?.logoUrl ?? null,
       });
     }
 
     return [...buttons.values()];
+  });
+
+  /** The chain of the shop being bought at, whose button draws a tick. */
+  protected readonly pickedChain = computed<string | null>(() => {
+    const picked = this.pickedId();
+    return this._shops().find((shop) => shop.id === picked)?.chainKey ?? null;
   });
 
   /**
@@ -292,7 +308,7 @@ export class ShopPickerSheet {
     }
 
     return this._shops().filter((shop) =>
-      [shop.name, shop.chain, shop.where, shop.postalCode].some(
+      [shop.name, shop.chain, shop.address, shop.city, shop.postalCode].some(
         (field) => field !== null && foldForSearch(field).includes(query)
       )
     );
@@ -310,18 +326,32 @@ export class ShopPickerSheet {
             key: 'search',
             heading: '',
             code: null,
-            shops: this._matches().map(toRow),
+            shops: this._matches().map((shop) => toRow(shop, this._locale())),
           },
         ]
   );
 
-  /** The open chain's name, for the heading over its rows. */
-  protected readonly openName = computed(() => {
+  /**
+   * The open chain as the title row draws it (velista `0124`): its logo and its
+   * name, and how many of its shops there are. Null at the root.
+   */
+  protected readonly openHead = computed<{
+    readonly name: string;
+    readonly logo: ChainLogoView;
+    readonly count: number;
+  } | null>(() => {
     const open = this.openChain();
     const chain = this.chains().find((row) => row.key === open);
-    return chain?.name === null || chain === undefined
-      ? null
-      : inLocale(chain.name, this._locale());
+    if (chain === undefined) {
+      return null;
+    }
+    const name =
+      chain.name === null ? '' : catalogName(chain.name, this._locale());
+    return {
+      name,
+      logo: { logoUrl: chain.logoUrl, name, store: false },
+      count: chain.locations,
+    };
   });
 
   /**
@@ -338,26 +368,12 @@ export class ShopPickerSheet {
       return [];
     }
 
-    const byCode = new Map<string, ShopRow[]>();
-    for (const shop of this._shops()) {
-      if (shop.chainKey !== open) {
-        continue;
-      }
-      const code = shop.postalCode ?? '';
-      const held = byCode.get(code);
-      if (held === undefined) {
-        byCode.set(code, [toRow(shop)]);
-      } else {
-        held.push(toRow(shop));
-      }
-    }
-
-    return [...byCode.entries()].map(([code, shops]) => ({
-      key: code,
-      heading: code,
-      code: null,
-      shops,
-    }));
+    const locale = this._locale();
+    return groupByPostalCode(
+      this._shops()
+        .filter((shop) => shop.chainKey === open)
+        .map((shop) => toRow(shop, locale))
+    );
   });
 
   onQuery(query: string): void {
@@ -365,15 +381,16 @@ export class ShopPickerSheet {
   }
 
   /**
-   * A chain button was pressed: open it, or close it when it is open.
+   * A chain button was pressed: open its screen inside the sheet (velista `0124`).
+   * A sheet cannot push a page, so the chain replaces the root here and the title
+   * row's chevron brings the root back.
    *
-   * The search is cleared, which is `ShopStore.select`'s own rule and holds here for
-   * its reason: the buttons and the flat matches are two answers to the same
-   * question, and leaving a query behind would draw one over the other.
+   * The search is cleared: the buttons are hidden while something is typed, so a
+   * query left behind would greet the root with matches instead of the buttons.
    */
   select(key: string): void {
     this.typed.set('');
-    this.openChain.update((open) => (open === key ? null : key));
+    this.openChain.set(key);
   }
 
   /**
@@ -442,13 +459,26 @@ export class ShopPickerSheet {
   }
 
   /**
-   * The way back, which is the chevron, Escape, the scrim and the back gesture.
+   * The chevron in the title row. On a chain's screen it returns to the root and
+   * never leaves the sheet (velista `0124`); at the root it leaves, as {@link close}.
+   */
+  back(): void {
+    if (this.openChain() !== null) {
+      this.openChain.set(null);
+      return;
+    }
+    this.close();
+  }
+
+  /**
+   * The way out, which is Escape, the scrim, the back gesture and the root's
+   * chevron.
    *
    * `dismiss` and not `leaveTo`: the entry under this sheet is the filter sheet's,
    * which pushed it, so popping lands there, and the URL is the fallback for a cold
    * load on this sheet's own address.
    */
-  back(): void {
+  close(): void {
     void this._sheet.dismiss(this._filterUrl());
   }
 
@@ -458,36 +488,15 @@ export class ShopPickerSheet {
 }
 
 /** One picker shop as the list draws it. No exclusion state is ever set here. */
-function toRow(shop: PickerShop): ShopRow {
-  return {
-    id: shop.id,
-    chain: shop.chain,
-    name: shop.name,
-    where: shop.where,
-    postalCode: shop.postalCode,
-    excluded: false,
-    excludedChain: false,
-    failed: false,
-  };
+function toRow(shop: PickerShop, locale: string): ShopRow {
+  return pickRowOf(shop, locale);
 }
 
 /**
- * What two scopes of one chain have in common, which is the name and nothing else.
- *
- * `BasketPriceScope` carries no supermarket id: the read resolves the chain to a
- * name and stops there, so the name in both languages is the identity available to
- * this screen. Both are used rather than one, so a chain whose Spanish name is
- * shared with another's English name cannot collapse two brands into one button.
+ * The chain a scope belongs to: its id (velista `0124`), or the scope itself from
+ * a server that did not name the chain, which is one button per scope rather than
+ * two chains folded into one.
  */
 function chainKeyOf(scope: BasketPriceScope): string {
-  return `${scope.supermarketName.en} ${scope.supermarketName.es}`;
-}
-
-/** Street and town on one line, or null when the read holds neither. */
-function whereOf(location: ScopeLocation): string | null {
-  const parts = [location.address, location.city].filter(
-    (part): part is string => part !== null && part.trim() !== ''
-  );
-
-  return parts.length === 0 ? null : parts.join(', ');
+  return scope.supermarketId ?? scope.priceScopeId;
 }

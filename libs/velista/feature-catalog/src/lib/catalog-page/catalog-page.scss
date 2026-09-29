@@ -148,10 +148,9 @@
   font-size: var(--app-icon-sm);
 }
 
-// The chip row runs to the screen's edges, so it reads as one that scrolls. It holds
-// the way into the categories and the chain chips side by side in one scroller of
-// its own (velista 0119, rule P3); `lib-chain-chips` takes its natural width inside
-// it, so its own scroller never has anything to scroll.
+// The category row runs to the screen's edges, so a long "Frozen · Ice cream"
+// scrolls rather than wrapping (velista 0119, rule P3). The chain chips that shared
+// it became the Supermarket button above it (velista 0124).
 .chip-row {
   display: flex;
   align-items: center;
@@ -167,19 +166,7 @@
   }
 }
 
-.chips {
-  flex: none;
-}
-
-.chip-separator {
-  flex: none;
-  inline-size: 1px;
-  block-size: var(--app-space-7);
-  background: var(--app-border-subtle);
-}
-
-// The way in: a link, so it wears the chevron every picker row wears, where each
-// chain chip switches something in place.
+// The way in: a link, so it wears the chevron every picker row wears.
 .categories-link {
   box-sizing: border-box;
   display: inline-flex;

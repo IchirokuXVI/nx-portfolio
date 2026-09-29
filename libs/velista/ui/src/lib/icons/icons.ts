@@ -1024,6 +1024,24 @@ export class LocateIcon {
   );
 }
 
+/**
+ * A shop front with an awning (velista `0124`): OTHER among the chain buttons, and
+ * "All supermarkets", neither of which is one brand with a logo or an initial.
+ */
+@Component({
+  selector: 'lib-store-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class StoreIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./store-icon.svg?raw')
+  );
+}
+
 /** Two arrows passing each other: take one product instead of another. */
 @Component({
   selector: 'lib-swap-icon',

@@ -1,6 +1,7 @@
 import type {
   LocalizedName,
   ShopSection,
+  ShopSectionName,
   ShopSections,
 } from '@portfolio/velista/models';
 import { isRecord, mapArray, numOr, oneOf, str, strOr } from './primitives';
@@ -39,6 +40,32 @@ export function toShopSection(raw: unknown): ShopSection | null {
     position: numOr(raw['position'], 0),
     categoryIds: mapArray(raw['categoryIds'], str),
   };
+}
+
+/**
+ * `LocationSectionNameView[]` (backend `0170`): a shop's section names, on every
+ * view a picker row is built from.
+ *
+ * In the order the wire sent them, which is the shop's own, for the reason
+ * {@link toShopSections} gives. An unreadable or repeated entry is dropped, and
+ * anything that is not a list is no sections at all, which draws no line: a row
+ * cannot tell a server that sent none from one that is older than the field, and
+ * neither is worth a line.
+ */
+export function toShopSectionNames(raw: unknown): readonly ShopSectionName[] {
+  const seen = new Set<string>();
+  return mapArray(raw, (entry): ShopSectionName | null => {
+    if (!isRecord(entry)) {
+      return null;
+    }
+    const id = str(entry['id']);
+    const name = readableName(entry['name']);
+    if (id === null || id === '' || name === null || seen.has(id)) {
+      return null;
+    }
+    seen.add(id);
+    return { id, name };
+  });
 }
 
 /**

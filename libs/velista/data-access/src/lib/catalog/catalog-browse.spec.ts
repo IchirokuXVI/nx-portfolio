@@ -56,6 +56,7 @@ function query(
     soldBy: null,
     categoryId: null,
     priceScopeIds: [],
+    locationId: null,
     cursor: null,
     limit: 30,
     ...overrides,
@@ -185,6 +186,19 @@ describe('CatalogBrowseApi', () => {
       await result;
     });
 
+    it('sends one shop as locationId, alone (velista 0124, backend 0170)', async () => {
+      const result = api.browse(query({ locationId: 'loc-mayor' }));
+
+      const req = httpMock.expectOne(
+        (r) => r.url === `${GATEWAY}/v1/catalog/items`
+      );
+      expect(req.request.params.get('locationId')).toBe('loc-mayor');
+      expect(req.request.params.has('soldBy')).toBe(false);
+      expect(req.request.params.has('priceScopeId')).toBe(false);
+      req.flush({ items: [], nextCursor: null });
+      await result;
+    });
+
     it('sends a chosen category as categoryId, as it is, root or leaf (velista 0119)', async () => {
       const result = api.browse(
         query({ categoryId: 'cat-frozen', soldBy: 'chain-m' })
@@ -281,6 +295,7 @@ describe('CatalogBrowseApi', () => {
           supermarketId: 'chain-m',
           name: { es: 'Mercadona', en: 'Mercadona' },
           locations: 7,
+          logoUrl: null,
         },
       ]);
       expect(context?.scopes).toEqual([

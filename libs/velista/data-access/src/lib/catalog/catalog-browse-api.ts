@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import type {
   CatalogBrowseContext,
   CatalogBrowseQuery,
+  CatalogLocation,
   CatalogProduct,
   CatalogScopeOffer,
   Page,
@@ -13,6 +14,7 @@ import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
 import {
   toCatalogBrowseContext,
+  toCatalogLocation,
   toCatalogProduct,
   toCatalogScopeOffer,
 } from '../mapping/catalog-browse-mappers';
@@ -86,6 +88,11 @@ export class CatalogBrowseApi implements CatalogBrowseServiceI {
     for (const scope of query.priceScopeIds) {
       params = params.append('priceScopeId', scope);
     }
+    if (query.locationId !== null) {
+      // Priced at that one shop (backend `0170`, section 4). The server refuses a
+      // scope or another chain beside it, so the caller sends neither.
+      params = params.set('locationId', query.locationId);
+    }
     if (query.cursor !== null) {
       params = params.set('cursor', query.cursor);
     }
@@ -127,6 +134,15 @@ export class CatalogBrowseApi implements CatalogBrowseServiceI {
     }
 
     return rows;
+  }
+
+  async location(locationId: string): Promise<CatalogLocation | null> {
+    const body = await this._get(
+      `/v1/catalog/locations/${encodeURIComponent(locationId)}`,
+      new HttpParams(),
+      'catalog.location'
+    );
+    return toCatalogLocation(body);
   }
 
   /** Every chain's name. Empty on failure, which costs a name and nothing else. */

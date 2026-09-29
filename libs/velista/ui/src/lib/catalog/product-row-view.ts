@@ -25,6 +25,11 @@ export interface ProductRowOptions {
    * than the chain's name, which would be the same on every row (section 3).
    */
   readonly chainChosen: boolean;
+  /**
+   * One shop is chosen (velista `0124`), so a product with no price says the shop
+   * has none rather than vanishing: `no price` over `not priced here`.
+   */
+  readonly shopChosen?: boolean;
 }
 
 /**
@@ -65,6 +70,8 @@ export function productRowView(
     } else {
       caption = options.chainOf(offer.priceScopeId);
     }
+  } else if (options.shopChosen === true) {
+    caption = translate('catalog.supermarket.notPriced');
   }
 
   return {

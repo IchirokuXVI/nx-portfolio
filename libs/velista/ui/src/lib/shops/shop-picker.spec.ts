@@ -4,6 +4,7 @@ import type { FranchiseButton } from '@portfolio/velista/models';
 import type { ShopGroup, ShopRow } from './shop-list';
 import {
   ShopPicker,
+  type ShopPickerAny,
   type ShopPickerNear,
   type ShopPickerState,
 } from './shop-picker';
@@ -14,11 +15,15 @@ function shop(id: string, outsideAreas = false): ShopRow {
     chain: 'Mercadona',
     name: null,
     where: 'Calle Mayor 3, Córdoba',
+    street: 'Calle Mayor 3',
+    town: 'Córdoba',
     postalCode: '14001',
     excluded: false,
     excludedChain: false,
     failed: false,
     outsideAreas,
+    logo: { logoUrl: null, name: 'Mercadona', store: false },
+    sections: [],
   };
 }
 
@@ -29,6 +34,15 @@ const CHAINS: readonly FranchiseButton[] = [
     locations: 2,
     excluded: 0,
     state: 'none',
+    logoUrl: null,
+  },
+  {
+    key: 'dia',
+    name: { en: 'Dia', es: 'Dia' },
+    locations: 1,
+    excluded: 0,
+    state: 'none',
+    logoUrl: null,
   },
 ];
 
@@ -41,13 +55,22 @@ const GROUPS: readonly ShopGroup[] = [
   },
 ];
 
+const ANY: ShopPickerAny = {
+  title: 'All supermarkets',
+  detail: 'Every product from every chain',
+  logo: { logoUrl: null, name: '', store: true },
+  checked: true,
+};
+
 async function render(options: {
   readonly openKey?: string | null;
   readonly query?: string;
   readonly matches?: readonly ShopGroup[];
   readonly matchCount?: number;
   readonly pickedId?: string | null;
+  readonly pickedChain?: string | null;
   readonly state?: ShopPickerState;
+  readonly anyRow?: ShopPickerAny | null;
 }): Promise<ComponentFixture<ShopPicker>> {
   TestBed.resetTestingModule();
 
@@ -58,13 +81,14 @@ async function render(options: {
   const fixture = TestBed.createComponent(ShopPicker);
   fixture.componentRef.setInput('chains', CHAINS);
   fixture.componentRef.setInput('openKey', options.openKey ?? null);
-  fixture.componentRef.setInput('openName', 'Mercadona');
   fixture.componentRef.setInput('groups', GROUPS);
   fixture.componentRef.setInput('query', options.query ?? '');
   fixture.componentRef.setInput('matches', options.matches ?? []);
   fixture.componentRef.setInput('matchCount', options.matchCount ?? 0);
   fixture.componentRef.setInput('pickedId', options.pickedId ?? null);
+  fixture.componentRef.setInput('pickedChain', options.pickedChain ?? null);
   fixture.componentRef.setInput('state', options.state ?? 'ready');
+  fixture.componentRef.setInput('anyRow', options.anyRow ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -74,29 +98,51 @@ const element = (fixture: ComponentFixture<ShopPicker>) =>
   fixture.nativeElement as HTMLElement;
 
 /**
- * The picker's body (velista `0102`), which the basket's filter sheet and the get a
- * list sheet both draw. It holds nothing: the container says what the shops are, and
- * this draws them and reports taps.
+ * The picker's body (velista `0102`, `0124`), which the catalog's page and the
+ * three shop sheets all draw. It holds nothing: the container says what the shops
+ * are, and this draws them and reports taps.
  */
 describe('ShopPicker', () => {
-  it('draws the search and the chain buttons, and no shops until a chain opens', async () => {
+  it('draws the search and one big button per chain at the root, and no shops', async () => {
     const fixture = await render({});
 
     expect(element(fixture).querySelector('.search-input')).not.toBeNull();
-    expect(
-      element(fixture).querySelectorAll('lib-franchise-buttons .chip')
-    ).toHaveLength(1);
+    const buttons = element(fixture).querySelectorAll(
+      'lib-franchise-buttons .chip'
+    );
+    expect(buttons).toHaveLength(2);
+    // Each button leads with the chain's logo, the initial until one is set.
+    expect(buttons[0].querySelector('lib-chain-logo')?.textContent).toContain(
+      'M'
+    );
     expect(element(fixture).querySelector('lib-shop-list')).toBeNull();
   });
 
-  it('draws the open chain’s shops as radios, the chosen one checked', async () => {
+  it('ticks the chain of the current choice and no other', async () => {
+    const fixture = await render({ pickedChain: 'dia' });
+
+    const buttons = [
+      ...element(fixture).querySelectorAll('lib-franchise-buttons .chip'),
+    ];
+    expect(
+      buttons.map((button) => button.getAttribute('aria-pressed'))
+    ).toEqual(['false', 'true']);
+    expect(buttons[1].querySelector('.tick')).not.toBeNull();
+    expect(buttons[0].querySelector('.tick')).toBeNull();
+  });
+
+  it('replaces the whole root with the open chain’s shops, as radios', async () => {
     const fixture = await render({ openKey: 'merca', pickedId: 'loc-2' });
 
+    expect(element(fixture).querySelector('.search-input')).toBeNull();
+    expect(element(fixture).querySelector('lib-franchise-buttons')).toBeNull();
     const radios = [
       ...element(fixture).querySelectorAll<HTMLInputElement>('.checkbox'),
     ];
     expect(radios.map((radio) => radio.type)).toEqual(['radio', 'radio']);
     expect(radios.map((radio) => radio.checked)).toEqual([false, true]);
+    // Inside one chain the head carries the logo, so the rows do not.
+    expect(element(fixture).querySelector('.pick lib-chain-logo')).toBeNull();
   });
 
   it('says a shop outside the areas is outside them, and only that one', async () => {
@@ -108,43 +154,60 @@ describe('ShopPicker', () => {
   });
 
   it('reports a pick, a chain and a word as three different outputs', async () => {
-    const fixture = await render({ openKey: 'merca' });
+    const chainScreen = await render({ openKey: 'merca' });
     const picked: string[] = [];
+    chainScreen.componentInstance.picked.subscribe((id) => picked.push(id));
+    element(chainScreen)
+      .querySelectorAll<HTMLInputElement>('.checkbox')[1]
+      .click();
+    expect(picked).toEqual(['loc-2']);
+
+    const root = await render({});
     const chosen: string[] = [];
     const queried: string[] = [];
-    fixture.componentInstance.picked.subscribe((id) => picked.push(id));
-    fixture.componentInstance.chosen.subscribe((key) => chosen.push(key));
-    fixture.componentInstance.queried.subscribe((word) => queried.push(word));
-
-    element(fixture).querySelectorAll<HTMLInputElement>('.checkbox')[1].click();
-    element(fixture)
+    root.componentInstance.chosen.subscribe((key) => chosen.push(key));
+    root.componentInstance.queried.subscribe((word) => queried.push(word));
+    element(root)
       .querySelector<HTMLButtonElement>('lib-franchise-buttons .chip')
       ?.click();
     const field =
-      element(fixture).querySelector<HTMLInputElement>('.search-input');
+      element(root).querySelector<HTMLInputElement>('.search-input');
     if (field !== null) {
       field.value = 'Mayor';
       field.dispatchEvent(new Event('input'));
     }
 
-    expect(picked).toEqual(['loc-2']);
     expect(chosen).toEqual(['merca']);
     expect(queried).toEqual(['Mayor']);
   });
 
-  it('lists the matches flat while a word is searched, and says how many', async () => {
+  it('hides the chain buttons while a word is searched, and lists the matches in their place', async () => {
     const fixture = await render({
-      openKey: 'merca',
       query: 'Mayor',
       matches: [
         { key: 'search', heading: '', code: null, shops: [shop('loc-1')] },
       ],
       matchCount: 1,
+      anyRow: ANY,
     });
 
+    expect(element(fixture).querySelector('lib-franchise-buttons')).toBeNull();
+    expect(element(fixture).querySelector('.any')).toBeNull();
     expect(element(fixture).querySelector('.result-count')).not.toBeNull();
     expect(element(fixture).querySelectorAll('.row')).toHaveLength(1);
     expect(element(fixture).querySelector('.heading')).toBeNull();
+    // A search crosses chains, so its rows lead with their logos.
+    expect(
+      element(fixture).querySelector('.pick lib-chain-logo')
+    ).not.toBeNull();
+  });
+
+  it('brings the buttons back once the field is emptied', async () => {
+    const fixture = await render({ query: '   ' });
+
+    expect(
+      element(fixture).querySelector('lib-franchise-buttons')
+    ).not.toBeNull();
   });
 
   it('says it is loading, or that it failed, in one line where the buttons would be', async () => {
@@ -162,6 +225,46 @@ describe('ShopPicker', () => {
 });
 
 /**
+ * The any row (velista `0124`): only the catalog asks for one, with its own words,
+ * at the top of the root and at the top of a chain.
+ */
+describe('ShopPicker, the any row', () => {
+  it('draws none unless the host asks', async () => {
+    const fixture = await render({});
+
+    expect(element(fixture).querySelector('.any')).toBeNull();
+  });
+
+  it('draws the host’s words above the search at the root, checked when it is the choice', async () => {
+    const fixture = await render({ anyRow: ANY });
+
+    const any = element(fixture).querySelector('.any') as HTMLElement;
+    expect(any.textContent).toContain('All supermarkets');
+    expect(any.textContent).toContain('Every product from every chain');
+    expect(any.querySelector<HTMLInputElement>('input')?.checked).toBe(true);
+    const search = element(fixture).querySelector('.search') as HTMLElement;
+    expect(
+      any.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('draws it above a chain’s shops and reports a choice of it', async () => {
+    const fixture = await render({
+      openKey: 'merca',
+      anyRow: { ...ANY, title: 'Any Mercadona shop', checked: false },
+    });
+    let chosen = 0;
+    fixture.componentInstance.anyChosen.subscribe(() => (chosen += 1));
+
+    const any = element(fixture).querySelector('.any') as HTMLElement;
+    expect(any.textContent).toContain('Any Mercadona shop');
+    any.querySelector<HTMLInputElement>('input')?.click();
+
+    expect(chosen).toBe(1);
+  });
+});
+
+/**
  * "Near me" and the recent shops (velista `0103`). The container works out what
  * the device and the server said and hands it over as `near`; the body draws the
  * candidates nearest first, one line per reason, and one line per failure.
@@ -169,9 +272,10 @@ describe('ShopPicker', () => {
 describe('ShopPicker, near me and recent shops', () => {
   async function renderNear(
     near: ShopPickerNear,
-    recent: readonly ShopRow[] = []
+    recent: readonly ShopRow[] = [],
+    anyRow: ShopPickerAny | null = null
   ): Promise<ComponentFixture<ShopPicker>> {
-    const fixture = await render({ openKey: 'merca' });
+    const fixture = await render({ anyRow });
     fixture.componentRef.setInput('near', near);
     fixture.componentRef.setInput('recent', recent);
     fixture.detectChanges();
@@ -247,6 +351,24 @@ describe('ShopPicker, near me and recent shops', () => {
     }
   );
 
+  it('draws the candidates above the any row', async () => {
+    const fixture = await renderNear(
+      {
+        state: 'answered',
+        reason: 'AMBIGUOUS',
+        candidates: [candidate('n', '1 m')],
+      },
+      [],
+      ANY
+    );
+
+    const any = element(fixture).querySelector('.any') as HTMLElement;
+    expect(
+      nearSection(fixture).compareDocumentPosition(any) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
   it('says there is no shop within the radius in one line, with no empty box', async () => {
     const fixture = await renderNear({
       state: 'answered',
@@ -293,7 +415,6 @@ describe('ShopPicker, near me and recent shops', () => {
       expect(
         element(fixture).querySelector('lib-franchise-buttons')
       ).not.toBeNull();
-      expect(element(fixture).querySelectorAll('.chain .row')).toHaveLength(2);
     }
   );
 

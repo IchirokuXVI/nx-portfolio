@@ -24,20 +24,23 @@ import {
   type ShopFinderServiceI,
 } from '@portfolio/velista/data-access';
 import {
-  inLocale,
+  catalogName,
   nearbyPickedShop,
-  OTHER_CHAINS,
   type BasketShop,
   type FranchiseButton,
   type Shop,
 } from '@portfolio/velista/models';
 import {
+  catalogShopRow,
+  ChainLogo,
   ChevronLeftIcon,
+  groupByPostalCode,
   nearbyShopRow,
   NearMeButton,
+  offeredChains,
   recentShopRow,
   ShopPicker,
-  shopRowOf,
+  type ChainLogoView,
   type ShopGroup,
   type ShopPickerNear,
   type ShopPickerState,
@@ -68,7 +71,13 @@ const SEARCH_DEBOUNCE_MS = 250;
  */
 @Component({
   selector: 'lib-bought-shop-pane',
-  imports: [ChevronLeftIcon, NearMeButton, RokuTranslatorPipe, ShopPicker],
+  imports: [
+    ChainLogo,
+    ChevronLeftIcon,
+    NearMeButton,
+    RokuTranslatorPipe,
+    ShopPicker,
+  ],
   providers: [ShopStore, ShopFinder],
   templateUrl: './bought-shop-pane.html',
   styleUrl: './bought-shop-pane.scss',
@@ -132,16 +141,7 @@ export class BoughtShopPane {
 
   /** One button per chain the profile does not refuse. */
   protected readonly chains = computed<readonly FranchiseButton[]>(() =>
-    this._shops
-      .chains()
-      .filter((chain) => chain.state !== 'chain')
-      .map((chain) => ({
-        ...chain,
-        locations: chain.locations - chain.excluded,
-        excluded: 0,
-        state: 'none' as const,
-      }))
-      .filter((chain) => chain.locations > 0)
+    offeredChains(this._shops.chains())
   );
 
   /** Whether the chains are there to draw. No profile draws an empty, ready list. */
@@ -158,20 +158,6 @@ export class BoughtShopPane {
     this._shops.query() === '' ? this._shops.selection() : null
   );
 
-  protected readonly openName = computed<string | null>(() => {
-    const key = this._shops.selection();
-    const chain = this.chains().find((row) => row.key === key);
-    if (chain === undefined) {
-      return null;
-    }
-    const locale = this._locale();
-    return chain.name !== null
-      ? inLocale(chain.name, locale)
-      : key === OTHER_CHAINS
-        ? this._translator.t('shops.other', undefined, locale)
-        : null;
-  });
-
   private readonly _offered = computed<readonly Shop[]>(() =>
     this._shops.shops().filter((shop) => !shop.excluded && !shop.excludedChain)
   );
@@ -182,24 +168,9 @@ export class BoughtShopPane {
     }
 
     const locale = this._locale();
-    const byCode = new Map<string, ShopRow[]>();
-    for (const shop of this._offered()) {
-      const code = shop.postalCode ?? '';
-      const row = shopRowOf(basketShopOf(shop), locale);
-      const held = byCode.get(code);
-      if (held === undefined) {
-        byCode.set(code, [row]);
-      } else {
-        held.push(row);
-      }
-    }
-
-    return [...byCode.entries()].map(([code, shops]) => ({
-      key: code,
-      heading: code,
-      code: null,
-      shops,
-    }));
+    return groupByPostalCode(
+      this._offered().map((shop) => catalogShopRow(shop, locale))
+    );
   });
 
   protected readonly matches = computed<readonly ShopGroup[]>(() => {
@@ -212,9 +183,7 @@ export class BoughtShopPane {
         key: 'search',
         heading: '',
         code: null,
-        shops: this._offered().map((shop) =>
-          shopRowOf(basketShopOf(shop), locale)
-        ),
+        shops: this._offered().map((shop) => catalogShopRow(shop, locale)),
       },
     ];
   });
@@ -222,6 +191,58 @@ export class BoughtShopPane {
   protected readonly matchCount = computed(() =>
     this._shops.query() === '' ? 0 : this._offered().length
   );
+
+  /**
+   * The open chain as the title row draws it (velista `0124`): its logo, its name
+   * and how many of its shops there are. OTHER has no name of its own, so the
+   * screen names it, as the supermarkets page does. Null at the root.
+   */
+  protected readonly openHead = computed<{
+    readonly name: string;
+    readonly logo: ChainLogoView;
+    readonly count: number;
+  } | null>(() => {
+    const key = this.openKey();
+    const chain = this.chains().find((row) => row.key === key);
+    if (chain === undefined) {
+      return null;
+    }
+    const locale = this._locale();
+    const name =
+      chain.name !== null
+        ? catalogName(chain.name, locale)
+        : this._translator.t('shops.other', undefined, locale);
+    return {
+      name,
+      logo: { logoUrl: chain.logoUrl, name, store: chain.name === null },
+      count: chain.locations,
+    };
+  });
+
+  /** The chain of the shop already chosen, whose button draws a tick. */
+  protected readonly pickedChain = computed<string | null>(() => {
+    const picked = this.pickedId();
+    if (picked === null) {
+      return null;
+    }
+    const shop =
+      this._offered().find((row) => row.id === picked) ??
+      this._finder.recent().find((row) => row.shop.id === picked)?.shop;
+    return shop?.supermarketId ?? null;
+  });
+
+  /**
+   * The chevron in the title row. On a chain's screen it returns to the root and
+   * never leaves the pane (velista `0124`); at the root it goes back to the form.
+   */
+  protected goBack(): void {
+    const open = this.openKey();
+    if (open !== null) {
+      void this._shops.select(open);
+      return;
+    }
+    this.back.emit();
+  }
 
   protected onQuery(query: string): void {
     this.query.set(query);
@@ -337,6 +358,8 @@ function basketShopOf(shop: Shop): BasketShop {
     // One of the caller's own profile's shops, which is the one thing a chain
     // button can offer, so there is nothing to say about areas.
     inProfile: null,
+    logoUrl: shop.logoUrl,
+    sections: shop.sections,
   };
 }
 
@@ -351,5 +374,7 @@ function withoutDistance(shop: BasketShop): BasketShop {
     city: shop.city,
     postalCode: shop.postalCode,
     inProfile: shop.inProfile,
+    logoUrl: shop.logoUrl,
+    sections: shop.sections,
   };
 }
