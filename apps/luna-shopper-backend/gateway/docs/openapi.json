@@ -1027,6 +1027,19 @@
             }
           },
           {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "description": "Only accounts holding this role (plan 0175).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "premium"
+              ]
+            }
+          },
+          {
             "name": "createdAfter",
             "required": false,
             "in": "query",
@@ -1476,6 +1489,121 @@
           },
           "409": {
             "description": "`conflict` — That request conflicts with the current state.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-users"
+        ]
+      }
+    },
+    "/v1/admin/users/{id}/roles": {
+      "put": {
+        "operationId": "AdminUsersController_setRoles_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAdminUserRolesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The `adminUser.setRoles` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/admin-users.AdminUserDetailView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`guest_has_no_roles` — A guest account cannot hold a role. Grant it once the account is registered.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -25904,6 +26032,25 @@
           }
         }
       },
+      "SetAdminUserRolesDto": {
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "description": "Every role the account should hold afterwards. Empty takes them all away. A guest is refused with guest_has_no_roles.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "admin",
+                "premium"
+              ]
+            }
+          }
+        },
+        "required": [
+          "roles"
+        ]
+      },
       "UpdateAdminZoneDto": {
         "type": "object",
         "properties": {
@@ -30427,6 +30574,12 @@
               "null"
             ]
           },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.AccountRole"
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -30452,6 +30605,7 @@
           "displayName",
           "email",
           "emailVerifiedAt",
+          "roles",
           "createdAt",
           "updatedAt",
           "hasPassword",
@@ -30514,6 +30668,12 @@
               "null"
             ]
           },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.AccountRole"
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -30530,6 +30690,7 @@
           "displayName",
           "email",
           "emailVerifiedAt",
+          "roles",
           "createdAt",
           "updatedAt"
         ],
@@ -34979,6 +35140,13 @@
         ],
         "additionalProperties": false
       },
+      "enums.AccountRole": {
+        "type": "string",
+        "enum": [
+          "admin",
+          "premium"
+        ]
+      },
       "enums.AdapterKey": {
         "type": "string",
         "enum": [
@@ -35253,6 +35421,12 @@
           "GUEST"
         ]
       },
+      "enums.Permission": {
+        "type": "string",
+        "enum": [
+          "shopMap.record"
+        ]
+      },
       "enums.PostalCodeDiscoveryStatus": {
         "type": "string",
         "enum": [
@@ -35420,6 +35594,12 @@
           },
           "appState": {
             "$ref": "#/components/schemas/core.UserAppStateView"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/enums.Permission"
+            }
           }
         },
         "required": [
@@ -35429,7 +35609,8 @@
           "email",
           "emailVerified",
           "displayName",
-          "appState"
+          "appState",
+          "permissions"
         ],
         "additionalProperties": false
       },
@@ -38560,6 +38741,8 @@
               "section_slug_taken",
               "catalog_location_exclusive",
               "supermarket_location_not_found",
+              "permission_required",
+              "guest_has_no_roles",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
