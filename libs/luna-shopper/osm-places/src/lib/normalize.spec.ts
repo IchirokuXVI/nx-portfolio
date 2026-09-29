@@ -154,6 +154,92 @@ describe('footprintM2', () => {
     );
   });
 
+  /** A relation around the square at 37.88, -4.8, with the given members. */
+  function relation(tags: Record<string, string>, members: unknown[]) {
+    return normalizeElement({
+      type: 'relation',
+      id: 20,
+      bounds: { minlat: 37.88, minlon: -4.8, maxlat: 37.881, maxlon: -4.799 },
+      members,
+      tags: { shop: 'supermarket', ...tags },
+    });
+  }
+
+  function wayMember(ref: number, role: string, geometry: unknown[]) {
+    return { type: 'way', ref, role, geometry };
+  }
+
+  it('gives a site relation no size, since its members are not one outline', () => {
+    // A building and its car park grouped as a site, with empty roles.
+    const place = relation({ type: 'site' }, [
+      wayMember(30, '', square(37.88, -4.8, 0.001)),
+      wayMember(31, '', square(37.8812, -4.8, 0.0008)),
+    ]);
+    expect(place).not.toBeNull();
+    expect(place?.footprintM2).toBeNull();
+  });
+
+  it('gives a building relation no size, since its parts repeat its outline', () => {
+    const place = relation({ type: 'building' }, [
+      wayMember(32, 'outline', square(37.88, -4.8, 0.001)),
+      wayMember(33, 'part', square(37.88, -4.8, 0.0005)),
+      wayMember(34, 'part', square(37.8805, -4.7995, 0.0005)),
+    ]);
+    expect(place).not.toBeNull();
+    expect(place?.footprintM2).toBeNull();
+  });
+
+  it('gives a multipolygon no size when any of its rings does not close', () => {
+    const outer = square(37.88, -4.8, 0.001);
+    const openInner = square(37.8803, -4.7997, 0.0004).slice(0, 4);
+    expect(
+      relation({ type: 'multipolygon' }, [
+        wayMember(40, 'outer', outer),
+        wayMember(41, 'inner', openInner),
+      ])?.footprintM2
+    ).toBeNull();
+    expect(
+      relation({ type: 'multipolygon' }, [
+        wayMember(42, 'outer', outer),
+        wayMember(43, 'outer', square(37.882, -4.8, 0.0005).slice(0, 4)),
+      ])?.footprintM2
+    ).toBeNull();
+  });
+
+  describe('a ring split across member ways', () => {
+    const [p0, p1, p2, p3] = square(37.88, -4.8, 0.001);
+    const a = [p0, p1];
+    const b = [p1, p2];
+    const c = [p2, p3, p0];
+    const rev = (way: typeof a) => [...way].reverse();
+    const whole = normalizeElement({
+      type: 'way',
+      id: 50,
+      geometry: [p0, p1, p2, p3, p0],
+      tags: { shop: 'supermarket' },
+    })?.footprintM2;
+    const measure = (ways: (typeof a)[]) =>
+      relation(
+        { type: 'multipolygon' },
+        ways.map((way, i) => wayMember(60 + i, 'outer', way))
+      )?.footprintM2;
+
+    it.each([
+      ['forward', [a, b, c]],
+      ['with later ways reversed', [a, rev(b), rev(c)]],
+      ['with the first way reversed', [rev(a), b, c]],
+      ['shuffled', [b, a, rev(c)]],
+      ['shuffled, joining at the start', [b, rev(a), rev(c)]],
+    ])('gives the unsplit area when given %s', (_, ways) => {
+      expect(whole).toBeGreaterThan(0);
+      expect(measure(ways)).toBe(whole);
+    });
+
+    it('gives no size when a piece is missing and the ring has a gap', () => {
+      expect(measure([a, c])).toBeNull();
+    });
+  });
+
   it('gives an outline that does not close no size, and still places it', () => {
     const open = square(37.88, -4.8, 0.001).slice(0, 4);
     const place = normalizeElement({
