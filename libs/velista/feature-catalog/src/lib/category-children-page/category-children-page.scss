@@ -1,0 +1,49 @@
+@use '../picker-page' as picker;
+
+:host {
+  display: block;
+}
+
+.page {
+  @include picker.page;
+}
+
+.head {
+  @include picker.head;
+}
+
+.back {
+  @include picker.back;
+}
+
+.back-glyph {
+  @include picker.back-glyph;
+}
+
+.title {
+  @include picker.title;
+}
+
+.skeleton {
+  @include picker.skeleton;
+}
+
+.bone {
+  @include picker.bone;
+}
+
+.failed {
+  @include picker.failed;
+}
+
+.failed-text {
+  margin: 0;
+}
+
+.secondary {
+  @include picker.secondary;
+}
+
+.visually-hidden {
+  @include picker.visually-hidden;
+}

@@ -1,0 +1,79 @@
+// The picker's rows (velista 0119, rule P1): one raised card, hairlines between the
+// rows and never around each, so the page is a list of places.
+:host {
+  display: block;
+}
+
+.group {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+
+  li + li {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-category-row-height);
+  padding-block: var(--app-space-3);
+  padding-inline: var(--app-space-5) var(--app-space-4);
+  color: var(--app-text-primary);
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(-1 * var(--app-focus-ring-width));
+  }
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+}
+
+.name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.count {
+  flex: none;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+  flex: none;
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.is-emphasis .name {
+  font-weight: 600;
+}
+
+// Reopened from the chip: the current row takes a tick, the quiet amber and
+// `aria-current`, so colour is never the only carrier.
+.is-current .name {
+  color: var(--app-action-quiet-fg);
+  font-weight: 650;
+}
+
+.tick {
+  flex: none;
+  margin-inline-start: calc(-1 * var(--app-space-2));
+  font-size: var(--app-icon-sm);
+  color: var(--app-action-quiet-fg);
+}

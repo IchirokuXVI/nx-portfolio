@@ -78,6 +78,11 @@ export class CatalogBrowseApi implements CatalogBrowseServiceI {
       // from: that is the scope list below.
       params = params.append('soldBy', query.soldBy);
     }
+    if (query.categoryId !== null) {
+      // A leaf, or a root meaning every leaf under it: the server decides which
+      // (backend `0166`, section 4), so the client never expands a root itself.
+      params = params.set('categoryId', query.categoryId);
+    }
     for (const scope of query.priceScopeIds) {
       params = params.append('priceScopeId', scope);
     }

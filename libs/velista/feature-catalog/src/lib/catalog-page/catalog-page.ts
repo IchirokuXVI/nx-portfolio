@@ -10,7 +10,12 @@ import {
   viewChild,
   type ElementRef,
 } from '@angular/core';
-import { Router, RouterLink, RouterOutlet } from '@angular/router';
+import {
+  ActivatedRoute,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -18,12 +23,14 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_BROWSE_SERVICE,
+  CategoryStore,
   type CatalogBrowseServiceI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
   catalogName,
   catalogOrdersFor,
+  categoryName,
   chainOfScope,
   scopesOfChain,
   type CatalogBrowseContext,
@@ -37,7 +44,9 @@ import {
 } from '@portfolio/velista/platform';
 import {
   ChainChips,
+  ChevronRightIcon,
   CloseIcon,
+  ListLinesIcon,
   OrderPills,
   ProductRow,
   ProductRowSkeleton,
@@ -47,6 +56,7 @@ import {
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
+import { CATEGORY_PARAM, categoryChoice } from '../category-choice';
 
 /** How long the field waits after a keystroke before it asks (section 2). */
 export const CATALOG_SEARCH_DEBOUNCE_MS = 300;
@@ -88,16 +98,28 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * Every state lists every product. The priceless ones add one card at the top
  * saying why and how to fix it, and every row says `no price`.
  *
+ * ## A category narrows it too, and lives in the URL (velista `0119`)
+ *
+ * `?category=<slug>` is the one place the choice lives, so a shared link opens the
+ * tab narrowed and each step of the picker is a history entry. The slug is resolved
+ * through `CategoryStore` and sent as `categoryId`, a leaf or a root, composed with
+ * the field, the chain chip and the order. A slug the tree does not hold drops the
+ * parameter and opens the tab plain. Clearing the choice is a navigation to the tab
+ * without it, never a pop.
+ *
  * ## State lives here, not in a store
  *
  * `ShopStore`'s reasoning: the query, the chain and the pages are about the
- * screen that is open and are thrown away with it.
+ * screen that is open and are thrown away with it. The category is the exception,
+ * because it is chosen rather than typed (section 2), and it is the URL's.
  */
 @Component({
   selector: 'lib-catalog-page',
   imports: [
     ChainChips,
+    ChevronRightIcon,
     CloseIcon,
+    ListLinesIcon,
     OrderPills,
     ProductRow,
     ProductRowSkeleton,
@@ -121,6 +143,8 @@ export class CatalogPage {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _router = inject(Router);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _route = inject(ActivatedRoute);
+  private readonly _categories = inject(CategoryStore);
 
   protected readonly skeletonRows = SKELETON_ROWS;
 
@@ -136,6 +160,12 @@ export class CatalogPage {
   protected readonly order = signal<CatalogOrder>('name');
 
   protected readonly context = signal<CatalogBrowseContext | null>(null);
+
+  /** The slug in `?category=`, exactly as the URL holds it. */
+  protected readonly categorySlug = signal<string | null>(null);
+
+  /** Whether the URL has been read once, so its first emission always reads. */
+  private _urlRead = false;
 
   private readonly _products = signal<readonly CatalogProduct[]>([]);
   private readonly _cursor = signal<string | null>(null);
@@ -171,6 +201,68 @@ export class CatalogPage {
   protected readonly chosenChainName = computed(() => {
     const chain = this.chosenChain();
     return chain === null ? '' : catalogName(chain.name, this._locale());
+  });
+
+  /** The chosen category and its root, or null for none or a slug not in the tree. */
+  protected readonly choice = computed(() =>
+    categoryChoice(this._categories.tree(), this.categorySlug())
+  );
+
+  /** The chosen category's name: the leaf's, or the root's when a root is chosen. */
+  protected readonly categoryLabel = computed(() => {
+    const choice = this.choice();
+    return choice === null ? '' : categoryName(choice.node, this._locale());
+  });
+
+  /** The root's name, drawn in front of a leaf on the chip (rule P4). */
+  protected readonly categoryRootLabel = computed(() => {
+    const choice = this.choice();
+    return choice === null ? '' : categoryName(choice.root, this._locale());
+  });
+
+  /** Whether the choice is a leaf, which the chip draws as root and leaf. */
+  protected readonly leafChosen = computed(() => {
+    const choice = this.choice();
+    return choice !== null && choice.node !== choice.root;
+  });
+
+  /** The chip's accessible name: both names whole, and what a tap does. */
+  protected readonly categoryChipLabel = computed(() => {
+    const locale = this._locale();
+    this._translator.loaded();
+    return this.leafChosen()
+      ? this._translator.t('catalog.categories.chip', undefined, locale, {
+          root: this.categoryRootLabel(),
+          leaf: this.categoryLabel(),
+        })
+      : this._translator.t('catalog.categories.chipRoot', undefined, locale, {
+          root: this.categoryLabel(),
+        });
+  });
+
+  /** The page of parents, where the Categories link goes. */
+  protected readonly categoriesPath = computed(() =>
+    appPath(this._locale(), this._basePath, 'catalog', 'categories')
+  );
+
+  /** The chosen root's children page, where the chip's body goes (target 3). */
+  protected readonly categoryChipPath = computed(() => {
+    const choice = this.choice();
+    return choice === null
+      ? this.categoriesPath()
+      : appPath(
+          this._locale(),
+          this._basePath,
+          'catalog',
+          'categories',
+          choice.root.slug
+        );
+  });
+
+  /** The tab's own choice, carried to the children page so it can mark it. */
+  protected readonly categoryChipQuery = computed(() => {
+    const slug = this.categorySlug();
+    return slug === null ? null : { [CATEGORY_PARAM]: slug };
   });
 
   /** The first postal code, for `near 14013`. */
@@ -221,9 +313,25 @@ export class CatalogPage {
 
   protected readonly count = computed(() => this._products().length);
 
-  protected readonly placeholderKey = computed(() =>
-    this.chain() === null ? 'catalog.search.all' : 'catalog.search.chain'
-  );
+  /**
+   * The field says where it searches (rule P5): every supermarket, a chain, a
+   * category, or a category at a chain. The name is placed after "in" as it arrives,
+   * never folded into the grammar around it.
+   */
+  protected readonly placeholderKey = computed(() => {
+    const chain = this.chain() !== null;
+    if (this.choice() !== null) {
+      return chain
+        ? 'catalog.categories.searchChain'
+        : 'catalog.categories.search';
+    }
+    return chain ? 'catalog.search.chain' : 'catalog.search.all';
+  });
+
+  protected readonly placeholderArgs = computed(() => ({
+    chain: this.chosenChainName(),
+    category: this.categoryLabel(),
+  }));
 
   private readonly _sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
 
@@ -249,10 +357,18 @@ export class CatalogPage {
   });
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this._clearDebounce());
+    // The URL is the choice (target 5). The first emission is the arrival and starts
+    // the first page; a later one is the chip being cleared, or a link to another
+    // category landing on this same page.
+    const params = this._route.queryParamMap.subscribe((map) =>
+      this._readCategory(map.get(CATEGORY_PARAM))
+    );
+    inject(DestroyRef).onDestroy(() => {
+      params.unsubscribe();
+      this._clearDebounce();
+    });
 
     void this._context.load().then((context) => this.context.set(context));
-    void this._firstPage();
   }
 
   /** A keystroke: shown at once, asked for after the debounce. */
@@ -289,7 +405,9 @@ export class CatalogPage {
   }
 
   protected open(itemId: string): void {
-    void this._router.navigateByUrl(
+    // The sheet covers the narrowed tab, so it keeps the choice in its URL and
+    // closing it pops back onto the same narrowing.
+    const url = this._router.parseUrl(
       appPath(
         this._locale(),
         this._basePath,
@@ -297,6 +415,19 @@ export class CatalogPage {
         ...sheetSegments('products', itemId)
       )
     );
+    const slug = this.categorySlug();
+    if (slug !== null) {
+      url.queryParams = { [CATEGORY_PARAM]: slug };
+    }
+    void this._router.navigateByUrl(url);
+  }
+
+  /**
+   * The chip's cross and the empty leaf's button: the tab without the parameter,
+   * pushed and not popped (target 4), so the chain chip and the text survive it.
+   */
+  protected clearCategory(): void {
+    void this._router.navigateByUrl(this._tabPath());
   }
 
   protected retry(): void {
@@ -349,12 +480,41 @@ export class CatalogPage {
     void this._firstPage();
   }
 
+  /** A slug arriving from the URL. The same slug again changes nothing. */
+  private _readCategory(slug: string | null): void {
+    if (this._urlRead && slug === this.categorySlug()) {
+      return;
+    }
+    this._urlRead = true;
+    this.categorySlug.set(slug);
+    void this._firstPage();
+  }
+
+  private _tabPath(): string {
+    return appPath(this._locale(), this._basePath, 'catalog');
+  }
+
   private async _firstPage(): Promise<void> {
     const generation = ++this._generation;
     this.status.set('loading');
     this.moreStatus.set('idle');
     this._products.set([]);
     this._cursor.set(null);
+
+    // A category is sent by id, so the tree has to be known before the read. It is
+    // read once per session and is usually held already.
+    if (this.categorySlug() !== null) {
+      await this._categories.ensure();
+      if (generation !== this._generation) {
+        return;
+      }
+      if (this._categories.loaded() && this.choice() === null) {
+        // A slug the tree does not hold: drop it and open the tab plain (target 5),
+        // in place of this entry, so back does not return to a broken link.
+        void this._router.navigateByUrl(this._tabPath(), { replaceUrl: true });
+        return;
+      }
+    }
 
     // A chain's prices come from its own scopes, so the context has to be known
     // before the read. With no chain the read resolves the profile by itself.
@@ -386,6 +546,7 @@ export class CatalogPage {
       query: this.query(),
       order: this.order(),
       soldBy: chain,
+      categoryId: this.choice()?.node.id ?? null,
       priceScopeIds:
         chain === null || context === null
           ? []

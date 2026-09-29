@@ -1,0 +1,123 @@
+// The furniture both picker pages share (velista 0119): a column, a one row head of
+// chevron and title, and the loading and failed states. Mixins and not a component,
+// for the reason `feature-account`'s `_account-page.scss` gives.
+
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-7);
+}
+
+// One row: the back chevron, then the title beside it, so the head costs one line
+// and the parents page keeps its twelfth row on a phone.
+@mixin head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+// The negative start margin keeps the caret aligned with the card edge below it.
+@mixin back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-start: calc(-1 * var(--app-space-4));
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+@mixin title {
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-2xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+// Bones in the card's shape, one per row, while the tree is on its way.
+@mixin skeleton {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  overflow: hidden;
+}
+
+@mixin bone {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-category-row-height);
+  padding-inline: var(--app-space-5);
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+
+  &::before {
+    content: '';
+    inline-size: 45%;
+    block-size: var(--app-space-4);
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface-sunken);
+  }
+}
+
+@mixin failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+@mixin secondary {
+  min-block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// Heard and not seen. Written here because velista has no global utility class.
+@mixin visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,0 +1,780 @@
+<title>Velista: the category picker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Tab .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Tab .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Tab .ico { flex: none; display: block; }
+#ab-Tab .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-Tab .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-Tab .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Tab .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-Tab .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-Tab .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Tab .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-Tab .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-Tab .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-Tab .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-Tab .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-Tab .chip.cats .chev { color: var(--app-text-muted); }
+#ab-Tab .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-Tab .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-Tab .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-Tab .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-Tab .catchip .mid { flex: none; font-weight: 500; }
+#ab-Tab .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-Tab .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-Tab .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-Tab .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-Tab .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-Tab .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Tab .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-Tab .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-Tab .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-Tab .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-Tab .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Tab .pname { font-size: 16px; line-height: 1.2; }
+#ab-Tab .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-Tab .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-Tab .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Tab .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-Tab .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-Tab .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-Tab .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-Tab .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-Tab .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-Tab .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Tab .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Tab .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-Tab .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-Tab .group li:first-child { border-top: 0; }
+#ab-Tab .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-Tab .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-Tab .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Tab .crow .chev { color: var(--app-text-muted); }
+#ab-Tab .crow.all .cname { font-weight: 600; }
+#ab-Tab .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Tab .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-Tab .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Tab .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Tab .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Tab .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Tab .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-Tab .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Tab .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Tab .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-Tab .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-Tab .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-Tab .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Tab .spec .group { margin: 0; }
+#ab-Parents .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Parents .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Parents .ico { flex: none; display: block; }
+#ab-Parents .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-Parents .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-Parents .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Parents .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-Parents .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-Parents .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Parents .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-Parents .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-Parents .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-Parents .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-Parents .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-Parents .chip.cats .chev { color: var(--app-text-muted); }
+#ab-Parents .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-Parents .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-Parents .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-Parents .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-Parents .catchip .mid { flex: none; font-weight: 500; }
+#ab-Parents .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-Parents .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-Parents .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-Parents .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-Parents .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-Parents .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Parents .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-Parents .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-Parents .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-Parents .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-Parents .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Parents .pname { font-size: 16px; line-height: 1.2; }
+#ab-Parents .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-Parents .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-Parents .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Parents .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-Parents .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-Parents .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-Parents .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-Parents .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-Parents .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-Parents .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Parents .phead { flex: none; display: flex; align-items: center; gap: 4px; }
+#ab-Parents .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Parents .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-Parents .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-Parents .group li:first-child { border-top: 0; }
+#ab-Parents .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-Parents .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-Parents .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Parents .crow .chev { color: var(--app-text-muted); }
+#ab-Parents .crow.all .cname { font-weight: 600; }
+#ab-Parents .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Parents .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-Parents .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Parents .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Parents .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Parents .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Parents .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-Parents .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Parents .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Parents .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-Parents .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-Parents .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-Parents .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Parents .spec .group { margin: 0; }
+#ab-Children .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Children .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Children .ico { flex: none; display: block; }
+#ab-Children .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-Children .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-Children .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Children .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-Children .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-Children .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Children .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-Children .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-Children .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-Children .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-Children .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-Children .chip.cats .chev { color: var(--app-text-muted); }
+#ab-Children .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-Children .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-Children .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-Children .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-Children .catchip .mid { flex: none; font-weight: 500; }
+#ab-Children .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-Children .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-Children .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-Children .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-Children .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-Children .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Children .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-Children .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-Children .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-Children .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-Children .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Children .pname { font-size: 16px; line-height: 1.2; }
+#ab-Children .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-Children .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-Children .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Children .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-Children .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-Children .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-Children .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-Children .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-Children .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-Children .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Children .phead { flex: none; display: flex; align-items: center; gap: 4px; }
+#ab-Children .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Children .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-Children .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-Children .group li:first-child { border-top: 0; }
+#ab-Children .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-Children .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-Children .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Children .crow .chev { color: var(--app-text-muted); }
+#ab-Children .crow.all .cname { font-weight: 600; }
+#ab-Children .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Children .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-Children .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Children .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Children .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Children .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Children .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-Children .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Children .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Children .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-Children .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-Children .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-Children .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Children .spec .group { margin: 0; }
+#ab-Chosen .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Chosen .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Chosen .ico { flex: none; display: block; }
+#ab-Chosen .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-Chosen .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-Chosen .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Chosen .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-Chosen .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-Chosen .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Chosen .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-Chosen .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-Chosen .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-Chosen .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-Chosen .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-Chosen .chip.cats .chev { color: var(--app-text-muted); }
+#ab-Chosen .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-Chosen .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-Chosen .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-Chosen .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-Chosen .catchip .mid { flex: none; font-weight: 500; }
+#ab-Chosen .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-Chosen .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-Chosen .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-Chosen .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-Chosen .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-Chosen .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Chosen .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-Chosen .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-Chosen .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-Chosen .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-Chosen .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Chosen .pname { font-size: 16px; line-height: 1.2; }
+#ab-Chosen .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-Chosen .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-Chosen .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Chosen .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-Chosen .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-Chosen .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-Chosen .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-Chosen .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-Chosen .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-Chosen .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Chosen .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Chosen .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-Chosen .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-Chosen .group li:first-child { border-top: 0; }
+#ab-Chosen .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-Chosen .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-Chosen .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Chosen .crow .chev { color: var(--app-text-muted); }
+#ab-Chosen .crow.all .cname { font-weight: 600; }
+#ab-Chosen .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Chosen .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-Chosen .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Chosen .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Chosen .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Chosen .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Chosen .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-Chosen .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Chosen .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Chosen .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-Chosen .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-Chosen .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-Chosen .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Chosen .spec .group { margin: 0; }
+#ab-EmptyLeaf .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-EmptyLeaf .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-EmptyLeaf .ico { flex: none; display: block; }
+#ab-EmptyLeaf .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-EmptyLeaf .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-EmptyLeaf .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-EmptyLeaf .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-EmptyLeaf .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-EmptyLeaf .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-EmptyLeaf .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-EmptyLeaf .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-EmptyLeaf .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-EmptyLeaf .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-EmptyLeaf .chip.cats .chev { color: var(--app-text-muted); }
+#ab-EmptyLeaf .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-EmptyLeaf .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-EmptyLeaf .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-EmptyLeaf .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-EmptyLeaf .catchip .mid { flex: none; font-weight: 500; }
+#ab-EmptyLeaf .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-EmptyLeaf .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-EmptyLeaf .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-EmptyLeaf .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-EmptyLeaf .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-EmptyLeaf .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-EmptyLeaf .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-EmptyLeaf .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-EmptyLeaf .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-EmptyLeaf .pname { font-size: 16px; line-height: 1.2; }
+#ab-EmptyLeaf .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-EmptyLeaf .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-EmptyLeaf .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-EmptyLeaf .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-EmptyLeaf .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-EmptyLeaf .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-EmptyLeaf .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-EmptyLeaf .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-EmptyLeaf .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-EmptyLeaf .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-EmptyLeaf .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-EmptyLeaf .group li:first-child { border-top: 0; }
+#ab-EmptyLeaf .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-EmptyLeaf .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-EmptyLeaf .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-EmptyLeaf .crow .chev { color: var(--app-text-muted); }
+#ab-EmptyLeaf .crow.all .cname { font-weight: 600; }
+#ab-EmptyLeaf .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-EmptyLeaf .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-EmptyLeaf .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-EmptyLeaf .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-EmptyLeaf .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-EmptyLeaf .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-EmptyLeaf .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-EmptyLeaf .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-EmptyLeaf .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-EmptyLeaf .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-EmptyLeaf .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-EmptyLeaf .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-EmptyLeaf .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-EmptyLeaf .spec .group { margin: 0; }
+#ab-Anatomy .vel { --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a; --app-text-on-action: #0a0c14;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-focus-ring: #2f6fed;
+  font-family: var(--app-font-sans); color: var(--app-text-primary); }
+#ab-Anatomy .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Anatomy .ico { flex: none; display: block; }
+#ab-Anatomy .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
+#ab-Anatomy .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
+#ab-Anatomy .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Anatomy .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
+#ab-Anatomy .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
+#ab-Anatomy .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Anatomy .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
+#ab-Anatomy .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
+#ab-Anatomy .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
+#ab-Anatomy .chip.cats { gap: 6px; padding: 0 8px 0 11px; color: var(--app-text-primary); }
+#ab-Anatomy .chip.cats .lead { color: var(--app-action-quiet-fg); }
+#ab-Anatomy .chip.cats .chev { color: var(--app-text-muted); }
+#ab-Anatomy .sep { flex: none; width: 1px; height: 24px; background: var(--app-border-subtle); }
+#ab-Anatomy .catchip { flex: none; box-sizing: border-box; display: inline-flex; align-items: stretch; height: 44px; max-width: 320px; border-radius: 999px; background: var(--app-action-bg); color: var(--app-text-on-action); overflow: hidden; }
+#ab-Anatomy .catchip .body { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px 0 14px; color: inherit; font-size: 14px; text-decoration: none; }
+#ab-Anatomy .catchip .root { flex: 0 1 auto; min-width: 0; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+#ab-Anatomy .catchip .mid { flex: none; font-weight: 500; }
+#ab-Anatomy .catchip .leaf { flex: none; white-space: nowrap; font-weight: 700; }
+#ab-Anatomy .catchip .x { flex: none; width: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-left: 1px solid rgba(10, 12, 20, 0.22); padding: 0; background: transparent; color: inherit; cursor: pointer; }
+#ab-Anatomy .pills { display: flex; align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; }
+#ab-Anatomy .legend { margin-right: 4px; font-size: 12px; color: var(--app-text-muted); }
+#ab-Anatomy .pill { box-sizing: border-box; height: 44px; padding: 0 12px; display: flex; align-items: center; border: 1px solid var(--app-border-strong); border-radius: 999px; color: var(--app-text-secondary); font-size: 14px; font-weight: 600; }
+#ab-Anatomy .pill.on { border-color: var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Anatomy .tnote { margin: 0; font-size: 12px; color: var(--app-text-muted); }
+#ab-Anatomy .list { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 16px 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#ab-Anatomy .prow { flex: none; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); }
+#ab-Anatomy .thumb { flex: none; box-sizing: border-box; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: 12px; background: var(--app-surface-sunken); color: var(--app-text-muted); }
+#ab-Anatomy .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+#ab-Anatomy .pname { font-size: 16px; line-height: 1.2; }
+#ab-Anatomy .detail { font-size: 12px; color: var(--app-text-muted); }
+#ab-Anatomy .price { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+#ab-Anatomy .amount { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Anatomy .cap { font-size: 11px; color: var(--app-text-muted); }
+#ab-Anatomy .empty { flex: none; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border: 1px solid var(--app-border-subtle); border-radius: 16px; text-align: center; }
+#ab-Anatomy .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
+#ab-Anatomy .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
+#ab-Anatomy .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ab-Anatomy .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
+#ab-Anatomy .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Anatomy .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Anatomy .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
+#ab-Anatomy .group li { border-top: 1px solid var(--app-border-subtle); }
+#ab-Anatomy .group li:first-child { border-top: 0; }
+#ab-Anatomy .crow { box-sizing: border-box; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 10px 8px 16px; color: var(--app-text-primary); text-decoration: none; }
+#ab-Anatomy .cname { flex: 1; min-width: 0; font-size: 16px; line-height: 1.25; }
+#ab-Anatomy .count { flex: none; font-size: 14px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+#ab-Anatomy .crow .chev { color: var(--app-text-muted); }
+#ab-Anatomy .crow.all .cname { font-weight: 600; }
+#ab-Anatomy .crow.current .cname { color: var(--app-action-quiet-fg); font-weight: 650; }
+#ab-Anatomy .crow .tick { color: var(--app-action-quiet-fg); margin-left: -4px; }
+#ab-Anatomy .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Anatomy .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+#ab-Anatomy .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+#ab-Anatomy .badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#ab-Anatomy .spec { width: 860px; height: 1010px; box-sizing: border-box; padding: 32px 36px; background: var(--app-surface-ground); display: grid; grid-template-columns: 380px 1fr; column-gap: 40px; row-gap: 26px; align-content: start; }
+#ab-Anatomy .spec h2 { grid-column: 1 / -1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
+#ab-Anatomy .spec .specimen { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Anatomy .spec .specimen.col { flex-direction: column; align-items: stretch; gap: 0; }
+#ab-Anatomy .spec .say { font-size: 13px; line-height: 1.5; color: var(--app-text-secondary); }
+#ab-Anatomy .spec .say b { color: var(--app-text-primary); font-weight: 600; }
+#ab-Anatomy .spec code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 1px 5px; border-radius: 6px; background: var(--app-surface-sunken); color: var(--app-text-primary); }
+#ab-Anatomy .spec .group { margin: 0; }
+</style>
+
+<header>
+  <h1>Velista: the category picker</h1>
+  <p class="lede">Plan <code>0119</code>, with <code>0118</code> and backend <code>0166</code> behind it. The catalog tab gains a Categories link at the head of its chip row. It opens a page of the seventeen roots, a root opens a page of its children, and a child brings you back to the tab narrowed to it, beside the field, the chain chips and the order. The choice is <code>?category=&lt;slug&gt;</code> in the URL. Drawn on Day, on the tab as PR <code>#472</code> built it, in English with Spanish product names. Category names are appendix A of backend <code>0166</code>; every count and price is made up. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 4710px; height: 1630px;">
+      <figure class="board" style="left: 0px; top: 620px; width: 390px;">
+        <figcaption>Catalog tab, nothing chosen</figcaption>
+        <div class="frame" id="ab-Tab" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <div class="tools">
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search every supermarket</span></label>
+              <div class="chiprow"><a class="chip cats" href="Parents.dc.html"><svg class="ico lead" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg>Categories<svg class="ico chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip on" type="button" aria-pressed="true">All shops</button><button class="chip" type="button" aria-pressed="false">Mercadona</button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+    
+            </div>
+            <ul class="list">
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Aceite de oliva virgen extra</span><span class="detail">Hacendado &middot; 1 L</span></span>
+                  <span class="price"><span class="amount">8.45 &euro;</span><span class="cap">Mercadona</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Arroz redondo</span><span class="detail">SOS &middot; 1 kg</span></span>
+                  <span class="price"><span class="amount">1.29 &euro;</span><span class="cap">Carrefour</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Atún claro en aceite</span><span class="detail">Calvo &middot; 3 x 80 g</span></span>
+                  <span class="price"><span class="amount">2.65 &euro;</span><span class="cap">Carrefour</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Azúcar blanco</span><span class="detail">Azucarera &middot; 1 kg</span></span>
+                  <span class="price"><span class="amount">1.05 &euro;</span><span class="cap">Mercadona</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Café molido mezcla</span><span class="detail">Marcilla &middot; 250 g</span></span>
+                  <span class="price"><span class="amount">2.19 &euro;</span><span class="cap">Lidl</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Copos de avena</span><span class="detail">Hacendado &middot; 500 g</span></span>
+                  <span class="price"><span class="amount">0.95 &euro;</span><span class="cap">Mercadona</span></span>
+                </li>
+            </ul>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab on" href="Tab.dc.html" aria-current="page"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="#basket"><span class="badge">12</span><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path><path d="M5.4 15.5h13.2"></path><path d="m9.36 11 .88 9"></path><path d="m14.64 11-.88 9"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 470px; top: 620px; width: 390px;">
+        <figcaption>The page of parents</figcaption>
+        <div class="frame" id="ab-Parents" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <main class="page">
+              <header class="phead">
+                <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                <h1 class="ptitle">Categories</h1>
+              </header>
+              <ul class="group">
+                <li><a class="crow" href="#" aria-label="Fruit and vegetables, 486 products"><span class="cname">Fruit and vegetables</span><span class="count">486 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Meat, 392 products"><span class="cname">Meat</span><span class="count">392 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Cold cuts and cheese, 571 products"><span class="cname">Cold cuts and cheese</span><span class="count">571 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Fish and seafood, 238 products"><span class="cname">Fish and seafood</span><span class="count">238 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Dairy and eggs, 614 products"><span class="cname">Dairy and eggs</span><span class="count">614 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Bakery, 307 products"><span class="cname">Bakery</span><span class="count">307 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Breakfast and sweets, 689 products"><span class="cname">Breakfast and sweets</span><span class="count">689 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Pantry, 1,143 products"><span class="cname">Pantry</span><span class="count">1,143 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="Children.dc.html" aria-label="Frozen, 412 products"><span class="cname">Frozen</span><span class="count">412 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Ready meals, 276 products"><span class="cname">Ready meals</span><span class="count">276 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Snacks, 318 products"><span class="cname">Snacks</span><span class="count">318 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Drinks, 897 products"><span class="cname">Drinks</span><span class="count">897 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Baby, 164 products"><span class="cname">Baby</span><span class="count">164 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Pets, 203 products"><span class="cname">Pets</span><span class="count">203 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Household, 538 products"><span class="cname">Household</span><span class="count">538 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Personal care, 821 products"><span class="cname">Personal care</span><span class="count">821 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Other, 97 products"><span class="cname">Other</span><span class="count">97 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+              </ul>
+            </main>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab on" href="Tab.dc.html" aria-current="page"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="#basket"><span class="badge">12</span><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path><path d="M5.4 15.5h13.2"></path><path d="m9.36 11 .88 9"></path><path d="m14.64 11-.88 9"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 940px; top: 620px; width: 390px;">
+        <figcaption>The page of children: Frozen</figcaption>
+        <div class="frame" id="ab-Children" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <main class="page">
+              <header class="phead">
+                <button class="back" type="button" aria-label="Back to categories"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                <h1 class="ptitle">Frozen</h1>
+              </header>
+              <ul class="group">
+                <li><a class="crow all" href="Chosen.dc.html" aria-label="Everything in Frozen, 412 products"><span class="cname">Everything in Frozen</span><span class="count">412 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+              </ul>
+              <ul class="group">
+                <li><a class="crow" href="#" aria-label="Frozen vegetables, 94 products"><span class="cname">Frozen vegetables</span><span class="count">94 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Frozen fish and seafood, 81 products"><span class="cname">Frozen fish and seafood</span><span class="count">81 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Frozen meals and pizzas, 127 products"><span class="cname">Frozen meals and pizzas</span><span class="count">127 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="Chosen.dc.html" aria-label="Ice cream, 86 products"><span class="cname">Ice cream</span><span class="count">86 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Other frozen, 31 products"><span class="cname">Other frozen</span><span class="count">31 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+              </ul>
+            </main>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab on" href="Tab.dc.html" aria-current="page"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="#basket"><span class="badge">12</span><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path><path d="M5.4 15.5h13.2"></path><path d="m9.36 11 .88 9"></path><path d="m14.64 11-.88 9"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1410px; top: 620px; width: 390px;">
+        <figcaption>Catalog tab, Ice cream chosen</figcaption>
+        <div class="frame" id="ab-Chosen" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <div class="tools">
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search in Ice cream</span></label>
+              <div class="chiprow"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip on" type="button" aria-pressed="true">All shops</button><button class="chip" type="button" aria-pressed="false">Mercadona</button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+    
+            </div>
+            <ul class="list">
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Bombón helado almendrado</span><span class="detail">Carrefour &middot; 6 x 90 ml</span></span>
+                  <span class="price"><span class="amount">3.15 &euro;</span><span class="cap">Carrefour</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Cono de nata y chocolate</span><span class="detail">Nestlé &middot; 4 x 120 ml</span></span>
+                  <span class="price"><span class="amount">4.49 &euro;</span><span class="cap">Carrefour</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Helado de turrón</span><span class="detail">Gelatelli &middot; 1 L</span></span>
+                  <span class="price"><span class="amount">2.79 &euro;</span><span class="cap">Lidl</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Helado de vainilla</span><span class="detail">Carte d'Or &middot; 900 ml</span></span>
+                  <span class="price"><span class="amount">4.95 &euro;</span><span class="cap">Carrefour</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Polo de limón</span><span class="detail">Gelatelli &middot; 10 x 55 ml</span></span>
+                  <span class="price"><span class="amount">1.99 &euro;</span><span class="cap">Lidl</span></span>
+                </li>
+                <li class="prow">
+                  <span class="thumb" aria-hidden="true"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span>
+                  <span class="what"><span class="pname">Sándwich de nata</span><span class="detail">Gelatelli &middot; 6 x 90 ml</span></span>
+                  <span class="price"><span class="amount">2.29 &euro;</span><span class="cap">Lidl</span></span>
+                </li>
+            </ul>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab on" href="Tab.dc.html" aria-current="page"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="#basket"><span class="badge">12</span><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path><path d="M5.4 15.5h13.2"></path><path d="m9.36 11 .88 9"></path><path d="m14.64 11-.88 9"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 1880px; top: 620px; width: 390px;">
+        <figcaption>Ice cream at Mercadona: nothing yet</figcaption>
+        <div class="frame" id="ab-EmptyLeaf" style="width: 390px; height: 844px;">
+          <div class="vel phone">
+            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <div class="tools">
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search in Ice cream at Mercadona</span></label>
+              <div class="chiprow"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip" type="button" aria-pressed="false">All shops</button><button class="chip on" type="button" aria-pressed="true">Mercadona<svg class="ico " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+              <p class="tnote">7 shops near you. Prices are what Mercadona charges here.</p>
+            </div>
+            <ul class="list">
+                <li class="empty">
+                  <p class="et">Nothing in Ice cream at Mercadona yet</p>
+                  <p class="eb">Velista has not found any at this shop. Choose All shops, or clear the category to see everything from Mercadona.</p>
+                  <button class="secondary" type="button"><svg class="ico " width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg>Clear the category</button>
+                </li>
+            </ul>
+            <nav class="nav" aria-label="Main">
+              <a class="tab" href="#home"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</a>
+              <a class="tab on" href="Tab.dc.html" aria-current="page"><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</a>
+              <a class="tab" href="#basket"><span class="badge">12</span><svg class="ico " width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path><path d="M5.4 15.5h13.2"></path><path d="m9.36 11 .88 9"></path><path d="m14.64 11-.88 9"></path></svg>Shopping list</a>
+            </nav>
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 2350px; top: 620px; width: 860px;">
+        <figcaption>Chips and rows, up close</figcaption>
+        <div class="frame" id="ab-Anatomy" style="width: 860px; height: 1010px;">
+          <div class="vel spec">
+            <h2>The way in</h2>
+            <div class="specimen"><a class="chip cats" href="Parents.dc.html"><svg class="ico lead" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg>Categories<svg class="ico chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a><span class="sep" aria-hidden="true"></span><span class="chip on">All shops</span><span class="chip">Mercadona</span></div>
+            <p class="say"><b>A link, not a toggle.</b> Name <code>Categories</code>. The list glyph in the quiet amber, the chevron muted. It is outside the <code>Shops</code> group, so it is never read as a chain.</p>
+
+            <h2>A leaf chosen</h2>
+            <div class="specimen"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="chip on">All shops</span></div>
+            <p class="say"><b>Two controls in one pill.</b> The body is a link to the children page, name <code>Frozen, Ice cream. Change the category</code>. The cross is a button, 44 by 44, name <code>Clear the category</code>.</p>
+
+            <h2>A root chosen</h2>
+            <div class="specimen"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen. Change the category"><span class="leaf">Frozen</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="chip on">All shops</span></div>
+            <p class="say"><b>Everything in Frozen reads as the root alone.</b> Name <code>Frozen. Change the category</code>. Placeholder <code>Search in Frozen</code>.</p>
+
+            <h2>A long pair, and Spanish</h2>
+            <div class="specimen col" style="gap: 10px;"><div class="specimen"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Breakfast and sweets, Coffee, tea and cocoa. Change the category"><span class="root">Breakfast and sweets</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Coffee, tea and cocoa</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span></div><div class="specimen"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Congelados, Helados. Change the category"><span class="root">Congelados</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Helados</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span></div></div>
+            <p class="say"><b>The root gives way, the leaf does not.</b> The root is held to about ten letters and ellipsizes; the leaf is never cut. The chip stops at 320 pixels, which the longest leaf in appendix A fits with room for the root. The accessible name always carries both in full.</p>
+
+            <h2>Rows</h2>
+            <div class="specimen col"><ul class="group">
+                <li><a class="crow all" href="#" aria-label="Everything in Frozen, 412 products"><span class="cname">Everything in Frozen</span><span class="count">412 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow current" href="#" aria-label="Ice cream, 86 products, chosen" aria-current="true"><svg class="ico tick" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.4 12.4l3.2 3.2 6.2-6.4"></path></svg><span class="cname">Ice cream</span><span class="count">86 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Other frozen, 31 products"><span class="cname">Other frozen</span><span class="count">31 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+                <li><a class="crow" href="#" aria-label="Bolsas, papel de aluminio y film, 64 productos"><span class="cname">Bolsas, papel de aluminio y film</span><span class="count">64 productos</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
+            </ul></div>
+            <p class="say"><b>One link per row, named <code>name, count</code>.</b> The first row of a children page is semibold and sits in a card of its own. Reopened from the chip, the current leaf takes a tick, the quiet amber and <code>aria-current</code>, and its name ends <code>chosen</code>. A long Spanish name may wrap to two lines; the count stays on the right.</p>
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 470px;"><p>THE BRIEF. Narrow the catalog by category without a chip row: 0100 left that row out because twelve chips above a list is most of a phone, and there are now eighty leaves under seventeen roots. A page of parents, a page of one parent's children, and a tap on a child that returns to the tab narrowed to it. The narrowing composes with the field, the chain chip and the order.</p><p>Read left to right, the five phones are one walk: the tab, Categories, Frozen, Ice cream chosen, then Mercadona chosen as well. The board on the right is the chips and rows up close, with the accessible name of each.</p></aside>
+      <aside class="note" style="left: 530px; top: 0px; width: 470px;"><p>RULE P1: A ROW IS A NAME, A COUNT AND A CHEVRON, AND THE WHOLE ROW IS ONE LINK. 52 pixels tall: the name in the body size on the left, the count muted on the right, a chevron because every row goes somewhere. The rows sit in one raised card with hairlines between them, not a card each, so the page reads as a list of places and not as more product rows.</p><p>The parents page does not fit a phone. Twelve rows show and the page scrolls; no children page is longer than eight rows including its first. A row with a count of zero is not drawn, and a root whose children are all zero is not drawn either.</p></aside>
+      <aside class="note" style="left: 1060px; top: 0px; width: 470px;"><p>RULE P2: THE COUNT IS WORDS. '412 products', '1 product', '1,143 products', formatted with Intl for the reader's locale. Never a bare number and never a badge: a number alone beside a name reads as a price or a code.</p><p>Every row's accessible name is 'name, count', for example 'Frozen, 412 products', and the chevron is hidden.</p><p>The counts are catalog wide, not for the chosen chain (backend 0166, section 11), and a root counts distinct products. So a root's leaves can add up to more than the root when a product sits in two of them: Frozen says 412 and its leaves say 419. That is correct, and nothing on the page adds them up.</p></aside>
+      <aside class="note" style="left: 1590px; top: 0px; width: 470px;"><p>RULE P3: CATEGORIES LEADS THE CHIP ROW, AND IT IS A LINK, NOT A CHIP. It comes before All shops with a hairline between them. It wears the list glyph and a chevron, because it opens a page, where every chain chip switches something in place. It sits outside the Shops group, so a screen reader never counts it as a chain.</p><p>It scrolls with the row rather than being pinned. Pinned, a chosen 'Frozen · Ice cream' would leave room for All shops and nothing after it. The row always opens at its start, and the field names the choice as well, so the choice is not hidden. The cost is on the Mercadona board: with a category and a chain both chosen, the chosen chain starts past the edge, and only the placeholder and the note under the order name it.</p><p>lib-chain-chips does not change: the page puts the link, or the chosen chip, and the component side by side in one scroller of its own.</p></aside>
+      <aside class="note" style="left: 2120px; top: 0px; width: 470px;"><p>RULE P4: THE CHOSEN CHIP READS ROOT · LEAF, AND IT IS TWO CONTROLS. With a leaf chosen it reads 'Frozen · Ice cream', the leaf in the heavier weight. With Everything in Frozen chosen it reads 'Frozen' alone. It is filled like a chosen chain, because both narrow the list.</p><p>The body is a link to that root's children page, so changing the leaf is one tap and one page. The cross is its own 44 by 44 button behind a hairline. Clearing is a navigation to the tab without the parameter, not a pop, and the chain chip survives it.</p><p>A long pair gives way on the root and never on the leaf: the root is held to about ten letters, so 'Breakfast and sweets · Coffee, tea and cocoa' reads 'Breakfast… · Coffee, tea and cocoa'. The chip stops at 320 pixels, and its accessible name keeps both names whole.</p></aside>
+      <aside class="note" style="left: 2650px; top: 0px; width: 470px;"><p>RULE P5: THE FIELD SAYS WHERE IT SEARCHES. Today it reads 'Search every supermarket' or 'Search Mercadona'. With a leaf chosen it reads 'Search in Ice cream', with a chain as well 'Search in Ice cream at Mercadona', and with a root 'Search in Frozen'.</p><p>The name is data and is used exactly as it arrives, never lowercased. That is why the sentence says 'in' and places the name, rather than folding it into the grammar around it.</p></aside>
+      <aside class="note" style="left: 3180px; top: 0px; width: 470px;"><p>RULE P6: AN EMPTY LEAF NAMES BOTH HALVES. 'Nothing in Ice cream at Mercadona yet', one sentence with the two ways out, and one button, Clear the category, which keeps Mercadona. All shops is already one tap away in the chip row above, so it is not a second button.</p><p>The state exists because the counts are catalog wide: Ice cream says 86 products on the children page, and none of them need be at the chosen chain. A count per chain would remove it and is out of scope (0119, section 3).</p></aside>
+      <aside class="note" style="left: 3710px; top: 0px; width: 470px;"><p>RULE P7: TWO PAGES, THE BAR STAYS, AND CATALOG IS LIT. Both are pages with the page head, never sheets: one row, the back chevron and then the title in the display face beside it, so the head costs one line and not two. Their URLs begin with catalog, so activeNavTab already lights the Catalog tab on them with nothing added.</p><p>Each step is a push, so the phone's back walks the narrowed tab, Frozen, Categories, the tab. The chevrons call PageNavigation.back with the tab as the fallback, and are named 'Back to the catalog' and 'Back to categories'.</p><p>Neither page draws the app bar. The catalog tab has none, and 64 pixels of it would cost the parents page more than a row.</p></aside>
+      <aside class="note" style="left: 4240px; top: 0px; width: 470px;"><p>FOR YOU TO DECIDE.</p><p>1. 'Everything in Frozen' in place of 'All frozen'. The plan says 'All &lt;root&gt;', but lowercasing a name that is data breaks proper nouns and Spanish agreement ('Todas las frutas y verduras', 'Todos los congelados'). 'Everything in Frozen' and 'Todo en Congelados' use the name as it is.</p><p>2. The Categories link scrolls with the chip row rather than being pinned (P3).</p><p>3. No app bar on the two pages (P7).</p><p>4. The root Other, whose one leaf is Not yet categorised, is drawn like any root while it has products. Hiding it is one more rule if shoppers should never see it.</p><p>5. Reopened from the chip, the children page marks the current leaf with a tick, the quiet amber and aria-current (the board on the right). The plan does not ask for it.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 4710;
+    var h = 1630;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

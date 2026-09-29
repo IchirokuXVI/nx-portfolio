@@ -19,7 +19,7 @@
       <input
         (input)="onInput($event)"
         (keydown.escape)="clearSearch()"
-        [placeholder]="placeholderKey() | rokuT: { chain: chosenChainName() }"
+        [placeholder]="placeholderKey() | rokuT: placeholderArgs()"
         [value]="typed()"
         autocapitalize="none"
         autocomplete="off"
@@ -40,14 +40,54 @@
       }
     </span>
 
-    @if (chips().length > 0) {
-      <lib-chain-chips
-        (chosen)="chooseChain($event)"
-        [chains]="chips()"
-        [selected]="chain()"
-        class="chips"
-      />
-    }
+    <!--
+      One scroller for the way into the categories and the chain chips (rule P3).
+      Categories leads it and scrolls with it rather than being pinned, so a chosen
+      "Frozen · Ice cream" never leaves room for All shops alone. It is a link, not a
+      chip, and sits outside the Shops group, so it is never counted as a chain.
+    -->
+    <div class="chip-row">
+      @if (choice(); as chosen) {
+        <span class="category-chip">
+          <a
+            [attr.aria-label]="categoryChipLabel()"
+            [queryParams]="categoryChipQuery()"
+            [routerLink]="categoryChipPath()"
+            class="category-chip-body"
+          >
+            @if (leafChosen()) {
+              <span class="category-chip-root">{{ categoryRootLabel() }}</span>
+              <span aria-hidden="true" class="category-chip-mid">·</span>
+            }
+            <span class="category-chip-leaf">{{ categoryLabel() }}</span>
+          </a>
+          <button
+            (click)="clearCategory()"
+            [attr.aria-label]="'catalog.categories.clear' | rokuT"
+            class="category-chip-clear"
+            type="button"
+          >
+            <lib-close-icon class="category-chip-clear-glyph" />
+          </button>
+        </span>
+      } @else {
+        <a [routerLink]="categoriesPath()" class="categories-link">
+          <lib-list-lines-icon class="categories-link-lead" />
+          {{ 'catalog.categories.open' | rokuT }}
+          <lib-chevron-right-icon class="categories-link-chevron" />
+        </a>
+      }
+
+      @if (chips().length > 0) {
+        <span aria-hidden="true" class="chip-separator"></span>
+        <lib-chain-chips
+          (chosen)="chooseChain($event)"
+          [chains]="chips()"
+          [selected]="chain()"
+          class="chips"
+        />
+      }
+    </div>
 
     <lib-order-pills
       (chosen)="chooseOrder($event)"
@@ -145,6 +185,41 @@
             <p class="empty-body">{{ 'catalog.empty.body' | rokuT }}</p>
             <button (click)="clearSearch()" class="secondary" type="button">
               {{ 'catalog.empty.clear' | rokuT }}
+            </button>
+          </div>
+        } @else if (choice() !== null) {
+          <!--
+            The empty leaf names both halves (rule P6). The counts on the picker are
+            catalog wide, so a leaf can hold nothing at the chosen chain.
+          -->
+          <div class="empty">
+            <p class="empty-title">
+              @if (chosenChain() !== null) {
+                {{
+                  'catalog.categories.emptyChainTitle'
+                    | rokuT
+                      : { category: categoryLabel(), chain: chosenChainName() }
+                }}
+              } @else {
+                {{
+                  'catalog.categories.emptyTitle'
+                    | rokuT: { category: categoryLabel() }
+                }}
+              }
+            </p>
+            <p class="empty-body">
+              @if (chosenChain() !== null) {
+                {{
+                  'catalog.categories.emptyChainBody'
+                    | rokuT: { chain: chosenChainName() }
+                }}
+              } @else {
+                {{ 'catalog.categories.emptyBody' | rokuT }}
+              }
+            </p>
+            <button (click)="clearCategory()" class="secondary" type="button">
+              <lib-close-icon aria-hidden="true" class="secondary-glyph" />
+              {{ 'catalog.categories.clear' | rokuT }}
             </button>
           </div>
         } @else if (chosenChain() !== null) {

@@ -79,7 +79,8 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
           row.es.toLocaleLowerCase().includes(needle) ||
           row.en.toLocaleLowerCase().includes(needle)) &&
         (query.soldBy === null ||
-          row.prices[query.soldBy as ChainKey] !== undefined)
+          row.prices[query.soldBy as ChainKey] !== undefined) &&
+        inCategory(row, query.categoryId)
     );
 
     const ordered =
@@ -306,6 +307,18 @@ function fixture(
 
 function scopeOf(supermarketId: string): string {
   return `scope-${supermarketId}`;
+}
+
+/**
+ * Whether a product is under the category a read names: its own leaf, or the root
+ * that leaf sits under, which is how the server reads a root (backend `0166`).
+ */
+function inCategory(row: Fixture, categoryId: string | null): boolean {
+  if (categoryId === null) {
+    return true;
+  }
+  const leaf = memoryCategory(row.category);
+  return leaf.id === categoryId || leaf.parentId === categoryId;
 }
 
 function startsWith(row: Fixture, needle: string): boolean {

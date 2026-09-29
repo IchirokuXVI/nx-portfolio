@@ -94,6 +94,11 @@ export interface CatalogBrowseQuery {
   /** Only the products this chain sells (backend `0146`), or every chain. */
   readonly soldBy: string | null;
   /**
+   * Only the products under this category (backend `0166`, section 4): a leaf, or a
+   * root, which means every leaf under it. Null is the whole catalog (velista `0119`).
+   */
+  readonly categoryId: string | null;
+  /**
    * Price from exactly these scopes. Empty resolves the caller's own profile,
    * which is what every read without a chain chosen wants.
    */

@@ -370,6 +370,29 @@
       "failed": "Similar products did not load.",
       "change": "Change",
       "changeLabel": "Change to {{label}}"
+    },
+    "categories": {
+      "title": "Categories",
+      "open": "Categories",
+      "back": "Back to the catalog",
+      "backToRoots": "Back to categories",
+      "everything": "Everything in {{name}}",
+      "count_one": "{{shown}} product",
+      "count_other": "{{shown}} products",
+      "row": "{{name}}, {{amount}}",
+      "rowChosen": "{{name}}, {{amount}}, chosen",
+      "chip": "{{root}}, {{leaf}}. Change the category",
+      "chipRoot": "{{root}}. Change the category",
+      "clear": "Clear the category",
+      "search": "Search in {{category}}",
+      "searchChain": "Search in {{category}} at {{chain}}",
+      "loading": "Loading the categories",
+      "failed": "The categories did not load. Check your connection and try again.",
+      "none": "There are no categories to show yet.",
+      "emptyTitle": "Nothing in {{category}} yet",
+      "emptyBody": "Velista has not found any yet. Clear the category to see everything.",
+      "emptyChainTitle": "Nothing in {{category}} at {{chain}} yet",
+      "emptyChainBody": "Velista has not found any at this shop. Choose All shops, or clear the category to see everything from {{chain}}."
     }
   },
   "home": {

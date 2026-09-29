@@ -1020,6 +1020,32 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
+             * The category picker's page of parents (velista `0119`). A page and not a
+             * sheet: two levels deep, each with its own back (section 1).
+             *
+             * Under `catalog`, so `activeNavTab` lights the Catalog tab and the bar is
+             * drawn with nothing added. The tab's guards, because every catalog read is
+             * refused without an account (target 8). A sibling of the tab rather than a
+             * child: the tab renders its children into the product sheet's outlet.
+             */
+            path: 'catalog/categories',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CategoriesPage
+              ),
+          },
+          {
+            /** One root's children (velista `0119`), by the root's slug. */
+            path: 'catalog/categories/:parentSlug',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CategoryChildrenPage
+              ),
+          },
+          {
+            /**
              * The third tab (velista `0097`, section 7).
              *
              * **Declared before `shopping-lists/:basketId`**, so the word is not
