@@ -108,16 +108,21 @@ camera's `z`, so `y` points down when the map is drawn. A heading is in degrees,
 
 A walk is a log of entries, and the log only grows. `foldWalk` applies them in `seq` order.
 
+- **Saves while walking**: the first save of a session is a `started` or `resumed` entry.
+  Every later save (velista sends one every 20 s) is a new `continued` entry with a new id,
+  so no entry ever changes and a retried save is the same entry.
 - **Log time** is recorded time with the gaps between sessions removed. In a recording
-  entry (`started`, `resumed`, `stopped`) each event carries its own log time. An event with
+  entry (`started`, `resumed`, `continued`, `stopped`) each event carries its own log time. An event with
   none takes the time of the event before it. Every other entry happens at its `logTo`.
 - **Polylines**: the first path point of a `started` or `resumed` entry starts a new one.
-  Every other point continues the last one.
+  Every other point continues the last one, so `continued` saves extend the session's line.
 - **`rewound`** replaces the map with `stateAt(the entries before it, rewoundTo)` and the
   walk continues from there. A rewind to a point after an earlier rewind answers the map
   that rewind made.
-- **`discarded`** drops the path, marks and areas of the entry just before it from its
-  `logFrom` on: the segment after an automatic resume. `confirmed` keeps them.
+- **`discarded`** drops the path, marks and areas of the unconfirmed segment from its
+  `logFrom` on. The segment is the entry just before it, and when that is a `continued`
+  save, every save back to the `resumed` entry of the automatic resume. `confirmed` keeps
+  them.
 - **A starting document** stands for every entry before the first one given, so a server
   can fold from a snapshot. A rewind or a discard that reaches before that first entry
   throws, and the caller folds from an earlier snapshot.

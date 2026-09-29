@@ -80,10 +80,16 @@ export interface ShopMapProblemV2 {
   otherId?: string;
 }
 
-/** Section 3. */
+/**
+ * Section 3. `continued` is a save while walking: more path, marks and edits
+ * of the session the last `started` or `resumed` entry opened. The first save
+ * of a session is `started` or `resumed`, and every later save is a new
+ * `continued` entry with a new id, so no entry ever changes.
+ */
 export type WalkEntryKind =
   | 'started'
   | 'resumed'
+  | 'continued'
   | 'stopped'
   | 'edited'
   | 'rewound'

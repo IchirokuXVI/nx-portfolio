@@ -4,7 +4,7 @@ import {
   elJamonStop,
 } from '../__fixtures__/el-jamon';
 import { area, entry, mark, path } from './testing';
-import type { ShopMapDocumentV2, WalkEntry } from './types';
+import type { ShopMapDocumentV2, WalkEntry, WalkEvent } from './types';
 import { validateShopMapV2 } from './validate';
 import { foldWalk, stateAt, walkTimeline } from './walk-log';
 
@@ -276,6 +276,166 @@ describe('discarded and confirmed', () => {
     const d = foldWalk(entries);
     expect(d.path[1].points).toEqual([[9, 9]]);
     expect(d.marks).toEqual([]);
+  });
+});
+
+/** The log time of the last timed event of a list, for splitting an entry. */
+function lastTime(events: WalkEvent[], fallback: number): number {
+  let t = fallback;
+  for (const ev of events) {
+    if (ev.type === 'path' && ev.points.length > 0) {
+      t = ev.points[ev.points.length - 1][0];
+    } else if (ev.type === 'mark-put') t = ev.mark.logMs;
+    else if (ev.type === 'section-left') t = ev.logMs;
+  }
+  return t;
+}
+
+/**
+ * Splits the recording entries named by seq into `parts` saves each: the
+ * first keeps its kind and every later one is `continued`. Seqs are renumbered.
+ */
+function splitSessions(
+  log: WalkEntry[],
+  seqs: number[],
+  parts: number
+): WalkEntry[] {
+  const out: WalkEntry[] = [];
+  for (const e of log) {
+    if (!seqs.includes(e.seq)) {
+      out.push({ ...e });
+      continue;
+    }
+    const size = Math.ceil(e.events.length / parts);
+    let from = e.logFrom;
+    for (let k = 0; k < parts; k++) {
+      const events = e.events.slice(k * size, (k + 1) * size);
+      const to = k === parts - 1 ? e.logTo : lastTime(events, from);
+      out.push({
+        ...e,
+        id: k === 0 ? e.id : `${e.id}-${k}`,
+        kind: k === 0 ? e.kind : 'continued',
+        logFrom: from,
+        logTo: to,
+        events,
+      });
+      from = to;
+    }
+  }
+  return out.map((e, k) => ({ ...e, seq: k + 1 }));
+}
+
+describe('continued saves', () => {
+  it('extend the polyline the session opened', () => {
+    const d = foldWalk([
+      entry(1, 'started', 0, 1000, [path([0, 0, 0], [1000, 1, 0])]),
+      entry(2, 'continued', 1000, 2000, [path([2000, 2, 0])]),
+      entry(3, 'continued', 2000, 3000, [path([3000, 3, 0])]),
+      entry(4, 'stopped', 3000, 3000, [], { reason: 'button' }),
+      entry(5, 'resumed', 3000, 4000, [path([3000, 9, 9])]),
+      entry(6, 'continued', 4000, 5000, [path([5000, 10, 9])]),
+    ]);
+    expect(d.path.map((l) => l.points.length)).toEqual([4, 2]);
+  });
+
+  it('give their events their own log time', () => {
+    const log = [
+      entry(1, 'started', 0, 1000, [path([0, 0, 0])]),
+      entry(2, 'continued', 1000, 3000, [
+        { type: 'mark-put', mark: mark('m', 2000) },
+        { type: 'area-put', area: area('a') },
+      ]),
+    ];
+    expect(stateAt(log, 1999).marks).toEqual([]);
+    expect(stateAt(log, 2000).areas.map((a) => a.id)).toEqual(['a']);
+  });
+
+  it('are discarded with the automatic resume they continue', () => {
+    const d = foldWalk([
+      entry(1, 'started', 0, 2000, [path([0, 0, 0], [2000, 2, 0])]),
+      entry(2, 'stopped', 2000, 2000, [], { reason: 'tracking-lost' }),
+      entry(3, 'resumed', 2000, 3000, [path([2000, 9, 9], [3000, 10, 9])]),
+      entry(4, 'continued', 3000, 4000, [
+        path([4000, 11, 9]),
+        { type: 'mark-put', mark: mark('bad', 3500) },
+        { type: 'area-put', area: area('bad') },
+      ]),
+      entry(5, 'continued', 4000, 5000, [path([5000, 12, 9])]),
+      entry(6, 'discarded', 2000, 5000),
+    ]);
+    expect(d.path).toEqual([
+      {
+        points: [
+          [0, 0],
+          [2, 0],
+        ],
+      },
+    ]);
+    expect(d.marks).toEqual([]);
+    expect(d.areas).toEqual([]);
+  });
+
+  it('carry a discard back to the entry that opened the session', () => {
+    const d = foldWalk([
+      entry(1, 'started', 0, 2000, [
+        path([0, 0, 0]),
+        { type: 'mark-put', mark: mark('kept', 1500) },
+      ]),
+      entry(2, 'continued', 2000, 3000, [path([3000, 3, 0])]),
+      entry(3, 'discarded', 1000, 3000),
+    ]);
+    // The session opened at entry 1, so entry 1 is inside the segment too,
+    // and the discard drops from its logFrom on.
+    expect(d.marks).toEqual([]);
+    expect(d.path).toEqual([{ points: [[0, 0]] }]);
+  });
+
+  it('sit on the timeline at their logTo', () => {
+    const [, continued] = walkTimeline([
+      entry(1, 'started', 0, 1000),
+      entry(2, 'continued', 1000, 2000),
+    ]);
+    expect(continued).toMatchObject({ kind: 'continued', logMs: 2000 });
+  });
+
+  describe('the El Jamón walk saved every few minutes', () => {
+    // Session 1, the automatic resume and the replayed tail, each as three saves.
+    const split = splitSessions(elJamonLog, [1, 3, 7], 3);
+
+    it('is the same log in more entries', () => {
+      expect(split).toHaveLength(elJamonLog.length + 6);
+      expect(split.filter((e) => e.kind === 'continued')).toHaveLength(6);
+      const times = walkTimeline(split).map((m) => m.logMs);
+      expect([...times].sort((a, b) => a - b)).toEqual(times);
+    });
+
+    it('folds to the same map, the discard spanning three saves', () => {
+      expect(foldWalk(split)).toEqual(elJamonDocument);
+    });
+
+    it('answers the same state at every point', () => {
+      const points = [
+        300_000, 900_000, 960_000, 1_011_924, 1_050_000, 1_095_000, 1_110_000,
+        1_129_893,
+      ];
+      for (const t of points) {
+        expect(stateAt(split, t)).toEqual(stateAt(elJamonLog, t));
+      }
+    });
+
+    it('folds from a snapshot taken between two saves of a session', () => {
+      expect(foldWalk(split.slice(2), foldWalk(split.slice(0, 2)))).toEqual(
+        elJamonDocument
+      );
+    });
+
+    it('refuses a discard whose session opened before the snapshot', () => {
+      // Entries 5 to 7 are the automatic resume and its two saves.
+      expect(split[4].kind).toBe('resumed');
+      expect(() =>
+        foldWalk(split.slice(5), foldWalk(split.slice(0, 5)))
+      ).toThrow(/earlier snapshot/);
+    });
   });
 });
 
