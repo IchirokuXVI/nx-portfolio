@@ -271,6 +271,12 @@ owner or the harvester**, so they are the only path here that needs rate limitin
 section 8), abuse handling, and a moderation queue. They are also user generated content and are
 stored exactly as entered (0004 section 12).
 
+**Trusted submitters (added 2026-09-29).** The user decided that a price submitted by an
+admin account outranks other users' prices. Submissions stay in this backlog. When the
+writers are built, they add a permission to plan `0175`'s table, granted by the `admin`
+role, and a submission from an account with it ranks above the consensus of other users'
+submissions for its item and scope. Whether it also skips moderation is decided then.
+
 **This plan reserves the table and the aggregation rule; it does not build the writers.** The
 submission endpoints, image upload and storage, receipt OCR, moderation UI and abuse handling
 belong to the later plan in section 13. Defining the table here is what keeps that plan from
