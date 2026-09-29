@@ -65,27 +65,60 @@ export const SECTIGO_EV_R36_PEM = [
 const MAX_REDIRECTS = 5;
 
 /**
+ * How long a socket may stay silent before its request fails. Node's `https`
+ * has no timeout of its own, so a server that accepts the connection and then
+ * says nothing would hold a worker until the run is cancelled. Idle time, not
+ * total time: a page that keeps arriving is never cut off.
+ */
+export const ELJAMON_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Thrown when a socket stays silent past the transport's timeout. */
+export class ElJamonTimeoutError extends Error {
+  readonly code = 'ETIMEDOUT';
+
+  constructor(
+    readonly url: string,
+    readonly timeoutMs: number
+  ) {
+    super(`El Jamón said nothing for ${timeoutMs} ms on ${url}`);
+    this.name = 'ElJamonTimeoutError';
+  }
+}
+
+export interface ElJamonFetchOptions {
+  /** Idle milliseconds before a request fails. Defaults to 30 seconds. */
+  timeoutMs?: number;
+}
+
+/**
  * A `fetch` over Node's own `https`, trusting Node's roots plus
  * {@link SECTIGO_EV_R36_PEM}.
  *
  * A built in module rather than an HTTP dependency, so the library stays
  * dependency free (plan 0169, section 6). It implements the part of `fetch` the
  * client uses and no more: a method, string headers, a string body, an abort
- * signal, redirects, and a `Response` whose `Set-Cookie` lines survive, because
- * the client keeps the session by hand.
+ * signal, an idle timeout, redirects, and a `Response` whose `Set-Cookie` lines
+ * survive, because the client keeps the session by hand.
+ *
+ * **A cookie a redirect sets is kept.** It is sent on the request the redirect
+ * leads to, and it is on the final `Response` before that response's own, so
+ * the client's jar sees it too.
  *
  * No `accept-encoding` is sent, so the body arrives as it is and nothing here
  * has to decompress it.
  */
 export function createElJamonFetch(
-  extraCertificates: readonly string[] = [SECTIGO_EV_R36_PEM]
+  extraCertificates: readonly string[] = [SECTIGO_EV_R36_PEM],
+  options: ElJamonFetchOptions = {}
 ): typeof fetch {
   const ca = [...rootCertificates, ...extraCertificates];
+  const timeoutMs = options.timeoutMs ?? ELJAMON_REQUEST_TIMEOUT_MS;
 
   const send = (
     url: URL,
     init: RequestInit,
-    redirects: number
+    redirects: number,
+    carried: readonly string[]
   ): Promise<Response> =>
     new Promise<Response>((resolve, reject) => {
       const signal = init.signal ?? undefined;
@@ -114,14 +147,20 @@ export function createElJamonFetch(
           const location = incoming.headers.location;
           if (location && REDIRECTS.has(status) && redirects < MAX_REDIRECTS) {
             incoming.resume();
+            const setCookies = incoming.headers['set-cookie'] ?? [];
             const keepsMethod = status === 307 || status === 308;
+            const next = keepsMethod
+              ? init
+              : { ...init, method: 'GET', body: undefined };
             resolve(
               send(
                 new URL(location, url),
-                keepsMethod
-                  ? init
-                  : { ...init, method: 'GET', body: undefined },
-                redirects + 1
+                {
+                  ...next,
+                  headers: withCookies(headersOf(init.headers), setCookies),
+                },
+                redirects + 1,
+                [...carried, ...setCookies]
               )
             );
             return;
@@ -131,6 +170,11 @@ export function createElJamonFetch(
           incoming.on('error', reject);
           incoming.on('end', () => {
             const headers = new Headers();
+            // The redirects' cookies first, so the final response's own win
+            // where both name the same cookie.
+            for (const line of carried) {
+              headers.append('set-cookie', line);
+            }
             const raw = incoming.rawHeaders;
             for (let index = 0; index + 1 < raw.length; index += 2) {
               headers.append(raw[index], raw[index + 1]);
@@ -146,7 +190,18 @@ export function createElJamonFetch(
           });
         }
       );
-      request.on('error', reject);
+      if (timeoutMs > 0) {
+        // Destroying the request fails it with this error through the same
+        // listener a reset connection takes, so the client retries it.
+        request.setTimeout(timeoutMs, () => {
+          request.destroy(new ElJamonTimeoutError(url.toString(), timeoutMs));
+        });
+      }
+      request.on('error', (error) => {
+        // An abort surfaces as Node's own AbortError; answer the signal's
+        // reason instead, as `fetch` does.
+        reject(signal?.aborted ? signal.reason : error);
+      });
       if (body !== null) {
         request.write(body);
       }
@@ -159,11 +214,50 @@ export function createElJamonFetch(
         typeof input === 'string' || input instanceof URL ? input : input.url
       ),
       init ?? {},
-      0
+      0,
+      []
     )) as typeof fetch;
 }
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * The request's headers with the cookies a redirect set merged into its
+ * `cookie` header, each replacing a cookie of the same name.
+ */
+function withCookies(
+  headers: Record<string, string>,
+  setCookies: readonly string[]
+): Record<string, string> {
+  if (setCookies.length === 0) {
+    return headers;
+  }
+  const result = { ...headers };
+  const jar = new Map<string, string>();
+  for (const name of Object.keys(result)) {
+    if (name.toLowerCase() !== 'cookie') {
+      continue;
+    }
+    for (const pair of result[name].split(';')) {
+      addPair(jar, pair);
+    }
+    delete result[name];
+  }
+  for (const line of setCookies) {
+    addPair(jar, line.split(';', 1)[0]);
+  }
+  result['cookie'] = [...jar]
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ');
+  return result;
+}
+
+function addPair(jar: Map<string, string>, pair: string): void {
+  const equals = pair.indexOf('=');
+  if (equals > 0) {
+    jar.set(pair.slice(0, equals).trim(), pair.slice(equals + 1).trim());
+  }
+}
 
 function headersOf(headers: HeadersInit | undefined): Record<string, string> {
   if (!headers) {

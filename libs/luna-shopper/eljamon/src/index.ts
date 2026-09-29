@@ -34,7 +34,13 @@ export { parseBreadcrumb, parseProductPage } from './lib/product';
 export { splitSize } from './lib/size';
 export type { ElJamonSize } from './lib/size';
 export { parseLocations, storeRef } from './lib/stores';
-export { SECTIGO_EV_R36_PEM, createElJamonFetch } from './lib/transport';
+export {
+  ELJAMON_REQUEST_TIMEOUT_MS,
+  ElJamonTimeoutError,
+  SECTIGO_EV_R36_PEM,
+  createElJamonFetch,
+} from './lib/transport';
+export type { ElJamonFetchOptions } from './lib/transport';
 export type {
   ElJamonCategory,
   ElJamonClientOptions,

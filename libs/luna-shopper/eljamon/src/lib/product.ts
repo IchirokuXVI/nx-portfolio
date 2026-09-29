@@ -67,12 +67,11 @@ function readJsonLd(html: string): Record<string, unknown> | null {
   for (const match of html.matchAll(
     /<script type="application\/ld\+json">([\s\S]*?)<\/script>/g
   )) {
-    const source = match[1].replace(
-      /:\s*'([^'"\\]*)'/g,
-      (_, value: string) => `: "${value}"`
-    );
     try {
-      const parsed = JSON.parse(source) as Record<string, unknown>;
+      const parsed = JSON.parse(doubleQuoted(match[1])) as Record<
+        string,
+        unknown
+      >;
       if (parsed['@type'] === 'Product') {
         return parsed;
       }
@@ -81,6 +80,59 @@ function readJsonLd(html: string): Record<string, unknown> | null {
     }
   }
   return null;
+}
+
+/**
+ * The JSON-LD with every single quoted string rewritten as a JSON string. The
+ * shop's template single quotes its `availability`, which `JSON.parse` refuses.
+ *
+ * **A double quoted string is copied as it is**, escapes included, so an
+ * apostrophe or a `: '` inside a product's name is never taken for a quote.
+ */
+export function doubleQuoted(source: string): string {
+  let out = '';
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index];
+    if (char === '"') {
+      const end = endOfString(source, index, '"');
+      out += source.slice(index, end);
+      index = end;
+    } else if (char === "'") {
+      const end = endOfString(source, index, "'");
+      out += '"';
+      for (let at = index + 1; at < end - 1; at += 1) {
+        if (source[at] === '\\' && at + 1 < end - 1) {
+          // `\'` means nothing to JSON; every other escape is the same.
+          at += 1;
+          out += source[at] === "'" ? "'" : `\\${source[at]}`;
+        } else {
+          out += source[at] === '"' ? '\\"' : source[at];
+        }
+      }
+      out += '"';
+      index = end;
+    } else {
+      out += char;
+      index += 1;
+    }
+  }
+  return out;
+}
+
+/** The index just past the quote that closes the string opened at `start`. */
+function endOfString(source: string, start: number, quote: string): number {
+  let index = start + 1;
+  while (index < source.length) {
+    if (source[index] === '\\') {
+      index += 2;
+    } else if (source[index] === quote) {
+      return index + 1;
+    } else {
+      index += 1;
+    }
+  }
+  return source.length;
 }
 
 function stringOf(value: unknown): string | null {

@@ -211,6 +211,173 @@ describe('ElJamonClient', () => {
     expect(waits[1]).toBeGreaterThanOrEqual(200);
   });
 
+  it('backs off on a dropped connection and retries, as on a 429', async () => {
+    let dropped = 0;
+    const waits: number[] = [];
+    const site = fakeSite(storefront);
+    const flaky = (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      if (String(input).includes('/detalle/') && dropped < 2) {
+        dropped += 1;
+        throw Object.assign(new Error('socket hang up'), {
+          code: 'ECONNRESET',
+        });
+      }
+      return site.fetchImpl(input, init);
+    }) as typeof fetch;
+    const shop = new ElJamonClient({
+      userAgent: 'test',
+      fetchImpl: flaky,
+      sleepImpl: async (ms) => {
+        waits.push(ms);
+      },
+      backoffBaseMs: 100,
+    });
+
+    const product = await shop.getProduct('/detalle/-/Producto/x/1');
+
+    expect(product).not.toBeNull();
+    expect(waits).toHaveLength(2);
+    expect(waits[0]).toBeGreaterThanOrEqual(100);
+    expect(waits[1]).toBeGreaterThanOrEqual(200);
+    // Session (2) + two dropped attempts + the one that answered.
+    expect(shop.requests).toBe(5);
+  });
+
+  it('retries a body that breaks off halfway', async () => {
+    let broken = false;
+    const site = fakeSite(storefront);
+    const flaky = (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      const response = await site.fetchImpl(input, init);
+      if (String(input).includes('/detalle/') && !broken) {
+        broken = true;
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: async () => {
+            throw new Error('aborted');
+          },
+        } as unknown as Response;
+      }
+      return response;
+    }) as typeof fetch;
+
+    const product = await client(flaky).getProduct('/detalle/-/Producto/x/1');
+
+    expect(product).not.toBeNull();
+    expect(broken).toBe(true);
+  });
+
+  it('gives up on a connection that keeps dropping once the retries run out', async () => {
+    const site = fakeSite(storefront);
+    const failing = (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      if (String(input).includes('/detalle/')) {
+        throw new Error('socket hang up');
+      }
+      return site.fetchImpl(input, init);
+    }) as typeof fetch;
+    const shop = new ElJamonClient({
+      userAgent: 'test',
+      fetchImpl: failing,
+      sleepImpl: async () => undefined,
+      retries: 2,
+    });
+
+    await expect(shop.getProduct('/detalle/-/Producto/x/1')).rejects.toThrow(
+      'socket hang up'
+    );
+    expect(shop.requests).toBe(2 + 3);
+  });
+
+  it('does not retry once the run is aborted', async () => {
+    const controller = new AbortController();
+    const site = fakeSite(storefront);
+    let calls = 0;
+    const aborting = (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      if (String(input).includes('/detalle/')) {
+        calls += 1;
+        controller.abort(new Error('cancelled'));
+        throw new Error('The operation was aborted');
+      }
+      return site.fetchImpl(input, init);
+    }) as typeof fetch;
+
+    await expect(
+      new ElJamonClient({
+        userAgent: 'test',
+        fetchImpl: aborting,
+        sleepImpl: async () => undefined,
+        signal: controller.signal,
+      }).getProduct('/detalle/-/Producto/x/1')
+    ).rejects.toThrow();
+    expect(calls).toBe(1);
+  });
+
+  it('skips a failed page after the first and asks for the next one with the last filters read', async () => {
+    const site = fakeSite((url) =>
+      url.includes('pagina=2') ? { status: 403, body: '' } : storefront(url)
+    );
+    const failed: number[] = [];
+    const rows = [];
+    for await (const row of client(site.fetchImpl).walkCategory(
+      FRESCOS,
+      undefined,
+      (index) => failed.push(index)
+    )) {
+      rows.push(row);
+    }
+
+    expect(failed).toEqual([2]);
+    // Page 3 (which the fake answers with page 1) was still asked for, with
+    // page 1's filters and page 3 in them; its repeated codes then end the walk.
+    const third = site.sent.find((request) => request.url.includes('pagina=3'));
+    const filters = JSON.parse(
+      new URLSearchParams(third?.body ?? '').get('filters') ?? '{}'
+    ) as Record<string, unknown>;
+    expect(filters).toMatchObject({ categoryCode: '04', page: 3 });
+    expect(rows).toHaveLength(20);
+  });
+
+  it('throws on a failed page when nobody takes the failure, and on two in a row', async () => {
+    const walk = async (
+      failing: (url: string) => boolean,
+      onPageError?: (index: number) => void
+    ) => {
+      const site = fakeSite((url) =>
+        failing(url) ? { status: 403, body: '' } : storefront(url)
+      );
+      for await (const row of client(site.fetchImpl).walkCategory(
+        FRESCOS,
+        undefined,
+        onPageError
+      )) {
+        void row;
+      }
+    };
+
+    await expect(
+      walk((url) => url.includes('pagina=2'))
+    ).rejects.toBeInstanceOf(ElJamonHttpError);
+    await expect(
+      walk(
+        (url) => url.includes('pagina=2') || url.includes('pagina=3'),
+        () => undefined
+      )
+    ).rejects.toBeInstanceOf(ElJamonHttpError);
+  });
+
   it('throws on a status a retry cannot fix', async () => {
     const site = fakeSite((url) =>
       url.includes('/detalle/') ? { status: 403, body: '' } : storefront(url)
