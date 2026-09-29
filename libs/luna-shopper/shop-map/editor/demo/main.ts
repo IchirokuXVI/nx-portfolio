@@ -3,10 +3,11 @@ import type {
   MapMark,
   ShopMapDocumentV2,
   WalkEntry,
+  WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
 import {
   createLiveMap,
-  stateAt,
+  foldWalk,
   walkOrderV2,
 } from '@portfolio/luna-shopper/shop-map/model';
 // The demo only: the fixture is not part of the model's public surface.
@@ -101,72 +102,138 @@ $<HTMLInputElement>('#snap').addEventListener('change', (e) =>
 );
 setLook(look);
 
-// The replay: every tracked point of the log in log time order, fed to the live map.
-const points: [number, number, number][] = [];
-const marks: MapMark[] = [];
-for (const e of log) {
-  if (e.kind === 'rewound' || e.kind === 'edited') continue;
-  for (const ev of e.events) {
-    if (ev.type === 'path') points.push(...ev.points);
-    if (ev.type === 'mark-put') marks.push(ev.mark);
+// The replay: the recorded entries of the log (1 to 5) fed to the live map
+// the way the recording screen feeds it, as the model's own El Jamón replay
+// does. Tracking is good in both sessions, lost at the stop and suspect over
+// the turned frame of the automatic resume (entry 3), which is drawn as the
+// path to check until entry 4 discards it. Every suggestion is tapped 450 s in.
+type Step =
+  | { kind: 'point'; logMs: number; x: number; y: number; seq: number }
+  | { kind: 'mark'; mark: MapMark }
+  | { kind: 'left' }
+  | { kind: 'entry'; seq: number; entryKind: WalkEntry['kind'] };
+const steps: Step[] = [];
+for (const entry of log.slice(0, 5)) {
+  steps.push({ kind: 'entry', seq: entry.seq, entryKind: entry.kind });
+  for (const ev of entry.events) {
+    if (ev.type === 'path') {
+      for (const [logMs, x, y] of ev.points)
+        steps.push({ kind: 'point', logMs, x, y, seq: entry.seq });
+    } else if (ev.type === 'mark-put')
+      steps.push({ kind: 'mark', mark: ev.mark });
+    else if (ev.type === 'section-left') steps.push({ kind: 'left' });
   }
 }
-points.sort((a, b) => a[0] - b[0]);
-marks.sort((a, b) => a.logMs - b.logMs);
+const TAP_AT_MS = 450_000;
 
-const empty: ShopMapDocumentV2 = { version: 2, areas: [], marks: [], path: [] };
-let liveMap: LiveMapHandle | null = null;
-let fed = 0;
-let fedMarks = 0;
+interface Replay {
+  live: LiveMapHandle;
+  step: number;
+  seq: number;
+  events: WalkEvent[];
+  pending: WalkEvent[];
+  unconfirmed: [number, number][];
+  trail: [number, number][];
+  tapped: boolean;
+  t: number;
+}
+
+function startReplay(): Replay {
+  const empty: ShopMapDocumentV2 = {
+    version: 2,
+    areas: [],
+    marks: [],
+    path: [],
+  };
+  return {
+    live: createLiveMap({
+      document: empty,
+      settings: { idPrefix: 'live-', idSeed: 1 },
+    }),
+    step: 0,
+    seq: 0,
+    events: [],
+    pending: [],
+    unconfirmed: [],
+    trail: [],
+    tapped: false,
+    t: 0,
+  };
+}
 
 function heading(a: [number, number], b: [number, number]): number {
   // The model's convention: heading h faces (-sin h, cos h).
   return (Math.atan2(-(b[0] - a[0]), b[1] - a[1]) * 180) / Math.PI;
 }
 
-function showAt(t: number) {
-  const doc = stateAt(log, t);
+/** Feeds the steps up to log time `t` and draws the result. True at the end. */
+function advance(r: Replay, t: number): boolean {
+  const { live } = r;
+  while (r.step < steps.length) {
+    const s = steps[r.step];
+    if (s.kind === 'point' && s.logMs > t) break;
+    r.step++;
+    if (s.kind === 'entry') {
+      // What an entry made goes to the log when it ends; entry 3 is discarded.
+      r.pending.push(...live.snapshot().events);
+      if (r.seq !== 3) r.events.push(...r.pending);
+      r.pending = [];
+      r.seq = s.seq;
+      if (s.entryKind === 'stopped') live.setTracking('lost');
+      if (s.entryKind === 'resumed')
+        live.setTracking(s.seq === 3 ? 'suspect' : 'good');
+      if (s.entryKind === 'resumed' && s.seq === 5) r.unconfirmed = [];
+      continue;
+    }
+    if (s.kind === 'mark') live.mark(s.mark);
+    else if (s.kind === 'left') live.sectionLeft();
+    else {
+      if (!r.tapped && s.logMs >= TAP_AT_MS) {
+        r.tapped = true;
+        for (const g of live.snapshot().suggestions)
+          live.acceptSuggestion(g.id);
+      }
+      live.push({ logMs: s.logMs, x: s.x, y: s.y });
+      if (s.seq === 3) r.unconfirmed.push([s.x, s.y]);
+      r.trail.push([s.x, s.y]);
+    }
+  }
+  const snapshot = live.snapshot();
+  r.pending.push(...snapshot.events);
+  const events = r.seq === 3 ? r.events : [...r.events, ...r.pending];
+  const doc = foldWalk([
+    {
+      id: 'replay',
+      seq: 1,
+      kind: 'edited',
+      at: '2026-09-29T10:42:42.258Z',
+      logFrom: 0,
+      logTo: 0,
+      events,
+    },
+  ]);
   handle.setDocument(doc);
-  if (!liveMap) {
-    try {
-      liveMap = createLiveMap({
-        document: empty,
-        settings: { idPrefix: 'live-' },
-      });
-      liveMap.setTracking('good');
-    } catch {
-      liveMap = null;
-    }
-    fed = 0;
-    fedMarks = 0;
-  }
-  while (fed < points.length && points[fed][0] <= t) {
-    const [logMs, x, y] = points[fed++];
-    liveMap?.push({ logMs, x, y });
-    while (fedMarks < marks.length && marks[fedMarks].logMs <= logMs) {
-      const mark = marks[fedMarks++];
-      liveMap?.mark(mark);
-    }
-  }
-  const line = doc.path[doc.path.length - 1]?.points ?? [];
-  const at = line[line.length - 1];
-  const before = line[Math.max(0, line.length - 3)];
+  const at = r.trail[r.trail.length - 1];
+  const before = r.trail[Math.max(0, r.trail.length - 3)];
   const person: ShopMapPerson | undefined = at
     ? { x: at[0], y: at[1], heading: before ? heading(before, at) : 0 }
     : undefined;
-  const snapshot = liveMap?.snapshot() ?? {
-    walkedCells: [],
-    suggestions: [],
-    sectionRun: null,
-    events: [],
-  };
-  handle.setLive({ snapshot, person });
+  handle.setLive({
+    snapshot,
+    person,
+    ...(r.unconfirmed.length > 1 ? { unconfirmed: r.unconfirmed } : {}),
+  });
   say(
-    `${Math.round(t / 1000)} s of ${Math.round(endMs / 1000)} s` +
-      (liveMap
-        ? `, ${snapshot.suggestions.length} suggestions`
-        : ', live map not built yet')
+    `${Math.round(Math.min(t, endMs) / 1000)} s of ${Math.round(endMs / 1000)} s, ` +
+      `${snapshot.suggestions.length} suggestions` +
+      (snapshot.sectionRun ? `, in section ${snapshot.sectionRun.section}` : '')
   );
+  return r.step >= steps.length;
+}
+
+function showAt(t: number) {
+  setLook('mapper');
+  advance(startReplay(), t);
 }
 
 let timer = 0;
@@ -181,13 +248,11 @@ replay.addEventListener('click', () => {
     return;
   }
   setLook('mapper');
-  liveMap = null;
-  let t = 0;
+  const r = startReplay();
   replay.textContent = 'Stop';
   timer = window.setInterval(() => {
-    t = Math.min(endMs, t + 10_000);
-    showAt(t);
-    if (t >= endMs) {
+    r.t += 10_000;
+    if (advance(r, r.t)) {
       clearInterval(timer);
       timer = 0;
       replay.textContent = 'Replay';

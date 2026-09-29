@@ -179,7 +179,10 @@ export function drawPerson(t: DrawTarget, person: ShopMapPerson) {
   svg(t.doc, 'circle', { class: 'sm-person', r: 7.5 }, g);
   t.positioners.push((v) => {
     const [x, y] = toScreen(v, person.x, person.y);
-    g.setAttribute('transform', `translate(${px(x)} ${px(y)})`);
+    g.setAttribute(
+      'transform',
+      `translate(${px(x)} ${px(y)}) scale(${pinScale(v)})`
+    );
   });
 }
 
