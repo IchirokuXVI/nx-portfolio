@@ -74,3 +74,83 @@ per rule. `expected.json` states every answer.
 npx nx test luna-shopper/shop-map/model
 npx nx lint luna-shopper/shop-map/model
 ```
+
+## Version 2: a map in metres, and a walk that keeps its history
+
+`libs/luna-shopper/shop-map/plans/0002` adds a second document. Every new piece reads and
+writes it. Version 1 above stays built and exported, and nothing new reads it.
+
+`ShopMapDocumentV2` stores `areas` (rectangles with a kind), `marks` (section, counter and
+note, each with the heading the phone faced) and the walked `path` as polylines, all in
+metres in the frame of the walk. The map's `x` is the camera's `x` and its `y` is the
+camera's `z`, so `y` points down when the map is drawn. A heading is in degrees, 0 along
+`+y` and clockwise as drawn, so the phone faced `(-sin h, cos h)`. Nothing snaps to a grid.
+
+| Function                    | Gives                                                                    |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `validateShopMapV2(doc)`    | the problems below, empty when valid                                     |
+| `normalizeShopMapV2(doc)`   | one canonical form: sorted by id, two decimals, so equal maps hash equal |
+| `foldWalk(entries, start?)` | the normalized document a walk log folds to                              |
+| `stateAt(entries, logMs)`   | the document at a point of the log                                       |
+| `walkTimeline(entries)`     | one marker per entry, for the rewind slider                              |
+| `walkOrderV2(doc)`          | section names in walk order, with their areas and metres walked          |
+| `shopperView(doc)`          | the walkway polygons, the areas, the notes and the bounds                |
+
+| Code                    | Refuses                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `AREA_TOO_SMALL`        | an area under 0.3 m on a side                                       |
+| `BLOCKING_OVERLAP`      | two blocking areas overlapping by more than 0.1 m, naming the later |
+| `SECTION_ON_WRONG_KIND` | a `section` on anything but a shelf or a counter                    |
+| `BAD_COLOUR`            | a custom colour that is not `#rrggbb`                               |
+| `MARK_UNNAMED`          | a section or counter mark with empty text                           |
+
+### The walk log
+
+A walk is a log of entries, and the log only grows. `foldWalk` applies them in `seq` order.
+
+- **Log time** is recorded time with the gaps between sessions removed. In a recording
+  entry (`started`, `resumed`, `stopped`) each event carries its own log time. An event with
+  none takes the time of the event before it. Every other entry happens at its `logTo`.
+- **Polylines**: the first path point of a `started` or `resumed` entry starts a new one.
+  Every other point continues the last one.
+- **`rewound`** replaces the map with `stateAt(the entries before it, rewoundTo)` and the
+  walk continues from there. A rewind to a point after an earlier rewind answers the map
+  that rewind made.
+- **`discarded`** drops the path, marks and areas of the entry just before it from its
+  `logFrom` on: the segment after an automatic resume. `confirmed` keeps them.
+- **A starting document** stands for every entry before the first one given, so a server
+  can fold from a snapshot. A rewind or a discard that reaches before that first entry
+  throws, and the caller folds from an earlier snapshot.
+
+### The raster
+
+`walkOrderV2` and `shopperView` rasterize the document at 0.5 m. A cell is free when no
+blocking area (every kind except `path` and `entrance`) covers its centre and the walk or a
+`path` area passed within 0.75 m of it. A shopper stands on the free cell nearest an area,
+at most 1.5 m from it.
+
+The walk starts beside the first entrance, else at the first walked point. It visits one
+stop per section name (names match after trimming and case folding, and the stop is the
+first area by id), ordered by `walkOrder`'s nearest neighbour and 2-opt. It ends beside the
+checkout that makes it shortest, else at the last walked point. `startsAtEntrance` and
+`endsAtCheckout` say which.
+
+The shopper's walkway is the free cells plus every unblocked cell in a gap under 1 m, traced
+into rings. Outer rings run clockwise as drawn and holes the other way.
+
+### The El Jamón fixture
+
+`src/lib/__fixtures__/el-jamon/` holds the second El Jamón walk of 2026-09-29 as a walk log
+(`walk-log.json`), the map it folds to (`expected-map.json`) and its walk order
+(`expected-walk-order.json`). `tools/shop-map/reduce-el-jamon-walk.ts` writes all three from
+the 18 MB walk file, which is not committed. Never edit them by hand.
+
+```sh
+npx tsx tools/shop-map/reduce-el-jamon-walk.ts <path to walk-20260929-1242-el-jamon-2.geojson>
+```
+
+The log holds the camera path at one point per second and the 57 marks of the walk. It
+also holds the tracking stop at 920.5 s, the turned frame after it as an automatic resume
+that is then discarded, and a manual resume from 1013.4 s. Two rewinds are authored: the
+first goes back before the last two marks, the tail is replayed as a new session, and the
+second goes to 15 s into that replay. One edit, also authored, draws the areas.
