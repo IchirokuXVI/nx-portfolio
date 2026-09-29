@@ -57,7 +57,12 @@ export const HEADING_LIMIT_DEGREES = 45;
  */
 export const JUMP_METRES = 2;
 
-/** The baseline is learned over this much good tracking. Plan 0003 section 1. */
+/**
+ * The baseline is learned over this much unbroken good tracking. Plan 0003
+ * section 1. On 2026-09-29 the first minute of good tracking on the second
+ * El Jamón walk gave a baseline of 316.6 degrees (compass minus camera
+ * heading), and the camera frame held until the loss at 920.5 s.
+ */
 export const BASELINE_MS = 60_000;
 
 /** A path point is kept this far from the last kept one. Plan 0003 section 2. */
@@ -141,7 +146,19 @@ export type TrackingEvent =
       /** For `heading`: the 5 s median minus the baseline, in (−180, 180]. */
       drift?: number;
     }
-  | { t: number; kind: 'stopped'; reason: TrackingStopReason }
+  | {
+      t: number;
+      kind: 'stopped';
+      reason: TrackingStopReason;
+      /**
+       * True when the stop ends an unconfirmed segment: path points kept
+       * since an automatic resume that nobody confirmed. They may be in a
+       * moved frame (a `frame-moved` stop during an automatic resume is
+       * exactly that), so the host drops them and saves the walk only up to
+       * the loss. Absent when there is nothing unconfirmed to drop.
+       */
+      unconfirmedDropped?: true;
+    }
   | { t: number; kind: 'baseline'; degrees: number }
   | { t: number; kind: 'confirmed' }
   | { t: number; kind: 'discarded' };
@@ -258,6 +275,8 @@ export function createTrackingGuard(
   let offset: number | undefined;
   let learning: { t: number; offset: number }[] = [];
   let disagreeing = false;
+  /** An automatic resume kept points that nobody has confirmed yet. */
+  let unconfirmed = false;
   const log: TrackingEvent[] = [];
 
   function emit(out: TrackingEvent[], e: TrackingEvent): void {
@@ -267,6 +286,12 @@ export function createTrackingGuard(
 
   function enter(next: TrackingStateKind, t: number): void {
     if (kind !== next) since = t;
+    // The baseline needs 60 s of unbroken good tracking. Tracking that comes
+    // back after a loss can be in another frame, so a stretch cut short is
+    // thrown away rather than added to.
+    if (kind === 'good' && next !== 'good' && baseline === undefined) {
+      learning = [];
+    }
     kind = next;
   }
 
@@ -274,7 +299,14 @@ export function createTrackingGuard(
     if (stopped !== undefined) return;
     stopped = reason;
     automaticResume = false;
-    emit(out, { t, kind: 'stopped', reason });
+    const dropped = unconfirmed;
+    unconfirmed = false;
+    emit(out, {
+      t,
+      kind: 'stopped',
+      reason,
+      ...(dropped ? { unconfirmedDropped: true as const } : {}),
+    });
   }
 
   function lose(out: TrackingEvent[], t: number, why: 'emulated' | 'no-pose') {
@@ -367,6 +399,7 @@ export function createTrackingGuard(
         // A loss short of a stop resumes on its own; after a stop, the walk
         // has stopped and only the person resumes it.
         automaticResume = stopped === undefined;
+        if (automaticResume) unconfirmed = true;
         lostFrom = undefined;
         emit(out, {
           t: sample.t,
@@ -403,6 +436,7 @@ export function createTrackingGuard(
       enter('good', t);
       cause = undefined;
       automaticResume = false;
+      unconfirmed = false;
       stopped = undefined;
       // A compass that still disagrees fires again on the next pose.
       disagreeing = false;
@@ -415,6 +449,7 @@ export function createTrackingGuard(
       if (ended) return out;
       ended = true;
       automaticResume = false;
+      unconfirmed = false;
       emit(out, { t, kind: 'discarded' });
       return out;
     },
