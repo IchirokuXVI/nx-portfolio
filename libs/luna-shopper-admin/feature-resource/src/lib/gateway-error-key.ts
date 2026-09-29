@@ -83,6 +83,34 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // a linked brand can be deleted, because only its products have somewhere
       // to go back to.
       return 'resource.error.brandNotLinked';
+    // The category tree (backend plan 0166, admin plan 0036). Each is named
+    // apart because each has its own fix, and "the request was refused" says
+    // none of them.
+    case 'category_too_deep':
+      // A third level: the parent picked is itself inside another category, or
+      // the category being moved under one already has categories inside it.
+      return 'resource.error.categoryTooDeep';
+    case 'category_not_a_leaf':
+      // A product put on a top level category, or a category that holds
+      // products made top level. Products only go on a category inside another.
+      return 'resource.error.categoryNotALeaf';
+    case 'item_needs_a_category':
+      return 'resource.error.itemNeedsACategory';
+    case 'category_in_use':
+      // A delete of a category that still holds categories or products. Move
+      // them first; nothing in this app deletes one that holds something.
+      return 'resource.error.categoryInUse';
+    case 'category_not_found':
+      return 'resource.error.categoryNotFound';
+    // Shop sections (backend plan 0167, admin plan 0037).
+    case 'section_not_found':
+      return 'resource.error.sectionNotFound';
+    case 'section_of_another_chain':
+      // A shop's list or a product's pins naming a section of another chain.
+      // The pickers offer only the right chain's, so this is a stale screen.
+      return 'resource.error.sectionOfAnotherChain';
+    case 'section_slug_taken':
+      return 'resource.error.sectionSlugTaken';
     case 'run_in_progress':
       // A row the harvester is working on right now. A conflict, but the useful
       // half is which conflict: waiting for the run to finish is the whole of

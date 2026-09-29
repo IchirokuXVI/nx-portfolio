@@ -9,7 +9,11 @@ import {
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { notFoundError } from '../gateway-error';
-import type { ResourceGatewaysI, ResourceSource } from './resource-gateways';
+import type {
+  MemoryTables,
+  ResourceGatewaysI,
+  ResourceSource,
+} from './resource-gateways';
 
 /**
  * Every resource, served out of memory (plan 0004, and the workspace rule that
@@ -31,7 +35,22 @@ export class ResourceMemoryGateways implements ResourceGatewaysI {
   private readonly _seeded = new Set<string>();
 
   for<T extends ResourceRow>(source: ResourceSource<T>): ResourceGateway<T> {
-    return new ResourceMemory<T>(this._table(source), source);
+    return new ResourceMemory<T>(this._table(source), source, this._lookup);
+  }
+
+  /** The tables, for a rule that looks across them. */
+  private readonly _lookup: MemoryTables = {
+    table: (source) => this._table(source),
+  };
+
+  /**
+   * The same tables, for a hand written memory twin whose routes are not a
+   * resource's CRUD (admin plan 0037): a shop's section list and the preview of
+   * where a product is in a shop read across sections, shops and products, and
+   * have to see what the screens wrote.
+   */
+  tables(): MemoryTables {
+    return this._lookup;
   }
 
   /**
@@ -69,7 +88,8 @@ const DEFAULT_PAGE_SIZE = 25;
 class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
   constructor(
     private readonly _rows: T[],
-    private readonly _source: ResourceSource<T>
+    private readonly _source: ResourceSource<T>,
+    private readonly _tables: MemoryTables
   ) {}
 
   async list(query: ResourceQuery): Promise<ResourcePage<T>> {
@@ -82,7 +102,11 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
       return { items: [], nextCursor: null };
     }
 
-    const matching = this._rows.filter((row) => matches(row, filters));
+    const matching = this._rows.filter((row) =>
+      matches(row, filters, (param, value) =>
+        this._source.memory?.matches?.(row, param, value)
+      )
+    );
     const from = cursorIndex(query.cursor);
     const size = query.limit ?? this._source.pageSize ?? DEFAULT_PAGE_SIZE;
     const items = matching.slice(from, from + size);
@@ -110,7 +134,12 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
    * item hold two prices in the same scope, which is a state the column's unique
    * index makes impossible and a screen would then have to be able to draw.
    */
-  async create(input: ResourceRow): Promise<T> {
+  async create(submitted: ResourceRow): Promise<T> {
+    const rules = this._source.memory;
+    const input =
+      rules?.create === undefined
+        ? submitted
+        : rules.create(submitted, this._tables);
     const existing = this._rows.findIndex((row) => this._sameKey(row, input));
     if (existing !== -1) {
       const row = { ...this._rows[existing], ...input } as T;
@@ -131,7 +160,13 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
     if (index === -1) {
       throw notFoundError();
     }
-    const row = { ...this._rows[index], ...input } as T;
+    const current = this._rows[index];
+    const rules = this._source.memory;
+    const changes =
+      rules?.update === undefined
+        ? input
+        : rules.update(current, input, this._tables);
+    const row = { ...current, ...changes } as T;
     this._rows[index] = row;
     return row;
   }
@@ -141,6 +176,7 @@ class ResourceMemory<T extends ResourceRow> implements ResourceGateway<T> {
     if (index === -1) {
       throw notFoundError();
     }
+    this._source.memory?.remove?.(this._rows[index], this._tables);
     this._rows.splice(index, 1);
   }
 
@@ -189,7 +225,8 @@ function cursorIndex(cursor: string | undefined): number {
  */
 function matches(
   row: ResourceRow,
-  filters: Readonly<Record<string, FilterValue>> | undefined
+  filters: Readonly<Record<string, FilterValue>> | undefined,
+  rule: (param: string, value: string) => boolean | undefined = () => undefined
 ): boolean {
   if (filters === undefined) {
     return true;
@@ -200,11 +237,16 @@ function matches(
     if (typeof value !== 'string') {
       return (
         value.length === 0 ||
-        value.some((entry) => matches(row, { [param]: entry }))
+        value.some((entry) => matches(row, { [param]: entry }, rule))
       );
     }
     if (value === '') {
       return true;
+    }
+    // A resource's own reading of this parameter, where it has one.
+    const own = rule(param, value);
+    if (own !== undefined) {
+      return own;
     }
     // "None" on a column the row carries is the rows where that column is
     // empty (plan 0012, section 2), which is what the gateway answers for the

@@ -1,5 +1,4 @@
 import {
-  ItemCategory,
   UnitOfMeasure,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
@@ -10,6 +9,10 @@ import { BaseEntity } from './base.entity';
  * The actual product (plan 0012, section 2): one global row per product, owner
  * managed and never created by users. Its per store price and in store position
  * live on {@link SupermarketItem} rows. The name is localized, in at least one of EN and ES (plan 0079).
+ *
+ * Its categories are not a column (plan 0166, section 2): they are rows of
+ * `item_categories`, one or more per product, read and written by
+ * `CategoryService`.
  */
 @Entity({ name: 'items' })
 export class Item extends BaseEntity {
@@ -48,9 +51,6 @@ export class Item extends BaseEntity {
    */
   @Column({ type: 'smallint', nullable: true })
   packCount!: number | null;
-
-  @Column({ type: 'enum', enum: ItemCategory, default: ItemCategory.OTHER })
-  category!: ItemCategory;
 
   @Column({ type: 'enum', enum: UnitOfMeasure, default: UnitOfMeasure.UNIT })
   defaultUnit!: UnitOfMeasure;

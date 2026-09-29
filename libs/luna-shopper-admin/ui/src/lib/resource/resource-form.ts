@@ -137,7 +137,11 @@ export interface FieldChange {
         <p class="banner" role="alert">
           {{ key | rokuT }}
           @if (errorLink(); as link) {
-            <a [routerLink]="link.commands">{{ link.labelKey | rokuT }}</a>
+            <a
+              [queryParams]="link.queryParams ?? null"
+              [routerLink]="link.commands"
+              >{{ link.labelKey | rokuT }}</a
+            >
           }
         </p>
       }

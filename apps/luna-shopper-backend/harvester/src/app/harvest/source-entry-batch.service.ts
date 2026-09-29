@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BULK_DECISION_MAX_OPERATIONS,
   BulkOperationErrorCode,
-  ItemCategory,
   SourceEntryStatus,
   UnitOfMeasure,
   type ApplySourceEntryDecisionsRequest,
@@ -15,10 +14,7 @@ import {
   type SourceEntryDecisionOutcome,
   type SourceEntryPriceSkip,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  mapSizeFormat,
-  resolveCategory,
-} from '@portfolio/luna-shopper/mercadona';
+import { mapSizeFormat } from '@portfolio/luna-shopper/mercadona';
 import {
   describeError,
   ValidationException,
@@ -26,6 +22,7 @@ import {
 import { In, Repository, type EntityManager } from 'typeorm';
 import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
 import { acceptedName } from './source-entry-name';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
@@ -146,6 +143,13 @@ export class SourceEntryBatchService {
     if (taken.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, taken, null);
     }
+    const { outcomes: unplaced, idsOf } = await this.checkCategories(
+      operations,
+      byId
+    );
+    if (unplaced.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, unplaced, null);
+    }
 
     // --- Step 2: create every product ---------------------------------------
     let created: ItemView[] = [];
@@ -162,7 +166,8 @@ export class SourceEntryBatchService {
             return itemFrom(
               operation,
               entry,
-              adapterKeys.get(entry.supermarketId) ?? null
+              adapterKeys.get(entry.supermarketId) ?? null,
+              idsOf.get(operation.ref) as string[]
             );
           })
         );
@@ -449,6 +454,51 @@ export class SourceEntryBatchService {
    * then reads as "I know nothing" and the accept turns into a refusal rather
    * than a guessed language.
    */
+  /**
+   * The category ids of every product the file creates, keyed by `ref` (plan
+   * 0166, section 7).
+   *
+   * The tree is read once for the whole file, and only when the file creates
+   * something. A slug the tree does not hold fails its own operation at
+   * VALIDATE, naming the slug, so nothing is created for a file that could not
+   * place every product: an override typed by hand and a table leaf catalog
+   * has not seeded are the same mistake from here.
+   */
+  private async checkCategories(
+    operations: readonly SourceEntryDecisionOperation[],
+    rows: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<{
+    outcomes: SourceEntryDecisionOutcome[];
+    idsOf: Map<string, string[]>;
+  }> {
+    const outcomes = blank(operations);
+    const idsOf = new Map<string, string[]>();
+    if (!operations.some(isCreate)) {
+      return { outcomes, idsOf };
+    }
+    const index = new CategorySlugIndex(await this.catalog.categoryTree());
+    for (const [position, operation] of operations.entries()) {
+      if (!isCreate(operation)) {
+        continue;
+      }
+      const slugs = categorySlugsFor(
+        operation.item.categorySlugs,
+        rows.get(operation.entryId)?.categoryPath
+      );
+      const resolved = index.resolve(slugs);
+      if (resolved.ids === null) {
+        fail(
+          outcomes[position],
+          BulkOperationErrorCode.NOT_FOUND,
+          `No category has the slug ${resolved.unknown.join(', ')}.`
+        );
+      } else {
+        idsOf.set(operation.ref, resolved.ids);
+      }
+    }
+    return { outcomes, idsOf };
+  }
+
   private async adapterKeysOf(
     rows: readonly SourceCatalogEntry[]
   ): Promise<Map<string, string | null>> {
@@ -476,7 +526,8 @@ export class SourceEntryBatchService {
 function itemFrom(
   operation: CreateItemFromSourceEntryOperation,
   entry: SourceCatalogEntry,
-  adapterKey: string | null
+  adapterKey: string | null,
+  categoryIds: string[]
 ): CreateItemInput {
   const item = operation.item;
   return {
@@ -498,9 +549,9 @@ function itemFrom(
     // Never from the chain (plan 0038, section 5.7).
     imageUrl: null,
     sku: null,
-    category:
-      (item.category as ItemCategory | undefined) ??
-      resolveCategory((entry.categoryPath ?? []).map((name) => ({ name }))),
+    // Resolved from slugs by `checkCategories`, through one read of the tree
+    // for the whole file (plan 0166, section 7).
+    categoryIds,
     defaultUnit:
       (item.defaultUnit as UnitOfMeasure | undefined) ??
       mapSizeFormat(entry.sizeFormat) ??

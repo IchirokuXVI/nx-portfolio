@@ -7,6 +7,8 @@ import {
 import {
   idOf,
   type AnyResourceDescriptor,
+  type ErrorLink,
+  type ErrorLinkTarget,
   type ResourceGateway,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
@@ -71,6 +73,27 @@ export class ResourceRegistry {
     }
 
     return null;
+  }
+
+  /**
+   * Where a refusal's link goes, or `null` when the resource is not mounted.
+   *
+   * A row of the target, or its list narrowed by {@link ErrorLink.filter}
+   * when the link names one: a category that still holds products opens its
+   * products (admin plan 0036).
+   */
+  linkFor(link: ErrorLink, id: string): ErrorLinkTarget | null {
+    const path = this.pathOf(link.resource);
+    if (path === null) {
+      return null;
+    }
+    // The least a link can say, for a resource that did not name its own
+    // words. Every one that does reads better than this.
+    const labelKey = link.label ?? 'resource.error.openRow';
+
+    return link.filter === undefined
+      ? { commands: [...path, id], labelKey }
+      : { commands: path, queryParams: { [link.filter]: id }, labelKey };
   }
 
   /** The gateway for a resource, built in an injection context. */

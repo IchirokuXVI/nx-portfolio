@@ -2,13 +2,13 @@ import { ApiProperty, ApiPropertyOptional, OmitType } from '@nestjs/swagger';
 import {
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
+  CATEGORY_SLUG_MAX_LENGTH,
   CONTENT_LOCALES,
   DiscoveredPlaceStatus,
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
   HarvestRunWrites,
-  ItemCategory,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   PostalCodeDiscoveryStatus,
@@ -365,6 +365,13 @@ export class LinkDiscoveredPlaceDto {
   supermarketLocationId!: string;
 }
 
+/**
+ * How many categories one created product may name (plan 0166). The same
+ * bound the catalog item routes state, for the same reason: a product sits in
+ * two or three aisles, never the whole tree.
+ */
+const ENTRY_CATEGORY_MAX = 10;
+
 /** Bind a queued row to a product the catalog already holds (plan 0086, section 7). */
 export class AcceptSourceEntryDto {
   @ApiProperty({ format: 'uuid' })
@@ -419,13 +426,20 @@ export class CreateItemFromEntryDto {
   packCount?: number | null;
 
   @ApiPropertyOptional({
-    enum: ItemCategory,
+    type: [String],
+    minItems: 1,
+    maxItems: ENTRY_CATEGORY_MAX,
     description:
-      'Override the category the source’s own tree mapped to. Mercadona has 26 top level categories against our 12, so the mapping is lossy by construction.',
+      'Override the categories the row’s source path resolves to, as one or more leaf slugs in the order meant, for example `["ice-cream"]` (plan 0166, section 3). Slugs rather than ids, because a decisions file is read by a person. Absent resolves from the path; an unknown slug is refused with `category_not_found`.',
   })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ENTRY_CATEGORY_MAX)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(CATEGORY_SLUG_MAX_LENGTH, { each: true })
+  categorySlugs?: string[];
 
   @ApiPropertyOptional({
     enum: UnitOfMeasure,

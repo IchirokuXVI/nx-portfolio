@@ -7,8 +7,9 @@ import {
   type FieldDescriptor,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
+import { CATEGORIES } from './categories';
 import {
-  ITEM_CATEGORY_OPTIONS,
+  CATEGORY_KIND_OPTIONS,
   POSTAL_CODE_SOURCE_OPTIONS,
   PRICE_SCOPE_KIND_OPTIONS,
   PRICE_SOURCE_KIND_OPTIONS,
@@ -18,10 +19,11 @@ import {
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
   PRICE_POLICY_SEED,
+  ITEM_SEED,
   PRICE_SCOPE_SEED,
   PRICE_SEED,
 } from './catalog-seed';
-import { ITEMS } from './items';
+import { ITEMS, withCategoryIds } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
 import { PRICE_POLICIES } from './price-policies';
@@ -51,6 +53,7 @@ const ALL = [
   LOCATIONS,
   PRICE_SCOPES,
   ITEMS,
+  CATEGORIES,
   PRODUCT_GROUPS,
   PRICES,
   PRICE_POLICIES,
@@ -197,7 +200,7 @@ describe('the catalog enumerations', () => {
    */
   it('offers a distinct, keyed option for every value', () => {
     const lists = [
-      ITEM_CATEGORY_OPTIONS,
+      CATEGORY_KIND_OPTIONS,
       UNIT_OF_MEASURE_OPTIONS,
       PRICE_SCOPE_KIND_OPTIONS,
       PRICE_SOURCE_KIND_OPTIONS,
@@ -671,7 +674,7 @@ describe('localized names', () => {
     const typed = {
       ...draft,
       name: { en: 'Whole milk', es: 'Leche entera' },
-      category: 'DAIRY',
+      categoryIds: ['cat_milk'],
       defaultUnit: 'LITER',
     };
 
@@ -689,7 +692,7 @@ describe('localized names', () => {
     const typed = {
       ...draft,
       name: { en: 'Whole milk', es: '' },
-      category: 'DAIRY',
+      categoryIds: ['cat_milk'],
       defaultUnit: 'LITER',
     };
 
@@ -747,5 +750,107 @@ describe('the product list', () => {
     expect((ITEMS.filters ?? []).map((filter) => filter.param)).not.toContain(
       'withoutProductGroup'
     );
+  });
+});
+
+/**
+ * The category tree and the product's place in it (admin plan 0036).
+ *
+ * Categories are rows now, so what is checked here is the shape of the two
+ * fields that point at them: the product's list of leaves, and the parent a
+ * category sits in.
+ */
+describe('categories', () => {
+  it('writes the slug once and never again', () => {
+    const slug = fieldOf(CATEGORIES, 'slug');
+
+    expect(slug !== undefined && isEditable(slug, 'create')).toBe(true);
+    expect(slug !== undefined && isEditable(slug, 'edit')).toBe(false);
+  });
+
+  it('offers only roots as a parent, and allows none', () => {
+    const parent = fieldOf(CATEGORIES, 'parentId');
+
+    expect(parent?.kind).toBe('reference');
+    if (parent?.kind === 'reference') {
+      expect(parent.nullable).toBe(true);
+      expect(parent.scopeFrom?.({})).toEqual({ kind: 'root' });
+    }
+  });
+
+  it('says a refusal about the parent under the parent', () => {
+    expect(CATEGORIES.errorFields).toEqual({
+      category_too_deep: 'parentId',
+      category_not_a_leaf: 'parentId',
+    });
+  });
+
+  /** The category is the row asked about, so the link carries no detail. */
+  it('links a category in use to its products, filtered by it', () => {
+    expect(CATEGORIES.errorLinks?.['category_in_use']).toEqual({
+      resource: 'items',
+      filter: 'categoryId',
+      label: 'catalog.categories.inUseOpen',
+    });
+  });
+
+  it('gives a product a required, ordered list of leaves', () => {
+    const field = fieldOf(ITEMS, 'categoryIds');
+
+    expect(field?.kind).toBe('references');
+    if (field?.kind === 'references') {
+      expect(field.resource).toBe('categories');
+      expect(field.required).toBe(true);
+      expect(field.ordered).toBe(true);
+      expect(field.scopeFrom?.({})).toEqual({ kind: 'leaf' });
+    }
+  });
+
+  it('filters the products by a category at any level', () => {
+    expect(
+      ITEMS.filters?.find((filter) => filter.param === 'categoryId')
+    ).toEqual(
+      expect.objectContaining({ kind: 'reference', resource: 'categories' })
+    );
+  });
+
+  it('reads the ids off the categories a product row carries, in order', () => {
+    const row = withCategoryIds({
+      ...ITEM_SEED[0],
+      categories: [
+        { ...ITEM_SEED[0].categories[0], id: 'cat_b' },
+        { ...ITEM_SEED[0].categories[0], id: 'cat_a' },
+      ],
+    });
+
+    expect(row.categoryIds).toEqual(['cat_b', 'cat_a']);
+    expect(
+      draftFor(ITEMS, row as unknown as ResourceRow, 'edit')['categoryIds']
+    ).toEqual(['cat_b', 'cat_a']);
+  });
+
+  /**
+   * The first category is the one a row shows. Putting another first is a
+   * change, where a shop's price scopes in another order are not.
+   */
+  it('sends a new order of the same categories, and nothing when untouched', () => {
+    const row = withCategoryIds({
+      ...ITEM_SEED[0],
+      categories: [
+        { ...ITEM_SEED[0].categories[0], id: 'cat_a' },
+        { ...ITEM_SEED[0].categories[0], id: 'cat_b' },
+      ],
+    }) as unknown as ResourceRow;
+    const original = draftFor(ITEMS, row, 'edit');
+
+    expect(toInput(ITEMS, original, 'edit', original)).toEqual({});
+    expect(
+      toInput(
+        ITEMS,
+        { ...original, categoryIds: ['cat_b', 'cat_a'] },
+        'edit',
+        original
+      )
+    ).toEqual({ categoryIds: ['cat_b', 'cat_a'] });
   });
 });

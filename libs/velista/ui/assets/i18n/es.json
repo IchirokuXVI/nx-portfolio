@@ -1242,6 +1242,8 @@
         "legend": "Agrupar por",
         "none": "Nada",
         "category": "Categoría",
+        "aisle": "Pasillo",
+        "aisleHint": "el orden de esta tienda",
         "list": "Lista",
         "listHint": "las cantidades de cada lista"
       },
@@ -1297,6 +1299,7 @@
       "chip": {
         "remove": "Quitar: {{name}}",
         "byCategory": "Por categoría",
+        "byAisle": "Por pasillo",
         "byList": "Por lista",
         "shop": "{{name}}",
         "more": "+{{count}}",
@@ -1324,6 +1327,10 @@
       "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
+      "uncovered": "Categorías que no encontramos en esta tienda",
+      "uncoveredInfo": "Sobre estas categorías",
+      "uncoveredWhy": "Estos productos están agrupados por su categoría.",
+      "uncoveredWhere": "Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.",
       "progress": "{{done}} de {{total}} conseguidos",
       "unavailable_one": "{{count}} no disponible",
       "unavailable_other": "{{count}} no disponibles",
@@ -1512,20 +1519,6 @@
       "isNone": "{{name}} no estaba disponible",
       "isWanted": "{{name}} está aún por conseguir",
       "isPartly": "{{name}} está conseguido en parte"
-    },
-    "category": {
-      "PRODUCE": "Frutas y verduras",
-      "DAIRY": "Lácteos",
-      "BAKERY": "Panadería",
-      "MEAT": "Carne",
-      "SEAFOOD": "Pescado",
-      "FROZEN": "Congelados",
-      "BEVERAGES": "Bebidas",
-      "SNACKS": "Aperitivos",
-      "PANTRY": "Despensa",
-      "HOUSEHOLD": "Hogar",
-      "PERSONAL_CARE": "Cuidado personal",
-      "OTHER": "Otros"
     },
     "entries": {
       "title": "Listas que lo piden",

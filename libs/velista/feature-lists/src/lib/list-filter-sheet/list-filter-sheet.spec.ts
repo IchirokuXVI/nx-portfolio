@@ -7,10 +7,15 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  fakeCategoryStore,
   fakeItemNames,
   ItemNames,
   LineStore,
   ListViewStore,
+  MEMORY_CATEGORIES,
+  memoryCategory,
+  provideFakeCategoryStore,
+  type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import type { CatalogItem, Line } from '@portfolio/velista/models';
 import {
@@ -27,7 +32,7 @@ function line(id: string, itemIds: string[]): Line {
   return { id, content: id, itemIds, position: 1 } as unknown as Line;
 }
 
-function product(id: string, category: CatalogItem['category']): CatalogItem {
+function product(id: string, slug: string): CatalogItem {
   return {
     id,
     name: { es: id, en: id },
@@ -35,26 +40,35 @@ function product(id: string, category: CatalogItem['category']): CatalogItem {
     size: null,
     unit: 'UNIT',
     productGroupId: null,
-    category,
+    categories: [memoryCategory(slug)],
     offer: null,
+    unitBasis: null,
+    chainPrices: [],
+    imageUrl: null,
+    packCount: null,
   };
 }
 
-/** Two dairy lines, one pantry line, one with no products. No produce at all. */
+/**
+ * One pantry line, two milk lines, one with no products. The pantry line comes first,
+ * so the tree's order (milk before pantry) is not the order the list meets them in.
+ */
 const LINES = [
-  line('milk', ['p-milk']),
-  line('yogurt', ['p-yogurt']),
   line('rice', ['p-rice']),
+  line('milk', ['p-milk']),
+  line('milk-six', ['p-milk-six']),
   line('bags', []),
 ];
 
 const ITEMS = [
-  product('p-milk', 'DAIRY'),
-  product('p-yogurt', 'DAIRY'),
-  product('p-rice', 'PANTRY'),
+  product('p-milk', 'milk'),
+  product('p-milk-six', 'milk'),
+  product('p-rice', 'pasta-rice-and-legumes'),
 ];
 
-function render() {
+function render(
+  tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES)
+) {
   TestBed.resetTestingModule();
 
   const sheets = {
@@ -70,6 +84,7 @@ function render() {
       ListViewStore,
       { provide: LineStore, useValue: { linesIn: () => LINES } },
       { provide: ItemNames, useValue: fakeItemNames({ items: ITEMS }) },
+      provideFakeCategoryStore(tree),
       provideFakeBrowserFacade(new Map()),
       { provide: SheetNavigation, useValue: sheets },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -133,18 +148,50 @@ describe('ListFilterSheet', () => {
     expect(view.order()).toBe('alpha');
   });
 
-  it('reveals only the categories present on the list, with counts and No category last', () => {
+  it('reveals only the categories present on the list, in tree order, with counts and No category last', () => {
     const { fixture } = render();
 
     choose(fixture, radios(fixture, 'list-view')[1]);
 
     expect(
       radios(fixture, 'list-category').map((input) => input.value)
-    ).toEqual(['DAIRY', 'PANTRY', 'NONE']);
+    ).toEqual(['cat-milk', 'cat-pasta-rice-and-legumes', 'NONE']);
     const counts = fixture.debugElement
       .queryAll(By.css('.categories .choice-count'))
       .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
     expect(counts).toEqual(['2', '1', '1']);
+  });
+
+  it('names each category from its data, and No category from the copy', () => {
+    const { fixture } = render();
+
+    choose(fixture, radios(fixture, 'list-view')[1]);
+
+    const names = fixture.debugElement
+      .queryAll(By.css('.categories .choice-title'))
+      .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
+    expect(names).toEqual([
+      'Milk',
+      'Pasta, rice and legumes',
+      'list.view.noCategory',
+    ]);
+  });
+
+  it('draws the categories in first appearance order before the tree lands, and re-sorts when it does', () => {
+    const tree = fakeCategoryStore();
+    const { fixture } = render(tree);
+
+    choose(fixture, radios(fixture, 'list-view')[1]);
+    expect(
+      radios(fixture, 'list-category').map((input) => input.value)
+    ).toEqual(['cat-pasta-rice-and-legumes', 'cat-milk', 'NONE']);
+
+    tree.land(MEMORY_CATEGORIES);
+    fixture.detectChanges();
+
+    expect(
+      radios(fixture, 'list-category').map((input) => input.value)
+    ).toEqual(['cat-milk', 'cat-pasta-rice-and-legumes', 'NONE']);
   });
 
   it('draws the categories as a radiogroup with a visible legend', () => {
@@ -169,7 +216,7 @@ describe('ListFilterSheet', () => {
 
     choose(fixture, radios(fixture, 'list-category')[0]);
 
-    expect(view.picked()).toBe('DAIRY');
+    expect(view.picked()).toBe('cat-milk');
     expect(view.visibleCount()).toBe(2);
   });
 
@@ -189,7 +236,7 @@ describe('ListFilterSheet', () => {
 
     fixture.destroy();
 
-    expect(view.picked()).toBe('PANTRY');
+    expect(view.picked()).toBe('cat-pasta-rice-and-legumes');
   });
 
   it('puts both sections back on Reset', () => {

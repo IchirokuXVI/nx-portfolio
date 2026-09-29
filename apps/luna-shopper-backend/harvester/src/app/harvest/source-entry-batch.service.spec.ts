@@ -1,6 +1,5 @@
 import {
   BulkOperationErrorCode,
-  ItemCategory,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
@@ -16,6 +15,7 @@ import {
 import type { FindOperator, Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import type { SourceEntryPriceWriter } from './source-entry-write';
@@ -74,7 +74,7 @@ function entry(
     ean: null,
     unitSize: 1,
     sizeFormat: '1 L',
-    categoryPath: ['Lácteos', 'Leche'],
+    categoryPath: ['Huevos, leche y mantequilla', 'Leche y bebidas vegetales'],
     url: null,
     extra: null,
     timesSeen: 3,
@@ -104,7 +104,6 @@ function item(id: string): ItemView {
     unitSize: null,
     imageUrl: null,
     sku: null,
-    category: ItemCategory.DAIRY,
     defaultUnit: UnitOfMeasure.LITER,
   } as unknown as ItemView;
 }
@@ -183,8 +182,10 @@ function build(
       return holder ? [{ ...item(holder), ean }] : [];
     }),
   }));
+  const categoryTree = jest.fn(async () => fakeCategoryTree());
   const catalog = {
     createItems,
+    categoryTree,
     deleteItem,
     findItemsByEans,
   } as unknown as CatalogClient;
@@ -230,6 +231,7 @@ function build(
     service,
     saved,
     createItems,
+    categoryTree,
     deleteItem,
     findItemsByEans,
     write,
@@ -408,6 +410,121 @@ describe('SourceEntryBatchService', () => {
       expect(createItems).toHaveBeenCalledWith([
         expect.objectContaining({ packCount: null }),
       ]);
+    });
+  });
+
+  describe('the categories a created product gets (plan 0166, section 7)', () => {
+    const rows = () => [
+      entry({ id: 'e-1' }),
+      entry({ id: 'e-2', externalId: '4242', categoryPath: ['Nada'] }),
+    ];
+
+    it('resolves every slug through one read of the tree for the whole file', async () => {
+      const { service, createItems, categoryTree } = build({ rows: rows() });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: { es: 'Leche' } },
+            expect: expectFresh,
+          },
+          {
+            op: 'createItem',
+            entryId: 'e-2',
+            ref: 'cola',
+            item: {
+              name: { es: 'Refresco' },
+              categorySlugs: ['soft-drinks', 'juices'],
+            },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(categoryTree).toHaveBeenCalledTimes(1);
+      expect(createItems).toHaveBeenCalledWith([
+        // The row's own path, through the Mercadona table.
+        expect.objectContaining({ categoryIds: ['cat-milk'] }),
+        // The override, in the order the file wrote it.
+        expect.objectContaining({
+          categoryIds: ['cat-soft-drinks', 'cat-juices'],
+        }),
+      ]);
+    });
+
+    it('files a path the table cannot place under uncategorised', async () => {
+      const { service, createItems } = build({ rows: rows() });
+
+      await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-2',
+            ref: 'unknown',
+            item: { name: { es: 'Algo' } },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ categoryIds: ['cat-uncategorised'] }),
+      ]);
+    });
+
+    it('refuses the file at VALIDATE when a slug names no category, and creates nothing', async () => {
+      const { service, createItems, saved } = build({ rows: rows() });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: { name: { es: 'Leche' }, categorySlugs: ['ice-creem'] },
+            expect: expectFresh,
+          },
+          {
+            op: 'createItem',
+            entryId: 'e-2',
+            ref: 'cola',
+            item: { name: { es: 'Refresco' } },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.NOT_FOUND,
+        detail: expect.stringContaining('ice-creem'),
+      });
+      expect(result.results[1].error).toBeNull();
+      expect(createItems).not.toHaveBeenCalled();
+      expect(saved).toEqual([]);
+    });
+
+    it('reads no tree for a file that creates nothing', async () => {
+      const { service, categoryTree } = build({
+        rows: [entry({ id: 'e-1' })],
+      });
+
+      await service.applyDecisions(
+        request([
+          {
+            op: 'reject',
+            entryId: 'e-1',
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(categoryTree).not.toHaveBeenCalled();
     });
   });
 

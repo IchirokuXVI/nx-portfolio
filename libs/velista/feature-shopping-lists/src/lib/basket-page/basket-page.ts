@@ -1,3 +1,4 @@
+import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
   afterRenderEffect,
   ChangeDetectionStrategy,
@@ -56,11 +57,14 @@ import {
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
+  AnchoredPopover,
+  type AnchoredPopoverClose,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
   ClockIcon,
   FlagIcon,
+  InfoIcon,
   LineComposer,
   type LineComposerSubmit,
   ListPicker,
@@ -156,12 +160,15 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 @Component({
   selector: 'lib-basket-page',
   imports: [
+    AnchoredPopover,
     BasketRow,
+    CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
     ClockIcon,
     SeenTarget,
     FlagIcon,
+    InfoIcon,
     LineComposer,
     ListPicker,
     ListTools,
@@ -1528,6 +1535,28 @@ export class BasketPage {
    * drew with one more level around it.
    */
   protected readonly sections = this._view.sections;
+
+  /**
+   * Whether the explanation under the band's info control is open (velista `0120`,
+   * rule A4 of the mock). A popover and not a sheet: two sentences and nothing to
+   * do, so no route, no scrim, and the rows they are about stay in view.
+   */
+  protected readonly uncoveredInfoOpen = signal(false);
+
+  protected toggleUncoveredInfo(): void {
+    this.uncoveredInfoOpen.update((open) => !open);
+  }
+
+  /** Closed by Escape, a press outside it or the overlay going; Escape hands focus back. */
+  protected closeUncoveredInfo(
+    reason: AnchoredPopoverClose,
+    control: HTMLElement
+  ): void {
+    this.uncoveredInfoOpen.set(false);
+    if (reason === 'escape') {
+      control.focus();
+    }
+  }
 
   /** How many lines are on the screen, for the chip row's count. */
   protected readonly visibleCount = this._view.visibleCount;

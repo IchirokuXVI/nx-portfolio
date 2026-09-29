@@ -16,8 +16,14 @@ import {
   start,
 } from './commands.mjs';
 import { makeGateway } from './gateway.mjs';
+import { categoryVocabulary } from './rules.mjs';
 import { readJsonl } from './run-dir.mjs';
-import { makeCatalog, makeFakeSession, makeQueue } from './test-fakes.mjs';
+import {
+  CATEGORY_TREE,
+  makeCatalog,
+  makeFakeSession,
+  makeQueue,
+} from './test-fakes.mjs';
 
 const MAIN_URL = 'http://localhost:3000';
 const REHEARSAL_URL = 'http://localhost:43000';
@@ -28,7 +34,7 @@ const SUPERMARKETS = [
 ];
 
 const VOCABULARIES = {
-  categories: ['DAIRY', 'PANTRY', 'OTHER'],
+  ...categoryVocabulary(CATEGORY_TREE),
   units: ['UNIT', 'LITER', 'GRAM'],
 };
 
@@ -164,7 +170,7 @@ const CREATE_MILK = {
     brand: null,
     unitSize: 1,
     defaultUnit: 'LITER',
-    category: 'DAIRY',
+    categorySlugs: ['milk'],
     ean: null,
   },
   reasoning: 'a new product',
@@ -234,6 +240,69 @@ test('start snapshots the whole registry into brands.json', async () => {
     ).length,
     1
   );
+});
+
+test('start reads the category tree once and every later step reads its file', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+
+  // No vocabulary handed in: the categories come from the main gateway's tree
+  // (backend plan 0166), the units from the committed OpenAPI document.
+  const answer = await startIn(dir, w, { vocabularies: undefined });
+
+  assert.equal(
+    w.mainSession.calls.filter((call) => call.path === '/v1/catalog/categories')
+      .length,
+    1
+  );
+  const snapshot = JSON.parse(
+    readFileSync(join(dir, 'categories.json'), 'utf8')
+  );
+  assert.ok(Date.parse(snapshot.readAt) > 0);
+  assert.deepEqual(snapshot.categories, VOCABULARIES.categories);
+  // Leaf slugs grouped under their root's name, never a root itself.
+  assert.match(
+    answer.prompt,
+    /- Dairy and eggs: `milk`, `eggs`, `other-dairy`/
+  );
+  assert.doesNotMatch(answer.prompt, /`dairy-and-eggs`/);
+  assert.deepEqual(
+    answer.schema.properties.item.properties.categorySlugs.items.enum,
+    VOCABULARIES.categories
+  );
+
+  // A slug the tree did not hold is refused against that file, with no
+  // vocabulary handed to `decide` either.
+  const refused = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: {
+      ...CREATE_MILK,
+      item: { ...CREATE_MILK.item, categorySlugs: ['milk', 'DAIRY'] },
+    },
+    final: true,
+    gateways: w.gateways,
+  });
+  assert.equal(refused.decision.decision, 'REVIEW');
+  assert.equal(
+    refused.issues.filter((i) => i.code === 'UNKNOWN_CATEGORY').length,
+    1
+  );
+});
+
+test('a tree with no leaf stops start before a run directory exists', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche')] });
+  w.mainSession.fetch = ((original) => async (path, init) =>
+    path === '/v1/catalog/categories'
+      ? { categories: CATEGORY_TREE.filter((row) => !row.parentId) }
+      : original(path, init))(w.mainSession.fetch);
+
+  await assert.rejects(
+    () => startIn(dir, w, { vocabularies: undefined }),
+    /answered no leaf category/
+  );
+  assert.equal(existsSync(join(dir, 'state.json')), false);
 });
 
 test('an empty registry is allowed when asked for, and said out loud', async () => {
@@ -494,6 +563,42 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
     status: 'CANDIDATE',
     lastSeenAt: '2026-09-08T10:00:00.000Z',
   });
+
+  // The catalog create route takes ids, so the slugs became the rehearsal
+  // slot's own ids, read from that slot's tree (backend plan 0166). The
+  // record keeps both, so a resume can replay the same write.
+  assert.deepEqual(w.rehearsalCatalog.rows[0].categoryIds, ['cat-milk']);
+  assert.deepEqual(row.item.categorySlugs, ['milk']);
+  assert.deepEqual(row.item.categoryIds, ['cat-milk']);
+});
+
+test('a slug the rehearsal slot does not hold is a REVIEW, and writes nothing', async () => {
+  const dir = runDir();
+  const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });
+  w.rehearsalSession.fetch = ((original) => async (path, init) =>
+    path === '/v1/catalog/categories'
+      ? { categories: CATEGORY_TREE.filter((row) => row.slug !== 'milk') }
+      : original(path, init))(w.rehearsalSession.fetch);
+  await startIn(dir, w);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: CREATE_MILK,
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'CREATE');
+  assert.ok(
+    answer.issues.some(
+      (i) =>
+        i.code === 'REHEARSAL_WRITE_FAILED' &&
+        /holds no leaf category milk/.test(i.detail)
+    )
+  );
+  assert.equal(w.rehearsalCatalog.rows.length, 0);
 });
 
 test('a confidence under the threshold is demoted and writes nothing anywhere', async () => {
@@ -1099,7 +1204,9 @@ const CREATE_ROW = {
     brand: null,
     ean: null,
     unitSize: 1,
-    category: 'DAIRY',
+    categorySlugs: ['milk'],
+    // The rehearsal slot's ids, which `decide` records for a resume.
+    categoryIds: ['cat-milk'],
     defaultUnit: 'LITER',
   },
   expect: { status: 'CANDIDATE', lastSeenAt: '2026-09-08T10:00:00.000Z' },
@@ -1141,12 +1248,14 @@ test('buildOperations keeps the decided order and skips every REVIEW', () => {
       ['accept', 'e3', 'i9'],
     ]
   );
+  // The bulk op takes slugs as they are (backend plan 0166), and a rehearsal id
+  // never reaches the main catalog.
   assert.deepEqual(operations[0].item, {
     name: { es: 'Leche entera', en: 'Whole milk' },
     brand: null,
     ean: null,
     unitSize: 1,
-    category: 'DAIRY',
+    categorySlugs: ['milk'],
     defaultUnit: 'LITER',
   });
   assert.deepEqual(operations[0].expect, CREATE_ROW.expect);

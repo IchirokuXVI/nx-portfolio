@@ -90,7 +90,7 @@ format apart, and rule 1 merges anything they do not separate.
 - `entry.unitSize` and `entry.sizeFormat` are the format. `sizeFormat` is the printed
   string and `unitSize` the number read out of it.
 - `entry.categoryPath` is the chain's own shelf path. Read it as evidence for
-  `item.category`. The vocabulary is ours, and the chain's own words are not in it.
+  `item.categorySlugs`. The vocabulary is ours, and the chain's own words are not in it.
 - `entry.brand` can be null even when the printed name states a brand.
 - `entry.ean` is the barcode the source published, or null.
 - `entry.sharedEan` is null, or it lists the other queued entries of this chain with the same
@@ -148,7 +148,8 @@ list and you `LINK` onto it.
 - `item.defaultUnit` is one value from the unit vocabulary below, and is never null: a
   product with no printed size is sold by the piece, so `defaultUnit` is `UNIT` and
   `unitSize` is null.
-- `item.category` is one value from the category vocabulary below.
+- `item.categorySlugs` is a list of one or more slugs from the category vocabulary below,
+  the best fit first. When the product plainly sits in two sections, name both.
 - `item.ean` is the entry's own barcode when it has one, else null. Never invent one, and
   never copy one off a candidate.
 - `confidence` is a number from 0 to 1.
@@ -178,8 +179,8 @@ send it:
   `nameEn` alike.
 - `NAME_GLITCH`: a digit inside a word of `nameEs` or `nameEn`, as in `fres1a` or
   `may1onesa`. Read both names back before you send them.
-- `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a value outside the two vocabularies below. Copy
-  one of those strings exactly.
+- `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a category slug or a unit outside the two
+  vocabularies below. Copy those strings exactly.
 - `PRIVATE_LABEL_CROSSES_CHAIN`: rule 6.
 - `BRAND_UNREGISTERED`: a `CREATE` whose `item.brand` the registry does not hold. A null
   brand is never this, because plenty of products carry none.
@@ -213,7 +214,7 @@ An entry whose only candidate is the same product in another size:
     "brand": "Carbonell",
     "unitSize": 750,
     "defaultUnit": "MILLILITER",
-    "category": "PANTRY",
+    "categorySlugs": ["oil-and-vinegar"],
     "ean": "8410010001234"
   },
   "confidence": 0.94,

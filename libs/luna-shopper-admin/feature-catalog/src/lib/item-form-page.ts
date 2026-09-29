@@ -12,6 +12,7 @@ import {
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
+import { ItemSectionsPanel } from './item-sections-panel';
 import { ItemSourceEntries } from './item-source-entries';
 
 /**
@@ -20,7 +21,8 @@ import { ItemSourceEntries } from './item-source-entries';
  *
  * Everything the form does is inherited, exactly as the price editor inherits
  * it. What is added is only on an existing product: a way to its prices at
- * every scope, and the source products panel. A product being created has no
+ * every scope, where it is in each chain's shops (admin plan 0037), and the
+ * source products panel. A product being created has no
  * prices and nothing bound to it, so neither is drawn there.
  *
  * **The panel is drawn whatever the form's read did.** It reads the harvester
@@ -34,6 +36,7 @@ import { ItemSourceEntries } from './item-source-entries';
     ResourceForm,
     ConfirmDialog,
     ItemSourceEntries,
+    ItemSectionsPanel,
     RouterLink,
     RokuTranslatorPipe,
   ],
@@ -72,6 +75,7 @@ import { ItemSourceEntries } from './item-source-entries';
             'catalog.items.pricesLink' | rokuT
           }}</a>
         }
+        <lib-item-sections-panel [itemId]="id" />
         <lib-item-source-entries [itemId]="id" />
       </div>
     }

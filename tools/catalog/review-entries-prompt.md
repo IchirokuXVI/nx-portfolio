@@ -54,7 +54,7 @@ Exactly one JSON object of this shape:
     "brand": "the brand, or null",
     "unitSize": 1,
     "defaultUnit": "L",
-    "category": "PANTRY",
+    "categorySlugs": ["oil-and-vinegar"],
     "ean": "the barcode, or null"
   },
   "confidence": 0.97,
@@ -74,7 +74,8 @@ Field by field:
 - `item.nameEn` is the English name if you are confident of the translation, else null.
 - `item.unitSize` is a number, or null when the product has no size.
 - `item.defaultUnit` is one value from the unit vocabulary below.
-- `item.category` is one value from the category vocabulary below.
+- `item.categorySlugs` is a list of one or more slugs from the category vocabulary
+  below, the best fit first.
 - `item.ean` is the entry's barcode when it has one, else null. Never invent one.
 - `confidence` is a number from 0 to 1.
 - `issues` is a list, possibly empty. Each entry has a short upper case `code` and a

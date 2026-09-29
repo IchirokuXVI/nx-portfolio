@@ -380,6 +380,113 @@ export class ScopeNotFoundException extends DomainException {
 export const SCOPE_KEY_DETAIL = 'scopeKey';
 
 /**
+ * The write would make a third level of the category tree (plan 0166, rule
+ * R1). It publishes the row that breaks the rule under
+ * {@link CATEGORY_DETAIL}: the parent that is itself a child, or the root whose
+ * children stop it becoming one.
+ */
+export class CategoryTooDeepException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_TOO_DEEP;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A product named a root, or a child holding products was made a root (plan
+ * 0166, rule R2). It publishes the root under {@link CATEGORY_DETAIL}, so a
+ * refusal of a list of ids can say which one.
+ */
+export class CategoryNotALeafException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_NOT_A_LEAF;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A product with no category (plan 0166, rule R3). No details: the product is
+ * the one the request is about, and the fix is to name a leaf.
+ */
+export class ItemNeedsACategoryException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_NEEDS_A_CATEGORY;
+}
+
+/**
+ * A category with children or products cannot be deleted (plan 0166, rule R4).
+ * No details: the category is the one the client asked to delete, and the back
+ * office links to its products from the id it already holds.
+ */
+export class CategoryInUseException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_IN_USE;
+}
+
+/**
+ * An id or a slug named no category (plan 0166, section 3). It publishes what
+ * matched nothing under {@link CATEGORY_UNKNOWN_DETAIL}, a list, because a
+ * product write names several and a decisions file is read by a person.
+ */
+export class CategoryNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.CATEGORY_NOT_FOUND;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` key a {@link CategoryTooDeepException} or a
+ * {@link CategoryNotALeafException} names the offending category under.
+ */
+export const CATEGORY_DETAIL = 'categoryId';
+
+/**
+ * The `details` key a {@link CategoryNotFoundException} lists the ids or slugs
+ * that matched nothing under.
+ */
+export const CATEGORY_UNKNOWN_DETAIL = 'unknown';
+
+/**
+ * An id named no shop section (plan 0167, section 4). It publishes what
+ * matched nothing under {@link SECTION_UNKNOWN_DETAIL}, a list, because a
+ * shop's list and a pin each name several.
+ */
+export class SectionNotFoundException extends DomainException {
+  readonly code = ERROR_CODES.SECTION_NOT_FOUND;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A shop's list or a pin named a section of another chain (plan 0167, section
+ * 1). It publishes the offending sections under
+ * {@link SECTION_OTHER_CHAIN_DETAIL}, a list, so the back office can say which
+ * ones rather than only that one of them was wrong.
+ */
+export class SectionOfAnotherChainException extends DomainException {
+  readonly code = ERROR_CODES.SECTION_OF_ANOTHER_CHAIN;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The chain already has a section with this slug (plan 0167, section 1). It
+ * publishes the holder's id under {@link SECTION_SLUG_HOLDER_DETAIL}, for the
+ * reason {@link BrandKeyTakenException} publishes its holder: the back office's
+ * next act is to open it.
+ */
+export class SectionSlugTakenException extends DomainException {
+  readonly code = ERROR_CODES.SECTION_SLUG_TAKEN;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link SectionNotFoundException} lists the unknown ids under. */
+export const SECTION_UNKNOWN_DETAIL = 'unknown';
+
+/**
+ * The `details` key a {@link SectionOfAnotherChainException} lists the
+ * sections of another chain under.
+ */
+export const SECTION_OTHER_CHAIN_DETAIL = 'sectionIds';
+
+/**
+ * The `details` key a {@link SectionSlugTakenException} names the section
+ * that holds the slug under.
+ */
+export const SECTION_SLUG_HOLDER_DETAIL = 'sectionId';
+
+/**
  * The `details` key a {@link BrandLinkTooDeepException} names the brand that
  * breaks the one level rule under.
  *

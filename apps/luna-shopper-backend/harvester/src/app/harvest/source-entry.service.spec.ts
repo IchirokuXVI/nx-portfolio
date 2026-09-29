@@ -1,14 +1,17 @@
 import type { ConfigService } from '@nestjs/config';
 import { splitCardName } from '@portfolio/luna-shopper/carrefour';
 import {
-  ItemCategory,
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
   UnitOfMeasure,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
-import { ForbiddenException } from '@portfolio/luna-shopper/platform';
+import {
+  CATEGORY_UNKNOWN_DETAIL,
+  CategoryNotFoundException,
+  ForbiddenException,
+} from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type {
   HarvestRun,
@@ -17,6 +20,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
@@ -87,7 +91,7 @@ function entry(
     ean: null,
     unitSize: 1,
     sizeFormat: '1 L',
-    categoryPath: ['Lácteos', 'Leche'],
+    categoryPath: ['Huevos, leche y mantequilla', 'Leche y bebidas vegetales'],
     url: null,
     extra: null,
     timesSeen: 3,
@@ -117,7 +121,6 @@ function item(id = 'item-1'): ItemView {
     unitSize: null,
     imageUrl: null,
     sku: null,
-    category: ItemCategory.DAIRY,
     defaultUnit: UnitOfMeasure.LITER,
   } as unknown as ItemView;
 }
@@ -153,9 +156,11 @@ function build(
 
   const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
   const createItem = jest.fn(async () => item());
+  const categoryTree = jest.fn(async () => fakeCategoryTree());
   const catalog = {
     addPrices,
     createItem,
+    categoryTree,
     findItemByEan: jest.fn(async () => ({ item: null })),
   } as unknown as CatalogClient;
 
@@ -211,6 +216,7 @@ function build(
     saved,
     addPrices,
     createItem,
+    categoryTree,
     fetchEnglish,
   };
 }
@@ -371,6 +377,8 @@ describe('SourceEntryService', () => {
           brand: 'Hacendado',
           unitSize: 1,
           imageUrl: null,
+          // The row's own path, through the Mercadona table, as an id.
+          categoryIds: ['cat-milk'],
         })
       );
       expect(result.createdItem).not.toBeNull();
@@ -464,7 +472,7 @@ describe('SourceEntryService', () => {
         entryId: 'e-1',
         name: { es: 'Leche entera', en: 'Whole milk' },
         brand: null,
-        category: ItemCategory.BEVERAGES,
+        categorySlugs: ['soft-drinks', 'juices'],
         defaultUnit: UnitOfMeasure.LITER,
       });
 
@@ -472,10 +480,63 @@ describe('SourceEntryService', () => {
         expect.objectContaining({
           name: { es: 'Leche entera', en: 'Whole milk' },
           brand: null,
-          category: ItemCategory.BEVERAGES,
+          categoryIds: ['cat-soft-drinks', 'cat-juices'],
           defaultUnit: UnitOfMeasure.LITER,
         })
       );
+    });
+
+    describe('the categories (plan 0166, section 7)', () => {
+      it('files a path the table cannot place under uncategorised', async () => {
+        const { service, createItem } = build({
+          row: entry({ categoryPath: ['Nothing Mercadona has'] }),
+        });
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ categoryIds: ['cat-uncategorised'] })
+        );
+      });
+
+      it('files a row with no path at all under uncategorised', async () => {
+        const { service, createItem } = build({
+          row: entry({ categoryPath: null }),
+        });
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ categoryIds: ['cat-uncategorised'] })
+        );
+      });
+
+      it('reads the tree once for the product', async () => {
+        const { service, categoryTree } = build();
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(categoryTree).toHaveBeenCalledTimes(1);
+      });
+
+      it('refuses an unknown override slug, naming it, before anything is fetched or written', async () => {
+        const { service, createItem, fetchEnglish } = build();
+
+        const refusal = await service
+          .createItem({
+            userId: ADMIN,
+            entryId: 'e-1',
+            categorySlugs: ['milk', 'ice-creem'],
+          })
+          .catch((error: unknown) => error);
+
+        expect(refusal).toBeInstanceOf(CategoryNotFoundException);
+        expect((refusal as CategoryNotFoundException).details).toEqual({
+          [CATEGORY_UNKNOWN_DETAIL]: ['ice-creem'],
+        });
+        expect(fetchEnglish).not.toHaveBeenCalled();
+        expect(createItem).not.toHaveBeenCalled();
+      });
     });
 
     it('fetches the English name for an API row of a Mercadona source', async () => {

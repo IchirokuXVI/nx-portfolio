@@ -79,6 +79,10 @@ export interface RowAction {
       />
     }
 
+    <!-- A refusal of something the operator did to one row, such as a delete
+         the server would not do, with a link to what stands in the way. -->
+    <ng-content select="[listRefusal]" />
+
     <!-- What the page draws for ticked rows: a count, the bulk actions, and
          the panel one of them opened (admin plan 0035, section 2). -->
     <ng-content select="[listBulk]" />

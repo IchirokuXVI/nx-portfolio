@@ -21,7 +21,14 @@ const ITEM_VIEW = {
   sku: '1234',
   ean: '8480000000000',
   unitSize: 1,
-  category: 'DAIRY',
+  categories: [
+    {
+      id: 'cat-milk',
+      parentId: 'cat-dairy-and-eggs',
+      slug: 'milk',
+      name: { en: 'Milk', es: 'Leche' },
+    },
+  ],
   defaultUnit: 'LITER',
   productGroupId: 'group-milk',
   bestOffer: {
@@ -95,7 +102,14 @@ describe('CatalogBrowseApi', () => {
             imageUrl: null,
             size: 1,
             unit: 'LITER',
-            category: 'DAIRY',
+            categories: [
+              {
+                id: 'cat-milk',
+                parentId: 'cat-dairy-and-eggs',
+                slug: 'milk',
+                name: { en: 'Milk', es: 'Leche' },
+              },
+            ],
             offer: {
               price: 0.89,
               currency: 'EUR',

@@ -20,10 +20,13 @@ import {
   BasketStore,
   BasketViewStore,
   fakeGroupMembers,
+  fakeShopSectionsStore,
   GatewayError,
   provideFakeGroupMembers,
+  provideFakeShopSectionsStore,
   SessionStore,
   type FakeGroupMembers,
+  type FakeShopSectionsStore,
 } from '@portfolio/velista/data-access';
 import type {
   BasketAccessEnded,
@@ -224,6 +227,8 @@ interface Options {
    * or none. What the usual filter of velista `0104` needs to have anything to do.
    */
   readonly readAtShop?: BasketShop;
+  /** The shops' aisles already read, or none (velista `0120`). */
+  readonly shopSections?: FakeShopSectionsStore;
 }
 
 function guest(
@@ -685,6 +690,9 @@ async function render(options: Options = {}): Promise<{
       // page to open, through the restore the page now runs on load.
       provideFakeBrowserFacade(options.storage ?? new Map()),
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
+      provideFakeShopSectionsStore(
+        options.shopSections ?? fakeShopSectionsStore()
+      ),
     ],
   }).compileComponents();
 
@@ -1048,7 +1056,14 @@ describe('the number on a row', () => {
           offers: [],
           atShop: null,
           productGroupId: null,
-          categories: ['DAIRY'],
+          categories: [
+            {
+              id: 'cat-milk',
+              parentId: 'cat-dairy-and-eggs',
+              slug: 'milk',
+              name: { en: 'Milk', es: 'Leche' },
+            },
+          ],
         },
       ],
     ]);
@@ -1497,7 +1512,14 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: ['OTHER'],
+      categories: [
+        {
+          id: 'cat-uncategorised',
+          parentId: 'cat-other',
+          slug: 'uncategorised',
+          name: { en: 'Not yet categorised', es: 'Sin categoría' },
+        },
+      ],
     };
   }
 
@@ -2056,7 +2078,14 @@ describe('searching the basket', () => {
       offer: null,
       offers: [],
       productGroupId: null,
-      categories: ['DAIRY'],
+      categories: [
+        {
+          id: 'cat-milk',
+          parentId: 'cat-dairy-and-eggs',
+          slug: 'milk',
+          name: { en: 'Milk', es: 'Leche' },
+        },
+      ],
       ...over,
     });
 
@@ -2134,12 +2163,12 @@ describe('searching the basket', () => {
     it('heads each aisle with an h2 carrying the name and the count together', async () => {
       const { fixture } = await renderGrouped('category');
 
-      const [dairy] = headings(fixture);
-      expect(dairy.tagName).toBe('H2');
+      const [milk] = headings(fixture);
+      expect(milk.tagName).toBe('H2');
       // One accessible name, because a reader moving by heading hears the `h2` and
       // nothing else inside it (section 6). The visible spans are `aria-hidden`.
-      expect(dairy.getAttribute('aria-label')).toBe(
-        'basket.category.DAIRY, basket.group.progress'
+      expect(milk.getAttribute('aria-label')).toBe(
+        'Milk, basket.group.progress'
       );
     });
 
@@ -2194,7 +2223,7 @@ describe('searching the basket', () => {
       // Two keys, as the page's own sentence keeps them apart: a shop that had none
       // is not shopping done.
       expect(headings(fixture)[0].getAttribute('aria-label')).toBe(
-        'basket.category.DAIRY, basket.group.progress · basket.group.unavailable'
+        'Milk, basket.group.progress · basket.group.unavailable'
       );
     });
 
@@ -3071,7 +3100,14 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       size: 1,
       unit: 'LITER',
       productGroupId: null,
-      category: 'DAIRY',
+      categories: [
+        {
+          id: 'cat-milk',
+          parentId: 'cat-dairy-and-eggs',
+          slug: 'milk',
+          name: { en: 'Milk', es: 'Leche' },
+        },
+      ],
       offer: null,
       chainPrices: [],
       imageUrl: null,
@@ -3269,7 +3305,14 @@ describe('similar products on the basket', () => {
     offers: [],
     atShop: null,
     productGroupId: 'g-milk',
-    categories: ['DAIRY'],
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
   };
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
@@ -3279,7 +3322,14 @@ describe('similar products on the basket', () => {
     size: 1,
     unit: 'LITER',
     productGroupId: 'g-milk',
-    category: 'DAIRY',
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: { ...OFFER, price: unitPrice, unitPrice },
     chainPrices: [],
     imageUrl: null,
@@ -3370,5 +3420,160 @@ describe('similar products on the basket', () => {
       }),
     });
     expect(drawn(best.fixture).groupCheaper()).toBe(false);
+  });
+});
+
+/**
+ * The aisles of the shop you are in (velista `0120`): the headings in the shop's
+ * order, the band after them, and the explanation behind its info control.
+ */
+describe('BasketPage: the aisles of the shop you are in', () => {
+  const MERCADONA: BasketShop = {
+    id: 'loc-mayor',
+    supermarketId: 'sm-merca',
+    chain: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+    postalCode: '14001',
+    inProfile: true,
+  };
+
+  function item(
+    id: string,
+    name: string,
+    category: string,
+    sectionIds: readonly string[]
+  ): BasketProduct {
+    return {
+      id,
+      name: { en: name, es: name },
+      brand: null,
+      imageUrl: null,
+      size: null,
+      unit: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [
+        {
+          id: `cat-${category}`,
+          parentId: 'cat-root',
+          slug: category,
+          name: { en: category, es: category },
+        },
+      ],
+      sectionIds,
+    };
+  }
+
+  const PRODUCTS = new Map([
+    [
+      'i-pizza',
+      item('i-pizza', 'Pizza', 'pizzas', ['sec-frozen', 'sec-pizzas']),
+    ],
+    ['i-apple', item('i-apple', 'Apple', 'fruit', ['sec-fruit'])],
+    ['i-oil', item('i-oil', 'Olive oil', 'oil', [])],
+  ]);
+
+  const LINES = [
+    line('Olive oil', { optionIds: ['i-oil'] }),
+    line('Pizza', { optionIds: ['i-pizza'] }),
+    line('Apple', { optionIds: ['i-apple'] }),
+  ];
+
+  function section(id: string, name: string) {
+    return {
+      id,
+      supermarketId: 'sm-merca',
+      slug: id,
+      name: { en: name, es: name },
+      position: 0,
+      categoryIds: [],
+    };
+  }
+
+  const WALK = [
+    section('sec-fruit', 'Fruit'),
+    section('sec-pizzas', 'Pizzas'),
+    section('sec-frozen', 'Frozen'),
+  ];
+
+  function headings(fixture: ComponentFixture<BasketPage>): string[] {
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(
+        '.group-title > span:first-child'
+      )
+    ).map((node) => node.textContent?.trim() ?? '');
+  }
+
+  async function atMercadona(landed = true) {
+    const shopSections = fakeShopSectionsStore(
+      landed ? { 'loc-mayor': WALK } : {}
+    );
+    const rendered = await render({
+      lines: LINES,
+      products: PRODUCTS,
+      readAtShop: MERCADONA,
+      shopSections,
+    });
+    TestBed.inject(BasketViewStore).setGrouping('category');
+    rendered.fixture.detectChanges();
+    return { ...rendered, shopSections };
+  }
+
+  it('draws the shop’s aisles in its order, a row in two of them in both, then the band and the rest', async () => {
+    const { fixture } = await atMercadona();
+
+    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oil']);
+    const band = query(fixture, '.uncovered-band');
+    expect(band?.textContent).toContain('basket.group.uncovered');
+    // The band sits between the last aisle and the first category, in document order.
+    expect(band?.nextElementSibling?.textContent).toContain('oil');
+    // A paragraph, not a heading: moving by heading reads one flat run of groups.
+    expect(band?.querySelector('h1, h2, h3')).toBeNull();
+  });
+
+  it('draws by category, with no band, until the shop’s aisles land', async () => {
+    const { fixture, shopSections } = await atMercadona(false);
+
+    expect(headings(fixture)).toEqual(['oil', 'pizzas', 'fruit']);
+    expect(query(fixture, '.uncovered-band')).toBeNull();
+
+    shopSections.land('loc-mayor', WALK);
+    fixture.detectChanges();
+
+    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oil']);
+  });
+
+  it('opens the explanation from the info control, and closes it on a second press', async () => {
+    const { fixture } = await atMercadona();
+    const control = query(fixture, '.uncovered-info') as HTMLButtonElement;
+
+    expect(control.getAttribute('aria-label')).toBe(
+      'basket.group.uncoveredInfo'
+    );
+    expect(control.getAttribute('aria-expanded')).toBe('false');
+    expect(document.body.textContent).not.toContain(
+      'basket.group.uncoveredWhere'
+    );
+
+    control.click();
+    fixture.detectChanges();
+
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    expect(document.body.textContent).toContain('basket.group.uncoveredWhy');
+    expect(document.body.textContent).toContain('basket.group.uncoveredWhere');
+    expect(
+      document.querySelector(
+        '[role="dialog"][aria-labelledby="basket-uncovered-label"]'
+      )
+    ).not.toBeNull();
+
+    control.click();
+    fixture.detectChanges();
+
+    expect(control.getAttribute('aria-expanded')).toBe('false');
   });
 });

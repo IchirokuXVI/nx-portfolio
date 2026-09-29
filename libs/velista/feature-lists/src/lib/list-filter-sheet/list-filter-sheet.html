@@ -74,8 +74,9 @@
   </fieldset>
 
   <!--
-    The categories present on this list, in catalog order, with No category last and
-    only when a line has none. Nothing on the page changes until one is picked
+    The categories present on this list, in the tree's order, with No category last
+    and only when a line has none. Each is named from its data in the reader's
+    language (velista 0118). Nothing on the page changes until one is picked
     (section 4). A radiogroup with a visible legend (section 10), and the count is how
     many lines each one would show.
   -->
@@ -100,10 +101,10 @@
             type="radio"
           />
           <span class="choice-title">
-            @if (row.category === noCategory) {
+            @if (row.name === null) {
               {{ 'list.view.noCategory' | rokuT }}
             } @else {
-              {{ 'basket.category.' + row.category | rokuT }}
+              {{ row.name }}
             }
           </span>
           <span class="choice-count">{{ row.lines }}</span>

@@ -1,6 +1,14 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  effect,
+  inject,
+  Injectable,
+  signal,
+  untracked,
+} from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
+  basketGroupsByAisle,
   basketPricedAtShop,
   basketReadAtShop,
   basketSettleShop,
@@ -24,6 +32,7 @@ import {
   type BasketViewState,
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { ShopSectionsStore } from '../shops/shop-sections-store';
 import { BasketStore } from './basket-store';
 import {
   dropExpired,
@@ -108,6 +117,7 @@ export class BasketViewStore {
   private readonly _basket = inject(BasketStore);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _browser = inject(BrowserFacade);
+  private readonly _shopSections = inject(ShopSectionsStore);
 
   private readonly _query = signal('');
 
@@ -298,7 +308,33 @@ export class BasketViewStore {
     // price: the pipeline then marks nothing, which is the same screen as before.
     scopes: this._basket.basket()?.scopes ?? new Map(),
     shop: this.shopAt(),
+    // The shop's aisles once they have landed (velista `0120`), and null until
+    // then, which the pipeline draws by category with nothing waiting.
+    sections: this._shopSections.sectionsOf(this.shopAt()?.id ?? null),
   }));
+
+  /**
+   * Whether grouping by category draws the shop's aisles right now (velista
+   * `0120`).
+   *
+   * What the filter sheet's radio and the chip read, so the words Aisle and By
+   * aisle appear in the same frame as the headings and never before them.
+   */
+  readonly byAisle = computed(() =>
+    basketGroupsByAisle(this.state(), this._context())
+  );
+
+  constructor() {
+    // Ask for the chosen shop's aisles as soon as it is chosen, rather than when
+    // the read at it lands: they are read once per shop per session, so after the
+    // first visit they are already here. Nothing waits on the answer.
+    effect(() => {
+      const shop = this.shop();
+      if (shop !== null) {
+        untracked(() => void this._shopSections.ensure(shop));
+      }
+    });
+  }
 
   /**
    * The distinct rows on the screen, in the order they are drawn.
@@ -391,6 +427,7 @@ export class BasketViewStore {
       // another.
       chainName: this.chosenShop()?.chain ?? null,
       shopLocked: this.shopLocked(),
+      byAisle: this.byAisle(),
     })
   );
 

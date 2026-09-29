@@ -1,7 +1,6 @@
 import {
   BrandBatchOutcome,
   BulkOperationErrorCode,
-  ItemCategory,
   ItemPriceWrittenBy,
   NearbyShopNoPick,
   PostalCodeSource,
@@ -18,8 +17,12 @@ import {
   BRAND_PATTERNS,
   BULK_DECISION_MAX_OPERATIONS,
   CATALOG_SUGGESTION_KINDS,
+  CATEGORY_KINDS,
+  CATEGORY_PATTERNS,
+  CATEGORY_SLUG_MAX_LENGTH,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
+  LOCATION_SECTIONS_SOURCES,
   PACK_COUNT_FILL_MAX,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
@@ -29,6 +32,10 @@ import {
   PRODUCT_GROUP_MEMBERS_MAX,
   PRODUCT_GROUP_PATTERNS,
   SCOPE_ORIGINS,
+  SECTION_LIMITS,
+  SECTION_PATTERNS,
+  SECTION_RULE_STEPS,
+  SECTION_SLUG_MAX_LENGTH,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -60,7 +67,6 @@ import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
  * prices. Writes are owner only; reads open. Localized text fields carry EN + ES.
  */
 export const CATALOG_SCHEMA_IDS = {
-  itemCategory: schemaId('enums/ItemCategory'),
   unitOfMeasure: schemaId('enums/UnitOfMeasure'),
   priceScopeKind: schemaId('enums/PriceScopeKind'),
   priceSourceKind: schemaId('enums/PriceSourceKind'),
@@ -148,6 +154,41 @@ export const CATALOG_SCHEMA_IDS = {
   createItemInput: schemaId('catalog/CreateItemInput'),
   createItemsRequest: schemaId('msg/item.createMany/request'),
   createItemsResult: schemaId('msg/item.createMany/response'),
+  // Plan 0166: the update op of the items batch.
+  updateItemInput: schemaId('catalog/UpdateItemInput'),
+  updateItemsRequest: schemaId('msg/item.updateMany/request'),
+  updateItemsResult: schemaId('msg/item.updateMany/response'),
+  // Plan 0166: the category tree, and a category as a product carries it.
+  categoryView: schemaId('catalog/CategoryView'),
+  categoryTreeView: schemaId('catalog/CategoryTreeView'),
+  categoryPage: schemaId('catalog/CategoryPage'),
+  itemCategoryView: schemaId('catalog/ItemCategoryView'),
+  categoryTreeRequest: schemaId('msg/category.tree/request'),
+  createCategoryRequest: schemaId('msg/category.create/request'),
+  updateCategoryRequest: schemaId('msg/category.update/request'),
+  categoryIdRequest: schemaId('msg/category.id/request'),
+  listCategoriesRequest: schemaId('msg/category.list/request'),
+  // Plan 0167: shop sections, a shop's list of them, and pins.
+  supermarketSectionView: schemaId('catalog/SupermarketSectionView'),
+  supermarketSectionPage: schemaId('catalog/SupermarketSectionPage'),
+  locationSectionsSource: schemaId('enums/LocationSectionsSource'),
+  locationSectionsView: schemaId('catalog/LocationSectionsView'),
+  itemSectionPinsView: schemaId('catalog/ItemSectionPinsView'),
+  itemSectionPinsPage: schemaId('catalog/ItemSectionPinsPage'),
+  sectionRuleStep: schemaId('enums/SectionRuleStep'),
+  itemSectionsAtLocationEntry: schemaId('catalog/ItemSectionsAtLocationEntry'),
+  itemSectionsAtLocationView: schemaId('catalog/ItemSectionsAtLocationView'),
+  createSupermarketSectionRequest: schemaId('msg/section.create/request'),
+  updateSupermarketSectionRequest: schemaId('msg/section.update/request'),
+  supermarketSectionIdRequest: schemaId('msg/section.id/request'),
+  listSupermarketSectionsRequest: schemaId('msg/section.list/request'),
+  locationSectionsRequest: schemaId('msg/section.forLocation/request'),
+  setLocationSectionsRequest: schemaId('msg/section.setForLocation/request'),
+  listItemSectionPinsRequest: schemaId('msg/section.listPins/request'),
+  setItemSectionPinsRequest: schemaId('msg/section.setPins/request'),
+  itemSectionsAtLocationRequest: schemaId(
+    'msg/section.itemsAtLocation/request'
+  ),
   createProductGroupOperation: schemaId('catalog/CreateProductGroupOperation'),
   assignItemToGroupOperation: schemaId('catalog/AssignItemToGroupOperation'),
   productGroupAssignmentOutcome: schemaId(
@@ -432,6 +473,67 @@ const itemOfferView = object(
 );
 
 /**
+ * One row of the category tree (plan 0166, section 3). A root has a null
+ * parent; a child names its root.
+ */
+const categoryView = object(
+  CATALOG_SCHEMA_IDS.categoryView,
+  {
+    id: nonEmptyString(),
+    parentId: nullableString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    itemCount: integer({
+      minimum: 0,
+      description:
+        'Distinct products under this row. A root counts the distinct products under its children, not the sum of the leaves.',
+    }),
+  },
+  ['id', 'parentId', 'slug', 'name', 'position', 'itemCount']
+);
+
+/** The whole tree, roots then children, each by position. Unpaged. */
+const categoryTreeView = object(
+  CATALOG_SCHEMA_IDS.categoryTreeView,
+  { categories: array(ref(CATALOG_SCHEMA_IDS.categoryView)) },
+  ['categories']
+);
+
+const categoryPage = paginated(
+  CATALOG_SCHEMA_IDS.categoryPage,
+  CATALOG_SCHEMA_IDS.categoryView
+);
+
+/**
+ * A category as a product carries it (plan 0166, section 3). Denormalized, so a
+ * guest reading a basket has the name without a catalog route. The parent is
+ * never null: a product is only ever on a leaf.
+ */
+const itemCategoryView = object(
+  CATALOG_SCHEMA_IDS.itemCategoryView,
+  {
+    id: nonEmptyString(),
+    parentId: nonEmptyString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  },
+  ['id', 'parentId', 'slug', 'name']
+);
+
+/** One or more leaf ids, in the order meant (plan 0166, section 3). */
+const categoryIds = (): JsonSchema => ({
+  ...array(nonEmptyString()),
+  minItems: 1,
+});
+
+/** One or more leaf slugs, for the harvest surfaces (plan 0166, section 3). */
+export const categorySlugs = (): JsonSchema => ({
+  ...array(nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })),
+  minItems: 1,
+});
+
+/**
  * A product's own fields, exported so that a view extending one (the basket's
  * product of plan 0163) lists the same fields rather than a copy of them.
  */
@@ -444,7 +546,11 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   ean: nullableString(),
   unitSize: numberOrNull(),
   packCount: packCountOrNull(),
-  category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+  // Plan 0166: position order and never empty, so a reader always has a first.
+  categories: {
+    ...array(ref(CATALOG_SCHEMA_IDS.itemCategoryView)),
+    minItems: 1,
+  },
   defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   productGroupId: nullableString(),
   // Deliberately NOT required: only the reads that take price scopes fill it,
@@ -467,7 +573,7 @@ export const itemViewRequired: string[] = [
   'ean',
   'unitSize',
   'packCount',
-  'category',
+  'categories',
   'defaultUnit',
   'productGroupId',
 ];
@@ -1020,30 +1126,287 @@ const createItemRequest = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    categoryIds: categoryIds(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['userId', 'name', 'category', 'defaultUnit']
+  ['userId', 'name', 'categoryIds', 'defaultUnit']
 );
+/**
+ * The fields one product's edit may carry, stated once and used by the single
+ * update and by the update op of the items batch (plan 0166, section 3).
+ */
+const updateItemFields = {
+  itemId: nonEmptyString(),
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  imageUrl: nullableString(),
+  sku: nullableString(),
+  ean: nullableString(),
+  unitSize: numberOrNull(),
+  packCount: packCountOrNull(),
+  // Replaces the whole set. Never empty, because a product always has one.
+  categoryIds: categoryIds(),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  productGroupId: nullableString(),
+};
 const updateItemRequest = object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
-  {
-    ...adminCredentialProperties,
-    itemId: nonEmptyString(),
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
-  },
+  { ...adminCredentialProperties, ...updateItemFields },
   ['userId', 'itemId']
 );
+/** A product of a bulk update: {@link updateItemRequest} without the credential. */
+const updateItemInput = object(
+  CATALOG_SCHEMA_IDS.updateItemInput,
+  updateItemFields,
+  ['itemId']
+);
+const updateItemsRequest = object(
+  CATALOG_SCHEMA_IDS.updateItemsRequest,
+  {
+    ...adminCredentialProperties,
+    items: {
+      ...array(ref(CATALOG_SCHEMA_IDS.updateItemInput)),
+      minItems: 1,
+      maxItems: BULK_DECISION_MAX_OPERATIONS,
+    },
+  },
+  ['userId', 'items']
+);
+/** One view per input, as it now stands, in the order the request named them. */
+const updateItemsResult = object(
+  CATALOG_SCHEMA_IDS.updateItemsResult,
+  { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
+  ['items']
+);
+
+// --- The category tree (plan 0166, sections 1 to 3) -------------------------
+
+const categoryTreeRequest = object(
+  CATALOG_SCHEMA_IDS.categoryTreeRequest,
+  { userId: nonEmptyString() },
+  ['userId']
+);
+const createCategoryRequest = object(
+  CATALOG_SCHEMA_IDS.createCategoryRequest,
+  {
+    ...adminCredentialProperties,
+    // Absent or null makes a root.
+    parentId: nullableString(),
+    slug: nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+  },
+  ['userId', 'slug', 'name']
+);
+// No slug: it is an identity, written once on create.
+const updateCategoryRequest = object(
+  CATALOG_SCHEMA_IDS.updateCategoryRequest,
+  {
+    ...adminCredentialProperties,
+    categoryId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    parentId: nullableString(),
+  },
+  ['userId', 'categoryId']
+);
+const categoryIdRequest = object(
+  CATALOG_SCHEMA_IDS.categoryIdRequest,
+  { ...adminCredentialProperties, categoryId: nonEmptyString() },
+  ['userId', 'categoryId']
+);
+const listCategoriesRequest = object(
+  CATALOG_SCHEMA_IDS.listCategoriesRequest,
+  {
+    userId: nonEmptyString(),
+    parentId: nonEmptyString(),
+    withoutParent: boolean(),
+    kind: { type: 'string', enum: [...CATEGORY_KINDS] },
+    query: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId']
+);
+
+// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+
+/** A list of ids with no repeats, bounded. May be empty. */
+const distinctIds = (maxItems: number): JsonSchema => ({
+  ...array(nonEmptyString()),
+  maxItems,
+  uniqueItems: true,
+});
+
+/**
+ * One section of a chain. `locationCount` is deliberately NOT required: the
+ * back office's reads of a section carry it, and a shop's list does not.
+ */
+const supermarketSectionView = object(
+  CATALOG_SCHEMA_IDS.supermarketSectionView,
+  {
+    id: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    slug: nonEmptyString({ maxLength: SECTION_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    categoryIds: {
+      ...array(nonEmptyString()),
+      description:
+        'Roots and leaves, as written. A root covers every one of its children.',
+    },
+    locationCount: integer({
+      minimum: 0,
+      description:
+        'The shops of the chain this section is present at: the ones whose own list names it, plus the ones with no list of their own. Present on the back office reads of a section, absent inside a shop’s list.',
+    }),
+  },
+  ['id', 'supermarketId', 'slug', 'name', 'position', 'categoryIds']
+);
+
+const supermarketSectionPage = paginated(
+  CATALOG_SCHEMA_IDS.supermarketSectionPage,
+  CATALOG_SCHEMA_IDS.supermarketSectionView
+);
+
+const locationSectionsView = object(
+  CATALOG_SCHEMA_IDS.locationSectionsView,
+  {
+    sections: array(ref(CATALOG_SCHEMA_IDS.supermarketSectionView)),
+    source: ref(CATALOG_SCHEMA_IDS.locationSectionsSource),
+  },
+  ['sections', 'source']
+);
+
+const itemSectionPinsView = object(
+  CATALOG_SCHEMA_IDS.itemSectionPinsView,
+  {
+    supermarketId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    sectionIds: array(nonEmptyString()),
+  },
+  ['supermarketId', 'itemId', 'sectionIds']
+);
+
+const itemSectionPinsPage = paginated(
+  CATALOG_SCHEMA_IDS.itemSectionPinsPage,
+  CATALOG_SCHEMA_IDS.itemSectionPinsView
+);
+
+const itemSectionsAtLocationEntry = object(
+  CATALOG_SCHEMA_IDS.itemSectionsAtLocationEntry,
+  {
+    itemId: nonEmptyString(),
+    sectionIds: array(nonEmptyString()),
+    step: ref(CATALOG_SCHEMA_IDS.sectionRuleStep),
+  },
+  ['itemId', 'sectionIds', 'step']
+);
+
+const itemSectionsAtLocationView = object(
+  CATALOG_SCHEMA_IDS.itemSectionsAtLocationView,
+  {
+    source: ref(CATALOG_SCHEMA_IDS.locationSectionsSource),
+    items: array(ref(CATALOG_SCHEMA_IDS.itemSectionsAtLocationEntry)),
+  },
+  ['source', 'items']
+);
+
+const createSupermarketSectionRequest = object(
+  CATALOG_SCHEMA_IDS.createSupermarketSectionRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    slug: nonEmptyString({ maxLength: SECTION_SLUG_MAX_LENGTH }),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    categoryIds: distinctIds(SECTION_LIMITS.maxCategoriesPerSection),
+    position: integer({ minimum: 0 }),
+  },
+  ['userId', 'supermarketId', 'slug', 'name', 'categoryIds']
+);
+// No slug: it is an identity, written once on create.
+const updateSupermarketSectionRequest = object(
+  CATALOG_SCHEMA_IDS.updateSupermarketSectionRequest,
+  {
+    ...adminCredentialProperties,
+    sectionId: nonEmptyString(),
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    position: integer({ minimum: 0 }),
+    categoryIds: distinctIds(SECTION_LIMITS.maxCategoriesPerSection),
+  },
+  ['userId', 'sectionId']
+);
+const supermarketSectionIdRequest = object(
+  CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
+  { ...adminCredentialProperties, sectionId: nonEmptyString() },
+  ['userId', 'sectionId']
+);
+const listSupermarketSectionsRequest = object(
+  CATALOG_SCHEMA_IDS.listSupermarketSectionsRequest,
+  {
+    userId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    query: string(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'supermarketId']
+);
+// No userId, like shopAvailability: a guest reading a shared basket asks.
+const locationSectionsRequest = object(
+  CATALOG_SCHEMA_IDS.locationSectionsRequest,
+  { supermarketLocationId: nonEmptyString() },
+  ['supermarketLocationId']
+);
+const setLocationSectionsRequest = object(
+  CATALOG_SCHEMA_IDS.setLocationSectionsRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketLocationId: nonEmptyString(),
+    // Empty returns the shop to its chain's default.
+    sectionIds: distinctIds(SECTION_LIMITS.maxSectionsPerLocation),
+  },
+  ['userId', 'supermarketLocationId', 'sectionIds']
+);
+const listItemSectionPinsRequest = object(
+  CATALOG_SCHEMA_IDS.listItemSectionPinsRequest,
+  {
+    userId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    sectionId: nonEmptyString(),
+    cursor: string(),
+    limit: integer({ minimum: 1 }),
+    order: string(),
+  },
+  ['userId', 'supermarketId']
+);
+const setItemSectionPinsRequest = object(
+  CATALOG_SCHEMA_IDS.setItemSectionPinsRequest,
+  {
+    ...adminCredentialProperties,
+    supermarketId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    // Empty removes the pins.
+    sectionIds: distinctIds(SECTION_LIMITS.maxPinsPerItem),
+  },
+  ['userId', 'supermarketId', 'itemId', 'sectionIds']
+);
+// No userId: the basket read of a guest asks it. Unbounded, like the
+// shopAvailability request beside it: the basket read sends every product its
+// rows name, and a cap here would drop the sections of a large basket whole.
+const itemSectionsAtLocationRequest = object(
+  CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,
+  {
+    supermarketLocationId: nonEmptyString(),
+    itemIds: array(nonEmptyString()),
+  },
+  ['supermarketLocationId', 'itemIds']
+);
+
 // --- The two bulk replays (plan 0100) ---------------------------------------
 
 /**
@@ -1073,11 +1436,11 @@ const createItemInput = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    categoryIds: categoryIds(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['name', 'category', 'defaultUnit']
+  ['name', 'categoryIds', 'defaultUnit']
 );
 
 const createItemsRequest = object(
@@ -1265,7 +1628,8 @@ const searchItemsRequest = object(
   {
     userId: nonEmptyString(),
     query: string(),
-    category: ref(CATALOG_SCHEMA_IDS.itemCategory),
+    // Plan 0166: a leaf, or a root meaning any of its children.
+    categoryId: nonEmptyString(),
     // Plan 0048: the group filter, and the scopes a price may be quoted from. No
     // default is resolved when the scopes are absent; that is plan 0049.
     productGroupId: string(),
@@ -2258,7 +2622,6 @@ const shopsByIdView = object(
 );
 
 export const catalogSchemas: JsonSchema[] = [
-  enumOf(CATALOG_SCHEMA_IDS.itemCategory, Object.values(ItemCategory)),
   enumOf(CATALOG_SCHEMA_IDS.unitOfMeasure, Object.values(UnitOfMeasure)),
   enumOf(CATALOG_SCHEMA_IDS.priceScopeKind, Object.values(PriceScopeKind)),
   enumOf(CATALOG_SCHEMA_IDS.priceSourceKind, Object.values(PriceSourceKind)),
@@ -2286,6 +2649,19 @@ export const catalogSchemas: JsonSchema[] = [
   priceScopeView,
   productGroupView,
   itemOfferView,
+  categoryView,
+  categoryTreeView,
+  categoryPage,
+  itemCategoryView,
+  enumOf(CATALOG_SCHEMA_IDS.locationSectionsSource, LOCATION_SECTIONS_SOURCES),
+  enumOf(CATALOG_SCHEMA_IDS.sectionRuleStep, SECTION_RULE_STEPS),
+  supermarketSectionView,
+  supermarketSectionPage,
+  locationSectionsView,
+  itemSectionPinsView,
+  itemSectionPinsPage,
+  itemSectionsAtLocationEntry,
+  itemSectionsAtLocationView,
   itemView,
   productGroupOfferView,
   catalogSuggestion,
@@ -2336,6 +2712,23 @@ export const catalogSchemas: JsonSchema[] = [
   createItemInput,
   createItemsRequest,
   createItemsResult,
+  updateItemInput,
+  updateItemsRequest,
+  updateItemsResult,
+  categoryTreeRequest,
+  createCategoryRequest,
+  updateCategoryRequest,
+  categoryIdRequest,
+  listCategoriesRequest,
+  createSupermarketSectionRequest,
+  updateSupermarketSectionRequest,
+  supermarketSectionIdRequest,
+  listSupermarketSectionsRequest,
+  locationSectionsRequest,
+  setLocationSectionsRequest,
+  listItemSectionPinsRequest,
+  setItemSectionPinsRequest,
+  itemSectionsAtLocationRequest,
   createProductGroupOperation,
   assignItemToGroupOperation,
   productGroupAssignmentOutcome,
@@ -2513,9 +2906,77 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.createItemsRequest,
     response: CATALOG_SCHEMA_IDS.createItemsResult,
   },
+  [ITEM_PATTERNS.updateMany]: {
+    request: CATALOG_SCHEMA_IDS.updateItemsRequest,
+    response: CATALOG_SCHEMA_IDS.updateItemsResult,
+  },
   [ITEM_PATTERNS.fillPackCounts]: {
     request: CATALOG_SCHEMA_IDS.fillPackCountsRequest,
     response: CATALOG_SCHEMA_IDS.fillPackCountsResult,
+  },
+  [CATEGORY_PATTERNS.tree]: {
+    request: CATALOG_SCHEMA_IDS.categoryTreeRequest,
+    response: CATALOG_SCHEMA_IDS.categoryTreeView,
+  },
+  [CATEGORY_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createCategoryRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateCategoryRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.categoryIdRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [CATEGORY_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.categoryIdRequest,
+    response: CATALOG_SCHEMA_IDS.categoryView,
+  },
+  [CATEGORY_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listCategoriesRequest,
+    response: CATALOG_SCHEMA_IDS.categoryPage,
+  },
+  [SECTION_PATTERNS.create]: {
+    request: CATALOG_SCHEMA_IDS.createSupermarketSectionRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
+  },
+  [SECTION_PATTERNS.list]: {
+    request: CATALOG_SCHEMA_IDS.listSupermarketSectionsRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketSectionPage,
+  },
+  [SECTION_PATTERNS.get]: {
+    request: CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
+  },
+  [SECTION_PATTERNS.update]: {
+    request: CATALOG_SCHEMA_IDS.updateSupermarketSectionRequest,
+    response: CATALOG_SCHEMA_IDS.supermarketSectionView,
+  },
+  [SECTION_PATTERNS.delete]: {
+    request: CATALOG_SCHEMA_IDS.supermarketSectionIdRequest,
+    response: COMMON_IDS.idResult,
+  },
+  [SECTION_PATTERNS.forLocation]: {
+    request: CATALOG_SCHEMA_IDS.locationSectionsRequest,
+    response: CATALOG_SCHEMA_IDS.locationSectionsView,
+  },
+  [SECTION_PATTERNS.setForLocation]: {
+    request: CATALOG_SCHEMA_IDS.setLocationSectionsRequest,
+    response: CATALOG_SCHEMA_IDS.locationSectionsView,
+  },
+  [SECTION_PATTERNS.listPins]: {
+    request: CATALOG_SCHEMA_IDS.listItemSectionPinsRequest,
+    response: CATALOG_SCHEMA_IDS.itemSectionPinsPage,
+  },
+  [SECTION_PATTERNS.setPins]: {
+    request: CATALOG_SCHEMA_IDS.setItemSectionPinsRequest,
+    response: CATALOG_SCHEMA_IDS.itemSectionPinsView,
+  },
+  [SECTION_PATTERNS.itemsAtLocation]: {
+    request: CATALOG_SCHEMA_IDS.itemSectionsAtLocationRequest,
+    response: CATALOG_SCHEMA_IDS.itemSectionsAtLocationView,
   },
   [BRAND_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createBrandRequest,

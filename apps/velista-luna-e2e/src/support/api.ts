@@ -314,6 +314,114 @@ export async function resetAliceWorld(alice: Session): Promise<void> {
     await setLineQuantity(alice, lineId, quantity);
   }
   await setLineProducts(alice, LINE_MILK_ID, [ITEM_MILK_ID, ITEM_BREAD_ID]);
+  // Eggs names no product in the seed. The aisles spec gives it one for the
+  // length of its run and takes it back; this puts it back if a run stopped early.
+  await setLineProducts(alice, LINE_EGGS_ID, []);
 
   await ensurePostalCode(alice, '46004');
+}
+
+// --- The back office ---------------------------------------------------------
+
+/** What the stack scripts create the development admin with (`stack.sh`). */
+const DEV_ADMIN_USERNAME = process.env['E2E_ADMIN_USERNAME'] || 'dev-admin';
+const DEV_ADMIN_PASSWORD =
+  process.env['E2E_ADMIN_PASSWORD'] || 'dev-admin-password';
+
+/**
+ * `POST /v1/admin/auth/login` as the development admin, for the setup only the
+ * back office can write: a chain's sections and a product of its own (velista
+ * `0120`). The same `Session` shape, since an admin token rides the same header.
+ */
+export async function adminLogin(): Promise<Session> {
+  const ctx = await request.newContext({
+    baseURL: GATEWAY_URL,
+    ignoreHTTPSErrors: true,
+  });
+  const res = await ctx.post('/v1/admin/auth/login', {
+    data: { username: DEV_ADMIN_USERNAME, password: DEV_ADMIN_PASSWORD },
+  });
+  await expect(res, `login as the admin ${DEV_ADMIN_USERNAME}`).toBeOK();
+  const body = (await res.json()) as { adminId: string; accessToken: string };
+  return new Session(ctx, body.adminId, body.accessToken);
+}
+
+/** `GET /v1/catalog/categories`, then one row's id by its slug. */
+export async function categoryIdBySlug(
+  s: Session,
+  slug: string
+): Promise<string> {
+  const tree = await s.get<{ categories: { id: string; slug: string }[] }>(
+    '/v1/catalog/categories'
+  );
+  const id = tree.categories.find((one) => one.slug === slug)?.id;
+  if (id === undefined) throw new Error(`the catalog has no category ${slug}`);
+  return id;
+}
+
+export interface SectionView {
+  id: string;
+  slug: string;
+  name: { en: string; es: string };
+  position: number;
+  categoryIds: string[];
+}
+
+/** `GET /v1/admin/catalog/supermarkets/:id/sections`: a chain's sections. */
+export async function chainSections(
+  admin: Session,
+  supermarketId: string
+): Promise<SectionView[]> {
+  const page = await admin.get<{ items: SectionView[] }>(
+    `/v1/admin/catalog/supermarkets/${supermarketId}/sections`
+  );
+  return page.items;
+}
+
+/** `POST /v1/admin/catalog/supermarkets/:id/sections`. */
+export async function createSection(
+  admin: Session,
+  supermarketId: string,
+  body: {
+    slug: string;
+    name: { en: string; es: string };
+    categoryIds: string[];
+    position: number;
+  }
+): Promise<SectionView> {
+  return admin.post<SectionView>(
+    `/v1/admin/catalog/supermarkets/${supermarketId}/sections`,
+    body
+  );
+}
+
+/** `DELETE /v1/admin/catalog/sections/:id`. */
+export async function deleteSection(
+  admin: Session,
+  sectionId: string
+): Promise<void> {
+  await admin.delete(`/v1/admin/catalog/sections/${sectionId}`);
+}
+
+/**
+ * `GET /v1/admin/catalog/items?query=`, then `POST /v1/admin/catalog/items` when
+ * no product carries this exact English name: one product, created once and kept
+ * across runs, since a product nothing names costs nothing.
+ */
+export async function ensureItem(
+  admin: Session,
+  name: { en: string; es: string },
+  categoryIds: string[]
+): Promise<string> {
+  const page = await admin.get<{
+    items: { id: string; name: { en?: string } }[];
+  }>(`/v1/admin/catalog/items?query=${encodeURIComponent(name.en)}`);
+  const held = page.items.find((one) => one.name.en === name.en);
+  if (held) return held.id;
+  const made = await admin.post<{ id: string }>('/v1/admin/catalog/items', {
+    name,
+    categoryIds,
+    defaultUnit: 'UNIT',
+  });
+  return made.id;
 }

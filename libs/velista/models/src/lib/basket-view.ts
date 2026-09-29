@@ -7,10 +7,10 @@ import type {
   BasketStatus,
   BasketUsualState,
   ParticipantKind,
-  ProductCategory,
   SettlementOutcome,
 } from './enums';
 import { isOpenBasket } from './enums';
+import type { ProductCategory } from './product-category';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -372,13 +372,22 @@ export interface BasketProduct {
    * What aisles this product belongs to, for the category grouping (velista
    * `0077`, section 2).
    *
-   * A **list** where the wire carries one value, and that costs nothing today: the
-   * brief says a product will one day carry several, a pipeline written over a list
-   * is the same pipeline either way, and the day the wire grows a second value
-   * nothing above the mapper changes. Never empty: an unreadable value maps to
-   * `OTHER` rather than dropping the product out of every section.
+   * A list since `0077`, for the day the wire carried several, which is backend
+   * `0166`: rows of the catalog's tree in the catalog's order (velista `0118`).
+   * Empty when none was readable, and the grouping then puts the row in its last
+   * section, as it does a row with no product.
    */
   readonly categories: readonly ProductCategory[];
+  /**
+   * Which of the read's shop's sections hold this product (velista `0120`; backend
+   * `0167`, section 4), or null when the read named no shop, or the server could
+   * not read that shop's sections.
+   *
+   * **Empty is an answer**: no section of this shop holds it, so the aisle grouping
+   * draws it under its own categories after the aisles. Null is no answer at all,
+   * and draws exactly as a shop nobody has configured.
+   */
+  readonly sectionIds: readonly string[] | null;
 }
 
 /**

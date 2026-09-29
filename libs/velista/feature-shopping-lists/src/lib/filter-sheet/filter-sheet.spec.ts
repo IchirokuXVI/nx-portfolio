@@ -9,11 +9,15 @@ import {
 import {
   BasketStore,
   BasketViewStore,
+  fakeShopSectionsStore,
+  provideFakeShopSectionsStore,
   ShopPickNotices,
+  type FakeShopSectionsStore,
 } from '@portfolio/velista/data-access';
 import type {
   BasketListRef,
   BasketPriceScope,
+  BasketProduct,
   BasketRow,
   BasketShop,
   ParticipantKind,
@@ -119,6 +123,10 @@ function render(options: {
   readonly meKind?: ParticipantKind;
   /** The shop the basket was started at, which locks it (velista `0102`). */
   readonly own?: BasketShop;
+  /** What the basket's products are, for the aisles of velista `0120`. */
+  readonly products?: ReadonlyMap<string, BasketProduct>;
+  /** The shops' aisles already read (velista `0120`). */
+  readonly shopSections?: FakeShopSectionsStore;
 }) {
   TestBed.resetTestingModule();
 
@@ -147,7 +155,7 @@ function render(options: {
     // How a sheet addresses its own basket since velista `0091`: off the store,
     // never off `paramMap`, which has no id under `shopping-lists/live`.
     address: signal({ basketId: BASKET_ID }),
-    products: signal(new Map()),
+    products: signal(options.products ?? new Map()),
     me: signal({ kind: options.meKind ?? 'OWNER' }),
     basket: computed(() => ({
       id: BASKET_ID,
@@ -166,6 +174,7 @@ function render(options: {
       provideVelistaTesting({ basePath: '' }),
       { provide: BasketStore, useValue: store },
       BasketViewStore,
+      provideFakeShopSectionsStore(options.shopSections),
       // A fresh `Map` per test for what the sheet remembers (`0076`), rather than
       // the one `localStorage` jsdom shares with every other test in this file.
       provideFakeBrowserFacade(new Map()),
@@ -861,5 +870,78 @@ describe('FilterSheet: the usual switch', () => {
     control?.click();
     fixture.detectChanges();
     expect(view.usual()).toBe(true);
+  });
+});
+
+/**
+ * One radio with two names (velista `0120`): Category, and Aisle with its note once
+ * the chosen shop's sections have landed.
+ */
+describe('FilterSheet: the aisles of the shop', () => {
+  const MILK = {
+    id: 'i-milk',
+    name: { en: 'Milk', es: 'Leche' },
+    brand: null,
+    imageUrl: null,
+    size: null,
+    unit: null,
+    offer: null,
+    offers: [],
+    atShop: null,
+    productGroupId: null,
+    categories: [],
+    sectionIds: ['sec-dairy'],
+  } satisfies BasketProduct;
+
+  const DAIRY = {
+    id: 'sec-dairy',
+    supermarketId: 'sm-merca',
+    slug: 'dairy',
+    name: { en: 'Dairy', es: 'Lácteos' },
+    position: 0,
+    categoryIds: [],
+  };
+
+  function categoryRadio(fixture: ReturnType<typeof render>['fixture']) {
+    return (
+      (
+        choices(fixture, 'basket-grouping')[1].nativeElement as HTMLElement
+      ).closest('label')?.textContent ?? ''
+    ).replace(/\s+/g, ' ');
+  }
+
+  function atMercadona(landed: boolean) {
+    const shopSections = fakeShopSectionsStore(
+      landed ? { 's-merca-0': [DAIRY] } : {}
+    );
+    const rendered = render({
+      lines: GUEST_LINES,
+      scopes: [scope('s-merca', 'Mercadona', ['Calle Mayor 3'])],
+      products: new Map([['i-milk', MILK]]),
+      shopSections,
+    });
+    return { ...rendered, shopSections };
+  }
+
+  it('reads Category with no shop chosen', () => {
+    const { fixture } = atMercadona(true);
+
+    expect(categoryRadio(fixture)).toContain('basket.view.group.category');
+    expect(categoryRadio(fixture)).not.toContain('basket.view.group.aisle');
+  });
+
+  it('reads Aisle, with this shop’s order, once the shop’s sections have landed', () => {
+    const { fixture, view, shopSections } = atMercadona(false);
+    view.setShop('s-merca-0');
+    fixture.detectChanges();
+
+    expect(categoryRadio(fixture)).toContain('basket.view.group.category');
+
+    shopSections.land('s-merca-0', [DAIRY]);
+    fixture.detectChanges();
+
+    expect(categoryRadio(fixture)).toContain('basket.view.group.aisle');
+    expect(categoryRadio(fixture)).toContain('basket.view.group.aisleHint');
+    expect(categoryRadio(fixture)).not.toContain('basket.view.group.category');
   });
 });

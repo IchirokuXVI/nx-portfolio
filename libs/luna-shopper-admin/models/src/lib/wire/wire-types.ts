@@ -210,6 +210,16 @@ export type CreateBrandDto = {
 };
 
 /**
+ * `CreateCategoryDto` in the gateway's OpenAPI document.
+ */
+export type CreateCategoryDto = {
+  parentId?: string | null;
+  slug: string;
+  name: LocalizedTextDto;
+  position?: number;
+};
+
+/**
  * `CreateHarvestRunPresetDto` in the gateway's OpenAPI document.
  */
 export type CreateHarvestRunPresetDto = {
@@ -229,19 +239,7 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  category:
-    | 'PRODUCE'
-    | 'DAIRY'
-    | 'BAKERY'
-    | 'MEAT'
-    | 'SEAFOOD'
-    | 'FROZEN'
-    | 'BEVERAGES'
-    | 'SNACKS'
-    | 'PANTRY'
-    | 'HOUSEHOLD'
-    | 'PERSONAL_CARE'
-    | 'OTHER';
+  categoryIds: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
 };
@@ -255,19 +253,7 @@ export type CreateItemFromEntryDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  category?:
-    | 'PRODUCE'
-    | 'DAIRY'
-    | 'BAKERY'
-    | 'MEAT'
-    | 'SEAFOOD'
-    | 'FROZEN'
-    | 'BEVERAGES'
-    | 'SNACKS'
-    | 'PANTRY'
-    | 'HOUSEHOLD'
-    | 'PERSONAL_CARE'
-    | 'OTHER';
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
 };
 
@@ -346,6 +332,16 @@ export type CreateSupermarketLocationDto = {
   postalCode?: string | null;
   externalRef?: string | null;
   externalProvider?: string | null;
+};
+
+/**
+ * `CreateSupermarketSectionDto` in the gateway's OpenAPI document.
+ */
+export type CreateSupermarketSectionDto = {
+  slug: string;
+  name: LocalizedTextDto;
+  categoryIds: string[];
+  position?: number;
 };
 
 /**
@@ -540,6 +536,14 @@ export type ProblemDetails = {
     | 'place_already_imported'
     | 'place_matches_location'
     | 'scope_not_found'
+    | 'category_too_deep'
+    | 'category_not_a_leaf'
+    | 'item_needs_a_category'
+    | 'category_in_use'
+    | 'category_not_found'
+    | 'section_not_found'
+    | 'section_of_another_chain'
+    | 'section_slug_taken'
     | 'internal';
   detail?: string;
   message: string;
@@ -745,10 +749,25 @@ export type SetBasketRowDemandDto = {
 };
 
 /**
+ * `SetItemSectionPinsDto` in the gateway's OpenAPI document.
+ */
+export type SetItemSectionPinsDto = {
+  itemId: string;
+  sectionIds: string[];
+};
+
+/**
  * `SetListAccessDto` in the gateway's OpenAPI document.
  */
 export type SetListAccessDto = {
   entries: ListAccessEntryDto[];
+};
+
+/**
+ * `SetLocationSectionsDto` in the gateway's OpenAPI document.
+ */
+export type SetLocationSectionsDto = {
+  sectionIds: string[];
 };
 
 /**
@@ -952,11 +971,37 @@ export type UpdateBrandDto = {
 };
 
 /**
+ * `UpdateCategoryDto` in the gateway's OpenAPI document.
+ */
+export type UpdateCategoryDto = {
+  name?: LocalizedTextDto;
+  position?: number;
+  parentId?: string | null;
+};
+
+/**
  * `UpdateHarvestRunPresetDto` in the gateway's OpenAPI document.
  */
 export type UpdateHarvestRunPresetDto = {
   name?: string;
   input?: HarvestRunPresetInputDto;
+};
+
+/**
+ * `UpdateItemBatchEntryDto` in the gateway's OpenAPI document.
+ */
+export type UpdateItemBatchEntryDto = {
+  name?: LocalizedTextDto;
+  brand?: string | null;
+  imageUrl?: string | null;
+  sku?: string | null;
+  ean?: string | null;
+  unitSize?: number | null;
+  packCount?: number | null;
+  categoryIds?: string[];
+  defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+  productGroupId?: string | null;
+  itemId: string;
 };
 
 /**
@@ -970,21 +1015,16 @@ export type UpdateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  category?:
-    | 'PRODUCE'
-    | 'DAIRY'
-    | 'BAKERY'
-    | 'MEAT'
-    | 'SEAFOOD'
-    | 'FROZEN'
-    | 'BEVERAGES'
-    | 'SNACKS'
-    | 'PANTRY'
-    | 'HOUSEHOLD'
-    | 'PERSONAL_CARE'
-    | 'OTHER';
+  categoryIds?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+};
+
+/**
+ * `UpdateItemsDto` in the gateway's OpenAPI document.
+ */
+export type UpdateItemsDto = {
+  items: UpdateItemBatchEntryDto[];
 };
 
 /**
@@ -1090,6 +1130,15 @@ export type UpdateSupermarketLocationDto = {
   postalCode?: string | null;
   externalRef?: string | null;
   externalProvider?: string | null;
+};
+
+/**
+ * `UpdateSupermarketSectionDto` in the gateway's OpenAPI document.
+ */
+export type UpdateSupermarketSectionDto = {
+  name?: LocalizedTextDto;
+  position?: number;
+  categoryIds?: string[];
 };
 
 /**
@@ -1941,12 +1990,13 @@ export type BasketBasketProductView = {
   ean: string | null;
   unitSize: number | null;
   packCount: number | null;
-  category: EnumsItemCategory;
+  categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
   atShop: BasketBasketProductAtShopView | null;
+  sectionIds?: string[];
 };
 
 /**
@@ -2231,6 +2281,35 @@ export type CatalogCatalogSuggestion = {
 };
 
 /**
+ * `catalog.CategoryPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogCategoryPage = {
+  items: CatalogCategoryView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.CategoryTreeView` in the gateway's OpenAPI document.
+ */
+export type CatalogCategoryTreeView = {
+  categories: CatalogCategoryView[];
+};
+
+/**
+ * `catalog.CategoryView` in the gateway's OpenAPI document.
+ */
+export type CatalogCategoryView = {
+  id: string;
+  parentId: string | null;
+  slug: string;
+  name: CatalogLocalizedText;
+  position: number;
+  itemCount: number;
+};
+
+/**
  * `catalog.CreateBrandResult` in the gateway's OpenAPI document.
  */
 export type CatalogCreateBrandResult = {
@@ -2253,6 +2332,16 @@ export type CatalogCreateBrandResult = {
 export type CatalogDeleteBrandResult = {
   id: string;
   movedItems: number;
+};
+
+/**
+ * `catalog.ItemCategoryView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemCategoryView = {
+  id: string;
+  parentId: string;
+  slug: string;
+  name: CatalogLocalizedText;
 };
 
 /**
@@ -2377,6 +2466,42 @@ export type CatalogItemScopePricesView = {
 };
 
 /**
+ * `catalog.ItemSectionPinsPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogItemSectionPinsPage = {
+  items: CatalogItemSectionPinsView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.ItemSectionPinsView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionPinsView = {
+  supermarketId: string;
+  itemId: string;
+  sectionIds: string[];
+};
+
+/**
+ * `catalog.ItemSectionsAtLocationEntry` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionsAtLocationEntry = {
+  itemId: string;
+  sectionIds: string[];
+  step: EnumsSectionRuleStep;
+};
+
+/**
+ * `catalog.ItemSectionsAtLocationView` in the gateway's OpenAPI document.
+ */
+export type CatalogItemSectionsAtLocationView = {
+  source: EnumsLocationSectionsSource;
+  items: CatalogItemSectionsAtLocationEntry[];
+};
+
+/**
  * `catalog.ItemView` in the gateway's OpenAPI document.
  */
 export type CatalogItemView = {
@@ -2388,7 +2513,7 @@ export type CatalogItemView = {
   ean: string | null;
   unitSize: number | null;
   packCount: number | null;
-  category: EnumsItemCategory;
+  categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
@@ -2409,6 +2534,14 @@ export type CatalogLocalizedSynonyms = {
 export type CatalogLocalizedText = {
   en?: string;
   es?: string;
+};
+
+/**
+ * `catalog.LocationSectionsView` in the gateway's OpenAPI document.
+ */
+export type CatalogLocationSectionsView = {
+  sections: CatalogSupermarketSectionView[];
+  source: EnumsLocationSectionsSource;
 };
 
 /**
@@ -2772,6 +2905,29 @@ export type CatalogSupermarketPage = {
 };
 
 /**
+ * `catalog.SupermarketSectionPage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type CatalogSupermarketSectionPage = {
+  items: CatalogSupermarketSectionView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `catalog.SupermarketSectionView` in the gateway's OpenAPI document.
+ */
+export type CatalogSupermarketSectionView = {
+  id: string;
+  supermarketId: string;
+  slug: string;
+  name: CatalogLocalizedText;
+  position: number;
+  categoryIds: string[];
+  locationCount?: number;
+};
+
+/**
  * `catalog.SupermarketView` in the gateway's OpenAPI document.
  */
 export type CatalogSupermarketView = {
@@ -2976,23 +3132,6 @@ export type EnumsHarvestWarningCode =
   | 'DETAIL_SKIPPED_UNKNOWN';
 
 /**
- * `enums.ItemCategory` in the gateway's OpenAPI document.
- */
-export type EnumsItemCategory =
-  | 'PRODUCE'
-  | 'DAIRY'
-  | 'BAKERY'
-  | 'MEAT'
-  | 'SEAFOOD'
-  | 'FROZEN'
-  | 'BEVERAGES'
-  | 'SNACKS'
-  | 'PANTRY'
-  | 'HOUSEHOLD'
-  | 'PERSONAL_CARE'
-  | 'OTHER';
-
-/**
  * `enums.ItemPriceWrittenBy` in the gateway's OpenAPI document.
  */
 export type EnumsItemPriceWrittenBy = 'INSERTED' | 'CONFIRMED';
@@ -3041,6 +3180,11 @@ export type EnumsListResolutionBranch =
   | 'CONVERSATION'
   | 'ONLY_LIST'
   | 'ASKED';
+
+/**
+ * `enums.LocationSectionsSource` in the gateway's OpenAPI document.
+ */
+export type EnumsLocationSectionsSource = 'LOCATION' | 'CHAIN';
 
 /**
  * `enums.MembershipStatus` in the gateway's OpenAPI document.
@@ -3122,6 +3266,11 @@ export type EnumsPriceSourceKind =
  * `enums.ProfilePostalCodeSource` in the gateway's OpenAPI document.
  */
 export type EnumsProfilePostalCodeSource = 'TYPED' | 'DEVICE' | 'NEARBY';
+
+/**
+ * `enums.SectionRuleStep` in the gateway's OpenAPI document.
+ */
+export type EnumsSectionRuleStep = 'PINNED' | 'COVERED' | 'NONE';
 
 /**
  * `enums.SettlementOutcome` in the gateway's OpenAPI document.
@@ -4091,6 +4240,13 @@ export type MsgItemCreateManyResponse = {
  * `msg.item.getMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemGetManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
+ * `msg.item.updateMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemUpdateManyResponse = {
   items: CatalogItemView[];
 };
 

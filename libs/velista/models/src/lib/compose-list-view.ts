@@ -1,6 +1,6 @@
 import { foldForSearch } from './basket-search';
 import type { CatalogItem } from './domain';
-import { PRODUCT_CATEGORIES, type ProductCategory } from './enums';
+import { inCategoryOrder } from './product-category';
 
 /**
  * What the zone list page draws of a list, as opposed to what the list holds (velista
@@ -33,12 +33,18 @@ export type ListViewMode = 'all' | 'category';
  *
  * A line with no products has no category, and neither has a line whose products
  * did not load or failed to (section 3). "No category" is a real choice in the sheet,
- * so it needs a value, and it is not a member of `ProductCategory` because the
- * catalog never sends it.
+ * so it needs a value, and it is not a category id because the catalog never sends
+ * it: ids are uuids and this is not one.
  */
 export const NO_CATEGORY = 'NONE';
 
-export type ListCategoryPick = ProductCategory | typeof NO_CATEGORY;
+/**
+ * A category's id, or {@link NO_CATEGORY}.
+ *
+ * The id rather than the category, because a pick is compared, counted and held
+ * across reads, and two reads of one row are two objects (velista `0118`).
+ */
+export type ListCategoryPick = string;
 
 /** Everything the list filter sheet decides. */
 export interface ListViewState {
@@ -70,8 +76,11 @@ export interface ListViewContext {
   readonly categoriesOf: (lineId: string) => readonly ListCategoryPick[];
   /** A line's product names, already in the reader's language. */
   readonly productNamesOf: (lineId: string) => readonly string[];
-  /** A category's label in the reader's language, for the search. */
-  readonly categoryLabel: (category: ProductCategory) => string;
+  /**
+   * A category's name in the reader's language, for the search, or blank for an id
+   * nothing named. Never asked about {@link NO_CATEGORY}.
+   */
+  readonly categoryName: (categoryId: string) => string;
 }
 
 /** What the page draws: the lines, and the heading above them or null. */
@@ -89,21 +98,41 @@ export interface ListCategoryCount {
 }
 
 /**
- * A line's categories, from the products it carries (section 3).
+ * One radio as the sheet draws it: the count, and the words.
  *
- * The set of its products' categories, in `PRODUCT_CATEGORIES` order. A product the
- * lookup has not answered for, or failed on, contributes nothing, so a line none of
- * whose products has loaded answers {@link NO_CATEGORY} until they do.
+ * `name` is null for {@link NO_CATEGORY}, whose words are this app's and a key, and
+ * the category's own name in the reader's language for every other row.
+ */
+export interface ListCategoryChoice extends ListCategoryCount {
+  readonly name: string | null;
+}
+
+/** Where a category sits in the tree, or null for one the tree does not hold (yet). */
+export type CategoryRank = (categoryId: string) => number | null;
+
+/** The rank of a tree that has not arrived: nothing is ranked. */
+export const NO_CATEGORY_RANK: CategoryRank = () => null;
+
+/**
+ * A line's categories, from the products it carries (section 3, velista `0118`).
+ *
+ * The set of **every** category of every product it carries, so a line whose product
+ * is frozen and a ready meal is under both radios. In tree order by `rank`, and in
+ * first appearance order for whatever the tree does not rank, which is everything
+ * before the tree has arrived. A product the lookup has not answered for, or failed
+ * on, contributes nothing, and neither does a product with no readable category, so a
+ * line with none answers {@link NO_CATEGORY}.
  */
 export function lineCategories(
   itemIds: readonly string[],
-  itemOf: (itemId: string) => CatalogItem | null
+  itemOf: (itemId: string) => CatalogItem | null,
+  rank: CategoryRank = NO_CATEGORY_RANK
 ): readonly ListCategoryPick[] {
-  const found = new Set<ProductCategory>();
+  const found = new Set<string>();
   for (const itemId of itemIds) {
     const item = itemOf(itemId);
-    if (item !== null) {
-      found.add(item.category);
+    for (const category of item?.categories ?? []) {
+      found.add(category.id);
     }
   }
 
@@ -111,19 +140,20 @@ export function lineCategories(
     return [NO_CATEGORY];
   }
 
-  return PRODUCT_CATEGORIES.filter((category) => found.has(category));
+  return inCategoryOrder([...found], (id) => id, rank);
 }
 
 /**
  * The categories present on a list, each with its line count (section 4).
  *
- * In `PRODUCT_CATEGORIES` order, with "No category" last and only when a line has
- * none. A line with three categories counts once under each of them, which is what
- * picking any one of the three draws.
+ * In tree order by `rank`, then first appearance for anything unranked, with "No
+ * category" last and only when a line has none. A line with three categories counts
+ * once under each of them, which is what picking any one of the three draws.
  */
 export function listCategoryCounts(
   lines: readonly ListViewLine[],
-  categoriesOf: (lineId: string) => readonly ListCategoryPick[]
+  categoriesOf: (lineId: string) => readonly ListCategoryPick[],
+  rank: CategoryRank = NO_CATEGORY_RANK
 ): readonly ListCategoryCount[] {
   const counts = new Map<ListCategoryPick, number>();
   for (const line of lines) {
@@ -132,13 +162,16 @@ export function listCategoryCounts(
     }
   }
 
-  const order: readonly ListCategoryPick[] = [
-    ...PRODUCT_CATEGORIES,
-    NO_CATEGORY,
-  ];
-  return order
-    .filter((category) => counts.has(category))
-    .map((category) => ({ category, lines: counts.get(category) ?? 0 }));
+  const named = inCategoryOrder(
+    [...counts.keys()].filter((category) => category !== NO_CATEGORY),
+    (id) => id,
+    rank
+  );
+  const order = counts.has(NO_CATEGORY) ? [...named, NO_CATEGORY] : named;
+  return order.map((category) => ({
+    category,
+    lines: counts.get(category) ?? 0,
+  }));
 }
 
 /**
@@ -182,9 +215,10 @@ export function listViewHoldsReorder(
 /**
  * Whether one line answers the search (section 6).
  *
- * Its name, the name of any of its products, or the label of any of its categories
- * in the reader's language. "No category" is not a label a line carries, so typing
- * it finds nothing. An empty query matches everything.
+ * Its name, the name of any of its products, or the name of any of its categories
+ * in the reader's language (velista `0118`: the name is data now, where it was a
+ * label). "No category" is not a name a line carries, so typing it finds nothing. An
+ * empty query matches everything.
  */
 export function matchesListLine(
   line: ListViewLine,
@@ -204,7 +238,7 @@ export function matchesListLine(
       .categoriesOf(line.id)
       .some(
         (category) =>
-          category !== NO_CATEGORY && includes(context.categoryLabel(category))
+          category !== NO_CATEGORY && includes(context.categoryName(category))
       )
   );
 }

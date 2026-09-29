@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  demoWorld,
   ITEM_BREAD_ID,
   ITEM_MILK_ID,
   LINE_MILK_ID,
@@ -152,6 +153,18 @@ test.describe('one trip, by the owner', () => {
       await expect(
         page.locator('section.group h2.group-title').first()
       ).toBeVisible();
+
+      // The Milk row means the seeded milk, so it sits under that product's first
+      // category, headed by the category's own name (velista 0118). Both halves
+      // come from the seed: the leaf the demo world files milk under, and the
+      // name the catalog seeded that leaf with. No translation key is involved.
+      const milkAisle = await seededCategoryName(alice, ITEM_MILK_ID, 'en');
+      await expect(
+        page
+          .locator('section.group', { has: row(page, 'Milk') })
+          .locator('h2.group-title > span')
+          .first()
+      ).toHaveText(milkAisle);
     });
 
     await test.step('4. buying at one shop: Mercadona Colón', async () => {
@@ -368,3 +381,32 @@ test.describe('one trip, by the owner', () => {
     });
   });
 });
+
+/**
+ * The name the seed gave a seeded product's first category, in one language.
+ *
+ * The demo world files each product under leaf slugs (backend plan 0166), and the
+ * catalog seed writes the tree those slugs name. The name is read back from the
+ * tree the gateway serves, by the slug the demo world names, so a change to the
+ * seeded taxonomy moves this expectation with it rather than breaking it.
+ */
+async function seededCategoryName(
+  s: Session,
+  itemId: string,
+  locale: 'en' | 'es'
+): Promise<string> {
+  const item = demoWorld.catalog.items.find((one) => one.id === itemId);
+  const slug = item?.categories[0];
+  if (slug === undefined) {
+    throw new Error(`the demo world files no category for ${itemId}`);
+  }
+
+  const tree = await s.get<{
+    categories: { slug: string; name: { en?: string; es?: string } }[];
+  }>('/v1/catalog/categories');
+  const name = tree.categories.find((one) => one.slug === slug)?.name[locale];
+  if (name === undefined || name === '') {
+    throw new Error(`the catalog names no ${locale} category ${slug}`);
+  }
+  return name;
+}

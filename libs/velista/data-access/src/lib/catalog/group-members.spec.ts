@@ -12,7 +12,14 @@ function product(id: string, groupId: string): CatalogItem {
     size: null,
     unit: 'UNIT',
     productGroupId: groupId,
-    category: 'DAIRY',
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: null,
     chainPrices: [],
     imageUrl: null,

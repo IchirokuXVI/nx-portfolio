@@ -1,9 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
-  RokuLocaleStore,
-  RokuTranslatorService,
-} from '@portfolio/localization/rokutranslator-angular';
-import {
+  categoryName,
   composeListGroups,
   composeListView,
   DEFAULT_LIST_VIEW_STATE,
@@ -16,6 +14,7 @@ import {
   NO_CATEGORY,
   pickedListCategory,
   type Line,
+  type ListCategoryChoice,
   type ListCategoryPick,
   type ListGroupsInput,
   type ListGroupsView,
@@ -25,8 +24,10 @@ import {
   type ListViewMode,
   type ListViewOrder,
   type ListViewState,
+  type ProductCategory,
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { CategoryStore } from '../catalog/category-store';
 import { ItemNames } from '../catalog/item-names';
 import { LineStore } from '../lines/line-store';
 import {
@@ -52,18 +53,25 @@ import {
  * here, so the instance outlives the page: {@link leave} is what the page calls from
  * its own teardown, as the basket page does with `BasketViewStore.leave()`.
  *
- * ## Why it translates
+ * ## Why it knows the reader's language
  *
- * The search matches a category's label in the reader's language (section 6). The
- * label is words, so it needs the translator, and the sheet's footer count has to be
- * the same number the page draws, so the matching cannot live in the page alone.
+ * The search matches a category's name in the reader's language (section 6). Since
+ * velista `0118` the name is data on the product, so no translator is involved, and
+ * the sheet's footer count still has to be the same number the page draws, so the
+ * matching cannot live in the page alone.
+ *
+ * ## Why it reads the tree
+ *
+ * A line's categories and the sheet's radios are in the tree's order, from
+ * {@link CategoryStore}, which {@link open} asks for once and nothing waits on: until
+ * it lands they are in first appearance order, and they re-sort when it does.
  */
 @Injectable()
 export class ListViewStore {
   private readonly _lines = inject(LineStore);
   private readonly _items = inject(ItemNames);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _translator = inject(RokuTranslatorService);
+  private readonly _tree = inject(CategoryStore);
   private readonly _browser = inject(BrowserFacade);
 
   /** The list on screen, or null before the page opens one and after it leaves. */
@@ -104,17 +112,43 @@ export class ListViewStore {
    * Every line's categories, by line id (section 3).
    *
    * Recomputed as products resolve: `ItemNames` is a signal, so a line counted under
-   * "No category" moves to its aisle the moment its products load.
+   * "No category" moves to its aisle the moment its products load. Recomputed when the
+   * tree lands too, because `rank` reads it.
    */
   private readonly _categories = computed(() => {
     const byLine = new Map<string, readonly ListCategoryPick[]>();
     for (const line of this._source()) {
       byLine.set(
         line.id,
-        lineCategories(line.itemIds, (itemId) => this._items.nameOf(itemId))
+        lineCategories(
+          line.itemIds,
+          (itemId) => this._items.nameOf(itemId),
+          this._tree.rank
+        )
       );
     }
     return byLine;
+  });
+
+  /**
+   * Every category the list's products carry, by id, with its name.
+   *
+   * The products are where a name comes from: they carry their categories whole, so
+   * a heading or a radio is named whether or not the tree has landed, and for a
+   * category the tree was read too early to hold.
+   */
+  private readonly _categoryById = computed(() => {
+    const byId = new Map<string, ProductCategory>();
+    for (const line of this._source()) {
+      for (const itemId of line.itemIds) {
+        for (const category of this._items.nameOf(itemId)?.categories ?? []) {
+          if (!byId.has(category.id)) {
+            byId.set(category.id, category);
+          }
+        }
+      }
+    }
+    return byId;
   });
 
   /** Every line's product names, in the reader's language. */
@@ -145,10 +179,28 @@ export class ListViewStore {
       // still the client's, has no products to read and is "No category".
       categoriesOf: (lineId) => categories.get(lineId) ?? [NO_CATEGORY],
       productNamesOf: (lineId) => names.get(lineId) ?? [],
-      categoryLabel: (category) =>
-        this._translator.t(`basket.category.${category}`, undefined, locale),
+      categoryName: (categoryId) => this._nameOf(categoryId, locale),
     };
   });
+
+  /** A category's name in the reader's language, or blank for one nothing names. */
+  private _nameOf(categoryId: string, locale: string): string {
+    const category =
+      this._categoryById().get(categoryId) ?? this._tree.byId(categoryId);
+    return category === null || category === undefined
+      ? ''
+      : categoryName(category, locale);
+  }
+
+  /**
+   * The name of a category on this list in the reader's language, for the page's
+   * heading, or blank for {@link NO_CATEGORY} and for an id nothing names.
+   */
+  categoryName(categoryId: ListCategoryPick): string {
+    return categoryId === NO_CATEGORY
+      ? ''
+      : this._nameOf(categoryId, this._locale());
+  }
 
   /**
    * The categories on this list and how many lines hold each, for the sheet.
@@ -157,11 +209,20 @@ export class ListViewStore {
    * says what the list holds, and a radio that vanished while somebody typed would be
    * unusable.
    */
-  readonly categoryCounts = computed(() =>
-    listCategoryCounts(this._source(), (lineId) =>
-      this._context().categoriesOf(lineId)
-    )
-  );
+  readonly categoryCounts = computed<readonly ListCategoryChoice[]>(() => {
+    const locale = this._locale();
+    return listCategoryCounts(
+      this._source(),
+      (lineId) => this._context().categoriesOf(lineId),
+      this._tree.rank
+    ).map((count) => ({
+      ...count,
+      name:
+        count.category === NO_CATEGORY
+          ? null
+          : this._nameOf(count.category, locale),
+    }));
+  });
 
   /** How many settings are on, for the filter button's badge. */
   readonly activeCount = computed(() => listViewActiveCount(this._state()));
@@ -271,6 +332,8 @@ export class ListViewStore {
     this._state.set(DEFAULT_LIST_VIEW_STATE);
     this._forgetTrips();
     this._restore();
+    // For the order of the categories, and nothing waits on it.
+    void this._tree.ensure();
   }
 
   /** Search for this, or for nothing when it is empty. */

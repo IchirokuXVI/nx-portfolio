@@ -14,7 +14,14 @@ function product(id: string): CatalogItem {
     size: null,
     unit: 'UNIT',
     productGroupId: null,
-    category: 'DAIRY',
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: null,
   };
 }
@@ -57,7 +64,9 @@ describe('ItemNames.ensure', () => {
       1,
     ]);
     expect(requests.flat()).toEqual(wanted);
-    expect(names.nameOf(wanted[wanted.length - 1])?.category).toBe('DAIRY');
+    expect(
+      names.nameOf(wanted[wanted.length - 1])?.categories.map((one) => one.slug)
+    ).toEqual(['milk']);
   });
 
   it('asks one request for a set at the cap', async () => {

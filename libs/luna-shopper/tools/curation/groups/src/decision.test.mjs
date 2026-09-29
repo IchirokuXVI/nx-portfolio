@@ -21,7 +21,14 @@ const MILK = {
   name: { es: 'Leche semidesnatada Hacendado 1 L' },
   unitSize: 1,
   defaultUnit: 'LITER',
-  category: 'DAIRY',
+  categories: [
+    {
+      id: '0eabbe7e-1f72-53eb-85ed-78686d098ba4',
+      parentId: '6124c1d7-829f-5a9e-91ff-9a9732a838e6',
+      slug: 'other-dairy',
+      name: { en: 'Other dairy', es: 'Otros lácteos' },
+    },
+  ],
 };
 
 const MILK_GROUP = {

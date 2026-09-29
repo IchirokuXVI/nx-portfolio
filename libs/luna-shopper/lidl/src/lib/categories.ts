@@ -1,8 +1,10 @@
-import { ItemCategory } from '@portfolio/luna-shopper/contracts';
 import { LIDL_GROCERY_CATEGORIES } from './types';
 
 /**
- * LIDL's need world path mapped onto `ItemCategory` (plan 0089, section 5).
+ * LIDL's need world path mapped onto the leaves of the category taxonomy (plan
+ * 0089, section 5, retargeted by plan 0166, section 7). The answer is a leaf
+ * slug from appendix A of plan 0166, or null; the harvester turns the slug
+ * into a row and null into `uncategorised`.
  *
  * Two different questions live here and they are not the same one:
  *
@@ -11,11 +13,11 @@ import { LIDL_GROCERY_CATEGORIES } from './types';
  * - {@link resolveCategory} answers "what aisle is it", from the need world
  *   path. That is a proposal an admin sees, and it decides nothing.
  *
- * **The map is lossy and the fallback is the honest answer.** LIDL publishes a
- * four level tree against our twelve values, and its own tagging is noisy:
- * eight of one week's 153 grocery products are filed under `Vivir y amueblar`
- * and one under `Deporte y ocio`. Those reach `OTHER`, which is what the admin
- * queue is for. **A run never guesses a category from a product name.**
+ * **Null is the honest answer when the path says nothing we can read.** LIDL's
+ * own tagging is noisy: eight of one week's 153 grocery products are filed
+ * under `Vivir y amueblar` and one under `Deporte y ocio`. Those reach null,
+ * which is what the admin queue is for. **A run never guesses a category from
+ * a product name.**
  */
 
 /** Case and accent insensitive: the source's own casing is not stable. */
@@ -31,46 +33,66 @@ function fold(name: string): string {
  * The need world nodes that decide an aisle, measured against the whole
  * in-store assortment on 2026-09-06.
  *
- * They are the level three nodes under `Comida y cerca de la comida`, plus the
- * one level two node that is food and is not under it. **The deeper nodes are
- * deliberately absent**: resolution climbs towards the root, so `Alimentos
- * congelados/Helado` reaches `FROZEN` through its parent and a new child of a
- * mapped node needs no entry here at all.
+ * The level three nodes under `Comida y cerca de la comida` are listed, plus
+ * the one level two node that is food and is not under it, and each answers
+ * its root's `other-*` leaf or the one leaf it is. **A level four node is
+ * listed only where a fixture or the research sample printed it**, and only
+ * when it is narrower than its parent: resolution climbs towards the root, so
+ * a level four node nobody listed still lands on its parent's answer.
  *
  * Nothing outside food is listed. `Vivir y amueblar` and `Deporte y ocio` are
  * not aisles of a supermarket, and leaving them out is what makes them fall
- * back rather than claim a value.
+ * back rather than claim a leaf. `Flores y plantas` is left out too: the
+ * taxonomy has no leaf for it, and the index files plants as `P+F`, which
+ * {@link isGroceryCategory} drops before anything is resolved.
  */
-const CATEGORY_NODES: ReadonlyArray<readonly [string, ItemCategory]> = [
-  ['Frutas y hortalizas', ItemCategory.PRODUCE],
-  ['Carne y aves', ItemCategory.MEAT],
-  ['Pescado y marisco', ItemCategory.SEAFOOD],
-  ['Panadería', ItemCategory.BAKERY],
-  ['Quesos, productos lácteos y huevos', ItemCategory.DAIRY],
-  ['Alimentos congelados', ItemCategory.FROZEN],
-  ['Bebidas', ItemCategory.BEVERAGES],
+const CATEGORY_NODES: ReadonlyArray<readonly [string, string]> = [
+  ['Frutas y hortalizas', 'other-produce'],
+  ['Fruta', 'fruit'],
+  ['Carne y aves', 'other-meat'],
+  ['Embutidos y fiambres', 'cured-ham-and-sausages'],
+  ['Pescado y marisco', 'other-seafood'],
+  ['Panadería', 'other-bakery'],
+  ['Pasteles', 'pastries-and-cakes'],
+  ['Quesos, productos lácteos y huevos', 'other-dairy'],
+  ['Queso', 'cheese'],
+  ['Leche y nata', 'milk'],
+  ['Alimentos congelados', 'other-frozen'],
+  ['Helado', 'ice-cream'],
+  ['Pescado y marisco congelados', 'frozen-fish-and-seafood'],
+  ['Bebidas', 'other-drinks'],
+  ['Refrescos', 'soft-drinks'],
   // The level two node that is food: beer, wine and spirits are filed beside
   // `Comida y cerca de la comida` rather than under it.
-  ['Vino, cerveza y licores', ItemCategory.BEVERAGES],
-  ['Dulces y aperitivos', ItemCategory.SNACKS],
-  ['Café, té y cacao', ItemCategory.PANTRY],
-  ['Muesli y untables', ItemCategory.PANTRY],
-  ['Reservas de alimentos', ItemCategory.PANTRY],
-  ['Aceites, especias y salsas', ItemCategory.PANTRY],
+  ['Vino, cerveza y licores', 'other-drinks'],
+  ['Cerveza y sidra', 'beer'],
+  ['Dulces y aperitivos', 'other-snacks'],
+  ['Aperitivos salados', 'salty-snacks'],
+  ['Galletas y pasteles', 'biscuits'],
+  ['Productos de chocolate', 'chocolate-and-sweets'],
+  ['Café, té y cacao', 'coffee-tea-and-cocoa'],
+  ['Muesli y untables', 'other-breakfast'],
+  ['Reservas de alimentos', 'other-pantry'],
+  ['Ingredientes para repostería', 'flour-sugar-and-baking'],
+  ['Aceites, especias y salsas', 'other-pantry'],
+  ['Aceites y grasas', 'oil-and-vinegar'],
   // `Presupuesto` is LIDL's own word for the cheap household aisle, and it
   // holds toilet paper, detergent and cleaning products rather than food.
-  ['Presupuesto', ItemCategory.HOUSEHOLD],
-  ['Productos de droguería y cuidado personal', ItemCategory.PERSONAL_CARE],
-  ['Bebés y niños', ItemCategory.PERSONAL_CARE],
-  // Prepared meals and pet food are real supermarket aisles our enum has no
-  // value for. They are mapped rather than left to fall back, so that the
-  // fallback keeps meaning "the source said nothing we could read".
-  ['Platos precocinados', ItemCategory.OTHER],
-  ['Artículos para mascotas', ItemCategory.OTHER],
-  ['Flores y plantas', ItemCategory.OTHER],
+  ['Presupuesto', 'other-household'],
+  ['Papel higiénico', 'paper-and-wipes'],
+  ['Detergentes y cuidado de la ropa', 'laundry'],
+  ['Productos de droguería y cuidado personal', 'other-personal-care'],
+  ['Cuidado del cabello', 'hair'],
+  ['Vitaminas y nutrición deportiva', 'pharmacy'],
+  ['Bebés y niños', 'other-baby'],
+  ['Alimentos para bebés y leche en polvo', 'baby-food'],
+  ['Platos precocinados', 'other-ready-meals'],
+  ['Platos preparados refrigerados', 'prepared-dishes'],
+  ['Artículos para mascotas', 'other-pets'],
+  ['Comida para gatos', 'cats'],
 ];
 
-const BY_NAME = new Map<string, ItemCategory>(
+const BY_NAME = new Map<string, string>(
   CATEGORY_NODES.map(([name, category]) => [fold(name), category])
 );
 
@@ -102,23 +124,23 @@ export function categoryPathOf(wonCategoryPrimary: string | null): string[] {
 }
 
 /**
- * The aisle a need world path names, or `OTHER`.
+ * The leaf slug a need world path names, or null.
  *
  * The **deepest** node decides where a rule exists for it; otherwise resolution
- * climbs towards the root, so a leaf nobody mapped still lands under its parent
- * rather than in `OTHER`. That is what keeps this table at twenty rows against
- * a tree of several hundred nodes.
+ * climbs towards the root, so a node nobody mapped still lands on its parent's
+ * answer rather than on null. That is what keeps this table at forty rows
+ * against a tree of several hundred nodes.
  */
-export function resolveCategory(path: readonly string[]): ItemCategory {
+export function resolveCategory(path: readonly string[]): string | null {
   for (let i = path.length - 1; i >= 0; i -= 1) {
     const mapped = BY_NAME.get(fold(path[i]));
     if (mapped) {
       return mapped;
     }
   }
-  return ItemCategory.OTHER;
+  return null;
 }
 
 /** The table itself, for the test that asserts all of it at once. */
-export const LIDL_CATEGORY_MAP: ReadonlyArray<readonly [string, ItemCategory]> =
+export const LIDL_CATEGORY_MAP: ReadonlyArray<readonly [string, string]> =
   CATEGORY_NODES;
