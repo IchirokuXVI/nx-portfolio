@@ -242,7 +242,7 @@ const ZONE_LIMIT = 50;
     }
 
     button.role[aria-checked='true'] .track {
-      background: var(--admin-accent);
+      background: var(--admin-ink);
     }
 
     button.role[aria-checked='true'] .track::after {

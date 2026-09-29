@@ -1634,12 +1634,12 @@
           "confirm": "Delete the account"
         },
         "grantRole": {
-          "heading": "Give {{name}} the {{role}} role?",
+          "heading": "Give this account a role?",
           "body": "{{role}}: {{grants}} {{name}}’s account gets it at its next token refresh, within 15 minutes.",
           "confirm": "Give the role"
         },
         "removeRole": {
-          "heading": "Take the {{role}} role from {{name}}?",
+          "heading": "Take a role from this account?",
           "body": "{{role}}: {{grants}} {{name}}’s account loses it at its next token refresh, within 15 minutes.",
           "confirm": "Take the role away"
         }
