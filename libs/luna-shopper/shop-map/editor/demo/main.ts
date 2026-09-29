@@ -143,8 +143,10 @@ function showAt(t: number) {
   while (fed < points.length && points[fed][0] <= t) {
     const [logMs, x, y] = points[fed++];
     liveMap?.push({ logMs, x, y });
-    while (fedMarks < marks.length && marks[fedMarks].logMs <= logMs)
-      liveMap?.mark(marks[fedMarks++]);
+    while (fedMarks < marks.length && marks[fedMarks].logMs <= logMs) {
+      const mark = marks[fedMarks++];
+      liveMap?.mark(mark);
+    }
   }
   const line = doc.path[doc.path.length - 1]?.points ?? [];
   const at = line[line.length - 1];

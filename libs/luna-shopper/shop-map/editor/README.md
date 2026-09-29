@@ -32,13 +32,13 @@ map.destroy();
 ```
 
 The host element needs a size. The map fills it, fits the content on mount and on
-`fitToContent()`, and keeps fitting while nobody has zoomed or panned, so a map that grows
+`fitToContent()`, and keeps fitting until somebody zooms or pans, so a map that grows
 while somebody walks stays in view. Zoom runs from everything to half a metre in 28 css
 pixels, by pinch, wheel, double tap and drag (two fingers in the mapper look, where one
 finger draws).
 
 Every gesture of the mapper look reports a finished change as `area-put` events through
-`onChange` and applies it at once. The host appends the events to the log and may call
+`onChange` and applies it at once. The host appends the events to the log and then calls
 `setDocument` with the fold. A draw, move or resize that `validateShopMapV2` refuses is
 drawn in the refusal colour and not committed.
 
