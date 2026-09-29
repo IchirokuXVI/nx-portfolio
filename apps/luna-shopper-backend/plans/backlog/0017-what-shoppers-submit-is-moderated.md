@@ -12,6 +12,11 @@
 > ship without: a submission is `PENDING` until an admin accepts it. Everything else about
 > handling what strangers send is here.
 
+> **Update, 2026-09-29:** `0168` was rewritten. Maps are no longer submitted by shoppers:
+> only accounts with the `shopMap.record` permission (`0175`) record walks, and nothing
+> waits for review. What this plan says about maps applies again only when mapping opens to
+> every account. Prices are unchanged.
+
 Two kinds of shopper submission exist or are planned: prices (backlog `0001` section 2,
 stored as entered, a moderation queue reserved and not built) and maps (`0168`, accepted one
 by one in the back office). Both are user generated content, both need the same handling,

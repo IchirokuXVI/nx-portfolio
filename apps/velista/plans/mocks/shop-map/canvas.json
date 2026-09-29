@@ -1,0 +1,434 @@
+{
+  "title": "Velista: mapping a shop, and the map shoppers see",
+  "lede": "Somebody with the mapping permission walks a shop with the camera, marks sections, counters and notes, taps suggested shelves to fill them and edits any area by hand. A shop has several walks with a history each, and one walk is the map every shopper sees, from the basket or from the shop&#39;s own page. Plans velista <code>0121</code> to <code>0123</code> and <code>0126</code>, backend <code>0168</code>, <code>0175</code> and <code>0176</code>, and the shop map libraries. Day and Night. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Walking (Day)"
+    },
+    {
+      "file": "Mark.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Adding a mark (Day)"
+    },
+    {
+      "file": "Suggestion.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Shelf suggestion (Day)"
+    },
+    {
+      "file": "HoldMenu.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Holding a square (Day)"
+    },
+    {
+      "file": "EditCells.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Selecting and resizing (Day)"
+    },
+    {
+      "file": "EditArea.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Editing an area without walking (Day)"
+    },
+    {
+      "file": "CellKinds.dc.html",
+      "x": 2820,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "How the map is drawn (Day)"
+    },
+    {
+      "file": "MainNight.dc.html",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Walking (Night)"
+    },
+    {
+      "file": "MarkNight.dc.html",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Adding a mark (Night)"
+    },
+    {
+      "file": "SuggestionNight.dc.html",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Shelf suggestion (Night)"
+    },
+    {
+      "file": "HoldMenuNight.dc.html",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Holding a square (Night)"
+    },
+    {
+      "file": "EditCellsNight.dc.html",
+      "x": 1880,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Selecting and resizing (Night)"
+    },
+    {
+      "file": "EditAreaNight.dc.html",
+      "x": 2350,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Editing an area without walking (Night)"
+    },
+    {
+      "file": "CellKindsNight.dc.html",
+      "x": 2820,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "How the map is drawn (Night)"
+    },
+    {
+      "file": "Paused.dc.html",
+      "x": 0,
+      "y": 2228,
+      "w": 390,
+      "h": 844,
+      "title": "Stopped by a tracking problem (Day)"
+    },
+    {
+      "file": "Unconfirmed.dc.html",
+      "x": 470,
+      "y": 2228,
+      "w": 390,
+      "h": 844,
+      "title": "Path to check after an automatic resume (Day)"
+    },
+    {
+      "file": "Resume.dc.html",
+      "x": 940,
+      "y": 2228,
+      "w": 390,
+      "h": 844,
+      "title": "Resuming: where are you? (Day)"
+    },
+    {
+      "file": "ResumeLive.dc.html",
+      "x": 1410,
+      "y": 2228,
+      "w": 390,
+      "h": 844,
+      "title": "Resuming the walk shoppers see (Day)"
+    },
+    {
+      "file": "Unsaved.dc.html",
+      "x": 1880,
+      "y": 2228,
+      "w": 390,
+      "h": 844,
+      "title": "Not saved yet (Day)"
+    },
+    {
+      "file": "PausedNight.dc.html",
+      "x": 0,
+      "y": 3192,
+      "w": 390,
+      "h": 844,
+      "title": "Stopped by a tracking problem (Night)"
+    },
+    {
+      "file": "UnconfirmedNight.dc.html",
+      "x": 470,
+      "y": 3192,
+      "w": 390,
+      "h": 844,
+      "title": "Path to check after an automatic resume (Night)"
+    },
+    {
+      "file": "ResumeNight.dc.html",
+      "x": 940,
+      "y": 3192,
+      "w": 390,
+      "h": 844,
+      "title": "Resuming: where are you? (Night)"
+    },
+    {
+      "file": "ResumeLiveNight.dc.html",
+      "x": 1410,
+      "y": 3192,
+      "w": 390,
+      "h": 844,
+      "title": "Resuming the walk shoppers see (Night)"
+    },
+    {
+      "file": "UnsavedNight.dc.html",
+      "x": 1880,
+      "y": 3192,
+      "w": 390,
+      "h": 844,
+      "title": "Not saved yet (Night)"
+    },
+    {
+      "file": "Walks.dc.html",
+      "x": 0,
+      "y": 4456,
+      "w": 390,
+      "h": 844,
+      "title": "Walks of a shop (Day)"
+    },
+    {
+      "file": "MapSettings.dc.html",
+      "x": 470,
+      "y": 4456,
+      "w": 390,
+      "h": 844,
+      "title": "Settings for every walk (Day)"
+    },
+    {
+      "file": "History.dc.html",
+      "x": 940,
+      "y": 4456,
+      "w": 390,
+      "h": 844,
+      "title": "History of a walk (Day)"
+    },
+    {
+      "file": "Rewind.dc.html",
+      "x": 1410,
+      "y": 4456,
+      "w": 390,
+      "h": 844,
+      "title": "Rewind (Day)"
+    },
+    {
+      "file": "WalkOptions.dc.html",
+      "x": 1880,
+      "y": 4456,
+      "w": 390,
+      "h": 844,
+      "title": "Walk settings (Day)"
+    },
+    {
+      "file": "WalksNight.dc.html",
+      "x": 0,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "Walks of a shop (Night)"
+    },
+    {
+      "file": "MapSettingsNight.dc.html",
+      "x": 470,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "Settings for every walk (Night)"
+    },
+    {
+      "file": "HistoryNight.dc.html",
+      "x": 940,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "History of a walk (Night)"
+    },
+    {
+      "file": "RewindNight.dc.html",
+      "x": 1410,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "Rewind (Night)"
+    },
+    {
+      "file": "WalkOptionsNight.dc.html",
+      "x": 1880,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "Walk settings (Night)"
+    },
+    {
+      "file": "Entry.dc.html",
+      "x": 0,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "Opening the map from the basket (Day)"
+    },
+    {
+      "file": "ShopPicker.dc.html",
+      "x": 470,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "The shop picker opens a shop (Day)"
+    },
+    {
+      "file": "ShopPage.dc.html",
+      "x": 940,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "A shop (Day)"
+    },
+    {
+      "file": "ShopMap.dc.html",
+      "x": 1410,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map (Day)"
+    },
+    {
+      "file": "ShopMapAdmin.dc.html",
+      "x": 1880,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map, for somebody who maps (Day)"
+    },
+    {
+      "file": "ShopMapAssets.dc.html",
+      "x": 2350,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map with drawn assets (Day)"
+    },
+    {
+      "file": "SectionSheet.dc.html",
+      "x": 2820,
+      "y": 6684,
+      "w": 390,
+      "h": 844,
+      "title": "One section (Day)"
+    },
+    {
+      "file": "EntryNight.dc.html",
+      "x": 0,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "Opening the map from the basket (Night)"
+    },
+    {
+      "file": "ShopPickerNight.dc.html",
+      "x": 470,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "The shop picker opens a shop (Night)"
+    },
+    {
+      "file": "ShopPageNight.dc.html",
+      "x": 940,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "A shop (Night)"
+    },
+    {
+      "file": "ShopMapNight.dc.html",
+      "x": 1410,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map (Night)"
+    },
+    {
+      "file": "ShopMapAdminNight.dc.html",
+      "x": 1880,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map, for somebody who maps (Night)"
+    },
+    {
+      "file": "ShopMapAssetsNight.dc.html",
+      "x": 2350,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "The shop map with drawn assets (Night)"
+    },
+    {
+      "file": "SectionSheetNight.dc.html",
+      "x": 2820,
+      "y": 7648,
+      "w": 390,
+      "h": 844,
+      "title": "One section (Night)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": -520,
+      "y": -300,
+      "w": 440,
+      "text": "THE BRIEF, in the user's words, over five rounds on 2026-09-29. A live grid that fills as you walk and mark, with the camera. Shelves are suggestions you tap to fill, at most 2 m wide. Marks are Section, Counter and Note, with the direction the phone faced. A section runs until you turn, mark another or press Section left, and walking back removes it. Shapes are saved in metres and the grid only helps drawing. A shop has several walks, one is shown to shoppers, and every walk keeps a history you can rewind. Shoppers see a friendly map with no grid, opened from the basket or from a shop's own page. Only accounts with the mapping permission see the walks."
+    },
+    {
+      "id": "row0",
+      "x": 0,
+      "y": -300,
+      "w": 600,
+      "text": "Mapping a shop: walking, drawing and editing"
+    },
+    {
+      "id": "row1",
+      "x": 0,
+      "y": 1928,
+      "w": 600,
+      "text": "Mapping a shop: stops and resumes"
+    },
+    {
+      "id": "row2",
+      "x": 0,
+      "y": 4156,
+      "w": 600,
+      "text": "Walks and their history"
+    },
+    {
+      "id": "row3",
+      "x": 0,
+      "y": 6384,
+      "w": 600,
+      "text": "A shop, and the map every shopper sees"
+    },
+    {
+      "id": "assets",
+      "x": 2350,
+      "y": 8522,
+      "w": 390,
+      "text": "Drawn assets are on this one board only, so the user can decide whether they are worth building. The plans draw the plain look until the user decides."
+    }
+  ]
+}
