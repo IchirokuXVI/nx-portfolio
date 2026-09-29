@@ -1,0 +1,283 @@
+{
+ "club=false promo=false strike=eq disc=0 promos=-": [
+  {
+   "sku": "65",
+   "name": "Manzana roja granel 800 g aprox.",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "KILO",
+    "price": 1.59,
+    "price_per_unit": 1.99,
+    "strikethrough_price": 1.59
+   },
+   "promotions": [],
+   "weight": 0
+  },
+  {
+   "sku": "74",
+   "name": "Pimiento rojo unidad 350 g aprox.",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "KILO",
+    "price": 1.22,
+    "price_per_unit": 3.49,
+    "strikethrough_price": 1.22
+   },
+   "promotions": [],
+   "weight": 0
+  },
+  {
+   "sku": "78",
+   "name": "Kiwi Zespri granel 500 g aprox.",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "KILO",
+    "price": 3,
+    "price_per_unit": 5.99,
+    "strikethrough_price": 3
+   },
+   "promotions": [],
+   "weight": 0
+  }
+ ],
+ "club=true promo=true strike=gt disc=>0 promos=C": [
+  {
+   "sku": "85",
+   "name": "Agua mineral Font Vella 1,5 L",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 10,
+    "is_club_price": true,
+    "is_promo_price": true,
+    "measure_unit": "LITRO",
+    "price": 0.69,
+    "price_per_unit": 0.46,
+    "strikethrough_price": 0.77
+   },
+   "promotions": [
+    {
+     "description": "10% DTO. AGUA MINERAL FONT VELLA 1,5 L",
+     "only_club_dia": true,
+     "short_description": "AGUA FONT VELLA 1,5L"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "100",
+   "name": "Aceite de oliva suave Carbonell 1 L",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 33,
+    "is_club_price": true,
+    "is_promo_price": true,
+    "measure_unit": "LITRO",
+    "price": 3.85,
+    "price_per_unit": 3.85,
+    "strikethrough_price": 5.75
+   },
+   "promotions": [
+    {
+     "description": "SOLO A 3,85 EUR ACEITE OL. SUAVE CARBONELL 1L",
+     "only_club_dia": true,
+     "short_description": "CARBONELL SUAVE 1 L"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "686",
+   "name": "Fanta de limón 330 ml",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 6,
+    "is_club_price": true,
+    "is_promo_price": true,
+    "measure_unit": "LITRO",
+    "price": 0.75,
+    "price_per_unit": 2.27,
+    "strikethrough_price": 0.8
+   },
+   "promotions": [
+    {
+     "description": "SOLO A 0,75 EUROS FANTA DE LIMÓN 330 ML",
+     "only_club_dia": true,
+     "short_description": "FANTA DE LIMÓN 330ML"
+    }
+   ],
+   "weight": 0
+  }
+ ],
+ "club=false promo=false strike=eq disc=0 promos=C": [
+  {
+   "sku": "603",
+   "name": "Fabada asturiana Litoral 420 g",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "KILO",
+    "price": 2.65,
+    "price_per_unit": 6.31,
+    "strikethrough_price": 2.65
+   },
+   "promotions": [
+    {
+     "description": "2ª UD 50% DTO FABADA ASTURIANA LITORAL 420 G",
+     "only_club_dia": true,
+     "short_description": "FABADA ASTUR.LITORAL"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "1878",
+   "name": "Lentejas pardinas Luengo 500 g",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "KILO",
+    "price": 2.09,
+    "price_per_unit": 4.18,
+    "strikethrough_price": 2.09
+   },
+   "promotions": [
+    {
+     "description": "2ª UD AL 50% DTO LENTEJA PARDINA LUENGO 500 G",
+     "only_club_dia": true,
+     "short_description": "LENTEJA PARD. LUENGO"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "2274",
+   "name": "Bebida de soja Alpro 1 L",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "LITRO",
+    "price": 2.09,
+    "price_per_unit": 2.09,
+    "strikethrough_price": 2.09
+   },
+   "promotions": [
+    {
+     "description": "2ª UD AL 50% DTO. SELECCIÓN ALPRO",
+     "exclusive_online": true,
+     "only_club_dia": true,
+     "short_description": "SELECCIÓN ALPRO"
+    }
+   ],
+   "weight": 0
+  }
+ ],
+ "club=false promo=true strike=gt disc=>0 promos=G": [
+  {
+   "sku": "18036",
+   "name": "Cuartos traseros de pollo Selección de Dia 900 g aprox.",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 20,
+    "is_club_price": false,
+    "is_promo_price": true,
+    "measure_unit": "KILO",
+    "price": 2.51,
+    "price_per_unit": 2.79,
+    "strikethrough_price": 3.14
+   },
+   "promotions": [
+    {
+     "description": "SOLO A 2,79 EUR/KG CUARTOS TRASEROS POLLO DIA",
+     "short_description": "CUARTO TRASERO POLLO"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "277828",
+   "name": "Nachos naturales Dia Snack Maniac bolsa 150 g",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 25,
+    "is_club_price": false,
+    "is_promo_price": true,
+    "measure_unit": "KILO",
+    "price": 0.67,
+    "price_per_unit": 4.47,
+    "strikethrough_price": 0.9
+   },
+   "promotions": [
+    {
+     "description": "SOLO A 0,67 EUROS NACHOS NATURALES DIA 150 G",
+     "short_description": "NACHOS NATURALES DIA"
+    }
+   ],
+   "weight": 0
+  },
+  {
+   "sku": "297329",
+   "name": "Albóndigas de pollo Selección de Dia 420 g",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 21,
+    "is_club_price": false,
+    "is_promo_price": true,
+    "measure_unit": "KILO",
+    "price": 2.99,
+    "price_per_unit": 7.12,
+    "strikethrough_price": 3.79
+   },
+   "promotions": [
+    {
+     "description": "SOLO A 2,99 EUR ALBÓNDIGAS POLLO SEL.DIA 420G",
+     "short_description": "ALBÓNDIGAS POLLO DIA"
+    }
+   ],
+   "weight": 0
+  }
+ ],
+ "club=false promo=false strike=eq disc=0 promos=CC": [
+  {
+   "sku": "183142",
+   "name": "Tónica Nordic Mist 250 ml",
+   "prices": {
+    "currency": "EUR",
+    "discount_percentage": 0,
+    "is_club_price": false,
+    "is_promo_price": false,
+    "measure_unit": "LITRO",
+    "price": 0.72,
+    "price_per_unit": 2.88,
+    "strikethrough_price": 0.72
+   },
+   "promotions": [
+    {
+     "description": "2 UDS A 1 EURO TÓNICA NORDIC MIST 250 ML",
+     "only_club_dia": true,
+     "short_description": "TÓNICA NORDIC MIST"
+    },
+    {
+     "description": "2 UDS A 1 EURO TÓNICA NORDIC MIST 250 ML",
+     "only_club_dia": true,
+     "short_description": "TÓNICA NORDIC MIST"
+    }
+   ],
+   "weight": 0
+  }
+ ]
+}

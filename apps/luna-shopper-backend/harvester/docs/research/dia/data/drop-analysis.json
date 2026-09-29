@@ -1,0 +1,1823 @@
+{
+ "clear": [
+  {
+   "id": "L2302",
+   "name": "Novedades",
+   "skus": 38,
+   "alsoInKept": 38,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2297 Salsas para pasta 3",
+    "L2208 Salsas de tomate y pasta 3",
+    "L2087 Postres tradicionales 3",
+    "L2136 Tartas y churros 3"
+   ]
+  },
+  {
+   "id": "L2352",
+   "name": "Oktoberfest",
+   "skus": 34,
+   "alsoInKept": 34,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2117 Cervezas prémium y especiales 7",
+    "L2206 Salchichas 7",
+    "L2066 Galletas saladas y crackers 4",
+    "L2284 Encurtidos 3"
+   ]
+  },
+  {
+   "id": "L2328",
+   "name": "Freidora de aire - Airfryer",
+   "skus": 59,
+   "alsoInKept": 59,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2210 Verduras y patatas 17",
+    "L2025 Verduras congeladas y al vapor 14",
+    "L2132 Pescado y marisco 13",
+    "L2135 Croquetas y rebozados 12"
+   ]
+  },
+  {
+   "id": "L2350",
+   "name": "Selección sin gluten",
+   "skus": 43,
+   "alsoInKept": 43,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2200 Pan sin gluten 7",
+    "L2117 Cervezas prémium y especiales 7",
+    "L2323 Galletas, cereales y tortitas sin gluten 5",
+    "L2072 Pan rallado, tostado y picos 4"
+   ]
+  },
+  {
+   "id": "L2351",
+   "name": "Nutrición deportiva",
+   "skus": 58,
+   "alsoInKept": 58,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2229 Postres y batidos de proteínas 22",
+    "L2322 Barritas de cereales y proteínas 8",
+    "L2114 Bebidas isotónicas y deportivas 7",
+    "L2248 Yogures líquidos 5"
+   ]
+  },
+  {
+   "id": "L2303",
+   "name": "Mejor valorados",
+   "skus": 47,
+   "alsoInKept": 47,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2115 Cervezas 2",
+    "L2108 Cola 2",
+    "L2202 Pollo 2",
+    "L2130 Helados y hielo 2"
+   ]
+  },
+  {
+   "id": "L2040",
+   "name": "Frutas de temporada",
+   "skus": 18,
+   "alsoInKept": 7,
+   "pct": 38.9,
+   "orphans": 11,
+   "orphanEx": [
+    "83 Granada unidad 500 g aprox.",
+    "87 Chirimoya unidad 500 g aprox.",
+    "26712 Ciruela roja granel 500 g aprox.",
+    "46801 Melocotón amarillo granel 1 Kg aprox."
+   ],
+   "top": [
+    "L2267 Melón y sandía 7"
+   ]
+  },
+  {
+   "id": "L2336",
+   "name": "(hidden) /verano/hielo-agua-refrescos-y-horchatas/c/L2336",
+   "skus": 41,
+   "alsoInKept": 41,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2286 Packs de agua y refrescos 37",
+    "L2108 Cola 16",
+    "L2107 Agua 14",
+    "L2217 Bebidas energéticas 3"
+   ]
+  },
+  {
+   "id": "L2254",
+   "name": "(hidden) /navidad/carnes-navidad/c/L2254",
+   "skus": 4,
+   "alsoInKept": 4,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2014 Cerdo 2",
+    "L2013 Vacuno 1",
+    "L2202 Pollo 1"
+   ]
+  },
+  {
+   "id": "L2176",
+   "name": "(hidden) /mascotas/pajaros/c/L2176",
+   "skus": 0,
+   "alsoInKept": 0,
+   "pct": null,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": []
+  },
+  {
+   "id": "L2241",
+   "name": "(hidden) /sin-gluten/panaderia-sin-gluten/c/L2241",
+   "skus": 2,
+   "alsoInKept": 2,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2200 Pan sin gluten 2",
+    "L2074 Tortillas de trigo y pitas 1",
+    "L2103 Comida mexicana 1"
+   ]
+  },
+  {
+   "id": "L2224",
+   "name": "(hidden) /navidad/bodega/c/L2224",
+   "skus": 46,
+   "alsoInKept": 46,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2120 Vino tinto 12",
+    "L2122 Cavas y sidra 11",
+    "L2121 Vino blanco 11",
+    "L2129 Cremas, licores y brandy 10"
+   ]
+  },
+  {
+   "id": "L2243",
+   "name": "(hidden) /sin-gluten/platos-sin-gluten/c/L2243",
+   "skus": 2,
+   "alsoInKept": 2,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2273 Noodles 2",
+    "L2299 Comida asiática 2"
+   ]
+  },
+  {
+   "id": "L2333",
+   "name": "(hidden) /verano/gazpacho-y-salmorejo/c/L2333",
+   "skus": 6,
+   "alsoInKept": 6,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2106 Gazpachos y salmorejos 6"
+   ]
+  },
+  {
+   "id": "L2335",
+   "name": "(hidden) /verano/cervezas-y-tintos-de-verano/c/L2335",
+   "skus": 58,
+   "alsoInKept": 58,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2293 Packs de cervezas 53",
+    "L2115 Cervezas 30",
+    "L2118 Cervezas sin alcohol 12",
+    "L2182 Cervezas con limón 7"
+   ]
+  },
+  {
+   "id": "L2240",
+   "name": "(hidden) /sin-gluten/desayunos-sin-gluten/c/L2240",
+   "skus": 11,
+   "alsoInKept": 11,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2323 Galletas, cereales y tortitas sin gluten 5",
+    "L2216 Tortitas 4",
+    "L2322 Barritas de cereales y proteínas 4",
+    "L2067 Magdalenas y bollería clásica 2"
+   ]
+  },
+  {
+   "id": "L2218",
+   "name": "(hidden) /navidad/turrones/c/L2218",
+   "skus": 0,
+   "alsoInKept": 0,
+   "pct": null,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": []
+  },
+  {
+   "id": "L2331",
+   "name": "(hidden) /verano/barbacoa/c/L2331",
+   "skus": 20,
+   "alsoInKept": 20,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2017 Hamburguesas, carne picada y albóndigas 5",
+    "L2050 Ketchup, mayonesa y mostaza 4",
+    "L2296 Salsas especiales y picantes 4",
+    "L2014 Cerdo 4"
+   ]
+  },
+  {
+   "id": "L2330",
+   "name": "(hidden) /verano/aperitivos-y-picoteo/c/L2330",
+   "skus": 41,
+   "alsoInKept": 41,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2096 Aceitunas 7",
+    "L2098 Patatas fritas 5",
+    "L2072 Pan rallado, tostado y picos 4",
+    "L2195 Mejillones, berberechos y pescado 3"
+   ]
+  },
+  {
+   "id": "L2256",
+   "name": "(hidden) /navidad/frutos-secos-y-deshidratados/c/L2256",
+   "skus": 9,
+   "alsoInKept": 9,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2041 Frutas deshidratadas 6",
+    "L2097 Frutos secos 3"
+   ]
+  },
+  {
+   "id": "L2225",
+   "name": "(hidden) /navidad/entrantes-navidad/c/L2225",
+   "skus": 6,
+   "alsoInKept": 6,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2093 Caldos y sopas 3",
+    "L2098 Patatas fritas 3"
+   ]
+  },
+  {
+   "id": "L2244",
+   "name": "(hidden) /sin-gluten/bebidas-sin-gluten/c/L2244",
+   "skus": 1,
+   "alsoInKept": 1,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2117 Cervezas prémium y especiales 1"
+   ]
+  },
+  {
+   "id": "L2220",
+   "name": "(hidden) /navidad/roscones-panettones-y-polvorones/c/L2220",
+   "skus": 9,
+   "alsoInKept": 9,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2067 Magdalenas y bollería clásica 9"
+   ]
+  },
+  {
+   "id": "L2332",
+   "name": "(hidden) /verano/listo-para-comer/c/L2332",
+   "skus": 13,
+   "alsoInKept": 13,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2105 Tortillas y empanadas 7",
+    "L2304 Horno 4",
+    "L2102 Listos para comer 3",
+    "L2019 Fresco 2"
+   ]
+  },
+  {
+   "id": "L2245",
+   "name": "(hidden) /sin-gluten/productos-infantiles-sin-gluten/c/L2245",
+   "skus": 34,
+   "alsoInKept": 34,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2083 Yogures y postres infantiles 16",
+    "L2140 Bolsitas y snacks 15",
+    "L2141 Potitos y tarritos 14",
+    "L2139 Yogures y postres 3"
+   ]
+  },
+  {
+   "id": "L2339",
+   "name": "(hidden) /novedades-y-recomendados/especial-mundial/c/L2339",
+   "skus": 7,
+   "alsoInKept": 7,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2014 Cerdo 1",
+    "L2130 Helados y hielo 1",
+    "L2345 Semicurado 1",
+    "L2072 Pan rallado, tostado y picos 1"
+   ]
+  },
+  {
+   "id": "L2242",
+   "name": "(hidden) /sin-gluten/reposteria-sin-gluten/c/L2242",
+   "skus": 7,
+   "alsoInKept": 7,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2075 Harinas y levaduras 5",
+    "L2077 Preparados para postres y decoración 2"
+   ]
+  },
+  {
+   "id": "L2257",
+   "name": "(hidden) /navidad/postres-de-navidad/c/L2257",
+   "skus": 12,
+   "alsoInKept": 12,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2087 Postres tradicionales 12"
+   ]
+  },
+  {
+   "id": "L2189",
+   "name": "(hidden) /azucar-chocolates-y-caramelos/dulces-de-navidad/c/L2189",
+   "skus": 2,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 2,
+   "orphanEx": [
+    "273438 Barquillos rellenos de crema de turrón Dulce Noel Dia lata 200 g",
+    "273439 Barquillos rellenos de crema de cacao con avellanas  Dulce Noel Dia lata 200 g"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2334",
+   "name": "(hidden) /verano/helados/c/L2334",
+   "skus": 33,
+   "alsoInKept": 33,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2130 Helados y hielo 33",
+    "L2054 Nata 1"
+   ]
+  },
+  {
+   "id": "L2221",
+   "name": "(hidden) /navidad/polvorones-y-mantecados/c/L2221",
+   "skus": 2,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 2,
+   "orphanEx": [
+    "51094 Marquesas Delaviuda 125 g",
+    "313359 Mantecados de pistacho La flor de Antequera 190 g"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2219",
+   "name": "(hidden) /navidad/chocolates-y-dulces-navidad/c/L2219",
+   "skus": 3,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 3,
+   "orphanEx": [
+    "273438 Barquillos rellenos de crema de turrón Dulce Noel Dia lata 200 g",
+    "273439 Barquillos rellenos de crema de cacao con avellanas  Dulce Noel Dia lata 200 g",
+    "311815 Pastas en hucha globo Dulce Noel Dia 160 g"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2329",
+   "name": "(hidden) /novedades-y-recomendados/productos-premiados/c/L2329",
+   "skus": 50,
+   "alsoInKept": 50,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2120 Vino tinto 18",
+    "L2121 Vino blanco 12",
+    "L2011 Especialidades 4",
+    "L2007 Curado 4"
+   ]
+  },
+  {
+   "id": "L2349",
+   "name": "(hidden) /novedades-y-recomendados/vuelta-a-la-accion/c/L2349",
+   "skus": 60,
+   "alsoInKept": 60,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2247 Comida tradicional 5",
+    "L2079 Yogures naturales y desnatados 3",
+    "L2067 Magdalenas y bollería clásica 3",
+    "L2320 Galletas de chocolate y rellenas 3"
+   ]
+  }
+ ],
+ "border": [
+  {
+   "id": "L2200",
+   "name": "Pan sin gluten",
+   "skus": 12,
+   "alsoInKept": 9,
+   "pct": 75,
+   "orphans": 3,
+   "orphanEx": [
+    "184414 Pan tradicional sin gluten Proceli 160 g",
+    "256378 Baguette rústica sin gluten Proceli 120 g",
+    "299092 Chapata sin gluten El Molino de Dia 120 g"
+   ],
+   "top": [
+    "L2072 Pan rallado, tostado y picos 3",
+    "L2069 Pan de molde y especiales 3",
+    "L2074 Tortillas de trigo y pitas 2",
+    "L2103 Comida mexicana 2"
+   ]
+  },
+  {
+   "id": "L2274",
+   "name": "Pastas sin gluten",
+   "skus": 7,
+   "alsoInKept": 7,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2044 Macarrones, espaguetis y pastas secas 6",
+    "L2137 Arroces y pasta 1",
+    "L2272 Lasaña y canelones 1"
+   ]
+  },
+  {
+   "id": "L2323",
+   "name": "Galletas, cereales y tortitas sin gluten",
+   "skus": 15,
+   "alsoInKept": 14,
+   "pct": 93.3,
+   "orphans": 1,
+   "orphanEx": [
+    "309169 Salvado de avena sin gluten Esgir 300 g"
+   ],
+   "top": [
+    "L2216 Tortitas 4",
+    "L2321 Cereales integrales y muesli 3",
+    "L2065 Galletas clásicas y digestive 2",
+    "L2068 Cereales 2"
+   ]
+  },
+  {
+   "id": "L2267",
+   "name": "Melón y sandía",
+   "skus": 7,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 7,
+   "orphanEx": [
+    "28887 Melón piel de sapo unidad 5 Kg aprox.",
+    "265124 Media sandía rayada unidad 3 Kg aprox.",
+    "265125 Medio melón piel de sapo unidad 2.5 Kg aprox.",
+    "265126 Media sandía negra unidad 3 Kg aprox."
+   ],
+   "top": []
+  },
+  {
+   "id": "L2119",
+   "name": "Tinto de verano y sangría",
+   "skus": 7,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 7,
+   "orphanEx": [
+    "5962 Sangría Fiesta del Dia 1.5 L",
+    "66989 Sangría Don Simón 1.5 L",
+    "82389 Tinto de verano Fiesta del Dia 1.5 L",
+    "82850 Tinto de verano con limón La Casera 1.5 L"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2340",
+   "name": "Protector solar",
+   "skus": 24,
+   "alsoInKept": 1,
+   "pct": 4.2,
+   "orphans": 23,
+   "orphanEx": [
+    "81864 Protector solar spf 30 Delial 270 ml",
+    "120271 Aceite solar protector dorado sublime spf 20 Delial 150 ml",
+    "161650 Leche solar niños sensitive advanced spf 50 Delial 270 ml",
+    "161727 Leche solar protege & hidrata spf 30 Nivea 200 ml"
+   ],
+   "top": [
+    "L2153 Hidratación de cuerpo y manos 1"
+   ]
+  },
+  {
+   "id": "L2286",
+   "name": "Packs de agua y refrescos",
+   "skus": 43,
+   "alsoInKept": 43,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2108 Cola 19",
+    "L2107 Agua 16",
+    "L2217 Bebidas energéticas 3",
+    "L2212 Naranja, limón y lima-limón 3"
+   ]
+  },
+  {
+   "id": "L2292",
+   "name": "Packs de zumos",
+   "skus": 22,
+   "alsoInKept": 22,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2314 Zumos y batidos 19",
+    "L2290 Fruta y leche 12",
+    "L2288 Melocotón y piña 8",
+    "L2289 Multifrutas y otros sabores 1"
+   ]
+  },
+  {
+   "id": "L2293",
+   "name": "Packs de cervezas",
+   "skus": 65,
+   "alsoInKept": 65,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2115 Cervezas 36",
+    "L2118 Cervezas sin alcohol 14",
+    "L2117 Cervezas prémium y especiales 10",
+    "L2182 Cervezas con limón 7"
+   ]
+  },
+  {
+   "id": "L2268",
+   "name": "Frutas congeladas",
+   "skus": 3,
+   "alsoInKept": 3,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2038 Frutos rojos y del bosque 2",
+    "L2039 Frutas tropicales 1"
+   ]
+  },
+  {
+   "id": "L2106",
+   "name": "Gazpachos y salmorejos",
+   "skus": 9,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 9,
+   "orphanEx": [
+    "43231 Gazpacho Dia Al Punto 1 L",
+    "217992 Gazpacho Dia Al Punto 330 ml",
+    "231863 Salmorejo Dia Al Punto 1 L",
+    "246136 Gazpacho suave Dia Al Punto 1 L"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2139",
+   "name": "Yogures y postres",
+   "skus": 14,
+   "alsoInKept": 14,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2083 Yogures y postres infantiles 14",
+    "L2081 Yogures de sabores y frutas 2",
+    "L2088 Natillas, flan y arroz con leche 1",
+    "L2248 Yogures líquidos 1"
+   ]
+  },
+  {
+   "id": "L2314",
+   "name": "Zumos y batidos",
+   "skus": 27,
+   "alsoInKept": 27,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2292 Packs de zumos 19",
+    "L2290 Fruta y leche 13",
+    "L2053 Batidos 6",
+    "L2288 Melocotón y piña 5"
+   ]
+  },
+  {
+   "id": "L2315",
+   "name": "Galletas y bollería",
+   "skus": 48,
+   "alsoInKept": 48,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2320 Galletas de chocolate y rellenas 27",
+    "L2318 Rosquillas y pastelitos 12",
+    "L2065 Galletas clásicas y digestive 6",
+    "L2063 Chocolatinas y bombones 2"
+   ]
+  },
+  {
+   "id": "L2316",
+   "name": "Golosinas y chocolatinas",
+   "skus": 48,
+   "alsoInKept": 48,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2064 Golosinas 33",
+    "L2063 Chocolatinas y bombones 14",
+    "L2327 Chicles y caramelos 1"
+   ]
+  },
+  {
+   "id": "L2229",
+   "name": "Postres y batidos de proteínas",
+   "skus": 22,
+   "alsoInKept": 13,
+   "pct": 59.1,
+   "orphans": 9,
+   "orphanEx": [
+    "287450 Batido alto en proteínas sabor chocolate Just loading 225 ml",
+    "292374 Mousse de cacao alta en proteínas Dia Láctea 200 g",
+    "292375 Postre lácteo natural alto en proteína Dia Láctea 300 g",
+    "303224 Yogur de stracciatella alto en proteínas Dia Láctea 4 x 120 g"
+   ],
+   "top": [
+    "L2248 Yogures líquidos 5",
+    "L2088 Natillas, flan y arroz con leche 3",
+    "L2085 Kéfir y postres vegetales 2",
+    "L2089 Gelatinas y cuajadas 1"
+   ]
+  },
+  {
+   "id": "L2322",
+   "name": "Barritas de cereales y proteínas",
+   "skus": 36,
+   "alsoInKept": 1,
+   "pct": 2.8,
+   "orphans": 35,
+   "orphanEx": [
+    "43947 Barritas de cereales con chocolate con leche Gran Dia 150 g",
+    "43948 Barritas de cereales con avellanas Gran Dia 150 g",
+    "43949 Barritas de cereales plátano y chocolate con leche Gran Dia 150 g",
+    "85271 Barritas de cereales con chocolate con leche Corny 150 g"
+   ],
+   "top": [
+    "L2323 Galletas, cereales y tortitas sin gluten 1"
+   ]
+  },
+  {
+   "id": "L2261",
+   "name": "Leche sin lactosa y enriquecidas",
+   "skus": 47,
+   "alsoInKept": 0,
+   "pct": 0,
+   "orphans": 47,
+   "orphanEx": [
+    "22488 Leche semidesnatada calcio Puleva 1 L",
+    "22489 Leche desnatada calcio Puleva 1 L",
+    "27258 Leche entera calcio Puleva 1 L",
+    "27987 Leche semidesnatada fibra Asturiana 1 L"
+   ],
+   "top": []
+  },
+  {
+   "id": "L2262",
+   "name": "Leche infantil",
+   "skus": 17,
+   "alsoInKept": 17,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2138 Leches y papillas 17"
+   ]
+  }
+ ],
+ "orphansClear": {
+  "count": 16,
+  "of": 5718,
+  "byCat": {
+   "L2040": 11,
+   "L2221": 2,
+   "L2189": 2,
+   "L2219": 3
+  },
+  "examples": [
+   {
+    "sku": "83",
+    "name": "Granada unidad 500 g aprox.",
+    "url": "/frutas/frutas-de-temporada/p/83",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "87",
+    "name": "Chirimoya unidad 500 g aprox.",
+    "url": "/frutas/frutas-de-temporada/p/87",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "26712",
+    "name": "Ciruela roja granel 500 g aprox.",
+    "url": "/frutas/frutas-de-temporada/p/26712",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "46801",
+    "name": "Melocotón amarillo granel 1 Kg aprox.",
+    "url": "/frutas/frutas-de-temporada/p/46801",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "46803",
+    "name": "Nectarina granel 750 g aprox.",
+    "url": "/frutas/frutas-de-temporada/p/46803",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "51094",
+    "name": "Marquesas Delaviuda 125 g",
+    "url": "/navidad/polvorones-y-mantecados/p/51094",
+    "cats": [
+     "L2221"
+    ]
+   },
+   {
+    "sku": "172914",
+    "name": "Ciruela rosse granel 500 g aprox.",
+    "url": "/frutas/frutas-de-temporada/p/172914",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "190756",
+    "name": "Melocotón amarillo bandeja 750 g",
+    "url": "/frutas/frutas-de-temporada/p/190756",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "190825",
+    "name": "Nectarina bandeja 750 g",
+    "url": "/frutas/frutas-de-temporada/p/190825",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "191030",
+    "name": "Ciruela Claudia bandeja 300 g",
+    "url": "/frutas/frutas-de-temporada/p/191030",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "273438",
+    "name": "Barquillos rellenos de crema de turrón Dulce Noel Dia lata 200 g",
+    "url": "/navidad/dulces-navidad/p/273438",
+    "cats": [
+     "L2189",
+     "L2219"
+    ]
+   },
+   {
+    "sku": "273439",
+    "name": "Barquillos rellenos de crema de cacao con avellanas  Dulce Noel Dia lata 200 g",
+    "url": "/navidad/dulces-navidad/p/273439",
+    "cats": [
+     "L2189",
+     "L2219"
+    ]
+   },
+   {
+    "sku": "304665",
+    "name": "Ciruela rose bandeja 500 g",
+    "url": "/frutas/frutas-de-temporada/p/304665",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "304713",
+    "name": "Higos frescos bandeja 300 g",
+    "url": "/frutas/frutas-de-temporada/p/304713",
+    "cats": [
+     "L2040"
+    ]
+   },
+   {
+    "sku": "311815",
+    "name": "Pastas en hucha globo Dulce Noel Dia 160 g",
+    "url": "/navidad/chocolates-y-dulces-navidad/p/311815",
+    "cats": [
+     "L2219"
+    ]
+   },
+   {
+    "sku": "313359",
+    "name": "Mantecados de pistacho La flor de Antequera 190 g",
+    "url": "/navidad/polvorones-y-mantecados/p/313359",
+    "cats": [
+     "L2221"
+    ]
+   }
+  ]
+ },
+ "orphansAll": {
+  "count": 158,
+  "examples": [
+   "83 Granada unidad 500 g aprox. L2040",
+   "87 Chirimoya unidad 500 g aprox. L2040",
+   "5962 Sangría Fiesta del Dia 1.5 L L2119,L2335",
+   "22488 Leche semidesnatada calcio Puleva 1 L L2261",
+   "22489 Leche desnatada calcio Puleva 1 L L2261",
+   "26712 Ciruela roja granel 500 g aprox. L2040",
+   "27258 Leche entera calcio Puleva 1 L L2261",
+   "27987 Leche semidesnatada fibra Asturiana 1 L L2261",
+   "28887 Melón piel de sapo unidad 5 Kg aprox. L2040,L2267",
+   "30052 Leche desnatada omega 3 Puleva 1 L L2261"
+  ]
+ },
+ "highOverlapKept": [
+  {
+   "id": "L2268",
+   "name": "Frutas congeladas",
+   "skus": 3,
+   "alsoInKept": 3,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2038 Frutos rojos y del bosque 2",
+    "L2039 Frutas tropicales 1"
+   ]
+  },
+  {
+   "id": "L2030",
+   "name": "Ensaladas y verduras preparadas",
+   "skus": 11,
+   "alsoInKept": 11,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2300 Ensaladas y bowls 11",
+    "L2044 Macarrones, espaguetis y pastas secas 2"
+   ]
+  },
+  {
+   "id": "L2025",
+   "name": "Verduras congeladas y al vapor",
+   "skus": 39,
+   "alsoInKept": 39,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2210 Verduras y patatas 37",
+    "L2024 Brócoli, coliflor y judías verdes 2",
+    "L2043 Quinoa, couscous y soja 1"
+   ]
+  },
+  {
+   "id": "L2249",
+   "name": "Congelado",
+   "skus": 21,
+   "alsoInKept": 21,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2132 Pescado y marisco 21"
+   ]
+  },
+  {
+   "id": "L2251",
+   "name": "Rebozado",
+   "skus": 16,
+   "alsoInKept": 16,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2135 Croquetas y rebozados 11",
+    "L2132 Pescado y marisco 4",
+    "L2253 Marisco, gamba y calamar 1",
+    "L2019 Fresco 1"
+   ]
+  },
+  {
+   "id": "L2253",
+   "name": "Marisco, gamba y calamar",
+   "skus": 17,
+   "alsoInKept": 17,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2132 Pescado y marisco 17",
+    "L2251 Rebozado 1"
+   ]
+  },
+  {
+   "id": "L2012",
+   "name": "Paté y sobrasada",
+   "skus": 34,
+   "alsoInKept": 34,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2341 Patés 34"
+   ]
+  },
+  {
+   "id": "L2262",
+   "name": "Leche infantil",
+   "skus": 17,
+   "alsoInKept": 17,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2138 Leches y papillas 17"
+   ]
+  },
+  {
+   "id": "L2131",
+   "name": "Pizzas y masas",
+   "skus": 28,
+   "alsoInKept": 28,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2246 Pizzas congeladas 28"
+   ]
+  },
+  {
+   "id": "L2132",
+   "name": "Pescado y marisco",
+   "skus": 45,
+   "alsoInKept": 45,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2249 Congelado 21",
+    "L2253 Marisco, gamba y calamar 17",
+    "L2021 Surimi y elaborados 4",
+    "L2251 Rebozado 4"
+   ]
+  },
+  {
+   "id": "L2137",
+   "name": "Arroces y pasta",
+   "skus": 14,
+   "alsoInKept": 14,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2272 Lasaña y canelones 6",
+    "L2042 Arroz 4",
+    "L2271 Pastas rellenas y en salsa 1",
+    "L2274 Pastas sin gluten 1"
+   ]
+  },
+  {
+   "id": "L2297",
+   "name": "Salsas para pasta",
+   "skus": 54,
+   "alsoInKept": 54,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2208 Salsas de tomate y pasta 54",
+    "L2296 Salsas especiales y picantes 1"
+   ]
+  },
+  {
+   "id": "L2274",
+   "name": "Pastas sin gluten",
+   "skus": 7,
+   "alsoInKept": 7,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2044 Macarrones, espaguetis y pastas secas 6",
+    "L2137 Arroces y pasta 1",
+    "L2272 Lasaña y canelones 1"
+   ]
+  },
+  {
+   "id": "L2341",
+   "name": "Patés",
+   "skus": 34,
+   "alsoInKept": 34,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2012 Paté y sobrasada 34"
+   ]
+  },
+  {
+   "id": "L2319",
+   "name": "Tartas",
+   "skus": 6,
+   "alsoInKept": 6,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2087 Postres tradicionales 6",
+    "L2136 Tartas y churros 6"
+   ]
+  },
+  {
+   "id": "L2246",
+   "name": "Pizzas congeladas",
+   "skus": 28,
+   "alsoInKept": 28,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2131 Pizzas y masas 28"
+   ]
+  },
+  {
+   "id": "L2300",
+   "name": "Ensaladas y bowls",
+   "skus": 19,
+   "alsoInKept": 19,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2030 Ensaladas y verduras preparadas 11",
+    "L2191 Garbanzos y alubias 4",
+    "L2043 Quinoa, couscous y soja 3",
+    "L2044 Macarrones, espaguetis y pastas secas 2"
+   ]
+  },
+  {
+   "id": "L2286",
+   "name": "Packs de agua y refrescos",
+   "skus": 43,
+   "alsoInKept": 43,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2108 Cola 19",
+    "L2107 Agua 16",
+    "L2217 Bebidas energéticas 3",
+    "L2212 Naranja, limón y lima-limón 3"
+   ]
+  },
+  {
+   "id": "L2113",
+   "name": "Recién exprimido y fresco",
+   "skus": 12,
+   "alsoInKept": 12,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2287 Naranja 6",
+    "L2289 Multifrutas y otros sabores 4",
+    "L2291 Smoothies 3"
+   ]
+  },
+  {
+   "id": "L2292",
+   "name": "Packs de zumos",
+   "skus": 22,
+   "alsoInKept": 22,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2314 Zumos y batidos 19",
+    "L2290 Fruta y leche 12",
+    "L2288 Melocotón y piña 8",
+    "L2289 Multifrutas y otros sabores 1"
+   ]
+  },
+  {
+   "id": "L2293",
+   "name": "Packs de cervezas",
+   "skus": 65,
+   "alsoInKept": 65,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2115 Cervezas 36",
+    "L2118 Cervezas sin alcohol 14",
+    "L2117 Cervezas prémium y especiales 10",
+    "L2182 Cervezas con limón 7"
+   ]
+  },
+  {
+   "id": "L2139",
+   "name": "Yogures y postres",
+   "skus": 14,
+   "alsoInKept": 14,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2083 Yogures y postres infantiles 14",
+    "L2081 Yogures de sabores y frutas 2",
+    "L2088 Natillas, flan y arroz con leche 1",
+    "L2248 Yogures líquidos 1"
+   ]
+  },
+  {
+   "id": "L2314",
+   "name": "Zumos y batidos",
+   "skus": 27,
+   "alsoInKept": 27,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2292 Packs de zumos 19",
+    "L2290 Fruta y leche 13",
+    "L2053 Batidos 6",
+    "L2288 Melocotón y piña 5"
+   ]
+  },
+  {
+   "id": "L2315",
+   "name": "Galletas y bollería",
+   "skus": 48,
+   "alsoInKept": 48,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2320 Galletas de chocolate y rellenas 27",
+    "L2318 Rosquillas y pastelitos 12",
+    "L2065 Galletas clásicas y digestive 6",
+    "L2063 Chocolatinas y bombones 2"
+   ]
+  },
+  {
+   "id": "L2316",
+   "name": "Golosinas y chocolatinas",
+   "skus": 48,
+   "alsoInKept": 48,
+   "pct": 100,
+   "orphans": 0,
+   "orphanEx": [],
+   "top": [
+    "L2064 Golosinas 33",
+    "L2063 Chocolatinas y bombones 14",
+    "L2327 Chicles y caramelos 1"
+   ]
+  },
+  {
+   "id": "L2208",
+   "name": "Salsas de tomate y pasta",
+   "skus": 57,
+   "alsoInKept": 56,
+   "pct": 98.2,
+   "orphans": 1,
+   "orphanEx": [
+    "300575 Salsa de tomate con queso grana padano Gallo 350 g"
+   ],
+   "top": [
+    "L2297 Salsas para pasta 54",
+    "L2054 Nata 2",
+    "L2296 Salsas especiales y picantes 1"
+   ]
+  },
+  {
+   "id": "L2210",
+   "name": "Verduras y patatas",
+   "skus": 41,
+   "alsoInKept": 40,
+   "pct": 97.6,
+   "orphans": 1,
+   "orphanEx": [
+    "267132 Salteado de verduras Dia Al Punto 400 g"
+   ],
+   "top": [
+    "L2025 Verduras congeladas y al vapor 37",
+    "L2265 Empanados y elaborados 3",
+    "L2103 Comida mexicana 2",
+    "L2043 Quinoa, couscous y soja 1"
+   ]
+  },
+  {
+   "id": "L2026",
+   "name": "Conservas de verduras",
+   "skus": 79,
+   "alsoInKept": 77,
+   "pct": 97.5,
+   "orphans": 2,
+   "orphanEx": [
+    "17962 Remolacha cocida al vacío 500 g",
+    "19403 Mazorcas de maíz dulce cocidas 400 g"
+   ],
+   "top": [
+    "L2092 Conservas de verdura 77",
+    "L2191 Garbanzos y alubias 2",
+    "L2300 Ensaladas y bowls 2"
+   ]
+  },
+  {
+   "id": "L2083",
+   "name": "Yogures y postres infantiles",
+   "skus": 31,
+   "alsoInKept": 30,
+   "pct": 96.8,
+   "orphans": 1,
+   "orphanEx": [
+    "231491 Yogur de fresa líquido Danonino 4 x 70 g"
+   ],
+   "top": [
+    "L2140 Bolsitas y snacks 16",
+    "L2139 Yogures y postres 14",
+    "L2081 Yogures de sabores y frutas 2",
+    "L2088 Natillas, flan y arroz con leche 1"
+   ]
+  },
+  {
+   "id": "L2265",
+   "name": "Empanados y elaborados",
+   "skus": 19,
+   "alsoInKept": 18,
+   "pct": 94.7,
+   "orphans": 1,
+   "orphanEx": [
+    "285228 Callos a la madrileña Gancedo 500 g"
+   ],
+   "top": [
+    "L2135 Croquetas y rebozados 6",
+    "L2247 Comida tradicional 4",
+    "L2210 Verduras y patatas 3",
+    "L2202 Pollo 3"
+   ]
+  },
+  {
+   "id": "L2273",
+   "name": "Noodles",
+   "skus": 31,
+   "alsoInKept": 29,
+   "pct": 93.5,
+   "orphans": 2,
+   "orphanEx": [
+    "147389 Noodles sabor pollo Dia Al Punto 85 g",
+    "189076 Fideos de arroz vermicelli Tiger Khan 250 g"
+   ],
+   "top": [
+    "L2299 Comida asiática 29",
+    "L2137 Arroces y pasta 1"
+   ]
+  },
+  {
+   "id": "L2323",
+   "name": "Galletas, cereales y tortitas sin gluten",
+   "skus": 15,
+   "alsoInKept": 14,
+   "pct": 93.3,
+   "orphans": 1,
+   "orphanEx": [
+    "309169 Salvado de avena sin gluten Esgir 300 g"
+   ],
+   "top": [
+    "L2216 Tortitas 4",
+    "L2321 Cereales integrales y muesli 3",
+    "L2065 Galletas clásicas y digestive 2",
+    "L2068 Cereales 2"
+   ]
+  },
+  {
+   "id": "L2092",
+   "name": "Conservas de verdura",
+   "skus": 84,
+   "alsoInKept": 78,
+   "pct": 92.9,
+   "orphans": 6,
+   "orphanEx": [
+    "44607 Ensalada milanesa de atún MSC Dia Mari Marinera 150 g",
+    "44609 Ensalada mediterránea de atún MSC Dia Mari Marinera 150 g",
+    "51633 Champiñón laminado Dia Vegecampo 3 x 105 g",
+    "271327 Maíz dulce pack Celorrio 3 x 140 g"
+   ],
+   "top": [
+    "L2026 Conservas de verduras 77",
+    "L2191 Garbanzos y alubias 3",
+    "L2300 Ensaladas y bowls 2"
+   ]
+  },
+  {
+   "id": "L2143",
+   "name": "Higiene y cuidado",
+   "skus": 12,
+   "alsoInKept": 11,
+   "pct": 91.7,
+   "orphans": 1,
+   "orphanEx": [
+    "15627 Crema protectora de pañal Johnson's baby 100 ml"
+   ],
+   "top": [
+    "L2155 Perfumes y colonias 3",
+    "L2307 Botiquín 2",
+    "L2209 Pilas, menaje y bolsas 2",
+    "L2144 Champú 1"
+   ]
+  },
+  {
+   "id": "L2074",
+   "name": "Tortillas de trigo y pitas",
+   "skus": 10,
+   "alsoInKept": 9,
+   "pct": 90,
+   "orphans": 1,
+   "orphanEx": [
+    "14461 Pan de pita precocido Star 400 g"
+   ],
+   "top": [
+    "L2103 Comida mexicana 9",
+    "L2200 Pan sin gluten 2"
+   ]
+  },
+  {
+   "id": "L2299",
+   "name": "Comida asiática",
+   "skus": 34,
+   "alsoInKept": 30,
+   "pct": 88.2,
+   "orphans": 4,
+   "orphanEx": [
+    "190555 Alga wakame 100% natural Trevijano 50 g",
+    "266806 Gyozas de pollo y verduras al teppanyaki Dia Al Punto 140 g",
+    "274616 Gyozas de langostino al teppanyaki Dia Al Punto 140 g",
+    "298950 Rollitos de primavera Dia Al Punto 280 g"
+   ],
+   "top": [
+    "L2273 Noodles 29",
+    "L2135 Croquetas y rebozados 1",
+    "L2137 Arroces y pasta 1"
+   ]
+  },
+  {
+   "id": "L2103",
+   "name": "Comida mexicana",
+   "skus": 24,
+   "alsoInKept": 21,
+   "pct": 87.5,
+   "orphans": 3,
+   "orphanEx": [
+    "22565 Kit fajitas Old El Paso 505 g",
+    "28188 Chili con carne Old El Paso 418 g",
+    "181609 Chiles jalapeños en escabeche La Costeña 121 g"
+   ],
+   "top": [
+    "L2074 Tortillas de trigo y pitas 9",
+    "L2295 Sazonadores 4",
+    "L2296 Salsas especiales y picantes 2",
+    "L2200 Pan sin gluten 2"
+   ]
+  },
+  {
+   "id": "L2290",
+   "name": "Fruta y leche",
+   "skus": 17,
+   "alsoInKept": 13,
+   "pct": 76.5,
+   "orphans": 4,
+   "orphanEx": [
+    "50689 Bebida de fruta y leche tropical Dia Saborfera 1 L",
+    "115780 Bifrutas tropical Pascual 1 L",
+    "163217 Bebida de fruta y leche mediterráneo Dia Saborfera 1 L",
+    "307729 Bifrutas dark Pascual 330 ml"
+   ],
+   "top": [
+    "L2314 Zumos y batidos 13",
+    "L2292 Packs de zumos 12"
+   ]
+  },
+  {
+   "id": "L2200",
+   "name": "Pan sin gluten",
+   "skus": 12,
+   "alsoInKept": 9,
+   "pct": 75,
+   "orphans": 3,
+   "orphanEx": [
+    "184414 Pan tradicional sin gluten Proceli 160 g",
+    "256378 Baguette rústica sin gluten Proceli 120 g",
+    "299092 Chapata sin gluten El Molino de Dia 120 g"
+   ],
+   "top": [
+    "L2072 Pan rallado, tostado y picos 3",
+    "L2069 Pan de molde y especiales 3",
+    "L2074 Tortillas de trigo y pitas 2",
+    "L2103 Comida mexicana 2"
+   ]
+  },
+  {
+   "id": "L2272",
+   "name": "Lasaña y canelones",
+   "skus": 12,
+   "alsoInKept": 9,
+   "pct": 75,
+   "orphans": 3,
+   "orphanEx": [
+    "39198 Placas para canelones precocidas El pavo 125 g",
+    "39200 Placas para lasaña El pavo 200 g",
+    "45244 Placas para canelones El pavo 125 g"
+   ],
+   "top": [
+    "L2137 Arroces y pasta 6",
+    "L2247 Comida tradicional 3",
+    "L2274 Pastas sin gluten 1"
+   ]
+  },
+  {
+   "id": "L2247",
+   "name": "Comida tradicional",
+   "skus": 31,
+   "alsoInKept": 23,
+   "pct": 74.2,
+   "orphans": 8,
+   "orphanEx": [
+    "6630 Albóndigas Dia Al Punto 415 g",
+    "33811 Callos con chorizo Dia Al Punto 380 g",
+    "46587 Callos a la madrileña Litoral 380 g",
+    "189917 Patatas alioli Ensalandia 250 g"
+   ],
+   "top": [
+    "L2191 Garbanzos y alubias 8",
+    "L2265 Empanados y elaborados 4",
+    "L2094 Cremas y purés 4",
+    "L2193 Lentejas 3"
+   ]
+  },
+  {
+   "id": "L2138",
+   "name": "Leches y papillas",
+   "skus": 23,
+   "alsoInKept": 17,
+   "pct": 73.9,
+   "orphans": 6,
+   "orphanEx": [
+    "83913 Papilla líquida leche y cereales galleta Nestlé 2 x 250 ml",
+    "257968 Papilla 8 cereales sin azúcares añadidos Hero 410 g",
+    "290615 Papilla crema de arroz sin azúcares añadidos Hero 220 g",
+    "293490 Papilla de 8 cereales y galleta sin azúcares añadidos Nestlé 475 g"
+   ],
+   "top": [
+    "L2262 Leche infantil 17"
+   ]
+  },
+  {
+   "id": "L2140",
+   "name": "Bolsitas y snacks",
+   "skus": 38,
+   "alsoInKept": 27,
+   "pct": 71.1,
+   "orphans": 11,
+   "orphanEx": [
+    "303702 Alimento infantil con puré de arándanos, manzana y plátano funny fruits Nestlé 110 g",
+    "308139 Alimento lácteo infantil con cacao Nesquik 110 g",
+    "310407 Alimento infantil con puré de manzana, fresa, plátano y avena Nestlé 90 g",
+    "310408 Alimento infantil con puré de mango , plátano, leche y avena Nestlé 110 g"
+   ],
+   "top": [
+    "L2083 Yogures y postres infantiles 16",
+    "L2010 Untable y en porciones 5",
+    "L2282 Snacks salados 4",
+    "L2228 Cremas de cacao y de untar 1"
+   ]
+  },
+  {
+   "id": "L2102",
+   "name": "Listos para comer",
+   "skus": 10,
+   "alsoInKept": 7,
+   "pct": 70,
+   "orphans": 3,
+   "orphanEx": [
+    "309264 Arroz cocido con verduras Socarraet 280 g",
+    "310997 Ensaladilla rusa Selección de Dia 350 g",
+    "312602 Pastel de atún Selección de Dia 250 g"
+   ],
+   "top": [
+    "L2044 Macarrones, espaguetis y pastas secas 2",
+    "L2013 Vacuno 2",
+    "L2042 Arroz 1",
+    "L2265 Empanados y elaborados 1"
+   ]
+  },
+  {
+   "id": "L2136",
+   "name": "Tartas y churros",
+   "skus": 9,
+   "alsoInKept": 6,
+   "pct": 66.7,
+   "orphans": 3,
+   "orphanEx": [
+    "294456 Churros Dia Al Punto 500 g",
+    "294457 Porras fritas Dia Al Punto 250 g",
+    "309485 Churros lazo sin gluten Maheso 200 g"
+   ],
+   "top": [
+    "L2087 Postres tradicionales 6",
+    "L2319 Tartas 6"
+   ]
+  },
+  {
+   "id": "L2135",
+   "name": "Croquetas y rebozados",
+   "skus": 30,
+   "alsoInKept": 18,
+   "pct": 60,
+   "orphans": 12,
+   "orphanEx": [
+    "912 Empanadillas de atún MSC La Cocinera 312 g",
+    "1413 Mini empanadillas de atún Dia Al Punto 400 g",
+    "130345 Croquetas artesanas de jamón ibérico La Cocinera 400 g",
+    "294202 Palitos de mozzarella  Dia Al Punto 300 g"
+   ],
+   "top": [
+    "L2251 Rebozado 11",
+    "L2265 Empanados y elaborados 6",
+    "L2299 Comida asiática 1"
+   ]
+  },
+  {
+   "id": "L2229",
+   "name": "Postres y batidos de proteínas",
+   "skus": 22,
+   "alsoInKept": 13,
+   "pct": 59.1,
+   "orphans": 9,
+   "orphanEx": [
+    "287450 Batido alto en proteínas sabor chocolate Just loading 225 ml",
+    "292374 Mousse de cacao alta en proteínas Dia Láctea 200 g",
+    "292375 Postre lácteo natural alto en proteína Dia Láctea 300 g",
+    "303224 Yogur de stracciatella alto en proteínas Dia Láctea 4 x 120 g"
+   ],
+   "top": [
+    "L2248 Yogures líquidos 5",
+    "L2088 Natillas, flan y arroz con leche 3",
+    "L2085 Kéfir y postres vegetales 2",
+    "L2089 Gelatinas y cuajadas 1"
+   ]
+  },
+  {
+   "id": "L2182",
+   "name": "Cervezas con limón",
+   "skus": 17,
+   "alsoInKept": 10,
+   "pct": 58.8,
+   "orphans": 7,
+   "orphanEx": [
+    "6285 Cerveza con limón Mahou Mixta 33 cl",
+    "66511 Cerveza shandy Cruzcampo 33 cl",
+    "81852 Cerveza shandy sin alcohol Dia Ramblers 33 cl",
+    "167088 Cerveza radler Amstel 33 cl"
+   ],
+   "top": [
+    "L2293 Packs de cervezas 7",
+    "L2118 Cervezas sin alcohol 5"
+   ]
+  },
+  {
+   "id": "L2079",
+   "name": "Yogures naturales y desnatados",
+   "skus": 19,
+   "alsoInKept": 11,
+   "pct": 57.9,
+   "orphans": 8,
+   "orphanEx": [
+    "13963 Yogur natural Danone 4 x 120 g",
+    "13964 Yogur natural azucarado Danone 4 x 120 g",
+    "128591 Yogur natural desnatado Dia Láctea 6 x 125 g",
+    "128592 Yogur natural desnatado edulcorado Dia Láctea 6 x 125 g"
+   ],
+   "top": [
+    "L2078 Yogures bífidus y colesterol 8",
+    "L2081 Yogures de sabores y frutas 2",
+    "L2229 Postres y batidos de proteínas 1"
+   ]
+  },
+  {
+   "id": "L2011",
+   "name": "Especialidades",
+   "skus": 20,
+   "alsoInKept": 11,
+   "pct": 55,
+   "orphans": 9,
+   "orphanEx": [
+    "1253 Queso camembert Dia Selección Mundial 250 g",
+    "11877 Queso brie Dia Selección Mundial 200 g",
+    "263218 Queso havarti Dia Selección Mundial 200 g",
+    "282301 Queso emmental Dia Selección Mundial 220 g"
+   ],
+   "top": [
+    "L2345 Semicurado 4",
+    "L2007 Curado 3",
+    "L2008 Fresco 2",
+    "L2009 Azul y de cabra 1"
+   ]
+  },
+  {
+   "id": "L2115",
+   "name": "Cervezas",
+   "skus": 66,
+   "alsoInKept": 36,
+   "pct": 54.5,
+   "orphans": 30,
+   "orphanEx": [
+    "182 Cerveza Mahou 5 Estrellas 33 cl",
+    "192 Cerveza clásica Dia Ramblers 33 cl",
+    "678 Cerveza Estrella Damm 33 cl",
+    "1552 Cerveza clásica Mahou 1 L"
+   ],
+   "top": [
+    "L2293 Packs de cervezas 36"
+   ]
+  },
+  {
+   "id": "L2078",
+   "name": "Yogures bífidus y colesterol",
+   "skus": 24,
+   "alsoInKept": 13,
+   "pct": 54.2,
+   "orphans": 11,
+   "orphanEx": [
+    "50692 Bífidus con frutos del bosque Activia 4 x 120 g",
+    "55658 Bífidus con muesli desnatado Activia 4 x 115 g",
+    "117865 Bífidus natural Activia 8 x 120 g",
+    "117866 Bífidus natural desnatado edulcorado Activia 8 x 120 g"
+   ],
+   "top": [
+    "L2079 Yogures naturales y desnatados 8",
+    "L2248 Yogures líquidos 4",
+    "L2081 Yogures de sabores y frutas 1"
+   ]
+  },
+  {
+   "id": "L2281",
+   "name": "Té",
+   "skus": 12,
+   "alsoInKept": 6,
+   "pct": 50,
+   "orphans": 6,
+   "orphanEx": [
+    "31913 Té verde a la menta Hornimans 20 unidades",
+    "154330 Té classic Hornimans 25 unidades",
+    "184953 Té verde puro Hornimans 20 unidades",
+    "295422 Té negro Dia Tetería 25 unidades"
+   ],
+   "top": [
+    "L2059 Infusiones 5",
+    "L2280 Cafés fríos 1"
+   ]
+  },
+  {
+   "id": "L2291",
+   "name": "Smoothies",
+   "skus": 8,
+   "alsoInKept": 4,
+   "pct": 50,
+   "orphans": 4,
+   "orphanEx": [
+    "305247 Smoothie energy Dia Naturmundo 150 ml",
+    "305248 Smoothie detox Dia Naturmundo 150 ml",
+    "305249 Smoothie antioxidante Dia Naturmundo 150 ml",
+    "305250 Smoothie belleza Dia Naturmundo 150 ml"
+   ],
+   "top": [
+    "L2113 Recién exprimido y fresco 3",
+    "L2114 Bebidas isotónicas y deportivas 1"
+   ]
+  },
+  {
+   "id": "L2118",
+   "name": "Cervezas sin alcohol",
+   "skus": 36,
+   "alsoInKept": 18,
+   "pct": 50,
+   "orphans": 18,
+   "orphanEx": [
+    "1596 Cerveza sin alcohol Dia Ramblers 33 cl",
+    "29352 Cerveza sin alcohol Mahou 33 cl",
+    "29358 Cerveza 0,0% alcohol San Miguel 33 cl",
+    "54701 Cerveza 0,0% alcohol Dia Ramblers 33 cl"
+   ],
+   "top": [
+    "L2293 Packs de cervezas 14",
+    "L2182 Cervezas con limón 5",
+    "L2117 Cervezas prémium y especiales 1"
+   ]
+  }
+ ],
+ "leavesPerSku": {
+  "0": 5,
+  "1": 4667,
+  "2": 892,
+  "3": 135,
+  "4": 19
+ },
+ "menuLeavesEmpty": []
+}
