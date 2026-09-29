@@ -598,6 +598,11 @@ export class CatalogPage {
   /**
    * The chosen shop's words, for the button and the note. A shop named without its
    * chain takes the chain from the shop, so a hand typed link still says whose.
+   *
+   * The chain it takes is written into the URL too, in place of this entry. The URL
+   * is the choice, and a signal holding a chain the URL does not would read the next
+   * emission (a product sheet closing onto `?shop=` alone, say) as a different
+   * choice: the chain dropped again and the first page read for nothing.
    */
   private _readLocation(shopId: string | null): void {
     this.location.set(null);
@@ -611,6 +616,13 @@ export class CatalogPage {
       this.location.set(location);
       if (this.chain() === null) {
         this.chain.set(location.supermarketId);
+        // The current URL, whatever covers the tab, with the choice as it now is.
+        const url = this._router.parseUrl(this._router.url);
+        url.queryParams = {
+          ...url.queryParams,
+          ...catalogQueryOf(this._choice()),
+        };
+        void this._router.navigateByUrl(url, { replaceUrl: true });
       }
     });
   }

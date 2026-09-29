@@ -142,6 +142,38 @@ describe('CatalogSupermarketPage', () => {
       );
     });
 
+    it('says nothing about the matches until the search for the typed text has answered', async () => {
+      const { fixture } = await render();
+      jest.useFakeTimers();
+      try {
+        const input = host(fixture).querySelector(
+          '.search-input'
+        ) as HTMLInputElement;
+        input.value = 'no such street anywhere';
+        input.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+
+        // The buttons have gone at once, but the debounce has not fired: no
+        // "0 results" and no "no match", seen or announced.
+        expect(host(fixture).querySelector('lib-franchise-buttons')).toBeNull();
+        expect(
+          host(fixture).querySelector('.result-count')?.textContent?.trim()
+        ).toBe('');
+        expect(host(fixture).querySelector('.empty')).toBeNull();
+
+        jest.advanceTimersByTime(250);
+        await settle(fixture);
+        await settle(fixture);
+
+        expect(
+          host(fixture).querySelector('.result-count')?.textContent?.trim()
+        ).toBe('shops.search.results');
+        expect(host(fixture).querySelector('.empty')).not.toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('opens a chain on its own screen in place of this entry, carrying the choice', async () => {
       const { fixture, navigate } = await render({
         query: { category: 'milk' },

@@ -315,6 +315,40 @@ describe('CatalogPage', () => {
     );
   });
 
+  it('writes the chain a ?shop= link left out into the URL, so the URL and the page agree', async () => {
+    const navigate = jest
+      .spyOn(Router.prototype, 'navigateByUrl')
+      .mockResolvedValue(true);
+    try {
+      const { fixture, browse, query } = await render('priced', {
+        shop: 'location-mercadona-mayor',
+      });
+      await settle(fixture);
+
+      // The shop's chain, beside the shop, in place of this entry.
+      const url = lastUrl(navigate);
+      expect(url).toContain('chain=chain-mercadona');
+      expect(url).toContain('shop=location-mercadona-mayor');
+      expect(navigate.mock.calls[navigate.mock.calls.length - 1][1]).toEqual({
+        replaceUrl: true,
+      });
+
+      // That navigation lands here: the same choice, so no first page again.
+      const reads = browse.mock.calls.length;
+      query.next(
+        convertToParamMap({
+          chain: 'chain-mercadona',
+          shop: 'location-mercadona-mayor',
+        })
+      );
+      await settle(fixture);
+      expect(browse.mock.calls.length).toBe(reads);
+      expect(supermarket(fixture).textContent).toContain('Calle Mayor 3');
+    } finally {
+      navigate.mockRestore();
+    }
+  });
+
   it('says a product has no price at the shop rather than dropping it', async () => {
     const { fixture } = await render('noPlace', {
       chain: 'chain-mercadona',

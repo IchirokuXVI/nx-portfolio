@@ -151,6 +151,16 @@ export class ShopPicker {
   /** How many shops the search matched, for the announced count. */
   readonly matchCount = input(0);
 
+  /**
+   * Whether the matches are still for an older text than the one in the field. A
+   * host that asks a server after a debounce holds the typed text at once and the
+   * answer a moment later; while this is true the body draws no count and no "no
+   * match", so nobody sees or hears "0 results" for a search that has not been
+   * asked yet. The live region stays in place, empty, so the count is still heard
+   * when it arrives. A host that filters as it is typed never sets it.
+   */
+  readonly searchPending = input(false);
+
   /** The shop the radio group checks, or null for none. */
   readonly pickedId = input<string | null>(null);
 

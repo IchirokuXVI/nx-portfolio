@@ -1,9 +1,9 @@
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
   DestroyRef,
-  effect,
   ElementRef,
   inject,
   input,
@@ -42,7 +42,10 @@ const SECTION_GAP = 4;
  *
  * `+X` is a button named "Show all 9 sections". Pressed, the chips wrap onto as
  * many lines as they need and end in "Show fewer". Whether it is open is this row's
- * own, and it closes again when the list changes, which is a new `sections` array.
+ * own, and it closes again when the list changes: a different set of sections, by
+ * id. A new array holding the same sections is not a change, because the parent rows
+ * rebuild theirs on every recompute (a locale switch, a store refresh, a Near me
+ * answer), and a row that folded itself shut on each of those would be unusable.
  *
  * ## Never inside the row's label
  *
@@ -61,9 +64,19 @@ const SECTION_GAP = 4;
 export class SectionChips {
   readonly sections = input.required<readonly SectionChip[]>();
 
-  /** Every chip is drawn, wrapped. Closed again whenever the sections change. */
+  /**
+   * The sections by id, as one string, so that a rebuilt array holding the same
+   * sections compares equal and only a different list closes the row.
+   */
+  private readonly _key = computed(() =>
+    this.sections()
+      .map((section) => section.id)
+      .join(' ')
+  );
+
+  /** Every chip is drawn, wrapped. Closed again whenever the list changes. */
   protected readonly open = linkedSignal({
-    source: () => this.sections(),
+    source: this._key,
     computation: () => false,
   });
 
@@ -80,11 +93,18 @@ export class SectionChips {
 
   private readonly _plusWidth = signal(0);
 
-  private readonly _measure = effect(() => {
+  /**
+   * After render, because the rulers are measured and a plain `effect` runs before
+   * the view it reads has been updated. The names are read too: the rulers are
+   * tracked by id, so a locale switch renames them in place without a new
+   * `viewChildren` list, and the widths have to be taken again all the same.
+   */
+  private readonly _measure = afterRenderEffect(() => {
     const rulers = this._rulers();
     const plus = this._plus();
-    // Read so that a resize remeasures too.
+    // Read so that a resize, and a rename, remeasure too.
     this._available();
+    this.sections().forEach((section) => section.name);
 
     this._widths.set(
       rulers.map((ruler) => ruler.nativeElement.getBoundingClientRect().width)
