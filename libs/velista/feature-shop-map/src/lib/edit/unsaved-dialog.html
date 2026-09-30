@@ -15,6 +15,8 @@
   <p aria-live="polite" class="state">
     @if (status() === 'sending') {
       {{ 'shopMapEdit.unsaved.sending' | rokuT }}
+    } @else if (status() === 'saved') {
+      {{ 'shopMapEdit.unsaved.saved' | rokuT }}
     } @else if (seconds(); as seconds) {
       {{ 'shopMapEdit.unsaved.retryIn' | rokuT: { count: seconds } }}
     } @else {
