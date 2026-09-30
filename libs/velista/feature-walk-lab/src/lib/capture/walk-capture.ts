@@ -230,6 +230,19 @@ export class WalkCapture {
   }
 
   /**
+   * Takes back the most recent mark still standing and answers the marks left, or
+   * null when nothing was taken back. `WalkBuilder.deleteLastMark` says how a mark
+   * already saved is cancelled.
+   */
+  deleteLastMark(): WalkMark[] | null {
+    if (!this._builder || !this._recording()) {
+      return null;
+    }
+    const deleted = this._builder.deleteLastMark(roundTo(this.now(), 1));
+    return deleted ? this._builder.liveMarks : null;
+  }
+
+  /**
    * Stop, save the whole walk, and answer it.
    *
    * Safe to call twice, and from a component being destroyed: the second call answers
