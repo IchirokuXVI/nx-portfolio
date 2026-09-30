@@ -207,6 +207,24 @@ describe('createLiveMap', () => {
       expect(areas.every((a) => a.origin === 'suggested')).toBe(true);
     });
 
+    it('cuts one column when a walk clips the end of a long strip', () => {
+      const map = live();
+      aisles(map, 2.5, 9);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.snapshot();
+      map.setTracking('lost');
+      map.setTracking('good');
+      // Round the end at x = 10, one point dipping into the strip.
+      walk(map, [9, 0], [10, 0]);
+      walk(map, [10, 0], [9.3, 1.25]);
+      walk(map, [9.3, 1.25], [10, 2.5]);
+      const areas = [...areasOf(map.snapshot().events).values()];
+      expect(areas.map((a) => [a.kind, a.x, a.w, a.h])).toEqual([
+        ['shelf', -0.5, 9.5, 1.5],
+        ['path', 9, 0.5, 1.5],
+      ]);
+    });
+
     it('changes nothing when the setting is off', () => {
       expect(acrossTheShelf(false).events).toEqual([]);
     });
@@ -548,6 +566,30 @@ describe('createLiveMap', () => {
       expect(
         validateShopMapV2({ version: 2, areas, marks: [], path: [] })
       ).toEqual([]);
+    });
+
+    it('still names the other face after a crossing cut the strip short', () => {
+      const map = live();
+      aisles(map, 2.5, 9);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 0], [1, 0]);
+      map.mark(mark('m1', clock, { x: 1, y: 0, heading: 0, text: 'Lacteos' }));
+      map.sectionLeft();
+      walk(map, [1, 0], [3, 0]);
+      walk(map, [3, 0], [3, 2.5]);
+      walk(map, [3, 2.5], [6, 2.5]);
+      map.mark(
+        mark('m2', clock, { x: 6, y: 2.5, heading: 180, text: 'Yogures' })
+      );
+      const areas = [...areasOf(map.snapshot().events).values()];
+      const piece = (section: string) =>
+        areas
+          .filter((a) => a.section === section && a.x === 3.5)
+          .map((a) => [a.y, a.h]);
+      expect(piece('Lacteos')).toEqual([[0.5, 1]]);
+      expect(piece('Yogures')).toEqual([[1.5, 0.5]]);
     });
 
     it('keeps the spelling of a shelf already named the same', () => {
