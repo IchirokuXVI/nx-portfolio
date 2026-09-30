@@ -4,7 +4,7 @@ import {
   Component,
   DestroyRef,
   effect,
-  ElementRef,
+  type ElementRef,
   inject,
   input,
   output,

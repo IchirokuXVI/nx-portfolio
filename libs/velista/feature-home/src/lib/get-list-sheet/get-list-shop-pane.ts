@@ -31,6 +31,7 @@ import {
   type FranchiseButton,
   type Shop,
 } from '@portfolio/velista/models';
+import { shopPageOpener } from '@portfolio/velista/platform';
 import {
   catalogShopRow,
   ChainLogo,
@@ -47,7 +48,6 @@ import {
   type ShopPickerState,
   type ShopRow,
 } from '@portfolio/velista/ui';
-import { shopPageOpener } from '@portfolio/velista/platform';
 
 /** A shop "Near me" picked, with the distance the message says it was chosen on. */
 export interface NearShopPick {

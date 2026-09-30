@@ -43,10 +43,12 @@ function basket(rows: BasketRow[]): Basket {
   } as unknown as Basket;
 }
 
-function harness(options: {
-  readonly storage?: Map<string, string>;
-  readonly basket?: () => Promise<Basket>;
-} = {}) {
+function harness(
+  options: {
+    readonly storage?: Map<string, string>;
+    readonly basket?: () => Promise<Basket>;
+  } = {}
+) {
   const memory = new ShopMapMemory();
   const reads: { id: string; locationId: string | undefined }[] = [];
   const read = options.basket ?? (async () => basket([]));
@@ -108,7 +110,13 @@ describe('ShopMapStore', () => {
         state: 'WANTED',
         sectionIds: ['sec-mercadona-eggs'],
       },
-      { rowKey: 'note', content: 'note', quantity: 2, state: 'DONE', sectionIds: [] },
+      {
+        rowKey: 'note',
+        content: 'note',
+        quantity: 2,
+        state: 'DONE',
+        sectionIds: [],
+      },
     ]);
   });
 

@@ -3,7 +3,9 @@ import { toShopDetail, toShopMapRead } from './shop-map-mappers';
 
 /** The memory map's wire body, with its `map` replaced by whatever a spec says. */
 function withMap(patch: (map: Record<string, unknown>) => unknown): unknown {
-  const body = MEMORY_SHOP_MAPS['loc-tejares'] as { map: Record<string, unknown> };
+  const body = MEMORY_SHOP_MAPS['loc-tejares'] as {
+    map: Record<string, unknown>;
+  };
   return { map: patch(JSON.parse(JSON.stringify(body.map))) };
 }
 
@@ -82,7 +84,8 @@ describe('toShopMapRead', () => {
 
     expect(read.kind).toBe('map');
     expect(
-      read.kind === 'map' && read.map.document.areas.some((a) => a.id === 'area-lift')
+      read.kind === 'map' &&
+        read.map.document.areas.some((a) => a.id === 'area-lift')
     ).toBe(false);
   });
 
@@ -135,7 +138,9 @@ describe('toShopDetail', () => {
   });
 
   it('keeps a size only when it is a positive number', () => {
-    expect(toShopDetail({ ...RAW, footprintM2: 0 }, null)?.footprintM2).toBeNull();
+    expect(
+      toShopDetail({ ...RAW, footprintM2: 0 }, null)?.footprintM2
+    ).toBeNull();
     expect(
       toShopDetail({ ...RAW, footprintM2: '900' }, null)?.footprintM2
     ).toBeNull();

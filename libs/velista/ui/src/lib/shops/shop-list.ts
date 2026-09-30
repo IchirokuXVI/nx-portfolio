@@ -146,7 +146,13 @@ export interface ShopGroup {
  */
 @Component({
   selector: 'lib-shop-list',
-  imports: [ChainLogo, InfoIcon, OutsideAreas, RokuTranslatorPipe, SectionChips],
+  imports: [
+    ChainLogo,
+    InfoIcon,
+    OutsideAreas,
+    RokuTranslatorPipe,
+    SectionChips,
+  ],
   templateUrl: './shop-list.html',
   styleUrl: './shop-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

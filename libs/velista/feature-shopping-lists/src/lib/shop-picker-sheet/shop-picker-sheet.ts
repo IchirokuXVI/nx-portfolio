@@ -29,10 +29,7 @@ import {
   type FranchiseButton,
   type ShopSectionName,
 } from '@portfolio/velista/models';
-import {
-  SheetNavigation,
-  shopPageOpener,
-} from '@portfolio/velista/platform';
+import { SheetNavigation, shopPageOpener } from '@portfolio/velista/platform';
 import {
   ChainLogo,
   ChevronLeftIcon,

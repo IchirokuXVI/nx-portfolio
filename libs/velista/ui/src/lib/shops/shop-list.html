@@ -71,7 +71,9 @@
             -->
             <button
               (click)="about.emit(shop.id)"
-              [attr.aria-label]="'shops.row.about' | rokuT: { shop: text.title }"
+              [attr.aria-label]="
+                'shops.row.about' | rokuT: { shop: text.title }
+              "
               class="pick-about"
               type="button"
             >

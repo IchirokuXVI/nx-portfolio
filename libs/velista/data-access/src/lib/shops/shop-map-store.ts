@@ -116,8 +116,7 @@ export class ShopMapStore {
    */
   async open(locationId: string, basket: ShopMapBasketRef): Promise<void> {
     const seq = (this._seq += 1);
-    const same =
-      this._locationId() === locationId && this._basket() === basket;
+    const same = this._locationId() === locationId && this._basket() === basket;
     this._locationId.set(locationId);
     this._basket.set(basket);
     if (!same) {

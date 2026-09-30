@@ -39,7 +39,13 @@ export function shopMapPath(
   locationId: string,
   basket: string | null = null
 ): string {
-  const path = appPath(locale, basePath, SHOP_PATHS.shop, locationId, SHOP_PATHS.map);
+  const path = appPath(
+    locale,
+    basePath,
+    SHOP_PATHS.shop,
+    locationId,
+    SHOP_PATHS.map
+  );
   return basket === null
     ? path
     : `${path}?${SHOP_PATHS.basketParam}=${encodeURIComponent(basket)}`;

@@ -1,4 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -62,7 +67,9 @@ export class SectionSheet {
   /** The section as the map names it, or null for one the map does not name. */
   private readonly _section = computed(() => {
     const id = this._sectionId();
-    return this._maps.map()?.sections.find((one) => one.sectionId === id) ?? null;
+    return (
+      this._maps.map()?.sections.find((one) => one.sectionId === id) ?? null
+    );
   });
 
   /** The chain's own name for the section, else the name the mapper typed. */
@@ -97,7 +104,8 @@ export class SectionSheet {
       this._translator.t(key, undefined, locale, args);
 
     const parts: string[] = [];
-    const at = map === null ? null : shopMapSectionPosition(map, this._sectionId());
+    const at =
+      map === null ? null : shopMapSectionPosition(map, this._sectionId());
     if (at !== null) {
       parts.push(t('shopMap.section.position', { ...at }));
     }

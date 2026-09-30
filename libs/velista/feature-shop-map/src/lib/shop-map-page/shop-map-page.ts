@@ -9,11 +9,11 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
-import { SHOP_MAP_PROPERTIES } from '@portfolio/luna-shopper/shop-map/editor';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
+import { SHOP_MAP_PROPERTIES } from '@portfolio/luna-shopper/shop-map/editor';
 import {
   SessionStore,
   ShopDetailStore,
@@ -35,8 +35,8 @@ import {
   ThemeStore,
 } from '@portfolio/velista/platform';
 import { CheckIcon, ChevronLeftIcon } from '@portfolio/velista/ui';
-import { shopPageText } from '../shop-page/shop-page';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
+import { shopPageText } from '../shop-page/shop-page';
 
 /** Which sections the map marks: the ones on your list, or all of them alike. */
 export type ShopMapShow = 'mine' | 'all';

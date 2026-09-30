@@ -98,9 +98,7 @@ export class ShopPage {
 
   protected readonly locationId = locationIdOf(inject(ActivatedRoute));
 
-  protected readonly read = computed(() =>
-    this._shops.read(this.locationId())
-  );
+  protected readonly read = computed(() => this._shops.read(this.locationId()));
 
   protected readonly shop = computed(() => {
     const read = this.read();

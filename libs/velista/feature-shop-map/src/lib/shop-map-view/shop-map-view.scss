@@ -2,13 +2,14 @@
 // canvas can take from velista's tokens is set here, on the host, so the two
 // themes follow the app's own. The walkway and the areas keep the canvas's own
 // Day and Night values: velista has no token for either, and they are the mock's.
+//
+// No card behind it and no border: the mock draws the map straight on the page's
+// ground, which is what keeps the Night walkway apart from what surrounds it.
 :host {
   display: block;
   position: relative;
   min-block-size: 0;
   overflow: hidden;
-  border-radius: var(--app-card-radius);
-  background: var(--app-surface-raised);
 
   --shop-map-badge: var(--app-action-bg);
   --shop-map-badge-text: var(--app-text-on-action);

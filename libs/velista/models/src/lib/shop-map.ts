@@ -315,9 +315,7 @@ function insideRings(
   return inside;
 }
 
-function walkedPointsOf(
-  view: ShopperView
-): { points: [number, number][] }[] {
+function walkedPointsOf(view: ShopperView): { points: [number, number][] }[] {
   const vertices = view.walkway.flat();
   if (vertices.length === 0) {
     return [];
@@ -404,9 +402,9 @@ function walkedPointsOf(
   }
 
   const points: [number, number][] = [
-    ...[...corners].map(cellOf).map(
-      ([a, b]) => [a * CELL_METRES, b * CELL_METRES] as [number, number]
-    ),
+    ...[...corners]
+      .map(cellOf)
+      .map(([a, b]) => [a * CELL_METRES, b * CELL_METRES] as [number, number]),
     ...centres.map(([i, j]) => [centre(i), centre(j)] as [number, number]),
   ];
   points.sort((p, q) => p[1] - q[1] || p[0] - q[0]);

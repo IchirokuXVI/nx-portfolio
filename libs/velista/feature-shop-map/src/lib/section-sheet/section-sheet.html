@@ -1,8 +1,4 @@
-<lib-sheet-shell
-  (dismiss)="dismiss()"
-  #shell
-  labelledBy="shop-section-title"
->
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="shop-section-title">
   <div class="head">
     <div class="head-text">
       <h2 class="title" id="shop-section-title">
@@ -30,8 +26,10 @@
           <li [class.is-settled]="settled(line)" class="line">
             <span
               [attr.aria-label]="
-                (settled(line) ? 'shopMap.section.got' : 'shopMap.section.toGet')
-                  | rokuT
+                (settled(line)
+                  ? 'shopMap.section.got'
+                  : 'shopMap.section.toGet'
+                ) | rokuT
               "
               [class.is-settled]="settled(line)"
               class="settle"

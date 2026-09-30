@@ -74,8 +74,8 @@ import {
   type FieldSaveState,
   type ProfileField,
 } from '../profiles/shopping-profile-store';
-import { ShopDetailStore } from '../shops/shop-detail-store';
 import type { ShopDetailRead } from '../shops/shop-detail-service';
+import { ShopDetailStore } from '../shops/shop-detail-store';
 import { ShopSectionsStore } from '../shops/shop-sections-store';
 import {
   ZoneStore,

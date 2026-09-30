@@ -30,6 +30,7 @@ import {
   type FranchiseButton,
   type Shop,
 } from '@portfolio/velista/models';
+import { shopPageOpener } from '@portfolio/velista/platform';
 import {
   catalogShopRow,
   ChainLogo,
@@ -46,7 +47,6 @@ import {
   type ShopPickerState,
   type ShopRow,
 } from '@portfolio/velista/ui';
-import { shopPageOpener } from '@portfolio/velista/platform';
 
 /** How long typing waits before it asks, as the other two pickers wait. */
 const SEARCH_DEBOUNCE_MS = 250;
