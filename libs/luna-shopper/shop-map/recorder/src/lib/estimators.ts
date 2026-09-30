@@ -1,8 +1,7 @@
 /**
  * The estimators of recorder plan 0002 section 5, each a small state machine
- * fed one sample at a time. The Kotlin app implements the same machines with
- * the same numbers; the rules that the plan left open are fixed here and in
- * the README, and both sides follow them.
+ * fed one sample at a time. The rules that the plan left open are fixed here
+ * and in the README.
  *
  * Shared conventions:
  * - `t` is milliseconds, `dt` inside a filter is seconds.
@@ -264,8 +263,8 @@ export class RotationHeading implements HeadingSource {
  * sample's time, raw heading and rate. The settled clock is the time of the
  * first sample of the current unbroken run of samples whose rate is under 20
  * degrees per second; settled means that run is at least 400 ms old. The
- * rounding of the turn is `Math.round`, which takes an exact half towards +∞
- * (as Kotlin's `Math.round` does); only an exact 135 or 225 degrees can tie.
+ * rounding of the turn is `Math.round`, which takes an exact half towards +∞;
+ * only an exact 135 or 225 degrees can tie.
  * A turn is snapped whenever it is settled and past 60 degrees, and it always
  * rounds to a non zero multiple of 90 there, so `psiRef` never resets alone.
  */
