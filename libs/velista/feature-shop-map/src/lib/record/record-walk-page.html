@@ -282,7 +282,7 @@
             }
             <button
               (click)="startFromHere()"
-              [attr.aria-disabled]="picked() === null"
+              [attr.aria-disabled]="picked() === null || resuming()"
               class="primary"
               type="button"
             >
