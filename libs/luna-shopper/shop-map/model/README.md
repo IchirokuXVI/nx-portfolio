@@ -120,9 +120,12 @@ A walk is a log of entries, and the log only grows. `foldWalk` applies them in `
   walk continues from there. A rewind to a point after an earlier rewind answers the map
   that rewind made.
 - **`discarded`** drops the path, marks and areas of the unconfirmed segment from its
-  `logFrom` on. The segment is the entry just before it, and when that is a `continued`
-  save, every save back to the `resumed` entry of the automatic resume. `confirmed` keeps
-  them.
+  `logFrom` on. The segment is the entry just before it. When that entry is a `continued`
+  save or a `stopped` entry (Stop, leaving the page or a guard stop while the question
+  was open), the segment reaches back over every such entry to the `resumed` entry of the
+  automatic resume. The drop holds in every fold of the entries after the discard, at any
+  log time. So the slider and a rewind never show the rejected segment again, and only a
+  log without the discard still shows it. `confirmed` keeps the segment.
 - **A starting document** stands for every entry before the first one given, so a server
   can fold from a snapshot. A rewind or a discard that reaches before that first entry
   throws, and the caller folds from an earlier snapshot.
@@ -168,22 +171,23 @@ walked cells, the shelf suggestions, the section run in progress and the events 
 log since the last snapshot. The rules decide on 0.5 m cells, and every area they make is a
 rectangle snapped to its cells. Nothing is painted while tracking is not `good`.
 
-| Rule            | What it does                                                                                             |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| Walked          | every cell within 0.5 m of a good point, and of the step from the good point before when under 2 m       |
-| Suggestion      | a strip nobody walked, 1 to 4 cells across and at least 4 long, walked on both long sides, under no area |
-| Tapping         | `acceptSuggestion(id)` puts a `shelf` with origin `suggested`. Nothing else makes a shelf by itself      |
-| Walking across  | a good point inside a `suggested` shelf cuts the cells within 0.5 m of it into a `path` area             |
-| Section start   | a section mark fills the open cells beside the person on the side the phone faced, within 1.5 m          |
-| Section extends | each point moves the run's end beside the person, and walking back shortens it                           |
-| Section ends    | a turn of more than 45 degrees held for 2 m, 2 m away from the shelf, another mark, or `sectionLeft()`   |
-| Counter mark    | a 2 by 1 m `counter`, its long side facing the person, 0.5 m away                                        |
+| Rule            | What it does                                                                                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Walked          | every cell within 0.5 m of a good point, and of the step from the good point before when under 2 m                                                                                           |
+| Suggestion      | a strip nobody walked, 1 to 4 cells across and at least 4 long, walked on both long sides, under no area                                                                                     |
+| Tapping         | `acceptSuggestion(id)` puts a `shelf` with origin `suggested`, named after the run beside the person or a section mark within 1.5 m. Nothing else makes a shelf by itself                    |
+| Walking across  | a good point inside a `suggested` shelf cuts the cells within 0.5 m of it into a `path` area                                                                                                 |
+| Section start   | a section mark names the tapped or earlier run shelf it faces within 1.5 m, or fills the open cells there. It cuts the run just ended where it starts, and never names a shelf drawn by hand |
+| Section extends | each point moves the run's end beside the person, and walking back shortens it                                                                                                               |
+| Section ends    | the walking direction over the last metre turned more than 45 degrees for 2 m, 2 m away from the shelf, another mark, or `sectionLeft()`                                                     |
+| Counter mark    | a 2 by 1 m `counter`, its long side facing the person, 0.5 m away                                                                                                                            |
 
 Suggestions are computed and never stored, so a suggestion's id is its cells
 (`suggestion:i0,j0,i1,j1`). The ids of the areas the live map makes come from the caller's
 `idPrefix` and `idSeed`. The live map emits `mark-put`, `area-put`, `area-removed` and
 `section-left`, never a path: the recording screen appends the points the tracking guard
-keeps. No rule changes an area it did not make, except a `suggested` shelf walked across.
+keeps. No rule changes a shelf drawn by hand. A `suggested` shelf is cut when walked
+across, and a section mark names a `suggested` or `section-run` shelf it faces.
 
 `src/lib/__fixtures__/el-jamon/expected-live.json` is what replaying the El Jamón log
 answers. `tools/shop-map/replay-el-jamon-live.ts` writes it and draws it to

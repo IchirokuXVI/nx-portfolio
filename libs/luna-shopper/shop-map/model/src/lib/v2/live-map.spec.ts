@@ -329,6 +329,155 @@ describe('createLiveMap', () => {
     });
   });
 
+  describe('a section mark facing a shelf that is already an area', () => {
+    /** Two aisles with the strip between them tapped as a shelf (id a1). */
+    function tapped(): LiveMapHandle {
+      const map = live();
+      aisles(map, 1.5);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.snapshot();
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 0], [2, 0]);
+      return map;
+    }
+
+    it('names a tapped shelf and runs along it', () => {
+      const map = tapped();
+      map.mark(
+        mark('m', clock, { x: 2, y: 0, heading: 0, text: 'Congelados' })
+      );
+      const snap = map.snapshot();
+      expect(snap.sectionRun).toEqual({ section: 'Congelados', areaId: 'a1' });
+      expect(puts(snap.events)).toEqual([
+        {
+          id: 'a1',
+          kind: 'shelf',
+          x: -0.5,
+          y: 0.5,
+          w: 7,
+          h: 0.5,
+          section: 'Congelados',
+          colour: { mode: 'default' },
+          origin: 'suggested',
+        },
+      ]);
+    });
+
+    it('grows the named shelf past its end, and never shrinks it', () => {
+      const map = tapped();
+      map.mark(
+        mark('m', clock, { x: 2, y: 0, heading: 0, text: 'Congelados' })
+      );
+      walk(map, [2, 0], [8, 0]);
+      expect(areasOf(map.snapshot().events).get('a1')).toMatchObject({
+        x: -0.5,
+        w: 9,
+      });
+      walk(map, [8, 0], [1, 0]);
+      expect(areasOf(map.snapshot().events).get('a1')).toMatchObject({
+        x: -0.5,
+        w: 7,
+      });
+    });
+
+    it('adds to a run of the same section instead of making another', () => {
+      const map = live();
+      walk(map, [0, 0], [2, 0]);
+      map.mark(mark('m1', clock, { x: 2, y: 0, heading: 0, text: 'Pan' }));
+      walk(map, [2, 0], [4, 0]);
+      map.sectionLeft();
+      walk(map, [4, 0], [3, 0]);
+      map.mark(mark('m2', clock, { x: 3, y: 0, heading: 0, text: ' pan ' }));
+      const snap = map.snapshot();
+      expect(snap.sectionRun?.areaId).toBe('a1');
+      expect([...areasOf(snap.events).keys()]).toEqual(['a1']);
+    });
+
+    it('cuts the run just ended where the next section starts', () => {
+      const map = live();
+      walk(map, [0, 0], [2, 0]);
+      map.mark(mark('m1', clock, { x: 2, y: 0, heading: 0, text: 'Pan' }));
+      walk(map, [2, 0], [5, 0]);
+      map.mark(mark('m2', clock, { x: 4, y: 0, heading: 0, text: 'Leche' }));
+      const areas = areasOf(map.snapshot().events);
+      expect(areas.get('a1')).toMatchObject({ section: 'Pan', x: 2, w: 2 });
+      expect(areas.get('a2')).toMatchObject({ section: 'Leche', x: 4 });
+      expect(map.snapshot().sectionRun).toEqual({
+        section: 'Leche',
+        areaId: 'a2',
+      });
+    });
+
+    it('never names a shelf drawn by hand', () => {
+      const drawn = area('drawn', { x: 0, y: 0.5, w: 4, h: 1 });
+      const map = live(doc({ areas: [drawn] }));
+      walk(map, [0, 0], [2, 0]);
+      map.mark(mark('m', clock, { x: 2, y: 0, heading: 0, text: 'Pan' }));
+      const snap = map.snapshot();
+      expect(snap.sectionRun).toBeNull();
+      expect(snap.events.map((e) => e.type)).toEqual(['mark-put']);
+    });
+  });
+
+  describe('a tapped suggestion', () => {
+    it('takes the section of a mark within 1.5 m', () => {
+      const map = live();
+      aisles(map, 1.5);
+      map.mark(
+        mark('m', clock, {
+          x: 5,
+          y: 1.5,
+          heading: 180,
+          text: 'Pan',
+          kind: 'section',
+        })
+      );
+      map.snapshot();
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      expect(puts(map.snapshot().events)[0].section).toBe('Pan');
+    });
+
+    it('takes the section of the run in progress beside it', () => {
+      const map = live();
+      aisles(map, 1.5);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 2.5], [2, 2.5]);
+      // A run on the far side of the second aisle, 1.25 m from the strip.
+      map.mark(mark('m', clock, { x: 2, y: 2.5, heading: 0, text: 'Leche' }));
+      map.snapshot();
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      const tappedShelf = puts(map.snapshot().events).find(
+        (a) => a.origin === 'suggested'
+      );
+      expect(tappedShelf?.section).toBe('Leche');
+    });
+
+    it('stays unnamed with no section near', () => {
+      const map = live();
+      aisles(map, 1.5);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      expect('section' in puts(map.snapshot().events)[0]).toBe(false);
+    });
+  });
+
+  describe('the turn rule', () => {
+    it('reads the last metre of walking, so jitter on dense points ends nothing', () => {
+      const map = live();
+      walk(map, [0, 0], [2, 0]);
+      map.mark(mark('m', clock, { x: 2, y: 0, heading: 0, text: 'Pan' }));
+      // Every 5 cm, 10 cm to one side and back: each step turns 63 degrees.
+      for (let k = 1; k <= 80; k++) {
+        clock += 50;
+        map.push({ logMs: clock, x: 2 + k * 0.05, y: k % 2 === 0 ? 0 : 0.1 });
+      }
+      const snap = map.snapshot();
+      expect(snap.sectionRun).toEqual({ section: 'Pan', areaId: 'a1' });
+      expect(areasOf(snap.events).get('a1')).toMatchObject({ x: 2, w: 4.5 });
+    });
+  });
+
   describe('counter marks', () => {
     it('place a 2 by 1 m counter 0.5 m away, its long side facing the person', () => {
       const map = live();
