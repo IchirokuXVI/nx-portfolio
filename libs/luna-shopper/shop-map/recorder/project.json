@@ -22,6 +22,13 @@
       "options": {
         "command": "npx tsx libs/luna-shopper/shop-map/recorder/tools/generate-fixtures.ts"
       }
+    },
+    "cut-tracking-fixture": {
+      "//": "Cuts src/__fixtures__/tracking/el-jamon-2.tracking.json out of the second El Jamón walk (recorder plan 0003). Pass the walk file with --args. The walk itself is never committed.",
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx libs/luna-shopper/shop-map/recorder/tools/cut-tracking-fixture.ts"
+      }
     }
   }
 }
