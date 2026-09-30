@@ -500,6 +500,56 @@ describe('createLiveMap', () => {
       ]);
     });
 
+    it('never takes a mark of the same name elsewhere as the side that named it', () => {
+      const map = live();
+      aisles(map, 2.5, 9);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 0], [1, 0]);
+      map.mark(mark('m1', clock, { x: 1, y: 0, heading: 0, text: 'Lacteos' }));
+      map.sectionLeft();
+      // The same name again, on a shelf of its own far away.
+      map.mark(
+        mark('m2', clock, { x: 22, y: 20, heading: 0, text: 'Lacteos' })
+      );
+      walk(map, [1, 0], [5, 0]);
+      map.mark(mark('m3', clock, { x: 5, y: 0, heading: 0, text: 'Yogures' }));
+      const areas = areasOf(map.snapshot().events);
+      expect(areas.get('a1')).toMatchObject({ section: 'Lacteos', h: 1.5 });
+      expect(
+        [...areas.values()].filter((a) => a.section === 'Yogures')
+      ).toEqual([]);
+    });
+
+    it('splits a piece left by a crossing across the run, not across the aisle', () => {
+      const map = live();
+      aisles(map, 2.5, 4);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 0], [3.75, 0]);
+      map.mark(
+        mark('m1', clock, { x: 3.75, y: 0, heading: 0, text: 'Lacteos' })
+      );
+      walk(map, [3.75, 0], [3, 0]);
+      walk(map, [3, 0], [3, 2.5]);
+      walk(map, [3, 2.5], [4.25, 2.5]);
+      map.mark(
+        mark('m2', clock, { x: 4.25, y: 2.5, heading: 180, text: 'Yogures' })
+      );
+      const areas = [...areasOf(map.snapshot().events).values()];
+      const piece = (section: string) =>
+        areas
+          .filter((a) => a.section === section && a.x === 3.5)
+          .map((a) => [a.y, a.h]);
+      expect(piece('Lacteos')).toEqual([[0.5, 1]]);
+      expect(piece('Yogures')).toEqual([[1.5, 0.5]]);
+      expect(
+        validateShopMapV2({ version: 2, areas, marks: [], path: [] })
+      ).toEqual([]);
+    });
+
     it('keeps the spelling of a shelf already named the same', () => {
       const map = live();
       aisles(map, 1.5);

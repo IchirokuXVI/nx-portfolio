@@ -27,6 +27,8 @@ export const SUGGESTION_MAX_ACROSS_CELLS = 4;
 export const SUGGESTION_MIN_LONG_CELLS = 4;
 /** A section mark looks this far towards the side the phone faced for shelf cells (1.5 m). */
 export const SECTION_REACH_CELLS = 3;
+/** The same reach in metres. */
+export const SECTION_REACH_METRES = SECTION_REACH_CELLS * LIVE_CELL_METRES;
 /** How deep a section run fills a shelf nobody drew, when no aisle bounds it (1 m). */
 export const SECTION_DEPTH_CELLS = 2;
 /** The walking direction is read over this much of the path behind the person. */
@@ -61,6 +63,22 @@ const r2 = (v: number) => {
 function headingVector(heading: number): [number, number] {
   const h = (heading * Math.PI) / 180;
   return [-Math.sin(h), Math.cos(h)];
+}
+
+/** The vector from a point to the nearest point of an area. */
+function toShelf(shelf: MapArea, x: number, y: number): [number, number] {
+  return [
+    Math.max(shelf.x, Math.min(shelf.x + shelf.w, x)) - x,
+    Math.max(shelf.y, Math.min(shelf.y + shelf.h, y)) - y,
+  ];
+}
+
+/** Whether a mark stood within 1.5 m of a shelf with its heading towards it. */
+function markFaces(mark: MapMark, shelf: MapArea): boolean {
+  const [vx, vy] = toShelf(shelf, mark.x, mark.y);
+  if (Math.hypot(vx, vy) > SECTION_REACH_METRES + EPS) return false;
+  const [hx, hy] = headingVector(mark.heading);
+  return hx * vx + hy * vy > EPS;
 }
 
 function distanceToSegment(
@@ -481,7 +499,25 @@ class LiveMap implements LiveMapHandle {
       // longer stands for the pieces the crossing leaves.
       if (this.run?.area.id === a.id) this.run = null;
       const r = cellsOfArea(a);
-      const alongX = a.w >= a.h;
+      // The slab spans the shelf from the face the person came in through:
+      // entering over a top or bottom edge crosses it along y. Coming in over
+      // a corner, or with no point before, the longer side is its length.
+      const prev = this.prev;
+      const overTopOrBottom =
+        prev !== null &&
+        (prev.y < a.y || prev.y >= a.y + a.h) &&
+        prev.x >= a.x &&
+        prev.x < a.x + a.w;
+      const overLeftOrRight =
+        prev !== null &&
+        (prev.x < a.x || prev.x >= a.x + a.w) &&
+        prev.y >= a.y &&
+        prev.y < a.y + a.h;
+      const alongX = overTopOrBottom
+        ? true
+        : overLeftOrRight
+          ? false
+          : a.w >= a.h;
       const [lo, hi] = alongX ? [r.i0, r.i1] : [r.j0, r.j1];
       const at = alongX ? p.x : p.y;
       const s0 = Math.max(
@@ -553,14 +589,8 @@ class LiveMap implements LiveMapHandle {
    * within 1.5 m of the shelf, else the latest section mark within 1.5 m of it.
    */
   private sectionNear(shelf: MapArea): string | null {
-    const reach = SECTION_REACH_CELLS * CELL + EPS;
-    /** The vector from a point to the nearest point of the shelf. */
-    const toShelf = (x: number, y: number): [number, number] => [
-      Math.max(shelf.x, Math.min(shelf.x + shelf.w, x)) - x,
-      Math.max(shelf.y, Math.min(shelf.y + shelf.h, y)) - y,
-    ];
     const near = (x: number, y: number) =>
-      Math.hypot(...toShelf(x, y)) <= reach;
+      Math.hypot(...toShelf(shelf, x, y)) <= SECTION_REACH_METRES + EPS;
     const run = this.run;
     if (run && this.prev && near(this.prev.x, this.prev.y)) {
       // Only when the shelf is on the run's side of the person.
@@ -574,11 +604,7 @@ class LiveMap implements LiveMapHandle {
     }
     for (let k = this.sectionMarks.length - 1; k >= 0; k--) {
       const m = this.sectionMarks[k];
-      if (m.text.trim() === '' || !near(m.x, m.y)) continue;
-      // Only a mark whose heading faced the shelf.
-      const [vx, vy] = toShelf(m.x, m.y);
-      const [hx, hy] = headingVector(m.heading);
-      if (hx * vx + hy * vy > EPS) return m.text;
+      if (m.text.trim() !== '' && markFaces(m, shelf)) return m.text;
     }
     return null;
   }
@@ -651,7 +677,7 @@ class LiveMap implements LiveMapHandle {
         }
         // The other face of a tapped strip: split it along its length and
         // name the half facing the person. Any other named shelf is left alone.
-        const half = this.otherFace(shelf, mark);
+        const half = this.otherFace(shelf, mark, axis);
         if (half) this.adoptRun(mark, half, axis, along, walking);
         return;
       }
@@ -751,16 +777,18 @@ class LiveMap implements LiveMapHandle {
   }
 
   /**
-   * Splits a tapped strip named from its other side along its length, and
+   * Splits a tapped strip named from its other side along the run's axis, and
    * puts the half facing the person as a new unnamed `suggested` shelf. The
-   * far half keeps its id and its section. `null` when the strip is one cell
-   * across, or when no section mark tells which side named it, or it was
-   * named from the person's side (a second section along the same face).
+   * far half keeps its id and its section. The side that named it is the
+   * latest mark with its name that stood within 1.5 m facing it. `null` when
+   * the strip is one cell across, when no such mark exists, or when it stood
+   * on the person's side (a second section along the same face).
    */
-  private otherFace(shelf: MapArea, mark: MapMark): MapArea | null {
+  private otherFace(shelf: MapArea, mark: MapMark, axis: Axis): MapArea | null {
     if (shelf.origin !== 'suggested') return null;
     const r = cellsOfArea(shelf);
-    const acrossY = shelf.w >= shelf.h;
+    // The strip runs along the run's axis, so it splits across the other one.
+    const acrossY = axis === 'x';
     const [a0, a1] = acrossY ? [r.j0, r.j1] : [r.i0, r.i1];
     if (a1 - a0 + 1 < 2) return null;
     const middle = acrossY ? shelf.y + shelf.h / 2 : shelf.x + shelf.w / 2;
@@ -768,7 +796,12 @@ class LiveMap implements LiveMapHandle {
     const key = (t: string | undefined) => t?.trim().toLowerCase() ?? '';
     const namer = [...this.sectionMarks]
       .reverse()
-      .find((m) => m.id !== mark.id && key(m.text) === key(shelf.section));
+      .find(
+        (m) =>
+          m.id !== mark.id &&
+          key(m.text) === key(shelf.section) &&
+          markFaces(m, shelf)
+      );
     const mine = sideOf(mark);
     if (!namer || mine === 0 || sideOf(namer) !== -mine) return null;
     const count = a1 - a0 + 1;
