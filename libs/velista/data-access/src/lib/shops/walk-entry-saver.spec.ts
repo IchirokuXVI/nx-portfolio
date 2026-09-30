@@ -101,6 +101,29 @@ describe('WalkEntrySaver', () => {
     expect(memory.appended[0].id).not.toBe(memory.appended[1].id);
   });
 
+  it('sends one entry per base when a save is asked for while another is out', async () => {
+    const { memory, saver, lastSeq } = await harness();
+
+    // The timer's save and Done's save, at once, over the same edit.
+    saver.add([put('a-1')]);
+    const [first, second] = await Promise.all([saver.save(), saver.save()]);
+    expect([first, second]).toEqual(['saved', 'nothing']);
+    expect(memory.appended.map((entry) => entry.baseSeq)).toEqual([lastSeq]);
+
+    // An edit made while a save is out goes after it, on the answered seq.
+    saver.add([put('a-1', 13)]);
+    const out = saver.save();
+    saver.add([put('a-1', 14)]);
+    const again = saver.save();
+    await Promise.all([out, again]);
+    expect(memory.appended.map((entry) => entry.baseSeq)).toEqual([
+      lastSeq,
+      lastSeq + 1,
+      lastSeq + 2,
+    ]);
+    expect(new Set(memory.appended.map((entry) => entry.id)).size).toBe(3);
+  });
+
   it('sends nothing when nothing changed', async () => {
     const { memory, saver } = await harness();
 
