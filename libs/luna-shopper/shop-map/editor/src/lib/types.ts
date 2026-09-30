@@ -47,6 +47,12 @@ export interface ShopMapHandle {
   /** Shopper look: badges per section name. */
   setBadges(badges: Record<string, ShopMapBadge>): void;
   setSelected(areaId: string | null): void;
+  /**
+   * Mapper look: removes the square a long press marks. `setDocument`,
+   * `setSelected` and the next touch remove it too, so the host calls this
+   * only when its menu is dismissed without an action.
+   */
+  clearHeld(): void;
   setSnap(on: boolean): void;
   /** Mapper look: the kind a tap and drag on the floor draws. */
   setDrawKind(kind: AreaKind): void;
