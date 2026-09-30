@@ -169,9 +169,10 @@ function ringAreaM2(ring: readonly LatLon[]): number {
  * OpenStreetMap lets one ring be drawn as several ways that meet end to end,
  * in either direction, so a way is appended to the ring being built wherever
  * one of its ends meets one of the ring's. A chain that never closes is not a
- * ring and adds nothing: an outline with a gap has no area to measure.
+ * ring, and one such chain makes the whole answer null: an outline with a gap
+ * has no area to measure, and an inner ring with a gap cannot be subtracted.
  */
-function assembleRings(ways: LatLon[][]): LatLon[][] {
+function assembleRings(ways: LatLon[][]): LatLon[][] | null {
   const rings: LatLon[][] = [];
   const pending = ways.filter((way) => way.length >= 2);
   while (pending.length > 0) {
@@ -203,9 +204,10 @@ function assembleRings(ways: LatLon[][]): LatLon[][] {
         }
       }
     }
-    if (isClosed(ring)) {
-      rings.push(ring);
+    if (!isClosed(ring)) {
+      return null;
     }
+    rings.push(ring);
   }
   return rings;
 }
@@ -218,9 +220,15 @@ function assembleRings(ways: LatLon[][]): LatLon[][] {
  *   a size for it.
  * - A **way** answers the area of its ring when the ring closes, and null when
  *   it does not.
- * - A **relation** answers the sum of its outer rings minus the sum of its inner
- *   rings. A member with no role counts as outer, which is how older
- *   multipolygons were drawn.
+ * - A **relation** is measured only when it is a multipolygon: the sum of its
+ *   outer rings minus the sum of its inner rings, and null when any ring does
+ *   not close. A member with no role counts as outer, which is how older
+ *   multipolygons were drawn. Every other relation type answers null, because
+ *   its members are not rings of one outline: a `site` groups a building with
+ *   its car park, and a `building` holds its `outline` beside its `part`s, so
+ *   adding their members up would give a sum or a double count. A `boundary`
+ *   is an administrative area and never a shop's outline, so it is not
+ *   measured either.
  *
  * Zero or less is null too: a degenerate outline says nothing about a size.
  */
@@ -233,6 +241,9 @@ function readFootprint(element: Record<string, Json>): number | null {
     }
     area = ringAreaM2(ring);
   } else if (element['type'] === 'relation') {
+    if (readTags(element)['type'] !== 'multipolygon') {
+      return null;
+    }
     const members = Array.isArray(element['members']) ? element['members'] : [];
     const outer: LatLon[][] = [];
     const inner: LatLon[][] = [];
@@ -244,12 +255,13 @@ function readFootprint(element: Record<string, Json>): number | null {
       (member['role'] === 'inner' ? inner : outer).push(points);
     }
     const outerRings = assembleRings(outer);
-    if (outerRings.length === 0) {
+    const innerRings = assembleRings(inner);
+    if (!outerRings || !innerRings || outerRings.length === 0) {
       return null;
     }
     const sum = (rings: LatLon[][]) =>
       rings.reduce((total, ring) => total + ringAreaM2(ring), 0);
-    area = sum(outerRings) - sum(assembleRings(inner));
+    area = sum(outerRings) - sum(innerRings);
   } else {
     return null;
   }

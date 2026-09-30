@@ -28,7 +28,7 @@ the fixture is patchy rather than uniformly complete:
 
 ## Provenance
 
-Captured on 2026-09-30 (Overpass base 2026-09-29T22:01:29Z) with
+Captured on 2026-09-30 (Overpass base 2026-09-29T22:04:30Z) with
 `npx nx run luna-shopper/osm-places:capture-fixtures`. Rerun it to refresh them
 and commit the diff. The specs name element ids, so after a refresh, check their
 expectations against the new capture. The data is ODbL, so anything derived from it that
