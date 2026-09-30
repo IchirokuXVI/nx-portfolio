@@ -211,6 +211,9 @@
       ],
       "@portfolio/luna-shopper-admin/feature-brands": [
         "./libs/luna-shopper-admin/feature-brands/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/shop-map/editor": [
+        "./libs/luna-shopper/shop-map/editor/src/index.ts"
       ]
     }
   },
