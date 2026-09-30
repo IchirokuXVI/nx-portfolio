@@ -55,6 +55,7 @@ import {
   SHOP_MAP_SERVICE,
   SHOP_SECTIONS_SERVICE,
   SHOP_SERVICE,
+  SHOP_WALK_SERVICE,
   ShopApi,
   ShopDetailApi,
   ShopFinderApi,
@@ -62,6 +63,7 @@ import {
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
   ShopSectionsApi,
+  ShopWalkApi,
   StartupProbe,
   TRIP_SERVICE,
   TripApi,
@@ -287,6 +289,8 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // Bound apart so a map that does not answer costs the map page and nothing else.
   provideService(SHOP_DETAIL_SERVICE, ShopDetailApi),
   provideService(SHOP_MAP_SERVICE, ShopMapApi),
+  // A shop's walks and their logs (velista 0122), for accounts that map shops.
+  provideService(SHOP_WALK_SERVICE, ShopWalkApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches

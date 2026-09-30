@@ -2570,6 +2570,13 @@ export function fakeShopDetailStore(
     land: (locationId: string, read: ShopDetailRead) => {
       reads.update((all) => new Map(all).set(locationId, read));
     },
+    forget: (locationId: string) => {
+      reads.update((all) => {
+        const next = new Map(all);
+        next.delete(locationId);
+        return next;
+      });
+    },
     /** Every shop a screen asked about, in order. */
     ensured: () => [...ensured],
   };

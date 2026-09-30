@@ -14,8 +14,12 @@ import {
 import {
   mountShopMap,
   type ShopMapHandle,
+  type ShopMapLook,
 } from '@portfolio/luna-shopper/shop-map/editor';
-import type { ShopMapDocumentV2 } from '@portfolio/luna-shopper/shop-map/model';
+import type {
+  ShopMapDocumentV2,
+  WalkEntry,
+} from '@portfolio/luna-shopper/shop-map/model';
 import type { ShopMapBadgeCount } from '@portfolio/velista/models';
 import { ThemeStore } from '@portfolio/velista/platform';
 
@@ -54,6 +58,22 @@ export class ShopMapView {
   readonly label = input('');
 
   /**
+   * The shopper's friendly map, or the mapper's (velista `0122`): the walked
+   * floor, the grid, every mark. Chosen when the canvas mounts and followed after.
+   */
+  readonly look = input<ShopMapLook>('shopper');
+
+  /**
+   * The mapper look's rewind preview: everything after this point of the log
+   * drawn faded, which the canvas works out from the log (`setFadedAfter`). Null
+   * fades nothing.
+   */
+  readonly fadedAfter = input<{
+    readonly logMs: number;
+    readonly log: readonly WalkEntry[];
+  } | null>(null);
+
+  /**
    * A section's area was tapped: the name its area spells the section with.
    * Named for what happened rather than `select`, which is a DOM event.
    */
@@ -70,10 +90,26 @@ export class ShopMapView {
     afterNextRender(() => {
       this._handle = mountShopMap(this._canvas().nativeElement, {
         document: untracked(this.document),
-        look: 'shopper',
+        look: untracked(this.look),
         onSection: (section) => this.sectionTapped.emit(section),
       });
       this._handle.setBadges({ ...untracked(this.badges) });
+      const faded = untracked(this.fadedAfter);
+      if (faded !== null) {
+        this._handle.setFadedAfter(faded.logMs, faded.log);
+      }
+    });
+
+    effect(() => {
+      const look = this.look();
+      untracked(() => this._handle?.setLook(look));
+    });
+
+    effect(() => {
+      const faded = this.fadedAfter();
+      untracked(() =>
+        this._handle?.setFadedAfter(faded?.logMs ?? null, faded?.log)
+      );
     });
 
     effect(() => {

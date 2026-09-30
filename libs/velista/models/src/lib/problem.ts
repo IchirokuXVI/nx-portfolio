@@ -137,6 +137,14 @@ export const ERROR_CODES = [
    * raises it.
    */
   'line_merge_too_many_products',
+  /**
+   * The walk moved on since this phone read it (backend `0168`), as a 409, with
+   * `details.lastSeq`. Nothing was written. The rewind screen answers it by
+   * reading the walk again (velista `0122`).
+   */
+  'walk_changed',
+  /** The account lacks a permission the route takes (backend `0175`), as a 403. */
+  'permission_required',
   'internal',
 ] as const;
 

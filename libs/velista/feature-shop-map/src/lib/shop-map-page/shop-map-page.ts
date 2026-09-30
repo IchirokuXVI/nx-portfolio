@@ -15,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import { SHOP_MAP_PROPERTIES } from '@portfolio/luna-shopper/shop-map/editor';
 import {
+  ProfileStore,
   SessionStore,
   ShopDetailStore,
   ShopMapStore,
@@ -32,9 +33,10 @@ import {
   sheetSegments,
   SHOP_PATHS,
   shopPagePath,
+  shopWalksPath,
   ThemeStore,
 } from '@portfolio/velista/platform';
-import { CheckIcon, ChevronLeftIcon } from '@portfolio/velista/ui';
+import { CheckIcon, ChevronLeftIcon, WalkIcon } from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { shopPageText } from '../shop-page/shop-page';
 
@@ -60,6 +62,7 @@ export type ShopMapShow = 'mine' | 'all';
     RokuTranslatorPipe,
     RouterOutlet,
     ShopMapView,
+    WalkIcon,
   ],
   templateUrl: './shop-map-page.html',
   styleUrl: './shop-map-page.scss',
@@ -73,6 +76,7 @@ export class ShopMapPage {
   private readonly _maps = inject(ShopMapStore);
   private readonly _shops = inject(ShopDetailStore);
   private readonly _session = inject(SessionStore);
+  private readonly _profile = inject(ProfileStore);
   private readonly _pages = inject(PageNavigation);
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
@@ -91,6 +95,15 @@ export class ShopMapPage {
     const basket = this._query().get(SHOP_PATHS.basketParam);
     return basket === null || basket === '' ? null : basket;
   });
+
+  /**
+   * Whether the Walks button is drawn: only for an account that may record a
+   * shop's walks (velista `0122`, target 1). It appears when `me` answers, and a
+   * guest or an account without the permission never sees it.
+   */
+  protected readonly canMap = computed(
+    () => this._session.isAuthenticated() && this._profile.can('shopMap.record')
+  );
 
   protected readonly status = this._maps.status;
   protected readonly map = this._maps.map;
@@ -165,6 +178,13 @@ export class ShopMapPage {
 
   protected setShow(show: ShopMapShow): void {
     this._show.set(show);
+  }
+
+  /** A shop's walks, pushed so back returns to this map. */
+  protected openWalks(): void {
+    void this._router.navigateByUrl(
+      shopWalksPath(this._locale(), this._basePath, this.locationId())
+    );
   }
 
   protected retry(): void {

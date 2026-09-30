@@ -61,6 +61,11 @@ export function locationIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'locationId');
 }
 
+/** The walk a walk's history, rewind, settings or a sheet over them is about (velista `0122`). */
+export function walkIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'walkId');
+}
+
 /** The section the map's section sheet is about (velista `0121`). */
 export function sectionIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'sectionId');

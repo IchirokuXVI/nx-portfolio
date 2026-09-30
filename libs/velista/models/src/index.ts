@@ -34,6 +34,7 @@ export * from './lib/requests';
 export * from './lib/shop';
 export * from './lib/shop-map';
 export * from './lib/shop-section';
+export * from './lib/shop-walks';
 export * from './lib/shopping-lists-view';
 export * from './lib/shopping-profile';
 export * from './lib/trip-date';

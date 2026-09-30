@@ -1,0 +1,11 @@
+@use '../walks';
+
+// The three sheets of velista 0122: naming a new walk, deleting one, and the
+// warning before resuming the walk shoppers see.
+
+@include walks.sheet-form;
+
+.actions {
+  display: flex;
+  flex-direction: column;
+}
