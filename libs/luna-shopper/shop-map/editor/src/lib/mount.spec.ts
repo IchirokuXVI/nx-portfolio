@@ -276,6 +276,29 @@ describe('mountShopMap, drawing', () => {
     expect(host.querySelectorAll('rect.sm-handle')).toHaveLength(0);
   });
 
+  it('takes the theme from the closest data-theme, and follows it when it changes', async () => {
+    const page = document.createElement('div');
+    page.dataset['theme'] = 'night';
+    document.body.appendChild(page);
+    page.appendChild(host);
+    host.dataset['theme'] = 'day';
+    handle = mountShopMap(host, { document: doc, look: 'mapper' });
+    const root = host.querySelector('.sm-root') as HTMLElement;
+    expect(root.dataset['smTheme']).toBe('day');
+    delete host.dataset['theme'];
+    await Promise.resolve();
+    expect(root.dataset['smTheme']).toBe('night');
+    delete page.dataset['theme'];
+    handle.setLook('mapper');
+    expect(root.dataset['smTheme']).toBeUndefined();
+    const css = document.getElementById('shop-map-editor-styles')?.textContent;
+    expect(css).toContain('.sm-root[data-sm-theme="day"]{');
+    expect(css).not.toContain('[data-theme="night"] .sm-root');
+    handle.destroy();
+    handle = null;
+    page.remove();
+  });
+
   it('cleans up on destroy', () => {
     handle = mountShopMap(host, { document: doc, look: 'mapper' });
     handle.destroy();
@@ -335,15 +358,33 @@ describe('mountShopMap, the mapper gestures', () => {
 
   it('resizes by a corner handle, snapped when the switch is on', () => {
     const onChange = jest.fn<void, [WalkEvent[]]>();
-    handle = mountShopMap(host, { document: doc, look: 'mapper', onChange });
+    // Three metres wide, so its handles are big enough on screen to grab.
+    const wide = area('a1', { x: 1, y: 2, w: 3, section: 'Lácteos' });
+    handle = mountShopMap(host, {
+      document: { ...doc, areas: [wide, ...doc.areas.slice(1)] },
+      look: 'mapper',
+      onChange,
+    });
     handle.setSelected('a1');
     handle.setSnap(true);
-    // The bottom right corner of a1 is (2, 6); drag it to (2.9, 7.1).
-    drag(at(2, 6), at(2.9, 7.1));
+    // The bottom right corner is (4, 6); drag it to (4.9, 7.1).
+    drag(at(4, 6), at(4.9, 7.1));
     const put = onChange.mock.calls[0][0][0];
     expect(put).toEqual({
       type: 'area-put',
-      area: { ...doc.areas[0], x: 1, y: 2, w: 2, h: 5 },
+      area: { ...wide, x: 1, y: 2, w: 4, h: 5 },
+    });
+  });
+
+  it('moves a small area from its corner instead of resizing it', () => {
+    const onChange = jest.fn<void, [WalkEvent[]]>();
+    handle = mountShopMap(host, { document: doc, look: 'mapper', onChange });
+    // a1 is one metre wide, under two touch targets on screen.
+    handle.setSelected('a1');
+    drag(at(1.9, 5.9), at(2.9, 6.4));
+    expect(onChange.mock.calls[0][0][0]).toEqual({
+      type: 'area-put',
+      area: { ...doc.areas[0], x: 2, y: 2.5 },
     });
   });
 
@@ -367,6 +408,39 @@ describe('mountShopMap, the mapper gestures', () => {
     expect(host.querySelector('rect.sm-refused')).not.toBeNull();
     jest.advanceTimersByTime(1000);
     expect(host.querySelector('rect.sm-refused')).toBeNull();
+  });
+
+  it('clears a refused draw at once when the floor is touched again', () => {
+    jest.useFakeTimers();
+    handle = mountShopMap(host, { document: doc, look: 'mapper' });
+    drag(at(0.2, 0.2), at(2.5, 4));
+    expect(host.querySelector('rect.sm-refused')).not.toBeNull();
+    jest.advanceTimersByTime(300);
+    pointer('pointerdown', at(4.5, 0.5));
+    expect(host.querySelector('rect.sm-refused')).toBeNull();
+    expect(host.querySelectorAll('rect.sm-handle')).toHaveLength(0);
+    pointer('pointerup', at(4.5, 0.5));
+  });
+
+  it('draws the area back at once when a refused move is followed by a touch', () => {
+    jest.useFakeTimers();
+    const onChange = jest.fn();
+    handle = mountShopMap(host, { document: doc, look: 'mapper', onChange });
+    handle.setSelected('a2');
+    // Onto a1, which refuses.
+    drag(at(6.5, 3), at(1.5, 3));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(host.querySelector('rect.sm-refused')).not.toBeNull();
+    const drawnAreas = () =>
+      [...host.querySelectorAll('rect.sm-area.sm-shelf')].filter(
+        (r) => !r.classList.contains('sm-refused')
+      );
+    expect(drawnAreas()).toHaveLength(1);
+    jest.advanceTimersByTime(300);
+    pointer('pointerdown', at(4.5, 0.5));
+    expect(host.querySelector('rect.sm-refused')).toBeNull();
+    expect(drawnAreas()).toHaveLength(2);
+    pointer('pointerup', at(4.5, 0.5));
   });
 
   it('calls onSuggestion for a tapped suggestion', () => {
@@ -413,6 +487,34 @@ describe('mountShopMap, the mapper gestures', () => {
     pointer('pointerup', [p[0] + 40, p[1]]);
     expect(onChange).not.toHaveBeenCalled();
     expect(host.querySelector('rect.sm-held')).not.toBeNull();
+  });
+
+  describe('the held square after a long press', () => {
+    function longPress() {
+      jest.useFakeTimers();
+      handle = mountShopMap(host, { document: doc, look: 'mapper' });
+      const p = at(6.5, 3);
+      pointer('pointerdown', p);
+      jest.advanceTimersByTime(LONG_PRESS_MS + 10);
+      pointer('pointerup', p);
+      expect(host.querySelector('rect.sm-held')).not.toBeNull();
+      return handle;
+    }
+
+    it('goes when the host applies an action with setDocument', () => {
+      longPress().setDocument({ ...doc, areas: doc.areas.slice(0, 1) });
+      expect(host.querySelector('rect.sm-held')).toBeNull();
+    });
+
+    it('goes when the host selects an area', () => {
+      longPress().setSelected('a2');
+      expect(host.querySelector('rect.sm-held')).toBeNull();
+    });
+
+    it('goes when the host dismisses its menu with clearHeld', () => {
+      longPress().clearHeld();
+      expect(host.querySelector('rect.sm-held')).toBeNull();
+    });
   });
 
   it('never edits with two fingers', () => {
