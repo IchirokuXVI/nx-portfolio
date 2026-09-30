@@ -98,7 +98,9 @@ export const USER_SEED: readonly UserRow[] = [
     displayName: 'Marc Oliver',
     email: 'marc@example.com',
     emailVerifiedAt: null,
-    roles: [],
+    // The one account holding a role, so the column, the filter and the
+    // switches each have something to show in this mode (admin plan 0038).
+    roles: ['admin'],
     createdAt: '2026-03-03T08:00:00.000Z',
     updatedAt: '2026-03-03T08:00:00.000Z',
     hasPassword: false,

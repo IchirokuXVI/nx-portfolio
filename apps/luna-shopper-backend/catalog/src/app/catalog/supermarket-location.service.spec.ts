@@ -401,6 +401,55 @@ describe('SupermarketLocationService postal codes', () => {
   });
 
   /**
+   * Plan 0176: the size of a shop's mapped outline. Written when a place
+   * carries one, and never cleared by a place that carries none.
+   */
+  describe('footprint', () => {
+    it('stores the size a create carries, and null when it carries none', async () => {
+      const { service } = build();
+
+      const sized = await service.create({ ...CREATE, footprintM2: 3002 });
+      const point = await service.create({ ...CREATE });
+
+      expect(sized.footprintM2).toBe(3002);
+      expect(point.footprintM2).toBeNull();
+    });
+
+    it('replaces a size with a newly measured one', async () => {
+      const { service } = build();
+      const created = await service.create({ ...CREATE, footprintM2: 3002 });
+
+      const view = await service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        footprintM2: 2990,
+      });
+
+      expect(view.footprintM2).toBe(2990);
+    });
+
+    it('keeps the size when an update carries none', async () => {
+      const { service } = build();
+      const created = await service.create({ ...CREATE, footprintM2: 3002 });
+
+      const omitted = await service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        city: 'Córdoba',
+      });
+      // The contract refuses a null; this is the service's own guard behind it.
+      const nulled = await service.update({
+        userId: OWNER,
+        supermarketLocationId: created.id,
+        footprintM2: null as unknown as number,
+      });
+
+      expect(omitted.footprintM2).toBe(3002);
+      expect(nulled.footprintM2).toBe(3002);
+    });
+  });
+
+  /**
    * Section 4's last rule: deriving a postcode says where the location *is*, not
    * what it prices against. Re resolving scopes from a derived code is a larger
    * change belonging to whoever picks up chain specific scope resolution.

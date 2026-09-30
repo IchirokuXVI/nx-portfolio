@@ -125,6 +125,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.7794,
     externalRef: 'node/1156230891',
     externalProvider: 'osm',
+    footprintM2: null,
     sections: [],
     // The one shop with a walk shown to shoppers, whose section list the
     // map rewrites on every save (backend plan 0168, admin plan 0040).
@@ -147,6 +148,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.8012,
     externalRef: 'way/48821004',
     externalProvider: 'osm',
+    footprintM2: 2400,
     sections: [],
     hasMap: false,
   },
@@ -168,6 +170,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.8871,
     externalRef: 'node/9920011234',
     externalProvider: 'osm',
+    footprintM2: null,
     sections: [],
     hasMap: false,
   },
@@ -186,6 +189,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.7823,
     externalRef: null,
     externalProvider: null,
+    footprintM2: null,
     sections: [],
     hasMap: false,
   },

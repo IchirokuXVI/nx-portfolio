@@ -28,6 +28,12 @@ export interface ObservedPlace {
   name: string | null;
   latitude: number;
   longitude: number;
+  /**
+   * The area of the shop's mapped outline in whole square metres (plan 0176).
+   * Only an OpenStreetMap radius search measures one. Absent or null means the
+   * source gave no outline, and that never clears a size a run measured before.
+   */
+  footprintM2?: number | null;
   street: string | null;
   city: string | null;
   /** As the source stated it. Null asks the orchestrator to derive one. */

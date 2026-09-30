@@ -121,6 +121,8 @@ export class OsmStoreDiscoveryRunner implements StoreDiscoveryRunner {
         name: place.name,
         latitude: place.latitude,
         longitude: place.longitude,
+        // Plan 0176: the area of the outline, when the shop is mapped as one.
+        footprintM2: place.footprintM2,
         street: place.street,
         city: place.city,
         postalCode: place.postalCode,

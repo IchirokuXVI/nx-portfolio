@@ -7,8 +7,7 @@
  * - `src/__fixtures__/walks/<name>/<walk file name>.geojson`: the walk file of
  *   plan 0002 inside the GeoJSON of its section 3, with every mode drawn;
  * - `src/__fixtures__/walks/<name>/expected.json`: per mode and step model,
- *   the numbers this implementation computes, plus the true path's numbers.
- *   The Android app replays the same files and asserts the same numbers;
+ *   the numbers this implementation computes, plus the true path's numbers;
  * - `src/__fixtures__/traces/<name>.trace.json` and `.expected.json`: plan
  *   0001's motion samples and the `Walk` its recorder answers.
  *
