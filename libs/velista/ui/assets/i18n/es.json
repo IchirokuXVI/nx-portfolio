@@ -2195,6 +2195,7 @@
     },
     "resize": {
       "hint": "{{kind}} · arrastra una esquina para cambiar el tamaño",
+      "hintAlone": "Arrastra una esquina para cambiar el tamaño",
       "snap": "Ajustar a los cuadros"
     },
     "area": {
@@ -2226,6 +2227,7 @@
       "body": "Tus últimos cambios en este mapa solo están en este teléfono. Seguimos intentando guardarlos.",
       "keepOpen": "Deja la aplicación abierta hasta que ponga Guardado.",
       "sending": "Guardando ahora.",
+      "saved": "Guardado. Ya puedes salir.",
       "retryIn_one": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
       "retryIn_other": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
       "waiting": "Esperando para guardar.",

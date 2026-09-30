@@ -35,6 +35,7 @@ import {
   SHOP_PATHS,
   shopWalkPath,
   walkIdOf,
+  type LeavesWithUnsavedWork,
 } from '@portfolio/velista/platform';
 import { ChevronLeftIcon } from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
@@ -55,12 +56,6 @@ import { UnsavedDialog } from './unsaved-dialog';
 
 /** What the page says above the map after something did not go as asked. */
 export type EditMapNotice = 'changed' | 'refused' | 'blocked';
-
-/** A page the unsaved guard asks before it is left (velista `0123`, target 6). */
-export interface LeavesWithUnsavedEntries {
-  /** True to leave. May save first, and may ask. */
-  canLeave(): boolean | Promise<boolean>;
-}
 
 type Read =
   | { readonly kind: 'loading' }
@@ -102,7 +97,7 @@ type Read =
     { provide: MAP_EDIT_SESSION, useExisting: forwardRef(() => EditMapPage) },
   ],
 })
-export class EditMapPage implements MapEditSession, LeavesWithUnsavedEntries {
+export class EditMapPage implements MapEditSession, LeavesWithUnsavedWork {
   private readonly _walks = inject(ShopWalksStore);
   private readonly _saver = inject(WalkEntrySaver);
   private readonly _pages = inject(PageNavigation);
@@ -312,13 +307,22 @@ export class EditMapPage implements MapEditSession, LeavesWithUnsavedEntries {
 
   // Leaving.
 
-  /** Done: save, then back to the history. The guard asks if the save did not arrive. */
+  /** Done: save, ask if the save did not arrive, then back to the history. */
   protected done(): Promise<void> {
     return this.toHistory();
   }
 
-  protected toHistory(): Promise<void> {
-    return this._pages.back(
+  /**
+   * Asks before it pops, never after. A pop the guard then refuses is a
+   * popstate the router cancels by writing this page's URL over the entry the
+   * browser already moved to, which would eat the history page from the stack.
+   * After a yes nothing is unsent, so the guard passes at once.
+   */
+  protected async toHistory(): Promise<void> {
+    if (!(await this.canLeave())) {
+      return;
+    }
+    await this._pages.back(
       shopWalkPath(
         this._locale(),
         this._basePath,
