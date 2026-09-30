@@ -424,6 +424,37 @@ describe('RecordWalkPage (velista 0126)', () => {
     expect(all(fixture, '.pill')).toEqual([]);
   });
 
+  it('keeps the notice of a walk read again during the wait', async () => {
+    const harness = await renderPage({
+      walkId: MEMORY_OTHER_WALK_ID,
+      baseline: 300,
+    });
+    const { fixture, sensors, walks } = harness;
+    click(fixture, '.controls .chip');
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    expect(all(fixture, '.notice-text')).toEqual([
+      'shopWalkRecord.notice.cameraWaiting',
+    ]);
+
+    // Another phone saved first: the page reads the walk again and says so.
+    const page = fixture.componentInstance as unknown as {
+      _reload(notice: 'changed' | 'refused'): Promise<void>;
+    };
+    await page._reload('changed');
+    for (let t = 0; t < 1_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, 0, 0));
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+    }
+    await flush(fixture);
+
+    expect(all(fixture, '.notice-text')).toEqual([
+      'shopWalkRecord.notice.changed',
+    ]);
+    expect(walks.appended).toEqual([]);
+  });
+
   // Review of #576, item 4.
   it('keeps the mark sheet and its text while tracking is lost, and saves once it is back', async () => {
     const harness = await renderPage({ fresh: true });
