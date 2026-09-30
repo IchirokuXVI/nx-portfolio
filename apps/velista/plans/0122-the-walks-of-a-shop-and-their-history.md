@@ -1,3 +1,5 @@
+> **PR:** [#570](https://github.com/IchirokuXVI/nx-portfolio/pull/570)
+
 # 0122: the walks of a shop, and their history
 
 > Rewritten on 2026-09-29. The first version was an editor page with a tool strip for any

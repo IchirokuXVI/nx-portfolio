@@ -112,6 +112,33 @@ lib-line-composer {
   }
 }
 
+// The map of the shop the basket is read at (velista 0121): a round glyph in the
+// quiet action treatment, so it reads as an offer and not as the trip's main act,
+// and leaves the title its width.
+.map {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.map-glyph {
+  font-size: var(--app-icon-md);
+}
+
 .history-glyph,
 .share-glyph,
 .people-glyph,

@@ -124,6 +124,29 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `AppendShopWalkEntryDto` in the gateway's OpenAPI document.
+ */
+export type AppendShopWalkEntryDto = {
+  id: string;
+  baseSeq: number;
+  kind:
+    | 'started'
+    | 'resumed'
+    | 'continued'
+    | 'stopped'
+    | 'edited'
+    | 'rewound'
+    | 'confirmed'
+    | 'discarded';
+  at: string;
+  logFrom: number;
+  logTo: number;
+  events: CatalogShopWalkEvent[];
+  rewoundTo?: number;
+  reason?: 'button' | 'left-page' | 'tracking-lost' | 'frame-moved';
+};
+
+/**
  * `ApplyProductGroupAssignmentsDto` in the gateway's OpenAPI document.
  */
 export type ApplyProductGroupAssignmentsDto = {
@@ -291,6 +314,13 @@ export type CreateProductGroupDto = {
   slug: string;
   referenceUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   synonyms?: LocalizedSynonymsDto;
+};
+
+/**
+ * `CreateShopWalkDto` in the gateway's OpenAPI document.
+ */
+export type CreateShopWalkDto = {
+  name: string;
 };
 
 /**
@@ -546,6 +576,11 @@ export type ProblemDetails = {
     | 'section_slug_taken'
     | 'catalog_location_exclusive'
     | 'supermarket_location_not_found'
+    | 'permission_required'
+    | 'guest_has_no_roles'
+    | 'walk_changed'
+    | 'shop_map_invalid'
+    | 'shop_map_too_large'
     | 'internal';
   detail?: string;
   message: string;
@@ -732,6 +767,13 @@ export type ScopeCopyDto = {
  */
 export type SetAdminLineApprovalDto = {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+};
+
+/**
+ * `SetAdminUserRolesDto` in the gateway's OpenAPI document.
+ */
+export type SetAdminUserRolesDto = {
+  roles: ('admin' | 'premium')[];
 };
 
 /**
@@ -1090,6 +1132,14 @@ export type UpdateProductGroupDto = {
 export type UpdateProfileDto = {
   username: string;
   propagation?: 'GLOBAL_ONLY' | 'MATCHING_ZONES' | 'ALL_ZONES';
+};
+
+/**
+ * `UpdateShopWalkDto` in the gateway's OpenAPI document.
+ */
+export type UpdateShopWalkDto = {
+  name?: string;
+  shown?: boolean;
 };
 
 /**
@@ -1656,6 +1706,7 @@ export type AdminUsersAdminUserDetailView = {
   displayName: string | null;
   email: string | null;
   emailVerifiedAt: string | null;
+  roles: EnumsAccountRole[];
   createdAt: string;
   updatedAt: string;
   hasPassword: boolean;
@@ -1682,6 +1733,7 @@ export type AdminUsersAdminUserView = {
   displayName: string | null;
   email: string | null;
   emailVerifiedAt: string | null;
+  roles: EnumsAccountRole[];
   createdAt: string;
   updatedAt: string;
 };
@@ -2225,6 +2277,15 @@ export type CatalogAdminSupermarketItemView = {
 };
 
 /**
+ * `catalog.AppendShopWalkEntryResult` in the gateway's OpenAPI document.
+ */
+export type CatalogAppendShopWalkEntryResult = {
+  walk: CatalogShopWalkSummaryView;
+  entry: CatalogShopWalkTimelineEntry;
+  replayed: boolean;
+};
+
+/**
  * `catalog.BrandPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2560,6 +2621,13 @@ export type CatalogLocationSectionsView = {
 };
 
 /**
+ * `catalog.LocationShopMapView` in the gateway's OpenAPI document.
+ */
+export type CatalogLocationShopMapView = {
+  map: CatalogShopMapView | null;
+};
+
+/**
  * `catalog.NearbyPostalCodesView` in the gateway's OpenAPI document.
  */
 export type CatalogNearbyPostalCodesView = {
@@ -2799,6 +2867,84 @@ export type CatalogShopChainSummaryView = {
 };
 
 /**
+ * `catalog.ShopMapArea` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapArea = {
+  id: string;
+  kind: EnumsShopMapAreaKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  section?: string;
+  label?: string;
+  colour: CatalogShopMapAreaColour;
+  origin: EnumsShopMapAreaOrigin;
+};
+
+/**
+ * `catalog.ShopMapAreaColour` in the gateway's OpenAPI document.
+ *
+ * The colour of an area: the one default, the category colour, or a custom `#rrggbb` the mapper picked.
+ */
+export type CatalogShopMapAreaColour =
+  | {
+      mode: 'default' | 'category';
+    }
+  | {
+      mode: 'custom';
+      value: string;
+    };
+
+/**
+ * `catalog.ShopMapDocument` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapDocument = {
+  version: 2;
+  areas: CatalogShopMapArea[];
+  marks: CatalogShopMapMark[];
+  path: CatalogShopMapPolyline[];
+};
+
+/**
+ * `catalog.ShopMapMark` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapMark = {
+  id: string;
+  kind: EnumsShopMapMarkKind;
+  x: number;
+  y: number;
+  heading: number;
+  text: string;
+  logMs: number;
+};
+
+/**
+ * `catalog.ShopMapPolyline` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapPolyline = {
+  points: number[][];
+};
+
+/**
+ * `catalog.ShopMapSectionView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapSectionView = {
+  name: string;
+  sectionId: string;
+};
+
+/**
+ * `catalog.ShopMapView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopMapView = {
+  walkId: string;
+  savedAt: string;
+  view: CatalogShopperMapView;
+  sections: CatalogShopMapSectionView[];
+};
+
+/**
  * `catalog.ShopPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -2816,6 +2962,191 @@ export type CatalogShopView = {
   supermarket: CatalogSupermarketView;
   excluded: boolean;
   excludedChain: boolean;
+};
+
+/**
+ * `catalog.ShopWalkAreaPutEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkAreaPutEvent = {
+  type: 'area-put';
+  area: CatalogShopMapArea;
+};
+
+/**
+ * `catalog.ShopWalkAreaRemovedEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkAreaRemovedEvent = {
+  type: 'area-removed';
+  id: string;
+};
+
+/**
+ * `catalog.ShopWalkEntryView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkEntryView = {
+  id: string;
+  kind: EnumsShopWalkEntryKind;
+  at: string;
+  logFrom: number;
+  logTo: number;
+  rewoundTo?: number;
+  reason?: EnumsShopWalkStopReason;
+  seq: number;
+  events: CatalogShopWalkEvent[];
+};
+
+/**
+ * `catalog.ShopWalkEvent` in the gateway's OpenAPI document.
+ *
+ * One event of a walk entry, told apart by `type`.
+ */
+export type CatalogShopWalkEvent =
+  | CatalogShopWalkPathEvent
+  | CatalogShopWalkMarkPutEvent
+  | CatalogShopWalkMarkRemovedEvent
+  | CatalogShopWalkAreaPutEvent
+  | CatalogShopWalkAreaRemovedEvent
+  | CatalogShopWalkSectionLeftEvent;
+
+/**
+ * `catalog.ShopWalkListView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkListView = {
+  walks: CatalogShopWalkSummaryView[];
+};
+
+/**
+ * `catalog.ShopWalkLogView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkLogView = {
+  walkId: string;
+  snapshot: CatalogShopWalkSnapshotView | null;
+  entries: CatalogShopWalkEntryView[];
+  lastSeq: number;
+};
+
+/**
+ * `catalog.ShopWalkMarkPutEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkMarkPutEvent = {
+  type: 'mark-put';
+  mark: CatalogShopMapMark;
+};
+
+/**
+ * `catalog.ShopWalkMarkRemovedEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkMarkRemovedEvent = {
+  type: 'mark-removed';
+  id: string;
+};
+
+/**
+ * `catalog.ShopWalkPathEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkPathEvent = {
+  type: 'path';
+  points: number[][];
+};
+
+/**
+ * `catalog.ShopWalkSectionLeftEvent` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkSectionLeftEvent = {
+  type: 'section-left';
+  logMs: number;
+};
+
+/**
+ * `catalog.ShopWalkSnapshotView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkSnapshotView = {
+  seq: number;
+  document: CatalogShopMapDocument;
+};
+
+/**
+ * `catalog.ShopWalkSummaryView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkSummaryView = {
+  id: string;
+  supermarketLocationId: string;
+  name: string;
+  shown: boolean;
+  lastSeq: number;
+  entryCount: number;
+  markCount: number;
+  createdAt: string;
+  lastChangedAt: string;
+};
+
+/**
+ * `catalog.ShopWalkTimelineEntry` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkTimelineEntry = {
+  id: string;
+  kind: EnumsShopWalkEntryKind;
+  at: string;
+  logFrom: number;
+  logTo: number;
+  rewoundTo?: number;
+  reason?: EnumsShopWalkStopReason;
+  seq: number;
+  logMs: number;
+};
+
+/**
+ * `catalog.ShopWalkView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopWalkView = {
+  walk: CatalogShopWalkSummaryView;
+  document: CatalogShopMapDocument;
+  timeline: CatalogShopWalkTimelineEntry[];
+};
+
+/**
+ * `catalog.ShopperMapArea` in the gateway's OpenAPI document.
+ */
+export type CatalogShopperMapArea = {
+  id: string;
+  kind: 'shelf' | 'counter' | 'checkout' | 'entrance' | 'blocked';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  section?: string;
+  label?: string;
+  colour: CatalogShopMapAreaColour;
+};
+
+/**
+ * `catalog.ShopperMapBounds` in the gateway's OpenAPI document.
+ */
+export type CatalogShopperMapBounds = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+/**
+ * `catalog.ShopperMapNote` in the gateway's OpenAPI document.
+ */
+export type CatalogShopperMapNote = {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+};
+
+/**
+ * `catalog.ShopperMapView` in the gateway's OpenAPI document.
+ */
+export type CatalogShopperMapView = {
+  walkway: number[][][];
+  areas: CatalogShopperMapArea[];
+  notes: CatalogShopperMapNote[];
+  bounds: CatalogShopperMapBounds;
 };
 
 /**
@@ -2910,7 +3241,9 @@ export type CatalogSupermarketLocationView = {
   longitude: number | null;
   externalRef: string | null;
   externalProvider: string | null;
+  footprintM2: number | null;
   sections: CatalogLocationSectionNameView[];
+  hasMap: boolean;
 };
 
 /**
@@ -3003,6 +3336,11 @@ export type CoreUserAppStateView = {
   setupCompletedAt: string | null;
   tourSeenAt: string | null;
 };
+
+/**
+ * `enums.AccountRole` in the gateway's OpenAPI document.
+ */
+export type EnumsAccountRole = 'admin' | 'premium';
 
 /**
  * `enums.AdapterKey` in the gateway's OpenAPI document.
@@ -3239,6 +3577,11 @@ export type EnumsNearbyShopNoPick =
 export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
 
 /**
+ * `enums.Permission` in the gateway's OpenAPI document.
+ */
+export type EnumsPermission = 'shopMap.record';
+
+/**
  * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
  */
 export type EnumsPostalCodeDiscoveryStatus =
@@ -3296,6 +3639,53 @@ export type EnumsSectionRuleStep = 'PINNED' | 'COVERED' | 'NONE';
  * `enums.SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type EnumsSettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `enums.ShopMapAreaKind` in the gateway's OpenAPI document.
+ */
+export type EnumsShopMapAreaKind =
+  | 'shelf'
+  | 'counter'
+  | 'checkout'
+  | 'entrance'
+  | 'blocked'
+  | 'path';
+
+/**
+ * `enums.ShopMapAreaOrigin` in the gateway's OpenAPI document.
+ */
+export type EnumsShopMapAreaOrigin =
+  | 'suggested'
+  | 'section-run'
+  | 'counter-mark'
+  | 'drawn';
+
+/**
+ * `enums.ShopMapMarkKind` in the gateway's OpenAPI document.
+ */
+export type EnumsShopMapMarkKind = 'section' | 'counter' | 'note';
+
+/**
+ * `enums.ShopWalkEntryKind` in the gateway's OpenAPI document.
+ */
+export type EnumsShopWalkEntryKind =
+  | 'started'
+  | 'resumed'
+  | 'continued'
+  | 'stopped'
+  | 'edited'
+  | 'rewound'
+  | 'confirmed'
+  | 'discarded';
+
+/**
+ * `enums.ShopWalkStopReason` in the gateway's OpenAPI document.
+ */
+export type EnumsShopWalkStopReason =
+  | 'button'
+  | 'left-page'
+  | 'tracking-lost'
+  | 'frame-moved';
 
 /**
  * `enums.SourceEntryStatus` in the gateway's OpenAPI document.
@@ -3362,6 +3752,7 @@ export type GatewayAccountMeView = {
   emailVerified: boolean;
   displayName: string | null;
   appState: CoreUserAppStateView;
+  permissions: EnumsPermission[];
 };
 
 /**

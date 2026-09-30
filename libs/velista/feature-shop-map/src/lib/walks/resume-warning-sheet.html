@@ -1,0 +1,25 @@
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="resume-warning-title">
+  <h2 class="title" id="resume-warning-title">
+    {{ 'shopWalks.resume.title' | rokuT }}
+  </h2>
+  <p class="body">
+    @if (shopName(); as shop) {
+      {{ 'shopWalks.resume.bodyAt' | rokuT: { shop: shop } }}
+    } @else {
+      {{ 'shopWalks.resume.body' | rokuT }}
+    }
+  </p>
+  <p class="body">{{ 'shopWalks.resume.instead' | rokuT }}</p>
+
+  <div class="actions">
+    <button (click)="resume()" class="primary" type="button">
+      {{ 'shopWalks.resume.anyway' | rokuT }}
+    </button>
+    <button (click)="startNew()" class="secondary" type="button">
+      {{ 'shopWalks.list.start' | rokuT }}
+    </button>
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'shopWalks.cancel' | rokuT }}
+    </button>
+  </div>
+</lib-sheet-shell>

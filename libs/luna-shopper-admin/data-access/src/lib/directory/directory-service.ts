@@ -1,4 +1,5 @@
 import { inject } from '@angular/core';
+import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { serviceToken } from '@portfolio/shared/data-access';
 import { DirectoryMemory } from './directory-memory';
 
@@ -43,6 +44,17 @@ export interface DirectoryServiceI {
    * the screen offers it.
    */
   resendVerification(userId: string, locale?: string): Promise<void>;
+
+  /**
+   * Replace somebody's roles with exactly these (backend plan 0175).
+   *
+   * The whole set rather than a grant or a revoke, which is what the account
+   * page's switches describe: a repeat is harmless, and two operators racing
+   * end on the second one's set. An empty array takes every role away. A guest
+   * is refused with `guest_has_no_roles`, and the account carries its new
+   * permissions from its next token refresh, at most 15 minutes later.
+   */
+  setUserRoles(userId: string, roles: readonly AccountRole[]): Promise<void>;
 
   /** Delete a zone, through the reaper that owns what deleting one means. */
   deleteZone(zoneId: string): Promise<void>;
@@ -99,6 +111,22 @@ export interface DirectoryServiceI {
     lineId: string,
     status: LineApproval
   ): Promise<void>;
+}
+
+/** A role on a velista account, which is the whole of `enums.AccountRole`. */
+export type AccountRole = Wire.EnumsAccountRole;
+
+/**
+ * Every role, in the order the server lists them and a screen draws them.
+ *
+ * The server answers an account's roles in this order too, so a set that is
+ * sent in it reads back unchanged.
+ */
+export const ACCOUNT_ROLES: readonly AccountRole[] = ['admin', 'premium'];
+
+/** A set of roles, each once, in {@link ACCOUNT_ROLES} order. */
+export function orderedRoles(roles: readonly string[]): AccountRole[] {
+  return ACCOUNT_ROLES.filter((role) => roles.includes(role));
 }
 
 /** Where a line is in its approval, which is the whole of `LineApprovalStatus`. */

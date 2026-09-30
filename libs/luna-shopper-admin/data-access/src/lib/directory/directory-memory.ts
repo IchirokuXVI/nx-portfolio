@@ -3,6 +3,7 @@ import {
   compositeId,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
+import { GatewayError } from '../gateway-error';
 import { ResourceMemoryGateways } from '../resource/resource-memory';
 import {
   ADMIN_LIST_LINES_PATH,
@@ -13,7 +14,12 @@ import {
   LIST_LINE_KEY,
   MEMBERSHIP_KEY,
 } from './directory-paths';
-import type { DirectoryServiceI, LineApproval } from './directory-service';
+import {
+  orderedRoles,
+  type AccountRole,
+  type DirectoryServiceI,
+  type LineApproval,
+} from './directory-service';
 
 /** A join code, in the shape the real one has. */
 const JOIN_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -51,6 +57,26 @@ export class DirectoryMemory implements DirectoryServiceI {
 
   async resendVerification(): Promise<void> {
     // Nothing to imitate. The effect is an email, and an email is not a row.
+  }
+
+  /**
+   * The whole set, refused for a guest the way auth refuses it (backend plan
+   * 0175), so the screen that explains the refusal can be driven here too.
+   */
+  async setUserRoles(
+    userId: string,
+    roles: readonly AccountRole[]
+  ): Promise<void> {
+    const gateway = this._users();
+    const user = await gateway.read(userId);
+    if (user['kind'] === 'TEMPORARY') {
+      throw new GatewayError({
+        code: 'guest_has_no_roles',
+        status: 409,
+        correlationId: '',
+      });
+    }
+    await gateway.update(userId, { roles: orderedRoles(roles) });
   }
 
   async deleteZone(zoneId: string): Promise<void> {

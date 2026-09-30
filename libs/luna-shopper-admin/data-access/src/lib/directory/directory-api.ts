@@ -9,7 +9,12 @@ import {
   ADMIN_USERS_PATH,
   ADMIN_ZONES_PATH,
 } from './directory-paths';
-import type { DirectoryServiceI, LineApproval } from './directory-service';
+import {
+  orderedRoles,
+  type AccountRole,
+  type DirectoryServiceI,
+  type LineApproval,
+} from './directory-service';
 
 /**
  * The seven named actions, over HTTP (plan 0007, section 1).
@@ -41,6 +46,15 @@ export class DirectoryApi implements DirectoryServiceI {
       // and null is not the same claim.
       locale === undefined || locale === '' ? {} : { locale }
     );
+  }
+
+  async setUserRoles(
+    userId: string,
+    roles: readonly AccountRole[]
+  ): Promise<void> {
+    await this._send('put', `${ADMIN_USERS_PATH}/${part(userId)}/roles`, {
+      roles: orderedRoles(roles),
+    });
   }
 
   async deleteZone(zoneId: string): Promise<void> {
@@ -119,7 +133,7 @@ export class DirectoryApi implements DirectoryServiceI {
    * refusal of any of the seven.
    */
   private async _send<R>(
-    method: 'post' | 'delete' | 'patch',
+    method: 'post' | 'delete' | 'patch' | 'put',
     path: string,
     body?: unknown
   ): Promise<R> {

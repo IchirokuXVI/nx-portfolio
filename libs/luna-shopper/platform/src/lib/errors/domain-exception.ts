@@ -484,6 +484,66 @@ export class SupermarketLocationNotFoundException extends DomainException {
   readonly code = ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND;
 }
 
+/**
+ * The account behind the token does not hold the permission a route requires
+ * (plan 0175). It publishes the permission's name under
+ * {@link PERMISSION_REQUIRED_DETAIL}, which is the only fact in its details, so
+ * a client can say which thing it may not do. See
+ * `ERROR_CODES.PERMISSION_REQUIRED`.
+ */
+export class PermissionRequiredException extends DomainException {
+  readonly code = ERROR_CODES.PERMISSION_REQUIRED;
+  override readonly exposesDetails = true;
+}
+
+/** An operator tried to give a guest a role (plan 0175). */
+export class GuestHasNoRolesException extends DomainException {
+  readonly code = ERROR_CODES.GUEST_HAS_NO_ROLES;
+}
+
+/**
+ * A walk entry was built on a `lastSeq` the walk has moved past (plan 0168).
+ * Publishes the current one under {@link WALK_CHANGED_LAST_SEQ_DETAIL}.
+ */
+export class WalkChangedException extends DomainException {
+  readonly code = ERROR_CODES.WALK_CHANGED;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The document a walk entry folds to does not validate (plan 0168). Publishes
+ * the problems under {@link SHOP_MAP_PROBLEMS_DETAIL}.
+ */
+export class ShopMapInvalidException extends DomainException {
+  readonly code = ERROR_CODES.SHOP_MAP_INVALID;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A walk entry or its folded document is over its cap (plan 0168). Publishes
+ * which under {@link SHOP_MAP_LIMIT_DETAIL} and the cap under
+ * {@link SHOP_MAP_MAX_BYTES_DETAIL}.
+ */
+export class ShopMapTooLargeException extends DomainException {
+  readonly code = ERROR_CODES.SHOP_MAP_TOO_LARGE;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
+export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
+
+/** The `details` key a {@link ShopMapInvalidException} lists the problems under. */
+export const SHOP_MAP_PROBLEMS_DETAIL = 'problems';
+
+/** The `details` key a {@link ShopMapTooLargeException} names `entry` or `document` under. */
+export const SHOP_MAP_LIMIT_DETAIL = 'limit';
+
+/** The `details` key a {@link ShopMapTooLargeException} publishes the cap under. */
+export const SHOP_MAP_MAX_BYTES_DETAIL = 'maxBytes';
+
+/** The `details` key a {@link PermissionRequiredException} names the permission under. */
+export const PERMISSION_REQUIRED_DETAIL = 'permission';
+
 /** The `details` key a {@link SectionNotFoundException} lists the unknown ids under. */
 export const SECTION_UNKNOWN_DETAIL = 'unknown';
 

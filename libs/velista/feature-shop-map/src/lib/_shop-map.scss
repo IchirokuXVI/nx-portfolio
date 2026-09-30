@@ -1,0 +1,95 @@
+// The furniture a shop's page and its map share (velista 0121): a bar flush with
+// the top of the screen holding the back chevron, a title in the display face and a
+// line under it. Mixins and not a component, for the reason `feature-account`'s
+// `_account-page.scss` gives.
+
+@mixin bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-3) var(--app-space-4) var(--app-space-3)
+    var(--app-space-2);
+  padding-block-start: calc(var(--app-space-3) + var(--app-safe-top));
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+@mixin back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+@mixin heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+// One line, ellipsised: the bar is furniture, and a long name must not push the
+// map down the screen.
+@mixin title {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin subtitle {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@mixin retry {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}

@@ -119,7 +119,12 @@ describe('OptionalJwtAuthGuard', () => {
       }
     );
 
-    expect(request.user).toEqual({ userId: 'u1', kind: UserKind.REGISTERED });
+    // A token with no `perms` claim reads as no permissions (plan 0175).
+    expect(request.user).toEqual({
+      userId: 'u1',
+      kind: UserKind.REGISTERED,
+      permissions: [],
+    });
     expect(pinned).toBe('u1');
   });
 });

@@ -37,6 +37,11 @@ import {
 } from './catalog.controller';
 import { CatalogNearbyShopsController } from './nearby-shops.controller';
 import { ScopeResolutionService } from './scope-resolution.service';
+import {
+  CatalogLocationMapController,
+  CatalogLocationWalksController,
+  CatalogWalksController,
+} from './shop-walks.controller';
 
 /**
  * The gateway's catalog surface (plan 0012), proxying to catalog over NATS.
@@ -58,6 +63,11 @@ import { ScopeResolutionService } from './scope-resolution.service';
     // Plan 0167: a shop's sections, public, so a guest reading a shared
     // basket at a shop can draw its aisles.
     CatalogLocationSectionsController,
+    // Plan 0168: a shop's map, public like its sections, and its walks behind
+    // `shopMap.record`.
+    CatalogLocationMapController,
+    CatalogLocationWalksController,
+    CatalogWalksController,
     CatalogPriceScopesController,
     CatalogProductGroupsController,
     // Plan 0166: the category tree, whole, for velista's picker.
@@ -119,5 +129,8 @@ export class GatewayCatalogModule implements NestModule {
     consumer
       .apply(WithholdBodyMiddleware)
       .forRoutes(CatalogNearbyShopsController);
+    // A walk entry is up to 256 KB of a device's positions in a shop, and a
+    // log line is not the place for it (plan 0168).
+    consumer.apply(WithholdBodyMiddleware).forRoutes(CatalogWalksController);
   }
 }

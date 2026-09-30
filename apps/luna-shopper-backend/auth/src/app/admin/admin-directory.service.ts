@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  ACCOUNT_ROLES,
   AuthProvider,
   UserKind,
   type AdminIdentityListView,
@@ -18,6 +19,7 @@ import {
   type ResendAdminVerificationResult,
   type ResolveAdminUsersRequest,
   type ResolveAdminUsersResult,
+  type SetAdminUserRolesRequest,
   type UpdateAdminUserRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -123,6 +125,9 @@ export class AdminDirectoryService {
           : 'u."emailVerifiedAt" IS NULL'
       );
     }
+    if (req.role) {
+      qb.andWhere(':role = ANY(u.roles)', { role: req.role });
+    }
     if (req.createdAfter) {
       qb.andWhere('u."createdAt" >= :after', { after: req.createdAfter });
     }
@@ -200,6 +205,21 @@ export class AdminDirectoryService {
       );
     }
 
+    return this.detail(req.targetUserId);
+  }
+
+  /**
+   * Replace somebody's roles (plan 0175), through
+   * {@link IdentityService.setRolesAsOperator}, which refuses a guest and
+   * writes the audit row with the operator as the actor.
+   */
+  async setRoles(req: SetAdminUserRolesRequest): Promise<AdminUserDetailView> {
+    const actorId = await this.gate.requireAdmin(req);
+    await this.identity.setRolesAsOperator(
+      req.targetUserId,
+      req.roles,
+      actorId
+    );
     return this.detail(req.targetUserId);
   }
 
@@ -335,6 +355,9 @@ function toUserView(user: User): AdminUserView {
     displayName: user.displayName,
     email: user.email,
     emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
+    // In `ACCOUNT_ROLES` order, and only values that are roles, so a stale
+    // value in the column never reaches a screen as if it were one.
+    roles: ACCOUNT_ROLES.filter((role) => (user.roles ?? []).includes(role)),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };

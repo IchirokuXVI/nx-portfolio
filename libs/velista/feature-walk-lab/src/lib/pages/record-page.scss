@@ -215,10 +215,24 @@
   color: var(--app-status-danger-fg);
 }
 
+.last-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+}
+
 .last {
+  flex: 1;
+  min-inline-size: 0;
   min-block-size: calc(var(--app-leading-body) * 1em);
   margin: 0;
   font-weight: 600;
+}
+
+.delete-last {
+  @include lab.danger;
+  flex: none;
 }
 
 .marks {
@@ -274,14 +288,42 @@
   }
 }
 
+// Fixed to the bottom of the screen, and the page moves it up by the keyboard's
+// height (`bottom`) and caps it at the height the keyboard leaves (`max-height`), so
+// Save and Cancel are always the last thing above the keyboard.
 .panel {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   gap: var(--app-space-3);
   padding: var(--app-space-4);
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-radius-lg);
+  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
+  overflow-y: auto;
+  border-block-start: 1px solid var(--app-border-strong);
+  border-start-start-radius: var(--app-radius-lg);
+  border-start-end-radius: var(--app-radius-lg);
   background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+
+  // Past the cap the panel scrolls; nothing in it is squeezed.
+  > * {
+    flex: none;
+  }
+}
+
+// One row that scrolls sideways, so a long list of names never makes the panel
+// taller than the space the keyboard leaves.
+.used-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  .chip {
+    flex: none;
+  }
 }
 
 .panel-title {

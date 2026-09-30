@@ -1,7 +1,9 @@
-import type {
-  StreamName,
-  WalkFile,
-  WalkMark,
+import {
+  MARK_DELETED,
+  withoutDeletedMarks,
+  type StreamName,
+  type WalkFile,
+  type WalkMark,
 } from '@portfolio/luna-shopper/shop-map/recorder';
 
 /** What a walk is before its first row: everything the host knows at Start. */
@@ -82,6 +84,37 @@ export class WalkBuilder {
 
   mark(mark: WalkMark): void {
     this._marks.push(mark);
+  }
+
+  /** The marks still standing: every mark but those a `mark-deleted` event took back. */
+  get liveMarks(): WalkMark[] {
+    return withoutDeletedMarks(this._marks, this._events);
+  }
+
+  /**
+   * Takes back the most recent mark still standing, and answers it, or null when
+   * there is none.
+   *
+   * A mark not yet handed out in a chunk is simply removed. One already handed out
+   * is in storage, and a chunk is never rewritten, so it is cancelled instead with
+   * an event `{ kind: 'mark-deleted', detail: <its t> }` at `t`, which the reader
+   * applies (recorder README, rule 15). The file then keeps both, and so says what
+   * happened.
+   */
+  deleteLastMark(t: number): WalkMark | null {
+    const live = this.liveMarks;
+    const last = live[live.length - 1];
+    if (!last) {
+      return null;
+    }
+
+    const index = this._marks.lastIndexOf(last);
+    if (index >= (this._drained.get('#marks') ?? 0)) {
+      this._marks.splice(index, 1);
+    } else {
+      this._events.push({ t, kind: MARK_DELETED, detail: String(last.t) });
+    }
+    return last;
   }
 
   event(event: WalkEvent): void {

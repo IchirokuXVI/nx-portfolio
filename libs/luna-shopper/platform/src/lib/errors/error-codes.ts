@@ -321,6 +321,41 @@ export const ERROR_CODES = {
    * a query parameter and not the route's resource.
    */
   SUPERMARKET_LOCATION_NOT_FOUND: 'supermarket_location_not_found',
+  /**
+   * The caller's account does not hold the permission this route needs (plan
+   * 0175).
+   *
+   * A 403 like {@link FORBIDDEN}, so it never signs anybody out, and a code of
+   * its own because the client's reaction is particular: hide the control that
+   * led here, and refresh its token once in case a role was granted since. The
+   * permission's name is published in `details.permission`, never a role name.
+   */
+  PERMISSION_REQUIRED: 'permission_required',
+  /**
+   * An operator tried to give a guest a role (plan 0175). A guest is a
+   * temporary account and holds none; it keeps an empty set when it upgrades,
+   * and a role is granted to the registered account afterwards.
+   */
+  GUEST_HAS_NO_ROLES: 'guest_has_no_roles',
+  /**
+   * An entry was built on a walk that has moved on since (plan 0168, section
+   * 2): its `baseSeq` is not the walk's `lastSeq`. Two phones on one walk see
+   * this, and the second reloads. The current `lastSeq` is published in
+   * `details.lastSeq`.
+   */
+  WALK_CHANGED: 'walk_changed',
+  /**
+   * The document a walk entry folds to does not pass `validateShopMapV2` (plan
+   * 0168). The problems are published in `details.problems`, each with its
+   * code and the id of the area or mark it names.
+   */
+  SHOP_MAP_INVALID: 'shop_map_invalid',
+  /**
+   * A walk entry, or the document it folds to, is over its size cap (plan
+   * 0168: 256 KB per entry, 2 MB per document). `details.limit` says which
+   * (`entry` or `document`) and `details.maxBytes` the cap.
+   */
+  SHOP_MAP_TOO_LARGE: 'shop_map_too_large',
   INTERNAL: 'internal',
 } as const;
 
@@ -444,5 +479,17 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // does not exist.
   [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  // Plan 0175: 403 because the caller is known and not allowed, which is what
+  // a forbidden is, and never 401, which would sign them out.
+  [ERROR_CODES.PERMISSION_REQUIRED]: HttpStatus.FORBIDDEN,
+  // 409 for the ordinary reason: the request is well formed and the operator
+  // may make it, and what refuses it is the kind of account it names.
+  [ERROR_CODES.GUEST_HAS_NO_ROLES]: HttpStatus.CONFLICT,
+  // Plan 0168: a stale base is the state moving under the caller, a 409 like
+  // `stale_quantity`. A document that does not validate, or is too large, is a
+  // well formed request whose content is refused, which is what a 422 is.
+  [ERROR_CODES.WALK_CHANGED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SHOP_MAP_INVALID]: HttpStatus.UNPROCESSABLE_ENTITY,
+  [ERROR_CODES.SHOP_MAP_TOO_LARGE]: HttpStatus.UNPROCESSABLE_ENTITY,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -11,13 +11,14 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { CatalogModule } from './catalog/catalog.module';
 import type { CatalogConfig } from './config/app-config';
 import {
   catalogConfiguration,
   catalogValidationSchema,
 } from './config/app-config';
-import { CatalogModule } from './catalog/catalog.module';
 import { CATALOG_ENTITIES } from './entities';
+import { ShopWalksModule } from './shop-walks/shop-walks.module';
 
 @Module({
   imports: [
@@ -43,6 +44,8 @@ import { CATALOG_ENTITIES } from './entities';
       }),
     }),
     CatalogModule,
+    // Plan 0168: a shop's walks and its map.
+    ShopWalksModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

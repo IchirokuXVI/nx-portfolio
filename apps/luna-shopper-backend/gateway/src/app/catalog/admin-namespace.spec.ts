@@ -244,9 +244,16 @@ describe('the admin API is its own namespace', () => {
 
       // Both are reads that take a body: a list of ids, and a point a device
       // reported, which a query string would put in an access log (plan 0164).
+      // The walk writes of plan 0168 are an account's, behind
+      // `@RequirePermission('shopMap.record')`, and never an operator's:
+      // mapping stays in velista.
       expect(strays.sort()).toEqual([
+        'DELETE /v1/catalog/walks/{walkId}',
+        'PATCH /v1/catalog/walks/{walkId}',
         'POST /v1/catalog/items/lookup',
+        'POST /v1/catalog/locations/{id}/walks',
         'POST /v1/catalog/shops/nearby',
+        'POST /v1/catalog/walks/{walkId}/entries',
       ]);
     });
   });

@@ -1,3 +1,5 @@
+> **PR:** [#572](https://github.com/IchirokuXVI/nx-portfolio/pull/572)
+
 # 0123: editing a shop's map by hand
 
 > Rewritten on 2026-09-29. The first version was a step counting recorder, which the field

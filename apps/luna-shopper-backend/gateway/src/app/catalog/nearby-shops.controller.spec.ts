@@ -19,7 +19,11 @@ import { ScopeResolutionService } from './scope-resolution.service';
  * `nearby-shop-pick.spec.ts`.
  */
 
-const USER = { userId: 'user-1', kind: UserKind.REGISTERED };
+const USER = {
+  userId: 'user-1',
+  kind: UserKind.REGISTERED,
+  permissions: [],
+};
 const POINT = { latitude: 37.88, longitude: -4.77, accuracyMetres: 12 };
 const ANSWER = {
   candidates: [],

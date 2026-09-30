@@ -11,6 +11,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import { localizedTextValue } from '@portfolio/luna-shopper-admin/models';
+import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
 import { panelErrorKey } from './chain-sections';
 import {
   ShopSections,
@@ -67,7 +68,7 @@ export function moveId(
  */
 @Component({
   selector: 'lib-location-sections',
-  imports: [RokuTranslatorPipe],
+  imports: [ConfirmDialog, RokuTranslatorPipe],
   template: `
     <section aria-labelledby="location-sections-heading">
       <h2 id="location-sections-heading">
@@ -90,6 +91,12 @@ export function moveId(
       } @else {
         <p class="source">{{ sourceKey() | rokuT }}</p>
 
+        @if (hasMap()) {
+          <p class="notice" role="note">
+            {{ 'catalog.locationSections.mapNotice' | rokuT }}
+          </p>
+        }
+
         <ol class="choices">
           @for (choice of choices(); track choice.section.id) {
             <li [class.off]="!choice.ticked">
@@ -98,7 +105,7 @@ export function moveId(
               }}</span>
               <label>
                 <input
-                  (change)="toggle(choice.section.id)"
+                  (change)="toggle(choice.section.id, $event)"
                   [checked]="choice.ticked"
                   [disabled]="busy()"
                   type="checkbox"
@@ -181,6 +188,17 @@ export function moveId(
         </div>
       }
     </section>
+
+    @if (askingMapEdit()) {
+      <lib-confirm-dialog
+        (confirm)="confirmMapEdit()"
+        (dismiss)="dismissMapEdit()"
+        bodyKey="catalog.locationSections.mapNotice"
+        confirmKey="catalog.locationSections.mapConfirm.confirm"
+        headingKey="catalog.locationSections.mapConfirm.heading"
+        tone="primary"
+      />
+    }
   `,
   styles: `
     :host {
@@ -212,6 +230,14 @@ export function moveId(
       border: 1px dashed var(--admin-border);
       border-radius: var(--admin-radius);
       color: var(--admin-ink-muted);
+    }
+
+    .notice {
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-status-attention);
+      border-radius: var(--admin-radius);
+      background: var(--admin-status-attention-wash);
+      color: var(--admin-ink);
     }
 
     .failure {
@@ -330,6 +356,22 @@ export class LocationSections {
   readonly locationId = input.required<string>();
   /** The shop's chain, whose sections are the only ones offered. */
   readonly supermarketId = input.required<string>();
+  /**
+   * Whether the shop has a walk shown to shoppers (backend plan 0168), whose
+   * every save rewrites this list (admin plan 0040).
+   */
+  readonly hasMap = input(false);
+
+  /**
+   * Whether the operator has agreed, on this visit, to edit a list the map
+   * rewrites. Asked once per visit, on the first edit, and never again until
+   * the panel is opened afresh.
+   */
+  readonly mapEditAccepted = signal(false);
+  /** The edit waiting on that agreement, or `null`. */
+  private readonly _pendingEdit = signal<(() => unknown) | null>(null);
+  /** Whether the map confirmation is open. */
+  readonly askingMapEdit = computed(() => this._pendingEdit() !== null);
 
   /** What the server holds, as last read or written. */
   readonly saved = signal<ShopSectionList | null>(null);
@@ -392,6 +434,11 @@ export class LocationSections {
       const supermarketId = this.supermarketId();
       untracked(() => void this._read(locationId, supermarketId));
     });
+    // Accepting that a map writes the list holds for one shop only.
+    effect(() => {
+      this.locationId();
+      untracked(() => this.mapEditAccepted.set(false));
+    });
   }
 
   nameOf(section: ShopSection): string {
@@ -405,7 +452,16 @@ export class LocationSections {
   }
 
   /** Tick or untick one section. A newly ticked one joins at the end. */
-  toggle(id: string): void {
+  toggle(id: string, event?: Event): void {
+    if (this._needsMapConsent(() => this.toggle(id))) {
+      // The box has already flipped in the page. Put it back until the
+      // operator says yes, because the list itself has not changed.
+      const box = event?.target;
+      if (box instanceof HTMLInputElement) {
+        box.checked = !box.checked;
+      }
+      return;
+    }
     this.savedNow.set(false);
     this.order.update((order) =>
       order.includes(id) ? order.filter((held) => held !== id) : [...order, id]
@@ -413,6 +469,9 @@ export class LocationSections {
   }
 
   move(id: string, step: -1 | 1): void {
+    if (this._needsMapConsent(() => this.move(id, step))) {
+      return;
+    }
     this.savedNow.set(false);
     this.order.update((order) => moveId(order, id, step));
   }
@@ -430,7 +489,37 @@ export class LocationSections {
 
   /** The empty list, which returns the shop to its chain's default. */
   useChainDefault(): Promise<void> {
+    if (this._needsMapConsent(() => this.useChainDefault())) {
+      return Promise.resolve();
+    }
     return this._write([]);
+  }
+
+  /** The operator agreed: remember it for the visit, and make the edit. */
+  async confirmMapEdit(): Promise<void> {
+    const edit = this._pendingEdit();
+    this.mapEditAccepted.set(true);
+    this._pendingEdit.set(null);
+    await edit?.();
+  }
+
+  /** The operator declined: nothing changes, and the next edit asks again. */
+  dismissMapEdit(): void {
+    this._pendingEdit.set(null);
+  }
+
+  /**
+   * Whether an edit has to wait for the operator (admin plan 0040, target 2).
+   *
+   * Only for a shop with a map, and only until the first yes of the visit.
+   * A shop with no map edits exactly as it did before.
+   */
+  private _needsMapConsent(edit: () => unknown): boolean {
+    if (!this.hasMap() || this.mapEditAccepted()) {
+      return false;
+    }
+    this._pendingEdit.set(edit);
+    return true;
   }
 
   private async _write(sectionIds: readonly string[]): Promise<void> {

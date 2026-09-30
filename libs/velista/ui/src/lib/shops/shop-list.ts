@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { InfoIcon } from '../icons/icons';
 import { ChainLogo, type ChainLogoView } from './chain-logo';
 import { OutsideAreas } from './outside-areas';
 import { SectionChips, type SectionChip } from './section-chips';
@@ -145,7 +146,13 @@ export interface ShopGroup {
  */
 @Component({
   selector: 'lib-shop-list',
-  imports: [ChainLogo, OutsideAreas, RokuTranslatorPipe, SectionChips],
+  imports: [
+    ChainLogo,
+    InfoIcon,
+    OutsideAreas,
+    RokuTranslatorPipe,
+    SectionChips,
+  ],
   templateUrl: './shop-list.html',
   styleUrl: './shop-list.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -203,6 +210,13 @@ export class ShopList {
    * from here". A caller listening for the wrong one would compile.
    */
   readonly pick = output<string>();
+
+  /**
+   * A pick row's round button was pressed, to open that shop's own page (velista
+   * `0121`, target 1). Its own act, and never a pick: the button sits outside the
+   * label for exactly that reason.
+   */
+  readonly about = output<string>();
 
   /** Whether this row's control is on, which is a different question per mode. */
   protected isChecked(shop: ShopRow): boolean {

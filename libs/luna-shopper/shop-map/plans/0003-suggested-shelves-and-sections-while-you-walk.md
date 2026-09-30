@@ -1,3 +1,5 @@
+> **PR:** [#552](https://github.com/IchirokuXVI/nx-portfolio/pull/552)
+
 # 0003: suggested shelves and sections while you walk
 
 > Third plan of the model library. Needs `0002` (the document in metres and the walk log).

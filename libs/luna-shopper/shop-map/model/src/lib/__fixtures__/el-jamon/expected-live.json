@@ -1,0 +1,1191 @@
+{
+  "atTap": {
+    "walkedCells": 846,
+    "suggestions": [
+      {
+        "id": "suggestion:75,-36,79,-36",
+        "x": 37.5,
+        "y": -18,
+        "w": 2.5,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:12,-34,12,-26",
+        "x": 6,
+        "y": -17,
+        "w": 0.5,
+        "h": 4.5
+      },
+      {
+        "id": "suggestion:66,-34,74,-34",
+        "x": 33,
+        "y": -17,
+        "w": 4.5,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:76,-32,80,-32",
+        "x": 38,
+        "y": -16,
+        "w": 2.5,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:76,-29,81,-29",
+        "x": 38,
+        "y": -14.5,
+        "w": 3,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:68,-27,75,-27",
+        "x": 34,
+        "y": -13.5,
+        "w": 4,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:76,-22,81,-22",
+        "x": 38,
+        "y": -11,
+        "w": 3,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:72,-21,75,-21",
+        "x": 36,
+        "y": -10.5,
+        "w": 2,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:82,-20,85,-20",
+        "x": 41,
+        "y": -10,
+        "w": 2,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:77,-19,80,-19",
+        "x": 38.5,
+        "y": -9.5,
+        "w": 2,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:81,-17,84,-17",
+        "x": 40.5,
+        "y": -8.5,
+        "w": 2,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:72,-15,80,-15",
+        "x": 36,
+        "y": -7.5,
+        "w": 4.5,
+        "h": 0.5
+      }
+    ]
+  },
+  "accepted": [
+    "suggestion:75,-36,79,-36",
+    "suggestion:12,-34,12,-26",
+    "suggestion:66,-34,74,-34",
+    "suggestion:76,-32,80,-32",
+    "suggestion:76,-29,81,-29",
+    "suggestion:68,-27,75,-27",
+    "suggestion:76,-22,81,-22",
+    "suggestion:72,-21,75,-21",
+    "suggestion:82,-20,85,-20",
+    "suggestion:77,-19,80,-19",
+    "suggestion:81,-17,84,-17",
+    "suggestion:72,-15,80,-15"
+  ],
+  "end": {
+    "walkedCells": 1541,
+    "suggestions": [
+      {
+        "id": "suggestion:9,-41,10,-35",
+        "x": 4.5,
+        "y": -20.5,
+        "w": 1,
+        "h": 3.5
+      },
+      {
+        "id": "suggestion:-6,-40,-6,-36",
+        "x": -3,
+        "y": -20,
+        "w": 0.5,
+        "h": 2.5
+      },
+      {
+        "id": "suggestion:53,-23,64,-23",
+        "x": 26.5,
+        "y": -11.5,
+        "w": 6,
+        "h": 0.5
+      },
+      {
+        "id": "suggestion:71,-20,71,-16",
+        "x": 35.5,
+        "y": -10,
+        "w": 0.5,
+        "h": 2.5
+      }
+    ],
+    "sectionRun": null
+  },
+  "map": {
+    "areas": [
+      {
+        "id": "live-1",
+        "kind": "counter",
+        "x": 0,
+        "y": -8.5,
+        "w": 2,
+        "h": 1,
+        "section": "Horno de pan",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "counter-mark"
+      },
+      {
+        "id": "live-10",
+        "kind": "shelf",
+        "x": 34.5,
+        "y": -18.5,
+        "w": 0.5,
+        "h": 0.5,
+        "section": "Limpieza",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-11",
+        "kind": "shelf",
+        "x": 38.5,
+        "y": -21,
+        "w": 2,
+        "h": 1,
+        "section": "Hogar",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-12",
+        "kind": "shelf",
+        "x": 32,
+        "y": -17.5,
+        "w": 0.5,
+        "h": 1,
+        "section": "Mascotas",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-13",
+        "kind": "shelf",
+        "x": 36.5,
+        "y": -20,
+        "w": 1,
+        "h": 0.5,
+        "section": "Hogar",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-14",
+        "kind": "shelf",
+        "x": 39.5,
+        "y": -6.5,
+        "w": 1.5,
+        "h": 1,
+        "section": "Agua",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-15",
+        "kind": "shelf",
+        "x": 35.5,
+        "y": -4.5,
+        "w": 2.5,
+        "h": 1,
+        "section": "Bebida y cervezas",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-16",
+        "kind": "shelf",
+        "x": 37.5,
+        "y": -18,
+        "w": 2.5,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-17",
+        "kind": "shelf",
+        "x": 6,
+        "y": -17,
+        "w": 0.5,
+        "h": 4.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-18",
+        "kind": "shelf",
+        "x": 33,
+        "y": -17,
+        "w": 4.5,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-19",
+        "kind": "shelf",
+        "x": 38,
+        "y": -16,
+        "w": 2.5,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-2",
+        "kind": "shelf",
+        "x": 0,
+        "y": -21.5,
+        "w": 1,
+        "h": 0.5,
+        "section": "Desayuno y dulces",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-20",
+        "kind": "shelf",
+        "x": 38,
+        "y": -14.5,
+        "w": 3,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-21",
+        "kind": "shelf",
+        "x": 34,
+        "y": -13.5,
+        "w": 4,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-22",
+        "kind": "shelf",
+        "x": 38,
+        "y": -11,
+        "w": 3,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-23",
+        "kind": "shelf",
+        "x": 36,
+        "y": -10.5,
+        "w": 2,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-24",
+        "kind": "shelf",
+        "x": 41,
+        "y": -10,
+        "w": 1,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-25",
+        "kind": "shelf",
+        "x": 38.5,
+        "y": -9.5,
+        "w": 2,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-26",
+        "kind": "shelf",
+        "x": 40.5,
+        "y": -8.5,
+        "w": 2,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-27",
+        "kind": "shelf",
+        "x": 36,
+        "y": -7.5,
+        "w": 4.5,
+        "h": 0.5,
+        "section": "Agua",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-28",
+        "kind": "shelf",
+        "x": 24,
+        "y": -5.5,
+        "w": 0.5,
+        "h": 1,
+        "section": "Higiene y perfumería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-29",
+        "kind": "shelf",
+        "x": 21,
+        "y": 0,
+        "w": 0.5,
+        "h": 1,
+        "section": "Bebe",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-3",
+        "kind": "shelf",
+        "x": 4,
+        "y": -23.5,
+        "w": 0.5,
+        "h": 1,
+        "section": "Menaje",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-30",
+        "kind": "shelf",
+        "x": 25.5,
+        "y": -9.5,
+        "w": 2,
+        "h": 1,
+        "section": "Abrir y comer",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-31",
+        "kind": "shelf",
+        "x": 22,
+        "y": -11.5,
+        "w": 4.5,
+        "h": 1,
+        "section": "Despensa",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-32",
+        "kind": "shelf",
+        "x": 21,
+        "y": -13.5,
+        "w": 1,
+        "h": 1.5,
+        "section": "Congelados",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-33",
+        "kind": "shelf",
+        "x": 23,
+        "y": -7.5,
+        "w": 3,
+        "h": 1,
+        "section": "Abrir y comer",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-34",
+        "kind": "shelf",
+        "x": 22,
+        "y": -7,
+        "w": 1,
+        "h": 1,
+        "section": "Lácteos",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-35",
+        "kind": "shelf",
+        "x": 25,
+        "y": -4.5,
+        "w": 1,
+        "h": 0.5,
+        "section": "Higiene y perfumería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-36",
+        "kind": "shelf",
+        "x": 37.5,
+        "y": -7,
+        "w": 1.5,
+        "h": 1,
+        "section": "Bebida y cervezas",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-37",
+        "kind": "shelf",
+        "x": 41,
+        "y": -8,
+        "w": 0.5,
+        "h": 0.5,
+        "section": "Agua",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-38",
+        "kind": "path",
+        "x": 42,
+        "y": -10,
+        "w": 1,
+        "h": 0.5,
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "suggested"
+      },
+      {
+        "id": "live-39",
+        "kind": "shelf",
+        "x": 10,
+        "y": -12,
+        "w": 2,
+        "h": 1,
+        "section": "Bodega",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-4",
+        "kind": "shelf",
+        "x": 4,
+        "y": -21.5,
+        "w": 0.5,
+        "h": 1,
+        "section": "Menaje",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-40",
+        "kind": "shelf",
+        "x": -0.5,
+        "y": -24,
+        "w": 0.5,
+        "h": 1,
+        "section": "Desayuno y dulces",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-41",
+        "kind": "counter",
+        "x": 0,
+        "y": -10,
+        "w": 2,
+        "h": 1,
+        "section": "Horno de pan",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "counter-mark"
+      },
+      {
+        "id": "live-42",
+        "kind": "shelf",
+        "x": 11,
+        "y": 0,
+        "w": 1,
+        "h": 0.5,
+        "section": "Frutería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-43",
+        "kind": "shelf",
+        "x": 23,
+        "y": -5,
+        "w": 0.5,
+        "h": 0.5,
+        "section": "Higiene y perfumería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-44",
+        "kind": "shelf",
+        "x": 20.5,
+        "y": -8.5,
+        "w": 1.5,
+        "h": 0.5,
+        "section": "Lácteos",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-45",
+        "kind": "shelf",
+        "x": 21,
+        "y": -14,
+        "w": 1,
+        "h": 0.5,
+        "section": "Congelados",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-5",
+        "kind": "shelf",
+        "x": 12,
+        "y": -14,
+        "w": 3.5,
+        "h": 1,
+        "section": "Bodega",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      },
+      {
+        "id": "live-6",
+        "kind": "counter",
+        "x": 16,
+        "y": -22.5,
+        "w": 2,
+        "h": 1,
+        "section": "Pescadería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "counter-mark"
+      },
+      {
+        "id": "live-7",
+        "kind": "counter",
+        "x": 20,
+        "y": -25.5,
+        "w": 2,
+        "h": 1,
+        "section": "Carnicería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "counter-mark"
+      },
+      {
+        "id": "live-8",
+        "kind": "counter",
+        "x": 26.5,
+        "y": -24,
+        "w": 1,
+        "h": 2,
+        "section": "Charcutería",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "counter-mark"
+      },
+      {
+        "id": "live-9",
+        "kind": "shelf",
+        "x": 32,
+        "y": -19.5,
+        "w": 3,
+        "h": 1,
+        "section": "Mascotas",
+        "colour": {
+          "mode": "default"
+        },
+        "origin": "section-run"
+      }
+    ],
+    "marks": [
+      {
+        "id": "aa000000-0000-4000-8000-000000000001",
+        "kind": "note",
+        "x": 0.01,
+        "y": -0.03,
+        "heading": 171.29,
+        "text": "Entrada",
+        "logMs": 4027
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000002",
+        "kind": "counter",
+        "x": 0.89,
+        "y": -8.95,
+        "heading": 339.34,
+        "text": "Horno de pan",
+        "logMs": 78851
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000003",
+        "kind": "section",
+        "x": -0.57,
+        "y": -21.46,
+        "heading": 223.47,
+        "text": "Desayuno y dulces",
+        "logMs": 97085
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000004",
+        "kind": "section",
+        "x": 4.26,
+        "y": -22.01,
+        "heading": 236.83,
+        "text": "Menaje",
+        "logMs": 109141
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000005",
+        "kind": "section",
+        "x": 4.49,
+        "y": -22.17,
+        "heading": 287.44,
+        "text": "Menaje",
+        "logMs": 174121
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000006",
+        "kind": "section",
+        "x": -0.92,
+        "y": -21.11,
+        "heading": 77.19,
+        "text": "Desayuno y dulces",
+        "logMs": 185789
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000007",
+        "kind": "counter",
+        "x": 1.37,
+        "y": -9.26,
+        "heading": 335.54,
+        "text": "Horno de pan",
+        "logMs": 204897
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000008",
+        "kind": "section",
+        "x": 12.24,
+        "y": -12.59,
+        "heading": 255.17,
+        "text": "Bodega",
+        "logMs": 220503
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000009",
+        "kind": "counter",
+        "x": 17.2,
+        "y": -20.79,
+        "heading": 170.16,
+        "text": "Pescadería",
+        "logMs": 248751
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000010",
+        "kind": "counter",
+        "x": 21.22,
+        "y": -23.94,
+        "heading": 177.07,
+        "text": "Carnicería",
+        "logMs": 267829
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000011",
+        "kind": "counter",
+        "x": 25.92,
+        "y": -22.83,
+        "heading": 248.14,
+        "text": "Charcutería",
+        "logMs": 283021
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000012",
+        "kind": "section",
+        "x": 32.45,
+        "y": -18.04,
+        "heading": 235.51,
+        "text": "Mascotas",
+        "logMs": 301889
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000013",
+        "kind": "section",
+        "x": 34.53,
+        "y": -17.35,
+        "heading": 237.38,
+        "text": "Limpieza",
+        "logMs": 308130
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000014",
+        "kind": "section",
+        "x": 38.9,
+        "y": -19.62,
+        "heading": 233.16,
+        "text": "Hogar",
+        "logMs": 316411
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000015",
+        "kind": "section",
+        "x": 32.32,
+        "y": -18.06,
+        "heading": 64.2,
+        "text": "Mascotas",
+        "logMs": 326085
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000016",
+        "kind": "section",
+        "x": 38.75,
+        "y": -19.72,
+        "heading": 128.94,
+        "text": "Hogar",
+        "logMs": 344106
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000017",
+        "kind": "section",
+        "x": 32.15,
+        "y": -18.08,
+        "heading": 57.27,
+        "text": "Mascotas",
+        "logMs": 355949
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000018",
+        "kind": "section",
+        "x": 40.87,
+        "y": -7.1,
+        "heading": 67.94,
+        "text": "Agua",
+        "logMs": 414589
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000019",
+        "kind": "section",
+        "x": 37.56,
+        "y": -5.06,
+        "heading": 62.07,
+        "text": "Bebida y cervezas",
+        "logMs": 433221
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000020",
+        "kind": "section",
+        "x": 24.47,
+        "y": -3.86,
+        "heading": 92.7,
+        "text": "Higiene y perfumería",
+        "logMs": 462848
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000021",
+        "kind": "section",
+        "x": 21.33,
+        "y": -0.72,
+        "heading": 63.03,
+        "text": "Bebe",
+        "logMs": 478141
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000022",
+        "kind": "section",
+        "x": 25.92,
+        "y": -8.12,
+        "heading": 244.88,
+        "text": "Abrir y comer",
+        "logMs": 497983
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000023",
+        "kind": "section",
+        "x": 26.25,
+        "y": -11.88,
+        "heading": 60.5,
+        "text": "Despensa",
+        "logMs": 526333
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000024",
+        "kind": "section",
+        "x": 20.4,
+        "y": -12.33,
+        "heading": 248.26,
+        "text": "Congelados",
+        "logMs": 541408
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000025",
+        "kind": "counter",
+        "x": 17.07,
+        "y": -20.35,
+        "heading": 162.33,
+        "text": "Pescadería",
+        "logMs": 560665
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000026",
+        "kind": "counter",
+        "x": 21.26,
+        "y": -23.62,
+        "heading": 157.96,
+        "text": "Carnicería",
+        "logMs": 575890
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000027",
+        "kind": "counter",
+        "x": 26.14,
+        "y": -22.04,
+        "heading": 236.86,
+        "text": "Charcutería",
+        "logMs": 591313
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000028",
+        "kind": "section",
+        "x": 32.62,
+        "y": -18.11,
+        "heading": 237.95,
+        "text": "Mascotas",
+        "logMs": 606255
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000029",
+        "kind": "section",
+        "x": 34.47,
+        "y": -17.55,
+        "heading": 256.89,
+        "text": "Limpieza",
+        "logMs": 610990
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000030",
+        "kind": "section",
+        "x": 38.9,
+        "y": -19.7,
+        "heading": 260.05,
+        "text": "Hogar",
+        "logMs": 618990
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000031",
+        "kind": "section",
+        "x": 25.67,
+        "y": -8.38,
+        "heading": 55.83,
+        "text": "Abrir y comer",
+        "logMs": 645124
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000032",
+        "kind": "section",
+        "x": 22.74,
+        "y": -8.02,
+        "heading": 50.2,
+        "text": "Lácteos",
+        "logMs": 653686
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000033",
+        "kind": "section",
+        "x": 21.98,
+        "y": -0.9,
+        "heading": 291.85,
+        "text": "Bebe",
+        "logMs": 667167
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000034",
+        "kind": "section",
+        "x": 24.67,
+        "y": -4.05,
+        "heading": 187.83,
+        "text": "Higiene y perfumería",
+        "logMs": 679732
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000035",
+        "kind": "section",
+        "x": 37.92,
+        "y": -5.57,
+        "heading": 233.22,
+        "text": "Bebida y cervezas",
+        "logMs": 694801
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000036",
+        "kind": "section",
+        "x": 41.05,
+        "y": -7.24,
+        "heading": 254.13,
+        "text": "Agua",
+        "logMs": 701034
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000037",
+        "kind": "section",
+        "x": 20.46,
+        "y": -13.29,
+        "heading": 244.43,
+        "text": "Congelados",
+        "logMs": 742322
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000038",
+        "kind": "section",
+        "x": 11.71,
+        "y": -13.01,
+        "heading": 63.62,
+        "text": "Bodega",
+        "logMs": 762809
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000039",
+        "kind": "section",
+        "x": 4.58,
+        "y": -23.41,
+        "heading": 147.97,
+        "text": "Menaje",
+        "logMs": 781438
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000040",
+        "kind": "section",
+        "x": -0.27,
+        "y": -22.42,
+        "heading": 137.87,
+        "text": "Desayuno y dulces",
+        "logMs": 790587
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000041",
+        "kind": "counter",
+        "x": 1.09,
+        "y": -10.31,
+        "heading": 317.79,
+        "text": "Horno de pan",
+        "logMs": 821027
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000042",
+        "kind": "section",
+        "x": 10.53,
+        "y": 0.09,
+        "heading": 316.66,
+        "text": "Frutería",
+        "logMs": 843438
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000043",
+        "kind": "section",
+        "x": 21.01,
+        "y": -1.64,
+        "heading": 310.41,
+        "text": "Bebe",
+        "logMs": 862182
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000044",
+        "kind": "section",
+        "x": 24.04,
+        "y": -4.84,
+        "heading": 143.14,
+        "text": "Higiene y perfumería",
+        "logMs": 872217
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000045",
+        "kind": "section",
+        "x": 25.3,
+        "y": -8.8,
+        "heading": 71,
+        "text": "Abrir y comer",
+        "logMs": 901378
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000046",
+        "kind": "section",
+        "x": 21.99,
+        "y": -8.77,
+        "heading": 51.64,
+        "text": "Lácteos",
+        "logMs": 908595
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000047",
+        "kind": "section",
+        "x": 20.34,
+        "y": -13.61,
+        "heading": 246.99,
+        "text": "Congelados",
+        "logMs": 918721
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000053",
+        "kind": "section",
+        "x": 34.82,
+        "y": -17.51,
+        "heading": 228.09,
+        "text": "Limpieza",
+        "logMs": 1015713
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000054",
+        "kind": "section",
+        "x": 38.99,
+        "y": -19.55,
+        "heading": 258.46,
+        "text": "Hogar",
+        "logMs": 1023371
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000055",
+        "kind": "section",
+        "x": 25.64,
+        "y": -8.12,
+        "heading": 359.4,
+        "text": "Abrir y comer",
+        "logMs": 1050782
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000056",
+        "kind": "section",
+        "x": 22.03,
+        "y": -7.88,
+        "heading": 47.35,
+        "text": "Lácteos",
+        "logMs": 1056550
+      },
+      {
+        "id": "aa000000-0000-4000-8000-000000000057",
+        "kind": "note",
+        "x": 0.74,
+        "y": 2.58,
+        "heading": 326.13,
+        "text": "Entrada",
+        "logMs": 1082641
+      }
+    ]
+  },
+  "eventCounts": {
+    "mark-put": 52,
+    "area-put": 57,
+    "section-left": 1
+  }
+}

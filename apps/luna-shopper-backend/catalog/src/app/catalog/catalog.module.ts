@@ -108,5 +108,7 @@ import { SupermarketService } from './supermarket.service';
     CatalogDashboardService,
     NearbyShopsService,
   ],
+  // Plan 0168: the shown walk writes its shop's section list through it.
+  exports: [SectionService],
 })
 export class CatalogModule {}

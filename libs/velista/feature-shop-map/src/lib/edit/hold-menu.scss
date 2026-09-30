@@ -1,0 +1,153 @@
+@use '../walks';
+
+// The long press menu (velista 0123, the `HoldMenu` board): a raised card beside
+// the finger, the square as its head, then one row per action. The host is the
+// layer over the map; the backdrop fills it and closes the menu.
+
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+
+.panel {
+  position: absolute;
+  inline-size: min(var(--app-map-menu-width), 100% - var(--app-space-8));
+  padding-block-end: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+  visibility: hidden;
+
+  &.is-placed {
+    visibility: visible;
+  }
+}
+
+.head {
+  margin: 0;
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.items {
+  margin: 0;
+  padding: var(--app-space-2) 0 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: none;
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  text-align: start;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--app-surface-sunken);
+  }
+
+  @include walks.focus-ring;
+
+  &.is-danger {
+    color: var(--app-status-danger-fg);
+  }
+}
+
+.kind {
+  flex: none;
+  inline-size: var(--app-map-kind-swatch);
+  block-size: var(--app-map-kind-swatch);
+  box-sizing: border-box;
+  border: 1px solid;
+  border-radius: var(--app-space-2);
+}
+
+.glyph {
+  flex: none;
+  inline-size: var(--app-map-kind-swatch);
+  font-size: var(--app-icon-sm);
+  color: currentColor;
+}
+
+.note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-2);
+}
+
+.note-label {
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.note-field {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-ground);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  @include walks.focus-ring;
+}
+
+.note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--app-space-3);
+}
+
+.note-cancel,
+.note-save {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.note-cancel {
+  border: 1px solid var(--app-border-strong);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+}
+
+.note-save {
+  border: none;
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+
+  &[aria-disabled='true'] {
+    opacity: 0.45;
+    cursor: default;
+  }
+}

@@ -1,0 +1,106 @@
+<main class="page">
+  <header class="bar">
+    <button
+      (click)="toHistory()"
+      [attr.aria-label]="'shopWalks.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <div class="heading">
+      <h1 class="title">
+        {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
+      </h1>
+      @if (statusKey(status()); as key) {
+        <p aria-live="polite" class="subtitle">{{ key | rokuT }}</p>
+      }
+    </div>
+    <span class="walking">
+      <span aria-hidden="true" class="walking-dot"></span>
+      {{ 'shopMapEdit.notWalking' | rokuT }}
+    </span>
+    <button (click)="done()" class="done" type="button">
+      {{ 'shopMapEdit.done' | rokuT }}
+    </button>
+  </header>
+
+  @let state = read();
+  @if (state.kind === 'ready') {
+    <div class="map">
+      @if (document(); as document) {
+        <lib-shop-map-view
+          (areaSelected)="areaSelected($event)"
+          (changed)="changed($event)"
+          (longPressed)="longPressed($event)"
+          [document]="document"
+          [label]="'shopMapEdit.label' | rokuT"
+          [sizeLabel]="sizeLabel"
+          [snap]="snap()"
+          class="canvas"
+          look="mapper"
+        />
+      }
+      @if (press(); as press) {
+        <lib-hold-menu
+          (chosen)="chosen($event)"
+          (dismissed)="dismissed()"
+          [press]="press"
+        />
+      }
+      @if (notice(); as notice) {
+        <div class="notice" role="status">
+          <p class="notice-text">
+            {{ 'shopMapEdit.notice.' + notice | rokuT }}
+          </p>
+          <button
+            (click)="closeNotice()"
+            [attr.aria-label]="'shopMapEdit.close' | rokuT"
+            class="notice-close"
+            type="button"
+          >
+            {{ 'shopMapEdit.ok' | rokuT }}
+          </button>
+        </div>
+      }
+    </div>
+
+    @if (selected(); as area) {
+      <lib-resize-controls
+        (finished)="finishedArea()"
+        (opened)="openSelected()"
+        (snapChanged)="snapChanged($event)"
+        [area]="area"
+        [snap]="snap()"
+      />
+    } @else {
+      <p class="hint">{{ 'shopMapEdit.hint' | rokuT }}</p>
+    }
+  } @else if (state.kind === 'missing') {
+    <p class="empty" role="alert">{{ 'shopWalks.history.missing' | rokuT }}</p>
+  } @else if (state.kind === 'failed') {
+    <div class="state" role="alert">
+      <p class="state-text">{{ 'shopWalks.history.failed' | rokuT }}</p>
+      <button (click)="retry()" class="retry" type="button">
+        {{ 'shopWalks.retry' | rokuT }}
+      </button>
+    </div>
+  } @else {
+    <div
+      [attr.aria-label]="'shopWalks.history.loading' | rokuT"
+      class="map is-loading"
+      role="status"
+    ></div>
+  }
+</main>
+
+@if (asking()) {
+  <lib-unsaved-dialog
+    (leave)="leaveAnyway()"
+    (stay)="stay()"
+    [nextTryAt]="nextTryAt()"
+    [status]="status()"
+  />
+}
+
+<router-outlet />

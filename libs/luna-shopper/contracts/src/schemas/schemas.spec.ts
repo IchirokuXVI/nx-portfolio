@@ -41,6 +41,7 @@ import {
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
+import { SHOP_WALK_PATTERNS } from '../lib/messages/shop-walk.messages';
 import { STATS_PATTERNS } from '../lib/messages/stats.messages';
 import {
   MEMBERSHIP_PATTERNS,
@@ -100,6 +101,8 @@ describe('contract schemas', () => {
       ...Object.values(BRAND_PATTERNS),
       ...Object.values(CATEGORY_PATTERNS),
       ...Object.values(SECTION_PATTERNS),
+      // A shop's walks and its map (plan 0168).
+      ...Object.values(SHOP_WALK_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(HARVEST_PRESET_PATTERNS),
@@ -545,7 +548,9 @@ describe('contract schemas', () => {
             longitude: null,
             externalRef: null,
             externalProvider: null,
+            footprintM2: 1200,
             sections: [{ id: 'sec-1', name: { es: 'Frescos' } }],
+            hasMap: false,
           },
           supermarket: {
             id: 's-1',
@@ -562,6 +567,28 @@ describe('contract schemas', () => {
           ],
         }).valid
       ).toBe(true);
+    });
+
+    it('supermarketLocation.update takes a size and refuses to clear one (plan 0176)', () => {
+      const update = { userId: 'u-1', supermarketLocationId: 'loc-1' };
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: 3002,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: null,
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: 12.5,
+        }).valid
+      ).toBe(false);
     });
 
     it('basket.participant.list response names an account (plan 0054, section 2)', () => {
@@ -2002,8 +2029,7 @@ describe('what a shop picker row needs (plan 0170)', () => {
     const { sections: _sections, ...noSections } = shop;
     const { supermarketLogoUrl: _logo, ...noLogo } = shop;
     const answer = (shops: object[]) =>
-      validateMessageResponse('supermarketLocation.shopsById', { shops })
-        .valid;
+      validateMessageResponse('supermarketLocation.shopsById', { shops }).valid;
     expect(answer([shop])).toBe(true);
     expect(answer([noSections])).toBe(false);
     expect(answer([noLogo])).toBe(false);

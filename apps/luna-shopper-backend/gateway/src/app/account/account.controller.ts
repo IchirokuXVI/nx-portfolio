@@ -119,7 +119,10 @@ export class AccountController {
       }),
       this.appState(user.userId),
     ]);
-    return { ...profile, appState };
+    // From the token rather than from auth (plan 0175): the permissions a
+    // screen is drawn from must be the ones this gateway enforces on the same
+    // token, or velista would offer a control whose route still refuses.
+    return { ...profile, appState, permissions: [...user.permissions] };
   }
 
   /** Core's half of {@link me}, degrading to two nulls rather than failing. */

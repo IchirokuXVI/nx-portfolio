@@ -148,6 +148,7 @@
 // rule between two shops is drawn here, because the label is no longer the whole
 // shop.
 .pick {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--app-space-3);
@@ -235,4 +236,46 @@
 
 .pick.is-mixed .pick-sections {
   margin-inline-start: calc(var(--app-chain-logo-md) + var(--app-space-4));
+}
+
+// The shop's own page (velista 0121): a round button between the words and the
+// radio. It is the label's sibling, so it is placed over the row rather than in
+// the label's grid, and the words give way to it.
+.pick-body {
+  margin-inline-end: calc(var(--app-pick-about) + var(--app-space-3));
+}
+
+.pick-about {
+  position: absolute;
+  inset-block-start: var(--app-space-4);
+  inset-inline-end: calc(
+    var(--app-space-4) + var(--app-pick-radio) + var(--app-space-4)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-pick-about);
+  block-size: var(--app-pick-about);
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  // The target grows to the touch target without the circle growing.
+  &::after {
+    position: absolute;
+    inset: calc((var(--app-pick-about) - var(--app-touch-target)) / 2);
+    content: '';
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.pick-about-glyph {
+  font-size: var(--app-icon-sm);
 }

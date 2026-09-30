@@ -1,0 +1,168 @@
+@use '../shop-map' as shop;
+@use '../walks';
+
+// Editing a walk's map by hand (velista 0123, the `EditArea` and `EditCells`
+// boards): the bar with the walk's name, "Not walking" and Done, the map filling
+// what is left, and at its foot either the hint or the selected area's controls.
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.bar {
+  @include shop.bar;
+}
+
+.back {
+  @include shop.back;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.heading {
+  @include shop.heading;
+}
+
+.title {
+  @include shop.title;
+}
+
+.subtitle {
+  @include shop.subtitle;
+}
+
+.walking {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-chip-padding-block) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-neutral-bg);
+  color: var(--app-status-neutral-fg);
+  font-size: var(--app-text-xs);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.walking-dot {
+  inline-size: var(--app-space-3);
+  block-size: var(--app-space-3);
+  border-radius: var(--app-radius-full);
+  background: currentColor;
+}
+
+.done {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.map {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+
+  &.is-loading {
+    background: var(--app-surface-sunken);
+  }
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.notice {
+  position: absolute;
+  inset-inline: var(--app-space-4);
+  inset-block-start: var(--app-space-4);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-3) var(--app-space-3)
+    var(--app-space-5);
+  border: 1px solid var(--app-status-info-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+  box-shadow: var(--app-elevation-1);
+}
+
+.notice-text {
+  flex: 1;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.notice-close {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.hint {
+  flex: none;
+  margin: 0;
+  padding: var(--app-space-4) var(--app-space-5)
+    calc(var(--app-space-4) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-align: center;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--app-space-7) var(--app-space-5);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  padding: var(--app-space-7) var(--app-space-5);
+}
+
+.state-text {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
+.retry {
+  @include shop.retry;
+}

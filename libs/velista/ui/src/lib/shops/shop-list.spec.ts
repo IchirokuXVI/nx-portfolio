@@ -231,4 +231,45 @@ describe('ShopList, the pick row', () => {
       (fixture.nativeElement as HTMLElement).querySelector('lib-section-chips')
     ).toBeNull();
   });
+
+  /** Velista `0121`, target 1: the round button that opens the shop's page. */
+  it('offers the shop’s own page beside the label, named for the shop', async () => {
+    const fixture = await renderRow(row, false);
+    const element = fixture.nativeElement as HTMLElement;
+    const button = element.querySelector<HTMLButtonElement>(
+      '.pick > .pick-about'
+    );
+
+    expect(element.querySelector('label.row .pick-about')).toBeNull();
+    expect(button?.getAttribute('aria-label')).toBe('shops.row.about');
+    expect(button?.type).toBe('button');
+  });
+
+  it('opens the shop’s page from the button and never picks the shop', async () => {
+    const fixture = await renderRow(row, false);
+    const about: string[] = [];
+    const picked: string[] = [];
+    fixture.componentInstance.about.subscribe((id) => about.push(id));
+    fixture.componentInstance.pick.subscribe((id) => picked.push(id));
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.pick-about')
+      ?.click();
+
+    expect(about).toEqual(['loc-1']);
+    expect(picked).toEqual([]);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+        '.pick-radio'
+      )?.checked
+    ).toBe(false);
+  });
+
+  it('draws no button on the rows that ask about exclusion', async () => {
+    const fixture = await render({ mode: 'exclude' });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.pick-about')
+    ).toBeNull();
+  });
 });

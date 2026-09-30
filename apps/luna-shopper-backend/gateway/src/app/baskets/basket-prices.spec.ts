@@ -783,6 +783,7 @@ describe('GET /v1/baskets/:id at a shop (plan 0163)', () => {
       longitude: null,
       externalRef: null,
       externalProvider: null,
+      footprintM2: null,
       sections: [],
     },
     supermarket: {
@@ -1160,6 +1161,7 @@ describe('GET /v1/baskets/:id at a shop: its sections (plan 0167)', () => {
       longitude: null,
       externalRef: null,
       externalProvider: null,
+      footprintM2: null,
       sections: [],
     },
     supermarket: {
