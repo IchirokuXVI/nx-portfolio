@@ -27,16 +27,30 @@ describe('the drawn shopper look', () => {
       'Fruit and vegetables',
       'Produce',
       '  FRUTA ',
+      'Fruterías',
+      'Verdulerías',
+      'Fruita i verdura',
+      'Froita e verdura',
+      'Fresh produce',
+      'Fresh fruit',
+      '01 Frutería',
+      '- Frutas',
     ])('takes %p for fruit and vegetables', (name) => {
       expect(isProduceSection(name)).toBe(true);
     });
 
-    it.each(['Zumos de fruta', 'Frutos secos', 'Lácteos', '', undefined])(
-      'does not take %p',
-      (name) => {
-        expect(isProduceSection(name)).toBe(false);
-      }
-    );
+    it.each([
+      'Zumos de fruta',
+      'Frutos secos',
+      'Lácteos',
+      'Fresh bakery',
+      'Fresh',
+      '01',
+      '',
+      undefined,
+    ])('does not take %p', (name) => {
+      expect(isProduceSection(name)).toBe(false);
+    });
   });
 
   describe('drawingOf', () => {

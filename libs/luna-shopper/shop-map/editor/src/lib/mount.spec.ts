@@ -724,6 +724,48 @@ describe('mountShopMap, the drawn shopper look', () => {
     );
   });
 
+  it('keeps every pattern tile a few metres at most, so no browser scales it down', () => {
+    mountDrawn();
+    // The drawn look's patterns, which are in metres.
+    const patterns = [...host.querySelectorAll('pattern')].filter((p) =>
+      /-(strip-[ab]-[hv]|units-[hv]|crate)$/.test(p.getAttribute('id') ?? '')
+    );
+    expect(patterns).toHaveLength(7);
+    for (const p of patterns) {
+      for (const side of ['width', 'height']) {
+        const value = p.getAttribute(side);
+        if (value !== null) expect(Number(value)).toBeLessThanOrEqual(2);
+      }
+    }
+  });
+
+  it('measures a tag again once the web fonts have loaded', async () => {
+    let width = 40;
+    const proto = SVGElement.prototype as unknown as {
+      getComputedTextLength?: () => number;
+    };
+    proto.getComputedTextLength = () => width;
+    let loaded: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => (loaded = resolve));
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { status: 'loading', ready },
+    });
+    try {
+      mountDrawn();
+      const tag = [...host.querySelectorAll('rect.sm-label-tag')][0];
+      expect(tag.getAttribute('width')).toBe('52');
+      width = 60;
+      loaded();
+      await ready;
+      await Promise.resolve();
+      expect(tag.getAttribute('width')).toBe('72');
+    } finally {
+      delete proto.getComputedTextLength;
+      delete (document as unknown as { fonts?: unknown }).fonts;
+    }
+  });
+
   it('draws only inline SVG: no image, no file behind any url()', () => {
     mountDrawn();
     expect(host.querySelector('image')).toBeNull();
