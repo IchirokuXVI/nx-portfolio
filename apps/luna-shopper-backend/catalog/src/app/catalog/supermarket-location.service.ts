@@ -31,6 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
 import { PriceScope, Supermarket, SupermarketLocation } from '../entities';
+import { shopsWithMap } from '../shop-walks/has-map';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
   toSupermarketLocationView,
@@ -256,9 +257,14 @@ export class SupermarketLocationService {
   ): Promise<SupermarketLocationView[]> {
     // Independent reads on the pool rather than one transaction, so they run
     // side by side.
-    const [stacks, sections] = await Promise.all([
+    const [stacks, sections, mapped] = await Promise.all([
       this.stacksOf(rows),
       sectionNamesOf(
+        this.locations,
+        rows.map((row) => row.id)
+      ),
+      // Plan 0168: which of the page's shops have a shown walk, in one read.
+      shopsWithMap(
         this.locations,
         rows.map((row) => row.id)
       ),
@@ -267,7 +273,8 @@ export class SupermarketLocationService {
       toSupermarketLocationView(
         row,
         stacks.get(row.id) ?? [],
-        sections.get(row.id) ?? []
+        sections.get(row.id) ?? [],
+        mapped.has(row.id.toLowerCase())
       )
     );
   }

@@ -220,6 +220,18 @@ export const ERROR_CATALOG: Record<
     en: 'A guest account cannot hold a role. Grant it once the account is registered.',
     es: 'Una cuenta de invitado no puede tener roles. Asígnalos cuando la cuenta esté registrada.',
   },
+  [ERROR_CODES.WALK_CHANGED]: {
+    en: 'This walk was saved from somewhere else. Reload it and try again.',
+    es: 'Este recorrido se guardó desde otro sitio. Vuelve a cargarlo e inténtalo de nuevo.',
+  },
+  [ERROR_CODES.SHOP_MAP_INVALID]: {
+    en: 'That change would leave the shop map in a state it cannot be saved in.',
+    es: 'Ese cambio dejaría el mapa de la tienda en un estado que no se puede guardar.',
+  },
+  [ERROR_CODES.SHOP_MAP_TOO_LARGE]: {
+    en: 'That save is too large to store.',
+    es: 'Ese guardado es demasiado grande para almacenarlo.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

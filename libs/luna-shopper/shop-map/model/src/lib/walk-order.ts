@@ -66,7 +66,7 @@ function pathBetween(
  * reversal shortens the walk. Distances are whole cells, so "shortens" is
  * exact and the loop ends.
  */
-function solvePath(cost: number[][], interior: number[]): number[] {
+export function solvePath(cost: number[][], interior: number[]): number[] {
   const end = cost.length - 1;
   const left = [...interior];
   const order: number[] = [];
@@ -100,7 +100,7 @@ function solvePath(cost: number[][], interior: number[]): number[] {
   return path;
 }
 
-function pathLength(cost: number[][], path: number[]): number {
+export function pathLength(cost: number[][], path: number[]): number {
   let total = 0;
   for (let k = 1; k < path.length; k++) total += cost[path[k - 1]][path[k]];
   return total;
