@@ -569,6 +569,47 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('supermarketLocation.priceStack answers a shop, its chain and its scope stack (plan 0170)', () => {
+      expect(
+        validateMessageRequest('supermarketLocation.priceStack', {
+          supermarketLocationId: 'loc-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('supermarketLocation.priceStack', {
+          supermarketLocationId: '',
+        }).valid
+      ).toBe(false);
+      const view = {
+        id: 'loc-1',
+        supermarketId: 's-1',
+        priceScopeIds: ['ps-store', 'ps-region'],
+      };
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', view).valid
+      ).toBe(true);
+      // An empty stack is still a stack, and a missing one is not.
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          ...view,
+          priceScopeIds: [],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          id: 'loc-1',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(false);
+      // The stack and nothing more: the rest of the shop is not this answer's.
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          ...view,
+          label: null,
+        }).valid
+      ).toBe(false);
+    });
+
     it('supermarketLocation.update takes a size and refuses to clear one (plan 0176)', () => {
       const update = { userId: 'u-1', supermarketLocationId: 'loc-1' };
       expect(

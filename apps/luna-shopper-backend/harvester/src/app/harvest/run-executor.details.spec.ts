@@ -19,6 +19,7 @@ function build(
     externalId: string;
     ean: string | null;
     categoryPath?: string[];
+    extra?: Record<string, unknown> | null;
   }>
 ) {
   const entries = {
@@ -66,20 +67,30 @@ describe('RunExecutor, what a walk already knows (plan 0119)', () => {
     );
   });
 
-  it('names the products stored with one category level or none', async () => {
+  it('names the products whose row was written from a failed detail', async () => {
     const { known, entries } = build([
-      { externalId: 'a', ean: null, categoryPath: ['FRESCOS'] },
-      { externalId: 'b', ean: null, categoryPath: ['Frescos', 'Arroz'] },
-      { externalId: 'c', ean: '8480000900107', categoryPath: [] },
+      {
+        externalId: 'a',
+        ean: null,
+        categoryPath: ['FRESCOS'],
+        extra: { detailFailed: true },
+      },
+      // A page that was read and whose breadcrumb has one level (plan 0169).
+      {
+        externalId: 'b',
+        ean: null,
+        categoryPath: ['Frescos'],
+        extra: { previousPrice: 3.99 },
+      },
+      { externalId: 'c', ean: null, categoryPath: [], extra: null },
     ]);
 
     const answer = await known(HarvestDetailFetch.NEW);
 
-    // What a failed detail leaves behind on a source with no EAN (plan 0169).
-    expect(answer.externalIdsWithShallowPath).toEqual(new Set(['a', 'c']));
+    expect(answer.externalIdsWithFailedDetail).toEqual(new Set(['a']));
     expect(entries.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        select: expect.objectContaining({ categoryPath: true }),
+        select: expect.objectContaining({ extra: true }),
       })
     );
   });
