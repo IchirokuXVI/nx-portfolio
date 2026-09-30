@@ -17,8 +17,23 @@ import {
   type NearbyNoPick,
 } from '@portfolio/velista/models';
 import { InfoIcon, SearchIcon, SpinnerIcon } from '../icons/icons';
+import { ChainLogo, type ChainLogoView } from './chain-logo';
 import { FranchiseButtons } from './franchise-buttons';
 import { ShopList, type ShopGroup, type ShopRow } from './shop-list';
+
+/**
+ * The one row that answers "no particular shop" (velista `0124`): All
+ * supermarkets at the root, or Any Mercadona shop inside a chain. The catalog is
+ * the only host that draws one, because a chain alone is enough there; the words
+ * are the host's, since only it knows which question it is asking.
+ */
+export interface ShopPickerAny {
+  readonly title: string;
+  readonly detail: string;
+  readonly logo: ChainLogoView;
+  /** Whether it is the current choice, which checks its radio. */
+  readonly checked: boolean;
+}
 
 /**
  * Where the list body stands, for a caller that asks a server for it.
@@ -56,11 +71,17 @@ export type ShopPickerNear =
 /**
  * The body of "which shop am I buying at" (velista `0078`, section 4; `0102`).
  *
- * Top to bottom: the shops near the device once "Near me" was pressed, the shops
- * this person bought at recently (velista `0103`), and then the supermarkets
- * page's order (`0059`): a search across every chain, the chain buttons, and the
- * open chain's shops under their postal codes, or the flat matches while something
- * is typed. One radio per shop, one radio group per section.
+ * Top to bottom at the root: the shops near the device once "Near me" was pressed,
+ * the host's any row if it asked for one, the shops this person bought at recently
+ * (velista `0103`), a search across every chain, and the chain buttons, two to a
+ * row with their logos (velista `0124`). While something is typed the any row, the
+ * recent shops and the buttons go, and the matches take their place. A chosen
+ * chain replaces the whole root with the any row and that chain's shops under
+ * their postal codes. One radio per shop, one radio group per section.
+ *
+ * **It is the only picker.** The catalog's page, the basket's Buying at sheet, the
+ * get a list sheet and the Bought it pane all draw it, so two pickers that look
+ * almost alike can never confuse anybody: only the frame around it differs.
  *
  * "Near me" itself is not here. It sits in the title row, which each sheet owns,
  * so it is `NearMeButton` and the sheet draws it.
@@ -82,6 +103,7 @@ export type ShopPickerNear =
 @Component({
   selector: 'lib-shop-picker',
   imports: [
+    ChainLogo,
     FranchiseButtons,
     RokuTranslatorPipe,
     SearchIcon,
@@ -97,11 +119,22 @@ export class ShopPicker {
   /** One button per chain, with the count of its shops under the name. */
   readonly chains = input.required<readonly FranchiseButton[]>();
 
-  /** The chain whose shops are open, or null when none is. */
+  /**
+   * The chain whose screen is open, or null for the root (velista `0124`). A chosen
+   * chain **replaces the whole root** with its shops: six buttons fill a phone, so
+   * shops drawn under them would be out of sight. The host draws the chain's head,
+   * a back chevron and the logo, because it owns the title row.
+   */
   readonly openKey = input<string | null>(null);
 
-  /** The open chain's name, for the heading over its shops. */
-  readonly openName = input<string | null>(null);
+  /** The chain of the current choice, which its button draws with a tick. */
+  readonly pickedChain = input<string | null>(null);
+
+  /**
+   * One "any" row above the root and above a chain's shops, or null for none,
+   * which is every host but the catalog. See {@link ShopPickerAny}.
+   */
+  readonly anyRow = input<ShopPickerAny | null>(null);
 
   /** The open chain's shops, under their postal codes. */
   readonly groups = input<readonly ShopGroup[]>([]);
@@ -117,6 +150,16 @@ export class ShopPicker {
 
   /** How many shops the search matched, for the announced count. */
   readonly matchCount = input(0);
+
+  /**
+   * Whether the matches are still for an older text than the one in the field. A
+   * host that asks a server after a debounce holds the typed text at once and the
+   * answer a moment later; while this is true the body draws no count and no "no
+   * match", so nobody sees or hears "0 results" for a search that has not been
+   * asked yet. The live region stays in place, empty, so the count is still heard
+   * when it arrives. A host that filters as it is typed never sets it.
+   */
+  readonly searchPending = input(false);
 
   /** The shop the radio group checks, or null for none. */
   readonly pickedId = input<string | null>(null);
@@ -152,6 +195,15 @@ export class ShopPicker {
   /** A shop's radio was chosen: its location id. */
   readonly picked = output<string>();
 
+  /**
+   * A shop row's round button was pressed: its location id, for the shop's own
+   * page (velista `0121`). Every host opens `shops/:locationId`.
+   */
+  readonly about = output<string>();
+
+  /** The "any" row was chosen. */
+  readonly anyChosen = output<void>();
+
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   /** How far the server looks, in the reader's language, for the heading. */
@@ -183,6 +235,11 @@ export class ShopPicker {
   /** Whether a word is being searched, which decides what the body draws. */
   protected searching(): boolean {
     return this.query().trim() !== '';
+  }
+
+  /** The fixed id the any row's radio is labelled by, one per picker. */
+  protected anyName(): string {
+    return `${this.fieldId()}-any`;
   }
 
   protected onQuery(event: Event): void {

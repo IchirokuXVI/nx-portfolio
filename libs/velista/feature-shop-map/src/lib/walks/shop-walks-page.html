@@ -1,0 +1,124 @@
+<main class="page">
+  <header class="bar">
+    <button
+      (click)="back()"
+      [attr.aria-label]="'shopWalks.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <div class="heading">
+      <h1 class="title">{{ 'shopWalks.list.title' | rokuT }}</h1>
+      @if (subtitle(); as subtitle) {
+        <p class="subtitle">{{ subtitle }}</p>
+      }
+    </div>
+    <button
+      (click)="openMappingSettings()"
+      [attr.aria-label]="'shopWalks.mapping.title' | rokuT"
+      class="icon-button"
+      type="button"
+    >
+      <lib-sliders-icon />
+    </button>
+  </header>
+
+  <p class="intro">{{ 'shopWalks.list.intro' | rokuT }}</p>
+
+  @let state = read();
+  @if (state.kind === 'walks') {
+    @if (state.walks.length === 0) {
+      <p class="empty">{{ 'shopWalks.list.empty' | rokuT }}</p>
+    } @else {
+      <ul class="walks">
+        @for (walk of state.walks; track walk.id) {
+          @let when = changed(walk);
+          <li class="walk">
+            <!--
+                    A link, so the row opens with a long press into a new tab too,
+                    and a click handler, so the router does the navigation.
+                  -->
+            <a
+              (click)="$event.preventDefault(); open(walk)"
+              [href]="historyUrl(walk)"
+              class="walk-main"
+            >
+              <span class="walk-head">
+                <span class="walk-name">{{ walk.name }}</span>
+                @if (walk.shown) {
+                  <span class="shown">{{
+                    'shopWalks.list.shown' | rokuT
+                  }}</span>
+                }
+              </span>
+              <span class="walk-meta">
+                @switch (when.kind) {
+                  @case ('today') {
+                    {{
+                      'shopWalks.list.changedToday' | rokuT: { time: when.time }
+                    }}
+                  }
+                  @case ('yesterday') {
+                    {{
+                      'shopWalks.list.changedYesterday'
+                        | rokuT: { time: when.time }
+                    }}
+                  }
+                  @case ('date') {
+                    {{
+                      'shopWalks.list.changedOn' | rokuT: { date: when.date }
+                    }}
+                  }
+                }
+                ·
+                {{
+                  'shopWalks.list.entries' | rokuT: { count: walk.entryCount }
+                }}
+                ·
+                {{ 'shopWalks.list.marks' | rokuT: { count: walk.markCount } }}
+              </span>
+            </a>
+            <button
+              (click)="openSettings(walk)"
+              [attr.aria-label]="
+                'shopWalks.list.settingsFor' | rokuT: { name: walk.name }
+              "
+              class="icon-button"
+              type="button"
+            >
+              <lib-ellipsis-icon />
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  } @else if (state.kind === 'missing') {
+    <p class="empty" role="alert">{{ 'shopWalks.list.missing' | rokuT }}</p>
+  } @else if (state.kind === 'failed') {
+    <div class="state" role="alert">
+      <p class="state-text">{{ 'shopWalks.list.failed' | rokuT }}</p>
+      <button (click)="retry()" class="retry" type="button">
+        {{ 'shopWalks.retry' | rokuT }}
+      </button>
+    </div>
+  } @else {
+    <div
+      [attr.aria-label]="'shopWalks.list.loading' | rokuT"
+      class="bones"
+      role="status"
+    >
+      <div class="bone"></div>
+      <div class="bone"></div>
+    </div>
+  }
+
+  <footer class="foot">
+    <button (click)="startNew()" class="primary" type="button">
+      {{ 'shopWalks.list.start' | rokuT }}
+    </button>
+    <p class="foot-note">{{ 'shopWalks.list.startNote' | rokuT }}</p>
+  </footer>
+</main>
+
+<router-outlet />

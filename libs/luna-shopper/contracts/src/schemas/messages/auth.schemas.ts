@@ -73,6 +73,8 @@ const accessTokenClaims = object(
   {
     sub: nonEmptyString(),
     kind: ref(ENUM_IDS.userKind),
+    // Optional: a token signed before plan 0175 carries none (see the type).
+    perms: array(ref(ENUM_IDS.permission)),
     iat: integer(),
     exp: integer(),
   },

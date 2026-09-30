@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   BASKET_PATTERNS,
   ITEM_PATTERNS,
+  SECTION_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   type BasketPriceScopeView,
   type BasketResult,
@@ -12,6 +13,8 @@ import {
   type CatalogSuggestResponse,
   type GetItemsRequest,
   type GetItemsResult,
+  type ItemSectionsAtLocationRequest,
+  type ItemSectionsAtLocationView,
   type ItemView,
   type ListSupermarketLocationsRequest,
   type ShopAvailabilityRequest,
@@ -36,6 +39,7 @@ import {
   atShopOf,
   quotedScopeOf,
   toBasketShopView,
+  toScopeLocationView,
   withShopInScopes,
 } from './basket-shop';
 
@@ -130,11 +134,14 @@ export class BasketCatalogService {
     const shopId = own ?? locationId ?? null;
     const itemIds = [...new Set(basket.rows.flatMap((row) => row.optionIds))];
 
-    const [owner, shop] = await Promise.all([
+    const [owner, shop, sections] = await Promise.all([
       searchScope === undefined
         ? this.ownerScopeOf(basket.id, participantId)
         : this.ownerScopeFrom(searchScope),
       shopId ? this.shopAt(shopId, itemIds) : Promise.resolve(null),
+      // Plan 0167: which of the shop's sections each product is in. Beside the
+      // shop rather than after it, because neither needs the other.
+      shopId ? this.sectionsAt(shopId, itemIds) : Promise.resolve(null),
     ]);
     const resolved = owner?.view;
     const quoted = shop ? quotedScopeOf(shop) : null;
@@ -173,6 +180,9 @@ export class BasketCatalogService {
       products: products.map((product) => ({
         ...product,
         atShop: shop ? atShopOf(product, shop) : null,
+        // Absent, never empty, when the rule could not be read: an empty list
+        // is an answer ("no section holds it") and a failure is not one.
+        ...(sections ? { sectionIds: sections.get(product.id) ?? [] } : {}),
       })),
       shop:
         own && shop
@@ -253,6 +263,42 @@ export class BasketCatalogService {
       return await this.nats.send<ShopAvailabilityView>(
         SUPERMARKET_LOCATION_PATTERNS.shopAvailability,
         req
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Which of the shop's sections each product is in, by the rule of plan 0167
+   * section 3, keyed by product id; or null.
+   *
+   * **One call per read, never one per product**: catalog answers every
+   * product in one statement. A basket with no products asks nothing.
+   *
+   * **It never throws**, like {@link shopAt}. A rule catalog cannot answer this
+   * time costs the read its sections and nothing else: every product then
+   * carries no `sectionIds` at all, which a client draws under the product's
+   * own categories, exactly as it draws a shop that has no sections.
+   */
+  async sectionsAt(
+    supermarketLocationId: string,
+    itemIds: readonly string[]
+  ): Promise<Map<string, string[]> | null> {
+    if (itemIds.length === 0) {
+      return new Map();
+    }
+    const req: ItemSectionsAtLocationRequest = {
+      supermarketLocationId,
+      itemIds: [...itemIds],
+    };
+    try {
+      const answer = await this.nats.send<ItemSectionsAtLocationView>(
+        SECTION_PATTERNS.itemsAtLocation,
+        req
+      );
+      return new Map(
+        answer.items.map((entry) => [entry.itemId, entry.sectionIds])
       );
     } catch {
       return null;
@@ -475,15 +521,11 @@ export class BasketCatalogService {
       req
     );
     const refused = new Set(excludedLocationIds);
+    // The same shape the read's own shop is drawn in, section names included
+    // (plan 0170): catalog answers the page with them.
     return page.items
       .filter((location) => !refused.has(location.id))
-      .map((location) => ({
-        supermarketLocationId: location.id,
-        label: location.label,
-        address: location.address,
-        city: location.city,
-        postalCode: location.postalCode,
-      }));
+      .map(toScopeLocationView);
   }
 
   /**

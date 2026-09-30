@@ -1,0 +1,262 @@
+{
+ "10001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10216\"}\n"
+ },
+ "10600": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10216\"}\n"
+ },
+ "11001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10111\"}\n"
+ },
+ "12001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"1206\"}\n"
+ },
+ "13001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"7743\"}\n"
+ },
+ "14001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"7745\"}\n"
+ },
+ "15001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4608\"}\n"
+ },
+ "16001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10046\"}\n"
+ },
+ "17001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3919\"}\n"
+ },
+ "18001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"2447\"}\n"
+ },
+ "19001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"422\"}\n"
+ },
+ "20001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"5013\"}\n"
+ },
+ "21001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"2254\"}\n"
+ },
+ "22001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3290\"}\n"
+ },
+ "22300": {
+  "status": 206,
+  "body": ""
+ },
+ "23001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"25008\"}\n"
+ },
+ "24001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4179\"}\n"
+ },
+ "24700": {
+  "status": 206,
+  "body": ""
+ },
+ "25001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"5980\"}\n"
+ },
+ "26001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3213\"}\n"
+ },
+ "27001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4553\"}\n"
+ },
+ "27400": {
+  "status": 206,
+  "body": ""
+ },
+ "28001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"13835\"}\n"
+ },
+ "28041": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"13835\"}\n"
+ },
+ "28901": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"13835\"}\n"
+ },
+ "29001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10168\"}\n"
+ },
+ "30001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"1442\"}\n"
+ },
+ "30800": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"1752\"}\n"
+ },
+ "31001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3401\"}\n"
+ },
+ "32001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4933\"}\n"
+ },
+ "33001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4452\"}\n"
+ },
+ "34001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4320\"}\n"
+ },
+ "35001": {
+  "status": 206,
+  "body": ""
+ },
+ "36001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4944\"}\n"
+ },
+ "37001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"7987\"}\n"
+ },
+ "38001": {
+  "status": 206,
+  "body": ""
+ },
+ "39001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"5415\"}\n"
+ },
+ "40001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10016\"}\n"
+ },
+ "41001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"2354\"}\n"
+ },
+ "42001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3402\"}\n"
+ },
+ "42100": {
+  "status": 206,
+  "body": ""
+ },
+ "43001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10283\"}\n"
+ },
+ "44001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"41125\"}\n"
+ },
+ "44200": {
+  "status": 206,
+  "body": ""
+ },
+ "45001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10018\"}\n"
+ },
+ "46001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"1029\"}\n"
+ },
+ "47001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"46005\"}\n"
+ },
+ "48001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10277\"}\n"
+ },
+ "49001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"10260\"}\n"
+ },
+ "49300": {
+  "status": 206,
+  "body": ""
+ },
+ "50001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"3423\"}\n"
+ },
+ "51001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"50025\"}\n"
+ },
+ "52001": {
+  "status": 206,
+  "body": ""
+ },
+ "08001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"959\"}\n"
+ },
+ "07001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"34045\"}\n"
+ },
+ "07800": {
+  "status": 206,
+  "body": ""
+ },
+ "01001": {
+  "status": 206,
+  "body": ""
+ },
+ "02001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"1123\"}\n"
+ },
+ "03001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"36107\"}\n"
+ },
+ "04001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"2724\"}\n"
+ },
+ "05001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"18211\"}\n"
+ },
+ "06001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"17043\"}\n"
+ },
+ "09001": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"4154\"}\n"
+ },
+ "08901": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"959\"}\n"
+ },
+ "06800": {
+  "status": 200,
+  "body": "{\"physical_store_id\":\"17511\"}\n"
+ }
+}

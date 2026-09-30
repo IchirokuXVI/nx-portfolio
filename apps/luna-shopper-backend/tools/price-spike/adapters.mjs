@@ -181,23 +181,9 @@ export const lidl = {
 };
 
 /* ------------------------------------------------------------------ *
- * El Jamón — has a real online store (~7k refs) but no known API.
- * Scrapable with a custom HTML adapter; endpoint left unset until
- * confirmed from DevTools rather than guessed.
+ * El Jamón is not a spike any more: the adapter is written, in
+ * `libs/luna-shopper/eljamon` (plan 0169).
  * ------------------------------------------------------------------ */
-export const elJamon = {
-  id: 'el-jamon',
-  label: 'Supermercados El Jamón',
-  priceScope: 'store',
-  status: 'browser-required',
-  reason:
-    'supermercadoseljamon.com is a working online store with roughly 7,000 references, but no ' +
-    'documented API. Needs an HTML/XHR adapter written against the live site; regional chain, so ' +
-    'expect the online list to be its own price list separate from the shelf.',
-  async search() {
-    throw new Error('el-jamon: adapter not written — see reason');
-  },
-};
 
 /* ------------------------------------------------------------------ *
  * Deza — corporate site only. No online shop, no prices on the web
@@ -217,4 +203,4 @@ export const deza = {
   },
 };
 
-export const ADAPTERS = [mercadona, dia, lidl, elJamon, deza];
+export const ADAPTERS = [mercadona, dia, lidl, deza];

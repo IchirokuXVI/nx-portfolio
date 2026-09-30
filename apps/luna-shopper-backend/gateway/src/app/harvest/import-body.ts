@@ -1,3 +1,4 @@
+import { SHOP_WALK_LIMITS } from '@portfolio/luna-shopper/contracts';
 import {
   buildProblemDetails,
   ERROR_CODES,
@@ -53,6 +54,17 @@ export const BULK_DECISION_PATHS = [
 ] as const;
 
 /**
+ * The route that appends an entry to a walk (backend plan 0168, section 2),
+ * whose cap is 256 KB per entry. A pattern rather than a prefix, because the
+ * walk's id sits in the middle of the path.
+ */
+export const SHOP_WALK_ENTRIES_PATH =
+  /^\/v1\/catalog\/walks\/[^/]+\/entries\/?$/;
+
+/** The body cap of {@link SHOP_WALK_ENTRIES_PATH}, as the contract states it. */
+export const SHOP_WALK_ENTRY_MAX_BYTES = SHOP_WALK_LIMITS.entryMaxBytes;
+
+/**
  * Mount the parsers, largest path first.
  *
  * Order is load bearing: `express.json` sets `req._body` and every later parser
@@ -73,12 +85,27 @@ export function jsonBodyParsers(options: {
       path,
       handler: json({ limit: options.bulkMaxBytes }),
     })),
+    {
+      path: null,
+      handler: onlyWalkEntries(json({ limit: SHOP_WALK_ENTRY_MAX_BYTES })),
+    },
     { path: null, handler: json({ limit: options.defaultMaxBytes }) },
     {
       path: null,
       handler: urlencoded({ extended: true, limit: options.defaultMaxBytes }),
     },
   ];
+}
+
+/** A parser that runs on the walk entries route only, and passes every other request on. */
+function onlyWalkEntries(parser: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    if (SHOP_WALK_ENTRIES_PATH.test(req.path ?? '')) {
+      parser(req, res, next);
+    } else {
+      next();
+    }
+  };
 }
 
 /**
@@ -111,10 +138,20 @@ export function bodyParserProblems(options: {
     // a cap: the global filter already maps a multipart 413 to exactly this, and
     // one refusal shape for two routes that refuse the same thing is worth more
     // than the extra status code.
+    // A walk entry over its cap answers the code the walk routes publish for
+    // it (plan 0168), so a phone reads one refusal whichever half caught it.
+    const walkEntryTooLarge =
+      type === 'entity.too.large' &&
+      SHOP_WALK_ENTRIES_PATH.test(req.path ?? '');
     const problem = buildProblemDetails({
-      code: ERROR_CODES.VALIDATION_FAILED,
+      code: walkEntryTooLarge
+        ? ERROR_CODES.SHOP_MAP_TOO_LARGE
+        : ERROR_CODES.VALIDATION_FAILED,
       correlationId: getRequestContext()?.correlationId ?? randomUUID(),
       detail,
+      ...(walkEntryTooLarge
+        ? { details: { limit: 'entry', maxBytes: SHOP_WALK_ENTRY_MAX_BYTES } }
+        : {}),
     });
     res.status(problem.status).type(PROBLEM_JSON_CONTENT_TYPE).send(problem);
   };
@@ -140,6 +177,9 @@ function limitFor(
   }
   if (BULK_DECISION_PATHS.some((bulk) => path.startsWith(bulk))) {
     return options.bulkMaxBytes;
+  }
+  if (SHOP_WALK_ENTRIES_PATH.test(path)) {
+    return SHOP_WALK_ENTRY_MAX_BYTES;
   }
   return options.defaultMaxBytes;
 }

@@ -16,6 +16,7 @@ import type { BasketParticipantView } from './basket-sharing.messages';
 import type {
   ItemView,
   LocalizedText,
+  LocationSectionNameView,
   PriceScopeChainView,
 } from './catalog.messages';
 import type { SettlePick, SettlementPaid } from './list.messages';
@@ -343,6 +344,17 @@ export interface BasketPriceScopeView extends PriceScopeChainView {
 export interface BasketProductView extends ItemView {
   /** Null when the read has no shop. */
   atShop: BasketProductAtShopView | null;
+  /**
+   * The read's shop's sections this product is in, in the shop's order, by the
+   * rule of backend plan 0167, section 3 (plan 0167, section 4).
+   *
+   * **Absent** on a read without a shop, and absent too when catalog could not
+   * answer the rule this time: both mean "draw it under its own categories",
+   * and neither is a claim about the shop. **Empty** means catalog answered
+   * and no section of this shop holds the product, which is drawn the same way
+   * but is an answer. Never an availability: an empty list is still sold there.
+   */
+  sectionIds?: string[];
 }
 
 /**
@@ -379,6 +391,12 @@ export interface BasketShopView {
   id: string;
   supermarketId: string;
   supermarketName: LocalizedText;
+  /**
+   * The chain's `supermarkets.logoUrl` (plan 0170, section 1), null until an
+   * operator sets one. It travels on the view because a guest reading a
+   * basket has no account to list the chains with.
+   */
+  supermarketLogoUrl: string | null;
   label: LocalizedText | null;
   address: string | null;
   city: string | null;
@@ -389,6 +407,12 @@ export interface BasketShopView {
    * warn about, and it changes nothing on the server.
    */
   inProfile: boolean;
+  /**
+   * The shop's section names in its order (plan 0170, section 2), by the rule
+   * `section.forLocation` applies. Always present, and empty when the chain
+   * has no sections.
+   */
+  sections: LocationSectionNameView[];
 }
 
 /** One shop of a scope, as much of it as the pick sheet draws. */
@@ -398,6 +422,8 @@ export interface BasketScopeLocationView {
   address: string | null;
   city: string | null;
   postalCode: string | null;
+  /** As {@link BasketShopView.sections}: always present, maybe empty. */
+  sections: LocationSectionNameView[];
 }
 
 // --- Requests ---------------------------------------------------------------

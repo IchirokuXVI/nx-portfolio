@@ -148,10 +148,147 @@
   font-size: var(--app-icon-sm);
 }
 
-// The chips run to the screen's edges, so the row reads as one that scrolls.
-.chips {
+// The category row runs to the screen's edges, so a long "Frozen · Ice cream"
+// scrolls rather than wrapping (velista 0119, rule P3). The chain chips that shared
+// it became the Supermarket button above it (velista 0124).
+.chip-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
   margin-inline: calc(-1 * var(--app-space-5));
   padding-inline: var(--app-space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-inline: contain;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+// The way in: a link, so it wears the chevron every picker row wears.
+.categories-link {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-control-height);
+  padding-inline: var(--app-space-4) var(--app-space-3);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.categories-link-lead {
+  font-size: var(--app-icon-sm);
+  color: var(--app-action-quiet-fg);
+}
+
+.categories-link-chevron {
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+// The chosen category (rule P4): one pill of two controls, filled like a chosen
+// chain because both narrow the list. The body is a link to the root's children
+// page and the cross is its own button behind a hairline.
+.category-chip {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: none;
+  align-items: stretch;
+  min-block-size: var(--app-control-height);
+  max-inline-size: var(--app-category-chip-max-width);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  overflow: hidden;
+}
+
+.category-chip-body {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+  padding-inline: var(--app-space-5) var(--app-space-3);
+  color: inherit;
+  font-size: var(--app-text-sm);
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(-2 * var(--app-focus-ring-width));
+  }
+}
+
+// The root gives way and the leaf never does: about ten letters of the root, then
+// an ellipsis.
+.category-chip-root {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.category-chip-mid {
+  flex: none;
+  font-weight: 500;
+}
+
+.category-chip-leaf {
+  flex: none;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.category-chip-clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  position: relative;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  // The hairline between the two controls, in the text's own colour made faint, so
+  // it follows the fill in both themes without a colour of its own.
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: 1px;
+    background: currentColor;
+    opacity: 0.22;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(-2 * var(--app-focus-ring-width));
+  }
+}
+
+.category-chip-clear-glyph {
+  font-size: var(--app-icon-sm);
 }
 
 .note {
@@ -243,6 +380,9 @@
 }
 
 .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-3);
   min-block-size: var(--app-button-height);
   margin-block-start: var(--app-space-3);
   padding-inline: var(--app-space-5);
@@ -276,4 +416,8 @@
 
 .sentinel {
   block-size: 1px;
+}
+
+.secondary-glyph {
+  font-size: var(--app-icon-sm);
 }

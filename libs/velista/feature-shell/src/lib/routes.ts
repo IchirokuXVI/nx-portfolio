@@ -29,6 +29,11 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { setupGuard } from './setup-guard';
+import {
+  shopMapRecordGuard,
+  unsavedWalkGuard,
+  walkIdGuard,
+} from './shop-map-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
   basketIdGuard,
@@ -58,6 +63,15 @@ import {
  * The export is named for its role, not for the product, so a rename stays a data
  * edit (rule N1); the `@portfolio/velista/feature-shell` path already scopes it.
  */
+/**
+ * The edit page of velista `0123` and the sheet over it: no bar, and no
+ * connection screen over a failed save (see that route).
+ */
+const editMapData = {
+  [NAV_CHROME]: NO_NAV_CHROME,
+  [WORKS_WITHOUT_BACKEND]: true,
+};
+
 /**
  * Mark a route as drawn in a `SheetShell`, which is a fact about the route and not
  * only about the component.
@@ -1017,6 +1031,241 @@ export const AppShellRoutes: Route[] = [
                 (m) => m.CatalogPage
               ),
             children: [...productSheetRoutes()],
+          },
+          {
+            /**
+             * The category picker's page of parents (velista `0119`). A page and not a
+             * sheet: two levels deep, each with its own back (section 1).
+             *
+             * Under `catalog`, so `activeNavTab` lights the Catalog tab and the bar is
+             * drawn with nothing added. The tab's guards, because every catalog read is
+             * refused without an account (target 8). A sibling of the tab rather than a
+             * child: the tab renders its children into the product sheet's outlet.
+             */
+            path: 'catalog/categories',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CategoriesPage
+              ),
+          },
+          {
+            /** One root's children (velista `0119`), by the root's slug. */
+            path: 'catalog/categories/:parentSlug',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CategoryChildrenPage
+              ),
+          },
+          {
+            /**
+             * The catalog's supermarket picker (velista `0124`): the shop picker as a
+             * page of its own, where a chain is enough and a shop is optional. A
+             * sibling of the tab like the category pages, for their reason: the tab
+             * renders its children into the product sheet's outlet.
+             */
+            path: 'catalog/supermarket',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CatalogSupermarketPage
+              ),
+          },
+          {
+            /** One chain's shops (velista `0124`), by the chain's id. */
+            path: 'catalog/supermarket/:supermarketId',
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.CatalogSupermarketPage
+              ),
+          },
+          /*
+           * The walks of a shop and their history (velista `0122`). Every one of
+           * them takes an account with `shopMap.record`: anybody else is sent to
+           * the shop's map. The settings for every walk come before the walk's
+           * pages, and `walkIdGuard` keeps a word from being read as a walk id,
+           * by the house rule that the more specific path comes first. Velista
+           * `0123` added `walks/:walkId/edit`, and `0126` adds
+           * `walks/:walkId/record` beside them.
+           */
+          {
+            path: 'shops/:locationId/walks/settings',
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.MappingSettingsPage
+              ),
+          },
+          {
+            path: 'shops/:locationId/walks/:walkId/rewind',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkRewindPage
+              ),
+          },
+          {
+            /**
+             * Editing a walk's map by hand (velista `0123`), with the sheet of one
+             * area over it. Leaving with an edit the server has not answered asks
+             * first.
+             *
+             * No bar, as the mock draws it: the map needs the height, and Done is
+             * the way out. `WORKS_WITHOUT_BACKEND` because the connection screen
+             * would otherwise cover the page when a save fails, and its reload
+             * would throw away the edits the page keeps trying to send. The sheet
+             * says both again, since the bar and the gate read the deepest route.
+             */
+            path: 'shops/:locationId/walks/:walkId/edit',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            canDeactivate: [unsavedWalkGuard],
+            data: editMapData,
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.EditMapPage
+              ),
+            children: [
+              sheet({
+                path: 'areas/:areaId',
+                data: editMapData,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.AreaSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * Recording a walk with the camera (velista `0126`), with the sheet of
+             * one area over it for editing while walking. Leaving stops the walk,
+             * and leaving with a save the server has not answered asks first.
+             * No bar and `WORKS_WITHOUT_BACKEND`, for the edit page's reasons: the
+             * map needs the height, and a shop is where the signal is worst.
+             */
+            path: 'shops/:locationId/walks/:walkId/record',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            canDeactivate: [unsavedWalkGuard],
+            data: editMapData,
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.RecordWalkPage
+              ),
+            children: [
+              sheet({
+                path: 'areas/:areaId',
+                data: editMapData,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.AreaSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            path: 'shops/:locationId/walks/:walkId/settings',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkSettingsPage
+              ),
+            children: [
+              sheet({
+                path: 'delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.DeleteWalkSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /** A walk's history, with the warning before resuming the shown walk over it. */
+            path: 'shops/:locationId/walks/:walkId',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkHistoryPage
+              ),
+            children: [
+              sheet({
+                path: 'resume',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.ResumeWarningSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /** A shop's walks, with the sheet that names a new one over it. */
+            path: 'shops/:locationId/walks',
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopWalksPage
+              ),
+            children: [
+              sheet({
+                path: 'new',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.NewWalkSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * The map every shopper sees (velista `0121`, target 3), with the
+             * section sheet over it as a child (rule E1).
+             *
+             * **No guard.** The map read takes no account, and a guest on a shared
+             * basket opens the map from that basket like its owner does.
+             *
+             * Declared **before** `shops/:locationId` by the house rule that the
+             * more specific path comes first. The path is a literal rather than
+             * `SHOP_PATHS`, for `shopping-lists/:basketId`'s reason, and
+             * `routes.spec.ts` asserts the two agree. Velista `0122` and `0123` add
+             * their pages beside it in `feature-shop-map`.
+             */
+            path: 'shops/:locationId/map',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopMapPage
+              ),
+            children: [
+              sheet({
+                path: 'sections/:sectionId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.SectionSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * A shop's own page (velista `0121`, target 2), from the round button
+             * on every row of the shop picker, wherever the picker is drawn.
+             *
+             * No guard, for the picker's reason: the picker is drawn for a guest on
+             * a shared basket too, and a sign in wall behind a button in it would
+             * be a way out of the basket. The shop read takes an account, so a
+             * reader without one is told the shop would not load.
+             */
+            path: 'shops/:locationId',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopPage
+              ),
           },
           {
             /**

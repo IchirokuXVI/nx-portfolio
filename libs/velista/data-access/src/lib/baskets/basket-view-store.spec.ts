@@ -15,6 +15,11 @@ import {
   StorageKeys,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
+import {
+  fakeShopSectionsStore,
+  provideFakeShopSectionsStore,
+  type FakeShopSectionsStore,
+} from '../testing/store-doubles';
 import { BasketStore } from './basket-store';
 import {
   parseBasketViewMemory,
@@ -86,7 +91,14 @@ function product(
     offers: [],
     atShop: null,
     productGroupId: null,
-    categories: ['OTHER'],
+    categories: [
+      {
+        id: 'cat-uncategorised',
+        parentId: 'cat-other',
+        slug: 'uncategorised',
+        name: { en: 'Not yet categorised', es: 'Sin categoría' },
+      },
+    ],
   };
 }
 
@@ -119,6 +131,7 @@ interface Harness {
   readonly readAt: WritableSignal<string | null>;
   /** The shop the basket was started at, which locks it, or null. */
   readonly own: WritableSignal<BasketShop | null>;
+  readonly sections: FakeShopSectionsStore;
 }
 
 function harness(
@@ -136,9 +149,11 @@ function harness(
   const scopes = signal<ReadonlyMap<string, BasketPriceScope>>(new Map());
   const readAt = signal<string | null>(null);
   const own = signal<BasketShop | null>(null);
+  const sections = fakeShopSectionsStore();
 
   TestBed.configureTestingModule({
     providers: [
+      provideFakeShopSectionsStore(sections),
       { provide: RokuLocaleStore, useValue: { locale } },
       provideFakeBrowserFacade(storage, browser),
       {
@@ -179,6 +194,7 @@ function harness(
     storage,
     readAt,
     own,
+    sections,
   };
 }
 
@@ -1292,5 +1308,105 @@ describe('BasketViewStore: what you usually buy here', () => {
 
     expect(harnessed.view.usual()).toBe(true);
     expect(contents(harnessed.view.visibleRows())).toEqual(['Milk', 'Paper']);
+  });
+});
+
+/**
+ * The aisles of the shop you are in (velista `0120`): the view store asks for the
+ * chosen shop's sections and hands them to the pipeline, and nothing waits.
+ */
+describe('BasketViewStore: the aisles of the shop', () => {
+  const basket: readonly BasketRow[] = [
+    row('l-1', 'Milk', 'item-milk'),
+    row('l-2', 'Oil', 'item-oil'),
+  ];
+
+  const products = new Map<string, BasketProduct>([
+    [
+      'item-milk',
+      { ...product('item-milk', 'Milk', 'Leche'), sectionIds: ['sec-dairy'] },
+    ],
+    ['item-oil', { ...product('item-oil', 'Oil', 'Aceite'), sectionIds: [] }],
+  ]);
+
+  const DAIRY = {
+    id: 'sec-dairy',
+    supermarketId: 'sm-mercadona',
+    slug: 'dairy',
+    name: { en: 'Dairy', es: 'Lácteos' },
+    position: 0,
+    categoryIds: [],
+  };
+
+  function atTejares(): Harness {
+    const harnessed = harness(basket, products);
+    harnessed.scopes.set(
+      new Map([
+        [
+          'scope-mercadona',
+          {
+            priceScopeId: 'scope-mercadona',
+            supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+            locations: [
+              {
+                id: 'loc-tejares',
+                label: null,
+                address: 'Ronda de los Tejares 32',
+                city: 'Córdoba',
+                postalCode: '14008',
+              },
+            ],
+          },
+        ],
+      ])
+    );
+    harnessed.view.setGrouping('category');
+    harnessed.view.setShop('loc-tejares');
+    TestBed.tick();
+    return harnessed;
+  }
+
+  it('asks for the chosen shop’s sections as soon as it is chosen', () => {
+    const { sections } = atTejares();
+
+    expect(sections.ensured()).toEqual(['loc-tejares']);
+  });
+
+  it('draws by category until they land, then by aisle, with the words in the same frame', () => {
+    const { view, sections } = atTejares();
+
+    expect(view.sections().map((part) => part.key)).toEqual([
+      'category:cat-uncategorised',
+    ]);
+    expect(view.byAisle()).toBe(false);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byCategory'
+    );
+
+    sections.land('loc-tejares', [DAIRY]);
+
+    expect(
+      view.sections().map((part) => [part.key, part.uncoveredBand === true])
+    ).toEqual([
+      ['aisle:sec-dairy', false],
+      ['category:cat-uncategorised', true],
+    ]);
+    expect(view.byAisle()).toBe(true);
+    expect(view.chips().map((chip) => chip.key)).toContain(
+      'basket.view.chip.byAisle'
+    );
+  });
+
+  it('regroups by category, with no message, when the shop is put back to any', () => {
+    const { view, sections } = atTejares();
+    sections.land('loc-tejares', [DAIRY]);
+
+    view.setShop(null);
+    TestBed.tick();
+
+    expect(view.byAisle()).toBe(false);
+    expect(view.sections().map((part) => part.key)).toEqual([
+      'category:cat-uncategorised',
+    ]);
   });
 });

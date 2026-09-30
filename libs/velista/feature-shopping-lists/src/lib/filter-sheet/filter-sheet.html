@@ -86,9 +86,23 @@
         type="radio"
         value="category"
       />
-      <span class="choice-title">
-        {{ 'basket.view.group.category' | rokuT }}
-      </span>
+      <!--
+        One radio with two names (velista 0120): Aisle once the chosen shop's
+        sections have landed, with the note that ties the word to the shop chosen
+        further down, and Category otherwise.
+      -->
+      @if (byAisle()) {
+        <span class="choice-title">{{
+          'basket.view.group.aisle' | rokuT
+        }}</span>
+        <span class="choice-note">
+          {{ 'basket.view.group.aisleHint' | rokuT }}
+        </span>
+      } @else {
+        <span class="choice-title">
+          {{ 'basket.view.group.category' | rokuT }}
+        </span>
+      }
     </label>
 
     <!--

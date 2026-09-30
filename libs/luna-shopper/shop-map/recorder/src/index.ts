@@ -29,9 +29,48 @@ export type {
 } from './lib/track-types';
 export type { StreamName, WalkFile, WalkMark } from './lib/walk-file';
 export {
+  MARK_DELETED,
   WalkFileError,
   parseWalkImport,
   readWalkFile,
   walkFileName,
+  withoutDeletedMarks,
 } from './lib/walk-import';
 export type { WalkFileErrorCode, WalkImport } from './lib/walk-import';
+
+// Recorder plan 0003: camera tracking and its guards.
+export {
+  BASELINE_MS,
+  HEADING_LIMIT_DEGREES,
+  HEADING_WINDOW_MS,
+  JUMP_METRES,
+  LOST_AFTER_NO_POSE_MS,
+  PATH_STEP_METRES,
+  PATH_STEP_MS,
+  RESUME_BACK_METRES,
+  STOP_AFTER_LOST_MS,
+  alignPose,
+  alignSession,
+  applyRigid,
+  cameraHeading,
+  circularMedian,
+  compassHeading,
+  createTrackingGuard,
+  keepPathPoint,
+  mapPoint,
+  wrapDegrees,
+} from './lib/tracking-guard';
+export type {
+  AlignSessionInput,
+  CompassSample,
+  PathPoint,
+  PoseSample,
+  RigidTransform,
+  SuspectCause,
+  TrackingEvent,
+  TrackingGuard,
+  TrackingGuardOptions,
+  TrackingState,
+  TrackingStateKind,
+  TrackingStopReason,
+} from './lib/tracking-guard';

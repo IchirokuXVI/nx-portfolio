@@ -302,9 +302,19 @@
       "label": "Buscar en el catálogo",
       "clear": "Borrar la búsqueda"
     },
-    "chips": {
-      "label": "Tiendas",
-      "all": "Todas las tiendas"
+    "supermarket": {
+      "label": "Supermercado",
+      "title": "Supermercado",
+      "back": "Volver al catálogo",
+      "backToChains": "Volver a todas las cadenas",
+      "all": "Todos los supermercados",
+      "allDetail": "Todos los productos de todas las cadenas",
+      "any": "Cualquier tienda de {{chain}}",
+      "anyDetail": "Todos los productos de {{chain}}",
+      "anyShop": "cualquier tienda",
+      "pricesAt": "Precios en {{shop}}",
+      "notPriced": "sin precio aquí",
+      "clear": "Ver todos los supermercados"
     },
     "order": {
       "label": "Orden",
@@ -370,6 +380,29 @@
       "failed": "No se han podido cargar los productos similares.",
       "change": "Cambiar",
       "changeLabel": "Cambiar por {{label}}"
+    },
+    "categories": {
+      "title": "Categorías",
+      "open": "Categorías",
+      "back": "Volver al catálogo",
+      "backToRoots": "Volver a las categorías",
+      "everything": "Todo en {{name}}",
+      "count_one": "{{shown}} producto",
+      "count_other": "{{shown}} productos",
+      "row": "{{name}}, {{amount}}",
+      "rowChosen": "{{name}}, {{amount}}, elegida",
+      "chip": "{{root}}, {{leaf}}. Cambiar la categoría",
+      "chipRoot": "{{root}}. Cambiar la categoría",
+      "clear": "Quitar la categoría",
+      "search": "Buscar en {{category}}",
+      "searchChain": "Buscar en {{category}} en {{chain}}",
+      "loading": "Cargando las categorías",
+      "failed": "Las categorías no se han cargado. Revisa la conexión e inténtalo de nuevo.",
+      "none": "Todavía no hay categorías que mostrar.",
+      "emptyTitle": "Todavía no hay nada en {{category}}",
+      "emptyBody": "Velista aún no ha encontrado nada. Quita la categoría para verlo todo.",
+      "emptyChainTitle": "Todavía no hay nada en {{category}} en {{chain}}",
+      "emptyChainBody": "Velista aún no ha encontrado nada en esta tienda. Elige Todas las tiendas, o quita la categoría para ver todo lo de {{chain}}."
     }
   },
   "home": {
@@ -1122,11 +1155,17 @@
     "chain": {
       "count_one": "{{count}} tienda",
       "count_other": "{{count}} tiendas",
+      "inAreas_one": "{{count}} tienda en tus zonas",
+      "inAreas_other": "{{count}} tiendas en tus zonas",
       "exclude": "Excluir esta marca",
       "include": "Incluir esta marca",
       "excludeAll": "Excluir estas marcas",
       "includeAll": "Incluir estas marcas",
       "hint": "Excluir la marca también cubre las tiendas que abra más adelante. Apagar tiendas sueltas no"
+    },
+    "sections": {
+      "more": "Ver las {{count}} secciones",
+      "fewer": "Ver menos"
     },
     "state": {
       "chain": "Marca excluida",
@@ -1134,7 +1173,8 @@
     },
     "row": {
       "excluded": "Apagada",
-      "chainExcluded": "Marca apagada"
+      "chainExcluded": "Marca apagada",
+      "about": "Sobre {{shop}}"
     },
     "empty": {
       "noCodes": {
@@ -1242,6 +1282,8 @@
         "legend": "Agrupar por",
         "none": "Nada",
         "category": "Categoría",
+        "aisle": "Pasillo",
+        "aisleHint": "el orden de esta tienda",
         "list": "Lista",
         "listHint": "las cantidades de cada lista"
       },
@@ -1297,6 +1339,7 @@
       "chip": {
         "remove": "Quitar: {{name}}",
         "byCategory": "Por categoría",
+        "byAisle": "Por pasillo",
         "byList": "Por lista",
         "shop": "{{name}}",
         "more": "+{{count}}",
@@ -1324,6 +1367,10 @@
       "notListedHint": "sigue pendiente",
       "noCategory": "Sin categoría",
       "noCategoryHint": "líneas sin producto",
+      "uncovered": "Categorías que no encontramos en esta tienda",
+      "uncoveredInfo": "Sobre estas categorías",
+      "uncoveredWhy": "Estos productos están agrupados por su categoría.",
+      "uncoveredWhere": "Puede que esta tienda tenga estas categorías, u otras parecidas, pero no tenemos información sobre dónde están.",
       "progress": "{{done}} de {{total}} conseguidos",
       "unavailable_one": "{{count}} no disponible",
       "unavailable_other": "{{count}} no disponibles",
@@ -1513,20 +1560,6 @@
       "isWanted": "{{name}} está aún por conseguir",
       "isPartly": "{{name}} está conseguido en parte"
     },
-    "category": {
-      "PRODUCE": "Frutas y verduras",
-      "DAIRY": "Lácteos",
-      "BAKERY": "Panadería",
-      "MEAT": "Carne",
-      "SEAFOOD": "Pescado",
-      "FROZEN": "Congelados",
-      "BEVERAGES": "Bebidas",
-      "SNACKS": "Aperitivos",
-      "PANTRY": "Despensa",
-      "HOUSEHOLD": "Hogar",
-      "PERSONAL_CARE": "Cuidado personal",
-      "OTHER": "Otros"
-    },
     "entries": {
       "title": "Listas que lo piden",
       "otherList": "Otra lista",
@@ -1606,6 +1639,9 @@
       "failed": "El cambio no se ha guardado. Inténtalo de nuevo.",
       "cancel": "Cancelar",
       "cheaper": "otro más barato"
+    },
+    "map": {
+      "openLabel": "Mapa de {{shop}}"
     }
   },
   "getList": {
@@ -1864,6 +1900,7 @@
       "distance": "Metros",
       "liveOff": "Recorrido en directo no disponible",
       "lastMark": "{{kind}} {{label}} a los {{time}}",
+      "deleteLastMark": "Borrar última marca",
       "checkpointTitle": "Nombre del punto de control",
       "checkpointHelp": "Usa el mismo nombre cada vez que pases por el mismo sitio.",
       "noteTitle": "Nota",
@@ -1950,6 +1987,374 @@
       "stepSetting": "Longitud del paso al grabar",
       "app": "Grabado con",
       "events": "Eventos"
+    }
+  },
+  "shopPage": {
+    "back": "Atrás",
+    "loading": "Cargando la tienda",
+    "failed": "Esta tienda no se ha podido cargar",
+    "missing": "No encontramos esta tienda",
+    "retry": "Reintentar",
+    "address": "Dirección",
+    "size": "Unos {{size}} m²",
+    "sizeSource": "Tamaño del edificio según OpenStreetMap",
+    "seeMap": "Ver el mapa",
+    "sections": "Secciones",
+    "sectionsHint": "en el orden en que se recorren"
+  },
+  "shopMap": {
+    "title": "Dónde está cada cosa",
+    "back": "Atrás",
+    "loading": "Cargando el mapa",
+    "failed": "El mapa no se ha podido cargar",
+    "none": "Esta tienda aún no tiene mapa",
+    "retry": "Reintentar",
+    "saved": "Guardado en este teléfono",
+    "label": "Mapa de la tienda",
+    "show": "Mostrar",
+    "mine": "Mi lista · {{count}}",
+    "all": "Todas las secciones",
+    "legendLeft": "Por coger",
+    "legendDone": "Todo cogido",
+    "legendWalkway": "Pasillo",
+    "hint": "Toca una sección para ver lo que necesitas allí.",
+    "hintAll": "Toca una sección para ver su nombre y sus notas.",
+    "section": {
+      "close": "Cerrar",
+      "position": "Parada {{position}} de {{total}}",
+      "left_one": "Te queda {{count}} cosa por coger",
+      "left_other": "Te quedan {{count}} cosas por coger",
+      "allGot": "Ya lo tienes todo de aquí",
+      "nothing": "Nada de tu lista está aquí",
+      "got": "Cogido",
+      "toGet": "Por coger",
+      "note": "Nota en el mapa",
+      "unknown": "Esta sección ya no está en el mapa"
+    }
+  },
+  "shopWalks": {
+    "open": "Recorridos",
+    "back": "Atrás",
+    "retry": "Reintentar",
+    "cancel": "Cancelar",
+    "name": "Nombre",
+    "list": {
+      "title": "Recorridos",
+      "intro": "Los compradores ven el mapa de un recorrido. Abre un recorrido para ver su historial.",
+      "empty": "Aún no hay recorridos. Empieza uno para hacer el mapa de esta tienda.",
+      "missing": "No se ha encontrado esta tienda.",
+      "failed": "Los recorridos no se han cargado",
+      "loading": "Cargando los recorridos",
+      "shown": "Lo ven los compradores",
+      "changedToday": "Cambiado hoy a las {{time}}",
+      "changedYesterday": "Cambiado ayer a las {{time}}",
+      "changedOn": "Cambiado el {{date}}",
+      "entries_one": "{{count}} entrada",
+      "entries_other": "{{count}} entradas",
+      "marks_one": "{{count}} marca",
+      "marks_other": "{{count}} marcas",
+      "settingsFor": "Ajustes de {{name}}",
+      "start": "Empezar un recorrido nuevo",
+      "startNote": "Un recorrido nuevo empieza con el mapa vacío."
+    },
+    "mapping": {
+      "title": "Ajustes del mapa",
+      "intro": "Estos ajustes sirven para todos los recorridos que grabes, en todas las tiendas.",
+      "whileWalking": "Mientras caminas",
+      "walkingAcross": "Cruzar una estantería la convierte en pasillo",
+      "walkingAcrossHint": "Solo para las estanterías que sugirió la app. Las que dibujaste tú se quedan."
+    },
+    "new": {
+      "title": "Empezar un recorrido nuevo",
+      "body": "Ponle un nombre que vayas a reconocer.",
+      "defaultName": "Recorrido del {{date}}",
+      "failed": "El recorrido no se ha creado. Revisa el nombre e inténtalo otra vez.",
+      "start": "Empezar"
+    },
+    "history": {
+      "loadingTitle": "Recorrido",
+      "subtitle": "Historial",
+      "rewind": "Rebobinar",
+      "editMap": "Editar mapa",
+      "empty": "Aún no se ha guardado nada en este recorrido.",
+      "today": "Hoy",
+      "yesterday": "Ayer",
+      "latest": "Lo último",
+      "missing": "Este recorrido se ha borrado o ya no está.",
+      "failed": "El recorrido no se ha cargado",
+      "loading": "Cargando el recorrido",
+      "started": "Empezado desde cero",
+      "resumed": "Reanudado",
+      "walked_one": "{{count}} minuto caminado",
+      "walked_other": "{{count}} minutos caminados",
+      "checked": "camino revisado",
+      "trackingLost": "Parado por un problema de seguimiento",
+      "frameMoved": "Parado porque la cámara perdió su sitio",
+      "keptUntil": "Guardado hasta las {{time}}",
+      "purpleDiscarded": "camino morado descartado",
+      "stopped": "Parado",
+      "edited": "Editado sin caminar",
+      "areasChanged_one": "{{count}} zona cambiada",
+      "areasChanged_other": "{{count}} zonas cambiadas",
+      "marksChanged_one": "{{count}} marca cambiada",
+      "marksChanged_other": "{{count}} marcas cambiadas",
+      "rewound": "Rebobinado a las {{time}}",
+      "undoes": "El mapa como estaba antes de rebobinar a las {{time}}",
+      "beforeProblem": "Vuelta a antes del problema de seguimiento",
+      "confirmed": "Camino revisado",
+      "discarded": "Camino morado descartado",
+      "resume": "Reanudar el recorrido",
+      "noCamera": "Para seguir hace falta seguimiento con la cámara, y este navegador no lo tiene."
+    },
+    "settings": {
+      "title": "Ajustes del recorrido",
+      "shoppers": "Compradores",
+      "show": "Mostrar este recorrido a los compradores",
+      "showHint": "Una tienda muestra el mapa de un recorrido. Si lo activas, se ocultan los demás. Los compradores ven los cambios después de cada guardado.",
+      "delete": "Borrar este recorrido",
+      "notice": {
+        "renamed": "Nombre guardado.",
+        "renameFailed": "El nombre no se ha guardado. Inténtalo otra vez.",
+        "shown": "Los compradores ya ven este recorrido.",
+        "hidden": "Los compradores ya no ven este recorrido.",
+        "showFailed": "No se ha guardado. Inténtalo otra vez."
+      }
+    },
+    "delete": {
+      "title": "¿Borrar {{name}}?",
+      "body": "El recorrido sale de esta lista.",
+      "bodyShown": "El recorrido sale de esta lista y los compradores dejan de ver un mapa de esta tienda.",
+      "failed": "El recorrido no se ha borrado. Inténtalo otra vez.",
+      "confirm": "Borrar este recorrido"
+    },
+    "resume": {
+      "title": "Los compradores ven este recorrido",
+      "body": "Cada guardado mientras caminas cambia el mapa que usan los compradores. Pueden ver una zona a medio hacer hasta que pares.",
+      "bodyAt": "Cada guardado mientras caminas cambia el mapa que usan los compradores en {{shop}}. Pueden ver una zona a medio hacer hasta que pares.",
+      "instead": "Para cambiar el mapa sin eso, empieza un recorrido nuevo y muéstralo a los compradores cuando esté listo.",
+      "anyway": "Reanudar igualmente"
+    },
+    "rewind": {
+      "close": "Cerrar",
+      "title": "Rebobinar · {{name}}",
+      "label": "El mapa en el momento elegido",
+      "fadedNote": "Atenuado: lo que viene después de este momento",
+      "after": "{{minutes}} min {{seconds}} s después de las {{time}}",
+      "slider": "Momento del recorrido",
+      "step": "Un paso = 15 s",
+      "entry": "entrada del historial",
+      "jumps": "Ir a una entrada",
+      "notice": {
+        "changed": "Alguien ha guardado este recorrido en otro teléfono. Así está ahora. Elige el momento otra vez.",
+        "failed": "No se ha guardado. Inténtalo otra vez."
+      },
+      "pick": "Mueve el control para volver atrás",
+      "continue": "Seguir desde aquí",
+      "failed": "El historial del recorrido no se ha cargado",
+      "loading": "Cargando el historial del recorrido"
+    }
+  },
+  "shopMapEdit": {
+    "label": "El mapa de este recorrido, para editar",
+    "notWalking": "Sin recorrer",
+    "done": "Hecho",
+    "ok": "Vale",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "hint": "Arrastra por el suelo para dibujar una estantería. Toca una zona para cambiarla. Mantén pulsado un cuadro para más.",
+    "size": "{{w}} m × {{h}} m",
+    "status": {
+      "unsent": "Sin guardar",
+      "sending": "Guardando",
+      "saved": "Guardado",
+      "failed": "Sin guardar. Lo intentamos de nuevo."
+    },
+    "notice": {
+      "changed": "El mapa ha cambiado en otro teléfono. Este es el mapa como está ahora. Tus últimos cambios no se guardaron.",
+      "refused": "Ese cambio no se pudo guardar. Este es el mapa como se guardó.",
+      "blocked": "Eso no cabe ahí. Se solaparía con otra zona."
+    },
+    "kind": {
+      "section": "Sección",
+      "shelf": "Estantería",
+      "counter": "Mostrador",
+      "checkout": "Caja",
+      "entrance": "Entrada",
+      "blocked": "Bloqueado",
+      "path": "Pasillo"
+    },
+    "hold": {
+      "title": "Este cuadro · {{x}} m a lo ancho, {{y}} m hacia dentro",
+      "close": "Cerrar el menú",
+      "shelf": "Convertir en estantería",
+      "counter": "Dibujar un mostrador aquí",
+      "blocked": "Marcar como bloqueado",
+      "path": "Convertir en pasillo",
+      "note": "Añadir una nota aquí",
+      "section": "Cambiar su sección",
+      "erase": "Borrar",
+      "noteLabel": "Nota",
+      "noteSave": "Añadir nota"
+    },
+    "resize": {
+      "hint": "{{kind}} · arrastra una esquina para cambiar el tamaño",
+      "hintAlone": "Arrastra una esquina para cambiar el tamaño",
+      "snap": "Ajustar a los cuadros"
+    },
+    "area": {
+      "kindAndSize": "{{kind}} · {{w}} m × {{h}} m",
+      "rename": "Renombrar",
+      "renameTitle": "Renombrar",
+      "name": "Nombre",
+      "sectionName": "Nombre de la sección",
+      "saveName": "Guardar",
+      "categoryColour": "Usar el color de la categoría",
+      "categoryNotYet": "Aún no disponible: las categorías no tienen colores.",
+      "colour": "Color",
+      "delete": "Eliminar esta zona",
+      "deleteConfirm": "¿Eliminar {{name}}?",
+      "deleteYes": "Eliminar",
+      "keep": "Mantenerla",
+      "missing": "Esta zona ya no está en el mapa."
+    },
+    "colour": {
+      "default": "Por defecto",
+      "paleBlue": "Azul claro",
+      "green": "Verde",
+      "orange": "Naranja",
+      "lilac": "Lila",
+      "yellow": "Amarillo"
+    },
+    "unsaved": {
+      "title": "Sin guardar",
+      "body": "Tus últimos cambios en este mapa solo están en este teléfono. Seguimos intentando guardarlos.",
+      "keepOpen": "Deja la aplicación abierta hasta que ponga Guardado.",
+      "sending": "Guardando ahora.",
+      "saved": "Guardado. Ya puedes salir.",
+      "retryIn_one": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
+      "retryIn_other": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
+      "waiting": "Esperando para guardar.",
+      "ok": "Vale",
+      "leave": "Salir sin guardar"
+    }
+  },
+  "shopWalkRecord": {
+    "label": "El mapa de este recorrido, mientras lo recorres",
+    "stop": "Parar",
+    "status": {
+      "good": "Seguimiento bien",
+      "starting": "Encendiendo la cámara",
+      "lost": "Seguimiento perdido",
+      "check": "Revisa el camino",
+      "stopped": "Parado"
+    },
+    "saved": {
+      "justNow": "Guardado ahora mismo",
+      "seconds_one": "Guardado hace {{count}} s",
+      "seconds_other": "Guardado hace {{count}} s",
+      "minutes_one": "Guardado hace {{count}} min",
+      "minutes_other": "Guardado hace {{count}} min",
+      "sending": "Guardando",
+      "unsent": "Aún sin guardar"
+    },
+    "scale": "1 cuadro = 50 cm",
+    "hint": "Toca el mapa para dibujar o elegir. Mantén pulsado un cuadro para más.",
+    "inSection": "En la sección",
+    "sectionLeft": "Salí de la sección",
+    "marks": {
+      "group": "Añadir una marca",
+      "section": "Sección",
+      "counter": "Mostrador",
+      "note": "Nota"
+    },
+    "start": {
+      "title": "Sujeta el móvil en vertical",
+      "body": "La cámara sigue dónde estás. Camina despacio y apunta el móvil a las estanterías.",
+      "button": "Empezar a caminar"
+    },
+    "unsupported": {
+      "title": "Este móvil no puede grabar un recorrido",
+      "body": "Grabar necesita seguimiento con la cámara. Chrome en un móvil Android lo tiene. Safari en un iPhone no.",
+      "back": "Volver al recorrido"
+    },
+    "mark": {
+      "title": "Nueva marca",
+      "close": "Cerrar",
+      "remind": "Apunta el móvil a lo que marcas",
+      "pointing": {
+        "left": "Ahora apuntas a la estantería de tu izquierda.",
+        "right": "Ahora apuntas a la estantería de tu derecha.",
+        "ahead": "Ahora apuntas hacia delante.",
+        "behind": "Ahora apuntas detrás de ti."
+      },
+      "kinds": "Tipo de marca",
+      "name": {
+        "section": "Nombre de la sección",
+        "counter": "Nombre del mostrador",
+        "note": "Nota"
+      },
+      "placeholder": "Escribe o elige uno abajo",
+      "recent": "Recientes en este recorrido",
+      "sections": "Secciones de esta tienda",
+      "save": "Guardar marca",
+      "waiting": "El seguimiento no va bien ahora. Guardar espera a que vaya bien, y conserva lo que escribiste."
+    },
+    "suggestion": {
+      "label": "¿Estantería? Toca para rellenar",
+      "title": "¿Es una estantería?",
+      "close": "Cerrar",
+      "why": "Pasaste por los dos lados. Mide unos {{width}} m de ancho y {{length}} m de largo.",
+      "section": "Sección",
+      "none": "Aún sin sección",
+      "from": "De tu marca a {{distance}} m",
+      "change": "Cambiar",
+      "sectionName": "Nombre de la sección",
+      "notShelf": "No es una estantería",
+      "fill": "Rellenar como estantería"
+    },
+    "stopped": {
+      "title": "El recorrido se paró",
+      "lost": "La cámara perdió su sitio, así que ahora no se dibuja nada. Camina despacio y apunta el móvil a las estanterías. Oirás un sonido si vuelve a empezar sola.",
+      "trackingLost": "La cámara perdió su sitio, así que ahora no se dibuja nada. Ponte junto a algo que marcaste para seguir.",
+      "frameMoved": "La imagen que la cámara tiene de la tienda se movió, así que ahora no se dibuja nada. Ponte junto a algo que marcaste para seguir.",
+      "discarded": "El recorrido se guarda hasta el problema. Ponte junto a algo que marcaste para seguir.",
+      "paused": "El recorrido está en pausa. Ponte junto a algo que marcaste para seguir.",
+      "saved": "Todo hasta este momento está guardado.",
+      "resume": "Seguir desde un sitio que marqué",
+      "resumeHint": "Ponte junto a una marca y elígela en el mapa.",
+      "lostHint": "Sigue caminando despacio. El recorrido sigue solo, o se para en unos segundos."
+    },
+    "check": {
+      "title": "¿Está bien el camino morado?",
+      "body": "El seguimiento volvió solo. La parte morada no se guarda hasta que digas que coincide con por dónde caminaste.",
+      "no": "No, parar aquí",
+      "yes": "Sí, guardarlo",
+      "hint": "No, parar aquí guarda el recorrido hasta el problema. Luego sigues desde un sitio que marcaste."
+    },
+    "where": {
+      "title": "¿Dónde estás?",
+      "close": "Cerrar",
+      "remind": "Ponte junto a algo que marcaste y tócalo en el mapa.",
+      "marks": "Tus marcas",
+      "kind": {
+        "section": "Marca de sección",
+        "counter": "Marca de mostrador",
+        "note": "Nota"
+      },
+      "point": "apunta el móvil hacia donde indica la flecha",
+      "pick": "Toca una marca en el mapa, o elige una arriba.",
+      "none": "Este recorrido no tiene marcas desde las que empezar. Empieza un recorrido nuevo.",
+      "start": "Empezar desde aquí"
+    },
+    "notice": {
+      "changed": "El recorrido cambió en otro móvil. Este es el recorrido como está ahora. Tus últimos minutos no se guardaron.",
+      "refused": "Esa parte del recorrido no se pudo guardar. Este es el recorrido como se guardó.",
+      "blocked": "Eso no cabe ahí. Se solaparía con otra zona.",
+      "cameraFailed": "La cámara no se encendió. Inténtalo otra vez.",
+      "cameraWaiting": "Esperando a la cámara y la brújula. Levanta el móvil y apunta hacia donde indica la flecha."
+    },
+    "unsaved": {
+      "body": "La última parte de este recorrido solo está en este móvil. Seguimos intentando guardarla."
     }
   }
 }

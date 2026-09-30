@@ -12,6 +12,7 @@ export * from './lib/people-dashboard-view';
 export * from './lib/people-format';
 export * from './lib/people-seed';
 export * from './lib/user-detail-page';
+export * from './lib/user-roles';
 export * from './lib/users';
 export * from './lib/zone-detail-page';
 export * from './lib/zones';

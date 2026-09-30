@@ -1,4 +1,7 @@
-import type { ResourceSource } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  CATEGORY_SEED,
+  type ResourceSource,
+} from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ITEM_PRICE_SEED,
@@ -12,6 +15,15 @@ import {
   PRODUCT_GROUP_SEED,
   type ItemScopePrices,
 } from './catalog-seed';
+import { categoryMemoryRules, itemMemoryRules } from './category-rules';
+import { sectionMemoryRules } from './section-rules';
+import {
+  ITEM_SECTION_PIN_SEED,
+  LOCATION_SECTION_LIST_SEED,
+  SECTION_SEED,
+  type ItemSectionPin,
+  type LocationSectionList,
+} from './section-seed';
 import { SUPERMARKETS_PATH } from './supermarkets';
 
 /**
@@ -36,6 +48,7 @@ import { SUPERMARKETS_PATH } from './supermarkets';
  * | item prices     | inserted and removed, never changed; listed for one (item, scope)     |
  * | price policies  | six rows keyed on their kind, changed with a `PATCH`, never created   |
  * | location items  | one `PUT` for create and change, keyed on `(itemId, supermarketLocationId)`, and no delete |
+ * | sections        | listed and created under a chain, read and changed at their own path  |
  */
 
 /** Where the back office reads and writes shops (backend plan 0073). */
@@ -46,6 +59,16 @@ export const PRICE_SCOPES_PATH = '/v1/admin/catalog/price-scopes';
 
 /** Where the back office reads and writes products. */
 export const ITEMS_PATH = '/v1/admin/catalog/items';
+
+/**
+ * Where several products are changed in one transaction, all or nothing
+ * (backend plan 0166, section 3). What "Set categories" sends (admin plan
+ * 0036): one entry per ticked product, each what `PATCH items/{id}` takes.
+ */
+export const ITEMS_BATCH_PATH = `${ITEMS_PATH}/batch`;
+
+/** Where the back office reads and writes the category tree (backend plan 0166). */
+export const CATEGORIES_PATH = '/v1/admin/catalog/categories';
 
 /**
  * Where the back office reads one product at every scope (backend plan 0160),
@@ -131,8 +154,28 @@ export function priceScopeSource(): ResourceSource<Wire.CatalogPriceScopeView> {
   };
 }
 
+/**
+ * Products. In memory, a product's `categoryIds` become the `categories` its
+ * row carries, and the tree's rules refuse what catalog refuses.
+ */
 export function itemSource(): ResourceSource<Wire.CatalogItemView> {
-  return { path: ITEMS_PATH, seed: ITEM_SEED };
+  return {
+    path: ITEMS_PATH,
+    seed: ITEM_SEED,
+    memory: itemMemoryRules(categorySource),
+  };
+}
+
+/**
+ * The category tree: ordinary CRUD, two levels, and a list filtered by
+ * `parentId` (with `none` for the roots) and by `kind`.
+ */
+export function categorySource(): ResourceSource<Wire.CatalogCategoryView> {
+  return {
+    path: CATEGORIES_PATH,
+    seed: CATEGORY_SEED,
+    memory: categoryMemoryRules(categorySource, itemSource),
+  };
 }
 
 export function productGroupSource(): ResourceSource<Wire.CatalogProductGroupView> {
@@ -223,5 +266,81 @@ export function locationItemSource(): ResourceSource<Wire.CatalogSupermarketLoca
     keyFilters: ['supermarketLocationId'],
     readVia: 'collection',
     seed: LOCATION_ITEM_SEED,
+  };
+}
+
+/**
+ * Where one shop section is read, changed and deleted (backend plan 0167,
+ * section 4). Listed and created under its chain, the way shops are.
+ */
+export const SECTIONS_PATH = '/v1/admin/catalog/sections';
+
+/** A chain's sections, with the chain in place of `{id}`. */
+export function chainSectionsPath(supermarketId: string): string {
+  return `${SUPERMARKETS_PATH}/${encodeURIComponent(supermarketId)}/sections`;
+}
+
+/**
+ * A shop's ordered section list, read and replaced whole with the shop in
+ * place of `{id}`: `GET` and `PUT { sectionIds }`.
+ */
+export function locationSectionsPath(locationId: string): string {
+  return `${LOCATIONS_PATH}/${encodeURIComponent(locationId)}/sections`;
+}
+
+/** A chain's pins, read with `?itemId=` and replaced with `PUT { itemId, sectionIds }`. */
+export function chainItemSectionsPath(supermarketId: string): string {
+  return `${SUPERMARKETS_PATH}/${encodeURIComponent(supermarketId)}/item-sections`;
+}
+
+/** Where named products are at one shop, by the rule of backend plan 0167, section 3. */
+export function locationItemSectionsPath(locationId: string): string {
+  return `${LOCATIONS_PATH}/${encodeURIComponent(locationId)}/item-sections`;
+}
+
+/**
+ * Sections: two URLs, exactly as shops have. A chain's sections are listed and
+ * created at `/supermarkets/{id}/sections`, and one is read, changed and
+ * deleted at `/sections/{id}`.
+ */
+export function sectionSource(): ResourceSource<Wire.CatalogSupermarketSectionView> {
+  return {
+    path: SECTIONS_PATH,
+    collectionPath: (values) => {
+      const supermarketId = values['supermarketId'];
+      return typeof supermarketId === 'string' && supermarketId !== ''
+        ? chainSectionsPath(supermarketId)
+        : null;
+    },
+    pathParams: ['supermarketId'],
+    seed: SECTION_SEED,
+    memory: sectionMemoryRules({
+      sections: sectionSource,
+      categories: categorySource,
+      locations: locationSource,
+      lists: locationSectionListSource,
+      pins: itemSectionPinSource,
+    }),
+  };
+}
+
+/**
+ * The shops' own section lists, **in memory only**: the table the memory twin
+ * of `GET` and `PUT /locations/{id}/sections` keeps, keyed on the shop. No
+ * descriptor reads it and no HTTP request is made from it.
+ */
+export function locationSectionListSource(): ResourceSource<LocationSectionList> {
+  return {
+    path: `${LOCATIONS_PATH}/{id}/sections`,
+    seed: LOCATION_SECTION_LIST_SEED,
+  };
+}
+
+/** The chains' pins, **in memory only**, keyed on `(supermarketId, itemId)`. */
+export function itemSectionPinSource(): ResourceSource<ItemSectionPin> {
+  return {
+    path: `${SUPERMARKETS_PATH}/{id}/item-sections`,
+    key: ['supermarketId', 'itemId'],
+    seed: ITEM_SECTION_PIN_SEED,
   };
 }

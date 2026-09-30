@@ -52,18 +52,22 @@ const CHIP_GAP = 8;
  * `ResizeObserver` callback and in any spec that did not fake one, and collapsing
  * every chip into a `+N` on the first frame would be a visible flash of the wrong
  * answer. Drawing too many for one frame is invisible, because the row clips.
+ *
+ * `gap` is the space between two chips, for a row whose chips sit closer than
+ * these do (velista `0124`'s section chips).
  */
 export function fitChips(
   widths: readonly number[],
   plusWidth: number,
-  available: number
+  available: number,
+  gap: number = CHIP_GAP
 ): number {
   if (widths.length === 0 || available <= 0) {
     return widths.length;
   }
 
   const whole = widths.reduce(
-    (sum, width, at) => sum + width + (at === 0 ? 0 : CHIP_GAP),
+    (sum, width, at) => sum + width + (at === 0 ? 0 : gap),
     0
   );
   if (whole <= available) {
@@ -75,7 +79,7 @@ export function fitChips(
   let used = plusWidth;
   let shown = 0;
   for (const width of widths) {
-    const next = used + CHIP_GAP + width;
+    const next = used + gap + width;
     if (next > available) {
       break;
     }

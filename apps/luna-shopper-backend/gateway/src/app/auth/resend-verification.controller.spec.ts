@@ -22,7 +22,11 @@ import type { CurrentUser } from './jwt.strategy';
  * route actually carries rather than a restatement of it.
  */
 
-const caller: CurrentUser = { userId: 'u1', kind: UserKind.REGISTERED };
+const caller: CurrentUser = {
+  userId: 'u1',
+  kind: UserKind.REGISTERED,
+  permissions: [],
+};
 
 function contextFor(handler: (...args: never[]) => unknown): ExecutionContext {
   const request = { ip: '1.1.1.1', ips: [], headers: {} };

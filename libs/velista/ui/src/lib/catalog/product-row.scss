@@ -99,7 +99,10 @@
 }
 
 .no-price {
+  display: flex;
   flex: none;
+  flex-direction: column;
+  align-items: flex-end;
   font-size: var(--app-text-sm);
   color: var(--app-text-muted);
 }

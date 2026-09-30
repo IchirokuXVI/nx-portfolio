@@ -11,6 +11,7 @@ import {
   BasketViewStore,
   GatewayError,
   LINE_SERVICE,
+  provideFakeShopSectionsStore,
   SessionStore,
 } from '@portfolio/velista/data-access';
 import type {
@@ -384,6 +385,7 @@ async function render(world: World = {}) {
       // supplies. The sheet asks it one thing, which shop the screen is pricing
       // at, and the honest answer for a spec that has not chosen one is its own.
       BasketViewStore,
+      provideFakeShopSectionsStore(),
       { provide: LINE_SERVICE, useValue: lineService },
       // The reader's own account name, which the sheet uses for their own row in the
       // history and for the caption on a finished line (plan 0052, section 2.1).
@@ -895,7 +897,14 @@ describe('SettleSheet: the trip is finished', () => {
             offer: null,
             offers: [],
             productGroupId: null,
-            categories: ['OTHER' as const],
+            categories: [
+              {
+                id: 'cat-uncategorised',
+                parentId: 'cat-other',
+                slug: 'uncategorised',
+                name: { en: 'Not yet categorised', es: 'Sin categoría' },
+              },
+            ],
           },
         ],
         [
@@ -909,7 +918,14 @@ describe('SettleSheet: the trip is finished', () => {
             offer: null,
             offers: [],
             productGroupId: null,
-            categories: ['OTHER' as const],
+            categories: [
+              {
+                id: 'cat-uncategorised',
+                parentId: 'cat-other',
+                slug: 'uncategorised',
+                name: { en: 'Not yet categorised', es: 'Sin categoría' },
+              },
+            ],
           },
         ],
       ]),

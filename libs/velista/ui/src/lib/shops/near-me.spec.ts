@@ -19,6 +19,8 @@ const SHOP: BasketShop = {
   city: 'Córdoba',
   postalCode: '14001',
   inProfile: true,
+  logoUrl: null,
+  sections: [],
 };
 
 /**

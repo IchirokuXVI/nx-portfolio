@@ -50,6 +50,10 @@
             {
               "replace": "apps/velista/src/environments/environment.ts",
               "with": "apps/velista/src/environments/environment.prod.ts"
+            },
+            {
+              "replace": "libs/velista/platform/src/lib/sensors/scripted-walk-loader.ts",
+              "with": "libs/velista/platform/src/lib/sensors/scripted-walk-loader.prod.ts"
             }
           ]
         },

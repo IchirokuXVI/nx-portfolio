@@ -1,7 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
-  ItemCategory,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -133,7 +132,6 @@ describeIntegration('per shop availability (real Postgres)', () => {
       Array.from({ length: BATCH }, (_, i) =>
         items.create({
           name: { en: `Product ${i}`, es: `Producto ${i}` },
-          category: ItemCategory.PANTRY,
           defaultUnit: UnitOfMeasure.UNIT,
         })
       ),

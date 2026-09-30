@@ -1,7 +1,7 @@
 /**
- * The walk file, recorder plan 0002 section 2, verbatim. It is the contract
- * between the TypeScript and the Kotlin implementations: a field is added only
- * by editing the plan first.
+ * The walk file, recorder plan 0002 section 2, verbatim. A field is added only
+ * by editing the plan first. Files that the deleted Android app recorded
+ * (recorder plan 0004) say `platform: 'android'` and stay readable.
  */
 export interface WalkFile {
   format: 'shop-walk';
@@ -12,7 +12,7 @@ export interface WalkFile {
   durationMs: number;
   source: {
     platform: 'web' | 'android';
-    app: string; // 'velista-walk-lab' | 'shop-walk-android'
+    app: string; // 'velista-walk-lab', or the deleted Android app's name on its old files
     appVersion: string;
     device?: string; // Build.MODEL on Android
     userAgent?: string; // the web host
@@ -35,7 +35,8 @@ export interface WalkFile {
   poseSource?: 'arcore' | 'webxr';
   marks: WalkMark[];
   /** What happened to the recording: 'hidden', 'visible', 'tracking-lost',
-   * 'tracking-resumed', 'permission-denied', 'sensor-missing', with a detail. */
+   * 'tracking-resumed', 'permission-denied', 'sensor-missing', 'mark-deleted' (the
+   * detail is the deleted mark's t), with a detail. */
   events: { t: number; kind: string; detail?: string }[];
 }
 

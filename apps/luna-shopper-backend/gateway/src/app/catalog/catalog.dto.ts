@@ -8,14 +8,16 @@ import {
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BULK_DECISION_MAX_OPERATIONS,
+  CATEGORY_SLUG_MAX_LENGTH,
   CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
   ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
-  ItemCategory,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
+  SECTION_LIMITS,
+  SECTION_SLUG_MAX_LENGTH,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
@@ -23,6 +25,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -74,6 +77,14 @@ export class LookupItemsDto {
 }
 
 const LOCALIZED_TEXT_MAX_LENGTH = 200;
+
+/**
+ * How many categories one product may name (plan 0166, section 2).
+ *
+ * A bound rather than a rule of the plan: a product sits in two or three aisles
+ * at most, and the number is here so a write cannot carry the whole tree.
+ */
+const ITEM_CATEGORY_MAX = 10;
 
 /**
  * One language of a localized text (plan 0079): absent, or a non blank string
@@ -399,9 +410,20 @@ export class CreateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiProperty({ enum: ItemCategory })
-  @IsEnum(ItemCategory)
-  category!: ItemCategory;
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  // Any version: seeded categories carry version 5 ids derived from the slug.
+  @IsUUID('all', { each: true })
+  categoryIds!: string[];
 
   @ApiProperty({ enum: UnitOfMeasure })
   @IsEnum(UnitOfMeasure)
@@ -501,10 +523,20 @@ export class UpdateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiPropertyOptional({ enum: ItemCategory })
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'Replace the whole set of leaf categories, in the order meant (plan 0166, section 3). Absent leaves the set alone. An empty list is refused here with `validation_failed`, because a product always has one; catalog backs the rule with `item_needs_a_category` for any other writer.',
+  })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  @IsUUID('all', { each: true })
+  categoryIds?: string[];
 
   @ApiPropertyOptional({ enum: UnitOfMeasure })
   @IsOptional()
@@ -520,6 +552,219 @@ export class UpdateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+}
+
+/** One product of an {@link UpdateItemsDto}: the single edit, and which product. */
+export class UpdateItemBatchEntryDto extends UpdateItemDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('all')
+  itemId!: string;
+}
+
+/**
+ * The update op of the items batch (plan 0166, section 3): several products in
+ * one transaction, all or nothing.
+ *
+ * The back office's "Set categories" sends one entry per ticked row carrying
+ * `categoryIds`. The cap is stated here and in catalog, as it is for the create
+ * op beside it.
+ */
+export class UpdateItemsDto {
+  @ApiProperty({
+    type: [UpdateItemBatchEntryDto],
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The edits to apply, all of them or none. Each is what `PATCH /v1/admin/catalog/items/{id}` takes, plus the product it is for. A longer list is refused rather than split.',
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateItemBatchEntryDto)
+  items!: UpdateItemBatchEntryDto[];
+}
+
+// --- Categories (plan 0166, sections 1 to 3) --------------------------------
+
+export class CreateCategoryDto {
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'The root this category sits under. Absent or null makes a root. A parent that is itself inside another is refused with `category_too_deep`: the tree has two levels.',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all')
+  parentId?: string | null;
+
+  @ApiProperty({
+    minLength: 1,
+    maxLength: CATEGORY_SLUG_MAX_LENGTH,
+    description:
+      'Ascii kebab case, unique across the whole tree, and written once: nothing changes a slug after it ships (plan 0166, section 5).',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(CATEGORY_SLUG_MAX_LENGTH)
+  slug!: string;
+
+  @ApiProperty({ type: LocalizedTextDto })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name!: LocalizedTextDto;
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    minimum: 0,
+    description: 'Order among siblings. Absent appends after the last one.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+}
+
+/** An edit. No slug: it is an identity, written once on create. */
+export class UpdateCategoryDto {
+  @ApiPropertyOptional({ type: LocalizedTextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ type: 'integer', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    nullable: true,
+    description:
+      'Move the category under another root, or make it a root with null. A root with children cannot take a parent (`category_too_deep`), and a child holding products cannot become a root (`category_not_a_leaf`).',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID('all')
+  parentId?: string | null;
+}
+
+// --- Shop sections (plan 0167, sections 1 to 4) -----------------------------
+
+const SECTION_CATEGORY_IDS_DESCRIPTION =
+  'The categories this section covers, roots and leaves, as meant: a root covers every one of its children, a leaf only itself. May be empty, for a section that holds only pinned products. An unknown id is refused with `category_not_found`.';
+
+/** Create a section on the chain the route names. */
+export class CreateSupermarketSectionDto {
+  @ApiProperty({
+    minLength: 1,
+    maxLength: SECTION_SLUG_MAX_LENGTH,
+    description:
+      'Ascii kebab case, unique within the chain (`section_slug_taken` otherwise), and written once: an edit cannot change it.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(SECTION_SLUG_MAX_LENGTH)
+  slug!: string;
+
+  @ApiProperty({ type: LocalizedTextDto })
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name!: LocalizedTextDto;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxCategoriesPerSection,
+    uniqueItems: true,
+    description: SECTION_CATEGORY_IDS_DESCRIPTION,
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxCategoriesPerSection)
+  @ArrayUnique()
+  // Any version: seeded categories carry version 5 ids derived from the slug.
+  @IsUUID('all', { each: true })
+  categoryIds!: string[];
+
+  @ApiPropertyOptional({
+    type: 'integer',
+    minimum: 0,
+    description:
+      'The chain’s default order. Absent appends after the last section.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+}
+
+/** Edit a section. No slug: it is an identity, written once on create. */
+export class UpdateSupermarketSectionDto {
+  @ApiPropertyOptional({ type: LocalizedTextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({ type: 'integer', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxCategoriesPerSection,
+    uniqueItems: true,
+    description: `Replaces the whole set. Absent leaves it alone. ${SECTION_CATEGORY_IDS_DESCRIPTION}`,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxCategoriesPerSection)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  categoryIds?: string[];
+}
+
+/** A shop's ordered section list, saved whole (plan 0167, section 2). */
+export class SetLocationSectionsDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxSectionsPerLocation,
+    uniqueItems: true,
+    description:
+      'The sections this shop has, in the order it is walked. An empty array deletes the shop’s own list and returns it to its chain’s default. A section of another chain is refused with `section_of_another_chain`, an unknown one with `section_not_found`.',
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxSectionsPerLocation)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  sectionIds!: string[];
+}
+
+/** One product's pins in the chain the route names (plan 0167, section 2). */
+export class SetItemSectionPinsDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('all')
+  itemId!: string;
+
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: SECTION_LIMITS.maxPinsPerItem,
+    uniqueItems: true,
+    description:
+      'Replaces the product’s pins in this chain: "in this chain, this product is in these sections and no other". An empty array removes them, and the product returns to the rule’s other steps. A section of another chain is refused with `section_of_another_chain`.',
+  })
+  @IsArray()
+  @ArrayMaxSize(SECTION_LIMITS.maxPinsPerItem)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  sectionIds!: string[];
 }
 
 // --- Price scopes (plan 0038, section 5.1) ---------------------------------
@@ -952,7 +1197,7 @@ export class CatalogListQueryDto extends PageQueryDto {
  * answered 400 to the one parameter they document.
  */
 /** `?x=a&x=b` for one value arrives as a string; every list parameter needs it. */
-const asArray = ({ value }: { value: unknown }) =>
+export const asArray = ({ value }: { value: unknown }) =>
   value === undefined || Array.isArray(value) ? value : [value];
 
 export class ListPriceScopesQueryDto extends PageQueryDto {
@@ -1110,10 +1355,14 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   @MaxLength(120)
   query?: string;
 
-  @ApiPropertyOptional({ enum: ItemCategory })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.',
+  })
   @IsOptional()
-  @IsEnum(ItemCategory)
-  category?: ItemCategory;
+  @IsUUID('all')
+  categoryId?: string;
 
   @ApiPropertyOptional({
     format: 'uuid',
@@ -1139,6 +1388,16 @@ export class SearchItemsQueryDto extends PriceScopedQueryDto {
   // ids, and a version 4 check refused every chain but one (velista 0100).
   @IsUUID(undefined, { each: true })
   soldBy?: string[];
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Read the catalog at one shop (plan 0170): priced at that shop’s own scope alone, and listing its chain’s products, priced or not. Refused with catalog_location_exclusive beside priceScopeId, postalCode, supermarketId, profileId or a soldBy naming another chain, and with supermarket_location_not_found for a shop that does not exist.',
+  })
+  @IsOptional()
+  // Any version, like soldBy above (velista 0100).
+  @IsUUID('all')
+  locationId?: string;
 }
 
 /** The composer's own read: ranked groups, priced (plan 0048, section 3). */

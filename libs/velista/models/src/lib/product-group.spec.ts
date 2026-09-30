@@ -27,7 +27,14 @@ function item(id: string, priced: ProductOffer | null): CatalogItem {
     size: null,
     unit: 'UNIT',
     productGroupId: 'group-1',
-    category: 'OTHER',
+    categories: [
+      {
+        id: 'cat-uncategorised',
+        parentId: 'cat-other',
+        slug: 'uncategorised',
+        name: { en: 'Not yet categorised', es: 'Sin categoría' },
+      },
+    ],
     offer: priced,
     chainPrices: [],
     imageUrl: null,

@@ -1,0 +1,3 @@
+import {get} from './f.mjs'; import fs from 'node:fs';
+const tries=['/api/v1/plp-back/reduced/carnes/c/L102','/api/v1/plp-back/l1/all/L102?path=/carnes/c/L102','/api/v1/plp-back/l1/all/L102/reduced','/api/v1/plp-back/reduced/carnes/cerdo/c/L2014?page=9'];
+for(const u of tries){const r=await get(u); let s; try{const j=JSON.parse(r.body); s=Object.keys(j).join(',')+' | '+JSON.stringify(j.pagination)+' total='+j.total_items+' n='+(j.plp_items?.length);}catch{s=r.body.slice(0,150).replace(/\s+/g,' ')} console.log(r.status,u,r.body.length,s); fs.writeFileSync('o5_'+u.replace(/[^a-z0-9]/gi,'_').slice(0,80)+'.json',r.body);}

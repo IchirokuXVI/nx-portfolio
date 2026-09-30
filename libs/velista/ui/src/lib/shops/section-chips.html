@@ -1,0 +1,39 @@
+<!--
+  A list, so a screen reader says how many sections the line holds before reading
+  them. The chips are words, not controls: only +X and Show fewer are buttons.
+-->
+<ul [class.is-open]="open()" class="line">
+  @for (section of visible(); track section.id) {
+    <li class="chip">{{ section.name }}</li>
+  }
+
+  @if (open()) {
+    <li class="item">
+      <button (click)="open.set(false)" class="fewer" type="button">
+        {{ 'shops.sections.fewer' | rokuT }}
+      </button>
+    </li>
+  } @else if (hidden() > 0) {
+    <li class="item">
+      <button
+        (click)="open.set(true)"
+        [attr.aria-label]="'shops.sections.more' | rokuT: { count: total() }"
+        class="more"
+        type="button"
+      >
+        +{{ hidden() }}
+      </button>
+    </li>
+  }
+</ul>
+
+<!--
+  The measuring row: every chip at its natural width, and the +X at the widest it
+  can read, hidden from sight and from the accessibility tree.
+-->
+<div aria-hidden="true" class="ruler">
+  @for (section of sections(); track section.id) {
+    <span #ruler class="chip">{{ section.name }}</span>
+  }
+  <span #plusRuler class="more">+{{ total() }}</span>
+</div>

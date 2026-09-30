@@ -55,6 +55,18 @@ export function makeGateway(session) {
     },
 
     /**
+     * GET /v1/catalog/categories, the whole tree in one answer (backend plan
+     * 0166): roots, then children, each by `position`.
+     *
+     * `start` reads it from the main gateway for the vocabulary, and `decide`
+     * reads it from the rehearsal slot to turn slugs into that slot's ids.
+     */
+    async listCategories() {
+      const answer = await session.fetch('/v1/catalog/categories');
+      return answer?.categories ?? [];
+    },
+
+    /**
      * GET /v1/admin/harvest/entries, one page of one chain's queue.
      *
      * Absent `status` is the queue itself: CANDIDATE and UNRESOLVED, the two
@@ -137,7 +149,36 @@ export function makeGateway(session) {
   };
 }
 
-/** The body `CreateItemDto` names. */
+/**
+ * The item with the rehearsal slot's own ids for its slugs (backend plan 0166).
+ *
+ * The catalog create route takes `categoryIds` where the harvest routes take
+ * slugs, so the rehearsal write needs the slot's ids. They are kept on the
+ * recorded item, because a resume replays that write into a new slot with
+ * `toCreateItemBody(record.item)`, and a seeded category's id is derived from
+ * its slug, so it is the same in every slot. `apply` never sends them: the bulk
+ * op carries the slugs.
+ *
+ * A slug the slot does not hold is thrown, which `decide` records as
+ * `REHEARSAL_WRITE_FAILED`.
+ */
+export function withCategoryIds(item, rows) {
+  const ids = new Map(
+    (rows ?? [])
+      .filter((row) => row?.parentId && row.slug && row.id)
+      .map((row) => [row.slug, row.id])
+  );
+  const slugs = item.categorySlugs ?? [];
+  const missing = slugs.filter((slug) => !ids.has(slug));
+  if (missing.length > 0) {
+    throw new Error(
+      `the rehearsal slot holds no leaf category ${missing.join(', ')}`
+    );
+  }
+  return { ...item, categoryIds: slugs.map((slug) => ids.get(slug)) };
+}
+
+/** The body `CreateItemDto` names: the catalog create, with category ids. */
 export function toCreateItemBody(item) {
   return {
     name: item.nameEn
@@ -146,7 +187,24 @@ export function toCreateItemBody(item) {
     brand: item.brand,
     ean: item.ean,
     unitSize: item.unitSize,
-    category: item.category,
+    categoryIds: item.categoryIds,
+    defaultUnit: item.defaultUnit,
+  };
+}
+
+/**
+ * The `item` of the harvest bulk `createItem` op, which takes category slugs
+ * as they are and resolves them itself (backend plan 0166, section 3).
+ */
+export function toBulkCreateItem(item) {
+  return {
+    name: item.nameEn
+      ? { es: item.nameEs, en: item.nameEn }
+      : { es: item.nameEs },
+    brand: item.brand,
+    ean: item.ean,
+    unitSize: item.unitSize,
+    categorySlugs: item.categorySlugs,
     defaultUnit: item.defaultUnit,
   };
 }

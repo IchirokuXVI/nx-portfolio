@@ -1,0 +1,108 @@
+// One line under a shop row's name, which the ruler below it measures. The host is
+// what the `ResizeObserver` watches, so it is the width of the column it sits in.
+:host {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+}
+
+.line {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--app-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+
+  &.is-open {
+    flex-wrap: wrap;
+  }
+}
+
+.item {
+  display: flex;
+  flex: none;
+}
+
+// A section is a quiet word on the sunken surface. It is not a control, so it has
+// no hover and no pointer.
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  block-size: var(--app-section-chip-height);
+  padding-inline: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+}
+
+// `+X` is the one chip that does something, so it takes the quiet action pair and
+// reads as a button among words. Its target grows to the touch target without
+// growing the line, the way a chip's does elsewhere.
+.more,
+.fewer {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  block-size: var(--app-section-chip-height);
+  padding-inline: var(--app-space-3);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block: calc(
+      (var(--app-touch-target) - var(--app-section-chip-height)) / -2
+    );
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.more {
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+// Show fewer is a link-weight word at the end of the wrapped chips.
+.fewer {
+  padding-inline: var(--app-space-2);
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+// Out of sight and out of the flow, but laid out, so each chip has its width.
+.ruler {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: flex;
+  gap: var(--app-space-2);
+  visibility: hidden;
+  pointer-events: none;
+}

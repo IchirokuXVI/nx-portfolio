@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_PERMISSIONS,
   BASKET_KIND_FALLBACK,
   BASKET_KINDS,
   BASKET_STATUS_FALLBACK,
@@ -17,8 +18,6 @@ import {
   PRICE_SOURCE_KIND_FALLBACK,
   PRICE_SOURCE_KINDS,
   PRICE_UNIT_BASES,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_FALLBACK,
   SETTLEMENT_OUTCOME_FALLBACK,
   SETTLEMENT_OUTCOMES,
   UNIT_OF_MEASURE_FALLBACK,
@@ -76,6 +75,7 @@ import {
   type ZoneCounts,
   type ZonePresence,
 } from '@portfolio/velista/models';
+import { toProductCategories } from './category-mappers';
 import {
   date,
   isRecord,
@@ -589,12 +589,9 @@ export function toCatalogItem(
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     productGroupId: nullableStr(raw['productGroupId']),
     // Read since velista `0082`, so the zone list page can show one category at a
-    // time. The rule the basket mapper already uses for the same wire field.
-    category: oneOf(
-      raw['category'],
-      PRODUCT_CATEGORIES,
-      PRODUCT_CATEGORY_FALLBACK
-    ),
+    // time, and a list of the tree's rows since `0118`. The rule the basket mapper
+    // uses for the same wire field.
+    categories: toProductCategories(raw['categories']),
     offer,
     // Null with no offer, so a basis can never describe a price that is not
     // there. The browse mapper's rule for the same field.
@@ -990,6 +987,19 @@ export function toUserProfile(raw: unknown): UserProfile | null {
     // account and send the setup guard after somebody who finished it an hour ago.
     ...(isRecord(raw['appState'])
       ? { appState: toAppState(raw['appState']) }
+      : {}),
+    // Left off when the body carries no list, for `appState`'s reason: a rename's
+    // answer has none, and an empty list there would take the Walks button away from
+    // a mapper who only changed their name. A permission this build does not know is
+    // dropped, which is the safe direction: no control is drawn for it.
+    ...(Array.isArray(raw['permissions'])
+      ? {
+          permissions: raw['permissions'].filter(
+            (one): one is (typeof ACCOUNT_PERMISSIONS)[number] =>
+              typeof one === 'string' &&
+              (ACCOUNT_PERMISSIONS as readonly string[]).includes(one)
+          ),
+        }
       : {}),
   };
 }

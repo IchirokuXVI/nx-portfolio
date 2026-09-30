@@ -50,7 +50,11 @@ export function toCandidate(
     unitSize: item.unitSize ?? null,
     defaultUnit: item.defaultUnit ?? null,
     ean: item.ean ?? null,
-    category: item.category ?? null,
+    // An item answers its categories as rows now (backend plan 0166), and the
+    // slugs are the words the model names a category by.
+    categorySlugs: (item.categories ?? [])
+      .map((category) => category?.slug)
+      .filter(Boolean),
     ...(proposedByLadder ? { proposedByLadder: true } : {}),
   };
 }

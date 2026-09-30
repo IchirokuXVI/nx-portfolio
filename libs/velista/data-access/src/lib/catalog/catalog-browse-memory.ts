@@ -3,16 +3,17 @@ import type {
   CatalogBrowseContext,
   CatalogBrowseQuery,
   CatalogChain,
+  CatalogLocation,
   CatalogPriceState,
   CatalogProduct,
   CatalogScopeOffer,
   Page,
   PriceUnitBasis,
-  ProductCategory,
   ProductOffer,
   UnitOfMeasure,
 } from '@portfolio/velista/models';
 import type { CatalogBrowseServiceI } from './catalog-browse-service';
+import { memoryCategory } from './category-memory';
 
 /**
  * The catalog tab with no backend. Asked for by name, never a default.
@@ -64,13 +65,22 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
     query: CatalogBrowseQuery
   ): Promise<Page<CatalogProduct> | null> {
     const needle = query.query.trim().toLocaleLowerCase();
+    // A shop prices at its chain's one scope and lists that chain, as the server
+    // does with `locationId` (backend `0170`).
+    const shop =
+      query.locationId === null
+        ? null
+        : (LOCATIONS.find((row) => row.id === query.locationId) ?? null);
+    const soldBy = shop?.supermarketId ?? query.soldBy;
     const scopes =
       this.state !== 'priced'
         ? new Set<string>()
         : new Set(
-            query.priceScopeIds.length > 0
-              ? query.priceScopeIds
-              : CHAINS.map((chain) => scopeOf(chain.supermarketId))
+            shop !== null
+              ? [scopeOf(shop.supermarketId)]
+              : query.priceScopeIds.length > 0
+                ? query.priceScopeIds
+                : CHAINS.map((chain) => scopeOf(chain.supermarketId))
           );
 
     const matched = PRODUCTS.filter(
@@ -78,8 +88,8 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
         (needle === '' ||
           row.es.toLocaleLowerCase().includes(needle) ||
           row.en.toLocaleLowerCase().includes(needle)) &&
-        (query.soldBy === null ||
-          row.prices[query.soldBy as ChainKey] !== undefined)
+        (soldBy === null || row.prices[soldBy as ChainKey] !== undefined) &&
+        inCategory(row, query.categoryId)
     );
 
     const ordered =
@@ -115,7 +125,29 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
       available: true,
     }));
   }
+
+  async location(locationId: string): Promise<CatalogLocation | null> {
+    return LOCATIONS.find((row) => row.id === locationId) ?? null;
+  }
 }
+
+/** The shops a spec can price the tab at, one per chain. */
+const LOCATIONS: readonly CatalogLocation[] = [
+  {
+    id: 'location-mercadona-mayor',
+    supermarketId: 'chain-mercadona',
+    label: null,
+    address: 'Calle Mayor 3',
+    city: 'Córdoba',
+  },
+  {
+    id: 'location-deza-jardin',
+    supermarketId: 'chain-deza',
+    label: { es: 'Deza Ciudad Jardín', en: 'Deza Ciudad Jardín' },
+    address: 'Av. de Vallellano 20',
+    city: 'Córdoba',
+  },
+];
 
 type ChainKey = 'chain-mercadona' | 'chain-deza' | 'chain-carrefour';
 
@@ -124,16 +156,19 @@ const CHAINS: readonly CatalogChain[] = [
     supermarketId: 'chain-mercadona',
     name: { es: 'Mercadona', en: 'Mercadona' },
     locations: 7,
+    logoUrl: null,
   },
   {
     supermarketId: 'chain-deza',
     name: { es: 'Deza', en: 'Deza' },
     locations: 3,
+    logoUrl: null,
   },
   {
     supermarketId: 'chain-carrefour',
     name: { es: 'Carrefour', en: 'Carrefour' },
     locations: 2,
+    logoUrl: null,
   },
 ];
 
@@ -144,7 +179,8 @@ interface Fixture {
   readonly brand: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
-  readonly category: ProductCategory;
+  /** A leaf slug of the memory tree. */
+  readonly category: string;
   readonly basis: PriceUnitBasis | null;
   /** Price per chain. Null is stocked with no price, absent is not sold. */
   readonly prices: Partial<Record<ChainKey, number | null>>;
@@ -159,7 +195,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     1,
     'LITER',
-    'PANTRY',
+    'oil-and-vinegar',
     'LITER',
     { 'chain-mercadona': 8.45, 'chain-deza': 8.95 }
   ),
@@ -170,7 +206,7 @@ const PRODUCTS: readonly Fixture[] = [
     'SOS',
     1,
     'KILOGRAM',
-    'PANTRY',
+    'pasta-rice-and-legumes',
     'KILOGRAM',
     { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 }
   ),
@@ -181,7 +217,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Calvo',
     0.24,
     'KILOGRAM',
-    'PANTRY',
+    'canned-food',
     'KILOGRAM',
     { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 }
   ),
@@ -192,7 +228,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Azucarera',
     1,
     'KILOGRAM',
-    'PANTRY',
+    'flour-sugar-and-baking',
     'KILOGRAM',
     { 'chain-mercadona': 1.05, 'chain-deza': 1.15 }
   ),
@@ -203,7 +239,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Marcilla',
     0.25,
     'KILOGRAM',
-    'BEVERAGES',
+    'coffee-tea-and-cocoa',
     'KILOGRAM',
     { 'chain-deza': 2.19, 'chain-carrefour': 2.39 }
   ),
@@ -214,7 +250,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     12,
     'UNIT',
-    'DAIRY',
+    'eggs',
     'DOZEN',
     { 'chain-mercadona': 2.2 }
   ),
@@ -225,7 +261,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     1,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-mercadona': 0.89, 'chain-deza': 0.95 }
   ),
@@ -236,7 +272,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Puleva',
     6,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-carrefour': 6.42 }
   ),
@@ -247,7 +283,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Kaiku',
     1,
     'LITER',
-    'DAIRY',
+    'milk',
     'LITER',
     { 'chain-deza': 1.35 },
     true
@@ -259,7 +295,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Bimbo',
     0.45,
     'KILOGRAM',
-    'BAKERY',
+    'bread',
     'KILOGRAM',
     { 'chain-mercadona': null, 'chain-carrefour': 1.99 }
   ),
@@ -270,7 +306,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Danone',
     0.5,
     'KILOGRAM',
-    'DAIRY',
+    'yogurts-and-desserts',
     'KILOGRAM',
     { 'chain-mercadona': 1.1, 'chain-deza': 1.25, 'chain-carrefour': 1.19 }
   ),
@@ -282,7 +318,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Alvalle',
     1,
     'LITER',
-    'PANTRY',
+    'soups-and-stock',
     'LITER',
     {}
   ),
@@ -295,7 +331,7 @@ function fixture(
   brand: string | null,
   size: number | null,
   unit: UnitOfMeasure,
-  category: ProductCategory,
+  category: string,
   basis: PriceUnitBasis | null,
   prices: Partial<Record<ChainKey, number | null>>,
   stale = false
@@ -305,6 +341,18 @@ function fixture(
 
 function scopeOf(supermarketId: string): string {
   return `scope-${supermarketId}`;
+}
+
+/**
+ * Whether a product is under the category a read names: its own leaf, or the root
+ * that leaf sits under, which is how the server reads a root (backend `0166`).
+ */
+function inCategory(row: Fixture, categoryId: string | null): boolean {
+  if (categoryId === null) {
+    return true;
+  }
+  const leaf = memoryCategory(row.category);
+  return leaf.id === categoryId || leaf.parentId === categoryId;
 }
 
 function startsWith(row: Fixture, needle: string): boolean {
@@ -360,7 +408,7 @@ function toProduct(row: Fixture, scopes: ReadonlySet<string>): CatalogProduct {
     imageUrl: null,
     size: row.size,
     unit: row.unit,
-    category: row.category,
+    categories: [memoryCategory(row.category)],
     offer: best,
     unitBasis: best === null ? null : row.basis,
   };

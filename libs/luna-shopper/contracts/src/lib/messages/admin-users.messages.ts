@@ -1,3 +1,4 @@
+import type { AccountRole } from '../enums/account-role.enums';
 import type {
   AuthProvider,
   UserKind,
@@ -87,6 +88,20 @@ export const ADMIN_USER_PATTERNS = {
    * direct column write is correct there and is not an exception to the rule.
    */
   update: 'adminUser.update',
+  /**
+   * Replace somebody's roles (plan 0175).
+   *
+   * The whole set, not a grant or a revoke: the back office shows every role
+   * with a switch and sends what the switches say, so a repeat is harmless and
+   * two operators racing each other end on the second one's set rather than on
+   * a merge neither of them saw.
+   *
+   * A guest is refused with `guest_has_no_roles`. A role grants permissions
+   * through `PERMISSIONS_OF`, and the account carries them from its next token
+   * refresh, at most one access token lifetime later. The write records an
+   * `auth_audit` row with the operator as the actor.
+   */
+  setRoles: 'adminUser.setRoles',
 } as const;
 
 export type AdminUserPattern =
@@ -110,6 +125,11 @@ export interface AdminUserView {
   email: string | null;
   /** ISO 8601, or null while the address is unconfirmed or absent. */
   emailVerifiedAt: string | null;
+  /**
+   * The account's roles (plan 0175), in `ACCOUNT_ROLES` order. Empty for most
+   * accounts and always for a guest.
+   */
+  roles: AccountRole[];
   /** ISO 8601 UTC. */
   createdAt: string;
   /** ISO 8601 UTC. */
@@ -167,6 +187,8 @@ export interface ListAdminUsersRequest extends AdminCredential, PageQuery {
   kind?: UserKind;
   /** True for confirmed addresses only, false for unconfirmed and absent ones. */
   verified?: boolean;
+  /** Only accounts holding this role (plan 0175). */
+  role?: AccountRole;
   /** ISO 8601. Inclusive lower bound on `createdAt`. */
   createdAfter?: string;
   /** ISO 8601. Exclusive upper bound on `createdAt`. */
@@ -245,5 +267,20 @@ export interface UpdateAdminUserRequest extends AdminCredential {
 }
 
 export type UpdateAdminUserResult = AdminUserDetailView;
+
+/**
+ * Replace somebody's roles (plan 0175). `targetUserId` for the reason
+ * {@link DeleteAdminUserRequest} gives.
+ *
+ * `roles` is the whole new set. An empty array takes every role away, and a
+ * role named twice is held once.
+ */
+export interface SetAdminUserRolesRequest extends AdminCredential {
+  targetUserId: string;
+  roles: AccountRole[];
+}
+
+/** The account as it now stands, as every other write here answers. */
+export type SetAdminUserRolesResult = AdminUserDetailView;
 
 export type ResendAdminVerificationResult = ResendVerificationResult;

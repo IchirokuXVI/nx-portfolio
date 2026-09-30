@@ -99,9 +99,15 @@ describe('adapterCapabilities', () => {
 
   it('states no band for an adapter whose walk selects no scope', () => {
     // A band is about scopes a run is given. DEZA writes no price, Carrefour
-    // takes one default the operator chose, and LIDL creates its own regions
-    // from the week's offers, so none of the three has anything to refuse.
-    for (const key of ['deza-web', 'carrefour-web', 'lidl-api'] as const) {
+    // takes one default the operator chose, LIDL creates its own regions from
+    // the week's offers, and El Jamón takes one default like Carrefour, so none
+    // of the four has anything to refuse.
+    for (const key of [
+      'deza-web',
+      'carrefour-web',
+      'lidl-api',
+      'eljamon-web',
+    ] as const) {
       expect(ADAPTER_CAPABILITIES[key].walkablePriorities).toBeNull();
     }
   });
@@ -112,6 +118,7 @@ describe('adapterCapabilities', () => {
       'deza-web',
       'carrefour-web',
       'lidl-api',
+      'eljamon-web',
     ] as const) {
       expect(ADAPTER_CAPABILITIES[key].printedLocale).toBe('es');
     }

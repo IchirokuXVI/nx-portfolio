@@ -62,6 +62,40 @@ describe('gatewayErrorKey', () => {
     );
   });
 
+  /** The category tree's refusals (backend plan 0166, admin plan 0036). */
+  it('names each rule of the category tree apart', () => {
+    expect(
+      [
+        'category_too_deep',
+        'category_not_a_leaf',
+        'item_needs_a_category',
+        'category_in_use',
+        'category_not_found',
+      ].map((code) => gatewayErrorKey(failure({ code })))
+    ).toEqual([
+      'resource.error.categoryTooDeep',
+      'resource.error.categoryNotALeaf',
+      'resource.error.itemNeedsACategory',
+      'resource.error.categoryInUse',
+      'resource.error.categoryNotFound',
+    ]);
+  });
+
+  /** The shop section refusals (backend plan 0167, admin plan 0037). */
+  it('names each shop section refusal apart', () => {
+    expect(
+      [
+        'section_not_found',
+        'section_of_another_chain',
+        'section_slug_taken',
+      ].map((code) => gatewayErrorKey(failure({ code })))
+    ).toEqual([
+      'resource.error.sectionNotFound',
+      'resource.error.sectionOfAnotherChain',
+      'resource.error.sectionSlugTaken',
+    ]);
+  });
+
   /**
    * A body that did not reach this app intact is what a proxy answering instead
    * of the gateway looks like, and the status is all that survives it.

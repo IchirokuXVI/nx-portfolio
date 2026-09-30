@@ -34,8 +34,10 @@ import {
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { CatalogMemory } from '../catalog/catalog-memory';
+import { memoryCategory } from '../catalog/category-memory';
 import { GatewayError } from '../errors';
 import type { BasketChangeContext } from '../mapping/basket-change-mappers';
+import { memorySectionIdsAt } from '../shops/shop-sections-memory';
 import type { BasketServiceI } from './basket-service';
 
 /** The one link this fake knows. Anything else is dead, like most links are. */
@@ -154,7 +156,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     ),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-milk-pascual',
@@ -170,7 +173,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     ),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-milk-central',
@@ -186,7 +190,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     ...priced(),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('milk')],
+    sectionIds: null,
   },
   {
     id: 'item-eggs',
@@ -199,7 +204,8 @@ const PRODUCTS: readonly BasketProduct[] = [
     ...priced(offer(2.85, 0.24, 'EUR/ud')),
     atShop: null,
     imageUrl: null,
-    categories: ['DAIRY'],
+    categories: [memoryCategory('eggs')],
+    sectionIds: null,
   },
 ];
 
@@ -229,6 +235,8 @@ function atShopOf(
 const SCOPES: readonly BasketPriceScope[] = [
   {
     priceScopeId: SCOPE_MERCADONA,
+    supermarketId: 'chain-mercadona',
+    logoUrl: null,
     supermarketName: { en: 'Mercadona', es: 'Mercadona' },
     locations: [
       {
@@ -237,6 +245,7 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Ronda de los Tejares 32',
         city: 'Córdoba',
         postalCode: '14008',
+        sections: [],
       },
       {
         id: 'loc-barcelona',
@@ -244,11 +253,14 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Avenida de Barcelona 4',
         city: 'Córdoba',
         postalCode: '14001',
+        sections: [],
       },
     ],
   },
   {
     priceScopeId: SCOPE_DIA,
+    supermarketId: 'chain-dia',
+    logoUrl: null,
     supermarketName: { en: 'Dia', es: 'Dia' },
     locations: [
       {
@@ -257,6 +269,7 @@ const SCOPES: readonly BasketPriceScope[] = [
         address: 'Paseo de la Victoria 21',
         city: 'Córdoba',
         postalCode: '14004',
+        sections: [],
       },
     ],
   },
@@ -844,7 +857,15 @@ export class BasketMemory implements BasketServiceI {
           product.id,
           at === undefined
             ? product
-            : { ...product, atShop: atShopOf(product, at) },
+            : {
+                ...product,
+                atShop: atShopOf(product, at),
+                // Which of the shop's aisles hold it (velista `0120`).
+                sectionIds: memorySectionIdsAt(
+                  locationId,
+                  product.categories.map((category) => category.id)
+                ),
+              },
         ])
       ),
       // The chain and its shops reach every participant, a guest included,

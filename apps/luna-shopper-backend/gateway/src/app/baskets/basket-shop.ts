@@ -36,11 +36,15 @@ export function toBasketShopView(
     id: shop.location.id,
     supermarketId: shop.supermarket.id,
     supermarketName: shop.supermarket.name,
+    supermarketLogoUrl: shop.supermarket.logoUrl,
     label: shop.location.label,
     address: shop.location.address,
     city: shop.location.city,
     postalCode: shop.location.postalCode,
     inProfile: isInProfile(shop.location.postalCode, profilePostalCodes),
+    // Plan 0170: catalog read them with the shop, in the same statement the
+    // per shop read uses, so nothing is asked again here.
+    sections: shop.location.sections,
   };
 }
 
@@ -99,6 +103,7 @@ export function toScopeLocationView(
     address: location.address,
     city: location.city,
     postalCode: location.postalCode,
+    sections: location.sections,
   };
 }
 
@@ -147,6 +152,7 @@ export function withShopInScopes(
       priceScopeId: quoted,
       supermarketId: shop.supermarket.id,
       supermarketName: shop.supermarket.name,
+      supermarketLogoUrl: shop.supermarket.logoUrl,
       locations: servesLocations ? [here] : [],
     },
   ];

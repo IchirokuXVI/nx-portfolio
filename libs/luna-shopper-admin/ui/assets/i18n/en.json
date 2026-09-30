@@ -143,7 +143,8 @@
       "clearFilters": "Clear the filter",
       "confirm": "Yes, do it",
       "working": "Working…",
-      "edit": "Edit"
+      "edit": "Edit",
+      "dismiss": "Dismiss"
     },
     "confirm": {
       "delete": {
@@ -186,6 +187,14 @@
       "brandLinkOwnsNoChain": "A spelling of another brand has no chain of its own. Set the chain on the brand it spells.",
       "brandLinkKeepsKey": "A spelling of another brand keeps its key. Register the other spelling as its own brand.",
       "brandNotLinked": "Only a spelling linked to another brand can be deleted.",
+      "categoryTooDeep": "Categories have two levels. A category inside another cannot hold categories of its own, so pick a top level category as the parent.",
+      "categoryNotALeaf": "A product goes in a category inside another, never in a top level category.",
+      "itemNeedsACategory": "A product needs at least one category.",
+      "categoryInUse": "This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.",
+      "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
+      "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
+      "sectionOfAnotherChain": "That section belongs to another chain. A shop and a product's pins can only use their own chain's sections. Read the screen again and try once more.",
+      "sectionSlugTaken": "This chain already has a section with that slug. Choose another one.",
       "openRow": "Open the row it names."
     },
     "bulk": {
@@ -245,6 +254,80 @@
         "priceScopeId": "Price scope"
       }
     },
+    "sections": {
+      "one": "section",
+      "many": "Shop sections",
+      "id": "Identifier",
+      "supermarketId": "Chain",
+      "name": "Name",
+      "slug": "Slug",
+      "slugHelp": "Lowercase letters, digits and hyphens, unique within the chain. Written once: it cannot be changed after the section is created.",
+      "position": "Position",
+      "positionHelp": "The chain's default order. A shop with no list of its own walks its sections in this order. Leave it empty to add the section after the last one.",
+      "categoryIds": "Categories it holds",
+      "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then only the products pinned to it are in it.",
+      "locationCount": "Shops",
+      "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
+      "note": "Sections are read one chain at a time. Choose a chain to begin, or open the chain and use its Sections tab.",
+      "filter": {
+        "query": "Name or slug contains",
+        "supermarketId": "Chain"
+      }
+    },
+    "chainTabs": {
+      "label": "Chain screens",
+      "details": "Details",
+      "sections": "Sections"
+    },
+    "chainSections": {
+      "heading": "Sections of this chain",
+      "says": "The chain's own aisles, in the order a shop with no list of its own walks them, and the categories each one holds.",
+      "add": "Add a section",
+      "empty": "This chain has no sections yet. Its shops show products under their own categories.",
+      "actions": "Actions",
+      "coversAll": "{{name}} (all)",
+      "coversNothing": "Pinned products only",
+      "deleteHeading": "Delete this section?",
+      "deleteBody": "{{name}} leaves every shop's list and every pin. Products pinned only to it go back to being placed by their categories. There is no undo.",
+      "deleteConfirm": "Delete the section"
+    },
+    "locationSections": {
+      "heading": "Sections in this shop",
+      "fromChain": "This shop has no list of its own, so it has every section of its chain, in the chain's order. Change the list below to give it its own.",
+      "own": "This shop has its own list, in its own order.",
+      "noSections": "This shop's chain has no sections yet. Add them on the chain's Sections tab.",
+      "noneTicked": "Tick at least one section to save a list. To go back to the chain's list, use the chain's default.",
+      "up": "Move {{name}} up",
+      "down": "Move {{name}} down",
+      "upShort": "Up",
+      "downShort": "Down",
+      "save": "Save this order",
+      "discard": "Discard changes",
+      "useChain": "Use the chain's default",
+      "saved": "Saved.",
+      "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
+      "mapConfirm": {
+        "heading": "Change a list that follows a map?",
+        "confirm": "Change it anyway"
+      }
+    },
+    "itemSections": {
+      "heading": "Where it is, per chain",
+      "notSold": "No chain sells this product yet, so it is in no shop's sections.",
+      "noSections": "This chain has no sections, so its shops show the product under its own categories.",
+      "pinnedTo": "Pinned to {{sections}}.",
+      "byCategories": "By its categories: in whichever of a shop's sections hold one of them.",
+      "edit": "Change the pins",
+      "pickLegend": "The sections it is in, in this chain",
+      "pickHelp": "Pinned, the product is in these sections and in no other. Tick none to remove the pins.",
+      "save": "Save the pins",
+      "previewAt": "Where shoppers find it at a shop",
+      "preview": {
+        "pinned": "In {{sections}}, because it is pinned there.",
+        "covered": "In {{sections}}, because the section holds one of its categories.",
+        "none": "No section of this shop holds it, so it is shown under its own categories."
+      }
+    },
     "priceScopes": {
       "one": "price scope",
       "many": "Price scopes",
@@ -288,7 +371,8 @@
       "ean": "Barcode",
       "eanHelp": "The only identifier that joins a product across chains. Unique across the catalog.",
       "sku": "Source code",
-      "category": "Category",
+      "categoryIds": "Categories",
+      "categoryIdsHelp": "Only categories inside another. The first is the one a row shows when it has room for one.",
       "defaultUnit": "Unit",
       "unitSize": "Size",
       "unitSizeHelp": "Without it the unit says nothing: a liter is not a size.",
@@ -303,7 +387,7 @@
       },
       "filter": {
         "query": "Name or barcode contains",
-        "category": "Category",
+        "categoryId": "Category",
         "productGroupId": "Product group"
       },
       "setGroup": {
@@ -311,6 +395,51 @@
         "heading": "Set the group of {{count}} products",
         "group": "Group",
         "review": "Review"
+      },
+      "setCategories": {
+        "action": "Set categories",
+        "heading": "Set the categories of {{count}} products",
+        "help": "The categories you pick replace each product’s own, in the order you pick them.",
+        "categories": "Categories",
+        "review": "Review",
+        "reviewHeading": "Give {{count}} products the categories {{categories}}",
+        "lead": "Nothing has changed yet. Every product below will have exactly these categories once you confirm.",
+        "product": "Product",
+        "now": "Now",
+        "after": "After",
+        "result": "Now has",
+        "none": "None",
+        "alreadyThere": "Already has these, left alone",
+        "notChanged": "Not changed",
+        "confirm": "Set the categories of {{count}} products",
+        "back": "Back",
+        "applied": "{{count}} products now have the categories {{categories}}",
+        "refused": "Nothing was changed.",
+        "unknown": "Not found: {{names}}",
+        "close": "Done"
+      }
+    },
+    "categories": {
+      "one": "category",
+      "many": "Categories",
+      "id": "Identifier",
+      "name": "Name",
+      "slug": "Handle",
+      "slugHelp": "A stable handle that tools and decisions files name the category by: lower case words separated by single dashes. It cannot change once the category exists.",
+      "parentId": "Inside",
+      "parentIdHelp": "The top level category this one sits in. Leave it empty for a top level category. Products only go in a category inside another.",
+      "position": "Position",
+      "positionHelp": "The order among its siblings, lowest first. Empty puts a new category last.",
+      "itemCount": "Products",
+      "inUseOpen": "Show its products",
+      "kind": {
+        "root": "Top level",
+        "leaf": "Inside another"
+      },
+      "filter": {
+        "query": "Name or handle contains",
+        "parentId": "Inside",
+        "kind": "Level"
       }
     },
     "productGroups": {
@@ -487,28 +616,14 @@
       "id": "Identifier",
       "itemId": "Product",
       "supermarketLocationId": "Shop",
-      "positionInStore": "Position in the shop",
-      "positionInStoreHelp": "Where the product sits, such as an aisle. Per shop, because a warehouse cannot answer it.",
+      "positionInStore": "Shelf note",
+      "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
       "available": "Available in this shop",
       "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
       "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
       "filter": {
         "supermarketLocationId": "Shop"
       }
-    },
-    "itemCategory": {
-      "PRODUCE": "Fresh produce",
-      "DAIRY": "Dairy",
-      "BAKERY": "Bakery",
-      "MEAT": "Meat",
-      "SEAFOOD": "Seafood",
-      "FROZEN": "Frozen",
-      "BEVERAGES": "Drinks",
-      "SNACKS": "Snacks",
-      "PANTRY": "Pantry",
-      "HOUSEHOLD": "Household",
-      "PERSONAL_CARE": "Personal care",
-      "OTHER": "Other"
     },
     "unit": {
       "UNIT": "Unit",
@@ -705,20 +820,6 @@
       "FAILED": "Failed",
       "ABORTED": "Aborted",
       "STALE": "Stale"
-    },
-    "category": {
-      "PRODUCE": "Produce",
-      "DAIRY": "Dairy",
-      "BAKERY": "Bakery",
-      "MEAT": "Meat",
-      "SEAFOOD": "Seafood",
-      "FROZEN": "Frozen",
-      "BEVERAGES": "Beverages",
-      "SNACKS": "Snacks",
-      "PANTRY": "Pantry",
-      "HOUSEHOLD": "Household",
-      "PERSONAL_CARE": "Personal care",
-      "OTHER": "Other"
     },
     "absent": {
       "heading": "The harvester does not run here",
@@ -1148,7 +1249,8 @@
         "brand": "Brand",
         "ean": "Barcode",
         "unitSize": "Size",
-        "category": "Category",
+        "categories": "Categories",
+        "categoriesHelp": "Empty uses the categories the row’s own path resolves to. Pick one or more to override them, first one first.",
         "defaultUnit": "Sold by",
         "submit": "Create it and bind the row"
       },
@@ -1518,7 +1620,8 @@
         "email": "Email contains",
         "verified": "Address confirmed",
         "createdAfter": "Signed up on or after",
-        "createdBefore": "Signed up on or before"
+        "createdBefore": "Signed up on or before",
+        "role": "Holds the role"
       },
       "action": {
         "resendVerification": "Resend confirmation",
@@ -1534,13 +1637,44 @@
           "heading": "Delete this account?",
           "body": "{{name}}'s identity is removed and their shopping lists are deleted. Any zone they own is marked for deletion, and their memberships are retired with the name they used in each zone scrubbed. What they wrote on other people's lists stays. There is no undo.",
           "confirm": "Delete the account"
+        },
+        "grantRole": {
+          "heading": "Give this account a role?",
+          "body": "{{role}}: {{grants}} {{name}}’s account gets it at its next token refresh, within 15 minutes.",
+          "confirm": "Give the role"
+        },
+        "removeRole": {
+          "heading": "Take a role from this account?",
+          "body": "{{role}}: {{grants}} {{name}}’s account loses it at its next token refresh, within 15 minutes.",
+          "confirm": "Take the role away"
         }
       },
       "usernameHelp": "The handle this person is known by. Changing it reaches every zone they are in: the name on each of their memberships is rewritten to match, so this is not a private label.",
       "displayNameHelp": "Whatever the sign in provider supplied, which for a Google account is somebody’s real full name. It is kept off every listing for that reason, and clearing it is allowed.",
       "emailHelp": "Fixed here. Nothing in velista changes a registered address, so there is no service to call: the four paths that write it each establish an identity, and writing the column alone would leave the credential, any linked provider and every outstanding confirmation pointing at an address the account no longer claims. Use “Resend confirmation” for an unconfirmed one.",
       "emailVerifiedAtHelp": "Fixed here. Setting it by hand asserts that somebody proved control of an address, which is the one thing this column exists to record and the one thing an operator cannot observe.",
-      "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all."
+      "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all.",
+      "roles": {
+        "label": "Roles",
+        "admin": {
+          "name": "Admin",
+          "grants": "Can map shops."
+        },
+        "premium": {
+          "name": "Premium",
+          "grants": "Nothing yet."
+        },
+        "cell": {
+          "none": "No roles",
+          "admin": "Admin",
+          "premium": "Premium",
+          "adminPremium": "Admin, Premium"
+        },
+        "guest": "A guest account holds no roles. Once it registers, its roles can be set here.",
+        "guestRefused": "A guest account holds no roles, so the server refused. Set them once the account has registered.",
+        "saved": "Saved. The account sees the change at its next token refresh, within 15 minutes."
+      },
+      "rolesHelp": "Set on the account’s page, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
     },
     "zones": {
       "one": "zone",

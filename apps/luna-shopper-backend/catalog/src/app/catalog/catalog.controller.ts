@@ -112,12 +112,16 @@ import {
   type SupermarketLocationItemPage,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
   type UpdateBrandRequest,
   type UpdateBrandResult,
   type UpdateItemRequest,
+  type UpdateItemsRequest,
+  type UpdateItemsResult,
   type UpdatePricePolicyRequest,
   type UpdatePriceScopeRequest,
   type UpdateProductGroupRequest,
@@ -244,6 +248,17 @@ export class CatalogController {
     @Payload() req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
     return this.locations.get(req);
+  }
+
+  /**
+   * One shop's chain and scope stack (plan 0170, section 4), for the catalog
+   * read at one shop. Carries no `userId`, like `shopAvailability`.
+   */
+  @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.priceStack)
+  locationPriceStack(
+    @Payload() req: SupermarketLocationPriceStackRequest
+  ): Promise<SupermarketLocationPriceStackView> {
+    return this.locations.priceStack(req);
   }
 
   @MessagePattern(SUPERMARKET_LOCATION_PATTERNS.list)
@@ -375,6 +390,15 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.createMany)
   createItems(@Payload() req: CreateItemsRequest): Promise<CreateItemsResult> {
     return this.items.createMany(req);
+  }
+
+  /**
+   * Several product edits in one transaction, all or nothing (plan 0166,
+   * section 3): the back office's "Set categories" bulk action.
+   */
+  @MessagePattern(ITEM_PATTERNS.updateMany)
+  updateItems(@Payload() req: UpdateItemsRequest): Promise<UpdateItemsResult> {
+    return this.items.updateMany(req);
   }
 
   /**

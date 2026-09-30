@@ -2,36 +2,56 @@
   display: block;
 }
 
+// Two to a row (velista 0124, the `Picker` artboard): a chain button is a card with
+// the chain's logo, and six of them fill a phone, which is why a tap opens the chain
+// on a screen of its own rather than under the buttons.
 .grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--app-space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-// A card sized target rather than a pill: the button carries a name, a count and, on two
-// of its three states, a word about the exclusion, and a pill that wrapped would read as
-// two buttons.
-.chip {
+.cell {
   display: flex;
+  min-inline-size: 0;
+}
+
+.chip {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--app-space-2);
-  min-block-size: var(--app-touch-target);
-  padding: var(--app-space-3) var(--app-space-4);
-  border: 1px solid var(--app-border-strong);
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  min-block-size: var(--app-chain-button-height);
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-card-radius);
   background: var(--app-surface-raised);
   color: var(--app-text-primary);
   font: inherit;
   text-align: start;
   cursor: pointer;
+  transition:
+    border-color var(--app-motion-fast) var(--app-motion-ease),
+    transform var(--app-motion-fast) var(--app-motion-ease);
+
+  &:hover {
+    border-color: var(--app-border-strong);
+  }
+
+  // A press is felt: the card sinks a hair, and the motion token collapses it to
+  // nothing under reduced motion.
+  &:active {
+    transform: scale(0.98);
+  }
 
   // The ring, written out rather than taken from a mixin. Sass resolves `@use`
-  // against the filesystem, so a mixin cannot cross a library boundary, and this
-  // component left `feature-account` for `ui` in velista `0078`. The ring's
+  // against the filesystem, so a mixin cannot cross a library boundary. The ring's
   // *geometry* is a token precisely so the copies cannot disagree about it.
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
@@ -39,15 +59,60 @@
   }
 }
 
-// Open, which is a different fact from excluded: it says whose rows are underneath.
+// Chosen, which is a different fact from excluded: it is the chain of the current
+// choice, or on the supermarkets page the chain whose shops are open.
 .open {
   border-color: var(--app-action-bg);
   box-shadow: inset 0 0 0 1px var(--app-action-bg);
+
+  &:hover {
+    border-color: var(--app-action-bg);
+  }
+}
+
+// The chevron in the corner says the button goes somewhere; the tick replaces it on
+// the chosen chain.
+.go {
+  position: absolute;
+  inset-block-start: var(--app-space-5);
+  inset-inline-end: var(--app-space-3);
+  font-size: var(--app-icon-md);
+  color: var(--app-text-muted);
+}
+
+.tick {
+  position: absolute;
+  inset-block-start: var(--app-space-4);
+  inset-inline-end: var(--app-space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+}
+
+.tick-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .name {
-  font-size: var(--app-text-sm);
+  overflow: hidden;
+  font-size: var(--app-text-base);
   font-weight: 650;
+  line-height: var(--app-leading-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .count {
@@ -61,6 +126,7 @@
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
+  margin-block-start: var(--app-space-2);
   font-size: var(--app-text-2xs);
   font-weight: 700;
   letter-spacing: var(--app-tracking-wordmark);

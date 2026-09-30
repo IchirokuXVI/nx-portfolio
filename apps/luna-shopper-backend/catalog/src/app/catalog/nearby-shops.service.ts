@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   isInProfile,
   type BasketShopView,
+  type LocationSectionNameView,
   type NearbyShopsRequest,
   type NearbyShopsView,
   type NearbyShopView,
@@ -16,6 +17,7 @@ import {
 } from '@portfolio/luna-shopper/postal-codes';
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import { SupermarketLocation } from '../entities';
+import { sectionNamesOf } from './location-sections';
 import { NEARBY_SHOP_THRESHOLDS, pickNearbyShop } from './nearby-shop-pick';
 
 /**
@@ -25,17 +27,21 @@ import { NEARBY_SHOP_THRESHOLDS, pickNearbyShop } from './nearby-shop-pick';
  */
 export function toNamedShop(
   location: SupermarketLocation,
-  profilePostalCodes: readonly string[]
+  profilePostalCodes: readonly string[],
+  /** The shop's section names in its order (plan 0170), read in a batch. */
+  sections: readonly LocationSectionNameView[]
 ): BasketShopView {
   return {
     id: location.id,
     supermarketId: location.supermarketId,
     supermarketName: location.supermarket.name,
+    supermarketLogoUrl: location.supermarket.logoUrl,
     label: location.label,
     address: location.address,
     city: location.city,
     postalCode: location.postalCode,
     inProfile: isInProfile(location.postalCode, profilePostalCodes),
+    sections: [...sections],
   };
 }
 
@@ -81,7 +87,7 @@ export class NearbyShopsService {
 
     const refusedChains = new Set(req.excludedSupermarketIds);
     const refusedShops = new Set(req.excludedSupermarketLocationIds);
-    const candidates: NearbyShopView[] = [];
+    const within: { row: SupermarketLocation; distance: number }[] = [];
     for (const row of rows) {
       if (row.latitude === null || row.longitude === null) {
         continue;
@@ -89,11 +95,19 @@ export class NearbyShopsService {
       const distance = Math.round(
         distanceMetres(centre, { lat: row.latitude, lon: row.longitude })
       );
-      if (distance > radius) {
-        continue;
+      if (distance <= radius) {
+        within.push({ row, distance });
       }
+    }
+    // Plan 0170: every candidate's section names in one statement.
+    const sections = await sectionNamesOf(
+      this.locations,
+      within.map(({ row }) => row.id)
+    );
+    const candidates: NearbyShopView[] = [];
+    for (const { row, distance } of within) {
       candidates.push({
-        ...toNamedShop(row, req.profilePostalCodes),
+        ...toNamedShop(row, req.profilePostalCodes, sections.get(row.id) ?? []),
         distanceMetres: distance,
         excluded:
           refusedShops.has(row.id) || refusedChains.has(row.supermarketId),
@@ -142,8 +156,15 @@ export class NearbyShopsService {
       where: { id: In(ids) },
       relations: { supermarket: true },
     });
+    // Plan 0170: every shop's section names in one statement.
+    const sections = await sectionNamesOf(
+      this.locations,
+      rows.map((row) => row.id)
+    );
     return {
-      shops: rows.map((row) => toNamedShop(row, req.profilePostalCodes)),
+      shops: rows.map((row) =>
+        toNamedShop(row, req.profilePostalCodes, sections.get(row.id) ?? [])
+      ),
     };
   }
 }

@@ -236,6 +236,12 @@ $app-content-max: 480px;
   // token rather than a reuse of --app-line-row-height, which happens to be the same
   // number today and is about a shopping line.
   --app-member-row-height: 56px;
+  // A row of the category picker (velista 0119, rule P1): a place to go, one line of
+  // name and count, and a whole row that is one link.
+  --app-category-row-height: 52px;
+  // Where the chosen category chip stops (rule P4). The longest leaf of the tree fits
+  // with room for its root, and the chain chips still show beside it on a phone.
+  --app-category-chip-max-width: 320px;
   // The edge on the leading side of a line waiting for approval (plan 0012,
   // section 3.4). Not a hairline and deliberately not exempt from the pixel rule: it
   // has to read as a coloured bar at arm's length in a supermarket, which is a
@@ -295,6 +301,41 @@ $app-content-max: 480px;
   // target grows to the touch target with a pseudo element, as a chip's does.
   --app-chain-mark: 18px;
   --app-chain-mark-radius: 5px;
+  // A chain's logo in the shop picker (velista 0124, the `Rows` artboard of
+  // `mocks/shop-picker/`): a sheet's title row and the catalog's Supermarket button,
+  // a shop row, a chain button, and a chain page's head. The typeahead's mark above,
+  // at four bigger sizes.
+  --app-chain-logo-sm: 32px;
+  --app-chain-logo-md: 36px;
+  --app-chain-logo-lg: 48px;
+  --app-chain-logo-xl: 56px;
+  // A chain button: two to a row, tall enough for the logo, the name and the count.
+  --app-chain-button-height: 108px;
+  // The catalog's one Supermarket button, which is the logo and two lines of type.
+  --app-supermarket-button-height: 60px;
+  // One of a shop's sections under its row: small enough that five share a line.
+  --app-section-chip-height: 24px;
+  // A pick row's radio, a native one in the action colour, the mock's size.
+  --app-pick-radio: 22px;
+  // The round button on a pick row that opens the shop's own page (velista 0121),
+  // the mock's size: smaller than the touch target, which it grows to with a pseudo
+  // element.
+  --app-pick-about: 36px;
+  // The shop map's badge as the legend draws it (velista 0121), the canvas's size.
+  --app-map-badge: 22px;
+  // The settle circle on a line of the map's section sheet (velista 0121).
+  --app-map-settle: 24px;
+  // Editing a shop's map by hand (velista 0123), the mock's sizes: the colour
+  // swatches of the area sheet, the small kind swatch in the long press menu, and
+  // the menu itself, wide enough for "Change its section" beside its glyph.
+  --app-map-swatch: 40px;
+  --app-map-kind-swatch: 18px;
+  --app-map-menu-width: 236px;
+  // The border a colour swatch is drawn with, darker than its fill.
+  --app-map-swatch-border: 2px;
+  // The border of a warning over a walk being recorded: the walk stopped, or a
+  // path to check (velista 0126). Heavier than a rule, so it reads as a stop.
+  --app-map-warn-border: 2px;
   // One product inside an opened group: name, brand and price on a single line.
   --app-suggestion-inside-row: 22px;
   // The group popover, wide enough for its two sentences at four lines each.

@@ -12,6 +12,8 @@ import {
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CatalogController } from './catalog.controller';
+import { CategoriesController } from './categories.controller';
+import { CategoryService } from './category.service';
 import { CatalogDashboardService } from './dashboard.service';
 import { EffectivePriceService } from './effective-price.service';
 import { EffectivePriceSweep } from './effective-price.sweep';
@@ -27,6 +29,8 @@ import { PriceScopeService } from './price-scope.service';
 import { ProductGroupAssignmentService } from './product-group-assignment.service';
 import { ProductGroupService } from './product-group.service';
 import { ScopeResolverService } from './scope-resolver.service';
+import { SectionService } from './section.service';
+import { SectionsController } from './sections.controller';
 import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 import { SupermarketLocationService } from './supermarket-location.service';
@@ -60,8 +64,14 @@ import { SupermarketService } from './supermarket.service';
       },
     ]),
   ],
-  // Plan 0164: the shops near a point, and the shops by id.
-  controllers: [CatalogController, NearbyShopsController],
+  // Plan 0164: the shops near a point, and the shops by id. Plan 0166: the
+  // category tree. Plan 0167: shop sections.
+  controllers: [
+    CatalogController,
+    NearbyShopsController,
+    CategoriesController,
+    SectionsController,
+  ],
   providers: [
     CatalogEventsPublisher,
     PlatformAdminService,
@@ -82,6 +92,11 @@ import { SupermarketService } from './supermarket.service';
     // The registry a person fills, and the keys an item is written against
     // (plan 0115).
     BrandService,
+    // The category tree, and the leaves a product write names (plan 0166).
+    CategoryService,
+    // A chain's aisles, a shop's list of them, pins, and where a product is in
+    // a shop (plan 0167).
+    SectionService,
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,
@@ -93,5 +108,7 @@ import { SupermarketService } from './supermarket.service';
     CatalogDashboardService,
     NearbyShopsService,
   ],
+  // Plan 0168: the shown walk writes its shop's section list through it.
+  exports: [SectionService],
 })
 export class CatalogModule {}

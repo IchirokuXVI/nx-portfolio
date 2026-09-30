@@ -1,0 +1,52 @@
+// A square with softened corners, its size a token and everything else a share of
+// it, so the four sizes are one shape: the radius and the letter scale with the box.
+:host {
+  --logo-size: var(--app-chain-logo-md);
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--logo-size);
+  block-size: var(--logo-size);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: 27%;
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font-size: calc(var(--logo-size) * 0.43);
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  user-select: none;
+}
+
+:host(.is-sm) {
+  --logo-size: var(--app-chain-logo-sm);
+}
+
+:host(.is-lg) {
+  --logo-size: var(--app-chain-logo-lg);
+}
+
+:host(.is-xl) {
+  --logo-size: var(--app-chain-logo-xl);
+}
+
+// A real logo sits on the raised surface, so a transparent image reads as a mark
+// rather than as a letter tile with a picture on it.
+:host(.is-image) {
+  background: var(--app-surface-raised);
+}
+
+.image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.glyph {
+  font-size: calc(var(--logo-size) * 0.5);
+  color: var(--app-text-secondary);
+}

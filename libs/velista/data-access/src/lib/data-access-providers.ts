@@ -14,6 +14,8 @@ import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
+import { CatalogBrowseMemory } from './catalog/catalog-browse-memory';
+import { CategoryStore } from './catalog/category-store';
 import { GroupMembers } from './catalog/group-members';
 import { GroupNames } from './catalog/group-names';
 import { ItemNames } from './catalog/item-names';
@@ -33,8 +35,16 @@ import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
 import { PurchaseMemory } from './purchases/purchase-memory';
 import { PurchaseStore } from './purchases/purchase-store';
+import { MappingSettingsStore } from './shops/mapping-settings-store';
+import { ShopDetailMemory } from './shops/shop-detail-memory';
+import { ShopDetailStore } from './shops/shop-detail-store';
+import { ShopMapMemory } from './shops/shop-map-memory';
+import { ShopMapStore } from './shops/shop-map-store';
 import { ShopMemory } from './shops/shop-memory';
-import { CatalogBrowseMemory } from './catalog/catalog-browse-memory';
+import { ShopSectionsMemory } from './shops/shop-sections-memory';
+import { ShopSectionsStore } from './shops/shop-sections-store';
+import { ShopWalkMemory } from './shops/shop-walk-memory';
+import { ShopWalksStore } from './shops/shop-walks-store';
 import { StartupProbe } from './startup-probe';
 import { ZoneMemory } from './zones/zone-memory';
 import { ZoneStore } from './zones/zone-store';
@@ -151,6 +161,21 @@ import { ZoneStore } from './zones/zone-store';
  * same resolver for the group a line follows rather than for the products on it.
  * `GroupMembers` joins for the same reasons: the line page, the product sheet and the
  * basket ask for the same group's members, and it primes `ItemNames` as they arrive.
+ * `CategoryStore` (velista `0118`) joins for `ItemNames`' first reason, and is app
+ * scoped for a stronger version of its second: the tree is read once per session, and
+ * the zone list, the category picker and the aisles of a shop all sort by the one copy.
+ * `ShopSectionsStore` (velista `0120`) joins beside it for the same two reasons: it
+ * resolves `SHOP_SECTIONS_SERVICE`, and a shop's aisles are read once per session and
+ * outlive the basket page that asked. `ShopSectionsMemory` is listed with it for
+ * `ShopMemory`'s reason; `ShopSectionsApi` stays out like every other real transport.
+ * `ShopDetailStore` and `ShopMapStore` (velista `0121`) join for the same reasons: a
+ * shop read for its page is held for the session, and the map is shared by its page
+ * and the section sheet over it. Their memory twins are listed for `ShopMemory`'s.
+ * `ShopWalksStore` (velista `0122`) joins for the same reasons: it resolves
+ * `SHOP_WALK_SERVICE`, and the walks list, a walk's history, its rewind and its
+ * settings are four routes over the same walks. `ShopWalkMemory` is listed with it,
+ * and `MappingSettingsStore` beside them, for `ShopMapStore`'s reason: it reaches
+ * `BrowserFacade`, and recording (velista `0126`) reads the one it holds.
  *
  * `AssistantMemory` (plan 0032) joins for `CommentMemory`'s reason and no stronger one:
  * it injects nothing, so root scope would work for it, and it is listed here anyway so
@@ -200,6 +225,16 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   LineMemory,
   LineStore,
   CommentMemory,
+  CategoryStore,
+  ShopSectionsStore,
+  ShopSectionsMemory,
+  ShopDetailStore,
+  ShopDetailMemory,
+  ShopMapStore,
+  ShopMapMemory,
+  ShopWalksStore,
+  ShopWalkMemory,
+  MappingSettingsStore,
   GroupMembers,
   GroupNames,
   ItemNames,

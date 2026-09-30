@@ -106,22 +106,6 @@ export enum PriceSourceKind {
   USER_REPORTED = 'USER_REPORTED',
 }
 
-/** Coarse product category used to group and filter items. */
-export enum ItemCategory {
-  PRODUCE = 'PRODUCE',
-  DAIRY = 'DAIRY',
-  BAKERY = 'BAKERY',
-  MEAT = 'MEAT',
-  SEAFOOD = 'SEAFOOD',
-  FROZEN = 'FROZEN',
-  BEVERAGES = 'BEVERAGES',
-  SNACKS = 'SNACKS',
-  PANTRY = 'PANTRY',
-  HOUSEHOLD = 'HOUSEHOLD',
-  PERSONAL_CARE = 'PERSONAL_CARE',
-  OTHER = 'OTHER',
-}
-
 /**
  * Why one operation of a bulk decision request was refused (plan 0100).
  *

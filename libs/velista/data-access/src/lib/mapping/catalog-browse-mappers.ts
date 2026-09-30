@@ -1,18 +1,18 @@
 import {
   catalogPriceState,
   PRICE_UNIT_BASES,
-  PRODUCT_CATEGORIES,
-  PRODUCT_CATEGORY_FALLBACK,
   UNIT_OF_MEASURE_FALLBACK,
   UNITS_OF_MEASURE,
   type CatalogBrowseContext,
   type CatalogChain,
+  type CatalogLocation,
   type CatalogProduct,
   type CatalogScopeChain,
   type CatalogScopeOffer,
   type LocalizedName,
   type Supermarket,
 } from '@portfolio/velista/models';
+import { toProductCategories } from './category-mappers';
 import {
   toLocalizedName,
   toPostalCodeCoverage,
@@ -60,11 +60,7 @@ export function toCatalogProduct(raw: unknown): CatalogProduct | null {
     imageUrl: nullableStr(raw['imageUrl']),
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
-    category: oneOf(
-      raw['category'],
-      PRODUCT_CATEGORIES,
-      PRODUCT_CATEGORY_FALLBACK
-    ),
+    categories: toProductCategories(raw['categories']),
     offer,
     // Null with no offer, so a basis can never describe a price that is not there.
     unitBasis:
@@ -90,6 +86,30 @@ export function toCatalogScopeOffer(raw: unknown): CatalogScopeOffer | null {
   return offer === null
     ? null
     : { offer, available: raw['available'] === true };
+}
+
+/**
+ * From `SupermarketLocationView` (`GET /v1/catalog/locations/:id`): the shop the
+ * catalog tab is priced at, named (velista `0124`). Null without an id or a chain.
+ */
+export function toCatalogLocation(raw: unknown): CatalogLocation | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const id = str(raw['id']);
+  const supermarketId = str(raw['supermarketId']);
+  if (id === null || supermarketId === null) {
+    return null;
+  }
+
+  return {
+    id,
+    supermarketId,
+    label: isRecord(raw['label']) ? toLocalizedName(raw['label']) : null,
+    address: nullableStr(raw['address']),
+    city: nullableStr(raw['city']),
+  };
 }
 
 /** From one `catalog.ResolvedScopeView`. */
@@ -141,6 +161,7 @@ export function toCatalogBrowseContext(
       supermarketId: chain.supermarketId,
       name: chain.name,
       locations: chain.locations,
+      logoUrl: chain.logoUrl,
     }));
 
   const chainNames = new Map<string, LocalizedName>();

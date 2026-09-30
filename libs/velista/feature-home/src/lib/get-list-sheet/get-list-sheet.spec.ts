@@ -3,9 +3,9 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  BasketListStore,
   ContactStore,
   fakeZoneStore,
-  BasketListStore,
   LIST_SERVICE,
   provideFakeSessionStore,
   provideFakeZoneStore,
@@ -17,13 +17,13 @@ import {
   toNearbyShops,
   toRecentShops,
   type ListServiceI,
-  type ShopServiceI,
   type ShoppingProfileServiceI,
+  type ShopServiceI,
 } from '@portfolio/velista/data-access';
 import type {
+  BasketRun,
   Contact,
   CreateBasketRequest,
-  BasketRun,
   MyZone,
   ProfileGenerationScope,
   Shop,
@@ -163,6 +163,8 @@ function shopOf(
     provider: 'OSM',
     excluded: false,
     excludedChain: false,
+    logoUrl: null,
+    sections: [],
   };
 }
 
@@ -1054,12 +1056,12 @@ describe('GetListSheet: buying at', () => {
 
     // Back on the form, naming the shop, with the line that says what Generate does.
     expect(query(fixture, '#get-list-name')).not.toBeNull();
-    expect(
-      query(fixture, '.shop-row.is-chosen .shop-chain')?.textContent
-    ).toBe('Mercadona');
-    expect(
-      query(fixture, '.shop-row.is-chosen .shop-where')?.textContent
-    ).toBe('Ronda de los Tejares 32');
+    expect(query(fixture, '.shop-row.is-chosen .shop-chain')?.textContent).toBe(
+      'Mercadona'
+    );
+    expect(query(fixture, '.shop-row.is-chosen .shop-where')?.textContent).toBe(
+      'Ronda de los Tejares 32'
+    );
     expect(text(fixture)).toContain('getList.shop.chosenHint');
 
     await fixture.componentInstance.submit();

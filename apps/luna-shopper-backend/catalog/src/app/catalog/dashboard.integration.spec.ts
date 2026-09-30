@@ -1,6 +1,5 @@
 import {
   ADMIN_DASHBOARD_WINDOW_DAYS,
-  ItemCategory,
   PriceScopeKind,
   PriceSourceKind,
   UnitOfMeasure,
@@ -196,7 +195,6 @@ describeIntegration('catalog’s dashboard block (real Postgres)', () => {
     return items.save(
       items.create({
         name: { en: `Milk ${seq}`, es: `Leche ${seq}` },
-        category: ItemCategory.DAIRY,
         defaultUnit: UnitOfMeasure.LITER,
       })
     );
@@ -410,7 +408,6 @@ describeIntegration('catalog’s dashboard block (real Postgres)', () => {
           Item,
           items.create({
             name: { en: 'Butter', es: 'Mantequilla' },
-            category: ItemCategory.DAIRY,
             defaultUnit: UnitOfMeasure.GRAM,
           })
         )

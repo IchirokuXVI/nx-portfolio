@@ -651,6 +651,38 @@ describe('HarvestRunService.spawn', () => {
     );
   });
 
+  it('refuses an El Jamón walk with no scope to write its one price list to', async () => {
+    // One price list for every shop (plan 0169, section 2), written into the
+    // chain's NATIONAL scope. The chain names no scope of its own, so a walk
+    // with nowhere to write is refused, as a Carrefour one is.
+    const { service } = build({ source: { adapterKey: 'eljamon-web' } });
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('starts an El Jamón store discovery with no postal code', async () => {
+    // The locator names all 366 shops in one request (plan 0169, section 3).
+    const { service, store } = build({ source: { adapterKey: 'eljamon-web' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    );
+  });
+
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
     // A chain that publishes an assortment and no store list is still a radius
     // over OpenStreetMap and still needs a centre. Mercadona was this case

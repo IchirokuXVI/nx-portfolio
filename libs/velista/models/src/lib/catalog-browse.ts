@@ -1,5 +1,6 @@
 import type { ProductOffer } from './domain';
-import type { ProductCategory, UnitOfMeasure } from './enums';
+import type { UnitOfMeasure } from './enums';
+import type { ProductCategory } from './product-category';
 import {
   inLocale,
   type LocalizedName,
@@ -77,7 +78,8 @@ export interface CatalogProduct {
   readonly imageUrl: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
-  readonly category: ProductCategory;
+  /** The aisles the catalog files it under, in its order. Empty when none was readable. */
+  readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */
   readonly offer: ProductOffer | null;
   /** What {@link ProductOffer.unitPrice} is counted in, or null when unknown. */
@@ -92,12 +94,36 @@ export interface CatalogBrowseQuery {
   /** Only the products this chain sells (backend `0146`), or every chain. */
   readonly soldBy: string | null;
   /**
+   * Only the products under this category (backend `0166`, section 4): a leaf, or a
+   * root, which means every leaf under it. Null is the whole catalog (velista `0119`).
+   */
+  readonly categoryId: string | null;
+  /**
    * Price from exactly these scopes. Empty resolves the caller's own profile,
    * which is what every read without a chain chosen wants.
    */
   readonly priceScopeIds: readonly string[];
+  /**
+   * Price at exactly this shop (backend `0170`, section 4), or null for none.
+   * Sent alone: the server picks the shop's scope and chain itself and refuses
+   * scopes or another chain beside it, so a read with a shop sends neither.
+   */
+  readonly locationId: string | null;
   readonly cursor: string | null;
   readonly limit: number;
+}
+
+/**
+ * One shop, as the catalog tab names the shop it is priced at (velista `0124`;
+ * `GET /v1/catalog/locations/:id`).
+ */
+export interface CatalogLocation {
+  readonly id: string;
+  readonly supermarketId: string;
+  /** The shop's own name, which most shops of a chain do not have. */
+  readonly label: LocalizedName | null;
+  readonly address: string | null;
+  readonly city: string | null;
 }
 
 /**
@@ -124,6 +150,8 @@ export interface CatalogChain {
   readonly name: LocalizedName;
   /** How many of its shops are in the person's postal codes. */
   readonly locations: number;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
 }
 
 /** One price scope the person's read resolves to, and whose it is. */

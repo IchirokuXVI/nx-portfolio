@@ -4,29 +4,53 @@
 -->
 <div class="head">
   <button
-    (click)="back.emit()"
-    [attr.aria-label]="'getList.shop.back' | rokuT"
+    (click)="goBack()"
+    [attr.aria-label]="
+      (openHead() === null
+        ? 'getList.shop.back'
+        : 'catalog.supermarket.backToChains'
+      ) | rokuT
+    "
     #backButton
     class="back"
     type="button"
   >
     <lib-chevron-left-icon class="back-glyph" />
   </button>
-  <h2 class="title" id="get-list-shop-title">
-    {{ 'getList.shop.label' | rokuT }}
-  </h2>
-  <!--
-    In the title row, reachable without scrolling (velista 0103). It asks for the
-    position only when pressed.
-  -->
-  <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+  @if (openHead(); as chain) {
+    <lib-chain-logo [logo]="chain.logo" class="head-logo" size="sm" />
+    <!--
+      The pane keeps its name while a chain is open (velista 0124), so the chain's
+      name is what is seen and the question is still what is heard.
+    -->
+    <h2 class="title is-chain" id="get-list-shop-title">
+      <span class="visually-hidden">{{ 'getList.shop.label' | rokuT }},</span>
+      {{ chain.name }}
+    </h2>
+  } @else {
+    <h2 class="title" id="get-list-shop-title">
+      {{ 'getList.shop.label' | rokuT }}
+    </h2>
+    <!--
+      In the title row, reachable without scrolling (velista 0103). It asks for the
+      position only when pressed. Not on a chain's screen, which has none.
+    -->
+    <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+  }
 </div>
+
+@if (openHead(); as chain) {
+  <p class="count">
+    {{ 'shops.chain.inAreas' | rokuT: { count: chain.count } }}
+  </p>
+}
 
 <!--
   The body the basket's filter sheet draws too (velista 0102): the search, the chain
   buttons, and the open chain's shops or the flat matches, one radio each.
 -->
 <lib-shop-picker
+  (about)="openShop($event)"
   (chosen)="select($event)"
   (picked)="pick($event)"
   (queried)="onQuery($event)"
@@ -36,10 +60,11 @@
   [matches]="matches()"
   [near]="near()"
   [openKey]="openKey()"
-  [openName]="openName()"
+  [pickedChain]="pickedChain()"
   [pickedId]="pickedId()"
   [query]="query()"
   [recent]="recent()"
+  [searchPending]="searchPending()"
   [state]="state()"
   fieldId="get-list-shop-search"
 />

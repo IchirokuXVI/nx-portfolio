@@ -35,8 +35,18 @@ export class ResourceListStore<T extends ResourceRow> {
 
   constructor(
     private readonly _descriptor: ResourceDescriptor<T>,
-    private readonly _gateway: ResourceGateway<T>
-  ) {}
+    private readonly _gateway: ResourceGateway<T>,
+    /**
+     * The filters the list opens with, from the link that opened it.
+     *
+     * A refusal can point at a narrowed list rather than at a row: a category
+     * that still holds products links to its products (admin plan 0036), and
+     * the list has to open already filtered or the link says nothing.
+     */
+    initialFilters: Readonly<Record<string, string>> = {}
+  ) {
+    this._filters.set(initialFilters);
+  }
 
   readonly rows: Signal<readonly T[]> = this._rows.asReadonly();
   readonly status: Signal<ListStatus> = this._status.asReadonly();

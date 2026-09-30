@@ -20,6 +20,15 @@ export interface ProblemResponseOptions {
   participant?: boolean;
   /** The route resolves a zone membership, so it can be a 403 or a 404. */
   membership?: boolean;
+  /**
+   * The route carries `@RequirePermission`, so an account without the
+   * permission is a 403 of its own code (plan 0175). The decorator already
+   * documents this; a route that also documents another 403 of its own must
+   * pass it again, because Swagger keeps one response per status.
+   */
+  permission?: boolean;
+  /** The route sets an account's roles, which a guest cannot hold (plan 0175). */
+  guestRoles?: boolean;
   /** The route takes a request body, so validation can reject it with a 400. */
   body?: boolean;
   /**
@@ -68,6 +77,18 @@ export interface ProblemResponseOptions {
    * number.
    */
   lineMerge?: boolean;
+  /**
+   * The route reads the catalog at one shop (plan 0170): `locationId` beside
+   * another selector is a 400 of its own code, and an unknown shop a 404 of
+   * its own code.
+   */
+  atLocation?: boolean;
+  /**
+   * The route appends an entry to a walk (plan 0168, section 2): a stale base
+   * is a 409 of its own code, a fold that does not validate or is too large a
+   * 422, and an entry id already stored on another walk a plain 409.
+   */
+  shopWalk?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -123,6 +144,12 @@ export function ApiProblemResponses(
   if (options.membership) {
     codes.push(ERROR_CODES.FORBIDDEN, ERROR_CODES.NOT_FOUND);
   }
+  if (options.permission) {
+    codes.push(ERROR_CODES.PERMISSION_REQUIRED);
+  }
+  if (options.guestRoles) {
+    codes.push(ERROR_CODES.GUEST_HAS_NO_ROLES);
+  }
   if (options.notFound && !options.membership) {
     codes.push(ERROR_CODES.NOT_FOUND);
   }
@@ -146,6 +173,20 @@ export function ApiProblemResponses(
       ERROR_CODES.LINE_MERGE_REQUIRED,
       ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL,
       ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS
+    );
+  }
+  if (options.atLocation) {
+    codes.push(
+      ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE,
+      ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND
+    );
+  }
+  if (options.shopWalk) {
+    codes.push(
+      ERROR_CODES.WALK_CHANGED,
+      ERROR_CODES.CONFLICT,
+      ERROR_CODES.SHOP_MAP_INVALID,
+      ERROR_CODES.SHOP_MAP_TOO_LARGE
     );
   }
   if (options.throttled !== false) {

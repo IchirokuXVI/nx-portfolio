@@ -1,0 +1,42 @@
+<main class="page">
+  <header class="head">
+    <button
+      (click)="back()"
+      [attr.aria-label]="'catalog.categories.backToRoots' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <h1 class="title">{{ title() }}</h1>
+  </header>
+
+  @switch (state()) {
+    @case ('loaded') {
+      @if (branch() !== null) {
+        <lib-category-rows [emphasis]="true" [rows]="everything()" />
+        <lib-category-rows [rows]="children()" />
+      }
+    }
+    @case ('failed') {
+      <div class="failed" role="alert">
+        <p class="failed-text">{{ 'catalog.categories.failed' | rokuT }}</p>
+        <button (click)="retry()" class="secondary" type="button">
+          {{ 'catalog.error.retry' | rokuT }}
+        </button>
+      </div>
+    }
+    @default {
+      <div aria-live="polite" role="status">
+        <span class="visually-hidden">
+          {{ 'catalog.categories.loading' | rokuT }}
+        </span>
+        <div aria-hidden="true" class="skeleton">
+          @for (bone of skeletonRows; track bone) {
+            <span class="bone"></span>
+          }
+        </div>
+      </div>
+    }
+  }
+</main>

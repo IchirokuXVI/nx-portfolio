@@ -1,0 +1,158 @@
+@use '../walks';
+@use 'record';
+
+// The mark sheet (velista 0126, the `Mark` board). The host covers the screen;
+// the layer is fixed with its foot on the top of the keyboard (`bottom`, set by
+// the component), holds the sheet, which scrolls when the keyboard leaves little
+// room, and the Save bar, which never scrolls away.
+
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: var(--app-tour-z);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--app-scrim);
+}
+
+.layer {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.sheet {
+  @include record.sheet;
+
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-block-end: var(--app-space-4);
+  box-shadow: none;
+
+  > * {
+    flex: none;
+  }
+}
+
+.handle {
+  @include record.handle;
+}
+
+.head {
+  @include record.head;
+}
+
+.title {
+  @include record.title;
+}
+
+.close {
+  @include walks.icon-button;
+}
+
+.remind {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5);
+  border-radius: var(--app-radius-md);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.remind-glyph {
+  flex: none;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-icon-sm);
+}
+
+.remind-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+}
+
+.remind-title {
+  font-weight: 700;
+}
+
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--app-space-2);
+  padding: var(--app-space-2);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.kind {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  &.on {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+    box-shadow: var(--app-elevation-1);
+  }
+
+  @include walks.focus-ring;
+}
+
+.field-block,
+.chips-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.label {
+  @include record.label;
+}
+
+.field {
+  @include record.field;
+}
+
+.chips {
+  @include record.chips;
+}
+
+.chip {
+  @include record.chip;
+}
+
+.savebar {
+  flex: none;
+  padding: var(--app-space-4) var(--app-space-5);
+  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+.waiting {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-attention-fg);
+  text-align: center;
+}
+
+.save {
+  @include walks.primary;
+}

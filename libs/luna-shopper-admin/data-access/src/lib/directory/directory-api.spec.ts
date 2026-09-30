@@ -89,6 +89,57 @@ describe('DirectoryApi', () => {
     http.verify();
   });
 
+  /**
+   * The whole set with a PUT (backend plan 0175), in the order the server
+   * lists roles, so a set sent in any order reads back as it was sent.
+   */
+  it('replaces the roles with a PUT carrying the whole set', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setUserRoles(USER, ['premium', 'admin']);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/roles`
+    );
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ roles: ['admin', 'premium'] });
+    request.flush({});
+
+    await expect(done).resolves.toBeUndefined();
+    http.verify();
+  });
+
+  it('sends an empty set to take every role away', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setUserRoles(USER, []);
+    const request = http.expectOne(
+      `${API.gatewayBaseUrl}/v1/admin/users/${USER}/roles`
+    );
+    expect(request.request.body).toEqual({ roles: [] });
+    request.flush({});
+
+    await done;
+    http.verify();
+  });
+
+  it('turns a refused guest into a gateway error with its code', async () => {
+    const { directory, http } = setUp();
+
+    const done = directory.setUserRoles(USER, ['admin']);
+    http
+      .expectOne(`${API.gatewayBaseUrl}/v1/admin/users/${USER}/roles`)
+      .flush(
+        { code: 'guest_has_no_roles', message: 'No', correlationId: 'c-1' },
+        { status: 409, statusText: 'Conflict' }
+      );
+
+    await expect(done).rejects.toMatchObject({
+      code: 'guest_has_no_roles',
+      status: 409,
+    });
+    http.verify();
+  });
+
   it('deletes a zone through the reaper route', async () => {
     const { directory, http } = setUp();
 

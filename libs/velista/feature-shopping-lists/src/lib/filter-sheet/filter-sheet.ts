@@ -110,6 +110,12 @@ export class FilterSheet {
 
   protected readonly order = this._view.order;
   protected readonly grouping = this._view.grouping;
+  /**
+   * Whether the Category radio reads Aisle (velista `0120`): only once the chosen
+   * shop's sections have landed and there is at least one, which is the moment the
+   * headings on the page behind become the shop's. One radio with two names.
+   */
+  protected readonly byAisle = this._view.byAisle;
   protected readonly sourceLists = this._view.sourceLists;
   protected readonly keptLists = this._view.keptLists;
   private readonly _chosenShop = this._view.chosenShop;

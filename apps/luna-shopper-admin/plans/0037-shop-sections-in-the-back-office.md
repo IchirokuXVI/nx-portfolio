@@ -1,3 +1,7 @@
+> **PR:** [#527](https://github.com/IchirokuXVI/nx-portfolio/pull/527)
+> Built without the parts that read backend 0168 (shop maps), which is on hold: target 2's map written list notice and target 3's per shop pins from a map.
+> On 2026-09-29 the shop map series was rewritten: target 2 moved to `0040`, and target 3 was dropped because the new maps carry no product pins.
+
 # 0037 Shop sections in the back office
 
 > Back office half of backend `0167`. Needs `0036` (the tree has a screen and the item form

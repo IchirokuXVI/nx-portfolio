@@ -1,0 +1,2202 @@
+[
+ {
+  "slug": "fruits",
+  "parentSlug": null,
+  "position": 0,
+  "diaId": "L105",
+  "es": "Frutas",
+  "en": "Fruits"
+ },
+ {
+  "slug": "bananas-and-plantains",
+  "parentSlug": "fruits",
+  "position": 0,
+  "diaId": "L2033",
+  "es": "Plátanos y bananas",
+  "en": "Bananas and plantains"
+ },
+ {
+  "slug": "apples-and-pears",
+  "parentSlug": "fruits",
+  "position": 1,
+  "diaId": "L2032",
+  "es": "Manzanas y peras",
+  "en": "Apples and pears"
+ },
+ {
+  "slug": "oranges-tangerines-and-lemons",
+  "parentSlug": "fruits",
+  "position": 2,
+  "diaId": "L2196",
+  "es": "Naranjas, mandarinas y limones",
+  "en": "Oranges, tangerines, and lemons"
+ },
+ {
+  "slug": "melon-and-watermelon",
+  "parentSlug": "fruits",
+  "position": 3,
+  "diaId": "L2267",
+  "es": "Melón y sandía",
+  "en": "Melon and watermelon"
+ },
+ {
+  "slug": "grapes",
+  "parentSlug": "fruits",
+  "position": 4,
+  "diaId": "L2035",
+  "es": "Uvas",
+  "en": "Grapes"
+ },
+ {
+  "slug": "tropical-fruits",
+  "parentSlug": "fruits",
+  "position": 5,
+  "diaId": "L2039",
+  "es": "Frutas tropicales",
+  "en": "Tropical fruits"
+ },
+ {
+  "slug": "red-and-forest-fruits",
+  "parentSlug": "fruits",
+  "position": 6,
+  "diaId": "L2038",
+  "es": "Frutos rojos y del bosque",
+  "en": "Red and forest fruits"
+ },
+ {
+  "slug": "frozen-fruits",
+  "parentSlug": "fruits",
+  "position": 7,
+  "diaId": "L2268",
+  "es": "Frutas congeladas",
+  "en": "Frozen fruits"
+ },
+ {
+  "slug": "other-fruits",
+  "parentSlug": "fruits",
+  "position": 8,
+  "diaId": null,
+  "es": "Otras frutas",
+  "en": "Other fruits"
+ },
+ {
+  "slug": "vegetables",
+  "parentSlug": null,
+  "position": 1,
+  "diaId": "L104",
+  "es": "Verduras",
+  "en": "Vegetables"
+ },
+ {
+  "slug": "lettuce-and-leafy-greens",
+  "parentSlug": "vegetables",
+  "position": 0,
+  "diaId": "L2027",
+  "es": "Lechugas y hojas verdes",
+  "en": "Lettuce and leafy greens"
+ },
+ {
+  "slug": "tomatoes-peppers-and-cucumbers",
+  "parentSlug": "vegetables",
+  "position": 1,
+  "diaId": "L2023",
+  "es": "Tomates, pimientos y pepinos",
+  "en": "Tomatoes, peppers and cucumbers"
+ },
+ {
+  "slug": "garlic-onions-and-leeks",
+  "parentSlug": "vegetables",
+  "position": 2,
+  "diaId": "L2022",
+  "es": "Ajos, cebollas y puerros",
+  "en": "Garlic, onions and leeks"
+ },
+ {
+  "slug": "courgette-pumpkin-and-aubergine",
+  "parentSlug": "vegetables",
+  "position": 3,
+  "diaId": "L2181",
+  "es": "Calabacín, calabaza y berenjena",
+  "en": "Courgette, pumpkin and aubergine"
+ },
+ {
+  "slug": "potatoes-and-carrots",
+  "parentSlug": "vegetables",
+  "position": 4,
+  "diaId": "L2028",
+  "es": "Patatas y zanahorias",
+  "en": "Potatoes and carrots"
+ },
+ {
+  "slug": "broccoli-cauliflower-and-green-beans",
+  "parentSlug": "vegetables",
+  "position": 5,
+  "diaId": "L2024",
+  "es": "Brócoli, coliflor y judías verdes",
+  "en": "Broccoli, cauliflower, and green beans"
+ },
+ {
+  "slug": "mushrooms",
+  "parentSlug": "vegetables",
+  "position": 6,
+  "diaId": "L2029",
+  "es": "Setas y champiñones",
+  "en": "Mushrooms"
+ },
+ {
+  "slug": "aromatic-herbs",
+  "parentSlug": "vegetables",
+  "position": 7,
+  "diaId": "L2031",
+  "es": "Hierbas aromáticas",
+  "en": "Aromatic herbs"
+ },
+ {
+  "slug": "salads-and-prepared-vegetables",
+  "parentSlug": "vegetables",
+  "position": 8,
+  "diaId": "L2030",
+  "es": "Ensaladas y verduras preparadas",
+  "en": "Salads and prepared vegetables"
+ },
+ {
+  "slug": "frozen-and-steamed-vegetables",
+  "parentSlug": "vegetables",
+  "position": 9,
+  "diaId": "L2025",
+  "es": "Verduras congeladas y al vapor",
+  "en": "Frozen and steamed vegetables"
+ },
+ {
+  "slug": "vegetables-canned-vegetables",
+  "parentSlug": "vegetables",
+  "position": 10,
+  "diaId": "L2026",
+  "es": "Conservas de verduras",
+  "en": "Canned vegetables"
+ },
+ {
+  "slug": "meats",
+  "parentSlug": null,
+  "position": 2,
+  "diaId": "L102",
+  "es": "Carnes",
+  "en": "Meats"
+ },
+ {
+  "slug": "chicken",
+  "parentSlug": "meats",
+  "position": 0,
+  "diaId": "L2202",
+  "es": "Pollo",
+  "en": "Chicken"
+ },
+ {
+  "slug": "beef",
+  "parentSlug": "meats",
+  "position": 1,
+  "diaId": "L2013",
+  "es": "Vacuno",
+  "en": "Beef"
+ },
+ {
+  "slug": "pork",
+  "parentSlug": "meats",
+  "position": 2,
+  "diaId": "L2014",
+  "es": "Cerdo",
+  "en": "Pork"
+ },
+ {
+  "slug": "turkey",
+  "parentSlug": "meats",
+  "position": 3,
+  "diaId": "L2015",
+  "es": "Pavo",
+  "en": "Turkey"
+ },
+ {
+  "slug": "rabbit",
+  "parentSlug": "meats",
+  "position": 4,
+  "diaId": "L2016",
+  "es": "Conejo",
+  "en": "Rabbit"
+ },
+ {
+  "slug": "hamburgers-ground-beef-and-meatballs",
+  "parentSlug": "meats",
+  "position": 5,
+  "diaId": "L2017",
+  "es": "Hamburguesas, carne picada y albóndigas",
+  "en": "Hamburgers, ground beef, and meatballs"
+ },
+ {
+  "slug": "breaded-and-prepared-foods",
+  "parentSlug": "meats",
+  "position": 6,
+  "diaId": "L2265",
+  "es": "Empanados y elaborados",
+  "en": "Breaded and prepared foods"
+ },
+ {
+  "slug": "cuts-and-cuts",
+  "parentSlug": "meats",
+  "position": 7,
+  "diaId": "L2266",
+  "es": "Arreglos y despieces",
+  "en": "Cuts and cuts"
+ },
+ {
+  "slug": "fish-and-seafood",
+  "parentSlug": null,
+  "position": 3,
+  "diaId": "L103",
+  "es": "Pescados y mariscos",
+  "en": "Fish and seafood"
+ },
+ {
+  "slug": "fish-and-seafood-fresh",
+  "parentSlug": "fish-and-seafood",
+  "position": 0,
+  "diaId": "L2019",
+  "es": "Fresco",
+  "en": "Fresh"
+ },
+ {
+  "slug": "fish-and-seafood-frozen",
+  "parentSlug": "fish-and-seafood",
+  "position": 1,
+  "diaId": "L2249",
+  "es": "Congelado",
+  "en": "Frozen"
+ },
+ {
+  "slug": "breaded",
+  "parentSlug": "fish-and-seafood",
+  "position": 2,
+  "diaId": "L2251",
+  "es": "Rebozado",
+  "en": "Breaded"
+ },
+ {
+  "slug": "seafood-shrimp-and-squid",
+  "parentSlug": "fish-and-seafood",
+  "position": 3,
+  "diaId": "L2253",
+  "es": "Marisco, gamba y calamar",
+  "en": "Seafood, shrimp and squid"
+ },
+ {
+  "slug": "smoked-and-salted",
+  "parentSlug": "fish-and-seafood",
+  "position": 4,
+  "diaId": "L2020",
+  "es": "Ahumado y salazón",
+  "en": "Smoked and salted"
+ },
+ {
+  "slug": "surimi-and-prepared-products",
+  "parentSlug": "fish-and-seafood",
+  "position": 5,
+  "diaId": "L2021",
+  "es": "Surimi y elaborados",
+  "en": "Surimi and prepared products"
+ },
+ {
+  "slug": "charcuterie",
+  "parentSlug": null,
+  "position": 4,
+  "diaId": "L134",
+  "es": "Charcutería",
+  "en": "Charcuterie"
+ },
+ {
+  "slug": "cooked-ham",
+  "parentSlug": "charcuterie",
+  "position": 0,
+  "diaId": "L2001",
+  "es": "Jamón cocido",
+  "en": "Cooked ham"
+ },
+ {
+  "slug": "turkey-and-chicken",
+  "parentSlug": "charcuterie",
+  "position": 1,
+  "diaId": "L2342",
+  "es": "Pavo y pollo",
+  "en": "Turkey and chicken"
+ },
+ {
+  "slug": "serrano-ham",
+  "parentSlug": "charcuterie",
+  "position": 2,
+  "diaId": "L2004",
+  "es": "Jamón serrano",
+  "en": "Serrano ham"
+ },
+ {
+  "slug": "loin-and-chorizo",
+  "parentSlug": "charcuterie",
+  "position": 3,
+  "diaId": "L2005",
+  "es": "Lomo y chorizo",
+  "en": "Loin and chorizo"
+ },
+ {
+  "slug": "fuet-and-salchichon",
+  "parentSlug": "charcuterie",
+  "position": 4,
+  "diaId": "L2343",
+  "es": "Fuet y salchichón",
+  "en": "Fuet and salchichón"
+ },
+ {
+  "slug": "chopped-and-mortadella",
+  "parentSlug": "charcuterie",
+  "position": 5,
+  "diaId": "L2259",
+  "es": "Chopped y mortadela",
+  "en": "Chopped and mortadella"
+ },
+ {
+  "slug": "sausages",
+  "parentSlug": "charcuterie",
+  "position": 6,
+  "diaId": "L2206",
+  "es": "Salchichas",
+  "en": "Sausages"
+ },
+ {
+  "slug": "bacon",
+  "parentSlug": "charcuterie",
+  "position": 7,
+  "diaId": "L2344",
+  "es": "Bacon",
+  "en": "Bacon"
+ },
+ {
+  "slug": "pate-and-sobrasada",
+  "parentSlug": "charcuterie",
+  "position": 8,
+  "diaId": "L2012",
+  "es": "Paté y sobrasada",
+  "en": "Pâté and sobrasada"
+ },
+ {
+  "slug": "cheeses",
+  "parentSlug": null,
+  "position": 5,
+  "diaId": "L101",
+  "es": "Quesos",
+  "en": "Cheeses"
+ },
+ {
+  "slug": "cured",
+  "parentSlug": "cheeses",
+  "position": 0,
+  "diaId": "L2007",
+  "es": "Curado",
+  "en": "Cured"
+ },
+ {
+  "slug": "semi-cured",
+  "parentSlug": "cheeses",
+  "position": 1,
+  "diaId": "L2345",
+  "es": "Semicurado",
+  "en": "Semi-cured"
+ },
+ {
+  "slug": "young-mild",
+  "parentSlug": "cheeses",
+  "position": 2,
+  "diaId": "L2346",
+  "es": "Tierno",
+  "en": "Young/Mild"
+ },
+ {
+  "slug": "cheeses-fresh",
+  "parentSlug": "cheeses",
+  "position": 3,
+  "diaId": "L2008",
+  "es": "Fresco",
+  "en": "Fresh"
+ },
+ {
+  "slug": "specialties",
+  "parentSlug": "cheeses",
+  "position": 4,
+  "diaId": "L2011",
+  "es": "Especialidades",
+  "en": "Specialties"
+ },
+ {
+  "slug": "blue-and-goat-cheese",
+  "parentSlug": "cheeses",
+  "position": 5,
+  "diaId": "L2009",
+  "es": "Azul y de cabra",
+  "en": "Blue and goat cheese"
+ },
+ {
+  "slug": "sliced",
+  "parentSlug": "cheeses",
+  "position": 6,
+  "diaId": "L2205",
+  "es": "En lonchas",
+  "en": "Sliced"
+ },
+ {
+  "slug": "shredded-grated",
+  "parentSlug": "cheeses",
+  "position": 7,
+  "diaId": "L2347",
+  "es": "Rallado",
+  "en": "Shredded/Grated"
+ },
+ {
+  "slug": "spreadable-and-portions",
+  "parentSlug": "cheeses",
+  "position": 8,
+  "diaId": "L2010",
+  "es": "Untable y en porciones",
+  "en": "Spreadable and portions"
+ },
+ {
+  "slug": "eggs-milk-and-butter",
+  "parentSlug": null,
+  "position": 6,
+  "diaId": "L108",
+  "es": "Huevos, leche y mantequilla",
+  "en": "Eggs, milk, and butter"
+ },
+ {
+  "slug": "eggs",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 0,
+  "diaId": "L2055",
+  "es": "Huevos",
+  "en": "Eggs"
+ },
+ {
+  "slug": "milk",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 1,
+  "diaId": "L2051",
+  "es": "Leche",
+  "en": "Milk"
+ },
+ {
+  "slug": "lactose-free-and-fortified-milk",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 2,
+  "diaId": "L2261",
+  "es": "Leche sin lactosa y enriquecidas",
+  "en": "Lactose-free and fortified milk"
+ },
+ {
+  "slug": "plant-based-drinks-and-horchata",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 3,
+  "diaId": "L2052",
+  "es": "Bebidas vegetales y horchatas",
+  "en": "Plant-based drinks and horchata"
+ },
+ {
+  "slug": "infant-formula",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 4,
+  "diaId": "L2262",
+  "es": "Leche infantil",
+  "en": "Infant formula"
+ },
+ {
+  "slug": "milkshakes",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 5,
+  "diaId": "L2053",
+  "es": "Batidos",
+  "en": "Milkshakes"
+ },
+ {
+  "slug": "condensed-and-evaporated-milk",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 6,
+  "diaId": "L2264",
+  "es": "Leche condensada y evaporada",
+  "en": "Condensed and evaporated milk"
+ },
+ {
+  "slug": "butter-and-margarine",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 7,
+  "diaId": "L2056",
+  "es": "Mantequilla y margarina",
+  "en": "Butter and margarine"
+ },
+ {
+  "slug": "cream",
+  "parentSlug": "eggs-milk-and-butter",
+  "position": 8,
+  "diaId": "L2054",
+  "es": "Nata",
+  "en": "Cream"
+ },
+ {
+  "slug": "bakery",
+  "parentSlug": null,
+  "position": 7,
+  "diaId": "L112",
+  "es": "Panadería",
+  "en": "Bakery"
+ },
+ {
+  "slug": "freshly-baked-bread",
+  "parentSlug": "bakery",
+  "position": 0,
+  "diaId": "L2070",
+  "es": "Pan recién horneado",
+  "en": "Freshly baked bread"
+ },
+ {
+  "slug": "sliced-and-specialty-breads",
+  "parentSlug": "bakery",
+  "position": 1,
+  "diaId": "L2069",
+  "es": "Pan de molde y especiales",
+  "en": "Sliced and specialty breads"
+ },
+ {
+  "slug": "hamburger-and-hot-dog-buns",
+  "parentSlug": "bakery",
+  "position": 2,
+  "diaId": "L2073",
+  "es": "Pan para hamburguesas y perritos",
+  "en": "Hamburger and hot dog buns"
+ },
+ {
+  "slug": "wheat-tortillas-and-pita-bread",
+  "parentSlug": "bakery",
+  "position": 3,
+  "diaId": "L2074",
+  "es": "Tortillas de trigo y pitas",
+  "en": "Wheat tortillas and pita bread"
+ },
+ {
+  "slug": "gluten-free-bread",
+  "parentSlug": "bakery",
+  "position": 4,
+  "diaId": "L2200",
+  "es": "Pan sin gluten",
+  "en": "Gluten-free bread"
+ },
+ {
+  "slug": "breadcrumbs-toasted-bread-and-breadsticks",
+  "parentSlug": "bakery",
+  "position": 5,
+  "diaId": "L2072",
+  "es": "Pan rallado, tostado y picos",
+  "en": "Breadcrumbs, toasted bread, and breadsticks"
+ },
+ {
+  "slug": "oven",
+  "parentSlug": "bakery",
+  "position": 6,
+  "diaId": "L2304",
+  "es": "Horno",
+  "en": "Oven"
+ },
+ {
+  "slug": "doughs-and-pastries",
+  "parentSlug": "bakery",
+  "position": 7,
+  "diaId": "L2076",
+  "es": "Masas y hojaldres",
+  "en": "Doughs and pastries"
+ },
+ {
+  "slug": "yoghurts-and-desserts",
+  "parentSlug": null,
+  "position": 8,
+  "diaId": "L113",
+  "es": "Yogures y postres",
+  "en": "Yoghurts and desserts"
+ },
+ {
+  "slug": "natural-and-skimmed-yogurts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 0,
+  "diaId": "L2079",
+  "es": "Yogures naturales y desnatados",
+  "en": "Natural and skimmed yogurts"
+ },
+ {
+  "slug": "flavoured-and-fruit-yoghurts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 1,
+  "diaId": "L2081",
+  "es": "Yogures de sabores y frutas",
+  "en": "Flavoured and fruit yoghurts"
+ },
+ {
+  "slug": "greek-yogurts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 2,
+  "diaId": "L2082",
+  "es": "Yogures griegos",
+  "en": "Greek yogurts"
+ },
+ {
+  "slug": "liquid-yogurts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 3,
+  "diaId": "L2248",
+  "es": "Yogures líquidos",
+  "en": "Liquid yogurts"
+ },
+ {
+  "slug": "bifidus-yoghurts-and-cholesterol",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 4,
+  "diaId": "L2078",
+  "es": "Yogures bífidus y colesterol",
+  "en": "Bifidus yoghurts and cholesterol"
+ },
+ {
+  "slug": "kefir-and-plant-based-desserts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 5,
+  "diaId": "L2085",
+  "es": "Kéfir y postres vegetales",
+  "en": "Kefir and plant-based desserts"
+ },
+ {
+  "slug": "protein-desserts-and-yogurts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 6,
+  "diaId": "L2229",
+  "es": "Postres y batidos de proteínas",
+  "en": "Desserts and protein shakes"
+ },
+ {
+  "slug": "yogurts-and-children-s-desserts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 7,
+  "diaId": "L2083",
+  "es": "Yogures y postres infantiles",
+  "en": "Yogurts and children's desserts"
+ },
+ {
+  "slug": "traditional-desserts",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 8,
+  "diaId": "L2087",
+  "es": "Postres tradicionales",
+  "en": "Traditional desserts"
+ },
+ {
+  "slug": "custard-flan-and-rice-pudding",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 9,
+  "diaId": "L2088",
+  "es": "Natillas, flan y arroz con leche",
+  "en": "Custard, flan, and rice pudding"
+ },
+ {
+  "slug": "gelatins-and-curds",
+  "parentSlug": "yoghurts-and-desserts",
+  "position": 10,
+  "diaId": "L2089",
+  "es": "Gelatinas y cuajadas",
+  "en": "Gelatins and curds"
+ },
+ {
+  "slug": "frozen-foods-and-ice-cream",
+  "parentSlug": null,
+  "position": 9,
+  "diaId": "L119",
+  "es": "Congelados y helados",
+  "en": "Frozen foods and ice cream"
+ },
+ {
+  "slug": "pizzas-and-doughs",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 0,
+  "diaId": "L2131",
+  "es": "Pizzas y masas",
+  "en": "Pizzas and doughs"
+ },
+ {
+  "slug": "croquettes-and-batters",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 1,
+  "diaId": "L2135",
+  "es": "Croquetas y rebozados",
+  "en": "Croquettes and batters"
+ },
+ {
+  "slug": "frozen-foods-and-ice-cream-fish-and-seafood",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 2,
+  "diaId": "L2132",
+  "es": "Pescado y marisco",
+  "en": "Fish and seafood"
+ },
+ {
+  "slug": "vegetables-and-potatoes",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 3,
+  "diaId": "L2210",
+  "es": "Verduras y patatas",
+  "en": "Vegetables and potatoes"
+ },
+ {
+  "slug": "rice-and-pasta",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 4,
+  "diaId": "L2137",
+  "es": "Arroces y pasta",
+  "en": "Rice and pasta"
+ },
+ {
+  "slug": "ice-creams-and-ice",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 5,
+  "diaId": "L2130",
+  "es": "Helados y hielo",
+  "en": "Ice creams and ice"
+ },
+ {
+  "slug": "cakes-and-churros",
+  "parentSlug": "frozen-foods-and-ice-cream",
+  "position": 6,
+  "diaId": "L2136",
+  "es": "Tartas y churros",
+  "en": "Cakes and churros"
+ },
+ {
+  "slug": "rice-pasta-and-pulses",
+  "parentSlug": null,
+  "position": 10,
+  "diaId": "L106",
+  "es": "Arroz, pastas y legumbres",
+  "en": "Rice, pasta and pulses"
+ },
+ {
+  "slug": "rice",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 0,
+  "diaId": "L2042",
+  "es": "Arroz",
+  "en": "Rice"
+ },
+ {
+  "slug": "rice-pasta-and-pulses-fideos",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 1,
+  "diaId": "L2270",
+  "es": "Fideos",
+  "en": "Noodles"
+ },
+ {
+  "slug": "macaroni-spaghetti-and-dried-pasta",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 2,
+  "diaId": "L2044",
+  "es": "Macarrones, espaguetis y pastas secas",
+  "en": "Macaroni, spaghetti, and dried pasta"
+ },
+ {
+  "slug": "filled-and-sauced-pasta",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 3,
+  "diaId": "L2271",
+  "es": "Pastas rellenas y en salsa",
+  "en": "Filled and Sauced Pasta"
+ },
+ {
+  "slug": "lasagna-and-cannelloni",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 4,
+  "diaId": "L2272",
+  "es": "Lasaña y canelones",
+  "en": "Lasagna and cannelloni"
+ },
+ {
+  "slug": "pasta-sauces",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 5,
+  "diaId": "L2297",
+  "es": "Salsas para pasta",
+  "en": "Pasta sauces"
+ },
+ {
+  "slug": "rice-pasta-and-pulses-noodles",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 6,
+  "diaId": "L2273",
+  "es": "Noodles",
+  "en": "Noodles"
+ },
+ {
+  "slug": "gluten-free-pasta",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 7,
+  "diaId": "L2274",
+  "es": "Pastas sin gluten",
+  "en": "Gluten-free pasta"
+ },
+ {
+  "slug": "chickpeas-and-beans",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 8,
+  "diaId": "L2191",
+  "es": "Garbanzos y alubias",
+  "en": "Chickpeas and beans"
+ },
+ {
+  "slug": "lentils",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 9,
+  "diaId": "L2193",
+  "es": "Lentejas",
+  "en": "Lentils"
+ },
+ {
+  "slug": "quinoa-couscous-and-soy",
+  "parentSlug": "rice-pasta-and-pulses",
+  "position": 10,
+  "diaId": "L2043",
+  "es": "Quinoa, couscous y soja",
+  "en": "Quinoa, couscous, and soy"
+ },
+ {
+  "slug": "oils-sauces-and-spices",
+  "parentSlug": null,
+  "position": 11,
+  "diaId": "L107",
+  "es": "Aceites, salsas y especias",
+  "en": "Oils, sauces and spices"
+ },
+ {
+  "slug": "oils",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 0,
+  "diaId": "L2046",
+  "es": "Aceites",
+  "en": "Oils"
+ },
+ {
+  "slug": "vinegars-and-dressings",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 1,
+  "diaId": "L2047",
+  "es": "Vinagres y aliños",
+  "en": "Vinegars and dressings"
+ },
+ {
+  "slug": "garlic-salt-and-pepper",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 2,
+  "diaId": "L2048",
+  "es": "Ajo, sal y pimienta",
+  "en": "Garlic, salt, and pepper"
+ },
+ {
+  "slug": "spices-and-herbs",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 3,
+  "diaId": "L2294",
+  "es": "Especias y hierbas",
+  "en": "Spices and herbs"
+ },
+ {
+  "slug": "seasonings",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 4,
+  "diaId": "L2295",
+  "es": "Sazonadores",
+  "en": "Seasonings"
+ },
+ {
+  "slug": "tomato-and-pasta-sauces",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 5,
+  "diaId": "L2208",
+  "es": "Salsas de tomate y pasta",
+  "en": "Tomato and pasta sauces"
+ },
+ {
+  "slug": "special-and-spicy-sauces",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 6,
+  "diaId": "L2296",
+  "es": "Salsas especiales y picantes",
+  "en": "Special and spicy sauces"
+ },
+ {
+  "slug": "ketchup-mayonnaise-and-mustard",
+  "parentSlug": "oils-sauces-and-spices",
+  "position": 7,
+  "diaId": "L2050",
+  "es": "Ketchup, mayonesa y mostaza",
+  "en": "Ketchup, mayonnaise, and mustard"
+ },
+ {
+  "slug": "canned-food-broths-and-creams",
+  "parentSlug": null,
+  "position": 12,
+  "diaId": "L114",
+  "es": "Conservas, caldos y cremas",
+  "en": "Canned food, broths and creams"
+ },
+ {
+  "slug": "tuna-and-bonito",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 0,
+  "diaId": "L2179",
+  "es": "Atún y bonito",
+  "en": "Tuna and bonito"
+ },
+ {
+  "slug": "mackerel-and-sardines",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 1,
+  "diaId": "L2207",
+  "es": "Caballa y sardinas",
+  "en": "Mackerel and sardines"
+ },
+ {
+  "slug": "mussels-cockles-and-fish",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 2,
+  "diaId": "L2195",
+  "es": "Mejillones, berberechos y pescado",
+  "en": "Mussels, cockles, and fish"
+ },
+ {
+  "slug": "pates",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 3,
+  "diaId": "L2341",
+  "es": "Patés",
+  "en": "Pâtés"
+ },
+ {
+  "slug": "canned-food-broths-and-creams-canned-vegetables",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 4,
+  "diaId": "L2092",
+  "es": "Conservas de verdura",
+  "en": "Canned vegetables"
+ },
+ {
+  "slug": "canned-fruit",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 5,
+  "diaId": "L2298",
+  "es": "Conservas de fruta",
+  "en": "Canned fruit"
+ },
+ {
+  "slug": "creams-and-purees",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 6,
+  "diaId": "L2094",
+  "es": "Cremas y purés",
+  "en": "Creams and purées"
+ },
+ {
+  "slug": "broths-and-soups",
+  "parentSlug": "canned-food-broths-and-creams",
+  "position": 7,
+  "diaId": "L2093",
+  "es": "Caldos y sopas",
+  "en": "Broths and soups"
+ },
+ {
+  "slug": "coffee-cocoa-and-infusions",
+  "parentSlug": null,
+  "position": 13,
+  "diaId": "L109",
+  "es": "Café, cacao e infusiones",
+  "en": "Coffee, cocoa and infusions"
+ },
+ {
+  "slug": "compatible-nespresso-capsules",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 0,
+  "diaId": "L2057",
+  "es": "Cápsulas compatibles Nespresso",
+  "en": "Compatible Nespresso capsules"
+ },
+ {
+  "slug": "compatible-dolce-gusto-capsules",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 1,
+  "diaId": "L2275",
+  "es": "Cápsulas compatibles Dolce Gusto",
+  "en": "Compatible Dolce Gusto capsules"
+ },
+ {
+  "slug": "other-compatible-capsules",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 2,
+  "diaId": "L2276",
+  "es": "Otras cápsulas compatibles",
+  "en": "Other compatible capsules"
+ },
+ {
+  "slug": "ground-coffee",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 3,
+  "diaId": "L2277",
+  "es": "Café molido",
+  "en": "Ground coffee"
+ },
+ {
+  "slug": "instant-coffee",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 4,
+  "diaId": "L2278",
+  "es": "Café soluble",
+  "en": "Instant coffee"
+ },
+ {
+  "slug": "whole-bean-coffee",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 5,
+  "diaId": "L2279",
+  "es": "Café en grano",
+  "en": "Whole bean coffee"
+ },
+ {
+  "slug": "cold-brew-coffee",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 6,
+  "diaId": "L2280",
+  "es": "Cafés fríos",
+  "en": "Cold brew coffee"
+ },
+ {
+  "slug": "cocoa-and-hot-chocolate",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 7,
+  "diaId": "L2058",
+  "es": "Cacao y chocolate a la taza",
+  "en": "Cocoa and hot chocolate"
+ },
+ {
+  "slug": "infusions",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 8,
+  "diaId": "L2059",
+  "es": "Infusiones",
+  "en": "Infusions"
+ },
+ {
+  "slug": "tea",
+  "parentSlug": "coffee-cocoa-and-infusions",
+  "position": 9,
+  "diaId": "L2281",
+  "es": "Té",
+  "en": "Tea"
+ },
+ {
+  "slug": "pastries-cakes-and-sugar",
+  "parentSlug": null,
+  "position": 14,
+  "diaId": "L132",
+  "es": "Bollería, repostería y azúcar",
+  "en": "Pastries, cakes, and sugar"
+ },
+ {
+  "slug": "sweet-baked-goods",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 0,
+  "diaId": "L2317",
+  "es": "Bollería de horno dulce",
+  "en": "Sweet baked goods"
+ },
+ {
+  "slug": "muffins-and-classic-pastries",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 1,
+  "diaId": "L2067",
+  "es": "Magdalenas y bollería clásica",
+  "en": "Muffins and classic pastries"
+ },
+ {
+  "slug": "doughnuts-and-cakes",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 2,
+  "diaId": "L2318",
+  "es": "Rosquillas y pastelitos",
+  "en": "Doughnuts and cakes"
+ },
+ {
+  "slug": "pastries-cakes-and-sugar-cakes",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 3,
+  "diaId": "L2319",
+  "es": "Tartas",
+  "en": "Cakes"
+ },
+ {
+  "slug": "flours-and-yeasts",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 4,
+  "diaId": "L2075",
+  "es": "Harinas y levaduras",
+  "en": "Flours and yeasts"
+ },
+ {
+  "slug": "dessert-mixes-and-decorations",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 5,
+  "diaId": "L2077",
+  "es": "Preparados para postres y decoración",
+  "en": "Dessert mixes and decorations"
+ },
+ {
+  "slug": "sugar-honey-and-sweeteners",
+  "parentSlug": "pastries-cakes-and-sugar",
+  "position": 6,
+  "diaId": "L2060",
+  "es": "Azúcar, miel y edulcorantes",
+  "en": "Sugar, honey, and sweeteners"
+ },
+ {
+  "slug": "biscuits-cereals-and-jams",
+  "parentSlug": null,
+  "position": 15,
+  "diaId": "L111",
+  "es": "Galletas, cereales y mermeladas",
+  "en": "Biscuits, cereals, and jams"
+ },
+ {
+  "slug": "chocolate-and-filled-biscuits",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 0,
+  "diaId": "L2320",
+  "es": "Galletas de chocolate y rellenas",
+  "en": "Chocolate and filled biscuits"
+ },
+ {
+  "slug": "classic-and-digestive-biscuits",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 1,
+  "diaId": "L2065",
+  "es": "Galletas clásicas y digestive",
+  "en": "Classic and digestive biscuits"
+ },
+ {
+  "slug": "savory-biscuits-and-crackers",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 2,
+  "diaId": "L2066",
+  "es": "Galletas saladas y crackers",
+  "en": "Savory biscuits and crackers"
+ },
+ {
+  "slug": "cereals",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 3,
+  "diaId": "L2068",
+  "es": "Cereales",
+  "en": "Cereals"
+ },
+ {
+  "slug": "whole-grain-cereals-and-muesli",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 4,
+  "diaId": "L2321",
+  "es": "Cereales integrales y muesli",
+  "en": "Whole grain cereals and muesli"
+ },
+ {
+  "slug": "cereal-and-protein-bars",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 5,
+  "diaId": "L2322",
+  "es": "Barritas de cereales y proteínas",
+  "en": "Cereal and protein bars"
+ },
+ {
+  "slug": "biscuits-cereals-and-jams-cakes",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 6,
+  "diaId": "L2216",
+  "es": "Tortitas",
+  "en": "Cakes"
+ },
+ {
+  "slug": "gluten-free-biscuits-cereals-and-pancakes",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 7,
+  "diaId": "L2323",
+  "es": "Galletas, cereales y tortitas sin gluten",
+  "en": "Gluten-free biscuits, cereals, and pancakes"
+ },
+ {
+  "slug": "jams",
+  "parentSlug": "biscuits-cereals-and-jams",
+  "position": 8,
+  "diaId": "L2062",
+  "es": "Mermeladas",
+  "en": "Jams"
+ },
+ {
+  "slug": "chocolates-and-sweets",
+  "parentSlug": null,
+  "position": 16,
+  "diaId": "L110",
+  "es": "Chocolates y golosinas",
+  "en": "Chocolates and sweets"
+ },
+ {
+  "slug": "milk-chocolate",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 0,
+  "diaId": "L2324",
+  "es": "Chocolate con leche",
+  "en": "Milk chocolate"
+ },
+ {
+  "slug": "dark-chocolate",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 1,
+  "diaId": "L2325",
+  "es": "Chocolate negro",
+  "en": "Dark chocolate"
+ },
+ {
+  "slug": "white-chocolate",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 2,
+  "diaId": "L2326",
+  "es": "Chocolate blanco",
+  "en": "White chocolate"
+ },
+ {
+  "slug": "chocolates-and-bonbons",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 3,
+  "diaId": "L2063",
+  "es": "Chocolatinas y bombones",
+  "en": "Chocolates and bonbons"
+ },
+ {
+  "slug": "cocoa-spreads-and-creams",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 4,
+  "diaId": "L2228",
+  "es": "Cremas de cacao y de untar",
+  "en": "Cocoa spreads and creams"
+ },
+ {
+  "slug": "sweets",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 5,
+  "diaId": "L2064",
+  "es": "Golosinas",
+  "en": "Sweets"
+ },
+ {
+  "slug": "chewing-gum-and-candies",
+  "parentSlug": "chocolates-and-sweets",
+  "position": 6,
+  "diaId": "L2327",
+  "es": "Chicles y caramelos",
+  "en": "Chewing gum and candies"
+ },
+ {
+  "slug": "prepared-meals-and-pizzas",
+  "parentSlug": null,
+  "position": 17,
+  "diaId": "L116",
+  "es": "Platos preparados y pizzas",
+  "en": "Prepared meals and pizzas"
+ },
+ {
+  "slug": "ready-to-eat-dishes",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 0,
+  "diaId": "L2102",
+  "es": "Listos para comer",
+  "en": "Ready-to-eat dishes"
+ },
+ {
+  "slug": "tortillas-and-pies",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 1,
+  "diaId": "L2105",
+  "es": "Tortillas y empanadas",
+  "en": "Tortillas and pies"
+ },
+ {
+  "slug": "refrigerated-pizzas",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 2,
+  "diaId": "L2101",
+  "es": "Pizzas refrigeradas",
+  "en": "Refrigerated pizzas"
+ },
+ {
+  "slug": "frozen-pizzas",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 3,
+  "diaId": "L2246",
+  "es": "Pizzas congeladas",
+  "en": "Frozen pizzas"
+ },
+ {
+  "slug": "sandwiches-and-burgers",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 4,
+  "diaId": "L2104",
+  "es": "Sándwiches y hamburguesas",
+  "en": "Sandwiches and Burgers"
+ },
+ {
+  "slug": "traditional-food",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 5,
+  "diaId": "L2247",
+  "es": "Comida tradicional",
+  "en": "Traditional Food"
+ },
+ {
+  "slug": "mexican-food",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 6,
+  "diaId": "L2103",
+  "es": "Comida mexicana",
+  "en": "Mexican Food"
+ },
+ {
+  "slug": "asian-food",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 7,
+  "diaId": "L2299",
+  "es": "Comida asiática",
+  "en": "Asian Food"
+ },
+ {
+  "slug": "salads-and-bowls",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 8,
+  "diaId": "L2300",
+  "es": "Ensaladas y bowls",
+  "en": "Salads and Bowls"
+ },
+ {
+  "slug": "gazpachos-and-salmorejos",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 9,
+  "diaId": "L2106",
+  "es": "Gazpachos y salmorejos",
+  "en": "Gazpachos and salmorejos"
+ },
+ {
+  "slug": "hummus-and-guacamole",
+  "parentSlug": "prepared-meals-and-pizzas",
+  "position": 10,
+  "diaId": "L2269",
+  "es": "Hummus y guacamoles",
+  "en": "Hummus and guacamole"
+ },
+ {
+  "slug": "snacks-and-nuts",
+  "parentSlug": null,
+  "position": 18,
+  "diaId": "L115",
+  "es": "Aperitivos y frutos secos",
+  "en": "Snacks and nuts"
+ },
+ {
+  "slug": "potato-chips",
+  "parentSlug": "snacks-and-nuts",
+  "position": 0,
+  "diaId": "L2098",
+  "es": "Patatas fritas",
+  "en": "Potato chips"
+ },
+ {
+  "slug": "savory-snacks",
+  "parentSlug": "snacks-and-nuts",
+  "position": 1,
+  "diaId": "L2282",
+  "es": "Snacks salados",
+  "en": "Savory snacks"
+ },
+ {
+  "slug": "vegetable-snacks",
+  "parentSlug": "snacks-and-nuts",
+  "position": 2,
+  "diaId": "L2285",
+  "es": "Snacks vegetales",
+  "en": "Vegetable snacks"
+ },
+ {
+  "slug": "nuts",
+  "parentSlug": "snacks-and-nuts",
+  "position": 3,
+  "diaId": "L2097",
+  "es": "Frutos secos",
+  "en": "Nuts"
+ },
+ {
+  "slug": "mixed-nuts",
+  "parentSlug": "snacks-and-nuts",
+  "position": 4,
+  "diaId": "L2283",
+  "es": "Mix de frutos secos",
+  "en": "Mixed nuts"
+ },
+ {
+  "slug": "dried-fruit",
+  "parentSlug": "snacks-and-nuts",
+  "position": 5,
+  "diaId": "L2041",
+  "es": "Frutas deshidratadas",
+  "en": "Dried fruit"
+ },
+ {
+  "slug": "olives",
+  "parentSlug": "snacks-and-nuts",
+  "position": 6,
+  "diaId": "L2096",
+  "es": "Aceitunas",
+  "en": "Olives"
+ },
+ {
+  "slug": "pickles",
+  "parentSlug": "snacks-and-nuts",
+  "position": 7,
+  "diaId": "L2284",
+  "es": "Encurtidos",
+  "en": "Pickles"
+ },
+ {
+  "slug": "water-and-soft-drinks",
+  "parentSlug": null,
+  "position": 19,
+  "diaId": "L117",
+  "es": "Agua y refrescos",
+  "en": "Water and Soft Drinks"
+ },
+ {
+  "slug": "water",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 0,
+  "diaId": "L2107",
+  "es": "Agua",
+  "en": "Water"
+ },
+ {
+  "slug": "cola",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 1,
+  "diaId": "L2108",
+  "es": "Cola",
+  "en": "Cola"
+ },
+ {
+  "slug": "orange-lemon-and-lemon-lime",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 2,
+  "diaId": "L2212",
+  "es": "Naranja, limón y lima-limón",
+  "en": "Orange, Lemon, and Lemon-Lime"
+ },
+ {
+  "slug": "tonic-sparkling-water-and-bitter",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 3,
+  "diaId": "L2112",
+  "es": "Tónica, gaseosa y bitter",
+  "en": "Tonic, Sparkling Water, and Bitter"
+ },
+ {
+  "slug": "iced-tea",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 4,
+  "diaId": "L2111",
+  "es": "Té frío",
+  "en": "Iced Tea"
+ },
+ {
+  "slug": "non-carbonated-soft-drinks",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 5,
+  "diaId": "L2192",
+  "es": "Refrescos sin gas",
+  "en": "Non-Carbonated Soft Drinks"
+ },
+ {
+  "slug": "isotonic-and-sports-drinks",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 6,
+  "diaId": "L2114",
+  "es": "Bebidas isotónicas y deportivas",
+  "en": "Isotonic and sports drinks"
+ },
+ {
+  "slug": "energy-drinks",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 7,
+  "diaId": "L2217",
+  "es": "Bebidas energéticas",
+  "en": "Energy drinks"
+ },
+ {
+  "slug": "kombucha-and-vitamin-infused-waters",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 8,
+  "diaId": "L2110",
+  "es": "Kombucha y aguas vitaminadas",
+  "en": "Kombucha and Vitamin-Infused Waters"
+ },
+ {
+  "slug": "water-and-soft-drink-packs",
+  "parentSlug": "water-and-soft-drinks",
+  "position": 9,
+  "diaId": "L2286",
+  "es": "Packs de agua y refrescos",
+  "en": "Water and Soft Drink Packs"
+ },
+ {
+  "slug": "juices-and-smoothies",
+  "parentSlug": null,
+  "position": 20,
+  "diaId": "L127",
+  "es": "Zumos y smoothies",
+  "en": "Juices and Smoothies"
+ },
+ {
+  "slug": "freshly-squeezed-and-fresh",
+  "parentSlug": "juices-and-smoothies",
+  "position": 0,
+  "diaId": "L2113",
+  "es": "Recién exprimido y fresco",
+  "en": "Freshly squeezed and fresh"
+ },
+ {
+  "slug": "orange",
+  "parentSlug": "juices-and-smoothies",
+  "position": 1,
+  "diaId": "L2287",
+  "es": "Naranja",
+  "en": "Orange"
+ },
+ {
+  "slug": "lemonade",
+  "parentSlug": "juices-and-smoothies",
+  "position": 2,
+  "diaId": "L2312",
+  "es": "Limonadas",
+  "en": "Lemonade"
+ },
+ {
+  "slug": "peach-and-pineapple",
+  "parentSlug": "juices-and-smoothies",
+  "position": 3,
+  "diaId": "L2288",
+  "es": "Melocotón y piña",
+  "en": "Peach and Pineapple"
+ },
+ {
+  "slug": "multifruit-and-other-flavors",
+  "parentSlug": "juices-and-smoothies",
+  "position": 4,
+  "diaId": "L2289",
+  "es": "Multifrutas y otros sabores",
+  "en": "Multifruit and Other Flavors"
+ },
+ {
+  "slug": "fruit-and-milk",
+  "parentSlug": "juices-and-smoothies",
+  "position": 5,
+  "diaId": "L2290",
+  "es": "Fruta y leche",
+  "en": "Fruit and Milk"
+ },
+ {
+  "slug": "smoothies",
+  "parentSlug": "juices-and-smoothies",
+  "position": 6,
+  "diaId": "L2291",
+  "es": "Smoothies",
+  "en": "Smoothies"
+ },
+ {
+  "slug": "juice-packs",
+  "parentSlug": "juices-and-smoothies",
+  "position": 7,
+  "diaId": "L2292",
+  "es": "Packs de zumos",
+  "en": "Juice Packs"
+ },
+ {
+  "slug": "beers-wines-and-spirits",
+  "parentSlug": null,
+  "position": 21,
+  "diaId": "L118",
+  "es": "Cervezas, vinos y licores",
+  "en": "Beers, wines, and spirits"
+ },
+ {
+  "slug": "beers",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 0,
+  "diaId": "L2115",
+  "es": "Cervezas",
+  "en": "Beers"
+ },
+ {
+  "slug": "premium-and-specialty-beers",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 1,
+  "diaId": "L2117",
+  "es": "Cervezas prémium y especiales",
+  "en": "Premium and specialty beers"
+ },
+ {
+  "slug": "beers-with-lemon",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 2,
+  "diaId": "L2182",
+  "es": "Cervezas con limón",
+  "en": "Beers with lemon"
+ },
+ {
+  "slug": "non-alcoholic-beers",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 3,
+  "diaId": "L2118",
+  "es": "Cervezas sin alcohol",
+  "en": "Non-alcoholic beers"
+ },
+ {
+  "slug": "beer-packs",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 4,
+  "diaId": "L2293",
+  "es": "Packs de cervezas",
+  "en": "Beer packs"
+ },
+ {
+  "slug": "summer-red-wine-and-sangria",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 5,
+  "diaId": "L2119",
+  "es": "Tinto de verano y sangría",
+  "en": "Summer red wine and sangria"
+ },
+ {
+  "slug": "red-wine",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 6,
+  "diaId": "L2120",
+  "es": "Vino tinto",
+  "en": "Red wine"
+ },
+ {
+  "slug": "white-wine",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 7,
+  "diaId": "L2121",
+  "es": "Vino blanco",
+  "en": "White wine"
+ },
+ {
+  "slug": "rose-wine",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 8,
+  "diaId": "L2124",
+  "es": "Vino rosado",
+  "en": "Rose wine"
+ },
+ {
+  "slug": "cavas-and-cider",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 9,
+  "diaId": "L2122",
+  "es": "Cavas y sidra",
+  "en": "Cavas and cider"
+ },
+ {
+  "slug": "gin-vodka-and-tequila",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 10,
+  "diaId": "L2125",
+  "es": "Ginebra, vodka y tequila",
+  "en": "Gin, vodka and tequila"
+ },
+ {
+  "slug": "ron-and-whisky",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 11,
+  "diaId": "L2128",
+  "es": "Ron y whisky",
+  "en": "Ron and whisky"
+ },
+ {
+  "slug": "vermouth-and-aperitifs",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 12,
+  "diaId": "L2127",
+  "es": "Vermouth y aperitivos",
+  "en": "Vermouth and aperitifs"
+ },
+ {
+  "slug": "creams-liqueurs-and-brandy",
+  "parentSlug": "beers-wines-and-spirits",
+  "position": 13,
+  "diaId": "L2129",
+  "es": "Cremas, licores y brandy",
+  "en": "Creams, liqueurs, and brandy"
+ },
+ {
+  "slug": "cleaning-and-home",
+  "parentSlug": null,
+  "position": 22,
+  "diaId": "L122",
+  "es": "Limpieza y hogar",
+  "en": "Cleaning and home"
+ },
+ {
+  "slug": "detergents",
+  "parentSlug": "cleaning-and-home",
+  "position": 0,
+  "diaId": "L2170",
+  "es": "Detergentes",
+  "en": "Detergents"
+ },
+ {
+  "slug": "fabric-softeners-and-laundry-care",
+  "parentSlug": "cleaning-and-home",
+  "position": 1,
+  "diaId": "L2306",
+  "es": "Suavizantes y cuidado de la ropa",
+  "en": "Fabric softeners and laundry care"
+ },
+ {
+  "slug": "dishwasher",
+  "parentSlug": "cleaning-and-home",
+  "position": 2,
+  "diaId": "L2167",
+  "es": "Lavavajillas",
+  "en": "Dishwasher"
+ },
+ {
+  "slug": "toilet-paper-kitchen-paper-and-napkins",
+  "parentSlug": "cleaning-and-home",
+  "position": 3,
+  "diaId": "L2168",
+  "es": "Papel higiénico, cocina y servilletas",
+  "en": "Toilet paper, kitchen paper and napkins"
+ },
+ {
+  "slug": "garbage-bags-brooms-and-mops",
+  "parentSlug": "cleaning-and-home",
+  "position": 4,
+  "diaId": "L2160",
+  "es": "Bolsas de basura, escobas y fregonas",
+  "en": "Garbage bags, brooms and mops"
+ },
+ {
+  "slug": "kitchen-cleaning-and-degreasing",
+  "parentSlug": "cleaning-and-home",
+  "position": 5,
+  "diaId": "L2166",
+  "es": "Limpieza cocina y quitagrasas",
+  "en": "Kitchen cleaning and degreasing"
+ },
+ {
+  "slug": "bathroom-and-toilet-cleaning",
+  "parentSlug": "cleaning-and-home",
+  "position": 6,
+  "diaId": "L2164",
+  "es": "Limpieza baño y WC",
+  "en": "Bathroom and toilet cleaning"
+ },
+ {
+  "slug": "cleaning-floors-windows-and-furniture",
+  "parentSlug": "cleaning-and-home",
+  "position": 7,
+  "diaId": "L2163",
+  "es": "Limpieza suelos, cristales y muebles",
+  "en": "Cleaning floors, windows and furniture"
+ },
+ {
+  "slug": "bleach-and-disinfectants",
+  "parentSlug": "cleaning-and-home",
+  "position": 8,
+  "diaId": "L2161",
+  "es": "Lejía y desinfectantes",
+  "en": "Bleach and disinfectants"
+ },
+ {
+  "slug": "film-aluminum-and-preservation",
+  "parentSlug": "cleaning-and-home",
+  "position": 9,
+  "diaId": "L2169",
+  "es": "Film, aluminio y conservación",
+  "en": "Film, aluminum and preservation"
+ },
+ {
+  "slug": "scouring-pads-cloths-and-gloves",
+  "parentSlug": "cleaning-and-home",
+  "position": 10,
+  "diaId": "L2159",
+  "es": "Estropajos, bayetas y guantes",
+  "en": "Scouring pads, cloths and gloves"
+ },
+ {
+  "slug": "air-fresheners-refills-and-candles",
+  "parentSlug": "cleaning-and-home",
+  "position": 11,
+  "diaId": "L2226",
+  "es": "Ambientadores, recambios y velas",
+  "en": "Air fresheners, refills and candles"
+ },
+ {
+  "slug": "insecticides",
+  "parentSlug": "cleaning-and-home",
+  "position": 12,
+  "diaId": "L2173",
+  "es": "Insecticidas",
+  "en": "Insecticides"
+ },
+ {
+  "slug": "batteries-kitchenware-and-bags",
+  "parentSlug": "cleaning-and-home",
+  "position": 13,
+  "diaId": "L2209",
+  "es": "Pilas, menaje y bolsas",
+  "en": "Batteries, kitchenware and bags"
+ },
+ {
+  "slug": "hygiene-and-body-care",
+  "parentSlug": null,
+  "position": 23,
+  "diaId": "L129",
+  "es": "Higiene y cuidado del cuerpo",
+  "en": "Hygiene and Body Care"
+ },
+ {
+  "slug": "shower-gel-and-sponges",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 0,
+  "diaId": "L2211",
+  "es": "Gel de ducha y esponjas",
+  "en": "Shower gel and sponges"
+ },
+ {
+  "slug": "oral-hygiene",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 1,
+  "diaId": "L2151",
+  "es": "Higiene bucal",
+  "en": "Oral hygiene"
+ },
+ {
+  "slug": "deodorants",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 2,
+  "diaId": "L2154",
+  "es": "Desodorantes",
+  "en": "Deodorants"
+ },
+ {
+  "slug": "shaving",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 3,
+  "diaId": "L2150",
+  "es": "Afeitado",
+  "en": "Shaving"
+ },
+ {
+  "slug": "hair-removal",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 4,
+  "diaId": "L2188",
+  "es": "Depilación",
+  "en": "Hair removal"
+ },
+ {
+  "slug": "sanitary-pads-and-feminine-hygiene",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 5,
+  "diaId": "L2158",
+  "es": "Compresas e higiene íntima",
+  "en": "Sanitary pads and feminine hygiene"
+ },
+ {
+  "slug": "body-and-hand-hydration",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 6,
+  "diaId": "L2153",
+  "es": "Hidratación de cuerpo y manos",
+  "en": "Body and hand hydration"
+ },
+ {
+  "slug": "hand-soap",
+  "parentSlug": "hygiene-and-body-care",
+  "position": 7,
+  "diaId": "L2156",
+  "es": "Jabón de manos",
+  "en": "Hand soap"
+ },
+ {
+  "slug": "hair-and-perfumery",
+  "parentSlug": null,
+  "position": 24,
+  "diaId": "L130",
+  "es": "Cabello y perfumería",
+  "en": "Hair and Perfumery"
+ },
+ {
+  "slug": "shampoo",
+  "parentSlug": "hair-and-perfumery",
+  "position": 0,
+  "diaId": "L2144",
+  "es": "Champú",
+  "en": "Shampoo"
+ },
+ {
+  "slug": "conditioners-and-masks",
+  "parentSlug": "hair-and-perfumery",
+  "position": 1,
+  "diaId": "L2145",
+  "es": "Acondicionadores y mascarillas",
+  "en": "Conditioners and masks"
+ },
+ {
+  "slug": "foams-and-fixers",
+  "parentSlug": "hair-and-perfumery",
+  "position": 2,
+  "diaId": "L2146",
+  "es": "Espumas y fijadores",
+  "en": "Foams and fixers"
+ },
+ {
+  "slug": "dyes",
+  "parentSlug": "hair-and-perfumery",
+  "position": 3,
+  "diaId": "L2147",
+  "es": "Tintes",
+  "en": "Dyes"
+ },
+ {
+  "slug": "facial-care",
+  "parentSlug": "hair-and-perfumery",
+  "position": 4,
+  "diaId": "L2148",
+  "es": "Cuidado facial",
+  "en": "Facial Care"
+ },
+ {
+  "slug": "perfumes-and-colognes",
+  "parentSlug": "hair-and-perfumery",
+  "position": 5,
+  "diaId": "L2155",
+  "es": "Perfumes y colonias",
+  "en": "Perfumes and colognes"
+ },
+ {
+  "slug": "health-and-pharmacy",
+  "parentSlug": null,
+  "position": 25,
+  "diaId": "L131",
+  "es": "Salud y parafarmacia",
+  "en": "Health and Pharmacy"
+ },
+ {
+  "slug": "nutritional-supplements",
+  "parentSlug": "health-and-pharmacy",
+  "position": 0,
+  "diaId": "L2183",
+  "es": "Complementos nutricionales",
+  "en": "Nutritional supplements"
+ },
+ {
+  "slug": "parapharmacy",
+  "parentSlug": "health-and-pharmacy",
+  "position": 1,
+  "diaId": "L2184",
+  "es": "Parafarmacia",
+  "en": "Parapharmacy"
+ },
+ {
+  "slug": "first-aid-kit",
+  "parentSlug": "health-and-pharmacy",
+  "position": 2,
+  "diaId": "L2307",
+  "es": "Botiquín",
+  "en": "First Aid Kit"
+ },
+ {
+  "slug": "sunscreen",
+  "parentSlug": "health-and-pharmacy",
+  "position": 3,
+  "diaId": "L2340",
+  "es": "Protector solar",
+  "en": "Sunscreen"
+ },
+ {
+  "slug": "children",
+  "parentSlug": null,
+  "position": 26,
+  "diaId": "L120",
+  "es": "Infantil",
+  "en": "Children"
+ },
+ {
+  "slug": "milk-and-baby-food",
+  "parentSlug": "children",
+  "position": 0,
+  "diaId": "L2138",
+  "es": "Leches y papillas",
+  "en": "Milk and Baby Food"
+ },
+ {
+  "slug": "baby-foods-and-jars",
+  "parentSlug": "children",
+  "position": 1,
+  "diaId": "L2141",
+  "es": "Potitos y tarritos",
+  "en": "Baby foods and jars"
+ },
+ {
+  "slug": "yogurt-and-desserts",
+  "parentSlug": "children",
+  "position": 2,
+  "diaId": "L2139",
+  "es": "Yogures y postres",
+  "en": "Yogurt and Desserts"
+ },
+ {
+  "slug": "pots-and-snacks",
+  "parentSlug": "children",
+  "position": 3,
+  "diaId": "L2140",
+  "es": "Bolsitas y snacks",
+  "en": "Pots and Snacks"
+ },
+ {
+  "slug": "diapers-and-wipes",
+  "parentSlug": "children",
+  "position": 4,
+  "diaId": "L2142",
+  "es": "Pañales y toallitas",
+  "en": "Diapers and wipes"
+ },
+ {
+  "slug": "hygiene-and-care",
+  "parentSlug": "children",
+  "position": 5,
+  "diaId": "L2143",
+  "es": "Higiene y cuidado",
+  "en": "Hygiene and Care"
+ },
+ {
+  "slug": "children-juices-and-smoothies",
+  "parentSlug": "children",
+  "position": 6,
+  "diaId": "L2314",
+  "es": "Zumos y batidos",
+  "en": "Juices and Smoothies"
+ },
+ {
+  "slug": "cookies-and-pastries",
+  "parentSlug": "children",
+  "position": 7,
+  "diaId": "L2315",
+  "es": "Galletas y bollería",
+  "en": "Cookies and Pastries"
+ },
+ {
+  "slug": "sweets-and-chocolates",
+  "parentSlug": "children",
+  "position": 8,
+  "diaId": "L2316",
+  "es": "Golosinas y chocolatinas",
+  "en": "Sweets and Chocolates"
+ },
+ {
+  "slug": "pets",
+  "parentSlug": null,
+  "position": 27,
+  "diaId": "L123",
+  "es": "Mascotas",
+  "en": "Pets"
+ },
+ {
+  "slug": "wet-cat-food",
+  "parentSlug": "pets",
+  "position": 0,
+  "diaId": "L2308",
+  "es": "Gato comida húmeda",
+  "en": "Wet cat food"
+ },
+ {
+  "slug": "dry-cat-food",
+  "parentSlug": "pets",
+  "position": 1,
+  "diaId": "L2175",
+  "es": "Gato comida seca",
+  "en": "Dry cat food"
+ },
+ {
+  "slug": "cat-treats-and-care",
+  "parentSlug": "pets",
+  "position": 2,
+  "diaId": "L2309",
+  "es": "Gato snacks y cuidado",
+  "en": "Cat treats and care"
+ },
+ {
+  "slug": "wet-dog-food",
+  "parentSlug": "pets",
+  "position": 3,
+  "diaId": "L2310",
+  "es": "Perro comida húmeda",
+  "en": "Wet dog food"
+ },
+ {
+  "slug": "dry-dog-food",
+  "parentSlug": "pets",
+  "position": 4,
+  "diaId": "L2174",
+  "es": "Perro comida seca",
+  "en": "Dry dog food"
+ },
+ {
+  "slug": "dog-treats-and-care",
+  "parentSlug": "pets",
+  "position": 5,
+  "diaId": "L2311",
+  "es": "Perro snacks y cuidado",
+  "en": "Dog treats and care"
+ },
+ {
+  "slug": "other",
+  "parentSlug": null,
+  "position": 28,
+  "diaId": null,
+  "es": "Otros",
+  "en": "Other"
+ },
+ {
+  "slug": "uncategorised",
+  "parentSlug": "other",
+  "position": 0,
+  "diaId": null,
+  "es": "Sin categoría",
+  "en": "Not yet categorised"
+ }
+]

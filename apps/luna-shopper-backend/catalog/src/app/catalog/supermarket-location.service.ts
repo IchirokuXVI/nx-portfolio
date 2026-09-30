@@ -15,6 +15,8 @@ import {
   type SupermarketLocationChainSummariesView,
   type SupermarketLocationIdRequest,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
@@ -29,6 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { In, Repository, type SelectQueryBuilder } from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
 import { PriceScope, Supermarket, SupermarketLocation } from '../entities';
+import { shopsWithMap } from '../shop-walks/has-map';
 import { CatalogAuditService } from './catalog-audit.service';
 import {
   toSupermarketLocationView,
@@ -36,6 +39,7 @@ import {
 } from './catalog.mappers';
 import { EffectivePriceService } from './effective-price.service';
 import { idsOf, LocationScopeService } from './location-scopes';
+import { sectionNamesOf } from './location-sections';
 import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
@@ -144,6 +148,7 @@ export class SupermarketLocationService {
       longitude: req.longitude ?? null,
       externalRef: req.externalRef ?? null,
       externalProvider: req.externalProvider ?? null,
+      footprintM2: req.footprintM2 ?? null,
     });
     await this.fillPostalCodeFromCentroid(draft);
 
@@ -162,7 +167,7 @@ export class SupermarketLocationService {
       );
       return row;
     });
-    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
+    return this.viewOf(saved);
   }
 
   /**
@@ -236,12 +241,42 @@ export class SupermarketLocationService {
     }
   }
 
-  /** One shop's stack, most specific first. */
-  private async stackOf(supermarketLocationId: string): Promise<string[]> {
-    const stacks = await this.stacks.stacksFor(this.locations.manager, [
-      supermarketLocationId,
+  /** One shop's view, with its stack and its section names. */
+  private async viewOf(
+    row: SupermarketLocation
+  ): Promise<SupermarketLocationView> {
+    return (await this.viewsOf([row]))[0];
+  }
+
+  /**
+   * A page of shops' views: the stacks in one read, and the section names in
+   * one statement (plan 0170, section 2), never one per shop.
+   */
+  private async viewsOf(
+    rows: readonly SupermarketLocation[]
+  ): Promise<SupermarketLocationView[]> {
+    // Independent reads on the pool rather than one transaction, so they run
+    // side by side.
+    const [stacks, sections, mapped] = await Promise.all([
+      this.stacksOf(rows),
+      sectionNamesOf(
+        this.locations,
+        rows.map((row) => row.id)
+      ),
+      // Plan 0168: which of the page's shops have a shown walk, in one read.
+      shopsWithMap(
+        this.locations,
+        rows.map((row) => row.id)
+      ),
     ]);
-    return idsOf(stacks.get(supermarketLocationId));
+    return rows.map((row) =>
+      toSupermarketLocationView(
+        row,
+        stacks.get(row.id) ?? [],
+        sections.get(row.id) ?? [],
+        mapped.has(row.id.toLowerCase())
+      )
+    );
   }
 
   /** The stacks of a page of shops, in one read, keyed by shop. */
@@ -309,6 +344,12 @@ export class SupermarketLocationService {
     if (req.externalProvider !== undefined) {
       row.externalProvider = req.externalProvider;
     }
+    // Plan 0176: a measured size replaces the one held, and nothing else does.
+    // The contract has no null for it, and a null that got past it anyway is
+    // still not a reason to forget a number an earlier run measured.
+    if (typeof req.footprintM2 === 'number') {
+      row.footprintM2 = req.footprintM2;
+    }
     await this.fillPostalCodeFromCentroid(row);
 
     const saved = await this.audit.write(actor, async (tx) => {
@@ -330,7 +371,7 @@ export class SupermarketLocationService {
       }
       return updated;
     });
-    return toSupermarketLocationView(saved, await this.stackOf(saved.id));
+    return this.viewOf(saved);
   }
 
   async delete(req: SupermarketLocationIdRequest): Promise<{ id: string }> {
@@ -344,7 +385,23 @@ export class SupermarketLocationService {
     req: SupermarketLocationIdRequest
   ): Promise<SupermarketLocationView> {
     const row = await this.load(req.supermarketLocationId);
-    return toSupermarketLocationView(row, await this.stackOf(row.id));
+    return this.viewOf(row);
+  }
+
+  /**
+   * One shop's chain and scope stack (plan 0170, section 4): what the catalog
+   * read at one shop needs, without the section names {@link get} reads.
+   */
+  async priceStack(
+    req: SupermarketLocationPriceStackRequest
+  ): Promise<SupermarketLocationPriceStackView> {
+    const row = await this.load(req.supermarketLocationId);
+    const stacks = await this.stacksOf([row]);
+    return {
+      id: row.id,
+      supermarketId: row.supermarketId,
+      priceScopeIds: stacks.get(row.id) ?? [],
+    };
   }
 
   /**
@@ -407,11 +464,8 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
         : null;
 
-    const stacks = await this.stacksOf(page);
     return {
-      items: page.map((row) =>
-        toSupermarketLocationView(row, stacks.get(row.id) ?? [])
-      ),
+      items: await this.viewsOf(page),
       nextCursor,
     };
   }
@@ -615,10 +669,10 @@ export class SupermarketLocationService {
         ? encodeCursor({ value: last.postalCode ?? '', id: last.id })
         : null;
 
-    const stacks = await this.stacksOf(page);
+    const views = await this.viewsOf(page);
     return {
-      items: page.map((row) => ({
-        location: toSupermarketLocationView(row, stacks.get(row.id) ?? []),
+      items: page.map((row, index) => ({
+        location: views[index],
         supermarket: toSupermarketView(row.supermarket),
         excluded: refusedLocations.has(row.id),
         excludedChain: refusedChains.has(row.supermarketId),

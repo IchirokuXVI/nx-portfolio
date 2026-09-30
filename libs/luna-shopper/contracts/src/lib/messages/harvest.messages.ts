@@ -2,7 +2,6 @@ import type { HarvestDocument } from '../../schemas/harvest-document';
 import {
   DEFAULT_SCOPE_PRIORITY,
   PriceScopeKind,
-  type ItemCategory,
   type PostalCodeSource,
   type PriceSourceKind,
   type UnitOfMeasure,
@@ -257,6 +256,10 @@ export const ADAPTER_KEYS = [
   // its own shops too, which is why `STORE_DISCOVERY` dispatches on this field
   // as well.
   'lidl-api',
+  // Server rendered HTML with no EAN, like DEZA, but priced: one price list for
+  // every shop of the chain (plan 0169). Its store locator names every shop in
+  // one request.
+  'eljamon-web',
   'osm-places',
   'manual',
 ] as const;
@@ -302,8 +305,10 @@ export interface AdapterCapabilities {
    * A walk of this source has a detail phase that a known product can skip
    * (plan 0119, section 3), so a run takes `details`.
    *
-   * True for `mercadona-api` alone: its listing carries no EAN and no brand, so
-   * a walk fetched one detail per product. LIDL reads a product whole in one
+   * True for `mercadona-api`: its listing carries no EAN and no brand, so a
+   * walk fetched one detail per product. And for `eljamon-web`, whose listing
+   * carries no category path below the top level (plan 0169, section 5.2).
+   * LIDL reads a product whole in one
    * request, and Carrefour reads its product pages in a backfill of its own, so
    * neither has a detail phase to skip.
    */
@@ -404,6 +409,20 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     printedLocale: 'es',
     // It reads every region the week's offers name and creates what is missing,
     // so a run selects no scope and the band has nothing to say about it.
+    walkablePriorities: null,
+  },
+  'eljamon-web': {
+    writesPrices: true,
+    // One price list for the whole chain (plan 0169, section 2), written into
+    // the default scope the spawn is given, which is the chain's NATIONAL one.
+    scopesItsOwn: false,
+    // The store locator returns every shop in one request (section 3).
+    listsItsOwnStores: true,
+    // The product pages carry no EAN, so a backfill has nothing to read.
+    hasProductPages: false,
+    // A new product gets one product page for its category path (section 5.2).
+    skipsKnownDetails: true,
+    printedLocale: 'es',
     walkablePriorities: null,
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
@@ -1309,8 +1328,13 @@ export interface CreateItemFromSourceEntryRequest extends AdminCredential {
   unitSize?: number | null;
   /** Override the pack count the row read (plan 0162). Null creates a product with none. */
   packCount?: number | null;
-  /** Override the category the source's own tree mapped to. */
-  category?: ItemCategory;
+  /**
+   * Override the categories the source's own path resolves to, as one or more
+   * leaf slugs in the order meant (plan 0166, section 3). Absent resolves from
+   * the row's `categoryPath`. Slugs rather than ids, because a decisions file is
+   * read by a person; an unknown slug is refused with `category_not_found`.
+   */
+  categorySlugs?: string[];
   /** Override the unit the source's own size text mapped to. */
   defaultUnit?: UnitOfMeasure;
 }
@@ -1384,7 +1408,11 @@ export interface CreateItemFromSourceEntryOperation {
     unitSize?: number | null;
     /** Plan 0162. Absent takes the row's own count. */
     packCount?: number | null;
-    category?: ItemCategory;
+    /**
+     * Plan 0166. One or more leaf slugs; absent resolves from the row's
+     * `categoryPath`, as on the per row route.
+     */
+    categorySlugs?: string[];
     defaultUnit?: UnitOfMeasure;
   };
   expect: SourceEntryExpectation;

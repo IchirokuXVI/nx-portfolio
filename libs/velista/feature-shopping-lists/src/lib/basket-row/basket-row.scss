@@ -232,6 +232,13 @@
   overflow-wrap: anywhere;
 }
 
+// The section a row is found in (velista 0121), quieter than the product.
+.section {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  overflow-wrap: anywhere;
+}
+
 // Another of the shopper's own shops charges less. The attention role, which in
 // this app is violet: it is a decision to make and never an error (`0002`,
 // section 4.4). The words say it too, so the colour carries nothing alone.

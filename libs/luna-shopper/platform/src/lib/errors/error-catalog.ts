@@ -167,6 +167,71 @@ export const ERROR_CATALOG: Record<
     en: 'The chain has no price scope with the key this place declares. Create that scope first.',
     es: 'La cadena no tiene un ámbito de precios con la clave que declara este lugar. Crea ese ámbito primero.',
   },
+  // The four rules of the category tree, and the reference that names nothing
+  // (plan 0166). Each says what the tree allows, so the sentence still reads
+  // when the back office shows it on its own.
+  [ERROR_CODES.CATEGORY_TOO_DEEP]: {
+    en: 'Categories have two levels. A category inside another cannot hold categories of its own.',
+    es: 'Las categorías tienen dos niveles. Una categoría dentro de otra no puede contener categorías propias.',
+  },
+  [ERROR_CODES.CATEGORY_NOT_A_LEAF]: {
+    en: 'A product goes in a category inside another, never in a top level category.',
+    es: 'Un producto va en una categoría dentro de otra, nunca en una categoría principal.',
+  },
+  [ERROR_CODES.ITEM_NEEDS_A_CATEGORY]: {
+    en: 'A product needs at least one category.',
+    es: 'Un producto necesita al menos una categoría.',
+  },
+  [ERROR_CODES.CATEGORY_IN_USE]: {
+    en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
+    es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',
+  },
+  [ERROR_CODES.CATEGORY_NOT_FOUND]: {
+    en: 'That category does not exist.',
+    es: 'Esa categoría no existe.',
+  },
+  // Shop sections (plan 0167).
+  [ERROR_CODES.SECTION_NOT_FOUND]: {
+    en: 'That section does not exist.',
+    es: 'Esa sección no existe.',
+  },
+  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: {
+    en: 'A section belongs to one chain. A shop or a pinned product can only use sections of its own chain.',
+    es: 'Una sección pertenece a una sola cadena. Una tienda o un producto fijado solo puede usar secciones de su propia cadena.',
+  },
+  [ERROR_CODES.SECTION_SLUG_TAKEN]: {
+    en: 'This chain already has a section with that slug.',
+    es: 'Esta cadena ya tiene una sección con ese identificador.',
+  },
+  // The catalog read at one shop (plan 0170).
+  [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: {
+    en: 'A read at one shop is priced at that shop and lists its chain alone. Send the shop without other scopes, places, profiles or chains.',
+    es: 'Una consulta en una tienda usa los precios de esa tienda y solo lista su cadena. Envía la tienda sin otros ámbitos, lugares, perfiles ni cadenas.',
+  },
+  [ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND]: {
+    en: 'That shop does not exist.',
+    es: 'Esa tienda no existe.',
+  },
+  [ERROR_CODES.PERMISSION_REQUIRED]: {
+    en: 'Your account is not allowed to do that.',
+    es: 'Tu cuenta no tiene permiso para hacer eso.',
+  },
+  [ERROR_CODES.GUEST_HAS_NO_ROLES]: {
+    en: 'A guest account cannot hold a role. Grant it once the account is registered.',
+    es: 'Una cuenta de invitado no puede tener roles. Asígnalos cuando la cuenta esté registrada.',
+  },
+  [ERROR_CODES.WALK_CHANGED]: {
+    en: 'This walk was saved from somewhere else. Reload it and try again.',
+    es: 'Este recorrido se guardó desde otro sitio. Vuelve a cargarlo e inténtalo de nuevo.',
+  },
+  [ERROR_CODES.SHOP_MAP_INVALID]: {
+    en: 'That change would leave the shop map in a state it cannot be saved in.',
+    es: 'Ese cambio dejaría el mapa de la tienda en un estado que no se puede guardar.',
+  },
+  [ERROR_CODES.SHOP_MAP_TOO_LARGE]: {
+    en: 'That save is too large to store.',
+    es: 'Ese guardado es demasiado grande para almacenarlo.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

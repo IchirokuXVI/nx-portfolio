@@ -17,7 +17,11 @@ import { SourceCatalogEntry, type SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import { CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
-import type { BackfillEntry, RunPriceScope } from './catalog-runner';
+import {
+  DETAIL_FAILED_KEY,
+  type BackfillEntry,
+  type RunPriceScope,
+} from './catalog-runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
@@ -137,20 +141,33 @@ export class RunExecutor implements OnApplicationShutdown {
   ): Promise<{
     knownExternalIds: Set<string>;
     externalIdsWithoutEan: Set<string>;
+    externalIdsWithFailedDetail: Set<string>;
   }> {
     const knownExternalIds = new Set<string>();
     const externalIdsWithoutEan = new Set<string>();
+    const externalIdsWithFailedDetail = new Set<string>();
     if (details !== HarvestDetailFetch.NEW || detailBackfill) {
-      return { knownExternalIds, externalIdsWithoutEan };
+      return {
+        knownExternalIds,
+        externalIdsWithoutEan,
+        externalIdsWithFailedDetail,
+      };
     }
     const rows = await this.entries.find({
-      select: { externalId: true, ean: true },
+      select: { externalId: true, ean: true, extra: true },
       where: { supermarketId },
     });
     for (const row of rows) {
       (row.ean ? knownExternalIds : externalIdsWithoutEan).add(row.externalId);
+      if (row.extra?.[DETAIL_FAILED_KEY] === true) {
+        externalIdsWithFailedDetail.add(row.externalId);
+      }
     }
-    return { knownExternalIds, externalIdsWithoutEan };
+    return {
+      knownExternalIds,
+      externalIdsWithoutEan,
+      externalIdsWithFailedDetail,
+    };
   }
 
   /**

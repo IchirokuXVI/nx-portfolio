@@ -1,7 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
-  ItemCategory,
   ItemPriceWrittenBy,
   PriceScopeKind,
   PriceShownBecause,
@@ -171,7 +170,6 @@ describeIntegration('item prices (real Postgres)', () => {
       await items.save(
         items.create({
           name: { en: 'Milk', es: 'Leche' },
-          category: ItemCategory.DAIRY,
           defaultUnit: UnitOfMeasure.LITER,
         })
       )

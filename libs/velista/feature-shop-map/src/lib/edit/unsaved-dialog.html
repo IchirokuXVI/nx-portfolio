@@ -1,0 +1,35 @@
+<div aria-hidden="true" class="scrim"></div>
+<div
+  aria-describedby="unsaved-body"
+  aria-labelledby="unsaved-title"
+  aria-modal="true"
+  class="card"
+  role="alertdialog"
+>
+  <h2 class="title" id="unsaved-title">
+    {{ 'shopMapEdit.unsaved.title' | rokuT }}
+  </h2>
+  <p class="body" id="unsaved-body">{{ bodyKey() | rokuT }}</p>
+  <p class="body">{{ 'shopMapEdit.unsaved.keepOpen' | rokuT }}</p>
+
+  <p aria-live="polite" class="state">
+    @if (status() === 'sending') {
+      {{ 'shopMapEdit.unsaved.sending' | rokuT }}
+    } @else if (status() === 'saved') {
+      {{ 'shopMapEdit.unsaved.saved' | rokuT }}
+    } @else if (seconds(); as seconds) {
+      {{ 'shopMapEdit.unsaved.retryIn' | rokuT: { count: seconds } }}
+    } @else {
+      {{ 'shopMapEdit.unsaved.waiting' | rokuT }}
+    }
+  </p>
+
+  <button (click)="stay.emit()" #ok class="ok" type="button">
+    {{ 'shopMapEdit.unsaved.ok' | rokuT }}
+  </button>
+  @if (leavable()) {
+    <button (click)="leave.emit()" class="leave" type="button">
+      {{ 'shopMapEdit.unsaved.leave' | rokuT }}
+    </button>
+  }
+</div>

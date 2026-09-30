@@ -15,7 +15,7 @@
         "brand": "Hacendado",
         "unitSize": 800,
         "defaultUnit": "GRAM",
-        "category": "SNACKS",
+        "categorySlugs": ["biscuits"],
         "ean": "8480000111111"
       },
       "confidence": 0.94,
@@ -30,7 +30,7 @@
         "brand": null,
         "unitSize": null,
         "defaultUnit": "UNIT",
-        "category": "HOUSEHOLD",
+        "categorySlugs": ["cleaning"],
         "ean": null
       },
       "confidence": 0.55,
@@ -57,7 +57,7 @@
         "brand": "Hacendado",
         "unitSize": 1,
         "defaultUnit": "LITER",
-        "category": "PANTRY",
+        "categorySlugs": ["oil-and-vinegar"],
         "ean": null
       },
       "confidence": 0.93,

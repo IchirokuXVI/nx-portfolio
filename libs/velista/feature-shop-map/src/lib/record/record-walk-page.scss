@@ -1,0 +1,500 @@
+@use '../shop-map' as shop;
+@use '../walks';
+@use 'record';
+
+// Recording a walk with the camera (velista 0126, the `Main`, `Paused`,
+// `Unconfirmed` and `Resume` boards): the bar with the walk's name, the tracking
+// pill and Stop; the map filling what is left, with the saved and scale chips
+// and whatever the walk says over it; and at the foot the section in progress
+// and the three mark buttons, or the controls of a stop, a check or a resume.
+// The page is the camera's DOM overlay, so nothing here may need to scroll.
+
+:host {
+  display: block;
+  block-size: 100%;
+  background: var(--app-surface-ground);
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.bar {
+  @include shop.bar;
+}
+
+.back {
+  @include shop.back;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.heading {
+  @include shop.heading;
+}
+
+.title {
+  @include shop.title;
+}
+
+.pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-chip-padding-block) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  font-size: var(--app-text-xs);
+  font-weight: 650;
+  white-space: nowrap;
+
+  &.ok {
+    background: var(--app-status-success-bg);
+    color: var(--app-status-success-fg);
+  }
+
+  &.attention {
+    background: var(--app-status-attention-bg);
+    color: var(--app-status-attention-fg);
+  }
+
+  &.neutral {
+    background: var(--app-status-neutral-bg);
+    color: var(--app-status-neutral-fg);
+  }
+}
+
+.pill-dot {
+  inline-size: var(--app-space-3);
+  block-size: var(--app-space-3);
+  border-radius: var(--app-radius-full);
+  background: currentColor;
+}
+
+.stop {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.stop-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.map {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+  overflow: hidden;
+  background: var(--app-surface-sunken);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+// Over the map while the walk is stopped: the map fades, so what is drawn reads
+// as the past and not as where the person is.
+.veil {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--app-surface-ground);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.warn {
+  position: absolute;
+  inset-inline: var(--app-space-4);
+  inset-block-start: var(--app-space-4);
+  z-index: 2;
+  display: flex;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: var(--app-map-warn-border) solid var(--app-status-attention-fg);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+}
+
+.warn-glyph,
+.check-glyph {
+  flex: none;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-icon-md);
+  color: var(--app-status-attention-fg);
+}
+
+.warn-text,
+.check-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.warn-title,
+.check-title {
+  font-size: var(--app-text-base);
+  font-weight: 700;
+  color: var(--app-text-primary);
+}
+
+.warn-body,
+.check-body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.warn-note {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.remind,
+.intro {
+  position: absolute;
+  inset-inline: var(--app-space-4);
+  inset-block-start: var(--app-space-4);
+  z-index: 2;
+  display: flex;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  box-shadow: var(--app-elevation-1);
+}
+
+.intro {
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.intro-title {
+  font-weight: 700;
+}
+
+.intro-body {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
+.remind-glyph {
+  flex: none;
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-info-fg);
+}
+
+.saved,
+.scale {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  padding: var(--app-chip-padding-block) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  box-shadow: var(--app-elevation-1);
+  pointer-events: none;
+}
+
+.saved {
+  inset-inline-end: var(--app-space-4);
+  inset-block-start: var(--app-space-4);
+
+  &.unsent {
+    background: var(--app-status-attention-bg);
+    color: var(--app-status-attention-fg);
+    font-weight: 650;
+  }
+}
+
+.saved-glyph {
+  font-size: var(--app-icon-sm);
+  color: var(--app-status-success-fg);
+}
+
+.scale {
+  inset-inline-start: var(--app-space-4);
+  inset-block-end: var(--app-space-4);
+}
+
+.notice {
+  position: absolute;
+  inset-inline: var(--app-space-4);
+  inset-block-end: var(--app-space-10);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-3) var(--app-space-3)
+    var(--app-space-5);
+  border: 1px solid var(--app-status-info-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+  box-shadow: var(--app-elevation-1);
+}
+
+.notice-text {
+  flex: 1;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.notice-close {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  min-inline-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: none;
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.insection {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-4) var(--app-space-3)
+    var(--app-space-5);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+.insection-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.insection-label {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.insection-name {
+  overflow: hidden;
+  font-size: var(--app-text-lg);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insection-left {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.controls {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-5)
+    calc(var(--app-space-5) + var(--app-safe-bottom));
+  background: var(--app-surface-raised);
+
+  &.ruled {
+    padding-block-start: var(--app-space-5);
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+}
+
+.marks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--app-space-3);
+}
+
+.mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  min-block-size: calc(var(--app-button-height) + var(--app-space-4));
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  &.primary {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-bg);
+    color: var(--app-action-fg);
+  }
+
+  @include walks.focus-ring;
+}
+
+.mark-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.primary {
+  @include walks.primary;
+}
+
+.secondary {
+  @include walks.secondary;
+}
+
+.check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: var(--app-map-warn-border) solid var(--app-status-attention-fg);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+}
+
+.check-head {
+  display: flex;
+  gap: var(--app-space-4);
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+}
+
+.chips {
+  @include record.chips;
+}
+
+.chip {
+  @include record.chip;
+
+  &.on {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-quiet-bg);
+    color: var(--app-action-quiet-fg);
+    font-weight: 650;
+  }
+}
+
+.picked {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.picked-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-secondary);
+}
+
+.picked-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.picked-name {
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picked-detail {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--app-space-7) var(--app-space-5);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  padding: var(--app-space-7) var(--app-space-5);
+}
+
+.state-title {
+  @include record.title;
+}
+
+.state-text {
+  margin: 0;
+  color: var(--app-text-secondary);
+  line-height: var(--app-leading-body);
+}
+
+.retry {
+  @include shop.retry;
+}

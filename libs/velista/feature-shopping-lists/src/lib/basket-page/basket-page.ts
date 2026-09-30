@@ -1,3 +1,4 @@
+import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
   afterRenderEffect,
   ChangeDetectionStrategy,
@@ -23,7 +24,10 @@ import {
   BasketStore,
   BasketViewStore,
   GroupMembers,
+  keepsShopMap,
   SessionStore,
+  ShopDetailStore,
+  ShopSectionsStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -31,10 +35,12 @@ import {
   type BasketProduct,
   type BasketProgressSentence,
   type BasketRow as BasketRowModel,
+  basketRowPick,
   basketRowProduct,
   basketShelfMark,
   type BasketViewRow,
   type BasketViewSection,
+  catalogName,
   type CatalogSuggestion,
   cheaperInGroup,
   countableBasketRows,
@@ -53,19 +59,25 @@ import {
   NavChrome,
   searchOpenOf,
   sheetSegments,
+  shopMapPath,
+  StorageKeys,
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
+  AnchoredPopover,
+  type AnchoredPopoverClose,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
   ClockIcon,
   FlagIcon,
+  InfoIcon,
   LineComposer,
   type LineComposerSubmit,
   ListPicker,
   type ListPickerRow,
   ListTools,
+  MapIcon,
   OfflineIcon,
   PersonIcon,
   ShareIcon,
@@ -156,15 +168,19 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 @Component({
   selector: 'lib-basket-page',
   imports: [
+    AnchoredPopover,
     BasketRow,
+    CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
     ClockIcon,
     SeenTarget,
     FlagIcon,
+    InfoIcon,
     LineComposer,
     ListPicker,
     ListTools,
+    MapIcon,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
@@ -245,6 +261,88 @@ export class BasketPage {
   private readonly _live = this._route.snapshot.data['basket'] === 'live';
 
   private readonly _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+
+  /** The shop reads behind the Map button (velista `0121`, target 5). */
+  private readonly _shopDetails = inject(ShopDetailStore);
+  private readonly _shopSections = inject(ShopSectionsStore);
+
+  /**
+   * The shop whose map the head offers, or null (velista `0121`, target 5): the
+   * basket is read at one shop and that shop has a map.
+   *
+   * Only for a reader with an account, because the shop read takes one. A guest on
+   * a shared basket keeps the basket as it was.
+   *
+   * **Also when the shop could not be read but this device keeps its map** (target
+   * 6). In a shop with no signal the read fails after a reload, and the kept map is
+   * exactly what the button exists to open there. A read that answers decides.
+   */
+  protected readonly mapShop = computed<{
+    readonly id: string;
+    readonly name: string;
+  } | null>(() => {
+    const shop = this._view.shopAt();
+    if (shop === null || !this.canOpenHistory()) {
+      return null;
+    }
+    const read = this._shopDetails.read(shop.id);
+    const offered =
+      read.kind === 'shop'
+        ? read.shop.hasMap
+        : read.kind === 'failed' &&
+          keepsShopMap(
+            this._browser.readStorage(StorageKeys.shopMap),
+            shop.id,
+            Date.now()
+          );
+    if (!offered) {
+      return null;
+    }
+    const locale = this._locale();
+    const label = shop.label === null ? null : catalogName(shop.label, locale);
+    return {
+      id: shop.id,
+      name: label ?? catalogName(shop.chain, locale),
+    };
+  });
+
+  /**
+   * The name of the section a row is found in, under its product (velista
+   * `0121`, target 5), or null. Drawn while the Map button is, so the rows name
+   * what the map's sections are called, and not while the basket is grouped by
+   * aisle, whose headings already say it.
+   */
+  protected rowSection(row: BasketRowModel): string | null {
+    const shop = this.mapShop();
+    if (
+      shop === null ||
+      (this._view.grouping() === 'category' && this._view.byAisle())
+    ) {
+      return null;
+    }
+    const sections = this._shopSections.sectionsOf(shop.id) ?? [];
+    const ids = basketRowPick(row, this.products())?.sectionIds ?? [];
+    const section = sections.find((one) => ids.includes(one.id));
+    return section === undefined
+      ? null
+      : catalogName(section.name, this._locale());
+  }
+
+  /** The map of the shop the basket is read at, counting from this basket. */
+  protected openMap(): void {
+    const shop = this.mapShop();
+    if (shop === null) {
+      return;
+    }
+    void this._router.navigateByUrl(
+      shopMapPath(
+        this._locale(),
+        this._basePath,
+        shop.id,
+        this._live ? 'live' : this._id
+      )
+    );
+  }
 
   protected readonly state = this._store.state;
   protected readonly rows = this._store.rows;
@@ -828,6 +926,15 @@ export class BasketPage {
   );
 
   constructor() {
+    // Whether the shop the basket is read at has a map, read once per shop per
+    // session, so the Map button can appear (velista `0121`, target 5).
+    effect(() => {
+      const shop = this._view.shopAt();
+      if (shop !== null && this.canOpenHistory()) {
+        untracked(() => void this._shopDetails.ensure(shop.id));
+      }
+    });
+
     /**
      * The basket, and then what this device remembers about how to draw it
      * (`0076`, section 3).
@@ -1528,6 +1635,28 @@ export class BasketPage {
    * drew with one more level around it.
    */
   protected readonly sections = this._view.sections;
+
+  /**
+   * Whether the explanation under the band's info control is open (velista `0120`,
+   * rule A4 of the mock). A popover and not a sheet: two sentences and nothing to
+   * do, so no route, no scrim, and the rows they are about stay in view.
+   */
+  protected readonly uncoveredInfoOpen = signal(false);
+
+  protected toggleUncoveredInfo(): void {
+    this.uncoveredInfoOpen.update((open) => !open);
+  }
+
+  /** Closed by Escape, a press outside it or the overlay going; Escape hands focus back. */
+  protected closeUncoveredInfo(
+    reason: AnchoredPopoverClose,
+    control: HTMLElement
+  ): void {
+    this.uncoveredInfoOpen.set(false);
+    if (reason === 'escape') {
+      control.focus();
+    }
+  }
 
   /** How many lines are on the screen, for the chip row's count. */
   protected readonly visibleCount = this._view.visibleCount;

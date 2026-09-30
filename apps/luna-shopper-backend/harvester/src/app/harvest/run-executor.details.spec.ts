@@ -14,7 +14,14 @@ import { RunExecutor, readDetails, readWrites } from './run-executor.service';
 
 const CHAIN = '11111111-1111-4111-8111-111111111111';
 
-function build(rows: Array<{ externalId: string; ean: string | null }>) {
+function build(
+  rows: Array<{
+    externalId: string;
+    ean: string | null;
+    categoryPath?: string[];
+    extra?: Record<string, unknown> | null;
+  }>
+) {
   const entries = {
     find: jest.fn(async () => rows as SourceCatalogEntry[]),
   } as unknown as Repository<SourceCatalogEntry>;
@@ -57,6 +64,34 @@ describe('RunExecutor, what a walk already knows (plan 0119)', () => {
     expect(answer.externalIdsWithoutEan).toEqual(new Set(['7012']));
     expect(entries.find).toHaveBeenCalledWith(
       expect.objectContaining({ where: { supermarketId: CHAIN } })
+    );
+  });
+
+  it('names the products whose row was written from a failed detail', async () => {
+    const { known, entries } = build([
+      {
+        externalId: 'a',
+        ean: null,
+        categoryPath: ['FRESCOS'],
+        extra: { detailFailed: true },
+      },
+      // A page that was read and whose breadcrumb has one level (plan 0169).
+      {
+        externalId: 'b',
+        ean: null,
+        categoryPath: ['Frescos'],
+        extra: { previousPrice: 3.99 },
+      },
+      { externalId: 'c', ean: null, categoryPath: [], extra: null },
+    ]);
+
+    const answer = await known(HarvestDetailFetch.NEW);
+
+    expect(answer.externalIdsWithFailedDetail).toEqual(new Set(['a']));
+    expect(entries.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ extra: true }),
+      })
     );
   });
 

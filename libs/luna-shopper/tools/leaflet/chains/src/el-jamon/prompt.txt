@@ -15,7 +15,7 @@ every element MUST have exactly these keys:
   "price": 0.00,
   "unitPrice": 0.00,
   "unitPriceLabel": "the comparison line, verbatim, or null",
-  "category": "PRODUCE",
+  "category": "the kind of product in a word or two, or null",
   "categoryPath": ["DEPARTMENT HEADING AS PRINTED"],
   "leaflet": {
     "format": "the pack as printed, e.g. lata 33 cl. / 20 cl., Pack-6 / kilo / 750 ml., or null",
@@ -28,15 +28,9 @@ every element MUST have exactly these keys:
   }
 }
 
-"category" MUST be one of exactly these values, and nothing else:
-PRODUCE, DAIRY, BAKERY, MEAT, SEAFOOD, FROZEN, BEVERAGES, SNACKS, PANTRY,
-HOUSEHOLD, PERSONAL_CARE, OTHER.
-Choose the one that fits the product itself. Cleaning products, laundry,
-kitchen roll, foil and pet food are HOUSEHOLD. Shampoo, soap, razors, nappies
-and toothpaste are PERSONAL_CARE. Wine, beer, water, juice and soft drinks are
-BEVERAGES. Crisps, biscuits, sweets and chocolate are SNACKS. Tinned food,
-pasta, rice, oil, sauces, coffee and sugar are PANTRY. Use OTHER only when
-none of the twelve fits.
+"category" is optional free text: the kind of product in a word or two, in
+Spanish, as the page or the pack names it ("Leche", "Cerveza", "Detergente").
+It is not a fixed list of values. Write null when the page gives no clue.
 
 "leaflet.promotion" is either null or an object:
 
@@ -125,7 +119,7 @@ of you.
     "price": 1.05,
     "unitPrice": null,
     "unitPriceLabel": null,
-    "category": "BEVERAGES",
+    "category": "Cerveza",
     "categoryPath": ["BEBIDAS"],
     "leaflet": {
       "format": "1 L.",
@@ -145,7 +139,7 @@ of you.
     "price": 0.39,
     "unitPrice": 1.18,
     "unitPriceLabel": "el litro le sale a 1,18€",
-    "category": "BEVERAGES",
+    "category": "Cerveza",
     "categoryPath": ["BEBIDAS"],
     "leaflet": {
       "format": "lata 33 cl.",
@@ -165,7 +159,7 @@ of you.
     "price": 4.49,
     "unitPrice": 5.99,
     "unitPriceLabel": "el litro le sale a 5,99€",
-    "category": "BEVERAGES",
+    "category": "Vino",
     "categoryPath": ["BEBIDAS"],
     "leaflet": {
       "format": "750 ml.",
@@ -185,7 +179,7 @@ of you.
     "price": 5.95,
     "unitPrice": null,
     "unitPriceLabel": null,
-    "category": "MEAT",
+    "category": "Cerdo",
     "categoryPath": ["CARNICERIA"],
     "leaflet": {
       "format": "kilo",

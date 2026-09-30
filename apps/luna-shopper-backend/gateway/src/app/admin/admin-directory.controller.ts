@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import {
   type AdminUserPage,
   type DeleteAdminUserResult,
   type ResendAdminVerificationResult,
+  type SetAdminUserRolesResult,
   type UpdateAdminUserResult,
 } from '@portfolio/luna-shopper/contracts';
 import { UuidParam } from '@portfolio/luna-shopper/platform';
@@ -28,6 +30,7 @@ import { adminCredential } from './admin-credential';
 import {
   ListAdminUsersQueryDto,
   ResendAdminVerificationDto,
+  SetAdminUserRolesDto,
 } from './admin-directory.dto';
 import { UpdateAdminUserDto } from './admin-edit.dto';
 import { AdminJwtGuard } from './admin-jwt.guard';
@@ -57,6 +60,11 @@ import { ActingAdmin } from './current-admin.decorator';
  * office shows each field with the reason in place, so an operator looking for a
  * missing control finds the reason rather than concluding the screen is
  * unfinished.
+ *
+ * **Roles are a third editable thing** (backend plan 0175, admin plan 0038), set
+ * through their own `PUT :id/roles` rather than the user edit, because they
+ * decide what the account may do rather than who it is. The change reaches the
+ * account's access token at its next refresh.
  *
  * Guarded by {@link AdminJwtGuard} like everything under `/v1/admin/**`, and
  * gated **again** inside auth against the forwarded token, which is plan 0072
@@ -93,6 +101,7 @@ export class AdminUsersController {
       email: query.email,
       kind: query.kind,
       verified: query.verified,
+      role: query.role,
       createdAfter: query.createdAfter,
       createdBefore: query.createdBefore,
       cursor: query.cursor,
@@ -192,6 +201,30 @@ export class AdminUsersController {
       displayName: dto.displayName,
       usernamePropagation: dto.usernamePropagation,
     });
+  }
+
+  /**
+   * Replace an account's roles (plan 0175).
+   *
+   * The whole set, which is what the back office's switches describe. A role is
+   * only a name for a set of permissions (`PERMISSIONS_OF`), and the account's
+   * token carries the new permissions from its next refresh, at most one access
+   * token lifetime later. Auth writes an `auth_audit` row naming the operator.
+   *
+   * A guest is refused with 409 `guest_has_no_roles`.
+   */
+  @Put(':id/roles')
+  @ApiContractResponse(ADMIN_USER_PATTERNS.setRoles)
+  @ApiProblemResponses({ body: true, guestRoles: true })
+  setRoles(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: SetAdminUserRolesDto
+  ): Promise<SetAdminUserRolesResult> {
+    return this.nats.send<SetAdminUserRolesResult>(
+      ADMIN_USER_PATTERNS.setRoles,
+      { ...adminCredential(admin), targetUserId: id, roles: dto.roles }
+    );
   }
 }
 

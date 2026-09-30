@@ -18,12 +18,14 @@ import {
   AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogProductGroupsController,
+  AdminCatalogSectionsController,
   AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 import {
   CatalogItemsController,
   CatalogLocationItemsController,
+  CatalogLocationSectionsController,
   CatalogLocationsController,
   CatalogPriceScopesController,
   CatalogProductGroupsController,
@@ -165,6 +167,8 @@ const ADMIN_CONTROLLERS = [
   AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogLocationItemsController,
+  // Plan 0167: a section at its own id.
+  AdminCatalogSectionsController,
   AdminHarvestRunsController,
   AdminHarvestPlacesController,
   // One queue over one table since plan 0086. `AdminHarvestItemRefsController`
@@ -240,9 +244,16 @@ describe('the admin API is its own namespace', () => {
 
       // Both are reads that take a body: a list of ids, and a point a device
       // reported, which a query string would put in an access log (plan 0164).
+      // The walk writes of plan 0168 are an account's, behind
+      // `@RequirePermission('shopMap.record')`, and never an operator's:
+      // mapping stays in velista.
       expect(strays.sort()).toEqual([
+        'DELETE /v1/catalog/walks/{walkId}',
+        'PATCH /v1/catalog/walks/{walkId}',
         'POST /v1/catalog/items/lookup',
+        'POST /v1/catalog/locations/{id}/walks',
         'POST /v1/catalog/shops/nearby',
+        'POST /v1/catalog/walks/{walkId}/entries',
       ]);
     });
   });
@@ -273,6 +284,26 @@ describe('the admin API is its own namespace', () => {
         const guards = guardsOf(controller);
         expect(guards).toHaveLength(1);
       }
+    });
+
+    /**
+     * Plan 0167, section 4: a shop's aisle list is not private, and a guest
+     * reading a shared basket at a shop has no token to present. It is the one
+     * catalog read with no guard, on a controller of its own, and it reads only.
+     */
+    it('leaves a shop’s sections public, and nothing else on that controller', () => {
+      expect(guardsOf(CatalogLocationSectionsController)).toEqual([]);
+      expect(has('get', '/v1/catalog/locations/{id}/sections')).toBe(true);
+      expect(
+        Object.keys(document.paths['/v1/catalog/locations/{id}/sections'])
+      ).toEqual(['get']);
+      // Its admin twin, and the writes, are behind the operator's guard.
+      expect(has('get', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
+      expect(has('put', '/v1/admin/catalog/locations/{id}/sections')).toBe(
+        true
+      );
     });
   });
 });

@@ -1,3 +1,5 @@
+> **PR:** [#529](https://github.com/IchirokuXVI/nx-portfolio/pull/529)
+
 # 0120: the aisles of the shop you are in
 
 > **Mock first.** There is no mock for this plan yet. The session that builds it draws

@@ -6,8 +6,9 @@ import {
 import { WithholdBodyMiddleware } from '@portfolio/luna-shopper/platform';
 import { MessagingModule } from '../messaging/messaging.module';
 import {
-  AdminCatalogBrandSuggestionsController,
   AdminCatalogBrandsController,
+  AdminCatalogBrandSuggestionsController,
+  AdminCatalogCategoriesController,
   AdminCatalogItemPricesController,
   AdminCatalogItemsController,
   AdminCatalogLocationItemsController,
@@ -15,14 +16,17 @@ import {
   AdminCatalogPricePoliciesController,
   AdminCatalogPriceScopesController,
   AdminCatalogProductGroupsController,
+  AdminCatalogSectionsController,
   AdminCatalogSupermarketItemsController,
   AdminCatalogSupermarketsController,
 } from './catalog-admin.controller';
 import { CatalogSuggestService } from './catalog-suggest.service';
 import {
+  CatalogCategoriesController,
   CatalogItemsController,
   CatalogLocationItemsController,
   CatalogLocationsController,
+  CatalogLocationSectionsController,
   CatalogPriceScopesController,
   CatalogProductGroupsController,
   CatalogScopeController,
@@ -33,6 +37,11 @@ import {
 } from './catalog.controller';
 import { CatalogNearbyShopsController } from './nearby-shops.controller';
 import { ScopeResolutionService } from './scope-resolution.service';
+import {
+  CatalogLocationMapController,
+  CatalogLocationWalksController,
+  CatalogWalksController,
+} from './shop-walks.controller';
 
 /**
  * The gateway's catalog surface (plan 0012), proxying to catalog over NATS.
@@ -51,8 +60,18 @@ import { ScopeResolutionService } from './scope-resolution.service';
   controllers: [
     CatalogSupermarketsController,
     CatalogLocationsController,
+    // Plan 0167: a shop's sections, public, so a guest reading a shared
+    // basket at a shop can draw its aisles.
+    CatalogLocationSectionsController,
+    // Plan 0168: a shop's map, public like its sections, and its walks behind
+    // `shopMap.record`.
+    CatalogLocationMapController,
+    CatalogLocationWalksController,
+    CatalogWalksController,
     CatalogPriceScopesController,
     CatalogProductGroupsController,
+    // Plan 0166: the category tree, whole, for velista's picker.
+    CatalogCategoriesController,
     CatalogScopeController,
     CatalogShopsController,
     // Plan 0164: the shops near a point. A POST, so it cannot be swallowed by
@@ -71,6 +90,11 @@ import { ScopeResolutionService } from './scope-resolution.service';
     AdminCatalogLocationsController,
     AdminCatalogItemsController,
     AdminCatalogProductGroupsController,
+    // Plan 0166: the tree's two levels, and the four rules catalog enforces.
+    AdminCatalogCategoriesController,
+    // Plan 0167: shop sections at their own id; created and listed under
+    // their chain, and a shop's list under its location.
+    AdminCatalogSectionsController,
     // Plan 0115: the registry a person fills, and the keys the queue is asking
     // for. The second is composed from catalog and the harvester, which is why
     // it is two controllers rather than one path with a child.
@@ -105,5 +129,8 @@ export class GatewayCatalogModule implements NestModule {
     consumer
       .apply(WithholdBodyMiddleware)
       .forRoutes(CatalogNearbyShopsController);
+    // A walk entry is up to 256 KB of a device's positions in a shop, and a
+    // log line is not the place for it (plan 0168).
+    consumer.apply(WithholdBodyMiddleware).forRoutes(CatalogWalksController);
   }
 }

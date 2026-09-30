@@ -21,7 +21,14 @@ const ITEM_VIEW = {
   sku: '1234',
   ean: '8480000000000',
   unitSize: 1,
-  category: 'DAIRY',
+  categories: [
+    {
+      id: 'cat-milk',
+      parentId: 'cat-dairy-and-eggs',
+      slug: 'milk',
+      name: { en: 'Milk', es: 'Leche' },
+    },
+  ],
   defaultUnit: 'LITER',
   productGroupId: 'group-milk',
   bestOffer: {
@@ -47,7 +54,9 @@ function query(
     query: '',
     order: 'name',
     soldBy: null,
+    categoryId: null,
     priceScopeIds: [],
+    locationId: null,
     cursor: null,
     limit: 30,
     ...overrides,
@@ -95,7 +104,14 @@ describe('CatalogBrowseApi', () => {
             imageUrl: null,
             size: 1,
             unit: 'LITER',
-            category: 'DAIRY',
+            categories: [
+              {
+                id: 'cat-milk',
+                parentId: 'cat-dairy-and-eggs',
+                slug: 'milk',
+                name: { en: 'Milk', es: 'Leche' },
+              },
+            ],
             offer: {
               price: 0.89,
               currency: 'EUR',
@@ -170,6 +186,33 @@ describe('CatalogBrowseApi', () => {
       await result;
     });
 
+    it('sends one shop as locationId, alone (velista 0124, backend 0170)', async () => {
+      const result = api.browse(query({ locationId: 'loc-mayor' }));
+
+      const req = httpMock.expectOne(
+        (r) => r.url === `${GATEWAY}/v1/catalog/items`
+      );
+      expect(req.request.params.get('locationId')).toBe('loc-mayor');
+      expect(req.request.params.has('soldBy')).toBe(false);
+      expect(req.request.params.has('priceScopeId')).toBe(false);
+      req.flush({ items: [], nextCursor: null });
+      await result;
+    });
+
+    it('sends a chosen category as categoryId, as it is, root or leaf (velista 0119)', async () => {
+      const result = api.browse(
+        query({ categoryId: 'cat-frozen', soldBy: 'chain-m' })
+      );
+
+      const req = httpMock.expectOne(
+        (r) => r.url === `${GATEWAY}/v1/catalog/items`
+      );
+      expect(req.request.params.getAll('categoryId')).toEqual(['cat-frozen']);
+      expect(req.request.params.getAll('soldBy')).toEqual(['chain-m']);
+      req.flush({ items: [], nextCursor: null });
+      await result;
+    });
+
     it('sends no query and no selectors for a blank read, so the profile resolves', async () => {
       const result = api.browse(query({ query: '   ' }));
 
@@ -177,6 +220,7 @@ describe('CatalogBrowseApi', () => {
         (r) => r.url === `${GATEWAY}/v1/catalog/items`
       );
       expect(req.request.params.has('query')).toBe(false);
+      expect(req.request.params.has('categoryId')).toBe(false);
       expect(req.request.params.has('soldBy')).toBe(false);
       expect(req.request.params.has('priceScopeId')).toBe(false);
       req.flush({ items: [], nextCursor: null });
@@ -251,6 +295,7 @@ describe('CatalogBrowseApi', () => {
           supermarketId: 'chain-m',
           name: { es: 'Mercadona', en: 'Mercadona' },
           locations: 7,
+          logoUrl: null,
         },
       ]);
       expect(context?.scopes).toEqual([
@@ -366,6 +411,7 @@ describe('CatalogBrowseMemory', () => {
       query: '',
       order: 'name',
       soldBy: 'chain-deza',
+      categoryId: null,
       priceScopeIds: ['scope-chain-deza'],
       cursor: null,
       limit: 50,
@@ -379,6 +425,33 @@ describe('CatalogBrowseMemory', () => {
     }
   });
 
+  it('narrows to a leaf, and to every leaf under a root, as the server does', async () => {
+    const memory = new CatalogBrowseMemory();
+    const read = (categoryId: string) =>
+      memory.browse({
+        query: '',
+        order: 'name',
+        soldBy: null,
+        categoryId,
+        priceScopeIds: [],
+        cursor: null,
+        limit: 50,
+      });
+
+    const milk = await read('cat-milk');
+    const dairy = await read('cat-dairy-and-eggs');
+
+    expect(milk?.items.map((row) => row.id).sort()).toEqual([
+      'item-milk',
+      'item-milk-lactose',
+      'item-milk-six',
+    ]);
+    expect(dairy?.items.map((row) => row.id)).toEqual(
+      expect.arrayContaining(['item-milk', 'item-eggs', 'item-yogurt'])
+    );
+    expect(dairy?.items).toHaveLength(5);
+  });
+
   it('keeps every product and drops every price when nothing can be priced', async () => {
     const memory = new CatalogBrowseMemory();
     memory.state = 'noPlace';
@@ -387,6 +460,7 @@ describe('CatalogBrowseMemory', () => {
       query: '',
       order: 'name',
       soldBy: null,
+      categoryId: null,
       priceScopeIds: [],
       cursor: null,
       limit: 50,

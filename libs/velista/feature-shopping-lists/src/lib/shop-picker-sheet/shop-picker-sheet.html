@@ -1,33 +1,61 @@
-<lib-sheet-shell (dismiss)="back()" labelledBy="shop-picker-title">
+<lib-sheet-shell (dismiss)="close()" labelledBy="shop-picker-title">
   <!--
-    The chevron beside the title, which is this sheet's own way back. It is a
-    dismissal rather than a navigation: the filter sheet pushed this one, so popping
-    lands there and nothing is pushed (`0031`).
+    The chevron beside the title, which is this sheet's own way back. At the root it
+    is a dismissal rather than a navigation: the filter sheet pushed this one, so
+    popping lands there and nothing is pushed (`0031`). On a chain's screen it
+    returns to the root and never leaves the sheet (velista 0124).
   -->
   <div class="head">
     <button
       (click)="back()"
-      [attr.aria-label]="'basket.view.shop.back' | rokuT"
+      [attr.aria-label]="
+        (openHead() === null
+          ? 'basket.view.shop.back'
+          : 'catalog.supermarket.backToChains'
+        ) | rokuT
+      "
       class="back"
       type="button"
     >
       <lib-chevron-left-icon class="back-glyph" />
     </button>
-    <h2 class="title" id="shop-picker-title">
-      {{ 'basket.view.shop.title' | rokuT }}
-    </h2>
-    <!--
-      In the title row, reachable without scrolling (velista 0103). It asks for the
-      position only when pressed, even when the permission was granted long ago.
-    -->
-    <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+    @if (openHead(); as head) {
+      <lib-chain-logo [logo]="head.logo" class="head-logo" size="sm" />
+      <!--
+        The sheet keeps its name while a chain is open, so the dialog is still
+        "Buying at" to a screen reader; the chain's name is what is seen.
+      -->
+      <h2 class="title is-chain" id="shop-picker-title">
+        <span class="visually-hidden">
+          {{ 'basket.view.shop.title' | rokuT }},
+        </span>
+        {{ head.name }}
+      </h2>
+    } @else {
+      <h2 class="title" id="shop-picker-title">
+        {{ 'basket.view.shop.title' | rokuT }}
+      </h2>
+      <!--
+        In the title row, reachable without scrolling (velista 0103). It asks for
+        the position only when pressed, even when the permission was granted long
+        ago. Not on a chain's screen, which has no Near me of its own.
+      -->
+      <lib-near-me-button (pressed)="findNear()" [busy]="finding()" />
+    }
   </div>
 
+  @if (openHead(); as head) {
+    <p class="count">
+      {{ 'shops.chain.inAreas' | rokuT: { count: head.count } }}
+    </p>
+  }
+
   <!--
-    The body the get a list sheet draws too (velista `0102`): the search, the chain
-    buttons, and the open chain's shops or the flat matches, one radio each.
+    The body every shop picker draws (velista 0124): the recent shops, the search
+    and the chain buttons at the root, or one chain's shops once it is open.
   -->
   <lib-shop-picker
+    (about)="openShop($event)"
     (chosen)="select($event)"
     (picked)="pickShop($event)"
     (queried)="onQuery($event)"
@@ -37,7 +65,7 @@
     [matches]="flat()"
     [near]="near()"
     [openKey]="openChain()"
-    [openName]="openName()"
+    [pickedChain]="pickedChain()"
     [pickedId]="pickedId()"
     [query]="typed()"
     [recent]="recent()"

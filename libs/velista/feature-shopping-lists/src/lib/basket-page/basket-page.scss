@@ -112,6 +112,33 @@ lib-line-composer {
   }
 }
 
+// The map of the shop the basket is read at (velista 0121): a round glyph in the
+// quiet action treatment, so it reads as an offer and not as the trip's main act,
+// and leaves the title its width.
+.map {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: 1px solid var(--app-action-quiet-border);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.map-glyph {
+  font-size: var(--app-icon-md);
+}
+
 .history-glyph,
 .share-glyph,
 .people-glyph,
@@ -378,6 +405,62 @@ lib-line-composer {
   flex: none;
   color: var(--app-text-muted);
   font-size: var(--app-text-xs);
+}
+
+// The band between the shop's aisles and the categories no aisle holds (velista
+// 0120, rule A3). Sunken and full bleed, so it reads as a change of kind rather than
+// one more heading; the words wrap inside it rather than being cut.
+.uncovered-band {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  margin-block-start: var(--app-space-5);
+  padding-inline: var(--app-space-4) var(--app-space-2);
+  border-block: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-sunken);
+}
+
+.uncovered-label {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+// The info control: the whole touch target, the glyph at the icon size inside it.
+.uncovered-info {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-muted);
+  cursor: pointer;
+
+  &[aria-expanded='true'] {
+    background: var(--app-action-quiet-bg);
+    color: var(--app-action-quiet-fg);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
+
+// Every icon is 1em, so the glyph is sized by its font size.
+.uncovered-glyph {
+  display: inline-flex;
+  font-size: var(--app-icon-md);
 }
 
 // --- The states -------------------------------------------------------------

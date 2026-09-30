@@ -14,10 +14,12 @@ import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
   BRAND_PATTERNS,
+  CATEGORY_PATTERNS,
   ITEM_PATTERNS,
   POSTAL_CODE_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
+  SECTION_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
@@ -39,6 +41,7 @@ import {
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
+import { SHOP_WALK_PATTERNS } from '../lib/messages/shop-walk.messages';
 import { STATS_PATTERNS } from '../lib/messages/stats.messages';
 import {
   MEMBERSHIP_PATTERNS,
@@ -53,6 +56,14 @@ import {
   validateMessageResponse,
 } from './index';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
+
+/** A product's leaf as every item view carries it (plan 0166, section 3). */
+const MILK_CATEGORY = {
+  id: 'c-milk',
+  parentId: 'c-dairy-and-eggs',
+  slug: 'milk',
+  name: { en: 'Milk', es: 'Leche' },
+};
 
 describe('contract schemas', () => {
   it('builds a single Ajv instance with every schema (all $ids unique, all $refs resolve)', () => {
@@ -88,6 +99,10 @@ describe('contract schemas', () => {
       ...Object.values(PRICE_SCOPE_PATTERNS),
       ...Object.values(PRODUCT_GROUP_PATTERNS),
       ...Object.values(BRAND_PATTERNS),
+      ...Object.values(CATEGORY_PATTERNS),
+      ...Object.values(SECTION_PATTERNS),
+      // A shop's walks and its map (plan 0168).
+      ...Object.values(SHOP_WALK_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(HARVEST_PRESET_PATTERNS),
@@ -533,6 +548,9 @@ describe('contract schemas', () => {
             longitude: null,
             externalRef: null,
             externalProvider: null,
+            footprintM2: 1200,
+            sections: [{ id: 'sec-1', name: { es: 'Frescos' } }],
+            hasMap: false,
           },
           supermarket: {
             id: 's-1',
@@ -549,6 +567,69 @@ describe('contract schemas', () => {
           ],
         }).valid
       ).toBe(true);
+    });
+
+    it('supermarketLocation.priceStack answers a shop, its chain and its scope stack (plan 0170)', () => {
+      expect(
+        validateMessageRequest('supermarketLocation.priceStack', {
+          supermarketLocationId: 'loc-1',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('supermarketLocation.priceStack', {
+          supermarketLocationId: '',
+        }).valid
+      ).toBe(false);
+      const view = {
+        id: 'loc-1',
+        supermarketId: 's-1',
+        priceScopeIds: ['ps-store', 'ps-region'],
+      };
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', view).valid
+      ).toBe(true);
+      // An empty stack is still a stack, and a missing one is not.
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          ...view,
+          priceScopeIds: [],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          id: 'loc-1',
+          supermarketId: 's-1',
+        }).valid
+      ).toBe(false);
+      // The stack and nothing more: the rest of the shop is not this answer's.
+      expect(
+        validateMessageResponse('supermarketLocation.priceStack', {
+          ...view,
+          label: null,
+        }).valid
+      ).toBe(false);
+    });
+
+    it('supermarketLocation.update takes a size and refuses to clear one (plan 0176)', () => {
+      const update = { userId: 'u-1', supermarketLocationId: 'loc-1' };
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: 3002,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: null,
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('supermarketLocation.update', {
+          ...update,
+          footprintM2: 12.5,
+        }).valid
+      ).toBe(false);
     });
 
     it('basket.participant.list response names an account (plan 0054, section 2)', () => {
@@ -719,7 +800,7 @@ describe('contract schemas', () => {
         validateMessageRequest('item.create', {
           userId: 'owner',
           name: { en: 'Milk', es: 'Leche' },
-          category: 'DAIRY',
+          categoryIds: ['c-milk'],
           defaultUnit: 'LITER',
         }).valid
       ).toBe(true);
@@ -735,7 +816,7 @@ describe('contract schemas', () => {
               ean: null,
               unitSize: null,
               packCount: null,
-              category: 'DAIRY',
+              categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: null,
             },
@@ -743,6 +824,390 @@ describe('contract schemas', () => {
           nextCursor: null,
         }).valid
       ).toBe(true);
+    });
+
+    it('a product names its leaves, one or more, and never an enum (plan 0166)', () => {
+      const create = (fields: Record<string, unknown>) =>
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { en: 'Pizza', es: 'Pizza' },
+          defaultUnit: 'UNIT',
+          ...fields,
+        }).valid;
+      expect(create({ categoryIds: ['c-pizzas', 'c-frozen-meals'] })).toBe(
+        true
+      );
+      // A product always has a category, so the list is required and not empty.
+      expect(create({})).toBe(false);
+      expect(create({ categoryIds: [] })).toBe(false);
+      // The twelve value column is gone from the wire.
+      expect(create({ categoryIds: ['c-pizzas'], category: 'FROZEN' })).toBe(
+        false
+      );
+
+      const update = (categoryIds: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          categoryIds,
+        }).valid;
+      expect(update(['c-pizzas'])).toBe(true);
+      expect(update([])).toBe(false);
+
+      const view = (categories: unknown) =>
+        validateMessageResponse('item.get', {
+          id: 'i',
+          name: { en: 'Milk', es: 'Leche' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean: null,
+          unitSize: null,
+          packCount: null,
+          categories,
+          defaultUnit: 'LITER',
+          productGroupId: null,
+        }).valid;
+      expect(view([MILK_CATEGORY])).toBe(true);
+      expect(view([])).toBe(false);
+      // A product is only ever on a leaf, so the parent is never null.
+      expect(view([{ ...MILK_CATEGORY, parentId: null }])).toBe(false);
+
+      expect(
+        validateMessageRequest('item.search', {
+          userId: 'u',
+          categoryId: 'c-dairy-and-eggs',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.search', {
+          userId: 'u',
+          category: 'DAIRY',
+        }).valid
+      ).toBe(false);
+    });
+
+    it('item.updateMany is the update op of the items batch (plan 0166)', () => {
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [
+            { itemId: 'i-1', categoryIds: ['c-ice-cream'] },
+            { itemId: 'i-2', categoryIds: ['c-ice-cream', 'c-other-frozen'] },
+          ],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [],
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ categoryIds: ['c-ice-cream'] }],
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('item.updateMany', { items: [] }).valid
+      ).toBe(true);
+    });
+
+    it('the category tree, and its admin reads and writes (plan 0166)', () => {
+      const root = {
+        id: 'c-frozen',
+        parentId: null,
+        slug: 'frozen',
+        name: { en: 'Frozen', es: 'Congelados' },
+        position: 8,
+        itemCount: 12,
+      };
+      const leaf = {
+        ...root,
+        id: 'c-ice-cream',
+        parentId: 'c-frozen',
+        slug: 'ice-cream',
+        name: { en: 'Ice cream', es: 'Helados' },
+        position: 3,
+        itemCount: 4,
+      };
+      expect(
+        validateMessageRequest('category.tree', { userId: 'harvester' }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('category.tree', { categories: [root, leaf] })
+          .valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('category.list', {
+          items: [leaf],
+          nextCursor: null,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('category.list', {
+          userId: 'owner',
+          kind: 'leaf',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('category.list', {
+          userId: 'owner',
+          kind: 'branch',
+        }).valid
+      ).toBe(false);
+
+      expect(
+        validateMessageRequest('category.create', {
+          userId: 'owner',
+          parentId: 'c-frozen',
+          slug: 'frozen-desserts',
+          name: { es: 'Postres congelados' },
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('category.create', {
+          userId: 'owner',
+          slug: 'frozen',
+          name: {},
+        }).valid
+      ).toBe(false);
+      // The slug is an identity: an edit cannot carry one.
+      expect(
+        validateMessageRequest('category.update', {
+          userId: 'owner',
+          categoryId: 'c-frozen',
+          slug: 'frozen-food',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('category.update', {
+          userId: 'owner',
+          categoryId: 'c-ice-cream',
+          parentId: null,
+          position: 0,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('category.delete', { id: 'c-ice-cream' }).valid
+      ).toBe(true);
+    });
+
+    describe('shop sections (plan 0167)', () => {
+      const section = {
+        id: 's-pizzas',
+        supermarketId: 'mercadona',
+        slug: 'pizzas',
+        name: { es: 'Pizzas' },
+        position: 3,
+        categoryIds: ['c-pizzas'],
+      };
+
+      it('a section covers roots and leaves, and may cover none', () => {
+        const create = (fields: Record<string, unknown>) =>
+          validateMessageRequest('section.create', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            slug: 'frozen',
+            name: { en: 'Frozen', es: 'Congelados' },
+            ...fields,
+          }).valid;
+        expect(create({ categoryIds: ['c-frozen', 'c-pizzas'] })).toBe(true);
+        // The middle aisle of whatever is on offer: pins only.
+        expect(create({ categoryIds: [], position: 0 })).toBe(true);
+        expect(create({})).toBe(false);
+        expect(create({ categoryIds: ['c-frozen', 'c-frozen'] })).toBe(false);
+
+        // The slug is an identity: an edit cannot carry one.
+        expect(
+          validateMessageRequest('section.update', {
+            userId: 'owner',
+            sectionId: 's-pizzas',
+            categoryIds: ['c-pizzas'],
+            position: 1,
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.update', {
+            userId: 'owner',
+            sectionId: 's-pizzas',
+            slug: 'pizza',
+          }).valid
+        ).toBe(false);
+
+        // The back office's reads carry the shop count; nothing requires it.
+        expect(
+          validateMessageResponse('section.get', {
+            ...section,
+            locationCount: 12,
+          }).valid
+        ).toBe(true);
+        expect(validateMessageResponse('section.create', section).valid).toBe(
+          true
+        );
+        expect(
+          validateMessageResponse('section.list', {
+            items: [{ ...section, locationCount: 0 }],
+            nextCursor: null,
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.list', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            query: 'piz',
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.delete', { id: 's-pizzas' }).valid
+        ).toBe(true);
+      });
+
+      it('a shop’s list is read with no account, and says whose list it is', () => {
+        expect(
+          validateMessageRequest('section.forLocation', {
+            supermarketLocationId: 'loc-1',
+          }).valid
+        ).toBe(true);
+        for (const source of ['LOCATION', 'CHAIN']) {
+          expect(
+            validateMessageResponse('section.forLocation', {
+              sections: [section],
+              source,
+            }).valid
+          ).toBe(true);
+        }
+        expect(
+          validateMessageResponse('section.forLocation', {
+            sections: [],
+            source: 'NONE',
+          }).valid
+        ).toBe(false);
+
+        const put = (sectionIds: unknown) =>
+          validateMessageRequest('section.setForLocation', {
+            userId: 'owner',
+            supermarketLocationId: 'loc-1',
+            sectionIds,
+          }).valid;
+        expect(put(['s-pizzas', 's-frozen'])).toBe(true);
+        // Empty returns the shop to its chain's default.
+        expect(put([])).toBe(true);
+        expect(put(['s-pizzas', 's-pizzas'])).toBe(false);
+        expect(put(undefined)).toBe(false);
+      });
+
+      it('a pin names a product and sections of one chain; empty removes it', () => {
+        const pin = (sectionIds: unknown) =>
+          validateMessageRequest('section.setPins', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            itemId: 'i-pizza',
+            sectionIds,
+          }).valid;
+        expect(pin(['s-pizzas'])).toBe(true);
+        expect(pin([])).toBe(true);
+        expect(pin(['s-pizzas', 's-pizzas'])).toBe(false);
+        expect(
+          validateMessageResponse('section.setPins', {
+            supermarketId: 'mercadona',
+            itemId: 'i-pizza',
+            sectionIds: [],
+          }).valid
+        ).toBe(true);
+
+        expect(
+          validateMessageRequest('section.listPins', {
+            userId: 'owner',
+            supermarketId: 'mercadona',
+            sectionId: 's-pizzas',
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageResponse('section.listPins', {
+            items: [
+              {
+                supermarketId: 'mercadona',
+                itemId: 'i-pizza',
+                sectionIds: ['s-pizzas'],
+              },
+            ],
+            nextCursor: null,
+          }).valid
+        ).toBe(true);
+      });
+
+      it('the rule answers many products at one shop, naming the step', () => {
+        expect(
+          validateMessageRequest('section.itemsAtLocation', {
+            supermarketLocationId: 'loc-1',
+            itemIds: ['i-pizza', 'i-milk'],
+          }).valid
+        ).toBe(true);
+        expect(
+          validateMessageRequest('section.itemsAtLocation', {
+            supermarketLocationId: 'loc-1',
+          }).valid
+        ).toBe(false);
+        const answer = (step: string) =>
+          validateMessageResponse('section.itemsAtLocation', {
+            source: 'CHAIN',
+            items: [{ itemId: 'i-pizza', sectionIds: [], step }],
+          }).valid;
+        expect(answer('PINNED')).toBe(true);
+        expect(answer('COVERED')).toBe(true);
+        expect(answer('NONE')).toBe(true);
+        expect(answer('GUESSED')).toBe(false);
+      });
+
+      it('a basket product at a shop may carry its sections, and need not', () => {
+        const validate = createContractsAjv().getSchema(
+          'luna://basket/BasketProductView'
+        );
+        const product = {
+          id: 'i-pizza',
+          name: { es: 'Pizza' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean: null,
+          unitSize: null,
+          packCount: null,
+          categories: [MILK_CATEGORY],
+          defaultUnit: 'UNIT',
+          productGroupId: null,
+          atShop: null,
+        };
+        expect(validate?.(product)).toBe(true);
+        expect(validate?.({ ...product, sectionIds: [] })).toBe(true);
+        expect(validate?.({ ...product, sectionIds: ['s-pizzas'] })).toBe(true);
+        expect(validate?.({ ...product, sectionIds: null })).toBe(false);
+      });
+    });
+
+    it('the harvest create override names leaf slugs (plan 0166)', () => {
+      expect(
+        validateMessageRequest('sourceEntry.createItem', {
+          userId: 'owner',
+          entryId: 'e',
+          categorySlugs: ['ice-cream'],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('sourceEntry.createItem', {
+          userId: 'owner',
+          entryId: 'e',
+          categorySlugs: [],
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('sourceEntry.createItem', {
+          userId: 'owner',
+          entryId: 'e',
+          category: 'FROZEN',
+        }).valid
+      ).toBe(false);
     });
 
     it('a pack count is a whole number from 2 to 1000, or null (plan 0162)', () => {
@@ -790,7 +1255,7 @@ describe('contract schemas', () => {
               ean: null,
               unitSize: 1,
               packCount: 6,
-              category: 'DAIRY',
+              categories: [MILK_CATEGORY],
               defaultUnit: 'LITER',
               productGroupId: 'g',
               bestOffer: {
@@ -1464,11 +1929,13 @@ describe('the shops near a point and the recent shops (plan 0164)', () => {
     id: 'loc-1',
     supermarketId: 's-1',
     supermarketName: { en: 'Lidl', es: 'Lidl' },
+    supermarketLogoUrl: null,
     label: null,
     address: 'Calle Mayor 3',
     city: 'Córdoba',
     postalCode: '14001',
     inProfile: true,
+    sections: [],
     distanceMetres: 120,
     excluded: false,
   };
@@ -1562,5 +2029,50 @@ describe('the shops near a point and the recent shops (plan 0164)', () => {
         ],
       }).valid
     ).toBe(true);
+  });
+});
+
+describe('what a shop picker row needs (plan 0170)', () => {
+  it('section.namesForLocations takes up to 200 shops and answers a map of names', () => {
+    expect(
+      validateMessageRequest('section.namesForLocations', {
+        supermarketLocationIds: ['loc-1', 'loc-2'],
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('section.namesForLocations', {
+        supermarketLocationIds: Array.from({ length: 201 }, (_, i) => `l${i}`),
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageResponse('section.namesForLocations', {
+        locations: {
+          'loc-1': [{ id: 'sec-1', name: { es: 'Frescos' } }],
+          'loc-2': [],
+        },
+      }).valid
+    ).toBe(true);
+  });
+
+  it('refuses a shop view with no sections or no logo, because both are always present', () => {
+    const shop = {
+      id: 'loc-1',
+      supermarketId: 's-1',
+      supermarketName: { en: 'Lidl', es: 'Lidl' },
+      supermarketLogoUrl: null,
+      label: null,
+      address: null,
+      city: null,
+      postalCode: null,
+      inProfile: false,
+      sections: [],
+    };
+    const { sections: _sections, ...noSections } = shop;
+    const { supermarketLogoUrl: _logo, ...noLogo } = shop;
+    const answer = (shops: object[]) =>
+      validateMessageResponse('supermarketLocation.shopsById', { shops }).valid;
+    expect(answer([shop])).toBe(true);
+    expect(answer([noSections])).toBe(false);
+    expect(answer([noLogo])).toBe(false);
   });
 });

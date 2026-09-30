@@ -1,0 +1,99 @@
+@use '../walks';
+
+// The controls under a selected area (velista 0123, the `EditCells` board).
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5)
+    calc(var(--app-space-4) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+}
+
+.about {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-inline-size: 0;
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.swatch {
+  flex: none;
+  inline-size: var(--app-space-7);
+  block-size: var(--app-space-7);
+  box-sizing: border-box;
+  border: var(--app-map-swatch-border) solid;
+  border-radius: var(--app-space-2);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.name {
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  font-weight: 700;
+  color: var(--app-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hint {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.done {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.snap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  cursor: pointer;
+}
+
+.snap-label {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-primary);
+}
+
+.switch {
+  @include walks.switch;
+}

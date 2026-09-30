@@ -207,22 +207,61 @@
   color: var(--app-text-muted);
 }
 
-.chain {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-3);
+// The matches breathe under their count, which they do not need to on the
+// supermarkets page: there the list is the whole body of a scrolling screen.
+.result-count + lib-shop-list {
   margin-block-start: var(--app-space-4);
 }
 
-.chain-title {
-  margin: 0;
+// ---- the any row (velista 0124): All supermarkets, or Any Mercadona shop
+
+.any-card {
+  margin-block-end: var(--app-space-5);
+}
+
+.any {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-4);
+  cursor: pointer;
+
+  &:has(.any-radio:checked) {
+    background: var(--app-action-quiet-bg);
+  }
+
+  &:has(.any-radio:focus-visible) {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.any-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.any-title {
   font-size: var(--app-text-base);
-  font-weight: 650;
+  font-weight: 600;
+  line-height: var(--app-leading-heading);
   color: var(--app-text-primary);
 }
 
-// The list under the buttons breathes, which it does not need to on the
-// supermarkets page: there it is the whole body of a scrolling screen.
-lib-shop-list {
-  margin-block-start: var(--app-space-4);
+.any-detail {
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.any-radio {
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
 }

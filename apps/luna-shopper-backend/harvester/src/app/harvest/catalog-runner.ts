@@ -3,6 +3,18 @@ import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
 
+/**
+ * The key of an observation's `extra` that says its product page was asked for
+ * and could not be read (plan 0169, section 5.3).
+ *
+ * A source with no EAN has nothing else to retry a failed detail by: El Jamón
+ * writes the top level category the listing carries in its place, which is
+ * also what a page with a one level breadcrumb answers. The ingest writes
+ * `extra` verbatim on a full read and leaves it alone on a partial one, so the
+ * key stays on the row until a later read of the page succeeds.
+ */
+export const DETAIL_FAILED_KEY = 'detailFailed';
+
 /** One row a backfill reads a page for, as the run that found it described it. */
 export interface BackfillEntry {
   externalId: string;
@@ -99,6 +111,16 @@ export interface CatalogDiscoveryInput {
    * large number is visible in the report (plan 0119, section 8).
    */
   externalIdsWithoutEan?: ReadonlySet<string>;
+  /**
+   * The external ids whose stored row was written from a detail that failed,
+   * marked by {@link DETAIL_FAILED_KEY}, loaded beside the two sets above and
+   * overlapping them.
+   *
+   * For a source with no EAN it is how a failed detail is retried: a runner
+   * that fetches only new details reads these again rather than keeping the
+   * listing's top level category forever (plan 0169, section 5.3).
+   */
+  externalIdsWithFailedDetail?: ReadonlySet<string>;
 }
 
 /**

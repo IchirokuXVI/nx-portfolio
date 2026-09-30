@@ -183,7 +183,7 @@ function toCreateItemBody(
     brand: item['brand'],
     ean: item['ean'],
     unitSize: item['unitSize'],
-    category: item['category'],
+    categorySlugs: item['categorySlugs'],
     defaultUnit: item['defaultUnit'],
   };
   for (const key of Object.keys(body)) {

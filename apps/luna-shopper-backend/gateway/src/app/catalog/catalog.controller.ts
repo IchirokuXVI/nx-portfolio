@@ -10,19 +10,24 @@ import {
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import {
   CATALOG_SCHEMA_IDS,
+  CATEGORY_PATTERNS,
   ITEM_PATTERNS,
   PRICE_SCOPE_PATTERNS,
   PRODUCT_GROUP_PATTERNS,
+  SECTION_PATTERNS,
   SUPERMARKET_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type CatalogScopeView,
   type CatalogSuggestResponse,
+  type CategoryTreeView,
   type GetItemsRequest,
   type GetItemsResult,
   type ItemPage,
   type ItemView,
+  type LocationSectionsRequest,
+  type LocationSectionsView,
   type PriceScopePage,
   type ProductGroupOfferPage,
   type ProductGroupPage,
@@ -34,14 +39,22 @@ import {
   type SupermarketLocationChainSummariesView,
   type SupermarketLocationItemView,
   type SupermarketLocationPage,
+  type SupermarketLocationPriceStackRequest,
+  type SupermarketLocationPriceStackView,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
 } from '@portfolio/luna-shopper/contracts';
-import { UuidParam } from '@portfolio/luna-shopper/platform';
+import {
+  CatalogLocationExclusiveException,
+  ERROR_CODES,
+  SupermarketLocationNotFoundException,
+  UuidParam,
+} from '@portfolio/luna-shopper/platform';
 import { AuthUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { errorCodeOf } from '../auth/remote-problem';
 import {
   ApiContractResponse,
   ApiProblemResponses,
@@ -109,6 +122,25 @@ function toScopeQuery(query: PriceScopedQueryDto): ScopeQuery {
     supermarketIds: query.supermarketId,
     profileId: query.profileId,
   };
+}
+
+/**
+ * `locationId` says where a price comes from on its own (plan 0170), so any
+ * other way of saying it beside it is refused rather than one of the two
+ * quietly ignored. An empty repeatable parameter says nothing and passes.
+ */
+function refuseBesideLocation(query: PriceScopedQueryDto): void {
+  const named = [
+    query.priceScopeId?.length ? 'priceScopeId' : null,
+    query.postalCode?.length ? 'postalCode' : null,
+    query.supermarketId?.length ? 'supermarketId' : null,
+    query.profileId !== undefined ? 'profileId' : null,
+  ].filter((name): name is string => name !== null);
+  if (named.length > 0) {
+    throw new CatalogLocationExclusiveException(
+      `locationId cannot be combined with ${named.join(', ')}`
+    );
+  }
 }
 
 /**
@@ -229,6 +261,42 @@ export class CatalogLocationsController {
         cursor: query.cursor,
         limit: query.limit,
       }
+    );
+  }
+}
+
+/**
+ * A shop's sections, in its order (plan 0167, section 4): the aisles of the
+ * shop you are in, which velista `0120` draws the basket by.
+ *
+ * **Public: no guard and no token**, and its own controller for that reason,
+ * because a guard is carried by the controller and every other read here
+ * takes a velista token. A shop's aisle list is not private, and a guest
+ * reading a shared basket at a shop has no account to present. The same
+ * reasoning as `supermarketLocation.shopAvailability`, which the basket read
+ * already asks for a guest. It carries the default throttler bucket, like
+ * every route: the answer is reference data a few dozen rows long.
+ *
+ * Declared beside {@link CatalogLocationsController} on the same path. The
+ * two do not collide: its routes are `:id` and `:id/offers`, and this one is
+ * `:id/sections`.
+ */
+@ApiTags('catalog')
+@Controller({ path: 'catalog/locations', version: '1' })
+export class CatalogLocationSectionsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get(':id/sections')
+  @ApiContractResponse(SECTION_PATTERNS.forLocation, {
+    description:
+      'The shop’s sections in its order, each with the categories it covers. `source` is `LOCATION` when the shop has a list of its own and `CHAIN` when it inherits its chain’s. An unknown shop is a 404.',
+  })
+  @ApiProblemResponses({ notFound: true })
+  sections(@UuidParam('id') id: string): Promise<LocationSectionsView> {
+    const req: LocationSectionsRequest = { supermarketLocationId: id };
+    return this.nats.send<LocationSectionsView>(
+      SECTION_PATTERNS.forLocation,
+      req
     );
   }
 }
@@ -360,27 +428,80 @@ export class CatalogItemsController {
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
+  @ApiProblemResponses({ auth: true, membership: true, atLocation: true })
   async search(
     @AuthUser() user: CurrentUser,
     @Query() query: SearchItemsQueryDto
   ): Promise<ItemPage> {
+    // Plan 0170: a read at one shop names its scope and its chain itself, and
+    // nothing is resolved from the caller's profile.
+    const atShop =
+      query.locationId === undefined
+        ? null
+        : await this.atLocation(query, query.locationId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: user.userId,
       query: query.query,
-      category: query.category,
+      categoryId: query.categoryId,
       productGroupId: query.productGroupId,
-      priceScopeIds: await this.scopes.forRead(
-        user.userId,
-        toScopeQuery(query)
-      ),
+      priceScopeIds: atShop
+        ? atShop.priceScopeIds
+        : await this.scopes.forRead(user.userId, toScopeQuery(query)),
       // Plan 0146: which chains sell the products, passed through untouched. It
       // is deliberately not resolved through `toScopeQuery` above: that answers
       // where a price comes from, and this answers what is listed.
-      soldBy: query.soldBy,
+      soldBy: atShop ? atShop.soldBy : query.soldBy,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
     });
+  }
+
+  /**
+   * The read at one shop (plan 0170, section 4): priced at the most specific
+   * scope of the shop's stack alone, as the basket prices a shop, and listing
+   * its chain's products. A product the chain sells with no price there stays
+   * in the page with no offer, as any unpriced product does.
+   *
+   * The combination is checked before the shop is looked up, so a malformed
+   * request is a 400 whether or not the shop exists.
+   */
+  private async atLocation(
+    query: SearchItemsQueryDto,
+    locationId: string
+  ): Promise<{ priceScopeIds: string[]; soldBy: string[] }> {
+    refuseBesideLocation(query);
+    let location: SupermarketLocationPriceStackView;
+    try {
+      // The chain and the stack alone: `get` would also read the shop's
+      // section names, which nothing here uses.
+      location = await this.nats.send<
+        SupermarketLocationPriceStackView,
+        SupermarketLocationPriceStackRequest
+      >(SUPERMARKET_LOCATION_PATTERNS.priceStack, {
+        supermarketLocationId: locationId,
+      });
+    } catch (error) {
+      throw errorCodeOf(error) === ERROR_CODES.NOT_FOUND
+        ? new SupermarketLocationNotFoundException(
+            'Supermarket location not found'
+          )
+        : error;
+    }
+    if (
+      query.soldBy?.some(
+        (chain) => chain.toLowerCase() !== location.supermarketId.toLowerCase()
+      )
+    ) {
+      throw new CatalogLocationExclusiveException(
+        'soldBy names another chain than the shop’s'
+      );
+    }
+    const quoted = location.priceScopeIds[0];
+    return {
+      priceScopeIds: quoted ? [quoted] : [],
+      soldBy: [location.supermarketId],
+    };
   }
 
   /**
@@ -495,6 +616,32 @@ export class CatalogItemsController {
         limit: query.limit,
       }
     );
+  }
+}
+
+/**
+ * The category tree, whole (plan 0166, section 3): what velista's picker draws,
+ * a page of roots and a page of each root's children.
+ *
+ * Unscoped and unpaged. The tree is reference data and the same for everybody,
+ * and at two levels of a supermarket's aisles it is under a hundred rows. The
+ * counts are catalog wide. A product's own categories come on the product,
+ * named, so nothing needs this route to resolve a name.
+ */
+@ApiTags('catalog')
+@ApiBearerAuth('access-token')
+@UseGuards(JwtAuthGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'catalog/categories', version: '1' })
+export class CatalogCategoriesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Get()
+  @ApiContractResponse(CATEGORY_PATTERNS.tree)
+  tree(@AuthUser() user: CurrentUser): Promise<CategoryTreeView> {
+    return this.nats.send<CategoryTreeView>(CATEGORY_PATTERNS.tree, {
+      userId: user.userId,
+    });
   }
 }
 

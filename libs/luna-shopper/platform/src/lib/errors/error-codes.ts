@@ -245,6 +245,117 @@ export const ERROR_CODES = {
    * can create that scope first.
    */
   SCOPE_NOT_FOUND: 'scope_not_found',
+  /**
+   * The write would make a third level of the category tree (plan 0166, rule
+   * R1).
+   *
+   * Either the parent named is itself a child, or the row being given a parent
+   * is a root that already has children. The row that breaks the rule travels in
+   * the envelope's `details` as `categoryId`.
+   */
+  CATEGORY_TOO_DEEP: 'category_too_deep',
+  /**
+   * A product was put on a root, or a child holding products was made a root
+   * (plan 0166, rule R2). A product sits on a leaf, and a leaf is a row with a
+   * parent. The root named travels in `details` as `categoryId`.
+   */
+  CATEGORY_NOT_A_LEAF: 'category_not_a_leaf',
+  /**
+   * A product was created with no category, or an edit emptied its set (plan
+   * 0166, rule R3). Every product has at least one.
+   */
+  ITEM_NEEDS_A_CATEGORY: 'item_needs_a_category',
+  /**
+   * A category that has children or products was asked to be deleted (plan
+   * 0166, rule R4). Move them first: nothing deletes a category that holds
+   * something.
+   */
+  CATEGORY_IN_USE: 'category_in_use',
+  /**
+   * An id or a slug names no category (plan 0166, section 3). Its own code
+   * rather than a plain {@link NOT_FOUND}, because on a product write the
+   * missing thing is a value in the body and not the route's resource. The ids
+   * or slugs that matched nothing travel in `details` as `unknown`.
+   */
+  CATEGORY_NOT_FOUND: 'category_not_found',
+  /**
+   * An id names no shop section (plan 0167, section 4).
+   *
+   * Its own code rather than a plain {@link NOT_FOUND}, for the reason
+   * {@link CATEGORY_NOT_FOUND} gives: on a shop's list or a pin the missing
+   * thing is a value in the body, not the route's resource. The ids that
+   * matched nothing travel in `details` as `unknown`.
+   */
+  SECTION_NOT_FOUND: 'section_not_found',
+  /**
+   * A shop's list or a pin named a section of another chain (plan 0167,
+   * section 1).
+   *
+   * A section belongs to one chain, and a shop lists only its own chain's
+   * sections, which a trigger enforces because a foreign key cannot say it.
+   * The sections that broke the rule travel in `details` as `sectionIds`.
+   */
+  SECTION_OF_ANOTHER_CHAIN: 'section_of_another_chain',
+  /**
+   * The chain already has a section with this slug (plan 0167, section 1).
+   *
+   * Two sections named "Frescos" in one chain is an operator error worth
+   * refusing. The holder's id travels in `details` as `sectionId`, so the back
+   * office can offer to open it rather than only say no.
+   */
+  SECTION_SLUG_TAKEN: 'section_slug_taken',
+  /**
+   * `GET /v1/catalog/items` was sent `locationId` beside another way of saying
+   * where a price comes from, or beside a `soldBy` naming another chain (plan
+   * 0170, section 4).
+   *
+   * A read at one shop is priced at that shop's scope alone and lists that
+   * shop's chain alone, so a `priceScopeId`, `postalCode`, `supermarketId`,
+   * `profileId` or foreign `soldBy` beside it asks two questions at once, and
+   * answering either would ignore the other.
+   */
+  CATALOG_LOCATION_EXCLUSIVE: 'catalog_location_exclusive',
+  /**
+   * An id names no shop (plan 0170, section 4). Its own code rather than a
+   * plain {@link NOT_FOUND}, because on the catalog read the missing thing is
+   * a query parameter and not the route's resource.
+   */
+  SUPERMARKET_LOCATION_NOT_FOUND: 'supermarket_location_not_found',
+  /**
+   * The caller's account does not hold the permission this route needs (plan
+   * 0175).
+   *
+   * A 403 like {@link FORBIDDEN}, so it never signs anybody out, and a code of
+   * its own because the client's reaction is particular: hide the control that
+   * led here, and refresh its token once in case a role was granted since. The
+   * permission's name is published in `details.permission`, never a role name.
+   */
+  PERMISSION_REQUIRED: 'permission_required',
+  /**
+   * An operator tried to give a guest a role (plan 0175). A guest is a
+   * temporary account and holds none; it keeps an empty set when it upgrades,
+   * and a role is granted to the registered account afterwards.
+   */
+  GUEST_HAS_NO_ROLES: 'guest_has_no_roles',
+  /**
+   * An entry was built on a walk that has moved on since (plan 0168, section
+   * 2): its `baseSeq` is not the walk's `lastSeq`. Two phones on one walk see
+   * this, and the second reloads. The current `lastSeq` is published in
+   * `details.lastSeq`.
+   */
+  WALK_CHANGED: 'walk_changed',
+  /**
+   * The document a walk entry folds to does not pass `validateShopMapV2` (plan
+   * 0168). The problems are published in `details.problems`, each with its
+   * code and the id of the area or mark it names.
+   */
+  SHOP_MAP_INVALID: 'shop_map_invalid',
+  /**
+   * A walk entry, or the document it folds to, is over its size cap (plan
+   * 0168: 256 KB per entry, 2 MB per document). `details.limit` says which
+   * (`entry` or `document`) and `details.maxBytes` the cap.
+   */
+  SHOP_MAP_TOO_LARGE: 'shop_map_too_large',
   INTERNAL: 'internal',
 } as const;
 
@@ -347,5 +458,38 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: HttpStatus.CONFLICT,
   [ERROR_CODES.PLACE_MATCHES_LOCATION]: HttpStatus.CONFLICT,
   [ERROR_CODES.SCOPE_NOT_FOUND]: HttpStatus.CONFLICT,
+  // 409 for the three rules of the tree that turn on another row (plan 0166):
+  // the request is well formed, and what refuses it is where the named rows
+  // sit, or what they hold.
+  [ERROR_CODES.CATEGORY_TOO_DEEP]: HttpStatus.CONFLICT,
+  [ERROR_CODES.CATEGORY_NOT_A_LEAF]: HttpStatus.CONFLICT,
+  [ERROR_CODES.CATEGORY_IN_USE]: HttpStatus.CONFLICT,
+  // 400, because what is wrong is a value in the body: an empty list.
+  [ERROR_CODES.ITEM_NEEDS_A_CATEGORY]: HttpStatus.BAD_REQUEST,
+  // 404, the way an unknown group id on a product write is refused, and the
+  // status a read of one missing category answers with too.
+  [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  // Plan 0167: 404 the way an unknown category is, and 409 for the two that
+  // turn on another row: which chain a section belongs to, and which section
+  // already holds a slug.
+  [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
+  // Plan 0170: a malformed combination of query parameters, and a shop that
+  // does not exist.
+  [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND]: HttpStatus.NOT_FOUND,
+  // Plan 0175: 403 because the caller is known and not allowed, which is what
+  // a forbidden is, and never 401, which would sign them out.
+  [ERROR_CODES.PERMISSION_REQUIRED]: HttpStatus.FORBIDDEN,
+  // 409 for the ordinary reason: the request is well formed and the operator
+  // may make it, and what refuses it is the kind of account it names.
+  [ERROR_CODES.GUEST_HAS_NO_ROLES]: HttpStatus.CONFLICT,
+  // Plan 0168: a stale base is the state moving under the caller, a 409 like
+  // `stale_quantity`. A document that does not validate, or is too large, is a
+  // well formed request whose content is refused, which is what a 422 is.
+  [ERROR_CODES.WALK_CHANGED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.SHOP_MAP_INVALID]: HttpStatus.UNPROCESSABLE_ENTITY,
+  [ERROR_CODES.SHOP_MAP_TOO_LARGE]: HttpStatus.UNPROCESSABLE_ENTITY,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -10,6 +10,12 @@
 > `0168`, the `shop-map` libraries). The user asked whether the app can tell a shopper what
 > to get next from where they stand, marked it low priority, and asked for it in the backlog.
 
+> **Update, 2026-09-29:** the series was rewritten around a map in metres
+> (`shop-map/plans/0002`) with no product pins, and the viewer lost `setHighlight`. Scanning
+> a product to say where you stand no longer works, and "you are here" becomes a point in
+> metres. Rewrite the Context and Target state against `0121` and the editor's current API
+> when this plan is picked up.
+
 A shopper on the map page (`0121`) says where they are, and the app reorders what is left
 by distance from there. Saying where they are is a tap on the map, or a scan of any product
 on the shelf beside them, because a pinned product's cell is a position. Nothing senses the

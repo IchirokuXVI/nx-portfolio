@@ -260,7 +260,12 @@ function observationOf(product: LidlProduct): SourceObservation {
 }
 
 function extraOf(product: LidlProduct): Record<string, unknown> | null {
-  const extra: Record<string, unknown> = { category: product.category };
+  // The leaf the need world path resolved to, or null (plan 0166, section 7).
+  // Kept as a note beside the row, which is all it ever was: the product is
+  // placed from `categoryPath` when it is created, and nothing reads this.
+  const extra: Record<string, unknown> = {
+    categorySlug: product.categorySlug,
+  };
   if (product.shortCode) {
     extra['shortCode'] = product.shortCode;
   }

@@ -1,3 +1,4 @@
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -22,7 +23,7 @@ import {
   type WalkMark,
 } from '@portfolio/luna-shopper/shop-map/recorder';
 import { APP_VERSION } from '@portfolio/velista/models';
-import { ReloadBlocker } from '@portfolio/velista/platform';
+import { ReloadBlocker, watchKeyboardInset } from '@portfolio/velista/platform';
 import { replayRows } from '../capture/replay';
 import { WalkCapture, type StopReason } from '../capture/walk-capture';
 import { formatDuration, formatMetres } from '../format';
@@ -76,6 +77,7 @@ export class RecordPage {
   private readonly _reload = inject(ReloadBlocker);
   private readonly _version = inject(APP_VERSION);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _document = inject(DOCUMENT);
 
   private readonly _root = viewChild<ElementRef<HTMLElement>>('root');
 
@@ -100,6 +102,10 @@ export class RecordPage {
   readonly marks = signal<WalkMark[]>([]);
   readonly panel = signal<Panel>(null);
   readonly draft = signal('');
+  /** How far the visual viewport's bottom is above the layout viewport's, in pixels. */
+  readonly panelInset = signal(0);
+  /** The visual viewport's height while the panel is open, in pixels. */
+  readonly panelMaxHeight = signal<number | null>(null);
   readonly lastMark = signal<WalkMark | null>(null);
   readonly finishArmed = signal(false);
   readonly stopReason = signal<StopReason | null>(null);
@@ -161,6 +167,7 @@ export class RecordPage {
   private _timer: ReturnType<typeof setInterval> | null = null;
   private _finishTimer: ReturnType<typeof setTimeout> | null = null;
   private _releaseReload: (() => void) | null = null;
+  private _unwatch: (() => void) | null = null;
   private _pendingT = 0;
 
   constructor() {
@@ -170,6 +177,7 @@ export class RecordPage {
 
     inject(DestroyRef).onDestroy(() => {
       this._stopTimers();
+      this._unwatchViewport();
       if (this._capture.recording()) {
         // Leaving by the back button or a link: the walk is kept, not lost.
         void this._capture.stop('left').then(() => this._releaseReload?.());
@@ -286,11 +294,11 @@ export class RecordPage {
   openPanel(kind: 'checkpoint' | 'note'): void {
     this._pendingT = this._capture.now();
     this.draft.set('');
-    this.panel.set(kind);
+    this._setPanel(kind);
   }
 
   closePanel(): void {
-    this.panel.set(null);
+    this._setPanel(null);
   }
 
   saveLabel(label?: string): void {
@@ -300,8 +308,22 @@ export class RecordPage {
       return;
     }
     const mark = this._capture.mark(kind, text, this._pendingT);
-    this.panel.set(null);
+    this._setPanel(null);
     this._marked(mark);
+  }
+
+  /**
+   * Takes back the most recent mark, with no question: one tap undoes one wrong tap,
+   * and the status line then names the mark before it.
+   */
+  deleteLastMark(): void {
+    const left = this._capture.deleteLastMark();
+    if (!left) {
+      return;
+    }
+    this.marks.set(left);
+    this.lastMark.set(left[left.length - 1] ?? null);
+    this._capture.buzz();
   }
 
   /** Finish takes two taps, four seconds apart at most, so a pocket cannot end a walk. */
@@ -371,6 +393,7 @@ export class RecordPage {
     this.stoppedWalk.set(walk);
     this.saveFailed.set(failed);
     this.elapsed.set(walk.durationMs);
+    this._setPanel(null);
     this.phase.set('stopped');
   }
 
@@ -381,6 +404,43 @@ export class RecordPage {
     this.marks.update((list) => [...list, mark]);
     this.lastMark.set(mark);
     this._capture.buzz();
+  }
+
+  private _setPanel(kind: Panel): void {
+    this.panel.set(kind);
+    if (kind) {
+      this._watchViewport();
+    } else {
+      this._unwatchViewport();
+    }
+  }
+
+  /**
+   * Keeps the open panel against the bottom of the visual viewport, which is the
+   * height the on screen keyboard leaves. The page cannot scroll (inside WebXR's DOM
+   * overlay nothing does), so a panel drawn in the flow would sit under the keyboard
+   * with its Save button out of reach. Chrome for Android reports the keyboard
+   * through `visualViewport` in the overlay too. Without `visualViewport` the panel
+   * stays at the bottom of the layout viewport. It uses platform's
+   * `watchKeyboardInset`, which the recording screen uses too.
+   */
+  private _watchViewport(): void {
+    this._unwatchViewport();
+    const win = this._document.defaultView;
+    if (!win?.visualViewport) {
+      return;
+    }
+    this._unwatch = watchKeyboardInset(win, (inset) => {
+      this.panelInset.set(inset.bottom);
+      this.panelMaxHeight.set(inset.height);
+    });
+  }
+
+  private _unwatchViewport(): void {
+    this._unwatch?.();
+    this._unwatch = null;
+    this.panelInset.set(0);
+    this.panelMaxHeight.set(null);
   }
 
   private _makeEngine(

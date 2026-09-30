@@ -11,11 +11,17 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  inLocale,
+  catalogName,
   OTHER_CHAINS,
   type FranchiseButton,
 } from '@portfolio/velista/models';
-import { HalfCircleIcon, SlashCircleIcon } from '../icons/icons';
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  HalfCircleIcon,
+  SlashCircleIcon,
+} from '../icons/icons';
+import { ChainLogo, type ChainLogoView } from './chain-logo';
 
 /** One button as this list draws it: a name in the reader's language, and a state. */
 interface FranchiseRow extends FranchiseButton {
@@ -23,6 +29,7 @@ interface FranchiseRow extends FranchiseButton {
   readonly label: string;
   readonly other: boolean;
   readonly open: boolean;
+  readonly logo: ChainLogoView;
 }
 
 /**
@@ -55,7 +62,14 @@ interface FranchiseRow extends FranchiseButton {
  */
 @Component({
   selector: 'lib-franchise-buttons',
-  imports: [RokuTranslatorPipe, HalfCircleIcon, SlashCircleIcon],
+  imports: [
+    ChainLogo,
+    CheckIcon,
+    ChevronRightIcon,
+    HalfCircleIcon,
+    RokuTranslatorPipe,
+    SlashCircleIcon,
+  ],
   templateUrl: './franchise-buttons.html',
   styleUrl: './franchise-buttons.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -63,7 +77,11 @@ interface FranchiseRow extends FranchiseButton {
 export class FranchiseButtons {
   readonly chains = input.required<readonly FranchiseButton[]>();
 
-  /** The franchise whose shops are open, or null when none is. */
+  /**
+   * The chain drawn as chosen, with a tick and `aria-pressed`, or null for none.
+   * On the supermarkets page it is the chain whose shops are open under the
+   * buttons; in the shop picker it is the chain of the current choice.
+   */
   readonly openKey = input<string | null>(null);
 
   /**
@@ -87,11 +105,21 @@ export class FranchiseButtons {
     const locale = this._locale();
     const open = this.openKey();
 
-    return this.chains().map((chain) => ({
-      ...chain,
-      label: chain.name === null ? '' : inLocale(chain.name, locale),
-      other: chain.name === null,
-      open: chain.key === open,
-    }));
+    return this.chains().map((chain) => {
+      // `catalogName`, because a chain the catalog named only in Spanish would
+      // print blank for an English reader under `inLocale`.
+      const label = chain.name === null ? '' : catalogName(chain.name, locale);
+      return {
+        ...chain,
+        label,
+        other: chain.name === null,
+        open: chain.key === open,
+        logo: {
+          logoUrl: chain.logoUrl,
+          name: label,
+          store: chain.name === null,
+        },
+      };
+    });
   });
 }
