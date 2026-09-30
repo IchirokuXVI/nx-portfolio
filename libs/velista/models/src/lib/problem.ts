@@ -137,6 +137,22 @@ export const ERROR_CODES = [
    * raises it.
    */
   'line_merge_too_many_products',
+  /**
+   * The walk moved on since this phone read it (backend `0168`), as a 409, with
+   * `details.lastSeq`. Nothing was written. The rewind screen answers it by
+   * reading the walk again (velista `0122`).
+   */
+  'walk_changed',
+  /** The account lacks a permission the route takes (backend `0175`), as a 403. */
+  'permission_required',
+  /**
+   * An appended entry folds to a map the rules refuse (backend `0168`), as a 422,
+   * with `details.problems`. Nothing was written. The edit page drops the entry
+   * and reads the walk again (velista `0123`).
+   */
+  'shop_map_invalid',
+  /** An entry or the map it folds to is over its size limit (backend `0168`), as a 422. */
+  'shop_map_too_large',
   'internal',
 ] as const;
 

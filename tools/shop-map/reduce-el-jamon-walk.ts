@@ -31,10 +31,14 @@
  *   Then the same tail is walked again (the recorded tail, replayed as a new
  *   `resumed` entry a week later, with new mark ids). Rewind 2 goes to 15 s
  *   into that replay, which is past rewind 1.
- * - Authored: one `edited` entry draws a shelf or a counter in front of the
+ * - Authored: one `edited` entry draws a gondola or a counter in front of the
  *   first mark of every section still on the map, an entrance, a checkout, a
  *   pillar and a hand drawn floor, moves the Frutería mark, removes a
- *   repeated Mascotas mark and adds a note.
+ *   repeated Mascotas mark and adds a note. A gondola starts at the first
+ *   floor nobody walked in the direction the phone faced, is up to 1 m deep,
+ *   and grows along the aisle both ways while the aisle in front of it was
+ *   walked, until walked floor crosses it or it meets another area, up to 9 m
+ *   long (a counter up to 4 m).
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -48,6 +52,7 @@ import {
   type WalkEntry,
   type WalkEvent,
 } from '../../libs/luna-shopper/shop-map/model/src/index';
+import { createLiveMap } from '../../libs/luna-shopper/shop-map/model/src/lib/v2/live-map';
 import {
   computeTrack,
   positionAt,
@@ -311,34 +316,136 @@ for (const m of [...before.marks].sort((a, b) => a.logMs - b.logMs)) {
 }
 let counters = 0;
 let shelves = 0;
-/** A shelf or a counter 0.5 m in front of a mark, its long side facing the person. */
-function areaInFront(m: MapMark, section: string): MapArea {
+/** The walked cells of the live map (within 0.5 m of the path), cell (i, j) covering [i·0.5, (i+1)·0.5). */
+const walkedCells = new Set(
+  createLiveMap({
+    document: { version: 2, areas: [], marks: [], path: before.path },
+    settings: { idPrefix: 'x', idSeed: 1 },
+  })
+    .snapshot()
+    .walkedCells.map((c) => `${c.x},${c.y}`)
+);
+const CELL = 0.5;
+const floor = { x0: 0, y0: 0 };
+/** Every kept path point with its log time, outside the discarded segment. */
+const timed = entries
+  .filter((e) => e.seq !== 3)
+  .flatMap((e) => e.events)
+  .flatMap((ev) => (ev.type === 'path' ? ev.points : []))
+  .sort((a, b) => a[0] - b[0]);
+/** The walking direction around a log time, over two seconds each way. */
+function walkingAt(logMs: number): [number, number] | null {
+  const near = (t: number) =>
+    timed.reduce((best, p) =>
+      Math.abs(p[0] - t) < Math.abs(best[0] - t) ? p : best
+    );
+  const a = near(logMs - 2000);
+  const b = near(logMs + 2000);
+  const d = Math.hypot(b[1] - a[1], b[2] - a[2]);
+  return d > 0.5 ? [(b[1] - a[1]) / d, (b[2] - a[2]) / d] : null;
+}
+const walkedAt = (i: number, j: number) => walkedCells.has(`${i},${j}`);
+/** Cells of the gondola: up to this deep... */
+const GONDOLA_DEPTH_CELLS = 2;
+/** ...and up to this long, a counter shorter. */
+const GONDOLA_MAX_CELLS = 18;
+const COUNTER_MAX_CELLS = 8;
+/** How far in front of the person the shelf face is looked for (2 m). */
+const FACE_REACH_CELLS = 4;
+
+/**
+ * A gondola or a counter in front of a mark: its near face at the first cell
+ * nobody walked in the direction the phone faced, up to 1 m deep, grown along
+ * the aisle both ways over unwalked cells while the aisle in front was walked,
+ * until it meets walked floor or another area. `null` when there is no room.
+ */
+function areaInFront(m: MapMark, section: string): MapArea | null {
   const counter = m.kind === 'counter';
-  const long = counter ? 2 : 1.5;
-  const short = counter ? 1 : 0.6;
   const h = (m.heading * Math.PI) / 180;
   const dx = -Math.sin(h);
   const dy = Math.cos(h);
-  const alongX = Math.abs(dx) >= Math.abs(dy);
-  const w = alongX ? short : long;
-  const hh = alongX ? long : short;
-  const reach = 0.5 + short / 2;
-  return {
-    id: areaId(areas.length + 1),
-    kind: counter ? 'counter' : 'shelf',
-    x: r2(m.x + dx * reach - w / 2),
-    y: r2(m.y + dy * reach - hh / 2),
-    w,
-    h: hh,
-    section,
-    colour: { mode: 'default' },
-    origin: 'drawn',
+  // The gondola lines the aisle: its long side runs the way the person
+  // walked, and it stands on the side the phone faced. Standing still, the
+  // phone's own main axis decides.
+  const walking = walkingAt(m.logMs);
+  const alongX = walking
+    ? Math.abs(walking[1]) >= Math.abs(walking[0])
+    : Math.abs(dx) >= Math.abs(dy);
+  const step = (alongX ? Math.sign(dx) : Math.sign(dy)) || 1;
+  const mi = Math.floor((m.x - floor.x0) / CELL);
+  const mj = Math.floor((m.y - floor.y0) / CELL);
+  // Depth runs along the facing axis (n); length runs across it (t).
+  const cellAt = (n: number, t: number): [number, number] =>
+    alongX ? [n, t] : [t, n];
+  const n0 = alongX ? mi : mj;
+  const t0 = alongX ? mj : mi;
+  let near: number | null = null;
+  for (let k = 1; k <= FACE_REACH_CELLS; k++) {
+    if (!walkedAt(...cellAt(n0 + k * step, t0))) {
+      near = n0 + k * step;
+      break;
+    }
+  }
+  if (near === null) near = n0 + step;
+  let depth = 1;
+  while (
+    depth < GONDOLA_DEPTH_CELLS &&
+    !walkedAt(...cellAt(near + depth * step, t0))
+  ) {
+    depth++;
+  }
+  const nLo = Math.min(near, near + (depth - 1) * step);
+  const nHi = Math.max(near, near + (depth - 1) * step);
+  const rect = (tLo: number, tHi: number): MapArea => {
+    const [iLo, jLo] = cellAt(nLo, tLo);
+    const [iHi, jHi] = cellAt(nHi, tHi);
+    return {
+      id: areaId(areas.length + 1),
+      kind: counter ? 'counter' : 'shelf',
+      x: r2(floor.x0 + iLo * CELL),
+      y: r2(floor.y0 + jLo * CELL),
+      w: r2((iHi - iLo + 1) * CELL),
+      h: r2((jHi - jLo + 1) * CELL),
+      section,
+      colour: { mode: 'default' },
+      origin: 'drawn',
+    };
   };
+  // A column continues the gondola while the aisle in front of it was walked
+  // within 1.5 m and its back row was not: a gondola lines an aisle, and ends
+  // where the aisle does or where walked floor crosses it. A path that wanders
+  // into its front row is the aisle's edge, not a gap.
+  const back = near + (depth - 1) * step;
+  const columnOpen = (t: number) => {
+    let aisle = false;
+    for (let k = 1; k <= 3; k++) {
+      if (walkedAt(...cellAt(near - k * step, t))) aisle = true;
+    }
+    if (!aisle || walkedAt(...cellAt(back, t))) return false;
+    return !overlaps(rect(t, t));
+  };
+  if (overlaps(rect(t0, t0))) return null;
+  const max = counter ? COUNTER_MAX_CELLS : GONDOLA_MAX_CELLS;
+  let tLo = t0;
+  let tHi = t0;
+  let grew = true;
+  while (grew && tHi - tLo + 1 < max) {
+    grew = false;
+    if (columnOpen(tLo - 1)) {
+      tLo--;
+      grew = true;
+    }
+    if (tHi - tLo + 1 < max && columnOpen(tHi + 1)) {
+      tHi++;
+      grew = true;
+    }
+  }
+  return rect(tLo, tHi);
 }
 for (const m of firstMarks.values()) {
   const counter = m.kind === 'counter';
   const area = areaInFront(m, m.text);
-  if (overlaps(area)) {
+  if (!area) {
     skipped.push(m.text);
     continue;
   }
@@ -355,7 +462,7 @@ const hygiene = before.marks
   .sort((a, b) => a.logMs - b.logMs)[1];
 if (!hygiene) throw new Error('No second Higiene y perfumería mark.');
 const second = areaInFront(hygiene, 'higiene y perfumería ');
-if (overlaps(second)) throw new Error('The second hygiene shelf overlaps.');
+if (!second) throw new Error('No room for the second hygiene shelf.');
 areas.push(second);
 
 const door = before.marks.find((m) => m.kind === 'note');

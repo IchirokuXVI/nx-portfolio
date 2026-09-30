@@ -255,10 +255,50 @@ describe('discarded and confirmed', () => {
     expect(d.areas).toEqual([area('kept')]);
   });
 
-  it('keeps the segment in the history before the discard', () => {
-    const d = stateAt(log('discarded'), 3999);
-    expect(d.path).toHaveLength(2);
-    expect(texts(d)).toEqual(['bad']);
+  it('shows the segment only to a log that has no discard yet', () => {
+    const open = stateAt(log('discarded').slice(0, 3), 3999);
+    expect(open.path).toHaveLength(2);
+    expect(texts(open)).toEqual(['bad']);
+    // Once discarded, no point of the log shows it, inside the segment or not.
+    for (const t of [2000, 2500, 3000, 3999]) {
+      const d = stateAt(log('discarded'), t);
+      expect(d.path).toHaveLength(1);
+      expect(d.marks).toEqual([]);
+    }
+  });
+
+  it('never lets a later rewind bring the segment back', () => {
+    const entries = [
+      ...log('discarded'),
+      entry(5, 'rewound', 4000, 4000, [], { rewoundTo: 3000 }),
+    ];
+    const d = foldWalk(entries);
+    expect(d.path).toHaveLength(1);
+    expect(d.marks).toEqual([]);
+    expect(d.areas).toEqual([area('kept')]);
+  });
+
+  it('discards across a stop made while the question was open', () => {
+    const entries = log('discarded');
+    entries.splice(
+      3,
+      0,
+      entry(4, 'stopped', 4000, 4000, [path([4000, 12, 9])], {
+        reason: 'left-page',
+      })
+    );
+    entries[4] = entry(5, 'discarded', 2000, 4000);
+    const d = foldWalk(entries);
+    expect(d.path).toEqual([
+      {
+        points: [
+          [0, 0],
+          [2, 0],
+        ],
+      },
+    ]);
+    expect(d.marks).toEqual([]);
+    expect(d.areas).toEqual([area('kept')]);
   });
 
   it('keeps the segment when it is confirmed', () => {
@@ -519,15 +559,42 @@ describe('the El Jamón walk', () => {
     );
   });
 
-  it('answers the turned segment inside it, and not after the discard', () => {
-    const inside = stateAt(log, 960_000);
+  it('answers the turned segment before the discard is written, and never after', () => {
+    const inside = stateAt(log.slice(0, 3), 960_000);
     expect(inside.path).toHaveLength(2);
     expect(texts(inside)).toContain('Pastas');
+    for (const t of [log[1].logTo, 960_000, log[3].logTo - 1]) {
+      const d = stateAt(log, t);
+      expect(d.path).toHaveLength(1);
+      expect(texts(d)).not.toContain('Pastas');
+    }
     const afterDiscard = stateAt(log.slice(0, 4), log[3].logTo);
     expect(afterDiscard.path).toEqual(
       stateAt(log.slice(0, 2), log[1].logTo).path
     );
     expect(texts(afterDiscard)).not.toContain('Pastas');
+  });
+
+  it('rewinds into the discarded segment without writing it back', () => {
+    const walked = log.slice(0, 5);
+    const end = walked[4].logTo;
+    for (const target of [960_000, walked[1].logTo]) {
+      const d = foldWalk([
+        ...walked,
+        {
+          id: 'rewind',
+          seq: 6,
+          kind: 'rewound',
+          at: '2026-09-29T18:00:00.000Z',
+          logFrom: end,
+          logTo: end,
+          events: [],
+          rewoundTo: target,
+        },
+      ]);
+      expect(d.path).toEqual(stateAt(log.slice(0, 2), log[1].logTo).path);
+      expect(texts(d)).not.toContain('Pastas');
+    }
   });
 
   it('answers the state of each rewind after it', () => {

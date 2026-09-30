@@ -1042,6 +1042,69 @@ export class StoreIcon {
   );
 }
 
+/**
+ * A folded map (velista `0121`): "See the map" on a shop's page and the basket's
+ * Map button. The words always travel with it.
+ */
+@Component({
+  selector: 'lib-map-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MapIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./map-icon.svg?raw')
+  );
+}
+
+/** A floor plan's outline (velista `0121`): a shop's size on its page. */
+@Component({
+  selector: 'lib-floor-area-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class FloorAreaIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./floor-area-icon.svg?raw')
+  );
+}
+
+/** A person walking (velista `0122`): a shop's walks, on the map page's Walks button. */
+@Component({
+  selector: 'lib-walk-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class WalkIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./walk-icon.svg?raw')
+  );
+}
+
+/** Three sliders (velista `0122`): settings that apply to many things at once. */
+@Component({
+  selector: 'lib-sliders-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SlidersIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./sliders-icon.svg?raw')
+  );
+}
+
 /** Two arrows passing each other: take one product instead of another. */
 @Component({
   selector: 'lib-swap-icon',

@@ -317,6 +317,22 @@ $app-content-max: 480px;
   --app-section-chip-height: 24px;
   // A pick row's radio, a native one in the action colour, the mock's size.
   --app-pick-radio: 22px;
+  // The round button on a pick row that opens the shop's own page (velista 0121),
+  // the mock's size: smaller than the touch target, which it grows to with a pseudo
+  // element.
+  --app-pick-about: 36px;
+  // The shop map's badge as the legend draws it (velista 0121), the canvas's size.
+  --app-map-badge: 22px;
+  // The settle circle on a line of the map's section sheet (velista 0121).
+  --app-map-settle: 24px;
+  // Editing a shop's map by hand (velista 0123), the mock's sizes: the colour
+  // swatches of the area sheet, the small kind swatch in the long press menu, and
+  // the menu itself, wide enough for "Change its section" beside its glyph.
+  --app-map-swatch: 40px;
+  --app-map-kind-swatch: 18px;
+  --app-map-menu-width: 236px;
+  // The border a colour swatch is drawn with, darker than its fill.
+  --app-map-swatch-border: 2px;
   // One product inside an opened group: name, brand and price on a single line.
   --app-suggestion-inside-row: 22px;
   // The group popover, wide enough for its two sentences at four lines each.

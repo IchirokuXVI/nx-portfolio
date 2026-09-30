@@ -56,6 +56,26 @@ function paramSignal(route: ActivatedRoute, name: string): Signal<string> {
   });
 }
 
+/** The shop a shop page, its map or a sheet over the map is about (velista `0121`). */
+export function locationIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'locationId');
+}
+
+/** The walk a walk's history, rewind, settings or a sheet over them is about (velista `0122`). */
+export function walkIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'walkId');
+}
+
+/** The area the edit page's area sheet is about (velista `0123`). */
+export function areaIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'areaId');
+}
+
+/** The section the map's section sheet is about (velista `0121`). */
+export function sectionIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'sectionId');
+}
+
 /** The group this screen is about. Empty string only if the route is misdeclared. */
 export function zoneIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'zoneId');

@@ -1173,7 +1173,8 @@
     },
     "row": {
       "excluded": "Off",
-      "chainExcluded": "Brand off"
+      "chainExcluded": "Brand off",
+      "about": "About {{shop}}"
     },
     "empty": {
       "noCodes": {
@@ -1638,6 +1639,9 @@
       "failed": "The change did not save. Try again.",
       "cancel": "Cancel",
       "cheaper": "cheaper option"
+    },
+    "map": {
+      "openLabel": "Map of {{shop}}"
     }
   },
   "getList": {
@@ -1983,6 +1987,253 @@
       "stepSetting": "Step length when recorded",
       "app": "Recorded with",
       "events": "Events"
+    }
+  },
+  "shopPage": {
+    "back": "Back",
+    "loading": "Loading the shop",
+    "failed": "This shop would not load",
+    "missing": "We could not find this shop",
+    "retry": "Try again",
+    "address": "Address",
+    "size": "About {{size}} m²",
+    "sizeSource": "Building size from OpenStreetMap",
+    "seeMap": "See the map",
+    "sections": "Sections",
+    "sectionsHint": "in the order you walk them"
+  },
+  "shopMap": {
+    "title": "Where things are",
+    "back": "Back",
+    "loading": "Loading the map",
+    "failed": "The map would not load",
+    "none": "This shop has no map yet",
+    "retry": "Try again",
+    "saved": "Saved on this phone",
+    "label": "Map of the shop",
+    "show": "Show",
+    "mine": "My list · {{count}}",
+    "all": "All sections",
+    "legendLeft": "Still to get",
+    "legendDone": "All got",
+    "legendWalkway": "Walkway",
+    "hint": "Tap a section to see what you need there.",
+    "hintAll": "Tap a section to see its name and any note.",
+    "section": {
+      "close": "Close",
+      "position": "Stop {{position}} of {{total}}",
+      "left_one": "{{count}} thing still to get",
+      "left_other": "{{count}} things still to get",
+      "allGot": "You got everything here",
+      "nothing": "Nothing on your list here",
+      "got": "Got",
+      "toGet": "Still to get",
+      "note": "Note on the map",
+      "unknown": "This section is not on the map any more"
+    }
+  },
+  "shopWalks": {
+    "open": "Walks",
+    "back": "Back",
+    "retry": "Try again",
+    "cancel": "Cancel",
+    "name": "Name",
+    "list": {
+      "title": "Walks",
+      "intro": "Shoppers see the map of one walk. Open a walk to see its history.",
+      "empty": "No walks yet. Start one to map this shop.",
+      "missing": "This shop could not be found.",
+      "failed": "The walks would not load",
+      "loading": "Loading the walks",
+      "shown": "Shown to shoppers",
+      "changedToday": "Changed today at {{time}}",
+      "changedYesterday": "Changed yesterday at {{time}}",
+      "changedOn": "Changed {{date}}",
+      "entries_one": "{{count}} entry",
+      "entries_other": "{{count}} entries",
+      "marks_one": "{{count}} mark",
+      "marks_other": "{{count}} marks",
+      "settingsFor": "Settings for {{name}}",
+      "start": "Start a new walk",
+      "startNote": "A new walk starts with an empty map."
+    },
+    "mapping": {
+      "title": "Mapping settings",
+      "intro": "These settings apply to every walk you record, in every shop.",
+      "whileWalking": "While walking",
+      "walkingAcross": "Walking across a shelf makes it a path",
+      "walkingAcrossHint": "Only for shelves the app suggested. Shelves you drew yourself stay."
+    },
+    "new": {
+      "title": "Start a new walk",
+      "body": "Give it a name you will know again.",
+      "defaultName": "Walk of {{date}}",
+      "failed": "The walk was not started. Check the name and try again.",
+      "start": "Start"
+    },
+    "history": {
+      "loadingTitle": "Walk",
+      "subtitle": "History",
+      "rewind": "Rewind",
+      "editMap": "Edit map",
+      "empty": "Nothing has been saved in this walk yet.",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "latest": "Latest",
+      "missing": "This walk was deleted, or it is not there any more.",
+      "failed": "The walk would not load",
+      "loading": "Loading the walk",
+      "started": "Started from zero",
+      "resumed": "Resumed walking",
+      "walked_one": "{{count}} minute walked",
+      "walked_other": "{{count}} minutes walked",
+      "checked": "path checked",
+      "trackingLost": "Stopped by a tracking problem",
+      "frameMoved": "Stopped when the camera lost its place",
+      "keptUntil": "Kept up to {{time}}",
+      "purpleDiscarded": "purple path discarded",
+      "stopped": "Stopped",
+      "edited": "Edited without walking",
+      "areasChanged_one": "{{count}} area changed",
+      "areasChanged_other": "{{count}} areas changed",
+      "marksChanged_one": "{{count}} mark changed",
+      "marksChanged_other": "{{count}} marks changed",
+      "rewound": "Rewound to {{time}}",
+      "undoes": "The map as it was before the rewind at {{time}}",
+      "beforeProblem": "Back to before the tracking problem",
+      "confirmed": "Path checked",
+      "discarded": "Purple path discarded"
+    },
+    "settings": {
+      "title": "Walk settings",
+      "shoppers": "Shoppers",
+      "show": "Show this walk to shoppers",
+      "showHint": "A shop shows the map of one walk. Turning this on hides the others. Shoppers see changes after each save.",
+      "delete": "Delete this walk",
+      "notice": {
+        "renamed": "Name saved.",
+        "renameFailed": "The name was not saved. Try again.",
+        "shown": "Shoppers now see this walk.",
+        "hidden": "Shoppers no longer see this walk.",
+        "showFailed": "That did not save. Try again."
+      }
+    },
+    "delete": {
+      "title": "Delete {{name}}?",
+      "body": "The walk goes from this list.",
+      "bodyShown": "The walk goes from this list, and shoppers no longer see a map of this shop.",
+      "failed": "The walk was not deleted. Try again.",
+      "confirm": "Delete this walk"
+    },
+    "resume": {
+      "title": "Shoppers see this walk",
+      "body": "Each save while you walk changes the map that shoppers use. They can see a half finished area until you stop.",
+      "bodyAt": "Each save while you walk changes the map that shoppers use in {{shop}}. They can see a half finished area until you stop.",
+      "instead": "To change the map without that, start a new walk and show it to shoppers when it is ready.",
+      "anyway": "Resume anyway"
+    },
+    "rewind": {
+      "close": "Close",
+      "title": "Rewind · {{name}}",
+      "label": "The map at the moment you chose",
+      "fadedNote": "Faded: what comes after this moment",
+      "after": "{{minutes}} min {{seconds}} s after {{time}}",
+      "slider": "Moment of the walk",
+      "step": "One step = 15 s",
+      "entry": "history entry",
+      "jumps": "Go to an entry",
+      "notice": {
+        "changed": "Somebody saved this walk on another phone. This is the walk as it is now. Choose the moment again.",
+        "failed": "That did not save. Try again."
+      },
+      "pick": "Move the slider to go back",
+      "continue": "Continue from here",
+      "failed": "The walk's history would not load",
+      "loading": "Loading the walk's history"
+    }
+  },
+  "shopMapEdit": {
+    "label": "The map of this walk, for editing",
+    "notWalking": "Not walking",
+    "done": "Done",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "close": "Close",
+    "hint": "Drag across the floor to draw a shelf. Tap an area to change it. Hold a square for more.",
+    "size": "{{w}} m × {{h}} m",
+    "status": {
+      "unsent": "Not saved yet",
+      "sending": "Saving",
+      "saved": "Saved",
+      "failed": "Not saved yet. Trying again."
+    },
+    "notice": {
+      "changed": "The map changed on another phone. This is the map as it is now. Your last changes were not saved.",
+      "refused": "That change could not be saved. This is the map as it was saved.",
+      "blocked": "That does not fit there. It would overlap another area."
+    },
+    "kind": {
+      "section": "Section",
+      "shelf": "Shelf",
+      "counter": "Counter",
+      "checkout": "Checkout",
+      "entrance": "Entrance",
+      "blocked": "Blocked",
+      "path": "Path"
+    },
+    "hold": {
+      "title": "This square · {{x}} m across, {{y}} m in",
+      "close": "Close the menu",
+      "shelf": "Make it a shelf",
+      "counter": "Draw a counter here",
+      "blocked": "Mark as blocked",
+      "path": "Make it a path",
+      "note": "Add a note here",
+      "section": "Change its section",
+      "erase": "Erase",
+      "noteLabel": "Note",
+      "noteSave": "Add note"
+    },
+    "resize": {
+      "hint": "{{kind}} · drag a corner to resize",
+      "hintAlone": "Drag a corner to resize",
+      "snap": "Snap to the squares"
+    },
+    "area": {
+      "kindAndSize": "{{kind}} · {{w}} m × {{h}} m",
+      "rename": "Rename",
+      "renameTitle": "Rename",
+      "name": "Name",
+      "sectionName": "Section name",
+      "saveName": "Save",
+      "categoryColour": "Use the category color",
+      "categoryNotYet": "Not available yet: categories have no colors.",
+      "colour": "Color",
+      "delete": "Delete this area",
+      "deleteConfirm": "Delete {{name}}?",
+      "deleteYes": "Delete",
+      "keep": "Keep it",
+      "missing": "This area is not on the map any more."
+    },
+    "colour": {
+      "default": "Default",
+      "paleBlue": "Pale blue",
+      "green": "Green",
+      "orange": "Orange",
+      "lilac": "Lilac",
+      "yellow": "Yellow"
+    },
+    "unsaved": {
+      "title": "Not saved yet",
+      "body": "Your last changes to this map are only on this phone. We keep trying to save them.",
+      "keepOpen": "Please keep the app open until it says Saved.",
+      "sending": "Saving now.",
+      "saved": "Saved. You can leave now.",
+      "retryIn_one": "No connection. Trying again in {{count}} s.",
+      "retryIn_other": "No connection. Trying again in {{count}} s.",
+      "waiting": "Waiting to save.",
+      "ok": "OK",
+      "leave": "Leave without saving"
     }
   }
 }

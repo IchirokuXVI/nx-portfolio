@@ -1,0 +1,83 @@
+<button
+  (click)="dismiss()"
+  [attr.aria-label]="'shopMapEdit.hold.close' | rokuT"
+  class="backdrop"
+  tabindex="-1"
+  type="button"
+></button>
+
+<div
+  [class.is-placed]="place() !== null"
+  [style.left.px]="place()?.left ?? 0"
+  [style.top.px]="place()?.top ?? 0"
+  #panel
+  aria-labelledby="hold-menu-title"
+  class="panel"
+  role="dialog"
+>
+  <p class="head" id="hold-menu-title">
+    {{ 'shopMapEdit.hold.title' | rokuT: square() }}
+  </p>
+
+  @if (!noting()) {
+    <ul class="items" role="menu">
+      @for (action of actions(); track action) {
+        <li role="none">
+          <button
+            (click)="choose(action)"
+            [attr.data-action]="action"
+            [class.is-danger]="action === 'erase'"
+            class="item"
+            role="menuitem"
+            type="button"
+          >
+            @let kindStyle = swatch(action);
+            @if (kindStyle !== null) {
+              <span
+                [style.background]="kindStyle.background"
+                [style.border-color]="kindStyle.border"
+                aria-hidden="true"
+                class="kind"
+              ></span>
+            } @else if (action === 'note') {
+              <lib-comment-icon aria-hidden="true" class="glyph" />
+            } @else if (action === 'section') {
+              <lib-flag-icon aria-hidden="true" class="glyph" />
+            } @else {
+              <lib-trash-icon aria-hidden="true" class="glyph" />
+            }
+            <span>{{ 'shopMapEdit.hold.' + action | rokuT }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  } @else {
+    <form (ngSubmit)="saveNote()" class="note">
+      <label class="note-label" for="hold-note">{{
+        'shopMapEdit.hold.noteLabel' | rokuT
+      }}</label>
+      <input
+        [(ngModel)]="note"
+        [maxlength]="noteMax"
+        autocomplete="off"
+        class="note-field"
+        enterkeyhint="done"
+        id="hold-note"
+        name="note"
+        type="text"
+      />
+      <div class="note-actions">
+        <button (click)="dismiss()" class="note-cancel" type="button">
+          {{ 'shopMapEdit.cancel' | rokuT }}
+        </button>
+        <button
+          [attr.aria-disabled]="note().trim() === ''"
+          class="note-save"
+          type="submit"
+        >
+          {{ 'shopMapEdit.hold.noteSave' | rokuT }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

@@ -3,6 +3,8 @@ import {
   NAV_CHROME,
   NO_NAV_CHROME,
   SHEET_SEGMENT,
+  sheetFallGuard,
+  SHOP_PATHS,
   WORKS_WITHOUT_BACKEND,
 } from '@portfolio/velista/platform';
 import { readdirSync, readFileSync, statSync } from 'fs';
@@ -10,6 +12,11 @@ import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
+import {
+  shopMapRecordGuard,
+  unsavedWalkGuard,
+  walkIdGuard,
+} from './shop-map-guards';
 
 /**
  * What every signed in page carries: an account, and the setup's one offer
@@ -1071,7 +1078,13 @@ describe('the sheets and their exit animation', () => {
     //
     // `0116` took `sheet/add/list` off both baskets: the list is asked for by a
     // popover at the moment of adding, which has no URL.
-    expect(sheets).toHaveLength(43);
+    //
+    // `0121` added one: a section of a shop's map, over the map.
+    //
+    // `0122` added three: naming a new walk over the walks list, deleting a walk
+    // over its settings, and the warning before resuming the shown walk over its
+    // history.
+    expect(sheets).toHaveLength(48);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1084,9 +1097,12 @@ describe('the sheets and their exit animation', () => {
 
   it('puts the guard on nothing else', () => {
     // A page is not a panel, and delaying a navigation off one would be a stall with
-    // nothing on screen to explain it.
+    // nothing on screen to explain it. The one page guard allowed is the unsaved
+    // warning of the edit page (velista 0123), which asks on screen.
     const overreach = all
-      .filter(({ route }) => (route.canDeactivate ?? []).length > 0)
+      .filter(({ route }) =>
+        (route.canDeactivate ?? []).some((guard) => guard !== unsavedWalkGuard)
+      )
       .filter(({ route }) => !isSheet(route))
       .map(({ path }) => path);
 
@@ -1174,6 +1190,8 @@ describe('the bottom bar', () => {
     'join/:code',
     's/:secret',
     'lab/walk',
+    // Velista 0123: the map needs the height, and Done is the way out.
+    'shops/:locationId/walks/:walkId/edit',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {
@@ -1322,8 +1340,10 @@ describe('the setup (velista 0098)', () => {
     );
 
     expect(signedIn.length).toBeGreaterThan(5);
+    // First, and in this order. A page may add a guard of its own after them: a
+    // shop's walks add `shopMapRecordGuard` (velista 0122).
     for (const page of signedIn) {
-      expect(page.canActivate).toEqual(
+      expect(page.canActivate?.slice(0, 2)).toEqual(
         page.path === 'setup' ? [authenticatedGuard] : SIGNED_IN
       );
     }
@@ -1387,5 +1407,129 @@ describe('the walk lab', () => {
     walk(join(root, 'apps/velista/src'));
 
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * A shop's page and its map (velista `0121`). Both public, the map before the
+   * page it is a prefix of, and the section sheet addressed under the marker.
+   */
+  describe('the shop pages', () => {
+    const shopPath = `${SHOP_PATHS.shop}/:locationId`;
+    const mapPath = `${shopPath}/${SHOP_PATHS.map}`;
+    const shop = pages.find((route) => route.path === shopPath);
+    const map = pages.find((route) => route.path === mapPath);
+
+    it('declares both, the map first, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(shop).toBeDefined();
+      expect(map).toBeDefined();
+      expect(paths.indexOf(mapPath)).toBeLessThan(paths.indexOf(shopPath));
+      expect(paths.indexOf(shopPath)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('guards neither, because a guest opens the map from a shared basket', () => {
+      expect(shop?.canActivate).toBeUndefined();
+      expect(map?.canActivate).toBeUndefined();
+      expect(map?.canMatch).toBeUndefined();
+    });
+
+    it('offers the section sheet over the map, and keeps all three lazy', () => {
+      const [section] = sheetsOf(mapPath);
+
+      expect(section?.path).toBe(`${SHEET_SEGMENT}/sections/:sectionId`);
+      expect(section?.canDeactivate).toEqual([sheetFallGuard]);
+      expect(section?.loadComponent).toBeDefined();
+      expect(map?.loadComponent).toBeDefined();
+      expect(shop?.loadComponent).toBeDefined();
+      expect(shop?.children).toBeUndefined();
+    });
+  });
+
+  describe('the walks of a shop', () => {
+    const walks = `${SHOP_PATHS.shop}/:locationId/${SHOP_PATHS.walks}`;
+    const walk = `${walks}/:walkId`;
+    const paths = {
+      list: walks,
+      settings: `${walks}/${SHOP_PATHS.settings}`,
+      history: walk,
+      rewind: `${walk}/${SHOP_PATHS.rewind}`,
+      walkSettings: `${walk}/${SHOP_PATHS.settings}`,
+      edit: `${walk}/${SHOP_PATHS.edit}`,
+    };
+    const find = (path: string) => pages.find((route) => route.path === path);
+    const order = pages.map((route) => route.path);
+
+    it('declares every page, each before anything that would swallow it', () => {
+      for (const path of Object.values(paths)) {
+        expect(find(path)).toBeDefined();
+      }
+      expect(order.indexOf(paths.settings)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.rewind)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.walkSettings)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.edit)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.history)).toBeLessThan(
+        order.indexOf(paths.list)
+      );
+      expect(order.indexOf(paths.list)).toBeLessThan(
+        order.indexOf(`${SHOP_PATHS.shop}/:locationId`)
+      );
+    });
+
+    it('lets nobody without shopMap.record reach any of them', () => {
+      for (const path of Object.values(paths)) {
+        expect(find(path)?.canActivate).toEqual([
+          authenticatedGuard,
+          setupGuard,
+          shopMapRecordGuard,
+        ]);
+      }
+    });
+
+    it('reads a walk id only where a uuid stands', () => {
+      for (const path of [
+        paths.history,
+        paths.rewind,
+        paths.walkSettings,
+        paths.edit,
+      ]) {
+        expect(find(path)?.canMatch).toEqual([walkIdGuard]);
+      }
+    });
+
+    it('puts one sheet over the list, the settings and the history', () => {
+      expect(sheetsOf(paths.list).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.newWalk}`,
+      ]);
+      expect(sheetsOf(paths.walkSettings).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.deleteWalk}`,
+      ]);
+      expect(sheetsOf(paths.history).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.resume}`,
+      ]);
+      expect(sheetsOf(paths.settings)).toEqual([]);
+      expect(sheetsOf(paths.rewind)).toEqual([]);
+    });
+
+    // Velista 0123: editing by hand, with one area's sheet over it.
+    it('puts the area sheet over the edit page and asks before leaving it', () => {
+      expect(sheetsOf(paths.edit).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
+      ]);
+      expect(find(paths.edit)?.canDeactivate).toEqual([unsavedWalkGuard]);
+      // A failed save must not bring the connection screen, whose reload would
+      // throw the unsent edits away.
+      expect(find(paths.edit)?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.edit)[0].data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.edit)[0].data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+    });
   });
 });

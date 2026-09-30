@@ -1,0 +1,162 @@
+<main class="page">
+  <header class="bar">
+    <button
+      (click)="close()"
+      [attr.aria-label]="'shopWalks.rewind.close' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-close-icon class="back-glyph" />
+    </button>
+    <div class="heading">
+      <h1 class="title">
+        {{ 'shopWalks.rewind.title' | rokuT: { name: name() ?? '' } }}
+      </h1>
+      @if (subtitle(); as subtitle) {
+        <p class="subtitle">{{ subtitle }}</p>
+      }
+    </div>
+  </header>
+
+  @let state = read();
+  @if (state.kind === 'log') {
+    <div class="map">
+      <lib-shop-map-view
+        [document]="document()"
+        [fadedAfter]="faded()"
+        [label]="'shopWalks.rewind.label' | rokuT"
+        class="canvas"
+        look="mapper"
+      />
+      @if (!atEnd()) {
+        <p class="faded-note">{{ 'shopWalks.rewind.fadedNote' | rokuT }}</p>
+      }
+    </div>
+
+    <section class="panel">
+      @if (moment(); as moment) {
+        <div class="moment">
+          <p aria-live="polite" class="moment-time" id="rewind-moment">
+            @switch (moment.day.kind) {
+              @case ('today') {
+                {{ 'shopWalks.history.today' | rokuT }}
+              }
+              @case ('yesterday') {
+                {{ 'shopWalks.history.yesterday' | rokuT }}
+              }
+              @default {
+                @if (moment.day.kind === 'date') {
+                  {{ moment.day.text }}
+                }
+              }
+            }
+            {{ moment.time }}
+          </p>
+          <p class="moment-since">
+            {{
+              'shopWalks.rewind.after'
+                | rokuT
+                  : {
+                      minutes: moment.since.minutes,
+                      seconds: moment.since.seconds,
+                      time: moment.start,
+                    }
+            }}
+          </p>
+        </div>
+
+        <div class="slider">
+          <div aria-hidden="true" class="ticks">
+            @for (marker of markers(); track marker.id) {
+              <span
+                [style.inset-inline-start.%]="marker.percent"
+                class="tick"
+              ></span>
+            }
+          </div>
+          <input
+            (input)="onSlide($event)"
+            [attr.aria-label]="'shopWalks.rewind.slider' | rokuT"
+            [attr.aria-valuetext]="moment.time"
+            [attr.max]="top()"
+            [attr.step]="step"
+            [value]="at()"
+            aria-describedby="rewind-moment"
+            class="range"
+            min="0"
+            type="range"
+          />
+        </div>
+        <p class="scale">
+          <span>{{ moment.start }}</span>
+          <span class="scale-key">
+            {{ 'shopWalks.rewind.step' | rokuT }}
+            <span aria-hidden="true" class="scale-tick"></span>
+            {{ 'shopWalks.rewind.entry' | rokuT }}
+          </span>
+          <span>{{ moment.end }}</span>
+        </p>
+
+        <div
+          [attr.aria-label]="'shopWalks.rewind.jumps' | rokuT"
+          class="jumps"
+          role="group"
+        >
+          @for (target of jumps(); track target.id) {
+            <button
+              (click)="jump(target.logMs)"
+              [attr.aria-pressed]="at() === target.logMs"
+              [class.is-on]="at() === target.logMs"
+              class="jump"
+              type="button"
+            >
+              <span class="jump-time">{{ target.time }}</span>
+              <span class="jump-title">{{
+                target.title.key | rokuT: target.title.values
+              }}</span>
+            </button>
+          }
+        </div>
+      } @else {
+        <p class="empty">{{ 'shopWalks.history.empty' | rokuT }}</p>
+      }
+
+      @if (notice(); as notice) {
+        <p class="notice" role="alert">
+          {{ 'shopWalks.rewind.notice.' + notice | rokuT }}
+        </p>
+      }
+
+      <button
+        (click)="continueHere()"
+        [attr.aria-busy]="busy()"
+        [attr.aria-disabled]="atEnd() || busy()"
+        class="primary"
+        type="button"
+      >
+        @if (busy()) {
+          <lib-spinner-icon class="spinning" />
+        }
+        <span>{{
+          (atEnd() ? 'shopWalks.rewind.pick' : 'shopWalks.rewind.continue')
+            | rokuT
+        }}</span>
+      </button>
+    </section>
+  } @else if (state.kind === 'missing') {
+    <p class="empty" role="alert">{{ 'shopWalks.history.missing' | rokuT }}</p>
+  } @else if (state.kind === 'failed') {
+    <div class="state" role="alert">
+      <p class="state-text">{{ 'shopWalks.rewind.failed' | rokuT }}</p>
+      <button (click)="retry()" class="retry" type="button">
+        {{ 'shopWalks.retry' | rokuT }}
+      </button>
+    </div>
+  } @else {
+    <div
+      [attr.aria-label]="'shopWalks.rewind.loading' | rokuT"
+      class="map is-loading"
+      role="status"
+    ></div>
+  }
+</main>

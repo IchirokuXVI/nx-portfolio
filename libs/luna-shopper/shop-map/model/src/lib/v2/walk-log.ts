@@ -24,12 +24,15 @@ import type {
  *   saves of a session extend its polyline, and a `stopped` entry may carry
  *   the tail of the path before the stop.
  * - `rewound` replaces the state with `stateAt(the entries before it,
- *   rewoundTo)`, and `discarded` replaces it with the fold of the entries
- *   before it without the events of the unconfirmed segment whose log time
- *   is at or after its `logFrom` (the automatic resume): that segment's path,
+ *   rewoundTo)`.
+ * - `discarded` drops the events of the unconfirmed segment whose log time is
+ *   at or after its `logFrom` (the automatic resume): that segment's path,
  *   marks and areas. The segment is the entry just before the discard, and
- *   when that is a `continued` save, every save back to the `started` or
- *   `resumed` entry that opened the session. `confirmed` changes nothing.
+ *   when that is a `continued` save or a `stopped` entry, every entry back to
+ *   the `started` or `resumed` entry that opened the session. The drop holds
+ *   in every fold of the entries after the discard, at any log time, so a
+ *   rewind or the slider never shows the rejected segment. `confirmed`
+ *   changes nothing.
  */
 
 const RECORDING: ReadonlySet<WalkEntryKind> = new Set([
@@ -167,9 +170,32 @@ function apply(state: FoldState, op: Op): void {
   }
 }
 
-/** Folds one log. Replacing operations (rewinds, discards) are computed once. */
+/** A discard, as the operations it drops from every later fold. */
+interface Drop {
+  /** Its operation's index: folds of the operations after it drop the segment. */
+  at: number;
+  /** The segment: entries `first` up to, not including, `entry`. */
+  first: number;
+  entry: number;
+  /** The automatic resume: only operations at or after it are dropped. */
+  from: number;
+}
+
+/** The kinds a discard walks back over to the entry that opened the session. */
+const SEGMENT_TAIL: ReadonlySet<WalkEntryKind> = new Set([
+  'continued',
+  'stopped',
+]);
+
+/**
+ * Folds one log. A rewind is computed once. A discard replaces nothing: it
+ * drops its segment from every fold of the operations after it, whatever the
+ * log time folded to, so neither the slider nor a rewind shows a rejected
+ * segment again.
+ */
 class Folder {
   private readonly ops: Op[];
+  private readonly drops: Drop[] = [];
   private readonly replaced = new Map<number, FoldState>();
 
   constructor(
@@ -177,15 +203,42 @@ class Folder {
     private readonly start: ShopMapDocumentV2 | undefined
   ) {
     this.ops = buildOps(entries);
+    this.ops.forEach((op, at) => {
+      if (op.type !== 'discard') return;
+      // The unconfirmed segment: the entry just before the discard, and every
+      // save and stop before that, back to the entry that opened the session.
+      let first = op.entry - 1;
+      while (first > 0 && SEGMENT_TAIL.has(this.entries[first].kind)) first--;
+      if (
+        this.start &&
+        (first < 0 || SEGMENT_TAIL.has(this.entries[first].kind))
+      ) {
+        throw new Error(
+          `The discard of entry ${this.entries[op.entry].id} names an entry before the starting document: fold from an earlier snapshot.`
+        );
+      }
+      this.drops.push({ at, first, entry: op.entry, from: op.from });
+    });
+  }
+
+  private dropped(op: Op, end: number): boolean {
+    if (op.type !== 'point' && op.type !== 'event') return false;
+    return this.drops.some(
+      (d) =>
+        d.at < end &&
+        op.entry >= d.first &&
+        op.entry < d.entry &&
+        op.t >= d.from
+    );
   }
 
   /** The state after the operations before `end` whose log time is at most `limit`. */
-  run(end: number, limit: number, drop?: (op: Op) => boolean): FoldState {
+  run(end: number, limit: number): FoldState {
     let from = 0;
     let state: FoldState | null = null;
     for (let i = end - 1; i >= 0; i--) {
       const op = this.ops[i];
-      if ((op.type === 'rewind' || op.type === 'discard') && op.t <= limit) {
+      if (op.type === 'rewind' && op.t <= limit) {
         state = copyState(this.replacedAt(i));
         from = i + 1;
         break;
@@ -194,7 +247,11 @@ class Folder {
     state ??= stateOf(this.start);
     for (let i = from; i < end; i++) {
       const op = this.ops[i];
-      if (op.t > limit || drop?.(op)) continue;
+      if (op.type === 'discard') {
+        if (op.t <= limit) state.lineEntry = null;
+        continue;
+      }
+      if (op.t > limit || this.dropped(op, end)) continue;
       apply(state, op);
     }
     return state;
@@ -204,41 +261,16 @@ class Folder {
     const known = this.replaced.get(i);
     if (known) return known;
     const op = this.ops[i];
-    const firstFrom = this.entries[0]?.logFrom ?? 0;
-    let state: FoldState;
-    if (op.type === 'rewind') {
-      if (this.start && op.target < firstFrom) {
-        throw new Error(
-          `The rewind of entry ${this.entries[op.entry].id} reaches before the starting document: fold from an earlier snapshot.`
-        );
-      }
-      state = this.run(i, op.target);
-    } else if (op.type === 'discard') {
-      // The unconfirmed segment: the entry just before the discard, and when
-      // that is a `continued` save, every save back to the entry that opened
-      // the session.
-      let first = op.entry - 1;
-      while (first > 0 && this.entries[first].kind === 'continued') first--;
-      if (
-        this.start &&
-        (first < 0 || this.entries[first]?.kind === 'continued')
-      ) {
-        throw new Error(
-          `The discard of entry ${this.entries[op.entry].id} names an entry before the starting document: fold from an earlier snapshot.`
-        );
-      }
-      state = this.run(
-        i,
-        op.t,
-        (o) =>
-          o.entry >= first &&
-          o.entry < op.entry &&
-          (o.type === 'point' || o.type === 'event') &&
-          o.t >= op.from
-      );
-    } else {
-      throw new Error('Only a rewind or a discard replaces the state.');
+    if (op.type !== 'rewind') {
+      throw new Error('Only a rewind replaces the state.');
     }
+    const firstFrom = this.entries[0]?.logFrom ?? 0;
+    if (this.start && op.target < firstFrom) {
+      throw new Error(
+        `The rewind of entry ${this.entries[op.entry].id} reaches before the starting document: fold from an earlier snapshot.`
+      );
+    }
+    const state = this.run(i, op.target);
     state.lineEntry = null;
     this.replaced.set(i, state);
     return state;
