@@ -18,6 +18,7 @@ import {
   provideResources,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
+import { LOCATION_SEED } from './catalog-seed';
 import { sectionSource } from './catalog-sources';
 import { CATEGORIES } from './categories';
 import { ChainSections } from './chain-sections';
@@ -436,6 +437,12 @@ describe('the sections of a shop', () => {
 
     buttonSaying(fixture, 'catalog.locationSections.useChain')?.click();
     await settle(fixture);
+    // This shop has a map, so the first edit of the visit is confirmed.
+    buttonSaying(
+      fixture,
+      'catalog.locationSections.mapConfirm.confirm'
+    )?.click();
+    await settle(fixture);
 
     expect(panel.saved()?.source).toBe('CHAIN');
     expect(panel.order()).toEqual([OFFERS, CHILLED]);
@@ -454,6 +461,141 @@ describe('the sections of a shop', () => {
     expect(panel.order()).toEqual([CHILLED, OFFERS]);
     expect(panel.saved()?.source).toBe('CHAIN');
     expect(text(fixture)).toContain('resource.error.sectionOfAnotherChain');
+  });
+});
+
+/**
+ * A shop whose list follows its map (admin plan 0040, on backend plan 0168).
+ *
+ * The memory twin holds one: `loc_cordoba_centro` has a walk shown to
+ * shoppers, and every save of that walk rewrites the list, so the panel says
+ * so and the first edit of a visit is confirmed. `loc_cordoba_oeste` has no
+ * map and edits as it always did.
+ */
+describe('the sections of a shop with a map', () => {
+  async function openShop(id: string) {
+    const fixture = await boot(`/locations/${id}`);
+    await settle(fixture);
+    const panel = fixture.debugElement.query(By.directive(LocationSections))
+      .componentInstance as LocationSections;
+    return { fixture, panel };
+  }
+
+  const dialog = (fixture: ComponentFixture<TestHost>) =>
+    fixture.nativeElement.querySelector('lib-confirm-dialog');
+
+  it('holds exactly one shop with a map in the memory twin', () => {
+    expect(
+      LOCATION_SEED.filter((location) => location.hasMap).map(
+        (location) => location.id
+      )
+    ).toEqual(['loc_cordoba_centro']);
+  });
+
+  it('says the list follows the map', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro');
+
+    expect(panel.hasMap()).toBe(true);
+    expect(
+      fixture.nativeElement.querySelector('[role="note"]')?.textContent
+    ).toContain('catalog.locationSections.mapNotice');
+  });
+
+  it('says nothing about a map for a shop without one', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_oeste');
+
+    expect(panel.hasMap()).toBe(false);
+    expect(text(fixture)).not.toContain('catalog.locationSections.mapNotice');
+
+    panel.move(CHILLED, -1);
+    await settle(fixture);
+
+    expect(dialog(fixture)).toBeNull();
+    expect(panel.order()).toEqual([CHILLED, OFFERS]);
+  });
+
+  it('asks before the first edit, with the same sentence, and makes it on yes', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro');
+    const before = panel.order();
+
+    const box = fixture.nativeElement.querySelector(
+      '.choices input[type="checkbox"]'
+    ) as HTMLInputElement;
+    box.click();
+    await settle(fixture);
+
+    expect(dialog(fixture)?.textContent).toContain(
+      'catalog.locationSections.mapConfirm.heading'
+    );
+    expect(dialog(fixture)?.textContent).toContain(
+      'catalog.locationSections.mapNotice'
+    );
+    // Nothing changed yet, and the box shows it.
+    expect(panel.order()).toEqual(before);
+    expect(box.checked).toBe(true);
+
+    buttonSaying(
+      fixture,
+      'catalog.locationSections.mapConfirm.confirm'
+    )?.click();
+    await settle(fixture);
+
+    expect(dialog(fixture)).toBeNull();
+    expect(panel.order()).toEqual(before.slice(1));
+  });
+
+  it('asks only once in a visit', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro');
+
+    const firstBox = () =>
+      fixture.nativeElement.querySelector(
+        '.choices input[type="checkbox"]'
+      ) as HTMLInputElement;
+
+    firstBox().click();
+    await settle(fixture);
+    expect(dialog(fixture)).not.toBeNull();
+    buttonSaying(
+      fixture,
+      'catalog.locationSections.mapConfirm.confirm'
+    )?.click();
+    await settle(fixture);
+    const afterFirst = panel.order();
+
+    firstBox().click();
+    await settle(fixture);
+
+    expect(dialog(fixture)).toBeNull();
+    expect(panel.askingMapEdit()).toBe(false);
+    expect(panel.mapEditAccepted()).toBe(true);
+    expect(panel.order()).not.toEqual(afterFirst);
+  });
+
+  it('changes nothing when the confirmation is dismissed, and asks again', async () => {
+    const { fixture, panel } = await openShop('loc_cordoba_centro');
+    const before = panel.order();
+    const write = jest.spyOn(TestBed.inject(ShopSections), 'setForLocation');
+
+    buttonSaying(fixture, 'catalog.locationSections.useChain')?.click();
+    await settle(fixture);
+    // The dialog's own cancel, not the form's, which leaves the page.
+    ([...dialog(fixture).querySelectorAll('button')] as HTMLButtonElement[])
+      .find((button) => button.textContent?.trim() === 'resource.action.cancel')
+      ?.click();
+    await settle(fixture);
+
+    expect(write).not.toHaveBeenCalled();
+    expect(panel.order()).toEqual(before);
+    expect(panel.dirty()).toBe(false);
+
+    // The first row's down button: its up button is disabled at the top.
+    (
+      fixture.nativeElement.querySelectorAll(
+        '.move button'
+      )[1] as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+    expect(dialog(fixture)).not.toBeNull();
   });
 });
 
