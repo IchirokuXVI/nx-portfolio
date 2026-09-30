@@ -41,6 +41,7 @@ import {
 import { MERGE_PATTERNS } from '../lib/messages/merge.messages';
 import { REALTIME_ACCESS_PATTERNS } from '../lib/messages/realtime.messages';
 import { RECONCILIATION_PATTERNS } from '../lib/messages/reconciliation.messages';
+import { SHOP_WALK_PATTERNS } from '../lib/messages/shop-walk.messages';
 import { STATS_PATTERNS } from '../lib/messages/stats.messages';
 import {
   MEMBERSHIP_PATTERNS,
@@ -100,6 +101,8 @@ describe('contract schemas', () => {
       ...Object.values(BRAND_PATTERNS),
       ...Object.values(CATEGORY_PATTERNS),
       ...Object.values(SECTION_PATTERNS),
+      // A shop's walks and its map (plan 0168).
+      ...Object.values(SHOP_WALK_PATTERNS),
       ...Object.values(POSTAL_CODE_PATTERNS),
       ...Object.values(HARVEST_PATTERNS),
       ...Object.values(HARVEST_PRESET_PATTERNS),
@@ -547,6 +550,7 @@ describe('contract schemas', () => {
             externalProvider: null,
             footprintM2: 1200,
             sections: [{ id: 'sec-1', name: { es: 'Frescos' } }],
+            hasMap: false,
           },
           supermarket: {
             id: 's-1',
@@ -2025,8 +2029,7 @@ describe('what a shop picker row needs (plan 0170)', () => {
     const { sections: _sections, ...noSections } = shop;
     const { supermarketLogoUrl: _logo, ...noLogo } = shop;
     const answer = (shops: object[]) =>
-      validateMessageResponse('supermarketLocation.shopsById', { shops })
-        .valid;
+      validateMessageResponse('supermarketLocation.shopsById', { shops }).valid;
     expect(answer([shop])).toBe(true);
     expect(answer([noSections])).toBe(false);
     expect(answer([noLogo])).toBe(false);

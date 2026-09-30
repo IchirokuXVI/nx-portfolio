@@ -725,6 +725,12 @@ export interface SupermarketLocationView {
    * chain's default. Always present, and empty when the chain has no sections.
    */
   sections: LocationSectionNameView[];
+  /**
+   * Whether the shop has a walk shown to shoppers (backend plan 0168), so
+   * `GET /v1/catalog/locations/:id/map` answers a map. While it is true, every
+   * save of that walk rewrites {@link sections}.
+   */
+  hasMap: boolean;
 }
 
 /**
