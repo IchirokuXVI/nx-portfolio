@@ -215,7 +215,9 @@ export class AreaSheet {
     }
     this._session.select(null);
     this._session.apply([{ type: 'area-removed', id: area.id }]);
-    await this._sheet.leaveTo(this._session.pageUrl());
+    // Back onto the page the sheet covers: the sheet's own entry is popped,
+    // so the page's back chevron still leads where it did.
+    await this._sheet.dismiss(this._session.pageUrl());
   }
 
   dismiss(): Promise<void> {

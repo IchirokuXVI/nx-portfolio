@@ -143,7 +143,9 @@ export class HoldMenu {
   /**
    * Beside the finger rather than under it, so the pressed square stays in
    * sight: to its left when there is room, else its right, centred on it
-   * vertically, and never past the layer's edges.
+   * vertically. On a phone held upright the menu is often too wide for either
+   * side, and then it goes above the finger, or below it when the finger is
+   * near the top. Never past the layer's edges.
    */
   private _position(): void {
     const panel = this._panel()?.nativeElement;
@@ -158,15 +160,22 @@ export class HoldMenu {
     const { x, y } = this.press().client;
     const px = x - box.left;
     const py = y - box.top;
-    let left = px - gap - width;
-    if (left < gap) {
+    const clampX = (v: number) =>
+      Math.max(gap, Math.min(v, box.width - width - gap));
+    const clampY = (v: number) =>
+      Math.max(gap, Math.min(v, box.height - height - gap));
+    let left: number;
+    let top: number;
+    if (px - gap - width >= gap) {
+      left = px - gap - width;
+      top = clampY(py - height / 2);
+    } else if (px + gap + width <= box.width - gap) {
       left = px + gap;
+      top = clampY(py - height / 2);
+    } else {
+      left = clampX(px - width / 2);
+      top = py - gap - height >= gap ? py - gap - height : clampY(py + gap);
     }
-    left = Math.max(gap, Math.min(left, box.width - width - gap));
-    const top = Math.max(
-      gap,
-      Math.min(py - height / 2, box.height - height - gap)
-    );
     this.place.set({ left: Math.round(left), top: Math.round(top) });
   }
 }

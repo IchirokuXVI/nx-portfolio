@@ -144,7 +144,9 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--app-space-4);
-  margin-block-end: var(--app-space-6);
+  // Room for the chosen swatch's ring, which sits outside it.
+  margin: 0 0 var(--app-space-5);
+  padding: var(--app-space-2);
 }
 
 // A swatch is smaller than the touch target on screen and grows its target to it.
@@ -165,6 +167,13 @@
     content: '';
     position: absolute;
     inset: calc((var(--app-map-swatch) - var(--app-touch-target)) / 2);
+  }
+
+  // Default carries its word, so it takes the width the word needs.
+  &.is-default {
+    inline-size: auto;
+    min-inline-size: var(--app-map-swatch);
+    padding-inline: var(--app-space-3);
   }
 
   &.is-on {

@@ -1190,6 +1190,8 @@ describe('the bottom bar', () => {
     'join/:code',
     's/:secret',
     'lab/walk',
+    // Velista 0123: the map needs the height, and Done is the way out.
+    'shops/:locationId/walks/:walkId/edit',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {
@@ -1523,6 +1525,11 @@ describe('the walk lab', () => {
         `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
       ]);
       expect(find(paths.edit)?.canDeactivate).toEqual([unsavedWalkGuard]);
+      // A failed save must not bring the connection screen, whose reload would
+      // throw the unsent edits away.
+      expect(find(paths.edit)?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.edit)[0].data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.edit)[0].data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
     });
   });
 });

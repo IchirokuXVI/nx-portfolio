@@ -64,6 +64,15 @@ import {
  * edit (rule N1); the `@portfolio/velista/feature-shell` path already scopes it.
  */
 /**
+ * The edit page of velista `0123` and the sheet over it: no bar, and no
+ * connection screen over a failed save (see that route).
+ */
+const editMapData = {
+  [NAV_CHROME]: NO_NAV_CHROME,
+  [WORKS_WITHOUT_BACKEND]: true,
+};
+
+/**
  * Mark a route as drawn in a `SheetShell`, which is a fact about the route and not
  * only about the component.
  *
@@ -1103,11 +1112,18 @@ export const AppShellRoutes: Route[] = [
              * Editing a walk's map by hand (velista `0123`), with the sheet of one
              * area over it. Leaving with an edit the server has not answered asks
              * first.
+             *
+             * No bar, as the mock draws it: the map needs the height, and Done is
+             * the way out. `WORKS_WITHOUT_BACKEND` because the connection screen
+             * would otherwise cover the page when a save fails, and its reload
+             * would throw away the edits the page keeps trying to send. The sheet
+             * says both again, since the bar and the gate read the deepest route.
              */
             path: 'shops/:locationId/walks/:walkId/edit',
             canMatch: [walkIdGuard],
             canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
             canDeactivate: [unsavedWalkGuard],
+            data: editMapData,
             loadComponent: () =>
               import('@portfolio/velista/feature-shop-map').then(
                 (m) => m.EditMapPage
@@ -1115,6 +1131,7 @@ export const AppShellRoutes: Route[] = [
             children: [
               sheet({
                 path: 'areas/:areaId',
+                data: editMapData,
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shop-map').then(
                     (m) => m.AreaSheet

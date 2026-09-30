@@ -7,10 +7,15 @@
             {{ name() ?? (kindKey() | rokuT) }}
           </h2>
           <p class="detail">
-            {{
-              'shopMapEdit.area.kindAndSize'
-                | rokuT: { kind: (kindKey() | rokuT), w: size().w, h: size().h }
-            }}
+            @if (name() !== null) {
+              {{
+                'shopMapEdit.area.kindAndSize'
+                  | rokuT
+                    : { kind: (kindKey() | rokuT), w: size().w, h: size().h }
+              }}
+            } @else {
+              {{ 'shopMapEdit.size' | rokuT: size() }}
+            }
           </p>
         </div>
         <button (click)="startRename()" class="rename" type="button">
@@ -74,6 +79,7 @@
           [attr.aria-checked]="isChosen(choice.colour)"
           [attr.aria-label]="'shopMapEdit.colour.' + choice.key | rokuT"
           [attr.data-colour]="choice.key"
+          [class.is-default]="choice.key === 'default'"
           [class.is-on]="isChosen(choice.colour)"
           [style.background]="choice.style.background"
           [style.border-color]="choice.style.border"

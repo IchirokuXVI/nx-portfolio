@@ -505,7 +505,7 @@ describe('AreaSheet', () => {
     await settle(() => fixture.detectChanges());
 
     expect(applied).toEqual([[{ type: 'area-removed', id: 'a-1' }]]);
-    expect(sheets.leaveTo).toHaveBeenCalledWith(EDIT);
+    expect(sheets.dismiss).toHaveBeenCalledWith(EDIT);
   });
 });
 
