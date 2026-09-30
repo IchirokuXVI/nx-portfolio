@@ -227,19 +227,10 @@ export class GetListShopPane {
     this._shops.query() === '' ? 0 : this._offered().length
   );
 
-  /**
-   * Whether the field holds text the store has not answered yet: the debounce has
-   * not fired, or the read it started is still out. The picker then draws no count
-   * and no "no match", which would otherwise be seen and announced for the 250 ms
-   * before anybody has searched for what was typed (velista `0124`).
-   */
-  protected readonly searchPending = computed(() => {
-    const typed = this.query().trim();
-    return (
-      typed !== '' &&
-      (typed !== this._shops.query() || this._shops.shopState() === 'loading')
-    );
-  });
+  /** Whether the field holds text the store has not answered yet (velista `0124`). */
+  protected readonly searchPending = computed(() =>
+    this._shops.searchPending(this.query())
+  );
 
   /**
    * The open chain as the title row draws it (velista `0124`): its logo, its name
