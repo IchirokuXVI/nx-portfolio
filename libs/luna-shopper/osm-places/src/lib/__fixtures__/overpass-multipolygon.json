@@ -1,0 +1,86 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-09-29T22:04:30Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "relation",
+      "id": 3013098,
+      "bounds": {
+        "minlat": 40.3418323,
+        "minlon": -3.7475082,
+        "maxlat": 40.3423703,
+        "maxlon": -3.747211
+      },
+      "members": [
+        {
+          "type": "way",
+          "ref": 226739877,
+          "role": "outer",
+          "geometry": [
+            {
+              "lat": 40.3418387,
+              "lon": -3.747211
+            },
+            {
+              "lat": 40.3419245,
+              "lon": -3.7472145
+            },
+            {
+              "lat": 40.341923,
+              "lon": -3.7472812
+            },
+            {
+              "lat": 40.3422154,
+              "lon": -3.747293
+            },
+            {
+              "lat": 40.3422161,
+              "lon": -3.7472604
+            },
+            {
+              "lat": 40.3423703,
+              "lon": -3.7472666
+            },
+            {
+              "lat": 40.3423647,
+              "lon": -3.7475082
+            }
+          ]
+        },
+        {
+          "type": "way",
+          "ref": 162073577,
+          "role": "outer",
+          "geometry": [
+            {
+              "lat": 40.3423647,
+              "lon": -3.7475082
+            },
+            {
+              "lat": 40.3418323,
+              "lon": -3.7474868
+            },
+            {
+              "lat": 40.3418387,
+              "lon": -3.747211
+            }
+          ]
+        }
+      ],
+      "tags": {
+        "brand": "Dia",
+        "brand:wikidata": "Q925132",
+        "brand:wikipedia": "es:DIA (supermercados)",
+        "building": "commercial",
+        "building:levels": "2",
+        "name": "Dia",
+        "shop": "supermarket",
+        "type": "multipolygon"
+      }
+    }
+  ]
+}

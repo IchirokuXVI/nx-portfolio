@@ -39,6 +39,7 @@ const shop = (postalCode: string | null): ShopAvailabilityView => ({
     longitude: null,
     externalRef: null,
     externalProvider: null,
+    footprintM2: null,
     sections: [SECTION],
   },
   supermarket: {

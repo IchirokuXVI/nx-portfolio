@@ -276,6 +276,10 @@ function missingFields(
   if (!location.postalCode) {
     Object.assign(patch, postalCodeFields(place));
   }
+  // Plan 0176: the outline's area, for a shop that has no size yet.
+  if ((location.footprintM2 ?? null) === null && place.footprintM2) {
+    patch.footprintM2 = place.footprintM2;
+  }
   return patch;
 }
 
@@ -373,9 +377,16 @@ export class DiscoveredPlaceService {
       const existing = await this.places.findOne({
         where: { provider: place.provider, externalRef: place.externalRef },
       });
+      // Plan 0176: a size only ever replaces a size. A place met again with no
+      // outline keeps the number an earlier run measured.
+      const footprintM2 = place.footprintM2 ?? existing?.footprintM2 ?? null;
       let row: DiscoveredPlace;
       if (existing) {
-        Object.assign(existing, fields);
+        const refreshedSize = await this.refreshLocationFootprint(
+          existing,
+          footprintM2
+        );
+        Object.assign(existing, fields, { footprintM2: refreshedSize });
         row = await this.places.save(existing);
         refreshed += 1;
       } else {
@@ -386,6 +397,7 @@ export class DiscoveredPlaceService {
             status: DiscoveredPlaceStatus.NEW,
             firstSeenAt: seenAt,
             ...fields,
+            footprintM2,
           })
         );
         created += 1;
@@ -460,6 +472,46 @@ export class DiscoveredPlaceService {
           `so it stays in the queue: ${describeError(error).message}`
       );
       return false;
+    }
+  }
+
+  /**
+   * Give a shop that is already ours the size a run measured (plan 0176).
+   *
+   * A place imported earlier is never offered again, so without this a shop
+   * imported before its outline was measured would never learn its size. It is
+   * written only when the number changed, so a run that meets the same shop
+   * again sends nothing, and never as a null.
+   *
+   * A failure is not the run's: the shop keeps what it had, the place keeps
+   * the size it held before, and the next run tries again. Answers the size the
+   * place should now hold.
+   */
+  private async refreshLocationFootprint(
+    existing: DiscoveredPlace,
+    footprintM2: number | null
+  ): Promise<number | null> {
+    const held = existing.footprintM2 ?? null;
+    if (
+      footprintM2 === null ||
+      footprintM2 === held ||
+      existing.status !== DiscoveredPlaceStatus.IMPORTED ||
+      !existing.supermarketLocationId
+    ) {
+      return footprintM2;
+    }
+    try {
+      await this.catalog.updateLocation({
+        supermarketLocationId: existing.supermarketLocationId,
+        footprintM2,
+      });
+      return footprintM2;
+    } catch (error) {
+      this.logger.warn(
+        `Could not give ${existing.provider}/${existing.externalRef} its ` +
+          `size of ${footprintM2} m2: ${describeError(error).message}`
+      );
+      return held;
     }
   }
 
@@ -798,6 +850,8 @@ export class DiscoveredPlaceService {
       externalRef: place.externalRef,
       // Recorded so the ODbL attribution obligation travels with the row.
       externalProvider: place.provider,
+      // Plan 0176: the outline's area, when the place was mapped as one.
+      ...(place.footprintM2 ? { footprintM2: place.footprintM2 } : {}),
     });
 
     place.status = DiscoveredPlaceStatus.IMPORTED;
