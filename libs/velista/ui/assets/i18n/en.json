@@ -2350,7 +2350,7 @@
       "refused": "That part of the walk could not be saved. This is the walk as it was saved.",
       "blocked": "That does not fit there. It would overlap another area.",
       "cameraFailed": "The camera did not start. Try again.",
-      "cameraWaiting": "The camera is not ready yet. Hold the phone up and try again."
+      "cameraWaiting": "Waiting for the camera and the compass. Hold the phone up, pointing the way the arrow shows."
     },
     "unsaved": {
       "body": "The last part of this walk is only on this phone. We keep trying to save it."

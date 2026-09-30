@@ -227,6 +227,10 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
   protected readonly status = this._saver.status;
   protected readonly nextTryAt = this._saver.nextTryAt;
   protected readonly asking = signal(false);
+  /** True while Start from here waits for the camera. */
+  protected readonly resuming = signal(false);
+  /** Counts Close and reloads, so a wait that outlives them resumes nothing. */
+  private _cancels = 0;
   private _answer: ((leave: boolean) => void) | null = null;
 
   private readonly _now = signal(Date.now());
@@ -531,17 +535,46 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
   protected async startFromHere(): Promise<void> {
     const mark = this.picked();
     const recording = this._recording;
-    if (mark === null || recording === null) {
+    // One at a time: a second tap during the wait would resume twice.
+    if (mark === null || recording === null || this.resuming()) {
       return;
     }
+    this.resuming.set(true);
+    try {
+      await this._resumeFrom(mark, recording);
+    } finally {
+      this.resuming.set(false);
+    }
+  }
+
+  private async _resumeFrom(
+    mark: MapMark,
+    recording: WalkRecording
+  ): Promise<void> {
     if (this._session === null && !(await this._startSensors())) {
       return;
     }
     // Wait for the camera to track, and for the compass when the walk's
-    // baseline is known, so the new session is turned by it.
+    // baseline is known, so the new session is turned by it. The wait says so.
+    const cancels = this._cancels;
+    const cancelled = () =>
+      cancels !== this._cancels ||
+      this._mode() !== 'where' ||
+      this._recording !== recording;
     const until = Date.now() + CAMERA_WAIT_MS;
+    if (!recording.readyToResume) {
+      this.notice.set('cameraWaiting');
+    }
     while (!recording.readyToResume && Date.now() < until) {
       await delay(200);
+      if (cancelled()) {
+        // Closed, or the walk was read again, while waiting: resume nothing.
+        this.notice.set(null);
+        return;
+      }
+    }
+    if (cancelled()) {
+      return;
     }
     if (!recording.resumeAt(mark)) {
       this.notice.set('cameraWaiting');
@@ -555,6 +588,8 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
 
   /** Close on "Where are you?": back to the stopped walk, or to the history. */
   protected closeWhere(): Promise<void> {
+    this._cancels += 1;
+    this.notice.set(null);
     if (this._phase() === 'stopped') {
       this._mode.set('recording');
       this.picked.set(null);
@@ -986,6 +1021,7 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
 
   /** Another phone saved first, or the server refused an entry: stop, and read the walk again. */
   private async _reload(notice: 'changed' | 'refused'): Promise<void> {
+    this._cancels += 1;
     this._endSensors();
     this._stopDrawing();
     this._recording = null;

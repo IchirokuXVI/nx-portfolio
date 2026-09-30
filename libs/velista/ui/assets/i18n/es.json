@@ -2350,7 +2350,7 @@
       "refused": "Esa parte del recorrido no se pudo guardar. Este es el recorrido como se guardó.",
       "blocked": "Eso no cabe ahí. Se solaparía con otra zona.",
       "cameraFailed": "La cámara no se encendió. Inténtalo otra vez.",
-      "cameraWaiting": "La cámara aún no está lista. Levanta el móvil e inténtalo otra vez."
+      "cameraWaiting": "Esperando a la cámara y la brújula. Levanta el móvil y apunta hacia donde indica la flecha."
     },
     "unsaved": {
       "body": "La última parte de este recorrido solo está en este móvil. Seguimos intentando guardarla."
