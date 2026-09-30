@@ -91,7 +91,10 @@ export function shopMapTesting(options: ShopMapHarnessOptions = {}) {
     },
     {
       provide: SessionStore,
-      useValue: { isAuthenticated: () => options.authenticated ?? true },
+      useValue: {
+        isAuthenticated: () => options.authenticated ?? true,
+        userId: () => ((options.authenticated ?? true) ? 'u-1' : null),
+      },
     },
     { provide: ActivatedRoute, useValue: route },
     { provide: PageNavigation, useValue: pages },

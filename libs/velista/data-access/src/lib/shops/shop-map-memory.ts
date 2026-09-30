@@ -3,9 +3,8 @@ import {
   shopperView,
   type ShopMapDocumentV2,
 } from '@portfolio/luna-shopper/shop-map/model';
-import type { ShopMapRead } from '@portfolio/velista/models';
 import { toShopMapRead } from '../mapping/shop-map-mappers';
-import type { ShopMapServiceI } from './shop-map-service';
+import type { ShopMapAnswer, ShopMapServiceI } from './shop-map-service';
 
 /**
  * The walk behind `loc-tejares`'s map: a 12 m by 8 m shop with two gondolas, the
@@ -111,11 +110,12 @@ export class ShopMapMemory implements ShopMapServiceI {
   /** Set to make every read fail, as a gateway that does not answer would. */
   failing = false;
 
-  async map(locationId: string): Promise<ShopMapRead> {
+  async map(locationId: string): Promise<ShopMapAnswer> {
     this.asked.push(locationId);
     if (this.failing) {
-      return { kind: 'failed' };
+      return { read: { kind: 'failed' }, body: null };
     }
-    return toShopMapRead(MEMORY_SHOP_MAPS[locationId] ?? { map: null });
+    const body = MEMORY_SHOP_MAPS[locationId] ?? { map: null };
+    return { read: toShopMapRead(body), body };
   }
 }
