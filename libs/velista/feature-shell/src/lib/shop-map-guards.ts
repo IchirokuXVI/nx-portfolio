@@ -8,7 +8,7 @@ import {
   type UrlSegment,
 } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
-import { ProfileStore } from '@portfolio/velista/data-access';
+import { ProfileStore, SessionStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import { shopMapPath } from '@portfolio/velista/platform';
 
@@ -29,8 +29,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * away, the safe direction.
  *
  * It never sends anybody to a page it guards, so it cannot loop.
+ *
+ * Somebody signed out is `authenticatedGuard`'s to turn away. Angular runs every
+ * `canActivate` of a route at once, so this one answers true for them straight
+ * away rather than reading `me` with no token, which would leave the profile
+ * read failed for the sign in that follows.
  */
 export const shopMapRecordGuard: CanActivateFn = async (route) => {
+  if (!inject(SessionStore).isAuthenticated()) {
+    return true;
+  }
   const profile = inject(ProfileStore);
   const router = inject(Router);
   const locale = inject(RokuLocaleStore).locale();

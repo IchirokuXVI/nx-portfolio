@@ -151,15 +151,34 @@ describe('shopWalkHistory', () => {
     expect(read[0].changes).toEqual({ areas: 1, marks: 1 });
   });
 
-  it('says a rewind went back past an earlier one, and which', () => {
-    const past = entry(10, 'rewound', 1_129_893, 1_129_893, {
-      rewoundTo: 900_000,
-    });
+  it('names the newest earlier rewind that removed the moment it returns to', () => {
+    // 1 110 000 is after the fixture's second rewind's target and before that
+    // rewind happened, so that rewind took it away and this one brings it back.
+    const [second] = shopWalkHistory([
+      ...JAMON,
+      entry(10, 'rewound', 1_129_893, 1_129_893, { rewoundTo: 1_110_000 }),
+    ]);
+    // 1 060 000 only the first rewind removed.
+    const [first] = shopWalkHistory([
+      ...JAMON,
+      entry(10, 'rewound', 1_129_893, 1_129_893, { rewoundTo: 1_060_000 }),
+    ]);
 
-    const [row] = shopWalkHistory([...JAMON, past]);
+    expect(second.undoes?.getTime()).toBe(ms(bySeq(8).at));
+    expect(first.undoes?.getTime()).toBe(ms(bySeq(6).at));
+  });
+
+  it('names no rewind for a moment no rewind removed', () => {
+    // Before both fixture rewinds' targets: neither took this moment away,
+    // and what came after it is the tracking stop.
+    const [row] = shopWalkHistory([
+      ...JAMON,
+      entry(10, 'rewound', 1_129_893, 1_129_893, { rewoundTo: 900_000 }),
+    ]);
 
     expect(row.kind).toBe('rewound');
-    expect(row.undoes?.getTime()).toBe(ms(bySeq(8).at));
+    expect(row.undoes).toBeNull();
+    expect(row.beforeProblem).toBe(true);
     expect(row.rewoundTo?.getTime()).toBe(
       ms(bySeq(1).at) - (bySeq(1).logTo - 900_000)
     );
