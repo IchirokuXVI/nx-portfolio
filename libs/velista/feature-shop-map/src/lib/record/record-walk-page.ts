@@ -490,6 +490,9 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
   /** "Resume from a place I marked": choose a mark on the map (target 7). */
   protected async resumeFromMark(): Promise<void> {
     this.picked.set(null);
+    // What is left of the session ends first, so the resume follows a stop.
+    this._recording?.endSession();
+    this._sync();
     this._mode.set('where');
     this._recording?.startProbe();
     // The camera starts now, on this tap, so the new session is tracking by the
@@ -534,8 +537,10 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
     if (this._session === null && !(await this._startSensors())) {
       return;
     }
+    // Wait for the camera to track, and for the compass when the walk's
+    // baseline is known, so the new session is turned by it.
     const until = Date.now() + CAMERA_WAIT_MS;
-    while (!recording.canResume && Date.now() < until) {
+    while (!recording.readyToResume && Date.now() < until) {
       await delay(200);
     }
     if (!recording.resumeAt(mark)) {
@@ -572,7 +577,11 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
 
   /** Save mark: where the phone is and the way it points at this moment. */
   protected saveMark(saved: MarkSaved): void {
-    this._recording?.mark(saved.kind, saved.text);
+    // A mark needs good tracking at this moment. Without it the sheet stays
+    // open with what was typed, and says why Save waits.
+    if (this._recording?.mark(saved.kind, saved.text) == null) {
+      return;
+    }
     this.markKind.set(null);
     this._draw();
   }
@@ -1041,6 +1050,11 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
     });
     this._sync();
     this._mode.set(fresh ? 'start' : 'where');
+    if (!fresh) {
+      // The probe learns the compass offset while a mark is chosen, so the
+      // resume can be turned by the walk's baseline.
+      this._recording.startProbe();
+    }
     this.live.set(null);
     this.read.set({ kind: 'ready', detail });
   }

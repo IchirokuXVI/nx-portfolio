@@ -16,6 +16,12 @@ export interface XrCameraOptions {
   readonly overlayRoot: Element | null;
   /** Called just before the session is asked for, once WebXR is known to exist. */
   requesting?(): void;
+  /**
+   * The session opened and is being set up: the caller may hold it from now, so a
+   * hidden page meanwhile is seen as the camera taking the screen. A setup that
+   * fails after this answers `failed` and ends it.
+   */
+  opened?(camera: XrCamera): void;
   /** Asked once the session opened: false ends it at once, because nobody wants it any more. */
   wanted(): boolean;
   /**
@@ -115,6 +121,8 @@ export async function openXrCamera(
       void session.end().catch(() => undefined);
     },
   };
+
+  options.opened?.(camera);
 
   try {
     const canvas = options.document.createElement('canvas');

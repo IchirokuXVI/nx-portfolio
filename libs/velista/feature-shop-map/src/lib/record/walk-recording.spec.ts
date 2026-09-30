@@ -303,4 +303,78 @@ describe('WalkRecording (velista 0126)', () => {
     rec.stopWalk('button');
     expect(out.pushes.map((one) => one.reason)).toEqual(['left-page']);
   });
+
+  // Review of #576, item 1.
+  it('turns a resume from the history by the stored baseline, not by pointing', () => {
+    const out = output();
+    const rec = recording(out, OFFSET);
+    const mark = { x: 0, y: 10, heading: 90 };
+    rec.startProbe();
+
+    // The camera tracks, but the compass has said nothing yet: wait for it.
+    const frame: RigidTransform = { rotation: 150, x: 7, y: -3 };
+    const at = applyRigid(frame, { x: 0, y: 10 });
+    rec.pose(uprightPose(0, at.x, at.y, 110 + frame.rotation));
+    expect(rec.canResume).toBe(true);
+    expect(rec.readyToResume).toBe(false);
+
+    // The phone faces 110, not the mark's 90: pointing would be 20 degrees off.
+    walk(rec, 100, 2_000, { frame, still: true, startY: 10, heading: 110 });
+    expect(rec.readyToResume).toBe(true);
+    expect(rec.resumeAt(mark)).toBe(true);
+    walk(rec, 2_000, 2_500, { frame, still: true, startY: 10, heading: 110 });
+
+    expect(out.opened).toEqual(['resumed']);
+    expect(rec.person()?.heading).toBeCloseTo(110, 0);
+  });
+
+  // Review of #576, item 2.
+  it('cannot resume on a pose from before the camera lost its place', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 3_000);
+    lose(rec, 3_000, 7_000);
+
+    expect(rec.phase).toBe('stopped');
+    expect(rec.canResume).toBe(false);
+    rec.startProbe();
+    expect(rec.resumeAt({ x: 0, y: 1, heading: 0 })).toBe(false);
+  });
+
+  // Review of #576, item 3.
+  it('stops a loss still waiting before a resume, so the resume follows a stop', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 5_000);
+    lose(rec, 5_000, 6_000);
+    expect(rec.phase).toBe('lost');
+
+    rec.endSession();
+    expect(rec.phase).toBe('stopped');
+    expect(out.pushes).toEqual([
+      expect.objectContaining({ kind: 'stopped', reason: 'tracking-lost' }),
+    ]);
+    expect(out.pushes[0].logTo).toBeLessThan(5_600);
+  });
+
+  it('discards an unconfirmed path before a resume, as "No, stop here" would', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 5_000);
+    lose(rec, 5_000, 6_500);
+    walk(rec, 6_500, 9_000, { startY: 6.5 });
+    expect(rec.phase).toBe('unconfirmed');
+
+    rec.startProbe();
+    expect(rec.resumeAt({ x: 0, y: 9, heading: 0 })).toBe(true);
+
+    expect(out.pushes.map((one) => [one.kind, one.reason])).toEqual([
+      ['stopped', 'tracking-lost'],
+      ['discarded', undefined],
+    ]);
+    expect(out.opened).toEqual(['started', 'resumed']);
+  });
 });

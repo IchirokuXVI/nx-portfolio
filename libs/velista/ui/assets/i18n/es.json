@@ -2295,7 +2295,8 @@
       "placeholder": "Escribe o elige uno abajo",
       "recent": "Recientes en este recorrido",
       "sections": "Secciones de esta tienda",
-      "save": "Guardar marca"
+      "save": "Guardar marca",
+      "waiting": "El seguimiento no va bien ahora. Guardar espera a que vaya bien, y conserva lo que escribiste."
     },
     "suggestion": {
       "label": "¿Estantería? Toca para rellenar",
@@ -2319,7 +2320,8 @@
       "paused": "El recorrido está en pausa. Ponte junto a algo que marcaste para seguir.",
       "saved": "Todo hasta este momento está guardado.",
       "resume": "Seguir desde un sitio que marqué",
-      "resumeHint": "Ponte junto a una marca y elígela en el mapa."
+      "resumeHint": "Ponte junto a una marca y elígela en el mapa.",
+      "lostHint": "Sigue caminando despacio. El recorrido sigue solo, o se para en unos segundos."
     },
     "check": {
       "title": "¿Está bien el camino morado?",
