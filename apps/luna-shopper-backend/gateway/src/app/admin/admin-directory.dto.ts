@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ACCOUNT_ROLES,
   DEFAULT_POSTAL_CODE_COUNTRY,
   UserKind,
+  type AccountRole,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { DEFAULT_NEARBY_RADIUS_METRES } from '@portfolio/luna-shopper/postal-codes';
@@ -11,6 +13,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -79,6 +82,14 @@ export class ListAdminUsersQueryDto extends PageQueryDto {
   verified?: boolean;
 
   @ApiPropertyOptional({
+    enum: ACCOUNT_ROLES,
+    description: 'Only accounts holding this role (plan 0175).',
+  })
+  @IsOptional()
+  @IsIn(ACCOUNT_ROLES)
+  role?: AccountRole;
+
+  @ApiPropertyOptional({
     format: 'date-time',
     description: 'Inclusive lower bound on when the account was created.',
   })
@@ -93,6 +104,26 @@ export class ListAdminUsersQueryDto extends PageQueryDto {
   @IsOptional()
   @IsISO8601()
   createdBefore?: string;
+}
+
+/**
+ * The whole new set of an account's roles (plan 0175).
+ *
+ * An empty array takes every role away, and a role named twice is held once.
+ * The bound is the number of roles there are, so a request cannot name more
+ * than exist.
+ */
+export class SetAdminUserRolesDto {
+  @ApiProperty({
+    enum: ACCOUNT_ROLES,
+    isArray: true,
+    description:
+      'Every role the account should hold afterwards. Empty takes them all away. A guest is refused with guest_has_no_roles.',
+  })
+  @IsArray()
+  @ArrayMaxSize(ACCOUNT_ROLES.length)
+  @IsIn(ACCOUNT_ROLES, { each: true })
+  roles!: AccountRole[];
 }
 
 /**

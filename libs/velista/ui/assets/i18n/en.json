@@ -1896,6 +1896,7 @@
       "distance": "Metres",
       "liveOff": "Live track unavailable",
       "lastMark": "{{kind}} {{label}} at {{time}}",
+      "deleteLastMark": "Delete last mark",
       "checkpointTitle": "Name this checkpoint",
       "checkpointHelp": "Use the same name each time you pass the same place.",
       "noteTitle": "Note",

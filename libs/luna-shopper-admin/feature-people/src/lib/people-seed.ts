@@ -84,6 +84,8 @@ export const USER_SEED: readonly UserRow[] = [
     displayName: 'Rosa Iglesias',
     email: 'rosa@example.com',
     emailVerifiedAt: '2026-01-14T09:12:00.000Z',
+    // Backend plan 0175 put roles on the wire. Admin plan 0038 draws them.
+    roles: [],
     createdAt: '2026-01-12T18:40:00.000Z',
     updatedAt: '2026-06-02T11:05:00.000Z',
     hasPassword: true,
@@ -96,6 +98,9 @@ export const USER_SEED: readonly UserRow[] = [
     displayName: 'Marc Oliver',
     email: 'marc@example.com',
     emailVerifiedAt: null,
+    // The one account holding a role, so the column, the filter and the
+    // switches each have something to show in this mode (admin plan 0038).
+    roles: ['admin'],
     createdAt: '2026-03-03T08:00:00.000Z',
     updatedAt: '2026-03-03T08:00:00.000Z',
     hasPassword: false,
@@ -110,6 +115,7 @@ export const USER_SEED: readonly UserRow[] = [
     displayName: null,
     email: 'rosa.b@example.com',
     emailVerifiedAt: '2026-05-20T16:30:00.000Z',
+    roles: [],
     createdAt: '2026-05-20T16:22:00.000Z',
     updatedAt: '2026-05-20T16:30:00.000Z',
     hasPassword: true,
@@ -122,6 +128,7 @@ export const USER_SEED: readonly UserRow[] = [
     displayName: null,
     email: null,
     emailVerifiedAt: null,
+    roles: [],
     createdAt: '2026-08-30T20:15:00.000Z',
     updatedAt: '2026-08-30T20:15:00.000Z',
     hasPassword: false,

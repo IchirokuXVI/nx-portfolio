@@ -546,6 +546,8 @@ export type ProblemDetails = {
     | 'section_slug_taken'
     | 'catalog_location_exclusive'
     | 'supermarket_location_not_found'
+    | 'permission_required'
+    | 'guest_has_no_roles'
     | 'internal';
   detail?: string;
   message: string;
@@ -732,6 +734,13 @@ export type ScopeCopyDto = {
  */
 export type SetAdminLineApprovalDto = {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+};
+
+/**
+ * `SetAdminUserRolesDto` in the gateway's OpenAPI document.
+ */
+export type SetAdminUserRolesDto = {
+  roles: ('admin' | 'premium')[];
 };
 
 /**
@@ -1656,6 +1665,7 @@ export type AdminUsersAdminUserDetailView = {
   displayName: string | null;
   email: string | null;
   emailVerifiedAt: string | null;
+  roles: EnumsAccountRole[];
   createdAt: string;
   updatedAt: string;
   hasPassword: boolean;
@@ -1682,6 +1692,7 @@ export type AdminUsersAdminUserView = {
   displayName: string | null;
   email: string | null;
   emailVerifiedAt: string | null;
+  roles: EnumsAccountRole[];
   createdAt: string;
   updatedAt: string;
 };
@@ -3006,6 +3017,11 @@ export type CoreUserAppStateView = {
 };
 
 /**
+ * `enums.AccountRole` in the gateway's OpenAPI document.
+ */
+export type EnumsAccountRole = 'admin' | 'premium';
+
+/**
  * `enums.AdapterKey` in the gateway's OpenAPI document.
  */
 export type EnumsAdapterKey =
@@ -3240,6 +3256,11 @@ export type EnumsNearbyShopNoPick =
 export type EnumsParticipantKind = 'OWNER' | 'REGISTERED' | 'GUEST';
 
 /**
+ * `enums.Permission` in the gateway's OpenAPI document.
+ */
+export type EnumsPermission = 'shopMap.record';
+
+/**
  * `enums.PostalCodeDiscoveryStatus` in the gateway's OpenAPI document.
  */
 export type EnumsPostalCodeDiscoveryStatus =
@@ -3363,6 +3384,7 @@ export type GatewayAccountMeView = {
   emailVerified: boolean;
   displayName: string | null;
   appState: CoreUserAppStateView;
+  permissions: EnumsPermission[];
 };
 
 /**
