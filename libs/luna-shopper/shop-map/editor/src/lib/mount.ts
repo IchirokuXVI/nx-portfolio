@@ -22,10 +22,12 @@ import {
   drawNote,
   drawPerson,
   drawSizeTag,
+  drawTaggedLabel,
   placeRect,
   screenBox,
   walkwayPath,
 } from './draw';
+import { drawDrawing, drawnDefs, inkOn } from './drawn';
 import {
   areaAt,
   boxOf,
@@ -260,6 +262,7 @@ export function mountShopMap(
     { class: 'sm-sug-stripe', x: 0, y: 0, width: 6, height: 12 },
     hatch
   );
+  drawnDefs(doc, defs, id);
 
   const ground = svg(doc, 'rect', { class: 'sm-ground', x: 0, y: 0 }, canvas);
   const under = svg(doc, 'g', {}, canvas);
@@ -302,7 +305,7 @@ export function mountShopMap(
   const shopperOf = () => (shopper ??= shopperView(map));
 
   function bounds(): Box {
-    if (look === 'shopper') return shopperOf().bounds;
+    if (look !== 'mapper') return shopperOf().bounds;
     const cells = live
       ? cellBoxes(live.snapshot.walkedCells.map((c) => cellKey(c.x, c.y)))
       : [];
@@ -337,7 +340,7 @@ export function mountShopMap(
 
   function hitTest(p: Pointer): Target {
     const [wx, wy] = toWorld(view, p.x, p.y);
-    if (look === 'shopper') {
+    if (look !== 'mapper') {
       const a = areaAt(map.areas, wx, wy, (x) => x.kind === 'path');
       return a ? { type: 'area', area: a } : { type: 'floor' };
     }
@@ -622,15 +625,24 @@ export function mountShopMap(
     );
     const hasBadges = Object.keys(badges).length > 0;
     const badged = new Set<string>();
-    for (const a of sv.areas) {
-      if (a.kind === 'entrance') continue;
-      drawArea(t, a, 'sm-area', 6);
-      if (a.kind === 'blocked') continue;
+    const textOf = (a: ShopperView['areas'][number]) => {
       const full = map.areas.find((x) => x.id === a.id);
-      const text = full ? labelOf(full) : (a.label ?? a.section ?? '');
+      return full ? labelOf(full) : (a.label ?? a.section ?? '');
+    };
+    const labelClass = (a: ShopperView['areas'][number]) => {
       const dim =
         hasBadges && (a.section === undefined || !(a.section in badges));
-      drawLabel(t, a, text, `sm-label${dim ? ' sm-dim' : ''}`);
+      return `sm-label${dim ? ' sm-dim' : ''}`;
+    };
+    if (look === 'shopper-drawn') {
+      drawShopperDrawing(t, sv, textOf, labelClass);
+    } else {
+      for (const a of sv.areas) {
+        if (a.kind === 'entrance') continue;
+        drawArea(t, a, 'sm-area', 6);
+        if (a.kind === 'blocked') continue;
+        drawLabel(t, a, textOf(a), labelClass(a));
+      }
     }
     for (const a of sv.areas) {
       const badge = a.section !== undefined ? badges[a.section] : undefined;
@@ -643,6 +655,38 @@ export function mountShopMap(
       if (a.kind !== 'entrance') continue;
       const full = map.areas.find((x) => x.id === a.id);
       drawEntrance(t, a, sv.bounds, full ? labelOf(full) : (a.label ?? ''));
+    }
+  }
+
+  /**
+   * The drawn shopper look (velista plan 0128): the areas as the plain look
+   * draws them, then every drawing in metres in one group that follows the
+   * view, then each label on its tag.
+   */
+  function drawShopperDrawing(
+    t: DrawTarget,
+    sv: ShopperView,
+    textOf: (a: ShopperView['areas'][number]) => string,
+    labelClass: (a: ShopperView['areas'][number]) => string
+  ): void {
+    for (const a of sv.areas) {
+      if (a.kind !== 'entrance') drawArea(t, a, 'sm-area', 6);
+    }
+    const drawings = svg(doc, 'g', { 'pointer-events': 'none' }, t.parent);
+    for (const a of sv.areas) drawDrawing(doc, drawings, a, sv, id);
+    t.positioners.push((v) =>
+      drawings.setAttribute(
+        'transform',
+        `matrix(${v.s} 0 0 ${v.s} ${px(v.tx)} ${px(v.ty)})`
+      )
+    );
+    for (const a of sv.areas) {
+      if (a.kind === 'entrance' || a.kind === 'blocked') continue;
+      const custom =
+        a.colour.mode === 'custom'
+          ? { fill: a.colour.value, ink: inkOn(a.colour.value) }
+          : null;
+      drawTaggedLabel(t, a, textOf(a), labelClass(a), custom);
     }
   }
 
@@ -869,8 +913,7 @@ export function mountShopMap(
       if (Math.hypot(p.x - g.start.x, p.y - g.start.y) <= SLOP_PX) return;
       endPending();
       const from = toWorld(view, g.start.x, g.start.y);
-      if (look === 'shopper')
-        gesture = { kind: 'pan', id: g.id, last: g.start };
+      if (look !== 'mapper') gesture = { kind: 'pan', id: g.id, last: g.start };
       else if (g.target.type === 'handle') {
         const fixed = corners(g.target.area)[(g.target.corner + 2) % 4];
         gesture = { kind: 'resize', id: g.id, area: g.target.area, fixed };
@@ -933,7 +976,7 @@ export function mountShopMap(
     }
     lastTap = { at: now, p: g.start };
     const target = g.target;
-    if (look === 'shopper') {
+    if (look !== 'mapper') {
       if (target.type === 'area' && target.area.section !== undefined) {
         options.onSection?.(target.area.section);
       }

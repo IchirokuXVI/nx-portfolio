@@ -77,6 +77,15 @@ describe('ShopMapPage', () => {
     ]);
   });
 
+  it('draws the map in the drawn look (velista 0128)', async () => {
+    const { fixture } = await render({ params: { locationId: 'loc-tejares' } });
+
+    expect(view(fixture).look()).toBe('shopper-drawn');
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('rect.sm-label-tag')
+    ).not.toBeNull();
+  });
+
   it('opened from the shop page, offers no list and marks no section', async () => {
     const { fixture } = await render({ params: { locationId: 'loc-tejares' } });
 

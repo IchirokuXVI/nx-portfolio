@@ -50,6 +50,15 @@ export const SHOP_MAP_PROPERTIES = {
   entrance: ['#111420', '#f7f8fc'],
   'entrance-text': ['#f7f8fc', '#0a0c14'],
   refused: ['#b91c1c', '#fca5a5'],
+  // The drawn shopper look (velista plan 0128), from the board with drawn assets.
+  'product-1': ['#d9644a', '#b5553f'],
+  'product-2': ['#3f9b8f', '#347f76'],
+  'product-3': ['#e0b243', '#b8923a'],
+  crate: ['#7bb04a', '#628f3b'],
+  glass: ['rgba(120, 170, 210, 0.55)', 'rgba(120, 170, 210, 0.35)'],
+  door: ['#525a78', '#98a0bb'],
+  'label-ink-dark': ['#111420', '#111420'],
+  'label-ink-light': ['#f7f8fc', '#f7f8fc'],
 } as const satisfies Record<string, readonly [string, string]>;
 
 export type ShopMapProperty = keyof typeof SHOP_MAP_PROPERTIES;
@@ -73,7 +82,7 @@ export function shopMapCss(): string {
     `@media (prefers-color-scheme: dark){.sm-root{${night}}}`,
     `.sm-root[data-sm-theme="day"]{${day}}`,
     `.sm-root[data-sm-theme="night"]{${night}}`,
-    `.sm-root svg{display:block;width:100%;height:100%}`,
+    `.sm-root>svg{display:block;width:100%;height:100%}`,
     `.sm-ground{fill:${cssVar('ground')}}`,
     `.sm-walked{fill:${cssVar('walked')}}`,
     `.sm-grid-line{stroke:${cssVar('grid')};stroke-width:1;fill:none}`,
@@ -114,5 +123,17 @@ export function shopMapCss(): string {
     `.sm-entrance-text{fill:${cssVar('entrance-text')};font-size:12px;font-weight:700;dominant-baseline:central}`,
     `.sm-entrance-glyph{fill:none;stroke:${cssVar('entrance-text')};stroke-width:2;stroke-linecap:round;stroke-linejoin:round}`,
     `.sm-faded{opacity:.35}`,
+    `.sm-product-1{fill:${cssVar('product-1')}}`,
+    `.sm-product-2{fill:${cssVar('product-2')}}`,
+    `.sm-product-3{fill:${cssVar('product-3')}}`,
+    `.sm-crate{fill:${cssVar('crate')}}`,
+    `.sm-glass{fill:${cssVar('glass')}}`,
+    `.sm-door{fill:${cssVar('door')}}`,
+    `.sm-shelf-line{fill:${cssVar('area-border')}}`,
+    `.sm-till{fill:${cssVar('area')};stroke:${cssVar('area-text')};stroke-width:1.6;stroke-linejoin:round}`,
+    `.sm-till-belt{fill:none;stroke-dasharray:2 2}`,
+    `.sm-label-tag{fill:${cssVar('area')}}`,
+    `.sm-label.sm-ink-dark{fill:${cssVar('label-ink-dark')}}`,
+    `.sm-label.sm-ink-light{fill:${cssVar('label-ink-light')}}`,
   ].join('\n');
 }

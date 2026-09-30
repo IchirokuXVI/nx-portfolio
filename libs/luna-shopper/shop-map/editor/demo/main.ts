@@ -35,7 +35,8 @@ const frame = $<HTMLElement>('#frame');
 const status = $<HTMLElement>('#status');
 const say = (text: string) => (status.textContent = text);
 
-let look: ShopMapLook = params.get('look') === 'shopper' ? 'shopper' : 'mapper';
+const LOOKS: ShopMapLook[] = ['mapper', 'shopper', 'shopper-drawn'];
+let look: ShopMapLook = LOOKS.find((l) => l === params.get('look')) ?? 'mapper';
 const theme = params.get('theme');
 if (theme === 'day' || theme === 'night')
   document.documentElement.dataset['theme'] = theme;
@@ -78,6 +79,30 @@ order
   );
 handle.setBadges(badges);
 
+// Side by side (velista plan 0128): the plain shopper look on the left and
+// the drawn one on the right, on the same document with the same badges.
+let second: ReturnType<typeof mountShopMap> | null = null;
+function setCompare(on: boolean) {
+  frame.classList.toggle('compare', on);
+  $<HTMLButtonElement>('#compare').setAttribute('aria-pressed', `${on}`);
+  if (on && !second) {
+    second = mountShopMap($<HTMLElement>('#map2'), {
+      document: baseDocument,
+      look: 'shopper-drawn',
+      onSection: (section) => say(`Section ${section} (drawn)`),
+    });
+    second.setBadges(badges);
+    setLook('shopper');
+  } else if (!on && second) {
+    second.destroy();
+    second = null;
+  }
+  handle.fitToContent();
+}
+$<HTMLButtonElement>('#compare').addEventListener('click', () =>
+  setCompare(!second)
+);
+
 function setLook(next: ShopMapLook) {
   look = next;
   handle.setLook(next);
@@ -101,6 +126,7 @@ $<HTMLInputElement>('#snap').addEventListener('change', (e) =>
   handle.setSnap((e.target as HTMLInputElement).checked)
 );
 setLook(look);
+if (params.get('compare')) setCompare(true);
 
 // The replay: the recorded entries of the log (1 to 5) fed to the live map
 // the way the recording screen feeds it, as the model's own El Jamón replay

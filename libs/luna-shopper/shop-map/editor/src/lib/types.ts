@@ -7,8 +7,13 @@ import type {
   WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
 
-/** The two looks of editor plan 0001, section 2. */
-export type ShopMapLook = 'mapper' | 'shopper';
+/**
+ * The looks of editor plan 0001, section 2, and the drawn shopper look of
+ * velista plan 0128: the shopper look with shelves, counters, crates, tills
+ * and the door drawn, and every label on a tag. It taps, badges and labels
+ * as the shopper look does.
+ */
+export type ShopMapLook = 'mapper' | 'shopper' | 'shopper-drawn';
 
 /** Where the walker is, in metres, with the heading convention of the model. */
 export interface ShopMapPerson {
