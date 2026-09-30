@@ -48,6 +48,12 @@
   padding: var(--app-space-5) var(--app-space-5) var(--app-space-2);
 }
 
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--app-space-3);
+}
+
 .secondary {
   @include walks.secondary;
 }

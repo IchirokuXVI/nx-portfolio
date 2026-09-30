@@ -3,6 +3,7 @@ import {
   Router,
   type ActivatedRouteSnapshot,
   type CanActivateFn,
+  type CanDeactivateFn,
   type CanMatchFn,
   type Route,
   type UrlSegment,
@@ -77,3 +78,23 @@ function locationIdFrom(route: ActivatedRouteSnapshot): string {
   }
   return '';
 }
+
+/** A page that asks before it is left with something unsent (velista `0123`). */
+export interface LeavesWithUnsavedWork {
+  canLeave(): boolean | Promise<boolean>;
+}
+
+/**
+ * The unsaved warning on leaving a page that saves a walk (velista `0123`,
+ * target 6; the `Unsaved` board). The page saves what it holds, and when the
+ * save does not arrive it shows "Not saved yet" and answers with the choice.
+ * The browser's own warning, for a closed tab or a reload, is the page's
+ * `beforeunload`, since no route guard runs then. Velista `0126` puts the same
+ * guard on its recording screen.
+ */
+export const unsavedWalkGuard: CanDeactivateFn<LeavesWithUnsavedWork> = (
+  component
+) =>
+  component !== null && typeof component.canLeave === 'function'
+    ? component.canLeave()
+    : true;

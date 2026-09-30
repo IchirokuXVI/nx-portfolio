@@ -29,7 +29,11 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { setupGuard } from './setup-guard';
-import { shopMapRecordGuard, walkIdGuard } from './shop-map-guards';
+import {
+  shopMapRecordGuard,
+  unsavedWalkGuard,
+  walkIdGuard,
+} from './shop-map-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
   basketIdGuard,
@@ -59,6 +63,15 @@ import {
  * The export is named for its role, not for the product, so a rename stays a data
  * edit (rule N1); the `@portfolio/velista/feature-shell` path already scopes it.
  */
+/**
+ * The edit page of velista `0123` and the sheet over it: no bar, and no
+ * connection screen over a failed save (see that route).
+ */
+const editMapData = {
+  [NAV_CHROME]: NO_NAV_CHROME,
+  [WORKS_WITHOUT_BACKEND]: true,
+};
+
 /**
  * Mark a route as drawn in a `SheetShell`, which is a fact about the route and not
  * only about the component.
@@ -1074,8 +1087,8 @@ export const AppShellRoutes: Route[] = [
            * the shop's map. The settings for every walk come before the walk's
            * pages, and `walkIdGuard` keeps a word from being read as a walk id,
            * by the house rule that the more specific path comes first. Velista
-           * `0123` adds `walks/:walkId/edit` and `0126` adds `walks/:walkId/record`
-           * beside them.
+           * `0123` added `walks/:walkId/edit`, and `0126` adds
+           * `walks/:walkId/record` beside them.
            */
           {
             path: 'shops/:locationId/walks/settings',
@@ -1093,6 +1106,38 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shop-map').then(
                 (m) => m.WalkRewindPage
               ),
+          },
+          {
+            /**
+             * Editing a walk's map by hand (velista `0123`), with the sheet of one
+             * area over it. Leaving with an edit the server has not answered asks
+             * first.
+             *
+             * No bar, as the mock draws it: the map needs the height, and Done is
+             * the way out. `WORKS_WITHOUT_BACKEND` because the connection screen
+             * would otherwise cover the page when a save fails, and its reload
+             * would throw away the edits the page keeps trying to send. The sheet
+             * says both again, since the bar and the gate read the deepest route.
+             */
+            path: 'shops/:locationId/walks/:walkId/edit',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            canDeactivate: [unsavedWalkGuard],
+            data: editMapData,
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.EditMapPage
+              ),
+            children: [
+              sheet({
+                path: 'areas/:areaId',
+                data: editMapData,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.AreaSheet
+                  ),
+              }),
+            ],
           },
           {
             path: 'shops/:locationId/walks/:walkId/settings',

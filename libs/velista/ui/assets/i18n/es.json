@@ -2075,6 +2075,7 @@
       "loadingTitle": "Recorrido",
       "subtitle": "Historial",
       "rewind": "Rebobinar",
+      "editMap": "Editar mapa",
       "empty": "Aún no se ha guardado nada en este recorrido.",
       "today": "Hoy",
       "yesterday": "Ayer",
@@ -2149,6 +2150,88 @@
       "continue": "Seguir desde aquí",
       "failed": "El historial del recorrido no se ha cargado",
       "loading": "Cargando el historial del recorrido"
+    }
+  },
+  "shopMapEdit": {
+    "label": "El mapa de este recorrido, para editar",
+    "notWalking": "Sin recorrer",
+    "done": "Hecho",
+    "ok": "Vale",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "hint": "Arrastra por el suelo para dibujar una estantería. Toca una zona para cambiarla. Mantén pulsado un cuadro para más.",
+    "size": "{{w}} m × {{h}} m",
+    "status": {
+      "unsent": "Sin guardar",
+      "sending": "Guardando",
+      "saved": "Guardado",
+      "failed": "Sin guardar. Lo intentamos de nuevo."
+    },
+    "notice": {
+      "changed": "El mapa ha cambiado en otro teléfono. Este es el mapa como está ahora. Tus últimos cambios no se guardaron.",
+      "refused": "Ese cambio no se pudo guardar. Este es el mapa como se guardó.",
+      "blocked": "Eso no cabe ahí. Se solaparía con otra zona."
+    },
+    "kind": {
+      "section": "Sección",
+      "shelf": "Estantería",
+      "counter": "Mostrador",
+      "checkout": "Caja",
+      "entrance": "Entrada",
+      "blocked": "Bloqueado",
+      "path": "Pasillo"
+    },
+    "hold": {
+      "title": "Este cuadro · {{x}} m a lo ancho, {{y}} m hacia dentro",
+      "close": "Cerrar el menú",
+      "shelf": "Convertir en estantería",
+      "counter": "Dibujar un mostrador aquí",
+      "blocked": "Marcar como bloqueado",
+      "path": "Convertir en pasillo",
+      "note": "Añadir una nota aquí",
+      "section": "Cambiar su sección",
+      "erase": "Borrar",
+      "noteLabel": "Nota",
+      "noteSave": "Añadir nota"
+    },
+    "resize": {
+      "hint": "{{kind}} · arrastra una esquina para cambiar el tamaño",
+      "snap": "Ajustar a los cuadros"
+    },
+    "area": {
+      "kindAndSize": "{{kind}} · {{w}} m × {{h}} m",
+      "rename": "Renombrar",
+      "renameTitle": "Renombrar",
+      "name": "Nombre",
+      "sectionName": "Nombre de la sección",
+      "saveName": "Guardar",
+      "categoryColour": "Usar el color de la categoría",
+      "categoryNotYet": "Aún no disponible: las categorías no tienen colores.",
+      "colour": "Color",
+      "delete": "Eliminar esta zona",
+      "deleteConfirm": "¿Eliminar {{name}}?",
+      "deleteYes": "Eliminar",
+      "keep": "Mantenerla",
+      "missing": "Esta zona ya no está en el mapa."
+    },
+    "colour": {
+      "default": "Por defecto",
+      "paleBlue": "Azul claro",
+      "green": "Verde",
+      "orange": "Naranja",
+      "lilac": "Lila",
+      "yellow": "Amarillo"
+    },
+    "unsaved": {
+      "title": "Sin guardar",
+      "body": "Tus últimos cambios en este mapa solo están en este teléfono. Seguimos intentando guardarlos.",
+      "keepOpen": "Deja la aplicación abierta hasta que ponga Guardado.",
+      "sending": "Guardando ahora.",
+      "retryIn_one": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
+      "retryIn_other": "Sin conexión. Lo intentamos de nuevo en {{count}} s.",
+      "waiting": "Esperando para guardar.",
+      "ok": "Vale",
+      "leave": "Salir sin guardar"
     }
   }
 }

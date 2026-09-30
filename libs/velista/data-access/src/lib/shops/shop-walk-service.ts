@@ -47,10 +47,20 @@ export interface ShopWalkServiceI {
     change: UpdateShopWalkRequest
   ): Promise<ShopWalkSummary>;
   remove(walkId: string): Promise<void>;
+  /**
+   * `keepalive` lets the request outlive the page (velista `0123`): a save sent
+   * as the page is hidden or closed.
+   */
   append(
     walkId: string,
-    entry: AppendShopWalkEntryRequest
+    entry: AppendShopWalkEntryRequest,
+    options?: ShopWalkAppendOptions
   ): Promise<ShopWalkAppendResult>;
+}
+
+/** How an append is sent. */
+export interface ShopWalkAppendOptions {
+  readonly keepalive?: boolean;
 }
 
 /**

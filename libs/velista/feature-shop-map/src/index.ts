@@ -9,6 +9,12 @@
  * Everything reachable from a route is exported here and nowhere else: the route
  * table lazy loads through this barrel.
  */
+export * from './lib/edit/area-sheet';
+export * from './lib/edit/edit-map-page';
+export * from './lib/edit/hold-menu';
+export * from './lib/edit/map-edits';
+export * from './lib/edit/resize-controls';
+export * from './lib/edit/unsaved-dialog';
 export * from './lib/section-sheet/section-sheet';
 export * from './lib/shop-map-page/shop-map-page';
 export * from './lib/shop-map-view/shop-map-view';

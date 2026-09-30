@@ -21,6 +21,7 @@ import {
   toShopWalkTimelineEntry,
 } from '../mapping/shop-walk-mappers';
 import type {
+  ShopWalkAppendOptions,
   ShopWalkListRead,
   ShopWalkLogRead,
   ShopWalkRead,
@@ -115,11 +116,13 @@ export class ShopWalkApi implements ShopWalkServiceI {
 
   async append(
     walkId: string,
-    entry: AppendShopWalkEntryRequest
+    entry: AppendShopWalkEntryRequest,
+    options: ShopWalkAppendOptions = {}
   ): Promise<ShopWalkAppendResult> {
     const body = await firstValueFrom(
       this._http.post<unknown>(`${this._walk(walkId)}/entries`, entry, {
         context: operation('catalog.walkAppend'),
+        ...(options.keepalive === true ? { keepalive: true } : {}),
       })
     );
     const record = isRecord(body) ? body : {};

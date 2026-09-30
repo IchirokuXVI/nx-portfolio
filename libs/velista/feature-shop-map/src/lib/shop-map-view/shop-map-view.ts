@@ -17,8 +17,11 @@ import {
   type ShopMapLook,
 } from '@portfolio/luna-shopper/shop-map/editor';
 import type {
+  AreaKind,
+  MapArea,
   ShopMapDocumentV2,
   WalkEntry,
+  WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
 import type { ShopMapBadgeCount } from '@portfolio/velista/models';
 import { ThemeStore } from '@portfolio/velista/platform';
@@ -79,6 +82,31 @@ export class ShopMapView {
    */
   readonly sectionTapped = output<string>();
 
+  /**
+   * Mapper look (velista `0123`): whether a drawn or resized corner snaps to the
+   * half metre squares. Off unless the page turns it on.
+   */
+  readonly snap = input(false);
+
+  /** Mapper look: the kind a drag on the floor draws. */
+  readonly drawKind = input<AreaKind>('shelf');
+
+  /** Mapper look: the size shown beside a selected area, in the app's words. */
+  readonly sizeLabel = input<((w: number, h: number) => string) | null>(null);
+
+  /** Mapper look: a finished draw, move or resize, as walk events. */
+  readonly changed = output<WalkEvent[]>();
+
+  /** Mapper look: an area was tapped or drawn, or the selection was cleared. */
+  readonly areaSelected = output<MapArea | null>();
+
+  /** Mapper look: a long press, with the point in metres and what is under it. */
+  readonly longPressed = output<{
+    readonly at: { readonly x: number; readonly y: number };
+    readonly area: MapArea | null;
+    readonly client: { readonly x: number; readonly y: number };
+  }>();
+
   protected readonly theme = inject(ThemeStore).theme;
 
   private readonly _canvas =
@@ -92,7 +120,16 @@ export class ShopMapView {
         document: untracked(this.document),
         look: untracked(this.look),
         onSection: (section) => this.sectionTapped.emit(section),
+        onChange: (events) => this.changed.emit(events),
+        onSelect: (area) => this.areaSelected.emit(area),
+        onLongPress: (at, area, client) =>
+          this.longPressed.emit({ at, area, client }),
+        sizeLabel: (w, h) =>
+          untracked(this.sizeLabel)?.(w, h) ??
+          `${Math.round(w * 100) / 100} m × ${Math.round(h * 100) / 100} m`,
       });
+      this._handle.setSnap(untracked(this.snap));
+      this._handle.setDrawKind(untracked(this.drawKind));
       this._handle.setBadges({ ...untracked(this.badges) });
       const faded = untracked(this.fadedAfter);
       if (faded !== null) {
@@ -118,6 +155,16 @@ export class ShopMapView {
     });
 
     effect(() => {
+      const snap = this.snap();
+      untracked(() => this._handle?.setSnap(snap));
+    });
+
+    effect(() => {
+      const kind = this.drawKind();
+      untracked(() => this._handle?.setDrawKind(kind));
+    });
+
+    effect(() => {
       const badges = this.badges();
       untracked(() => this._handle?.setBadges({ ...badges }));
     });
@@ -126,6 +173,16 @@ export class ShopMapView {
       this._handle?.destroy();
       this._handle = null;
     });
+  }
+
+  /** Mapper look: select an area, or clear the selection. */
+  select(areaId: string | null): void {
+    this._handle?.setSelected(areaId);
+  }
+
+  /** Mapper look: drop the pressed square after a menu closed with no action. */
+  clearHeld(): void {
+    this._handle?.clearHeld();
   }
 
   /** Fit the whole map in view again. */

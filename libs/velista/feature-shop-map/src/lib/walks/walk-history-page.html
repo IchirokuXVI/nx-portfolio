@@ -28,19 +28,21 @@
 
   @let state = read();
   @if (state.kind === 'walk') {
-    <!--
-      Edit map (velista 0123) and Resume walking (velista 0126) join Rewind here
-      when those plans add their routes.
-    -->
+    <!-- Resume walking (velista 0126) joins these when that plan adds its route. -->
     <div class="actions">
-      <button
-        (click)="rewind()"
-        [disabled]="state.detail.timeline.length === 0"
-        class="secondary"
-        type="button"
-      >
-        {{ 'shopWalks.history.rewind' | rokuT }}
-      </button>
+      <div class="pair">
+        <button
+          (click)="rewind()"
+          [disabled]="state.detail.timeline.length === 0"
+          class="secondary"
+          type="button"
+        >
+          {{ 'shopWalks.history.rewind' | rokuT }}
+        </button>
+        <button (click)="editMap()" class="secondary edit-map" type="button">
+          {{ 'shopWalks.history.editMap' | rokuT }}
+        </button>
+      </div>
     </div>
 
     @if (days().length === 0) {

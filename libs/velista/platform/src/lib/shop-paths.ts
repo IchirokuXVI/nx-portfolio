@@ -30,6 +30,10 @@ export const SHOP_PATHS = {
    * here so the resume warning can lead to it; the route is 0126's to add.
    */
   record: 'record',
+  /** `.../walks/:walkId/edit`: editing a walk's map by hand (velista `0123`). */
+  edit: 'edit',
+  /** `.../edit/sheet/areas/:areaId`: the sheet of one area over the edit page. */
+  areas: 'areas',
   /** The sheet over the walks list that names a new walk. */
   newWalk: 'new',
   /** The sheet over a walk's settings that confirms deleting it. */
@@ -63,15 +67,15 @@ export function mappingSettingsPath(
 }
 
 /**
- * One walk's page: its history with no `page`, else `rewind`, `settings`, or
- * `record` once velista `0126` adds it.
+ * One walk's page: its history with no `page`, else `rewind`, `settings`,
+ * `edit` (velista `0123`), or `record` once velista `0126` adds it.
  */
 export function shopWalkPath(
   locale: string,
   basePath: string,
   locationId: string,
   walkId: string,
-  page: 'rewind' | 'settings' | 'record' | null = null
+  page: 'rewind' | 'settings' | 'record' | 'edit' | null = null
 ): string {
   const path = `${shopWalksPath(locale, basePath, locationId)}/${encodeURIComponent(walkId)}`;
   return page === null ? path : `${path}/${SHOP_PATHS[page]}`;

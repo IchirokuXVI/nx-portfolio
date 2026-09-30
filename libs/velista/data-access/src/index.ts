@@ -128,6 +128,7 @@ export * from './lib/shops/shop-walk-api';
 export * from './lib/shops/shop-walk-memory';
 export * from './lib/shops/shop-walk-service';
 export * from './lib/shops/shop-walks-store';
+export * from './lib/shops/walk-entry-saver';
 export * from './lib/startup-probe';
 export * from './lib/testing/store-doubles';
 export * from './lib/trips/trip-api';

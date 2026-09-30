@@ -1,0 +1,75 @@
+@use '../walks';
+
+// "Not saved yet" (velista 0123, the `Unsaved` board): a card in the middle of a
+// dimmed screen, with the state of the last try on a quiet band.
+
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: var(--app-tour-z);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--app-space-6);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--app-scrim);
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  max-inline-size: var(--app-anchored-popover-width);
+  padding: var(--app-space-6);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-elevation-2);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  color: var(--app-text-primary);
+}
+
+.body {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  margin: 0;
+  padding: var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.ok {
+  @include walks.primary;
+}
+
+.leave {
+  min-block-size: var(--app-touch-target);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
