@@ -11,7 +11,10 @@ import {
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import { ProfileStore, SessionStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import { shopMapPath } from '@portfolio/velista/platform';
+import {
+  shopMapPath,
+  type LeavesWithUnsavedWork,
+} from '@portfolio/velista/platform';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -77,11 +80,6 @@ function locationIdFrom(route: ActivatedRouteSnapshot): string {
     }
   }
   return '';
-}
-
-/** A page that asks before it is left with something unsent (velista `0123`). */
-export interface LeavesWithUnsavedWork {
-  canLeave(): boolean | Promise<boolean>;
 }
 
 /**

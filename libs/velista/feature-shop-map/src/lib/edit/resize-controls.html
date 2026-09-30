@@ -8,9 +8,14 @@
     ></span>
     <span class="text">
       <span class="name">{{ name() ?? (kindKey() | rokuT) }}</span>
-      <span class="hint">{{
-        'shopMapEdit.resize.hint' | rokuT: { kind: (kindKey() | rokuT) }
-      }}</span>
+      <!-- An unnamed area already reads as its kind above: say it once. -->
+      <span class="hint">
+        @if (name() !== null) {
+          {{ 'shopMapEdit.resize.hint' | rokuT: { kind: (kindKey() | rokuT) } }}
+        } @else {
+          {{ 'shopMapEdit.resize.hintAlone' | rokuT }}
+        }
+      </span>
     </span>
   </button>
   <button (click)="finished.emit()" class="done" type="button">

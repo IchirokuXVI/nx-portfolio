@@ -213,12 +213,13 @@ describe('EditMapPage', () => {
 
     // A drawn area shows its controls, not its sheet.
     expect(all(fixture, 'lib-resize-controls .hint')).toEqual([
-      'shopMapEdit.resize.hint',
+      'shopMapEdit.resize.hintAlone',
     ]);
     click(fixture, '.bar .done');
-    const leave = await fixture.componentInstance.canLeave();
+    await settle(() => fixture.detectChanges());
 
-    expect(leave).toBe(true);
+    // Saved first, so the guard behind the pop has nothing to ask.
+    expect(await fixture.componentInstance.canLeave()).toBe(true);
     expect(pages.back).toHaveBeenCalledWith(`/en/shops/${SHOP}/walks/${WALK}`);
     expect(walks.appended).toEqual([
       expect.objectContaining({
@@ -328,6 +329,28 @@ describe('EditMapPage', () => {
     click(fixture, 'lib-unsaved-dialog .leave');
     expect(await leaving).toBe(true);
     expect(all(fixture, 'lib-unsaved-dialog')).toEqual([]);
+  });
+
+  it('asks before it pops: OK on the warning leaves the history alone', async () => {
+    const { fixture, view, walks, pages } = await renderPage();
+    jest
+      .spyOn(walks, 'append')
+      .mockRejectedValue(
+        new GatewayError({ code: 'internal', status: 0, correlationId: 'spec' })
+      );
+
+    view().changed.emit([{ type: 'area-put', area: counter }]);
+    click(fixture, '.bar .done');
+    await settle(() => fixture.detectChanges());
+    click(fixture, 'lib-unsaved-dialog .ok');
+    await settle(() => fixture.detectChanges());
+
+    expect(pages.back).not.toHaveBeenCalled();
+    click(fixture, '.bar .back');
+    await settle(() => fixture.detectChanges());
+    click(fixture, 'lib-unsaved-dialog .leave');
+    await settle(() => fixture.detectChanges());
+    expect(pages.back).toHaveBeenCalledTimes(1);
   });
 
   it('stays when OK is pressed on the warning', async () => {
@@ -550,6 +573,15 @@ describe('HoldMenu and ResizeControls', () => {
     ).dispatchEvent(new Event('submit'));
 
     expect(chosen).toEqual([{ action: 'note', text: 'Ask for the ham here' }]);
+  });
+
+  it('names an unnamed area’s kind once', async () => {
+    const fixture = await mount(ResizeControls, {
+      area: area({ kind: 'blocked', section: undefined }),
+    });
+
+    expect(all(fixture, '.name')).toEqual(['shopMapEdit.kind.blocked']);
+    expect(all(fixture, '.hint')).toEqual(['shopMapEdit.resize.hintAlone']);
   });
 
   it('turns the snap switch and says Done', async () => {

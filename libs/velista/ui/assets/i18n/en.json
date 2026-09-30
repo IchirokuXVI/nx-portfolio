@@ -2196,6 +2196,7 @@
     },
     "resize": {
       "hint": "{{kind}} · drag a corner to resize",
+      "hintAlone": "Drag a corner to resize",
       "snap": "Snap to the squares"
     },
     "area": {
@@ -2227,6 +2228,7 @@
       "body": "Your last changes to this map are only on this phone. We keep trying to save them.",
       "keepOpen": "Please keep the app open until it says Saved.",
       "sending": "Saving now.",
+      "saved": "Saved. You can leave now.",
       "retryIn_one": "No connection. Trying again in {{count}} s.",
       "retryIn_other": "No connection. Trying again in {{count}} s.",
       "waiting": "Waiting to save.",
