@@ -193,6 +193,10 @@ across, and a section mark names a `suggested` or `section-run` shelf it faces. 
 the shelf a run fills ends the run. A section mark saved at or behind the start of the
 run just ended, and facing it, cuts that whole run away and takes its cells.
 
+A strip's extent before any cut lives only in the live map's memory and is not
+persisted. After a resume, each piece of a strip cut before the pause has its own
+rectangle as its extent, so a mark on the other side names that piece only.
+
 `src/lib/__fixtures__/el-jamon/expected-live.json` is what replaying the El Jamón log
 answers. `tools/shop-map/replay-el-jamon-live.ts` writes it and draws it to
 `tmp/el-jamon-live.html` for checking by eye. Never edit it by hand.

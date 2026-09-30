@@ -71,6 +71,8 @@ describe('RecordPage', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    // Only the viewport spec stubs it, and a failed assertion there must not leak it.
+    delete (window as { visualViewport?: unknown }).visualViewport;
   });
 
   it('counts steps from devicemotion, saves as it goes, and keeps the walk on Finish', async () => {
@@ -224,8 +226,6 @@ describe('RecordPage', () => {
     expect(page.panelInset()).toBe(0);
     viewport.dispatchEvent(new Event('resize'));
     expect(page.panelInset()).toBe(0);
-
-    delete (window as { visualViewport?: unknown }).visualViewport;
   });
 
   it('asks for a second tap before it finishes', async () => {

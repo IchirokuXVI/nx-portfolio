@@ -35,7 +35,8 @@ export interface WalkFile {
   poseSource?: 'arcore' | 'webxr';
   marks: WalkMark[];
   /** What happened to the recording: 'hidden', 'visible', 'tracking-lost',
-   * 'tracking-resumed', 'permission-denied', 'sensor-missing', with a detail. */
+   * 'tracking-resumed', 'permission-denied', 'sensor-missing', 'mark-deleted' (the
+   * detail is the deleted mark's t), with a detail. */
   events: { t: number; kind: string; detail?: string }[];
 }
 

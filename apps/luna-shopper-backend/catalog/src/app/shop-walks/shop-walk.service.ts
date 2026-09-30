@@ -164,12 +164,15 @@ export class ShopWalkService {
     const key = `${walk.id}:${lastSeq}`;
     let derived = this.derived.get(key);
     if (!derived) {
+      // Filtered by `lastSeq` too, so the document cached under this key is the
+      // fold at that seq and never a later one an append wrote in between.
       const row = await this.dataSource.getRepository(ShopWalk).findOne({
         select: { id: true, document: true },
-        where: { id: walk.id },
+        where: { id: walk.id, lastSeq },
       });
       if (!row) {
-        return { map: null };
+        // The walk moved on (or was hidden) between the two reads: read again.
+        return this.mapForLocation(req);
       }
       derived = {
         view: shopperView(row.document),
@@ -524,6 +527,13 @@ export class ShopWalkService {
   }
 
   private remember(key: string, derived: DerivedMap): void {
+    // An older seq of the same walk is never read again, so it goes first.
+    const walkPrefix = key.slice(0, key.lastIndexOf(':') + 1);
+    for (const cached of [...this.derived.keys()]) {
+      if (cached !== key && cached.startsWith(walkPrefix)) {
+        this.derived.delete(cached);
+      }
+    }
     this.derived.set(key, derived);
     while (this.derived.size > VIEW_CACHE_SIZE) {
       const oldest = this.derived.keys().next().value;
