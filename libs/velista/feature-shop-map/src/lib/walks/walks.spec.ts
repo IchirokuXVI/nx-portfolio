@@ -252,17 +252,20 @@ describe('WalkHistoryPage', () => {
     expect(all(fixture, '.latest')).toEqual(['shopWalks.history.latest']);
   });
 
-  it('offers Rewind, and neither Edit map nor Resume walking yet', async () => {
+  it('offers Rewind and Edit map, and not Resume walking yet', async () => {
     const { fixture, navigate } = await render(WalkHistoryPage);
 
     expect(all(fixture, '.actions button')).toEqual([
       'shopWalks.history.rewind',
+      'shopWalks.history.editMap',
     ]);
     click(fixture, '.actions .secondary');
+    click(fixture, '.actions .edit-map');
     click(fixture, '.bar .icon-button');
 
     expect(navigate.mock.calls.map(([url]) => url)).toEqual([
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/rewind`,
+      `${BASE}/${MEMORY_SHOWN_WALK_ID}/edit`,
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/settings`,
     ]);
   });

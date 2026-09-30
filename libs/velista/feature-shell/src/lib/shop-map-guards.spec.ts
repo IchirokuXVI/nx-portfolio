@@ -14,7 +14,11 @@ import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular'
 import { ProfileStore } from '@portfolio/velista/data-access';
 import type { AccountPermission } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
-import { shopMapRecordGuard, walkIdGuard } from './shop-map-guards';
+import {
+  shopMapRecordGuard,
+  unsavedWalkGuard,
+  walkIdGuard,
+} from './shop-map-guards';
 
 function profile(held: readonly AccountPermission[] | null, loaded = held) {
   const permissions = signal(held);
@@ -87,5 +91,17 @@ describe('walkIdGuard', () => {
     expect(matches('shops', 'loc-1', 'walks', 'settings')).toBe(false);
     expect(matches('shops', 'loc-1', 'walks', 'sheet', 'new')).toBe(false);
     expect(matches('shops', 'loc-1', 'walks')).toBe(false);
+  });
+});
+
+describe('unsavedWalkGuard', () => {
+  const leave = (component: unknown) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (unsavedWalkGuard as any)(component, null, null, null);
+
+  it('asks the page, and lets a page with nothing to ask through', async () => {
+    expect(await leave({ canLeave: async () => false })).toBe(false);
+    expect(await leave({ canLeave: () => true })).toBe(true);
+    expect(leave(null)).toBe(true);
   });
 });

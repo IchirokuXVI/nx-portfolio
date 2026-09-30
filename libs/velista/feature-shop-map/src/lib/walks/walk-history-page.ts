@@ -166,9 +166,9 @@ export function historyDays(
  * day, with the newest marked "Latest". A walking session is one row, however
  * many 20 s saves it made (see `shopWalkHistory`).
  *
- * Edit map (velista `0123`, `walks/:walkId/edit`) and Resume walking (velista
- * `0126`, `walks/:walkId/record`, through the warning over this page when the walk
- * is shown) are absent until those plans add them.
+ * Edit map opens the edit page of velista `0123` (`walks/:walkId/edit`). Resume
+ * walking (velista `0126`, `walks/:walkId/record`, through the warning over this
+ * page when the walk is shown) is absent until that plan adds it.
  *
  * `shops/:locationId/walks/:walkId`, only with `shopMap.record`.
  */
@@ -236,6 +236,11 @@ export class WalkHistoryPage {
     void this._router.navigateByUrl(this._path('rewind'));
   }
 
+  /** Edit map: change the map by hand, without walking (velista `0123`). */
+  protected editMap(): void {
+    void this._router.navigateByUrl(this._path('edit'));
+  }
+
   protected openSettings(): void {
     void this._router.navigateByUrl(this._path('settings'));
   }
@@ -251,7 +256,7 @@ export class WalkHistoryPage {
     );
   }
 
-  private _path(page: 'rewind' | 'settings'): string {
+  private _path(page: 'rewind' | 'settings' | 'edit'): string {
     return shopWalkPath(
       this._locale(),
       this._basePath,

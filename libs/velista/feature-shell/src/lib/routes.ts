@@ -29,7 +29,11 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { setupGuard } from './setup-guard';
-import { shopMapRecordGuard, walkIdGuard } from './shop-map-guards';
+import {
+  shopMapRecordGuard,
+  unsavedWalkGuard,
+  walkIdGuard,
+} from './shop-map-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
   basketIdGuard,
@@ -1074,8 +1078,8 @@ export const AppShellRoutes: Route[] = [
            * the shop's map. The settings for every walk come before the walk's
            * pages, and `walkIdGuard` keeps a word from being read as a walk id,
            * by the house rule that the more specific path comes first. Velista
-           * `0123` adds `walks/:walkId/edit` and `0126` adds `walks/:walkId/record`
-           * beside them.
+           * `0123` added `walks/:walkId/edit`, and `0126` adds
+           * `walks/:walkId/record` beside them.
            */
           {
             path: 'shops/:locationId/walks/settings',
@@ -1093,6 +1097,30 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-shop-map').then(
                 (m) => m.WalkRewindPage
               ),
+          },
+          {
+            /**
+             * Editing a walk's map by hand (velista `0123`), with the sheet of one
+             * area over it. Leaving with an edit the server has not answered asks
+             * first.
+             */
+            path: 'shops/:locationId/walks/:walkId/edit',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            canDeactivate: [unsavedWalkGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.EditMapPage
+              ),
+            children: [
+              sheet({
+                path: 'areas/:areaId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.AreaSheet
+                  ),
+              }),
+            ],
           },
           {
             path: 'shops/:locationId/walks/:walkId/settings',

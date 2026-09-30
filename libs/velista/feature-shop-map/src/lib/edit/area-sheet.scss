@@ -1,0 +1,208 @@
+@use '../walks';
+
+// One area of the map (velista 0123, the `EditArea` board): the name with Rename,
+// the kind and size, the category colour box, the colours, and Delete.
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  margin-block-end: var(--app-space-5);
+}
+
+.head-text {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin: var(--app-space-hair) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.rename,
+.quiet {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.rename-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin-block: var(--app-space-4) var(--app-space-5);
+}
+
+.field-label {
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-primary);
+}
+
+.field {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-ground);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  @include walks.focus-ring;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--app-space-3);
+}
+
+.save,
+.danger {
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: none;
+  border-radius: var(--app-button-radius);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.save {
+  background: var(--app-action-bg);
+  color: var(--app-action-fg);
+}
+
+.danger {
+  background: var(--app-status-danger-fg);
+  color: var(--app-surface-raised);
+}
+
+.category {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-4);
+  margin-block-end: var(--app-space-5);
+  cursor: default;
+}
+
+.category-box {
+  flex: none;
+  inline-size: var(--app-space-6);
+  block-size: var(--app-space-6);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+}
+
+.category-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.category-title {
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  color: var(--app-text-muted);
+}
+
+.category-hint {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.group {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-4);
+  margin-block-end: var(--app-space-6);
+}
+
+// A swatch is smaller than the touch target on screen and grows its target to it.
+.swatch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-map-swatch);
+  block-size: var(--app-map-swatch);
+  padding: 0;
+  box-sizing: border-box;
+  border: var(--app-map-swatch-border) solid;
+  border-radius: var(--app-radius-md);
+  cursor: pointer;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: calc((var(--app-map-swatch) - var(--app-touch-target)) / 2);
+  }
+
+  &.is-on {
+    outline: var(--app-focus-ring-width) solid var(--app-text-primary);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  @include walks.focus-ring;
+}
+
+.swatch-word {
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+}
+
+.delete {
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-status-danger-border);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-status-danger-fg);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.confirm-text {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-primary);
+}

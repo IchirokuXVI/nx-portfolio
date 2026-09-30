@@ -2074,6 +2074,7 @@
       "loadingTitle": "Walk",
       "subtitle": "History",
       "rewind": "Rewind",
+      "editMap": "Edit map",
       "empty": "Nothing has been saved in this walk yet.",
       "today": "Today",
       "yesterday": "Yesterday",
@@ -2148,6 +2149,88 @@
       "continue": "Continue from here",
       "failed": "The walk's history would not load",
       "loading": "Loading the walk's history"
+    }
+  },
+  "shopMapEdit": {
+    "label": "The map of this walk, for editing",
+    "notWalking": "Not walking",
+    "done": "Done",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "close": "Close",
+    "hint": "Drag across the floor to draw a shelf. Tap an area to change it. Hold a square for more.",
+    "size": "{{w}} m × {{h}} m",
+    "status": {
+      "unsent": "Not saved yet",
+      "sending": "Saving",
+      "saved": "Saved",
+      "failed": "Not saved yet. Trying again."
+    },
+    "notice": {
+      "changed": "The map changed on another phone. This is the map as it is now. Your last changes were not saved.",
+      "refused": "That change could not be saved. This is the map as it was saved.",
+      "blocked": "That does not fit there. It would overlap another area."
+    },
+    "kind": {
+      "section": "Section",
+      "shelf": "Shelf",
+      "counter": "Counter",
+      "checkout": "Checkout",
+      "entrance": "Entrance",
+      "blocked": "Blocked",
+      "path": "Path"
+    },
+    "hold": {
+      "title": "This square · {{x}} m across, {{y}} m in",
+      "close": "Close the menu",
+      "shelf": "Make it a shelf",
+      "counter": "Draw a counter here",
+      "blocked": "Mark as blocked",
+      "path": "Make it a path",
+      "note": "Add a note here",
+      "section": "Change its section",
+      "erase": "Erase",
+      "noteLabel": "Note",
+      "noteSave": "Add note"
+    },
+    "resize": {
+      "hint": "{{kind}} · drag a corner to resize",
+      "snap": "Snap to the squares"
+    },
+    "area": {
+      "kindAndSize": "{{kind}} · {{w}} m × {{h}} m",
+      "rename": "Rename",
+      "renameTitle": "Rename",
+      "name": "Name",
+      "sectionName": "Section name",
+      "saveName": "Save",
+      "categoryColour": "Use the category color",
+      "categoryNotYet": "Not available yet: categories have no colors.",
+      "colour": "Color",
+      "delete": "Delete this area",
+      "deleteConfirm": "Delete {{name}}?",
+      "deleteYes": "Delete",
+      "keep": "Keep it",
+      "missing": "This area is not on the map any more."
+    },
+    "colour": {
+      "default": "Default",
+      "paleBlue": "Pale blue",
+      "green": "Green",
+      "orange": "Orange",
+      "lilac": "Lilac",
+      "yellow": "Yellow"
+    },
+    "unsaved": {
+      "title": "Not saved yet",
+      "body": "Your last changes to this map are only on this phone. We keep trying to save them.",
+      "keepOpen": "Please keep the app open until it says Saved.",
+      "sending": "Saving now.",
+      "retryIn_one": "No connection. Trying again in {{count}} s.",
+      "retryIn_other": "No connection. Trying again in {{count}} s.",
+      "waiting": "Waiting to save.",
+      "ok": "OK",
+      "leave": "Leave without saving"
     }
   }
 }

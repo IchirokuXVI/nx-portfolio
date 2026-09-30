@@ -1,0 +1,30 @@
+<div class="row">
+  <button (click)="opened.emit()" class="about" type="button">
+    <span
+      [style.background]="swatch().background"
+      [style.border-color]="swatch().border"
+      aria-hidden="true"
+      class="swatch"
+    ></span>
+    <span class="text">
+      <span class="name">{{ name() ?? (kindKey() | rokuT) }}</span>
+      <span class="hint">{{
+        'shopMapEdit.resize.hint' | rokuT: { kind: (kindKey() | rokuT) }
+      }}</span>
+    </span>
+  </button>
+  <button (click)="finished.emit()" class="done" type="button">
+    {{ 'shopMapEdit.done' | rokuT }}
+  </button>
+</div>
+
+<label class="snap">
+  <span class="snap-label">{{ 'shopMapEdit.resize.snap' | rokuT }}</span>
+  <input
+    (change)="toggled($event)"
+    [checked]="snap()"
+    class="switch"
+    role="switch"
+    type="checkbox"
+  />
+</label>

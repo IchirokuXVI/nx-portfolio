@@ -14,6 +14,7 @@ import {
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import type {
+  ShopWalkAppendOptions,
   ShopWalkListRead,
   ShopWalkLogRead,
   ShopWalkRead,
@@ -235,6 +236,8 @@ export class ShopWalkMemory implements ShopWalkServiceI {
 
   /** Every append, in order, so a spec can read what was sent. */
   readonly appended: AppendShopWalkEntryRequest[] = [];
+  /** How each append was sent, in the same order. */
+  readonly appendOptions: ShopWalkAppendOptions[] = [];
 
   constructor() {
     this._hold(
@@ -342,10 +345,12 @@ export class ShopWalkMemory implements ShopWalkServiceI {
 
   async append(
     walkId: string,
-    entry: AppendShopWalkEntryRequest
+    entry: AppendShopWalkEntryRequest,
+    options: ShopWalkAppendOptions = {}
   ): Promise<ShopWalkAppendResult> {
     const walk = this._require(walkId);
     this.appended.push(entry);
+    this.appendOptions.push(options);
     const known = this._answers.get(entry.id);
     if (known !== undefined) {
       return { ...known, replayed: true };
