@@ -14,6 +14,7 @@ import {
 import {
   mountShopMap,
   type ShopMapHandle,
+  type ShopMapLive,
   type ShopMapLook,
 } from '@portfolio/luna-shopper/shop-map/editor';
 import type {
@@ -94,6 +95,19 @@ export class ShopMapView {
   /** Mapper look: the size shown beside a selected area, in the app's words. */
   readonly sizeLabel = input<((w: number, h: number) => string) | null>(null);
 
+  /**
+   * Mapper look, while recording (velista `0126`): the walk as it happens, the
+   * walked floor, the suggestions, the person and the purple path. The page
+   * passes a new value at most ten times a second.
+   */
+  readonly live = input<ShopMapLive | null>(null);
+
+  /** Mapper look: the words on a shelf suggestion, read when the canvas mounts. */
+  readonly suggestionLabel = input<string | null>(null);
+
+  /** Mapper look: a shelf suggestion was tapped, by its id. */
+  readonly suggestionTapped = output<string>();
+
   /** Mapper look: a finished draw, move or resize, as walk events. */
   readonly changed = output<WalkEvent[]>();
 
@@ -124,6 +138,10 @@ export class ShopMapView {
         onSelect: (area) => this.areaSelected.emit(area),
         onLongPress: (at, area, client) =>
           this.longPressed.emit({ at, area, client }),
+        onSuggestion: (id) => this.suggestionTapped.emit(id),
+        ...(untracked(this.suggestionLabel) !== null
+          ? { suggestionLabel: untracked(this.suggestionLabel) ?? undefined }
+          : {}),
         sizeLabel: (w, h) =>
           untracked(this.sizeLabel)?.(w, h) ??
           `${Math.round(w * 100) / 100} m × ${Math.round(h * 100) / 100} m`,
@@ -135,6 +153,15 @@ export class ShopMapView {
       if (faded !== null) {
         this._handle.setFadedAfter(faded.logMs, faded.log);
       }
+      const live = untracked(this.live);
+      if (live !== null) {
+        this._handle.setLive(live);
+      }
+    });
+
+    effect(() => {
+      const live = this.live();
+      untracked(() => this._handle?.setLive(live));
     });
 
     effect(() => {
@@ -183,6 +210,37 @@ export class ShopMapView {
   /** Mapper look: drop the pressed square after a menu closed with no action. */
   clearHeld(): void {
     this._handle?.clearHeld();
+  }
+
+  /**
+   * Mapper look: which of the document's marks has its pin under a point of the
+   * screen, as an index into `document().marks`, or null. The canvas draws one pin
+   * per mark in the document's order and reports no tap on one, so the pins are
+   * found by what they draw (a round pin or a note square) and measured on screen.
+   * A pin counts within `reach` css pixels of its centre.
+   */
+  markAt(client: { x: number; y: number }, reach = 30): number | null {
+    const host = this._canvas().nativeElement;
+    const pins = Array.from(host.querySelectorAll('g')).filter((g) =>
+      g.firstElementChild?.matches('circle.sm-pin, rect.sm-note')
+    );
+    if (pins.length !== this.document().marks.length) {
+      return null;
+    }
+    let best: number | null = null;
+    let bestDistance = reach;
+    pins.forEach((pin, index) => {
+      const box = pin.getBoundingClientRect();
+      const distance = Math.hypot(
+        box.left + box.width / 2 - client.x,
+        box.top + box.height / 2 - client.y
+      );
+      if (distance <= bestDistance) {
+        best = index;
+        bestDistance = distance;
+      }
+    });
+    return best;
   }
 
   /** Fit the whole map in view again. */

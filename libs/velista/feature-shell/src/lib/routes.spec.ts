@@ -1084,7 +1084,10 @@ describe('the sheets and their exit animation', () => {
     // `0122` added three: naming a new walk over the walks list, deleting a walk
     // over its settings, and the warning before resuming the shown walk over its
     // history.
-    expect(sheets).toHaveLength(48);
+    //
+    // `0123` added one: an area's sheet over the edit page, and `0126` the same
+    // sheet over the recording page.
+    expect(sheets).toHaveLength(49);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1192,6 +1195,8 @@ describe('the bottom bar', () => {
     'lab/walk',
     // Velista 0123: the map needs the height, and Done is the way out.
     'shops/:locationId/walks/:walkId/edit',
+    // Velista 0126: the same for recording, where Stop is the way out.
+    'shops/:locationId/walks/:walkId/record',
   ];
 
   it.each(chromeless)('draws no bar on "%s"', (path) => {
@@ -1456,6 +1461,7 @@ describe('the walk lab', () => {
       rewind: `${walk}/${SHOP_PATHS.rewind}`,
       walkSettings: `${walk}/${SHOP_PATHS.settings}`,
       edit: `${walk}/${SHOP_PATHS.edit}`,
+      record: `${walk}/${SHOP_PATHS.record}`,
     };
     const find = (path: string) => pages.find((route) => route.path === path);
     const order = pages.map((route) => route.path);
@@ -1474,6 +1480,9 @@ describe('the walk lab', () => {
         order.indexOf(paths.history)
       );
       expect(order.indexOf(paths.edit)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.record)).toBeLessThan(
         order.indexOf(paths.history)
       );
       expect(order.indexOf(paths.history)).toBeLessThan(
@@ -1500,6 +1509,7 @@ describe('the walk lab', () => {
         paths.rewind,
         paths.walkSettings,
         paths.edit,
+        paths.record,
       ]) {
         expect(find(path)?.canMatch).toEqual([walkIdGuard]);
       }
@@ -1530,6 +1540,19 @@ describe('the walk lab', () => {
       expect(find(paths.edit)?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
       expect(sheetsOf(paths.edit)[0].data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
       expect(sheetsOf(paths.edit)[0].data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+    });
+
+    // Velista 0126: recording, with the same area sheet over it for editing
+    // while walking, and the same question before leaving.
+    it('puts the area sheet over the recording page and asks before leaving it', () => {
+      expect(sheetsOf(paths.record).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
+      ]);
+      expect(find(paths.record)?.canDeactivate).toEqual([unsavedWalkGuard]);
+      expect(find(paths.record)?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.record)[0].data?.[WORKS_WITHOUT_BACKEND]).toBe(
+        true
+      );
     });
   });
 });

@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   inject,
+  signal,
   untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
@@ -21,8 +22,11 @@ import {
 import {
   locationIdOf,
   PageNavigation,
+  sheetSegments,
+  SHOP_PATHS,
   shopWalkPath,
   shopWalksPath,
+  WALK_SENSORS,
   walkIdOf,
 } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, EllipsisIcon } from '@portfolio/velista/ui';
@@ -167,8 +171,9 @@ export function historyDays(
  * many 20 s saves it made (see `shopWalkHistory`).
  *
  * Edit map opens the edit page of velista `0123` (`walks/:walkId/edit`). Resume
- * walking (velista `0126`, `walks/:walkId/record`, through the warning over this
- * page when the walk is shown) is absent until that plan adds it.
+ * walking opens the recording page of velista `0126` (`walks/:walkId/record`),
+ * through the warning over this page when the walk is shown. Where the browser
+ * has no camera tracking (`immersive-ar`) it is absent, and one line says why.
  *
  * `shops/:locationId/walks/:walkId`, only with `shopMap.record`.
  */
@@ -191,6 +196,9 @@ export class WalkHistoryPage {
   protected readonly walkId = walkIdOf(this._route);
 
   protected readonly read = computed(() => this._walks.walk(this.walkId()));
+
+  /** Whether this browser can record: null until it answered. */
+  protected readonly canRecord = signal<boolean | null>(null);
 
   protected readonly name = computed(() => {
     const read = this.read();
@@ -220,6 +228,10 @@ export class WalkHistoryPage {
   });
 
   constructor() {
+    void inject(WALK_SENSORS)
+      .supported()
+      .then((yes) => this.canRecord.set(yes));
+
     effect(() => {
       const walkId = this.walkId();
       if (walkId === '') {
@@ -241,6 +253,21 @@ export class WalkHistoryPage {
     void this._router.navigateByUrl(this._path('edit'));
   }
 
+  /**
+   * Resume walking (velista `0126`): the warning first when shoppers see this
+   * walk, since every save while walking changes their map.
+   */
+  protected resume(): void {
+    const read = this.read();
+    if (read.kind === 'walk' && read.detail.walk.shown) {
+      void this._router.navigate(sheetSegments(SHOP_PATHS.resume), {
+        relativeTo: this._route,
+      });
+      return;
+    }
+    void this._router.navigateByUrl(this._path('record'));
+  }
+
   protected openSettings(): void {
     void this._router.navigateByUrl(this._path('settings'));
   }
@@ -256,7 +283,7 @@ export class WalkHistoryPage {
     );
   }
 
-  private _path(page: 'rewind' | 'settings' | 'edit'): string {
+  private _path(page: 'rewind' | 'settings' | 'edit' | 'record'): string {
     return shopWalkPath(
       this._locale(),
       this._basePath,

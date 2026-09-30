@@ -135,6 +135,7 @@ export class WalkEntrySaver {
   private _kind: ShopWalkEntryKind = 'edited';
   private _thenKind: ShopWalkEntryKind = 'edited';
   private _opened = 0;
+  private _nextKind: ShopWalkEntryKind | null = null;
   private _logEnd = 0;
   private _everyMs = WALK_SAVE_EVERY_MS;
   private _retryMs = WALK_SAVE_EVERY_MS;
@@ -179,6 +180,7 @@ export class WalkEntrySaver {
     this._kind = start.kind;
     this._thenKind = start.thenKind ?? start.kind;
     this._opened = 0;
+    this._nextKind = null;
     this._everyMs = start.everyMs ?? WALK_SAVE_EVERY_MS;
     this._retryMs = start.retryMs ?? this._everyMs;
     this._open = null;
@@ -228,6 +230,28 @@ export class WalkEntrySaver {
     });
     this._logEnd = logTo;
     this._afterChange();
+  }
+
+  /**
+   * Seal what is open, and give the next entry opened this kind; every entry
+   * after that takes `thenKind` again. A recording calls it with `resumed` when a
+   * new session starts in the same page (velista `0126`, target 7).
+   */
+  openNext(kind: ShopWalkEntryKind): void {
+    if (this._walkId === null) {
+      return;
+    }
+    const sealing = this._open !== null;
+    this._seal();
+    this._nextKind = kind;
+    if (sealing) {
+      this._afterChange();
+    }
+  }
+
+  /** Where the log ends: the `logTo` of the last entry held or answered. */
+  logEnd(): number {
+    return this._logEnd;
   }
 
   /**
@@ -349,12 +373,14 @@ export class WalkEntrySaver {
     if (this._open === null) {
       this._open = {
         id: newEntryId(),
-        kind: this._opened === 0 ? this._kind : this._thenKind,
+        kind:
+          this._nextKind ?? (this._opened === 0 ? this._kind : this._thenKind),
         logFrom: this._logEnd,
         logTo: this._logEnd,
         events: [],
       };
       this._opened += 1;
+      this._nextKind = null;
     }
     return this._open;
   }

@@ -114,7 +114,7 @@ describe('ShopWalksPage', () => {
 });
 
 describe('NewWalkSheet', () => {
-  it('starts a walk with the name given and leaves for its history', async () => {
+  it('starts a walk with the name given and leaves for recording it (velista 0126)', async () => {
     const { fixture, sheets, walks } = await render(NewWalkSheet);
     const field = (fixture.nativeElement as HTMLElement).querySelector(
       'input'
@@ -131,7 +131,7 @@ describe('NewWalkSheet', () => {
         ? list.walks.find((w) => w.name === 'Spring')
         : null;
     expect(made).toBeDefined();
-    expect(sheets.leaveTo).toHaveBeenCalledWith(`${BASE}/${made?.id}`);
+    expect(sheets.leaveTo).toHaveBeenCalledWith(`${BASE}/${made?.id}/record`);
   });
 
   it('holds a name to keep before anybody types', async () => {
@@ -252,12 +252,13 @@ describe('WalkHistoryPage', () => {
     expect(all(fixture, '.latest')).toEqual(['shopWalks.history.latest']);
   });
 
-  it('offers Rewind and Edit map, and not Resume walking yet', async () => {
+  it('offers Rewind, Edit map and Resume walking', async () => {
     const { fixture, navigate } = await render(WalkHistoryPage);
 
     expect(all(fixture, '.actions button')).toEqual([
       'shopWalks.history.rewind',
       'shopWalks.history.editMap',
+      'shopWalks.history.resume',
     ]);
     click(fixture, '.actions .secondary');
     click(fixture, '.actions .edit-map');
@@ -268,6 +269,38 @@ describe('WalkHistoryPage', () => {
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/edit`,
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/settings`,
     ]);
+  });
+
+  // Velista 0126, target 1.
+  it('warns first before resuming the walk shoppers see', async () => {
+    const { fixture, navigate, navigateTo } = await render(WalkHistoryPage);
+
+    click(fixture, '.actions .resume');
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(navigateTo.mock.calls[0][0]).toEqual(['sheet', 'resume']);
+  });
+
+  it('goes straight to recording a walk shoppers do not see', async () => {
+    const { fixture, navigate } = await render(WalkHistoryPage, {
+      params: { locationId: SHOP, walkId: MEMORY_OTHER_WALK_ID },
+    });
+
+    click(fixture, '.actions .resume');
+
+    expect(navigate).toHaveBeenCalledWith(
+      `${BASE}/${MEMORY_OTHER_WALK_ID}/record`
+    );
+  });
+
+  it('says in one line why it cannot resume without camera tracking', async () => {
+    const { fixture } = await render(WalkHistoryPage, { camera: false });
+
+    expect(all(fixture, '.actions button')).toEqual([
+      'shopWalks.history.rewind',
+      'shopWalks.history.editMap',
+    ]);
+    expect(all(fixture, '.no-camera')).toEqual(['shopWalks.history.noCamera']);
   });
 
   it('says a deleted walk is not there', async () => {

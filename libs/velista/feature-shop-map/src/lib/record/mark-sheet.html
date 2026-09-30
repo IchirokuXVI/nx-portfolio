@@ -1,0 +1,116 @@
+<div (click)="closed.emit()" aria-hidden="true" class="scrim"></div>
+<form
+  (submit)="save($event)"
+  [style.bottom.px]="inset()"
+  [style.max-height.px]="room()"
+  aria-labelledby="mark-sheet-title"
+  class="layer"
+  role="dialog"
+>
+  <div class="sheet">
+    <div aria-hidden="true" class="handle"></div>
+    <div class="head">
+      <h2 class="title" id="mark-sheet-title">
+        {{ 'shopWalkRecord.mark.title' | rokuT }}
+      </h2>
+      <button
+        (click)="closed.emit()"
+        [attr.aria-label]="'shopWalkRecord.mark.close' | rokuT"
+        class="close"
+        type="button"
+      >
+        <lib-close-icon />
+      </button>
+    </div>
+
+    <div class="remind">
+      <lib-info-icon class="remind-glyph" />
+      <div class="remind-text">
+        <span class="remind-title">{{
+          'shopWalkRecord.mark.remind' | rokuT
+        }}</span>
+        @if (pointing(); as pointing) {
+          <span aria-live="polite">{{
+            'shopWalkRecord.mark.pointing.' + pointing | rokuT
+          }}</span>
+        }
+      </div>
+    </div>
+
+    <div
+      [attr.aria-label]="'shopWalkRecord.mark.kinds' | rokuT"
+      class="kinds"
+      role="group"
+    >
+      @for (one of kinds; track one) {
+        <button
+          (click)="choose(one)"
+          [attr.aria-pressed]="current() === one"
+          [class.on]="current() === one"
+          class="kind"
+          type="button"
+        >
+          {{ 'shopWalkRecord.marks.' + one | rokuT }}
+        </button>
+      }
+    </div>
+
+    <div class="field-block">
+      <label class="label" for="mark-name">{{
+        'shopWalkRecord.mark.name.' + current() | rokuT
+      }}</label>
+      <input
+        (input)="typed($event)"
+        [maxLength]="maxLength"
+        [placeholder]="
+          recentNames().length + shopSections().length > 0
+            ? ('shopWalkRecord.mark.placeholder' | rokuT)
+            : ''
+        "
+        [value]="text()"
+        #field
+        autocomplete="off"
+        class="field"
+        enterkeyhint="done"
+        id="mark-name"
+        type="text"
+      />
+    </div>
+
+    @if (recentNames().length > 0) {
+      <div class="chips-block">
+        <span class="label" id="mark-recent">{{
+          'shopWalkRecord.mark.recent' | rokuT
+        }}</span>
+        <div aria-labelledby="mark-recent" class="chips" role="group">
+          @for (name of recentNames(); track name) {
+            <button (click)="pick(name)" class="chip" type="button">
+              {{ name }}
+            </button>
+          }
+        </div>
+      </div>
+    }
+
+    @if (shopSections().length > 0) {
+      <div class="chips-block">
+        <span class="label" id="mark-sections">{{
+          'shopWalkRecord.mark.sections' | rokuT
+        }}</span>
+        <div aria-labelledby="mark-sections" class="chips" role="group">
+          @for (name of shopSections(); track name) {
+            <button (click)="pick(name)" class="chip" type="button">
+              {{ name }}
+            </button>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="savebar">
+    <button [attr.aria-disabled]="!canSave()" class="save" type="submit">
+      {{ 'shopWalkRecord.mark.save' | rokuT }}
+    </button>
+  </div>
+</form>
