@@ -420,6 +420,110 @@ describe('createLiveMap', () => {
     });
   });
 
+  describe('two faces of one shelf', () => {
+    /** Aisles 2.5 m apart, the strip between them tapped, one face marked from aisle one. */
+    function lacteos(named: boolean): LiveMapHandle {
+      // Named: an earlier session's mark, so the tapped shelf takes its section.
+      const map = live(
+        named
+          ? doc({ marks: [mark('m0', 0, { x: 2, y: 0, text: 'Lacteos' })] })
+          : doc()
+      );
+      aisles(map, 2.5);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 0], [2, 0]);
+      if (!named) {
+        map.mark(
+          mark('m1', clock, { x: 2, y: 0, heading: 0, text: 'Lacteos' })
+        );
+      }
+      map.sectionLeft();
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 2.5], [2, 2.5]);
+      map.mark(
+        mark('m2', clock, { x: 2, y: 2.5, heading: 180, text: 'Yogures' })
+      );
+      return map;
+    }
+
+    it('never renames a tapped shelf a mark named', () => {
+      const map = lacteos(false);
+      const snap = map.snapshot();
+      expect(snap.sectionRun).toBeNull();
+      const shelves = [...areasOf(snap.events).values()];
+      expect(shelves.map((a) => a.section)).toEqual(['Lacteos']);
+    });
+
+    it('never renames a tapped shelf that took a section when tapped', () => {
+      const map = lacteos(true);
+      const snap = map.snapshot();
+      expect(puts(snap.events)[0].section).toBe('Lacteos');
+      expect(snap.sectionRun).toBeNull();
+      expect([...areasOf(snap.events).values()].map((a) => a.section)).toEqual([
+        'Lacteos',
+      ]);
+    });
+  });
+
+  it('ends the run when the person crosses the shelf it fills, and the map stays valid', () => {
+    const map = live();
+    aisles(map, 1.5);
+    const events: WalkEvent[] = [];
+    map.acceptSuggestion(map.snapshot().suggestions[0].id);
+    map.setTracking('lost');
+    map.setTracking('good');
+    walk(map, [6, 0], [5, 0]);
+    map.mark(mark('m', clock, { x: 5, y: 0, heading: 0, text: 'Pan' }));
+    walk(map, [5, 0], [3, 0]);
+    expect(map.snapshot().sectionRun?.areaId).toBe('a1');
+    walk(map, [3, 0], [3, 0.75]);
+    walk(map, [3, 0.75], [3, 0]);
+    walk(map, [3, 0], [-3, 0]);
+    const snap = map.snapshot();
+    expect(snap.sectionRun).toBeNull();
+    const all = [...events, ...snap.events];
+    const areas = [...areasOf(all).values()];
+    expect(
+      validateShopMapV2({ version: 2, areas, marks: [], path: [] })
+    ).toEqual([]);
+    expect(areas.map((a) => [a.kind, a.section ?? null])).toEqual([
+      ['shelf', 'Pan'],
+      ['shelf', 'Pan'],
+      ['path', null],
+    ]);
+  });
+
+  it('looks past floor drawn by hand for the shelf', () => {
+    const floor = area('floor', { kind: 'path', x: 0, y: 0.5, w: 4, h: 0.5 });
+    const map = live(doc({ areas: [floor] }));
+    walk(map, [0, 0], [2, 0]);
+    map.mark(mark('m', clock, { x: 2, y: 0, heading: 0, text: 'Pan' }));
+    const snap = map.snapshot();
+    expect(snap.sectionRun).toEqual({ section: 'Pan', areaId: 'a1' });
+    expect(areasOf(snap.events).get('a1')).toMatchObject({ y: 1 });
+  });
+
+  it('never names a tapped shelf from a mark saved while tracking was not good', () => {
+    const map = live();
+    aisles(map, 1.5);
+    map.setTracking('suspect');
+    map.mark(
+      mark('m', clock, {
+        x: 5,
+        y: 1.5,
+        heading: 180,
+        text: 'Pan',
+        kind: 'section',
+      })
+    );
+    map.setTracking('good');
+    map.acceptSuggestion(map.snapshot().suggestions[0].id);
+    expect('section' in puts(map.snapshot().events)[0]).toBe(false);
+  });
+
   describe('a tapped suggestion', () => {
     it('takes the section of a mark within 1.5 m', () => {
       const map = live();

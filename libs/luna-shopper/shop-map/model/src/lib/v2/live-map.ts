@@ -207,7 +207,10 @@ class LiveMap implements LiveMapHandle {
     this.emit({ type: 'mark-put', mark });
     this.lastLogMs = Math.max(this.lastLogMs, mark.logMs);
     if (mark.kind === 'note') return;
-    if (mark.kind === 'section') this.sectionMarks.push(mark);
+    // A mark saved while tracking is not good may be metres off: it names nothing.
+    if (mark.kind === 'section' && this.tracking === 'good') {
+      this.sectionMarks.push(mark);
+    }
     const ended = this.run;
     this.run = null;
     if (this.tracking !== 'good') return;
@@ -474,6 +477,9 @@ class LiveMap implements LiveMapHandle {
       if (p.x < a.x || p.x >= a.x + a.w || p.y < a.y || p.y >= a.y + a.h) {
         continue;
       }
+      // Crossing the shelf the run is filling ends the run: its rectangle no
+      // longer stands for the pieces the crossing leaves.
+      if (this.run?.area.id === a.id) this.run = null;
       const r = cellsOfArea(a);
       const alongX = a.w >= a.h;
       const [lo, hi] = alongX ? [r.i0, r.i1] : [r.j0, r.j1];
@@ -566,7 +572,8 @@ class LiveMap implements LiveMapHandle {
   /** A shelf a section mark may name: a tapped suggestion or an earlier run, never one drawn by hand. */
   private adoptable(i: number, j: number): MapArea | null | undefined {
     for (const a of this.areas.values()) {
-      if (!covers(a, i, j)) continue;
+      // Floor drawn by hand, a crossing path and an entrance are walked on.
+      if (!isBlockingArea(a.kind) || !covers(a, i, j)) continue;
       return a.kind === 'shelf' &&
         (a.origin === 'suggested' || a.origin === 'section-run')
         ? a
@@ -615,11 +622,9 @@ class LiveMap implements LiveMapHandle {
       const shelf = this.adoptable(ci, cj);
       if (shelf) {
         const named = shelf.section?.trim().toLowerCase() ?? '';
-        if (
-          shelf.origin === 'suggested' ||
-          named === '' ||
-          named === mark.text.trim().toLowerCase()
-        ) {
+        // A shelf with another section's name is that section's face, even a
+        // tapped strip: the other face of one unit carries its own section.
+        if (named === '' || named === mark.text.trim().toLowerCase()) {
           this.adoptRun(mark, shelf, axis, along, walking);
           return;
         }
