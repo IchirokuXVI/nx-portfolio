@@ -7,6 +7,7 @@ import {
   ConflictException,
   NotFoundException,
   ShopMapInvalidException,
+  ValidationException,
   WalkChangedException,
 } from '@portfolio/luna-shopper/platform';
 import {
@@ -251,6 +252,62 @@ describeIntegration('shop walks (real Postgres)', () => {
     expect(retried.walk.lastSeq).toBe(elJamon.length);
   });
 
+  it('names the replayed entry’s own seq as the next base, which another phone’s save makes stale', async () => {
+    // Phone A saves seq 1 and loses the answer; phone B saves seq 2 on top.
+    const walk = await walks.create({
+      userId: MAPPER,
+      supermarketLocationId: otherShopId,
+      name: 'Two phones',
+    });
+    const saveA: Omit<ShopWalkEntryView, 'seq'> = {
+      id: 'cc000000-0000-4000-8000-000000000001',
+      kind: 'started',
+      at: '2026-09-30T10:00:00.000Z',
+      logFrom: 0,
+      logTo: 1000,
+      events: [
+        {
+          type: 'path',
+          points: [
+            [0, 0, 0],
+            [1000, 1, 0],
+          ],
+        },
+      ],
+    };
+    const first = await append(walk.id, 0, saveA);
+    await append(walk.id, first.entry.seq, {
+      id: 'cc000000-0000-4000-8000-000000000002',
+      kind: 'continued',
+      at: '2026-09-30T10:00:20.000Z',
+      logFrom: 1000,
+      logTo: 2000,
+      events: [{ type: 'path', points: [[2000, 5, 5]] }],
+    });
+
+    // A retries and is told what it stored: its own seq, while the walk has
+    // moved on to B's entry.
+    const replay = await append(walk.id, 0, saveA);
+    expect(replay.replayed).toBe(true);
+    expect(replay.entry.seq).toBe(1);
+    expect(replay.walk.lastSeq).toBe(2);
+
+    // Building on its own seq, as the contract says, A is refused and reloads
+    // rather than extending B's path.
+    const error = await refusal(
+      append(walk.id, replay.entry.seq, {
+        id: 'cc000000-0000-4000-8000-000000000003',
+        kind: 'continued',
+        at: '2026-09-30T10:00:40.000Z',
+        logFrom: 1000,
+        logTo: 3000,
+        events: [{ type: 'path', points: [[3000, 1, 1]] }],
+      })
+    );
+    expect(error).toBeInstanceOf(WalkChangedException);
+    expect((error as WalkChangedException).details).toEqual({ lastSeq: 2 });
+  });
+
   it('refuses a stale base with walk_changed and the current lastSeq', async () => {
     const error = await refusal(
       append(walkId, elJamon.length - 1, {
@@ -276,6 +333,21 @@ describeIntegration('shop walks (real Postgres)', () => {
     });
     const error = await refusal(append(other.id, 0, elJamon[0]));
     expect(error).toBeInstanceOf(ConflictException);
+  });
+
+  it('refuses a reason on an entry that is not a stop', async () => {
+    const error = await refusal(
+      append(walkId, elJamon.length, {
+        id: 'bb000000-0000-4000-8000-000000000004',
+        kind: 'edited',
+        at: '2026-09-30T10:00:00.000Z',
+        logFrom: 2000000,
+        logTo: 2000000,
+        events: [],
+        reason: 'button',
+      })
+    );
+    expect(error).toBeInstanceOf(ValidationException);
   });
 
   it('refuses an entry whose fold does not validate, with the problems', async () => {
@@ -372,6 +444,24 @@ describeIntegration('shop walks (real Postgres)', () => {
     );
     expect(map?.sections.find((s) => s.name === 'Lácteos')?.sectionId).toBe(
       lacteos
+    );
+  });
+
+  it('resolves the section ids on every read, past the cached walk order', async () => {
+    const before = await walks.mapForLocation({
+      supermarketLocationId: shopId,
+    });
+    const fish = before.map?.sections.find((s) => s.name === 'Pescadería');
+    expect(fish).toBeDefined();
+    // Delete the chain section: the cached names still hold the walk's name,
+    // and the next read leaves it out because nothing resolves it.
+    await sections.delete({ userId: OWNER, sectionId: fish?.sectionId ?? '' });
+    const after = await walks.mapForLocation({ supermarketLocationId: shopId });
+    expect(after.map?.view).toBe(before.map?.view);
+    expect(after.map?.sections.map((s) => s.name)).toEqual(
+      before.map?.sections
+        .map((s) => s.name)
+        .filter((name) => name !== 'Pescadería')
     );
   });
 

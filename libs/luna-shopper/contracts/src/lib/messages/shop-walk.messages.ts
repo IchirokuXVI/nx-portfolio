@@ -232,7 +232,11 @@ export interface ShopWalkSummaryView {
   name: string;
   /** Whether shoppers see this walk. At most one per shop. */
   shown: boolean;
-  /** The `seq` of the newest entry, 0 for a walk with none. The next append's `baseSeq`. */
+  /**
+   * The `seq` of the newest entry, 0 for a walk with none. A client that reads
+   * a walk builds its first append on this. After an append it builds on the
+   * answered `entry.seq` instead (see {@link AppendShopWalkEntryResult}).
+   */
   lastSeq: number;
   /** How many entries the log holds. Equal to {@link lastSeq}, since `seq` counts from 1 with no gap. */
   entryCount: number;
@@ -368,7 +372,11 @@ export interface AppendShopWalkEntryRequest {
   walkId: string;
   /** Given by the client, so a retried save is the same entry. */
   id: string;
-  /** The walk's `lastSeq` the client last read. */
+  /**
+   * The `seq` this entry was built on: the walk's `lastSeq` when the client
+   * read the walk, then the `entry.seq` of each append it made. Anything but
+   * the walk's current `lastSeq` is refused with `walk_changed`.
+   */
   baseSeq: number;
   kind: ShopWalkEntryKind;
   at: string;
@@ -380,9 +388,20 @@ export interface AppendShopWalkEntryRequest {
 }
 
 export interface AppendShopWalkEntryResult {
-  /** The walk after the append, or as it stands now for a retried entry. */
+  /**
+   * The walk after the append, or as it stands now for a retried entry. On a
+   * replay after another phone saved, its `lastSeq` names that phone's entry,
+   * which this client never folded, so it is **not** the next base.
+   */
   walk: ShopWalkSummaryView;
-  /** The entry as stored. A retried id answers the entry stored the first time. */
+  /**
+   * The entry as stored. A retried id answers the entry stored the first time.
+   *
+   * **The next append's `baseSeq` is this `seq`, never `walk.lastSeq`.** On a
+   * fresh append the two are equal. On a replay after another phone saved,
+   * building on this `seq` is refused with `walk_changed`, and the client
+   * reloads instead of extending the other phone's path.
+   */
   entry: ShopWalkTimelineEntry;
   /** True when this id was already stored and nothing was written. */
   replayed: boolean;

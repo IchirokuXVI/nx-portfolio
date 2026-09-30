@@ -14,7 +14,6 @@ import {
   foldReplaying,
   needsSnapshot,
   replacesState,
-  type FoldStart,
 } from './walk-fold';
 
 /**
@@ -38,15 +37,26 @@ const expectedMap = read<ShopMapDocument>('expected-map.json');
 class MemoryWalk {
   document = emptyShopMapDocument();
   readonly log: ShopWalkEntryView[] = [];
-  readonly snapshots: FoldStart[] = [];
+  readonly snapshots: { seq: number; document: ShopMapDocument }[] = [];
+  /** The snapshot documents a replaying fold read, in the order it read them. */
+  readonly snapshotReads: number[] = [];
 
   async append(entry: Omit<ShopWalkEntryView, 'seq'>): Promise<void> {
     const seq = this.log.length + 1;
     const next: ShopWalkEntryView = { ...entry, seq };
     this.document = replacesState(next.kind)
       ? await foldReplaying(
-          this.snapshots,
-          async (after) => this.log.filter((e) => e.seq > after),
+          {
+            snapshotSeqs: this.snapshots.map((s) => s.seq),
+            snapshotAt: async (at) => {
+              this.snapshotReads.push(at);
+              const found = this.snapshots.find((s) => s.seq === at);
+              if (!found) throw new Error(`no snapshot at ${at}`);
+              return found.document;
+            },
+            entriesAfter: async (after) =>
+              this.log.filter((e) => e.seq > after),
+          },
           next
         )
       : foldOnto(this.document, next);
@@ -130,6 +140,7 @@ describe('the walk fold (plan 0168, section 2)', () => {
       );
     }
     expect(walk.snapshots.map((s) => s.seq)).toEqual([20]);
+    walk.snapshotReads.length = 0;
 
     // Back to 1.5 s: before everything the snapshot at 20 holds.
     await walk.append(
@@ -137,6 +148,8 @@ describe('the walk fold (plan 0168, section 2)', () => {
     );
     expect(walk.document.marks.map((m) => m.id)).toEqual(['a']);
     expect(walk.document).toEqual(foldWalk(walk.log as WalkEntry[]));
+    // The one snapshot was read once, tried, and given up for the start.
+    expect(walk.snapshotReads).toEqual([20]);
 
     // And past that rewind, to a point after it: the state it produced plus
     // what came after it.
