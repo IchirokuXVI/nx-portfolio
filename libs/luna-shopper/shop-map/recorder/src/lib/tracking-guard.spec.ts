@@ -133,6 +133,8 @@ describe('the tracking guard over the second El Jamón walk', () => {
       const stop = first(events, (x) => x.kind === 'stopped');
       expect(stop).toMatchObject({ reason: 'frame-moved' });
       expect(stop.t).toBe(heading.t);
+      // The points kept since 922.0 s are in the flipped frame.
+      expect(stop).toMatchObject({ unconfirmedDropped: true });
       expect(seconds(stop) - 922.0).toBeGreaterThan(0);
       expect(seconds(stop) - 922.0).toBeLessThan(5);
       if (heading.kind !== 'suspect') throw new Error('not suspect');
@@ -312,6 +314,24 @@ describe('the rules, one at a time', () => {
     );
   });
 
+  it('drops the unconfirmed segment when a loss during an automatic resume stops the walk', () => {
+    const s = steady();
+    s.at(0);
+    s.guard.pushPose({ ...facing(100, 0), tracked: false });
+    expect(s.at(1500)).toMatchObject([
+      { kind: 'suspect', automaticResume: true },
+    ]);
+    s.guard.pushPose({ ...facing(1600, 0), tracked: false });
+    expect(s.guard.pushCompass(compassAt(4600, 0))).toEqual([
+      {
+        t: 4600,
+        kind: 'stopped',
+        reason: 'tracking-lost',
+        unconfirmedDropped: true,
+      },
+    ]);
+  });
+
   it('does not count the distance across a loss as a jump', () => {
     const s = steady();
     s.at(0);
@@ -345,6 +365,44 @@ describe('the rules, one at a time', () => {
       guard.pushPose(facing(t, 0));
     }
     expect(guard.state().baseline).toBeCloseTo(90, 6);
+  });
+
+  it('learns the baseline over 60 s of good tracking, not of wall time', () => {
+    const guard = createTrackingGuard();
+    const at = (t: number, compass: number) => {
+      guard.pushCompass(compassAt(t, compass));
+      return guard.pushPose(facing(t, 0));
+    };
+    // Good for 20 s with the compass at 90, then a 1 s loss.
+    for (let t = 0; t <= 20_000; t += 100) at(t, 90);
+    guard.pushPose({ ...facing(20_100, 0), tracked: false });
+    // Poses return in a frame where the compass reads 30, and somebody
+    // confirms at 22 s.
+    expect(at(21_100, 30).map((e) => e.kind)).toEqual(['suspect']);
+    const baselines: TrackingEvent[] = [];
+    for (let t = 21_200; t <= 90_000; t += 100) {
+      if (t === 22_000) guard.confirm(t);
+      baselines.push(...at(t, 30).filter((e) => e.kind === 'baseline'));
+    }
+    // Not at 60 s of wall time, and not from the stretch before the loss.
+    expect(baselines).toHaveLength(1);
+    expect(baselines[0].t).toBe(82_000);
+    if (baselines[0].kind !== 'baseline') throw new Error('not a baseline');
+    expect(baselines[0].degrees).toBeCloseTo(30, 6);
+  });
+
+  it('does not fix the baseline on the first pose after a late confirm', () => {
+    const guard = createTrackingGuard();
+    const at = (t: number) => {
+      guard.pushCompass(compassAt(t, 90));
+      return guard.pushPose(facing(t, 0));
+    };
+    for (let t = 0; t <= 1_000; t += 100) at(t);
+    guard.pushPose({ ...facing(1_100, 0), tracked: false });
+    for (let t = 1_500; t < 70_000; t += 100) at(t);
+    guard.confirm(70_000);
+    expect(at(70_100)).toEqual([]);
+    expect(guard.state().baseline).toBeUndefined();
   });
 
   it('keeps the camera trusted while the compass stays within 45 degrees', () => {

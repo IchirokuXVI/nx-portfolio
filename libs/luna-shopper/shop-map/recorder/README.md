@@ -126,7 +126,7 @@ Over the fixture, left alone, the guard answers:
 | 62.0 s | baseline 316.6 degrees (compass minus camera heading) |
 | 920.5 s | `lost`, the pose is not tracked |
 | 922.0 s | `suspect`, poses returned, automatic resume |
-| 923.8 s | `suspect` by the heading rule (drift 162 degrees), and a `frame-moved` stop |
+| 923.8 s | `suspect` by the heading rule (drift 162 degrees), and a `frame-moved` stop that drops the unconfirmed segment |
 | 1013.4 s | `suspect` by the jump rule, 28.8 m in one frame |
 
 These are the choices the guard makes where the plan says nothing.
@@ -147,13 +147,24 @@ These are the choices the guard makes where the plan says nothing.
    `suspect`, including during an automatic resume, and it stops the walk with
    `frame-moved` unless a stop is already waiting for an answer. A stop ends the
    automatic resume, so no path point is kept after it.
-6. **The heading rule** fires when the 5 s median crosses 45 degrees from the baseline,
+6. **A stop drops the unconfirmed segment.** The points kept since an automatic resume
+   are saved only when the person confirms them. When a stop ends that resume first,
+   they are never saved: a `frame-moved` stop during an automatic resume means those
+   points are in the moved frame. The `stopped` event says so with
+   `unconfirmedDropped: true`, and the host then drops every point kept since the
+   automatic resume began and keeps the walk up to the loss. The field is absent when
+   nothing was unconfirmed.
+7. **The heading rule** fires when the 5 s median crosses 45 degrees from the baseline,
    not on every sample past it. `confirm` rearms it, so confirming while the compass
    still disagrees suspects again at the next pose.
-7. **The jump rule** compares consecutive tracked poses only, never the two sides of a
+8. **The jump rule** compares consecutive tracked poses only, never the two sides of a
    loss.
-8. **`discard`** ends the guard: it reads nothing more, and the host stops the walk.
-9. **Resuming.** `alignSession` takes the walk's `baseline` beside the plan's three
-   inputs. The host reads the new session's `compassOffset` from `state().offset` of a
-   guard fed the new session's raw poses, then feeds a guard created with the walk's
-   baseline the poses passed through `alignPose`.
+9. **`discard`** ends the guard: it reads nothing more, and the host stops the walk.
+10. **Resuming.** `alignSession` takes the walk's `baseline` beside the plan's three
+    inputs. The host reads the new session's `compassOffset` from `state().offset` of a
+    guard fed the new session's raw poses, then feeds a guard created with the walk's
+    baseline the poses passed through `alignPose`.
+11. **The baseline** is learned over 60 s of unbroken `good` tracking. When the guard
+    leaves `good` before the baseline is known, the samples learned so far are thrown
+    away and the next `good` stretch starts again from zero, because tracking that comes
+    back after a loss can be in another frame. Lost and suspect time never counts.
