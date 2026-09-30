@@ -4,6 +4,7 @@ import { BrowserFacade } from '../browser-facade';
 import { StorageKeys } from '../storage-keys';
 import type { CaptureNavigator, CaptureWindow } from './browser-types';
 import { listenToOrientation } from './orientation-stream';
+import { loadScriptedWalkSensors } from './scripted-walk-loader';
 import { immersiveArSupported, openXrCamera, type XrCamera } from './xr-camera';
 
 /**
@@ -258,21 +259,11 @@ export const WALK_SENSORS = new InjectionToken<WalkSensorsI>('WALK_SENSORS', {
     if (speed === null) {
       return new WebXrWalkSensors(document);
     }
-    return lazyScriptedSensors(document, speed);
+    // Null in a production build, which swaps the loader for a stub
+    // (`fileReplacements` in apps/velista/project.json), so the scripted walk
+    // is not even a chunk there.
+    return (
+      loadScriptedWalkSensors(document, speed) ?? new WebXrWalkSensors(document)
+    );
   },
 });
-
-/**
- * The scripted walk, loaded only when the flag asks for it, so its data never
- * reaches a bundle that does not use it.
- */
-function lazyScriptedSensors(document: Document, speed: number): WalkSensorsI {
-  const loaded = import('./scripted-walk-sensors').then(
-    (m) => new m.ScriptedWalkSensors(document, { speed })
-  );
-  return {
-    supported: () => loaded.then((sensors) => sensors.supported()),
-    start: (root, listener) =>
-      loaded.then((sensors) => sensors.start(root, listener)),
-  };
-}

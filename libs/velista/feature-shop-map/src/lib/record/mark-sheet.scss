@@ -145,6 +145,14 @@
   background: var(--app-surface-raised);
 }
 
+.waiting {
+  margin: 0 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-attention-fg);
+  text-align: center;
+}
+
 .save {
   @include walks.primary;
 }

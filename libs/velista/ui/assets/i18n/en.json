@@ -2296,7 +2296,8 @@
       "placeholder": "Type or pick one below",
       "recent": "Recent in this walk",
       "sections": "Sections in this shop",
-      "save": "Save mark"
+      "save": "Save mark",
+      "waiting": "Tracking is not good now. Save waits until it is, and keeps what you typed."
     },
     "suggestion": {
       "label": "Shelf? Tap to fill",
@@ -2320,7 +2321,8 @@
       "paused": "The walk is paused. Stand next to something you marked to go on.",
       "saved": "Everything up to this moment is saved.",
       "resume": "Resume from a place I marked",
-      "resumeHint": "Stand next to a mark and choose it on the map."
+      "resumeHint": "Stand next to a mark and choose it on the map.",
+      "lostHint": "Keep walking slowly. The walk goes on by itself, or stops in a few seconds."
     },
     "check": {
       "title": "Is the purple path right?",

@@ -68,6 +68,12 @@ export class MarkSheet {
   /** The shop's own sections, for a section mark. */
   readonly sections = input<readonly string[]>([]);
 
+  /**
+   * Whether tracking is good now. A mark is made only then, so Save waits and
+   * says why while it is not, and what was typed stays.
+   */
+  readonly tracking = input(true);
+
   /** Where the phone points now, or null when that is not known yet. */
   readonly pointing = input<RecordingPointing | null>(null);
 
@@ -80,7 +86,9 @@ export class MarkSheet {
   private readonly _chosen = signal<MarkKind | null>(null);
   protected readonly current = computed(() => this._chosen() ?? this.kind());
   protected readonly text = signal('');
-  protected readonly canSave = computed(() => this.text().trim().length > 0);
+  protected readonly canSave = computed(
+    () => this.text().trim().length > 0 && this.tracking()
+  );
 
   protected readonly recentNames = computed(() => {
     const kind = this.current();
@@ -130,7 +138,7 @@ export class MarkSheet {
   protected save(event?: Event): void {
     event?.preventDefault();
     const text = this.text().trim();
-    if (text.length === 0) {
+    if (text.length === 0 || !this.tracking()) {
       return;
     }
     this.saved.emit({ kind: this.current(), text });

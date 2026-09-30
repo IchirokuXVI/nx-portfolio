@@ -109,7 +109,17 @@
   </div>
 
   <div class="savebar">
-    <button [attr.aria-disabled]="!canSave()" class="save" type="submit">
+    @if (!tracking()) {
+      <p class="waiting" id="mark-waiting" role="status">
+        {{ 'shopWalkRecord.mark.waiting' | rokuT }}
+      </p>
+    }
+    <button
+      [attr.aria-describedby]="tracking() ? null : 'mark-waiting'"
+      [attr.aria-disabled]="!canSave()"
+      class="save"
+      type="submit"
+    >
       {{ 'shopWalkRecord.mark.save' | rokuT }}
     </button>
   </div>

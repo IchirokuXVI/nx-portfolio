@@ -8,6 +8,7 @@ import {
   MEMORY_OTHER_WALK_ID,
   MEMORY_SHOWN_WALK_ID,
 } from '@portfolio/velista/data-access';
+import { BrowserFacade } from '@portfolio/velista/platform';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
   compassAt,
@@ -22,6 +23,7 @@ import {
   SuggestionSheet,
   type SuggestionAnswer,
 } from './suggestion-sheet';
+import { writeWalkBaseline } from './walk-baselines';
 
 const SHOP = 'loc-tejares';
 const HISTORY = (walkId: string) => `/en/shops/${SHOP}/walks/${walkId}`;
@@ -55,7 +57,11 @@ async function flush(fixture: ComponentFixture<unknown>): Promise<void> {
  * about the walk every 100 ms, and the saver sends every 20 s.
  */
 async function renderPage(
-  options: ShopMapHarnessOptions & { fresh?: boolean; walkId?: string } = {}
+  options: ShopMapHarnessOptions & {
+    fresh?: boolean;
+    walkId?: string;
+    baseline?: number;
+  } = {}
 ) {
   TestBed.resetTestingModule();
   let walkId = options.walkId ?? MEMORY_SHOWN_WALK_ID;
@@ -77,6 +83,9 @@ async function renderPage(
   const navigate = jest
     .spyOn(TestBed.inject(Router), 'navigate')
     .mockResolvedValue(true);
+  if (options.baseline !== undefined) {
+    writeWalkBaseline(TestBed.inject(BrowserFacade), walkId, options.baseline);
+  }
   const fixture = TestBed.createComponent(RecordWalkPage);
   fixture.detectChanges();
   await flush(fixture);
@@ -204,7 +213,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     expect(pages.back).toHaveBeenCalledWith(HISTORY(walkId));
   });
 
-  it('stops with a sound when tracking is lost, and offers a resume at a mark', async () => {
+  it('stops with a sound when tracking is lost, and offers a resume at a mark once stopped', async () => {
     const harness = await renderPage({ fresh: true });
     const { fixture, tones, walks } = harness;
     click(fixture, '.controls .primary');
@@ -217,6 +226,11 @@ describe('RecordWalkPage (velista 0126)', () => {
       'shopWalkRecord.stopped.title',
     ]);
     expect(all(fixture, '.warn-body')).toEqual(['shopWalkRecord.stopped.lost']);
+    // Review of #576, item 3: no resume while tracking may still come back.
+    expect(all(fixture, '.controls .primary')).toEqual([]);
+    expect(all(fixture, '.controls .hint')).toEqual([
+      'shopWalkRecord.stopped.lostHint',
+    ]);
 
     walkFor(harness, 4_000, 3_000, { tracked: false });
     await flush(fixture);
@@ -293,6 +307,92 @@ describe('RecordWalkPage (velista 0126)', () => {
     expect(walks.appended[0]).toEqual(
       expect.objectContaining({ kind: 'resumed' })
     );
+  });
+
+  // Review of #576, item 1.
+  it('turns a resume from the history by the compass when the walk has a baseline', async () => {
+    const harness = await renderPage({
+      walkId: MEMORY_OTHER_WALK_ID,
+      baseline: 300,
+    });
+    const { fixture, sensors, walks } = harness;
+    click(fixture, '.controls .chip');
+    const mark = fixture.componentInstance.document()?.marks[0];
+    if (mark === undefined) {
+      throw new Error('no mark');
+    }
+    const page = fixture.componentInstance as unknown as {
+      startFromHere(): Promise<void>;
+    };
+    const starting = page.startFromHere();
+    await flush(fixture);
+    expect(sensors.starts).toBe(1);
+
+    // Standing at the mark in a camera frame turned 90 degrees, facing 20
+    // degrees off the mark's arrow, with the compass true to the walk.
+    const facing = mark.heading + 20;
+    const stand = (from: number, to: number) => {
+      for (let t = from; t < to; t += 100) {
+        sensors.compass(compassAt(t, facing + 300));
+        sensors.pose(uprightPose(t, -mark.y, mark.x, facing + 90));
+        jest.advanceTimersByTime(100);
+      }
+    };
+    stand(0, 1_500);
+    await starting;
+    stand(1_500, 1_800);
+    fixture.detectChanges();
+
+    expect(all(fixture, '.pill')).toEqual(['shopWalkRecord.status.good']);
+    const person = harness.view()?.live()?.person;
+    expect(person?.heading).toBeDefined();
+    const off = Math.abs((((person?.heading ?? 0) - facing + 540) % 360) - 180);
+    expect(off).toBeLessThan(2);
+    await fixture.componentInstance.canLeave();
+    await flush(fixture);
+    expect(walks.appended[0]).toEqual(
+      expect.objectContaining({ kind: 'resumed' })
+    );
+  });
+
+  // Review of #576, item 4.
+  it('keeps the mark sheet and its text while tracking is lost, and saves once it is back', async () => {
+    const harness = await renderPage({ fresh: true });
+    const { fixture } = harness;
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    walkFor(harness, 0, 3_000);
+    click(fixture, '.marks .mark.primary');
+    const field = (fixture.nativeElement as HTMLElement).querySelector(
+      '#mark-name'
+    ) as HTMLInputElement;
+    field.value = 'Lácteos';
+    field.dispatchEvent(new Event('input'));
+
+    walkFor(harness, 3_000, 800, { tracked: false });
+    click(fixture, '.savebar .save');
+
+    expect(fixture.debugElement.query(By.directive(MarkSheet))).not.toBeNull();
+    expect(all(fixture, '.savebar .waiting')).toEqual([
+      'shopWalkRecord.mark.waiting',
+    ]);
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.savebar .save')
+        ?.getAttribute('aria-disabled')
+    ).toBe('true');
+    expect(field.value).toBe('Lácteos');
+
+    // Back within 3 s by itself, and confirmed: Save now makes the mark.
+    walkFor(harness, 3_800, 1_000);
+    click(fixture, '.check .primary');
+    walkFor(harness, 4_800, 300);
+    click(fixture, '.savebar .save');
+    expect(fixture.debugElement.query(By.directive(MarkSheet))).toBeNull();
+    walkFor(harness, 5_100, 200);
+    expect(
+      fixture.componentInstance.document()?.marks.map((one) => one.text)
+    ).toContain('Lácteos');
   });
 
   it('says so where the browser has no camera tracking', async () => {

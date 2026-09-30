@@ -190,10 +190,7 @@
       }
       @case ('lost') {
         <div class="controls ruled">
-          <button (click)="resumeFromMark()" class="primary" type="button">
-            {{ 'shopWalkRecord.stopped.resume' | rokuT }}
-          </button>
-          <p class="hint">{{ 'shopWalkRecord.stopped.resumeHint' | rokuT }}</p>
+          <p class="hint">{{ 'shopWalkRecord.stopped.lostHint' | rokuT }}</p>
         </div>
       }
       @case ('stopped') {
@@ -345,6 +342,7 @@
     [pointing]="pointing()"
     [recent]="recent()"
     [sections]="shopSections()"
+    [tracking]="screen() === 'walking'"
   />
 }
 
