@@ -18,7 +18,11 @@ import { RecentShopsController } from './recent-shops.controller';
  * `recent-shops.integration.spec.ts` against real Postgres.
  */
 
-const USER = { userId: 'user-1', kind: UserKind.REGISTERED };
+const USER = {
+  userId: 'user-1',
+  kind: UserKind.REGISTERED,
+  permissions: [],
+};
 
 function shop(id: string, inProfile = true): BasketShopView {
   return {

@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import type { AuthTokens } from '@portfolio/luna-shopper/contracts';
+import {
+  permissionsOf,
+  type AuthTokens,
+} from '@portfolio/luna-shopper/contracts';
 import { UnauthorizedException } from '@portfolio/luna-shopper/platform';
 import { createHash, randomBytes } from 'node:crypto';
 import { IsNull, Repository, type EntityManager } from 'typeorm';
@@ -32,10 +35,19 @@ export class TokenService {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
 
-  /** Signs an access token carrying the user id and kind. */
-  private signAccessToken(user: Pick<User, 'id' | 'kind'>): Promise<string> {
+  /**
+   * Signs an access token carrying the user id, kind and permissions.
+   *
+   * `perms` is computed here from the account's roles with `permissionsOf`
+   * (plan 0175) and never read from a column, so a change to `PERMISSIONS_OF`
+   * reaches every account at its next refresh. Every flow that signs a token
+   * has just loaded the user row, so the roles are the ones committed now.
+   */
+  private signAccessToken(
+    user: Pick<User, 'id' | 'kind' | 'roles'>
+  ): Promise<string> {
     return this.jwt.signAsync(
-      { sub: user.id, kind: user.kind },
+      { sub: user.id, kind: user.kind, perms: permissionsOf(user.roles ?? []) },
       {
         privateKey: this.config.jwt.privateKey,
         algorithm: 'RS256',
@@ -126,7 +138,7 @@ export class TokenService {
    * without a claim that would go stale for the token's whole lifetime.
    */
   async issueTokens(
-    user: Pick<User, 'id' | 'kind' | 'username'>
+    user: Pick<User, 'id' | 'kind' | 'username' | 'roles'>
   ): Promise<AuthTokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.signAccessToken(user),

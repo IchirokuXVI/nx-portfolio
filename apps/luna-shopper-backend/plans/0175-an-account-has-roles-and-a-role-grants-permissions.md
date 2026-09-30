@@ -1,3 +1,5 @@
+> **PR:** [#546](https://github.com/IchirokuXVI/nx-portfolio/pull/546)
+
 # 0175: an account has roles, and a role grants permissions
 
 > First of the shop map series as rewritten on 2026-09-29, because mapping a shop is the

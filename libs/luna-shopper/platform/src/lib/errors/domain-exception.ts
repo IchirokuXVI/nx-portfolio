@@ -484,6 +484,26 @@ export class SupermarketLocationNotFoundException extends DomainException {
   readonly code = ERROR_CODES.SUPERMARKET_LOCATION_NOT_FOUND;
 }
 
+/**
+ * The account behind the token does not hold the permission a route requires
+ * (plan 0175). It publishes the permission's name under
+ * {@link PERMISSION_REQUIRED_DETAIL}, which is the only fact in its details, so
+ * a client can say which thing it may not do. See
+ * `ERROR_CODES.PERMISSION_REQUIRED`.
+ */
+export class PermissionRequiredException extends DomainException {
+  readonly code = ERROR_CODES.PERMISSION_REQUIRED;
+  override readonly exposesDetails = true;
+}
+
+/** An operator tried to give a guest a role (plan 0175). */
+export class GuestHasNoRolesException extends DomainException {
+  readonly code = ERROR_CODES.GUEST_HAS_NO_ROLES;
+}
+
+/** The `details` key a {@link PermissionRequiredException} names the permission under. */
+export const PERMISSION_REQUIRED_DETAIL = 'permission';
+
 /** The `details` key a {@link SectionNotFoundException} lists the unknown ids under. */
 export const SECTION_UNKNOWN_DETAIL = 'unknown';
 
