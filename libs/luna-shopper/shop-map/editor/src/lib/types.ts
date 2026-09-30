@@ -50,7 +50,7 @@ export interface ShopMapHandle {
   /**
    * Mapper look: removes the square a long press marks. The next touch, any
    * `setDocument` (also one from a live walk while the menu is open) and a
-   * `setSelected` that changes the selection remove it too, so the host calls
+   * `setSelected` of an area other than the pressed one remove it too, so the host calls
    * this only when its menu is dismissed without an action.
    */
   clearHeld(): void;
@@ -71,6 +71,7 @@ export interface MountOptions {
   onChange?: (events: WalkEvent[]) => void;
   /**
    * Mapper look: a long press, with the area under it and the point in metres.
+   * A press on a resize handle reports the selected area it belongs to.
    * The pressed square stays marked while the host's menu is open. Selecting
    * the pressed area keeps it. Any `setDocument` removes it, including one
    * that arrives from a live walk while the menu is open.

@@ -413,6 +413,72 @@ describe('mountShopMap, the mapper gestures', () => {
       });
     });
 
+    it('grabs the nearest corner when the corner targets overlap', () => {
+      const onChange = jest.fn<void, [WalkEvent[]]>();
+      const small = area('s1', { kind: 'blocked', x: 5, y: 5, w: 0.4, h: 0.4 });
+      handle = mountShopMap(host, {
+        document: { ...doc, areas: [...doc.areas, small] },
+        look: 'mapper',
+        onChange,
+      });
+      expect(mapperView().s).toBeCloseTo(36.8);
+      handle.setSelected('s1');
+      // 2 px right of and 10 px below the bottom left corner, also in reach of
+      // the bottom right one.
+      const [bx, by] = at(5, 5.4);
+      drag([bx + 2, by + 10], at(4, 6.5));
+      const put = onChange.mock.calls[0][0][0] as Extract<
+        WalkEvent,
+        { type: 'area-put' }
+      >;
+      expect(put.area.x).toBeCloseTo(4);
+      expect(put.area.w).toBeCloseTo(1.4);
+      expect(put.area.y).toBeCloseTo(5);
+      expect(put.area.h).toBeCloseTo(1.5);
+    });
+
+    it('moves an area smaller than the drawn handle from a press inside it', () => {
+      const onChange = jest.fn<void, [WalkEvent[]]>();
+      const tiny = area('t1', { kind: 'blocked', x: 5, y: 5, w: 0.3, h: 0.3 });
+      handle = mountShopMap(host, {
+        document: { ...doc, areas: [...doc.areas, tiny] },
+        look: 'mapper',
+        onChange,
+      });
+      handle.setSelected('t1');
+      const s = mapperView().s;
+      const [cx, cy] = at(5.15, 5.15);
+      // One metre down, clear of every other area.
+      drag([cx, cy], [cx, cy + s]);
+      const put = onChange.mock.calls[0][0][0] as Extract<
+        WalkEvent,
+        { type: 'area-put' }
+      >;
+      expect(put.area.x).toBeCloseTo(5);
+      expect(put.area.y).toBeCloseTo(6);
+      expect(put.area.w).toBeCloseTo(0.3);
+    });
+
+    it('reports the selected area for a long press on its handle', () => {
+      jest.useFakeTimers();
+      const onLongPress = jest.fn();
+      handle = mountShopMap(host, {
+        document: doc,
+        look: 'mapper',
+        onLongPress,
+      });
+      handle.setSelected('a1');
+      const p: [number, number] = [corner()[0] + 12, corner()[1] + 12];
+      pointer('pointerdown', p);
+      jest.advanceTimersByTime(LONG_PRESS_MS + 10);
+      pointer('pointerup', p);
+      expect(onLongPress).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ id: 'a1' }),
+        expect.anything()
+      );
+    });
+
     it('resizes from a press on the drawn handle inside it', () => {
       const onChange = jest.fn<void, [WalkEvent[]]>();
       handle = mountShopMap(host, { document: doc, look: 'mapper', onChange });
@@ -542,6 +608,11 @@ describe('mountShopMap, the mapper gestures', () => {
     it('goes when the host applies an action with setDocument', () => {
       longPress().setDocument({ ...doc, areas: doc.areas.slice(0, 1) });
       expect(host.querySelector('rect.sm-held')).toBeNull();
+    });
+
+    it('stays when the host selects the pressed area', () => {
+      longPress().setSelected('a2');
+      expect(host.querySelector('rect.sm-held')).not.toBeNull();
     });
 
     it('goes when the host selects a different area', () => {
