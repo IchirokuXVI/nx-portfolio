@@ -408,8 +408,17 @@ export function shopWalkHistory(
       case 'rewound': {
         const target = entry.rewoundTo ?? 0;
         const earlier = entries.slice(0, i);
+        // An earlier rewind this one undoes: it removed the moment this one
+        // returns to, which is every moment after its own target and before
+        // it happened. The newest such rewind is named.
         const undone = earlier
-          .filter((one) => one.kind === 'rewound' && one.logTo > target)
+          .filter(
+            (one) =>
+              one.kind === 'rewound' &&
+              one.rewoundTo != null &&
+              one.rewoundTo < target &&
+              target < one.logTo
+          )
           .pop();
         const after = earlier
           .filter((one) => markerOf(one) > target)

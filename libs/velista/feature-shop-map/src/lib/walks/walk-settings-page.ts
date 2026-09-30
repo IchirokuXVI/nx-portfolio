@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
@@ -42,7 +43,9 @@ export type WalkSettingsNotice =
  * and "Delete this walk", which asks in a sheet.
  *
  * The name is saved when the field is left or Go is pressed, and only when it
- * changed: there is no Save button to forget.
+ * changed: there is no Save button to forget. It is saved when the page goes
+ * away too, because on iOS Safari the back chevron does not take the focus out
+ * of the field, so no blur ever comes.
  *
  * `shops/:locationId/walks/:walkId/settings`, only with `shopMap.record`.
  */
@@ -84,6 +87,8 @@ export class WalkSettingsPage {
         untracked(() => void this._walks.loadWalk(walkId));
       }
     });
+
+    inject(DestroyRef).onDestroy(() => void this.saveName());
   }
 
   protected onTyped(event: Event): void {

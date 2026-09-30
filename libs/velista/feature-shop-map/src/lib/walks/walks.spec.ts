@@ -366,6 +366,23 @@ describe('WalkSettingsPage', () => {
     expect(read.kind === 'walk' && read.detail.walk.name).toBe('Winter');
   });
 
+  it('saves a changed name when the page goes away with no blur', async () => {
+    const { fixture, walks } = await render(WalkSettingsPage);
+    const field = (fixture.nativeElement as HTMLElement).querySelector(
+      '.field'
+    ) as HTMLInputElement;
+
+    field.value = 'Left by the chevron';
+    field.dispatchEvent(new Event('input'));
+    fixture.destroy();
+    await settle(() => undefined);
+
+    const read = await walks.walk(MEMORY_SHOWN_WALK_ID);
+    expect(read.kind === 'walk' && read.detail.walk.name).toBe(
+      'Left by the chevron'
+    );
+  });
+
   it('shows another walk to shoppers from its switch', async () => {
     const { fixture, walks } = await render(WalkSettingsPage, {
       params: { locationId: SHOP, walkId: MEMORY_OTHER_WALK_ID },
