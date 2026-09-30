@@ -48,9 +48,10 @@ export interface ShopMapHandle {
   setBadges(badges: Record<string, ShopMapBadge>): void;
   setSelected(areaId: string | null): void;
   /**
-   * Mapper look: removes the square a long press marks. `setDocument`,
-   * `setSelected` and the next touch remove it too, so the host calls this
-   * only when its menu is dismissed without an action.
+   * Mapper look: removes the square a long press marks. The next touch, any
+   * `setDocument` (also one from a live walk while the menu is open) and a
+   * `setSelected` of an area other than the pressed one remove it too, so the host calls
+   * this only when its menu is dismissed without an action.
    */
   clearHeld(): void;
   setSnap(on: boolean): void;
@@ -68,7 +69,13 @@ export interface MountOptions {
   onSelect?: (area: MapArea | null) => void;
   /** Mapper look: a finished draw, move or resize, as log events. */
   onChange?: (events: WalkEvent[]) => void;
-  /** Mapper look: a long press, with the area under it and the point in metres. */
+  /**
+   * Mapper look: a long press, with the area under it and the point in metres.
+   * A press on a resize handle reports the selected area it belongs to.
+   * The pressed square stays marked while the host's menu is open. Selecting
+   * the pressed area keeps it. Any `setDocument` removes it, including one
+   * that arrives from a live walk while the menu is open.
+   */
   onLongPress?: (
     at: { x: number; y: number },
     area: MapArea | null,
