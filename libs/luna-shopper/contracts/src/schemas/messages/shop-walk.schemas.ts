@@ -392,7 +392,7 @@ const appendShopWalkEntryResult = object(
     replayed: {
       ...boolean(),
       description:
-        'True when this entry id was already stored: nothing was written and `entry` is what the first save stored.',
+        'True when this entry id was already stored: nothing was written and `entry` is what the first save stored. The next append builds on `entry.seq`, never on `walk.lastSeq`: after another phone saved, `walk.lastSeq` names an entry this client never folded, and building on `entry.seq` is refused with `walk_changed`, so the client reloads.',
     },
   },
   ['walk', 'entry', 'replayed']

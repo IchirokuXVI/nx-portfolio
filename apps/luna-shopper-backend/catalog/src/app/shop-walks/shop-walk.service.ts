@@ -59,8 +59,24 @@ import {
   replacesState,
   toEntryView,
   toTimelineEntry,
-  type FoldStart,
 } from './walk-fold';
+
+/**
+ * What the public read derives from one fold of a walk: the shopper's view and
+ * the section names in walk order. Both are fixed for a `walkId:lastSeq`.
+ */
+interface DerivedMap {
+  view: ShopMapView['view'];
+  sectionNames: string[];
+}
+
+/** The shown walk's row, without its document. */
+interface ShownWalkRow {
+  id: string;
+  lastSeq: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 /** One row of {@link SUMMARY_SQL}. */
 interface SummaryRow {
@@ -113,11 +129,13 @@ const VIEW_CACHE_SIZE = 64;
 @Injectable()
 export class ShopWalkService {
   /**
-   * walkId:lastSeq to the shopper's view of that fold, the expensive half of
-   * the public read. The sections beside it are resolved on every read, so a
-   * section an operator renames or deletes is never served stale.
+   * walkId:lastSeq to what the public read derives from that fold: the
+   * shopper's view and the section names of `walkOrderV2`, the two expensive
+   * halves of the read. Only the names are cached; the section ids beside them
+   * are resolved on every read, so a section an operator renames or deletes is
+   * never served stale.
    */
-  private readonly views = new Map<string, ShopMapView['view']>();
+  private readonly derived = new Map<string, DerivedMap>();
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -129,26 +147,45 @@ export class ShopWalkService {
     req: LocationShopMapRequest
   ): Promise<LocationShopMapView> {
     await this.requireShop(this.dataSource.manager, req.supermarketLocationId);
-    const walk = await this.dataSource.getRepository(ShopWalk).findOne({
-      where: { supermarketLocationId: req.supermarketLocationId, shown: true },
-    });
-    if (!walk || walk.deletedAt !== null) {
+    // The row without its document first: on a cache hit the document, up to
+    // 2 MB of json, is never read.
+    const [walk] = (await this.dataSource.query(
+      `SELECT w."id"::text AS "id", w."lastSeq" AS "lastSeq",
+              w."createdAt" AS "createdAt", w."updatedAt" AS "updatedAt"
+         FROM "shop_walks" w
+        WHERE w."supermarketLocationId" = $1
+          AND w."shown" AND w."deletedAt" IS NULL`,
+      [req.supermarketLocationId]
+    )) as ShownWalkRow[];
+    if (!walk) {
       return { map: null };
     }
-    const key = `${walk.id}:${walk.lastSeq}`;
-    let view = this.views.get(key);
-    if (!view) {
-      view = shopperView(walk.document);
-      this.remember(key, view);
+    const lastSeq = Number(walk.lastSeq);
+    const key = `${walk.id}:${lastSeq}`;
+    let derived = this.derived.get(key);
+    if (!derived) {
+      const row = await this.dataSource.getRepository(ShopWalk).findOne({
+        select: { id: true, document: true },
+        where: { id: walk.id },
+      });
+      if (!row) {
+        return { map: null };
+      }
+      derived = {
+        view: shopperView(row.document),
+        sectionNames: walkOrderV2(row.document).sections.map(
+          (stop) => stop.name
+        ),
+      };
+      this.remember(key, derived);
     }
-    const order = walkOrderV2(walk.document);
     const map: ShopMapView = {
       walkId: walk.id,
-      savedAt: await this.savedAt(walk),
-      view,
+      savedAt: await this.savedAt(walk.id, lastSeq, walk),
+      view: derived.view,
       sections: await this.sections.resolveWalkNames(
-        walk.supermarketLocationId,
-        order.sections.map((stop) => stop.name)
+        req.supermarketLocationId,
+        derived.sectionNames
       ),
     };
     return { map };
@@ -305,6 +342,13 @@ export class ShopWalkService {
    * answers what it stored; a stale base is refused; the entry is folded onto
    * the document, validated and stored; and a shown walk rewrites its shop's
    * section list.
+   *
+   * **The next `baseSeq` is the answered `entry.seq`, never `walk.lastSeq`.**
+   * On a fresh append the two are equal. On a replay they differ when another
+   * phone saved after the first attempt: `walk.lastSeq` then names that
+   * phone's entry, which the caller never folded, and building on it would
+   * extend the other phone's path. Building on `entry.seq` is refused with
+   * `walk_changed`, which is what makes the caller reload.
    */
   async append(
     req: AppendShopWalkEntryRequest
@@ -407,18 +451,29 @@ export class ShopWalkService {
     walk: ShopWalk,
     entry: ShopWalkEntryView
   ): Promise<ShopMapDocument> {
+    // The seqs only; each snapshot document is read when its start is tried.
     const rows = await manager.getRepository(ShopWalkEntry).find({
-      select: { seq: true, snapshot: true },
+      select: { seq: true },
       where: { walkId: walk.id, snapshot: Not(IsNull()) },
       order: { seq: 'DESC' },
     });
-    const starts: FoldStart[] = rows.map((row) => ({
-      seq: row.seq,
-      document: row.snapshot,
-    }));
+    const entries = manager.getRepository(ShopWalkEntry);
     return foldReplaying(
-      starts,
-      (after) => this.entriesAfter(manager, walk.id, after, walk.lastSeq),
+      {
+        snapshotSeqs: rows.map((row) => row.seq),
+        snapshotAt: async (seq) => {
+          const row = await entries.findOne({
+            select: { seq: true, snapshot: true },
+            where: { walkId: walk.id, seq },
+          });
+          if (!row?.snapshot) {
+            throw new Error(`No snapshot on entry ${seq} of walk ${walk.id}`);
+          }
+          return row.snapshot;
+        },
+        entriesAfter: (after) =>
+          this.entriesAfter(manager, walk.id, after, walk.lastSeq),
+      },
       entry
     );
   }
@@ -453,25 +508,29 @@ export class ShopWalkService {
   }
 
   /** When the walk's document last changed: its newest entry, else the walk's creation. */
-  private async savedAt(walk: ShopWalk): Promise<string> {
-    if (walk.lastSeq === 0) {
-      return walk.createdAt.toISOString();
+  private async savedAt(
+    walkId: string,
+    lastSeq: number,
+    times: { createdAt: Date; updatedAt: Date }
+  ): Promise<string> {
+    if (lastSeq === 0) {
+      return new Date(times.createdAt).toISOString();
     }
     const newest = await this.dataSource.getRepository(ShopWalkEntry).findOne({
       select: { createdAt: true },
-      where: { walkId: walk.id, seq: walk.lastSeq },
+      where: { walkId, seq: lastSeq },
     });
-    return (newest?.createdAt ?? walk.updatedAt).toISOString();
+    return new Date(newest?.createdAt ?? times.updatedAt).toISOString();
   }
 
-  private remember(key: string, view: ShopMapView['view']): void {
-    this.views.set(key, view);
-    while (this.views.size > VIEW_CACHE_SIZE) {
-      const oldest = this.views.keys().next().value;
+  private remember(key: string, derived: DerivedMap): void {
+    this.derived.set(key, derived);
+    while (this.derived.size > VIEW_CACHE_SIZE) {
+      const oldest = this.derived.keys().next().value;
       if (oldest === undefined) {
         break;
       }
-      this.views.delete(oldest);
+      this.derived.delete(oldest);
     }
   }
 
@@ -602,6 +661,11 @@ function requireEntryShape(req: AppendShopWalkEntryRequest): void {
   if (req.kind === 'rewound' && req.rewoundTo === undefined) {
     throw new ValidationException('rewoundTo is required on a rewound entry', {
       messageArgs: { field: 'rewoundTo' },
+    });
+  }
+  if (req.kind !== 'stopped' && req.reason !== undefined) {
+    throw new ValidationException('reason is only for a stopped entry', {
+      messageArgs: { field: 'reason' },
     });
   }
   if (req.kind !== 'rewound' && req.rewoundTo !== undefined) {
