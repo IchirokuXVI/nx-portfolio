@@ -317,6 +317,10 @@ describe('WalkRecording (velista 0126)', () => {
     rec.pose(uprightPose(0, at.x, at.y, 110 + frame.rotation));
     expect(rec.canResume).toBe(true);
     expect(rec.readyToResume).toBe(false);
+    // One compass reading is not enough: the offset rests on a second of them.
+    rec.compass(compassAt(50, 110 + OFFSET));
+    rec.pose(uprightPose(60, at.x, at.y, 110 + frame.rotation));
+    expect(rec.readyToResume).toBe(false);
 
     // The phone faces 110, not the mark's 90: pointing would be 20 degrees off.
     walk(rec, 100, 2_000, { frame, still: true, startY: 10, heading: 110 });

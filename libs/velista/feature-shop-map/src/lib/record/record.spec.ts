@@ -355,6 +355,75 @@ describe('RecordWalkPage (velista 0126)', () => {
     );
   });
 
+  // Review of #577: Start from here runs once, and Close cancels it.
+  it('resumes once for a double tap while it waits for the compass', async () => {
+    const harness = await renderPage({
+      walkId: MEMORY_OTHER_WALK_ID,
+      baseline: 300,
+    });
+    const { fixture, sensors, walks } = harness;
+    click(fixture, '.controls .chip');
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+
+    expect(sensors.starts).toBe(1);
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.controls .primary')
+        ?.getAttribute('aria-disabled')
+    ).toBe('true');
+    expect(all(fixture, '.notice-text')).toEqual([
+      'shopWalkRecord.notice.cameraWaiting',
+    ]);
+
+    // No compass on this phone: tracked poses only, for the whole wait.
+    for (let t = 0; t < 6_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, 0, 0));
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+    }
+    await flush(fixture);
+    expect(all(fixture, '.pill')).toEqual(['shopWalkRecord.status.good']);
+    await fixture.componentInstance.canLeave();
+    await flush(fixture);
+
+    expect(walks.appended.map((one) => [one.kind, one.reason])).toEqual([
+      ['resumed', undefined],
+      ['stopped', 'left-page'],
+    ]);
+  });
+
+  it('resumes nothing when Close is tapped during the wait', async () => {
+    const harness = await renderPage({
+      walkId: MEMORY_OTHER_WALK_ID,
+      baseline: 300,
+    });
+    const { fixture, sensors, walks, pages } = harness;
+    click(fixture, '.controls .chip');
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    for (let t = 0; t < 1_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, 0, 0));
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+    }
+
+    click(fixture, '.bar .back');
+    await flush(fixture);
+    for (let t = 1_000; t < 6_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, 0, 0));
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+    }
+    await flush(fixture);
+
+    expect(pages.back).toHaveBeenCalled();
+    expect(walks.appended).toEqual([]);
+    expect(all(fixture, '.pill')).toEqual([]);
+  });
+
   // Review of #576, item 4.
   it('keeps the mark sheet and its text while tracking is lost, and saves once it is back', async () => {
     const harness = await renderPage({ fresh: true });

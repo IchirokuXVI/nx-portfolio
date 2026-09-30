@@ -82,6 +82,12 @@ export interface WalkRecordingOptions {
   readonly createId: () => string;
 }
 
+/**
+ * A resume by the compass waits for this much of it, so the rotation rests on
+ * the median of a second of readings rather than on one.
+ */
+export const PROBE_COMPASS_MS = 1_000;
+
 /** The page flushes path points to the log once this many have been kept (about 2 s of walking). */
 export const PATH_BATCH_POINTS = 8;
 
@@ -140,6 +146,8 @@ export class WalkRecording {
   private _lastRaw: WalkPoseReading | null = null;
   /** The camera time of the last pose, tracked or not. */
   private _lastT = 0;
+  /** When the probe heard the compass first and last. */
+  private _probeCompass: { first: number; last: number } | null = null;
   private _lastAligned: PoseSample | null = null;
   private _lastKept: PathPoint | null = null;
   /** The last few kept points, for the direction the person walks. */
@@ -187,8 +195,16 @@ export class WalkRecording {
   get readyToResume(): boolean {
     return (
       this.canResume &&
-      (this._baseline === null || this._probe?.state().offset !== undefined)
+      (this._baseline === null ||
+        (this._probe?.state().offset !== undefined &&
+          this._probeCompassMs() >= PROBE_COMPASS_MS))
     );
+  }
+
+  /** How long the probe has been hearing the compass, so its offset is a median. */
+  private _probeCompassMs(): number {
+    const span = this._probeCompass;
+    return span === null ? 0 : span.last - span.first;
   }
 
   /** Where the person stands and faces, while walking. */
@@ -241,6 +257,7 @@ export class WalkRecording {
   /** Feed the tracking probe of a manual resume from now on (target 7). */
   startProbe(): void {
     this._probe = createTrackingGuard();
+    this._probeCompass = null;
   }
 
   /**
@@ -328,7 +345,13 @@ export class WalkRecording {
 
   /** One compass reading. */
   compass(reading: WalkCompassReading): void {
-    this._probe?.pushCompass(reading);
+    if (this._probe !== null) {
+      this._probe.pushCompass(reading);
+      this._probeCompass = {
+        first: this._probeCompass?.first ?? reading.t,
+        last: reading.t,
+      };
+    }
     if (this._guard !== null && this._phase !== 'stopped') {
       this._handle(this._guard.pushCompass(reading));
     }
