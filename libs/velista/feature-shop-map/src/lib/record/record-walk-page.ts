@@ -569,7 +569,7 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
       await delay(200);
       if (cancelled()) {
         // Closed, or the walk was read again, while waiting: resume nothing.
-        this.notice.set(null);
+        // The notice is left alone: Close clears it, and a reload sets its own.
         return;
       }
     }
