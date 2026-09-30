@@ -20,12 +20,15 @@ import {
   BasketStore,
   BasketViewStore,
   fakeGroupMembers,
+  fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
   provideFakeGroupMembers,
+  provideFakeShopDetailStore,
   provideFakeShopSectionsStore,
   SessionStore,
   type FakeGroupMembers,
+  type FakeShopDetailStore,
   type FakeShopSectionsStore,
 } from '@portfolio/velista/data-access';
 import type {
@@ -229,6 +232,7 @@ interface Options {
   readonly readAtShop?: BasketShop;
   /** The shops' aisles already read, or none (velista `0120`). */
   readonly shopSections?: FakeShopSectionsStore;
+  readonly shopDetails?: FakeShopDetailStore;
 }
 
 function guest(
@@ -693,6 +697,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
       ),
+      provideFakeShopDetailStore(options.shopDetails ?? fakeShopDetailStore()),
     ],
   }).compileComponents();
 
@@ -3575,5 +3580,140 @@ describe('BasketPage: the aisles of the shop you are in', () => {
     fixture.detectChanges();
 
     expect(control.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('BasketPage: the map of the shop you are in', () => {
+  const EL_JAMON: BasketShop = {
+    id: 'loc-jamon',
+    supermarketId: 'sm-jamon',
+    chain: { en: 'El Jamón', es: 'El Jamón' },
+    label: null,
+    address: 'Avenida de Cádiz 12',
+    city: 'Córdoba',
+    postalCode: '14013',
+    inProfile: true,
+  };
+
+  const MILK: BasketProduct = {
+    id: 'i-milk',
+    name: { en: 'Milk', es: 'Leche' },
+    brand: null,
+    imageUrl: null,
+    size: null,
+    unit: null,
+    offer: null,
+    offers: [],
+    atShop: null,
+    productGroupId: null,
+    categories: [],
+    sectionIds: ['sec-dairy'],
+  };
+
+  function detail(hasMap: boolean): ShopDetailRead {
+    return {
+      kind: 'shop',
+      shop: {
+        id: 'loc-jamon',
+        supermarketId: 'sm-jamon',
+        chain: { en: 'El Jamón', es: 'El Jamón' },
+        label: null,
+        address: 'Avenida de Cádiz 12',
+        city: 'Córdoba',
+        postalCode: '14013',
+        footprintM2: 1187,
+        hasMap,
+        sections: [],
+      },
+    };
+  }
+
+  async function atElJamon(options: {
+    readonly hasMap: boolean;
+    readonly me?: BasketParticipant;
+  }) {
+    const shopDetails = fakeShopDetailStore({
+      'loc-jamon': detail(options.hasMap),
+    });
+    const shopSections = fakeShopSectionsStore({
+      'loc-jamon': [
+        {
+          id: 'sec-dairy',
+          supermarketId: 'sm-jamon',
+          slug: 'dairy',
+          name: { en: 'Dairy', es: 'Lácteos' },
+          position: 0,
+          categoryIds: [],
+        },
+      ],
+    });
+    const rendered = await render({
+      lines: [line('Milk', { optionIds: ['i-milk'] })],
+      products: new Map([['i-milk', MILK]]),
+      readAtShop: EL_JAMON,
+      shopDetails,
+      shopSections,
+      ...(options.me === undefined ? {} : { me: options.me }),
+    });
+    return { ...rendered, shopDetails };
+  }
+
+  it('asks whether the shop the basket is read at has a map', async () => {
+    const { shopDetails } = await atElJamon({ hasMap: false });
+
+    expect(shopDetails.ensured()).toContain('loc-jamon');
+  });
+
+  it('offers the map in the head when that shop has one', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+    const button = query(fixture, '.bar button.map');
+
+    expect(button?.textContent).toContain('basket.map.open');
+    expect(button?.getAttribute('aria-label')).toBe('basket.map.openLabel');
+  });
+
+  it('offers nothing when the shop has no map', async () => {
+    const { fixture } = await atElJamon({ hasMap: false });
+
+    expect(query(fixture, '.bar button.map')).toBeNull();
+  });
+
+  it('offers a guest nothing, because the shop read needs an account', async () => {
+    const { fixture } = await atElJamon({
+      hasMap: true,
+      me: participant(guest('p-9', 1)),
+    });
+
+    expect(query(fixture, '.bar button.map')).toBeNull();
+  });
+
+  it('pushes the map, counting from this basket', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+    const go = TestBed.inject(Router).navigateByUrl as jest.Mock;
+    go.mockClear();
+
+    query(fixture, '.bar button.map')?.click();
+
+    expect(go).toHaveBeenCalledWith(
+      '/en/shops/loc-jamon/map?basket=basket-saturday'
+    );
+  });
+
+  it('names the section a row is found in, under the product', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+    TestBed.inject(BasketViewStore).setGrouping('none');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-basket-row .section')?.textContent).toContain(
+      'Dairy'
+    );
+  });
+
+  it('leaves it to the heading while the basket is grouped by aisle', async () => {
+    const { fixture } = await atElJamon({ hasMap: true });
+    TestBed.inject(BasketViewStore).setGrouping('category');
+    fixture.detectChanges();
+
+    expect(query(fixture, 'lib-basket-row .section')).toBeNull();
   });
 });

@@ -195,6 +195,12 @@ export class ShopPicker {
   /** A shop's radio was chosen: its location id. */
   readonly picked = output<string>();
 
+  /**
+   * A shop row's round button was pressed: its location id, for the shop's own
+   * page (velista `0121`). Every host opens `shops/:locationId`.
+   */
+  readonly about = output<string>();
+
   /** The "any" row was chosen. */
   readonly anyChosen = output<void>();
 

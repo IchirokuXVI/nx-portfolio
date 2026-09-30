@@ -65,6 +65,19 @@
               />
             </label>
 
+            <!--
+              The shop's own page (velista 0121): the label's sibling, so pressing it
+              never picks the shop, and drawn between the words and the radio.
+            -->
+            <button
+              (click)="about.emit(shop.id)"
+              [attr.aria-label]="'shops.row.about' | rokuT: { shop: text.title }"
+              class="pick-about"
+              type="button"
+            >
+              <lib-info-icon class="pick-about-glyph" />
+            </button>
+
             @if (shop.sections; as sections) {
               @if (sections.length > 0) {
                 <lib-section-chips

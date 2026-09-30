@@ -46,6 +46,7 @@ import {
   type ShopPickerState,
   type ShopRow,
 } from '@portfolio/velista/ui';
+import { shopPageOpener } from '@portfolio/velista/platform';
 
 /** How long typing waits before it asks, as the other two pickers wait. */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -84,6 +85,9 @@ const SEARCH_DEBOUNCE_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BoughtShopPane {
+  /** A shop row's round button: that shop's own page (velista `0121`). */
+  protected readonly openShop = shopPageOpener();
+
   private readonly _shops = inject(ShopStore);
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _locale = inject(RokuLocaleStore).locale;

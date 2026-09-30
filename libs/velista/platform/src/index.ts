@@ -25,6 +25,7 @@ export * from './lib/share-url';
 export * from './lib/sheet-fall';
 export * from './lib/sheet-navigation';
 export * from './lib/sheet-path';
+export * from './lib/shop-paths';
 export * from './lib/silence-detector';
 export * from './lib/startup-gate';
 export * from './lib/storage-keys';

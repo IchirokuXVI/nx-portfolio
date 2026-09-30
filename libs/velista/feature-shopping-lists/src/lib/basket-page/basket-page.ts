@@ -25,6 +25,8 @@ import {
   BasketViewStore,
   GroupMembers,
   SessionStore,
+  ShopDetailStore,
+  ShopSectionsStore,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -32,8 +34,10 @@ import {
   type BasketProduct,
   type BasketProgressSentence,
   type BasketRow as BasketRowModel,
+  basketRowPick,
   basketRowProduct,
   basketShelfMark,
+  catalogName,
   type BasketViewRow,
   type BasketViewSection,
   type CatalogSuggestion,
@@ -54,6 +58,7 @@ import {
   NavChrome,
   searchOpenOf,
   sheetSegments,
+  shopMapPath,
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
@@ -67,6 +72,7 @@ import {
   InfoIcon,
   LineComposer,
   type LineComposerSubmit,
+  MapIcon,
   ListPicker,
   type ListPickerRow,
   ListTools,
@@ -172,6 +178,7 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
     LineComposer,
     ListPicker,
     ListTools,
+    MapIcon,
     OfflineIcon,
     PersonIcon,
     RokuTranslatorPipe,
@@ -252,6 +259,75 @@ export class BasketPage {
   private readonly _live = this._route.snapshot.data['basket'] === 'live';
 
   private readonly _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+
+  /** The shop reads behind the Map button (velista `0121`, target 5). */
+  private readonly _shopDetails = inject(ShopDetailStore);
+  private readonly _shopSections = inject(ShopSectionsStore);
+
+  /**
+   * The shop whose map the head offers, or null (velista `0121`, target 5): the
+   * basket is read at one shop and that shop has a map.
+   *
+   * Only for a reader with an account, because the shop read takes one. A guest on
+   * a shared basket keeps the basket as it was.
+   */
+  protected readonly mapShop = computed<{
+    readonly id: string;
+    readonly name: string;
+  } | null>(() => {
+    const shop = this._view.shopAt();
+    if (shop === null || !this.canOpenHistory()) {
+      return null;
+    }
+    const read = this._shopDetails.read(shop.id);
+    if (read.kind !== 'shop' || !read.shop.hasMap) {
+      return null;
+    }
+    const locale = this._locale();
+    const label = shop.label === null ? null : catalogName(shop.label, locale);
+    return {
+      id: shop.id,
+      name: label ?? catalogName(shop.chain, locale),
+    };
+  });
+
+  /**
+   * The name of the section a row is found in, under its product (velista
+   * `0121`, target 5), or null. Drawn while the Map button is, so the rows name
+   * what the map's sections are called, and not while the basket is grouped by
+   * aisle, whose headings already say it.
+   */
+  protected rowSection(row: BasketRowModel): string | null {
+    const shop = this.mapShop();
+    if (
+      shop === null ||
+      (this._view.grouping() === 'category' && this._view.byAisle())
+    ) {
+      return null;
+    }
+    const sections = this._shopSections.sectionsOf(shop.id) ?? [];
+    const ids = basketRowPick(row, this.products())?.sectionIds ?? [];
+    const section = sections.find((one) => ids.includes(one.id));
+    return section === undefined
+      ? null
+      : catalogName(section.name, this._locale());
+  }
+
+  /** The map of the shop the basket is read at, counting from this basket. */
+  protected openMap(): void {
+    const shop = this.mapShop();
+    if (shop === null) {
+      return;
+    }
+    void this._router.navigateByUrl(
+      shopMapPath(
+        this._locale(),
+        this._basePath,
+        shop.id,
+        this._live ? 'live' : this._id
+      )
+    );
+  }
 
   protected readonly state = this._store.state;
   protected readonly rows = this._store.rows;
@@ -835,6 +911,15 @@ export class BasketPage {
   );
 
   constructor() {
+    // Whether the shop the basket is read at has a map, read once per shop per
+    // session, so the Map button can appear (velista `0121`, target 5).
+    effect(() => {
+      const shop = this._view.shopAt();
+      if (shop !== null && this.canOpenHistory()) {
+        untracked(() => void this._shopDetails.ensure(shop.id));
+      }
+    });
+
     /**
      * The basket, and then what this device remembers about how to draw it
      * (`0076`, section 3).

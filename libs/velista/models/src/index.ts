@@ -38,3 +38,4 @@ export * from './lib/shopping-profile';
 export * from './lib/trip-date';
 export * from './lib/trips';
 export * from './lib/zone-view';
+export * from './lib/shop-map';

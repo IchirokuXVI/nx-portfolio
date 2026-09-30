@@ -3,6 +3,8 @@ import {
   NAV_CHROME,
   NO_NAV_CHROME,
   SHEET_SEGMENT,
+  sheetFallGuard,
+  SHOP_PATHS,
   WORKS_WITHOUT_BACKEND,
 } from '@portfolio/velista/platform';
 import { readdirSync, readFileSync, statSync } from 'fs';
@@ -1071,7 +1073,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0116` took `sheet/add/list` off both baskets: the list is asked for by a
     // popover at the moment of adding, which has no URL.
-    expect(sheets).toHaveLength(43);
+    //
+    // `0121` added one: a section of a shop's map, over the map.
+    expect(sheets).toHaveLength(44);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1387,5 +1391,42 @@ describe('the walk lab', () => {
     walk(join(root, 'apps/velista/src'));
 
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * A shop's page and its map (velista `0121`). Both public, the map before the
+   * page it is a prefix of, and the section sheet addressed under the marker.
+   */
+  describe('the shop pages', () => {
+    const shopPath = `${SHOP_PATHS.shop}/:locationId`;
+    const mapPath = `${shopPath}/${SHOP_PATHS.map}`;
+    const shop = pages.find((route) => route.path === shopPath);
+    const map = pages.find((route) => route.path === mapPath);
+
+    it('declares both, the map first, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      expect(shop).toBeDefined();
+      expect(map).toBeDefined();
+      expect(paths.indexOf(mapPath)).toBeLessThan(paths.indexOf(shopPath));
+      expect(paths.indexOf(shopPath)).toBeLessThan(paths.indexOf(''));
+    });
+
+    it('guards neither, because a guest opens the map from a shared basket', () => {
+      expect(shop?.canActivate).toBeUndefined();
+      expect(map?.canActivate).toBeUndefined();
+      expect(map?.canMatch).toBeUndefined();
+    });
+
+    it('offers the section sheet over the map, and keeps all three lazy', () => {
+      const [section] = sheetsOf(mapPath);
+
+      expect(section?.path).toBe(`${SHEET_SEGMENT}/sections/:sectionId`);
+      expect(section?.canDeactivate).toEqual([sheetFallGuard]);
+      expect(section?.loadComponent).toBeDefined();
+      expect(map?.loadComponent).toBeDefined();
+      expect(shop?.loadComponent).toBeDefined();
+      expect(shop?.children).toBeUndefined();
+    });
   });
 });

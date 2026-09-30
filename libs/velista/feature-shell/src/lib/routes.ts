@@ -1069,6 +1069,51 @@ export const AppShellRoutes: Route[] = [
           },
           {
             /**
+             * The map every shopper sees (velista `0121`, target 3), with the
+             * section sheet over it as a child (rule E1).
+             *
+             * **No guard.** The map read takes no account, and a guest on a shared
+             * basket opens the map from that basket like its owner does.
+             *
+             * Declared **before** `shops/:locationId` by the house rule that the
+             * more specific path comes first. The path is a literal rather than
+             * `SHOP_PATHS`, for `shopping-lists/:basketId`'s reason, and
+             * `routes.spec.ts` asserts the two agree. Velista `0122` and `0123` add
+             * their pages beside it in `feature-shop-map`.
+             */
+            path: 'shops/:locationId/map',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopMapPage
+              ),
+            children: [
+              sheet({
+                path: 'sections/:sectionId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.SectionSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * A shop's own page (velista `0121`, target 2), from the round button
+             * on every row of the shop picker, wherever the picker is drawn.
+             *
+             * No guard, for the picker's reason: the picker is drawn for a guest on
+             * a shared basket too, and a sign in wall behind a button in it would
+             * be a way out of the basket. The shop read takes an account, so a
+             * reader without one is told the shop would not load.
+             */
+            path: 'shops/:locationId',
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopPage
+              ),
+          },
+          {
+            /**
              * The third tab (velista `0097`, section 7).
              *
              * **Declared before `shopping-lists/:basketId`**, so the word is not

@@ -1173,7 +1173,8 @@
     },
     "row": {
       "excluded": "Apagada",
-      "chainExcluded": "Marca apagada"
+      "chainExcluded": "Marca apagada",
+      "about": "Sobre {{shop}}"
     },
     "empty": {
       "noCodes": {
@@ -1638,6 +1639,10 @@
       "failed": "El cambio no se ha guardado. Inténtalo de nuevo.",
       "cancel": "Cancelar",
       "cheaper": "otro más barato"
+    },
+    "map": {
+      "open": "Mapa",
+      "openLabel": "Mapa de {{shop}}"
     }
   },
   "getList": {
@@ -1982,6 +1987,49 @@
       "stepSetting": "Longitud del paso al grabar",
       "app": "Grabado con",
       "events": "Eventos"
+    }
+  },
+  "shopPage": {
+    "back": "Atrás",
+    "loading": "Cargando la tienda",
+    "failed": "Esta tienda no se ha podido cargar",
+    "missing": "No encontramos esta tienda",
+    "retry": "Reintentar",
+    "address": "Dirección",
+    "size": "Unos {{size}} m²",
+    "sizeSource": "Tamaño del edificio según OpenStreetMap",
+    "seeMap": "Ver el mapa",
+    "sections": "Secciones",
+    "sectionsHint": "en el orden en que se recorren"
+  },
+  "shopMap": {
+    "title": "Dónde está cada cosa",
+    "back": "Atrás",
+    "loading": "Cargando el mapa",
+    "failed": "El mapa no se ha podido cargar",
+    "none": "Esta tienda aún no tiene mapa",
+    "retry": "Reintentar",
+    "saved": "Guardado en este teléfono",
+    "label": "Mapa de la tienda",
+    "show": "Mostrar",
+    "mine": "Mi lista · {{count}}",
+    "all": "Todas las secciones",
+    "legendLeft": "Por coger",
+    "legendDone": "Todo cogido",
+    "legendWalkway": "Pasillo",
+    "hint": "Toca una sección para ver lo que necesitas allí.",
+    "hintAll": "Toca una sección para ver su nombre y sus notas.",
+    "section": {
+      "close": "Cerrar",
+      "position": "Parada {{position}} de {{total}}",
+      "left_one": "Te queda {{count}} cosa por coger",
+      "left_other": "Te quedan {{count}} cosas por coger",
+      "allGot": "Ya lo tienes todo de aquí",
+      "nothing": "Nada de tu lista está aquí",
+      "got": "Cogido",
+      "toGet": "Por coger",
+      "note": "Nota en el mapa",
+      "unknown": "Esta sección ya no está en el mapa"
     }
   }
 }

@@ -74,6 +74,8 @@ import {
   type FieldSaveState,
   type ProfileField,
 } from '../profiles/shopping-profile-store';
+import { ShopDetailStore } from '../shops/shop-detail-store';
+import type { ShopDetailRead } from '../shops/shop-detail-service';
 import { ShopSectionsStore } from '../shops/shop-sections-store';
 import {
   ZoneStore,
@@ -2543,6 +2545,43 @@ export function fakeShopSectionsStore(
 }
 
 export type FakeShopSectionsStore = ReturnType<typeof fakeShopSectionsStore>;
+
+/**
+ * A `ShopDetailStore` that holds the shops you gave it (velista `0121`).
+ *
+ * A shop it was not given reads as loading, which is every shop before its read
+ * lands: the basket draws no Map button. {@link land} is a read arriving later.
+ */
+export function fakeShopDetailStore(
+  held: Readonly<Record<string, ShopDetailRead>> = {}
+) {
+  const reads = signal<ReadonlyMap<string, ShopDetailRead>>(
+    new Map(Object.entries(held))
+  );
+  const ensured: string[] = [];
+
+  return {
+    read: (locationId: string): ShopDetailRead | { readonly kind: 'loading' } =>
+      reads().get(locationId) ?? { kind: 'loading' },
+    ensure: async (locationId: string) => {
+      ensured.push(locationId);
+    },
+    /** A shop's read arriving, as the real store's would. */
+    land: (locationId: string, read: ShopDetailRead) => {
+      reads.update((all) => new Map(all).set(locationId, read));
+    },
+    /** Every shop a screen asked about, in order. */
+    ensured: () => [...ensured],
+  };
+}
+
+export type FakeShopDetailStore = ReturnType<typeof fakeShopDetailStore>;
+
+export function provideFakeShopDetailStore(
+  store: FakeShopDetailStore = fakeShopDetailStore()
+): Provider {
+  return { provide: ShopDetailStore, useValue: store };
+}
 
 export function provideFakeShopSectionsStore(
   store: FakeShopSectionsStore = fakeShopSectionsStore()
