@@ -44,6 +44,16 @@ export interface DiscoveredPlace {
   name: string | null;
   latitude: number;
   longitude: number;
+  /**
+   * The area of the shop's mapped outline in whole square metres (backend plan
+   * 0176), for a place mapped as a way or a multipolygon relation.
+   *
+   * **Null for a node**, and for an outline that does not close. A node has a
+   * position and no area, and a shop inside a larger building (a node within a
+   * mall) is exactly that case: nothing here guesses a size for it. Only the
+   * number is kept, never the outline.
+   */
+  footprintM2: number | null;
   /** `addr:street` joined with `addr:housenumber`. 35% of elements carry it. */
   street: string | null;
   city: string | null;

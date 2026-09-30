@@ -1,3 +1,5 @@
+> **PR:** [#554](https://github.com/IchirokuXVI/nx-portfolio/pull/554)
+
 # 0001: an editor and a viewer without a framework
 
 > Rewritten on 2026-09-29 for the design of `shop-map/plans/0002`: shapes in metres, a walk

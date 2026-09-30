@@ -1,3 +1,5 @@
+> **PR:** [#551](https://github.com/IchirokuXVI/nx-portfolio/pull/551)
+
 # 0038 An account's roles are set in the back office
 
 > Rewritten on 2026-09-29. The first version was a queue where operators accepted maps that

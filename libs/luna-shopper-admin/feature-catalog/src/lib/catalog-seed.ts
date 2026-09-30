@@ -125,6 +125,8 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.7794,
     externalRef: 'node/1156230891',
     externalProvider: 'osm',
+    footprintM2: null,
+    sections: [],
   },
   {
     id: 'loc_cordoba_oeste',
@@ -143,6 +145,8 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.8012,
     externalRef: 'way/48821004',
     externalProvider: 'osm',
+    footprintM2: 2400,
+    sections: [],
   },
   {
     id: 'loc_sierra',
@@ -162,6 +166,8 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.8871,
     externalRef: 'node/9920011234',
     externalProvider: 'osm',
+    footprintM2: null,
+    sections: [],
   },
   {
     id: 'loc_consum_centro',
@@ -178,6 +184,8 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     longitude: -4.7823,
     externalRef: null,
     externalProvider: null,
+    footprintM2: null,
+    sections: [],
   },
 ];
 

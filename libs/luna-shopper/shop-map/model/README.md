@@ -120,9 +120,12 @@ A walk is a log of entries, and the log only grows. `foldWalk` applies them in `
   walk continues from there. A rewind to a point after an earlier rewind answers the map
   that rewind made.
 - **`discarded`** drops the path, marks and areas of the unconfirmed segment from its
-  `logFrom` on. The segment is the entry just before it, and when that is a `continued`
-  save, every save back to the `resumed` entry of the automatic resume. `confirmed` keeps
-  them.
+  `logFrom` on. The segment is the entry just before it. When that entry is a `continued`
+  save or a `stopped` entry (Stop, leaving the page or a guard stop while the question
+  was open), the segment reaches back over every such entry to the `resumed` entry of the
+  automatic resume. The drop holds in every fold of the entries after the discard, at any
+  log time. So the slider and a rewind never show the rejected segment again, and only a
+  log without the discard still shows it. `confirmed` keeps the segment.
 - **A starting document** stands for every entry before the first one given, so a server
   can fold from a snapshot. A rewind or a discard that reaches before that first entry
   throws, and the caller folds from an earlier snapshot.
@@ -158,4 +161,38 @@ The log holds the camera path at one point per second and the 57 marks of the wa
 also holds the tracking stop at 920.5 s, the turned frame after it as an automatic resume
 that is then discarded, and a manual resume from 1013.4 s. Two rewinds are authored: the
 first goes back before the last two marks, the tail is replayed as a new session, and the
-second goes to 15 s into that replay. One edit, also authored, draws the areas.
+second goes to 15 s into that replay. One edit, also authored, draws the areas: a gondola
+up to 1 m deep in front of each section's first mark, lining the aisle the person walked
+until walked floor crosses it, up to 9 m long (a counter up to 4 m).
+
+## The live map: suggestions and section runs while walking
+
+`libs/luna-shopper/shop-map/plans/0003` adds `createLiveMap({ document, settings })`. The
+recording screen feeds it one tracked point or one mark at a time. `snapshot()` answers the
+walked cells, the shelf suggestions, the section run in progress and the events for the walk
+log since the last snapshot. The rules decide on 0.5 m cells, and every area they make is a
+rectangle snapped to its cells. Nothing is painted while tracking is not `good`.
+
+| Rule            | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Walked          | every cell within 0.5 m of a good point, and of the step from the good point before when under 2 m                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Suggestion      | a strip nobody walked, 1 to 4 cells across and at least 4 long, walked on both long sides, under no area                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Tapping         | `acceptSuggestion(id)` puts a `shelf` with origin `suggested`. It takes the section of the run in progress when the shelf is within 1.5 m on the run's side, else of the latest section mark within 1.5 m whose heading faced it. Nothing else makes a shelf by itself                                                                                                                                                                                                                                                                         |
+| Walking across  | a good point inside a `suggested` shelf cuts the cells within 0.5 m of it into a `path` area. The cut runs right through the shelf from the face the person came in through when the shelf is at most 2 m deep that way, and across its longer side otherwise, so clipping the end of a long gondola cuts one column                                                                                                                                                                                                                           |
+| Section start   | a section mark names the shelf it faces within 1.5 m when that shelf is a tapped suggestion or an earlier run with no section or the same one (keeping its spelling), or fills the open cells there. A tapped strip named from its other side (by a mark of that name that stood beside the strip as it was before any cut, within 1.5 m of it across its length, facing it) is split along the run's axis, and the half facing the person takes the section. Any other named shelf, or one drawn by hand, is never renamed, and no run starts |
+| Section extends | each point moves the run's end beside the person, and walking back shortens it                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Section ends    | the walking direction over the last metre turned more than 45 degrees for 2 m, 2 m away from the shelf, another mark, or `sectionLeft()`                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Counter mark    | a 2 by 1 m `counter`, its long side facing the person, 0.5 m away                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+
+Suggestions are computed and never stored, so a suggestion's id is its cells
+(`suggestion:i0,j0,i1,j1`). The ids of the areas the live map makes come from the caller's
+`idPrefix` and `idSeed`. The live map emits `mark-put`, `area-put`, `area-removed` and
+`section-left`, never a path: the recording screen appends the points the tracking guard
+keeps. No rule changes a shelf drawn by hand. A `suggested` shelf is cut when walked
+across, and a section mark names a `suggested` or `section-run` shelf it faces. Crossing
+the shelf a run fills ends the run. A section mark saved at or behind the start of the
+run just ended, and facing it, cuts that whole run away and takes its cells.
+
+`src/lib/__fixtures__/el-jamon/expected-live.json` is what replaying the El Jamón log
+answers. `tools/shop-map/replay-el-jamon-live.ts` writes it and draws it to
+`tmp/el-jamon-live.html` for checking by eye. Never edit it by hand.

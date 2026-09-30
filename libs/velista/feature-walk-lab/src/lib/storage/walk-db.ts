@@ -1,6 +1,9 @@
 import { DOCUMENT } from '@angular/common';
 import { inject, Injectable, signal } from '@angular/core';
-import type { WalkFile } from '@portfolio/luna-shopper/shop-map/recorder';
+import {
+  withoutDeletedMarks,
+  type WalkFile,
+} from '@portfolio/luna-shopper/shop-map/recorder';
 import {
   assembleWalk,
   type WalkChunk,
@@ -72,8 +75,19 @@ export class WalkDb {
    *
    * A partial walk is put back together from its chunks, saved whole, and its chunks
    * dropped, so recovering a walk happens once.
+   *
+   * A stored walk keeps a mark taken back during the recording beside the
+   * `mark-deleted` event that took it back, as the file does; the answer leaves that
+   * mark out, the way `readWalkFile` reads the file.
    */
   async get(id: string): Promise<WalkFile | null> {
+    const walk = await this._stored(id);
+    return walk
+      ? { ...walk, marks: withoutDeletedMarks(walk.marks, walk.events) }
+      : null;
+  }
+
+  private async _stored(id: string): Promise<WalkFile | null> {
     const db = await this._open();
 
     if (!db) {

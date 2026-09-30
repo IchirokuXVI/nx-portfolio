@@ -70,4 +70,65 @@ describe('WalkBuilder', () => {
     const assembled = assembleWalk(header, [second, third, first]);
     expect(assembled).toEqual(builder.toWalk());
   });
+
+  describe('deleteLastMark', () => {
+    it('removes a mark not yet drained, leaving no trace', () => {
+      const builder = new WalkBuilder(header);
+      builder.mark({ t: 1, kind: 'entrance' });
+      builder.drainChunk();
+      builder.mark({ t: 2, kind: 'checkpoint', label: 'wrong' });
+
+      expect(builder.deleteLastMark(3)).toEqual({
+        t: 2,
+        kind: 'checkpoint',
+        label: 'wrong',
+      });
+      expect(builder.liveMarks).toEqual([{ t: 1, kind: 'entrance' }]);
+      expect(builder.events).toEqual([]);
+      expect(builder.drainChunk().marks).toEqual([]);
+      expect(builder.toWalk().marks).toEqual([{ t: 1, kind: 'entrance' }]);
+    });
+
+    it('cancels a mark already drained with a mark-deleted event', () => {
+      const builder = new WalkBuilder(header);
+      builder.mark({ t: 1, kind: 'entrance' });
+      builder.mark({ t: 2.5, kind: 'checkpoint', label: 'wrong' });
+      const first = builder.drainChunk();
+
+      expect(builder.deleteLastMark(4)?.t).toBe(2.5);
+      expect(builder.liveMarks).toEqual([{ t: 1, kind: 'entrance' }]);
+      const second = builder.drainChunk();
+      expect(second.marks).toEqual([]);
+      expect(second.events).toEqual([
+        { t: 4, kind: 'mark-deleted', detail: '2.5' },
+      ]);
+
+      // The next deletion takes the mark before it, also drained.
+      expect(builder.deleteLastMark(5)?.t).toBe(1);
+      expect(builder.liveMarks).toEqual([]);
+      expect(builder.deleteLastMark(6)).toBeNull();
+
+      // The file keeps both marks and both events, and so do the chunks.
+      const walk = builder.toWalk();
+      expect(walk.marks).toHaveLength(2);
+      expect(walk.events.map((e) => e.detail)).toEqual(['2.5', '1']);
+      expect(
+        assembleWalk(header, [first, second, builder.drainChunk()])
+      ).toEqual(walk);
+    });
+
+    it('takes back drained and undrained marks in order, newest first', () => {
+      const builder = new WalkBuilder(header);
+      builder.mark({ t: 1, kind: 'entrance' });
+      builder.drainChunk();
+      builder.mark({ t: 2, kind: 'note', label: 'x' });
+
+      expect(builder.deleteLastMark(3)?.t).toBe(2);
+      expect(builder.deleteLastMark(4)?.t).toBe(1);
+      expect(builder.toWalk().marks).toEqual([{ t: 1, kind: 'entrance' }]);
+      expect(builder.toWalk().events).toEqual([
+        { t: 4, kind: 'mark-deleted', detail: '1' },
+      ]);
+    });
+  });
 });

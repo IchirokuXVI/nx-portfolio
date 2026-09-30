@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <title>Shop map editor</title>
+    <style>
+      :root {
+        --bg: #f7f8fc;
+        --raised: #ffffff;
+        --text: #111420;
+        --muted: #616a8a;
+        --line: #dde1ed;
+        --action: #ffb454;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='day']) {
+          --bg: #0a0c14;
+          --raised: #161a28;
+          --text: #f7f8fc;
+          --muted: #98a0bb;
+          --line: rgba(255, 255, 255, 0.08);
+        }
+      }
+      :root[data-theme='night'] {
+        --bg: #0a0c14;
+        --raised: #161a28;
+        --text: #f7f8fc;
+        --muted: #98a0bb;
+        --line: rgba(255, 255, 255, 0.08);
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+      }
+      #frame {
+        display: flex;
+        flex-direction: column;
+        height: 100svh;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 12px;
+        background: var(--raised);
+        border-bottom: 1px solid var(--line);
+      }
+      button,
+      label {
+        height: 36px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      button[aria-pressed='true'] {
+        background: var(--action);
+        border-color: var(--action);
+        color: #0a0c14;
+        font-weight: 600;
+      }
+      #map {
+        flex: 1;
+        min-height: 0;
+      }
+      #status {
+        margin: 0;
+        padding: 8px 12px;
+        min-height: 20px;
+        font-size: 13px;
+        color: var(--muted);
+        background: var(--raised);
+        border-top: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <div class="bar">
+        <button type="button" data-look="mapper">Mapper</button>
+        <button type="button" data-look="shopper">Shopper</button>
+        <button type="button" data-theme-to="day">Day</button>
+        <button type="button" data-theme-to="night">Night</button>
+        <button id="replay" type="button">Replay</button>
+        <label><input id="snap" type="checkbox" /> Snap</label>
+      </div>
+      <div id="map"></div>
+      <p id="status"></p>
+    </div>
+    <script src="demo.js"></script>
+  </body>
+</html>

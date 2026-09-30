@@ -157,6 +157,77 @@ describe('RecordPage', () => {
     });
   });
 
+  it('deletes the last mark, saved or not, and the stored walk agrees', async () => {
+    const page = TestBed.createComponent(RecordPage).componentInstance;
+    const db = TestBed.inject(WalkDb);
+    jest.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    page.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    await walkFor(1);
+
+    page.markNow('entrance');
+    jest.advanceTimersByTime(100);
+    page.openPanel('checkpoint');
+    page.draft.set('wrong');
+    page.saveLabel();
+    // Both marks are drained into storage.
+    await jest.advanceTimersByTimeAsync(SAVE_EVERY_MS);
+
+    jest.advanceTimersByTime(100);
+    page.markNow('checkout');
+    expect(page.lastMark()?.kind).toBe('checkout');
+
+    // Not yet saved: simply removed.
+    page.deleteLastMark();
+    expect(page.lastMark()?.label).toBe('wrong');
+    // Already saved: cancelled with an event.
+    page.deleteLastMark();
+    expect(page.lastMark()?.kind).toBe('entrance');
+    expect(page.marks().map((m) => m.kind)).toEqual(['entrance']);
+    expect(page.usedLabels()).toEqual([]);
+
+    await page.finish();
+    await page.finish();
+
+    const [summary] = await db.list();
+    const walk = await db.get(summary.id);
+    expect(walk?.marks.map((m) => m.kind)).toEqual(['entrance']);
+    expect(walk?.events.filter((e) => e.kind === 'mark-deleted')).toHaveLength(
+      1
+    );
+  });
+
+  it('pins the open panel to the bottom of the visual viewport', () => {
+    const viewport = Object.assign(new EventTarget(), {
+      height: window.innerHeight,
+      offsetTop: 0,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: viewport,
+    });
+
+    const page = TestBed.createComponent(RecordPage).componentInstance;
+    page.start();
+    page.openPanel('checkpoint');
+    expect(page.panelInset()).toBe(0);
+
+    // The keyboard opens and takes 300 pixels.
+    viewport.height = window.innerHeight - 300;
+    viewport.dispatchEvent(new Event('resize'));
+    expect(page.panelInset()).toBe(300);
+    expect(page.panelMaxHeight()).toBe(window.innerHeight - 300);
+
+    page.closePanel();
+    expect(page.panelInset()).toBe(0);
+    viewport.dispatchEvent(new Event('resize'));
+    expect(page.panelInset()).toBe(0);
+
+    delete (window as { visualViewport?: unknown }).visualViewport;
+  });
+
   it('asks for a second tap before it finishes', async () => {
     const page = TestBed.createComponent(RecordPage).componentInstance;
     page.start();

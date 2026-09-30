@@ -7,6 +7,7 @@ import {
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
 import { USER_SEED, type UserRow } from './people-seed';
 import { UserDetailPage } from './user-detail-page';
+import { rolesCell, USER_ROLE_OPTIONS } from './user-roles';
 
 /** A person using velista, as the back office reads one. */
 export type User = UserRow;
@@ -112,14 +113,32 @@ export const USERS = defineResource<User>({
       help: 'people.field.createdAtHelp',
       editable: false,
     },
+    // Shown here and set only on the account's page, one switch at a time and
+    // each confirmed (admin plan 0038). Never a control on the form or a row.
+    {
+      kind: 'text',
+      name: 'roles',
+      label: 'people.users.roles.label',
+      help: 'people.users.rolesHelp',
+      editable: false,
+      read: (row) => rolesCell(row.roles),
+    },
   ],
 
   list: {
-    columns: ['username', 'email', 'kind', 'emailVerifiedAt', 'createdAt'],
+    columns: [
+      'username',
+      'email',
+      'kind',
+      'roles',
+      'emailVerifiedAt',
+      'createdAt',
+    ],
     // The card already carries the handle as its title, so the two lines under
     // it are the ones that tell two accounts with the same handle apart: the
-    // address, and whether this is a real account or a temporary one.
-    compact: ['email', 'kind'],
+    // address, and whether this is a real account or a temporary one. The
+    // roles are the third, because they are what this account may do.
+    compact: ['email', 'kind', 'roles'],
   },
 
   filters: [
@@ -139,6 +158,12 @@ export const USERS = defineResource<User>({
       kind: 'boolean',
       param: 'verified',
       label: 'people.users.filter.verified',
+    },
+    {
+      kind: 'enum',
+      param: 'role',
+      label: 'people.users.filter.role',
+      options: USER_ROLE_OPTIONS,
     },
     {
       kind: 'date',
@@ -199,5 +224,13 @@ export const USERS = defineResource<User>({
       path: ADMIN_USERS_PATH,
       idField: 'userId',
       seed: USER_SEED,
+      // `role` is not a column: it asks for the accounts holding that role,
+      // which is what the gateway answers for it.
+      memory: {
+        matches: (row, param, value) =>
+          param === 'role'
+            ? (row.roles as readonly string[]).includes(value)
+            : undefined,
+      },
     }),
 });

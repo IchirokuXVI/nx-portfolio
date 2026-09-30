@@ -71,11 +71,44 @@ function sortedByTime<T extends number[] | number>(rows: T[]): T[] {
   return rows;
 }
 
+/** The event that takes back a mark already saved (velista plan 0127). */
+export const MARK_DELETED = 'mark-deleted';
+
+/**
+ * The marks left once every `mark-deleted` event is applied.
+ *
+ * A recording that saves as it goes cannot take a saved mark out again, so it writes
+ * `{ kind: 'mark-deleted', detail: <the mark's t> }` instead. Events are applied in
+ * the order they are listed, and each one removes the last mark still standing whose
+ * `t` is the detail read as a number. An event that matches no mark removes nothing.
+ * The order of the marks that are left is kept.
+ */
+export function withoutDeletedMarks(
+  marks: readonly WalkMark[],
+  events: WalkFile['events']
+): WalkMark[] {
+  const left = [...marks];
+  for (const event of events) {
+    if (event.kind !== MARK_DELETED || event.detail === undefined) continue;
+    const t = Number(event.detail);
+    if (!Number.isFinite(t)) continue;
+    for (let i = left.length - 1; i >= 0; i--) {
+      if (left[i].t === t) {
+        left.splice(i, 1);
+        break;
+      }
+    }
+  }
+  return left;
+}
+
 /**
  * Checks a parsed walk file and answers it. Refuses a `format` other than
  * `shop-walk` and a `version` other than 1; ignores fields it does not know.
  * `marks` and `events` default to empty lists. A stream whose rows are out of
- * `t` order is stably sorted by `t`, which is the only change a read makes.
+ * `t` order is stably sorted by `t`, and a mark taken back by a `mark-deleted`
+ * event is dropped (`withoutDeletedMarks`); those are the only changes a read
+ * makes. The events are kept as they are.
  */
 export function readWalkFile(value: unknown): WalkFile {
   if (!isObject(value)) invalid('A walk file is a JSON object');
@@ -169,7 +202,10 @@ export function readWalkFile(value: unknown): WalkFile {
   return {
     ...(value as unknown as WalkFile),
     streams,
-    marks: marks as WalkMark[],
+    marks: withoutDeletedMarks(
+      marks as WalkMark[],
+      events as WalkFile['events']
+    ),
     events: events as WalkFile['events'],
   };
 }

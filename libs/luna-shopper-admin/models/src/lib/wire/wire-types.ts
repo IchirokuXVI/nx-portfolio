@@ -3241,6 +3241,7 @@ export type CatalogSupermarketLocationView = {
   longitude: number | null;
   externalRef: string | null;
   externalProvider: string | null;
+  footprintM2: number | null;
   sections: CatalogLocationSectionNameView[];
   hasMap: boolean;
 };

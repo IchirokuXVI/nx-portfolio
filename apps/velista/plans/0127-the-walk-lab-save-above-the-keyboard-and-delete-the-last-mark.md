@@ -1,3 +1,5 @@
+> **PR:** [#544](https://github.com/IchirokuXVI/nx-portfolio/pull/544)
+
 # 0127: the walk lab, Save above the keyboard, and deleting the last mark
 
 > Asked for on 2026-09-29 after the second El Jamón walk, and held until the plans were

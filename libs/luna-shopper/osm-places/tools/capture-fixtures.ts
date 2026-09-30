@@ -3,9 +3,11 @@
  *
  *   npx nx run luna-shopper/osm-places:capture-fixtures
  *
- * Run by hand, never by CI. Two requests total: one Nominatim geocode and one
- * Overpass query, at the pacing the client defaults to, which is inside both
- * services' usage policies (section 8.2). The data is ODbL; anything derived from
+ * Run by hand, never by CI. A handful of requests: the Nominatim geocode, the
+ * Overpass query a discovery run makes, and one more Overpass query for a single
+ * multipolygon relation (backend plan 0176), because no supermarket around 14013
+ * is mapped as one and the area of a relation is read from its members. All of
+ * it is inside both services' usage policies (section 8.2). The data is ODbL; anything derived from
  * it that reaches a user carries "© OpenStreetMap contributors".
  */
 import { writeFileSync } from 'node:fs';
@@ -22,6 +24,13 @@ const POSTAL_CODE = process.env['OSM_POSTAL_CODE'] ?? '14013';
 const COUNTRY = process.env['OSM_COUNTRY'] ?? 'es';
 /** Section 11's recommended default: 3 km returned 26 supermarkets around 14013. */
 const RADIUS_METRES = Number(process.env['OSM_RADIUS_METRES'] ?? 3000);
+/**
+ * A supermarket mapped as a multipolygon relation: the Dia at Leganés, drawn as
+ * a building. Any relation tagged `shop=supermarket` will do.
+ */
+const MULTIPOLYGON_RELATION = Number(
+  process.env['OSM_MULTIPOLYGON_RELATION'] ?? 3013098
+);
 
 async function main(): Promise<void> {
   const client = new OsmPlacesClient({
@@ -64,8 +73,20 @@ async function main(): Promise<void> {
   const overpassQuery =
     `[out:json][timeout:60];` +
     `nwr["shop"="supermarket"](around:${RADIUS_METRES},${centre.lat},${centre.lon});` +
-    `out center tags;`;
-  const raw = await fetch(
+    `out geom;`;
+  write('overpass-supermarkets.json', await overpass(overpassQuery));
+
+  // The same `out geom` a discovery run asks for, over one relation by id.
+  write(
+    'overpass-multipolygon.json',
+    await overpass(
+      `[out:json][timeout:60];rel(${MULTIPOLYGON_RELATION});out geom;`
+    )
+  );
+}
+
+async function overpass(query: string): Promise<unknown> {
+  return fetch(
     process.env['OVERPASS_URL'] ?? 'https://overpass-api.de/api/interpreter',
     {
       method: 'POST',
@@ -74,10 +95,9 @@ async function main(): Promise<void> {
         'content-type': 'application/x-www-form-urlencoded',
         'user-agent': USER_AGENT,
       },
-      body: new URLSearchParams({ data: overpassQuery }).toString(),
+      body: new URLSearchParams({ data: query }).toString(),
     }
   ).then((r) => r.json());
-  write('overpass-supermarkets.json', raw);
 }
 
 function write(file: string, payload: unknown): void {
