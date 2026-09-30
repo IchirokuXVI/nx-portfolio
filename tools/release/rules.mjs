@@ -76,6 +76,7 @@ export const SCOPES = [
   'luna-shopper-admin',
 
   // The native Android walk app of the shop map field test (recorder plan 0002).
+  // Recorder plan 0004 deleted the app. The scope stays so older titles still parse.
   'android',
 
   // Shared code.

@@ -304,7 +304,12 @@
       "save": "Save this order",
       "discard": "Discard changes",
       "useChain": "Use the chain's default",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
+      "mapConfirm": {
+        "heading": "Change a list that follows a map?",
+        "confirm": "Change it anyway"
+      }
     },
     "itemSections": {
       "heading": "Where it is, per chain",
@@ -1615,7 +1620,8 @@
         "email": "Email contains",
         "verified": "Address confirmed",
         "createdAfter": "Signed up on or after",
-        "createdBefore": "Signed up on or before"
+        "createdBefore": "Signed up on or before",
+        "role": "Holds the role"
       },
       "action": {
         "resendVerification": "Resend confirmation",
@@ -1631,13 +1637,44 @@
           "heading": "Delete this account?",
           "body": "{{name}}'s identity is removed and their shopping lists are deleted. Any zone they own is marked for deletion, and their memberships are retired with the name they used in each zone scrubbed. What they wrote on other people's lists stays. There is no undo.",
           "confirm": "Delete the account"
+        },
+        "grantRole": {
+          "heading": "Give this account a role?",
+          "body": "{{role}}: {{grants}} {{name}}’s account gets it at its next token refresh, within 15 minutes.",
+          "confirm": "Give the role"
+        },
+        "removeRole": {
+          "heading": "Take a role from this account?",
+          "body": "{{role}}: {{grants}} {{name}}’s account loses it at its next token refresh, within 15 minutes.",
+          "confirm": "Take the role away"
         }
       },
       "usernameHelp": "The handle this person is known by. Changing it reaches every zone they are in: the name on each of their memberships is rewritten to match, so this is not a private label.",
       "displayNameHelp": "Whatever the sign in provider supplied, which for a Google account is somebody’s real full name. It is kept off every listing for that reason, and clearing it is allowed.",
       "emailHelp": "Fixed here. Nothing in velista changes a registered address, so there is no service to call: the four paths that write it each establish an identity, and writing the column alone would leave the credential, any linked provider and every outstanding confirmation pointing at an address the account no longer claims. Use “Resend confirmation” for an unconfirmed one.",
       "emailVerifiedAtHelp": "Fixed here. Setting it by hand asserts that somebody proved control of an address, which is the one thing this column exists to record and the one thing an operator cannot observe.",
-      "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all."
+      "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all.",
+      "roles": {
+        "label": "Roles",
+        "admin": {
+          "name": "Admin",
+          "grants": "Can map shops."
+        },
+        "premium": {
+          "name": "Premium",
+          "grants": "Nothing yet."
+        },
+        "cell": {
+          "none": "No roles",
+          "admin": "Admin",
+          "premium": "Premium",
+          "adminPremium": "Admin, Premium"
+        },
+        "guest": "A guest account holds no roles. Once it registers, its roles can be set here.",
+        "guestRefused": "A guest account holds no roles, so the server refused. Set them once the account has registered.",
+        "saved": "Saved. The account sees the change at its next token refresh, within 15 minutes."
+      },
+      "rolesHelp": "Set on the account’s page, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
     },
     "zones": {
       "one": "zone",
