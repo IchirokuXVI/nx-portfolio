@@ -2102,7 +2102,9 @@
       "undoes": "El mapa como estaba antes de rebobinar a las {{time}}",
       "beforeProblem": "Vuelta a antes del problema de seguimiento",
       "confirmed": "Camino revisado",
-      "discarded": "Camino morado descartado"
+      "discarded": "Camino morado descartado",
+      "resume": "Reanudar el recorrido",
+      "noCamera": "Para seguir hace falta seguimiento con la cámara, y este navegador no lo tiene."
     },
     "settings": {
       "title": "Ajustes del recorrido",
@@ -2234,6 +2236,123 @@
       "waiting": "Esperando para guardar.",
       "ok": "Vale",
       "leave": "Salir sin guardar"
+    }
+  },
+  "shopWalkRecord": {
+    "label": "El mapa de este recorrido, mientras lo recorres",
+    "stop": "Parar",
+    "status": {
+      "good": "Seguimiento bien",
+      "starting": "Encendiendo la cámara",
+      "lost": "Seguimiento perdido",
+      "check": "Revisa el camino",
+      "stopped": "Parado"
+    },
+    "saved": {
+      "justNow": "Guardado ahora mismo",
+      "seconds_one": "Guardado hace {{count}} s",
+      "seconds_other": "Guardado hace {{count}} s",
+      "minutes_one": "Guardado hace {{count}} min",
+      "minutes_other": "Guardado hace {{count}} min",
+      "sending": "Guardando",
+      "unsent": "Aún sin guardar"
+    },
+    "scale": "1 cuadro = 50 cm",
+    "hint": "Toca el mapa para dibujar o elegir. Mantén pulsado un cuadro para más.",
+    "inSection": "En la sección",
+    "sectionLeft": "Salí de la sección",
+    "marks": {
+      "group": "Añadir una marca",
+      "section": "Sección",
+      "counter": "Mostrador",
+      "note": "Nota"
+    },
+    "start": {
+      "title": "Sujeta el móvil en vertical",
+      "body": "La cámara sigue dónde estás. Camina despacio y apunta el móvil a las estanterías.",
+      "button": "Empezar a caminar"
+    },
+    "unsupported": {
+      "title": "Este móvil no puede grabar un recorrido",
+      "body": "Grabar necesita seguimiento con la cámara. Chrome en un móvil Android lo tiene. Safari en un iPhone no.",
+      "back": "Volver al recorrido"
+    },
+    "mark": {
+      "title": "Nueva marca",
+      "close": "Cerrar",
+      "remind": "Apunta el móvil a lo que marcas",
+      "pointing": {
+        "left": "Ahora apuntas a la estantería de tu izquierda.",
+        "right": "Ahora apuntas a la estantería de tu derecha.",
+        "ahead": "Ahora apuntas hacia delante.",
+        "behind": "Ahora apuntas detrás de ti."
+      },
+      "kinds": "Tipo de marca",
+      "name": {
+        "section": "Nombre de la sección",
+        "counter": "Nombre del mostrador",
+        "note": "Nota"
+      },
+      "placeholder": "Escribe o elige uno abajo",
+      "recent": "Recientes en este recorrido",
+      "sections": "Secciones de esta tienda",
+      "save": "Guardar marca"
+    },
+    "suggestion": {
+      "label": "¿Estantería? Toca para rellenar",
+      "title": "¿Es una estantería?",
+      "close": "Cerrar",
+      "why": "Pasaste por los dos lados. Mide unos {{width}} m de ancho y {{length}} m de largo.",
+      "section": "Sección",
+      "none": "Aún sin sección",
+      "from": "De tu marca a {{distance}} m",
+      "change": "Cambiar",
+      "sectionName": "Nombre de la sección",
+      "notShelf": "No es una estantería",
+      "fill": "Rellenar como estantería"
+    },
+    "stopped": {
+      "title": "El recorrido se paró",
+      "lost": "La cámara perdió su sitio, así que ahora no se dibuja nada. Camina despacio y apunta el móvil a las estanterías. Oirás un sonido si vuelve a empezar sola.",
+      "trackingLost": "La cámara perdió su sitio, así que ahora no se dibuja nada. Ponte junto a algo que marcaste para seguir.",
+      "frameMoved": "La imagen que la cámara tiene de la tienda se movió, así que ahora no se dibuja nada. Ponte junto a algo que marcaste para seguir.",
+      "discarded": "El recorrido se guarda hasta el problema. Ponte junto a algo que marcaste para seguir.",
+      "paused": "El recorrido está en pausa. Ponte junto a algo que marcaste para seguir.",
+      "saved": "Todo hasta este momento está guardado.",
+      "resume": "Seguir desde un sitio que marqué",
+      "resumeHint": "Ponte junto a una marca y elígela en el mapa."
+    },
+    "check": {
+      "title": "¿Está bien el camino morado?",
+      "body": "El seguimiento volvió solo. La parte morada no se guarda hasta que digas que coincide con por dónde caminaste.",
+      "no": "No, parar aquí",
+      "yes": "Sí, guardarlo",
+      "hint": "No, parar aquí guarda el recorrido hasta el problema. Luego sigues desde un sitio que marcaste."
+    },
+    "where": {
+      "title": "¿Dónde estás?",
+      "close": "Cerrar",
+      "remind": "Ponte junto a algo que marcaste y tócalo en el mapa.",
+      "marks": "Tus marcas",
+      "kind": {
+        "section": "Marca de sección",
+        "counter": "Marca de mostrador",
+        "note": "Nota"
+      },
+      "point": "apunta el móvil hacia donde indica la flecha",
+      "pick": "Toca una marca en el mapa, o elige una arriba.",
+      "none": "Este recorrido no tiene marcas desde las que empezar. Empieza un recorrido nuevo.",
+      "start": "Empezar desde aquí"
+    },
+    "notice": {
+      "changed": "El recorrido cambió en otro móvil. Este es el recorrido como está ahora. Tus últimos minutos no se guardaron.",
+      "refused": "Esa parte del recorrido no se pudo guardar. Este es el recorrido como se guardó.",
+      "blocked": "Eso no cabe ahí. Se solaparía con otra zona.",
+      "cameraFailed": "La cámara no se encendió. Inténtalo otra vez.",
+      "cameraWaiting": "La cámara aún no está lista. Levanta el móvil e inténtalo otra vez."
+    },
+    "unsaved": {
+      "body": "La última parte de este recorrido solo está en este móvil. Seguimos intentando guardarla."
     }
   }
 }

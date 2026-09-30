@@ -2102,7 +2102,9 @@
       "undoes": "The map as it was before the rewind at {{time}}",
       "beforeProblem": "Back to before the tracking problem",
       "confirmed": "Path checked",
-      "discarded": "Purple path discarded"
+      "discarded": "Purple path discarded",
+      "resume": "Resume walking",
+      "noCamera": "Resuming needs camera tracking, which this browser does not have."
     },
     "settings": {
       "title": "Walk settings",
@@ -2234,6 +2236,123 @@
       "waiting": "Waiting to save.",
       "ok": "OK",
       "leave": "Leave without saving"
+    }
+  },
+  "shopWalkRecord": {
+    "label": "The map of this walk, as you walk it",
+    "stop": "Stop",
+    "status": {
+      "good": "Tracking good",
+      "starting": "Starting the camera",
+      "lost": "Tracking lost",
+      "check": "Check the path",
+      "stopped": "Stopped"
+    },
+    "saved": {
+      "justNow": "Saved just now",
+      "seconds_one": "Saved {{count}} s ago",
+      "seconds_other": "Saved {{count}} s ago",
+      "minutes_one": "Saved {{count}} min ago",
+      "minutes_other": "Saved {{count}} min ago",
+      "sending": "Saving",
+      "unsent": "Not saved yet"
+    },
+    "scale": "1 square = 50 cm",
+    "hint": "Tap the map to draw or select. Hold a square for more.",
+    "inSection": "In section",
+    "sectionLeft": "Section left",
+    "marks": {
+      "group": "Add a mark",
+      "section": "Section",
+      "counter": "Counter",
+      "note": "Note"
+    },
+    "start": {
+      "title": "Hold the phone upright",
+      "body": "The camera keeps track of where you are. Walk slowly and point the phone at the shelves.",
+      "button": "Start walking"
+    },
+    "unsupported": {
+      "title": "This phone cannot record a walk",
+      "body": "Recording needs camera tracking. Chrome on an Android phone has it. Safari on an iPhone does not.",
+      "back": "Back to the walk"
+    },
+    "mark": {
+      "title": "New mark",
+      "close": "Close",
+      "remind": "Point your phone at what you mark",
+      "pointing": {
+        "left": "Now pointing at the shelf on your left.",
+        "right": "Now pointing at the shelf on your right.",
+        "ahead": "Now pointing straight ahead.",
+        "behind": "Now pointing behind you."
+      },
+      "kinds": "Kind of mark",
+      "name": {
+        "section": "Section name",
+        "counter": "Counter name",
+        "note": "Note"
+      },
+      "placeholder": "Type or pick one below",
+      "recent": "Recent in this walk",
+      "sections": "Sections in this shop",
+      "save": "Save mark"
+    },
+    "suggestion": {
+      "label": "Shelf? Tap to fill",
+      "title": "Is this a shelf?",
+      "close": "Close",
+      "why": "You walked on both sides of it. It is about {{width}} m wide and {{length}} m long.",
+      "section": "Section",
+      "none": "No section yet",
+      "from": "From your mark {{distance}} m away",
+      "change": "Change",
+      "sectionName": "Section name",
+      "notShelf": "Not a shelf",
+      "fill": "Fill as shelf"
+    },
+    "stopped": {
+      "title": "The walk stopped",
+      "lost": "The camera lost its place, so nothing is drawn now. Walk slowly and point the phone at the shelves. You will hear a sound if it starts again by itself.",
+      "trackingLost": "The camera lost its place, so nothing is drawn now. Stand next to something you marked to go on.",
+      "frameMoved": "The camera's picture of the shop moved, so nothing is drawn now. Stand next to something you marked to go on.",
+      "discarded": "The walk is kept up to the problem. Stand next to something you marked to go on.",
+      "paused": "The walk is paused. Stand next to something you marked to go on.",
+      "saved": "Everything up to this moment is saved.",
+      "resume": "Resume from a place I marked",
+      "resumeHint": "Stand next to a mark and choose it on the map."
+    },
+    "check": {
+      "title": "Is the purple path right?",
+      "body": "Tracking came back by itself. The purple part is not saved until you say it matches where you walked.",
+      "no": "No, stop here",
+      "yes": "Yes, keep it",
+      "hint": "No, stop here keeps the walk up to the problem. You then resume from a place you marked."
+    },
+    "where": {
+      "title": "Where are you?",
+      "close": "Close",
+      "remind": "Stand next to something you marked and tap it on the map.",
+      "marks": "Your marks",
+      "kind": {
+        "section": "Section mark",
+        "counter": "Counter mark",
+        "note": "Note"
+      },
+      "point": "point the phone the way the arrow shows",
+      "pick": "Tap a mark on the map, or choose one above.",
+      "none": "This walk has no marks to start from. Start a new walk instead.",
+      "start": "Start from here"
+    },
+    "notice": {
+      "changed": "The walk changed on another phone. This is the walk as it is now. Your last minutes were not saved.",
+      "refused": "That part of the walk could not be saved. This is the walk as it was saved.",
+      "blocked": "That does not fit there. It would overlap another area.",
+      "cameraFailed": "The camera did not start. Try again.",
+      "cameraWaiting": "The camera is not ready yet. Hold the phone up and try again."
+    },
+    "unsaved": {
+      "body": "The last part of this walk is only on this phone. We keep trying to save it."
     }
   }
 }

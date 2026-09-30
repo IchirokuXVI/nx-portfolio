@@ -235,4 +235,32 @@ describe('WalkEntrySaver', () => {
     ]);
     expect(memory.appended[2].reason).toBe('button');
   });
+
+  // Velista 0126: a new session in the same page opens as `resumed`.
+  it('opens the next entry with the kind asked for, then goes back to thenKind', async () => {
+    const { memory, saver, lastSeq, logTo } = await harness();
+    saver.begin({
+      walkId: WALK,
+      baseSeq: lastSeq,
+      logTo,
+      kind: 'started',
+      thenKind: 'continued',
+    });
+
+    saver.add([{ type: 'path', points: [[logTo + 1000, 1, 1]] }], logTo + 1000);
+    saver.push({ kind: 'confirmed' });
+    saver.openNext('resumed');
+    saver.add([{ type: 'path', points: [[logTo + 2000, 1, 2]] }], logTo + 2000);
+    expect(saver.logEnd()).toBe(logTo + 2000);
+    saver.openNext('continued');
+    saver.add([{ type: 'path', points: [[logTo + 3000, 1, 3]] }], logTo + 3000);
+    await saver.save();
+
+    expect(memory.appended.map((entry) => entry.kind)).toEqual([
+      'started',
+      'confirmed',
+      'resumed',
+      'continued',
+    ]);
+  });
 });

@@ -58,6 +58,17 @@
   @include walks.secondary;
 }
 
+.primary {
+  @include walks.primary;
+}
+
+.no-camera {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-muted);
+}
+
 .day-name {
   @include walks.group-heading;
 }

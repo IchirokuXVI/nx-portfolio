@@ -1,3 +1,5 @@
+> **PR:** [#576](https://github.com/IchirokuXVI/nx-portfolio/pull/576)
+
 # 0126: recording a walk with the camera
 
 > Part of the shop map series as rewritten on 2026-09-29. It replaces the step counting
@@ -131,3 +133,30 @@ the plan's "decisions taken".
 - Editing without walking: `0123`. The walks and their history: `0122`.
 - Recording on an iPhone, which has no WebXR camera tracking in Safari.
 - Relocalizing against a saved camera map.
+
+## 2. Decisions taken while building
+
+- **An automatic resume is written only once it is answered.** Yes: the purple points join the
+  session they belong to, a `confirmed` entry follows, and the next entry opens as `resumed`.
+  No: a `stopped` entry (tracking lost) at the loss, then `discarded`, so the walk is kept up to
+  the problem. A guard stop that drops the unconfirmed segment writes the `stopped` entry only.
+- **The stop sound plays when tracking is lost**, once per stop, not when the guard stops the
+  walk three seconds later. The panel says a sound comes if tracking returns by itself.
+- **The mark sheet and the shelf suggestion are panels of the recording page**, not routes:
+  the walk goes on under them and the page keeps drawing it. Save sits on a layer whose foot
+  follows the keyboard (`watchKeyboardInset`).
+- **Stop and the back chevron both stop the walk and go to the history** (`button` and
+  `left-page`). Resuming is Resume walking in the history, through "Where are you?".
+- **Marks are made only while tracking is good**: the three buttons show only then.
+- **The compass baseline is kept on the device, by walk** (`StorageKeys.walkBaselines`). A
+  manual resume without it lines up by the direction the phone points at the chosen mark.
+- **A mark is chosen by tapping its pin**, found from the canvas's own drawing, because the
+  editor reports no tap on a mark. The chips under the map are the same choice without the map.
+- **The live map does not learn about areas drawn by hand during a walk**; its suggestions
+  may overlap them.
+- **The browser check replays a scripted walk** (`?fakeWalk=3`, dev builds only): the first six
+  minutes of the second El Jamón walk with three incidents. It proves the screens and the log,
+  not the camera.
+- **Progress evidence still owed: the real walk on an Android phone** (a forced stop, one
+  automatic resume confirmed and one discarded, one manual resume, and the repeat error at
+  three marks visited twice). Nobody has walked it yet; its numbers go here.
