@@ -232,7 +232,7 @@ export class CatalogWalksController {
   @ApiContractResponse(SHOP_WALK_PATTERNS.append, {
     status: HttpStatus.CREATED,
     description:
-      'The entry as stored and the walk after it. A retried id answers the first result with `replayed: true`. A `baseSeq` that is not the walk’s `lastSeq` is `walk_changed` with `details.lastSeq`; a fold that does not validate is `shop_map_invalid` with `details.problems`; an entry over 256 KB or a document over 2 MB is `shop_map_too_large`.',
+      'The entry as stored and the walk after it. A retried id answers the first result with `replayed: true`. The next `baseSeq` is the answered `entry.seq`, never `walk.lastSeq`, so a replay after another phone’s save leads to `walk_changed`. A `baseSeq` that is not the walk’s `lastSeq` is `walk_changed` with `details.lastSeq`; a fold that does not validate is `shop_map_invalid` with `details.problems`; an entry over 256 KB or a document over 2 MB is `shop_map_too_large`.',
   })
   @ApiProblemResponses({
     auth: true,

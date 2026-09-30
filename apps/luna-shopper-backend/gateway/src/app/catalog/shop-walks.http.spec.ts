@@ -232,6 +232,14 @@ describe('shop walks over HTTP (plan 0168)', () => {
     ['an id that is not a uuid', { ...entry(), id: 'e1' }],
     ['an unknown kind', { ...entry(), kind: 'paused' }],
     ['a negative base', { ...entry(), baseSeq: -1 }],
+    [
+      'a reason on an entry that is not a stop',
+      { ...entry(), reason: 'button' },
+    ],
+    [
+      'rewoundTo on an entry that is not a rewind',
+      { ...entry(), rewoundTo: 5 },
+    ],
     ['events that are not a list', { ...entry(), events: {} }],
   ])('refuses %s with a 400', async (_name, body) => {
     const res = await call('POST', `/v1/catalog/walks/${WALK}/entries`, {

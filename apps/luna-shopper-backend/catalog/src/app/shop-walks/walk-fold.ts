@@ -55,39 +55,42 @@ export function foldOnto(
   return foldWalk([toModelEntry(entry)], toModelDocument(document));
 }
 
-/** One place the log can be folded from: a stored snapshot, or the start of the walk. */
-export interface FoldStart {
-  /** The `seq` the snapshot was stored on, or 0 for the start. */
-  seq: number;
-  document: ShopMapDocument | null;
+/** Where a replaying fold reads the log from: the stored snapshots and the entries. */
+export interface ReplaySource {
+  /** The `seq` of every entry that stored a snapshot, in any order. No documents. */
+  snapshotSeqs: readonly number[];
+  /** The snapshot stored on the entry `seq`. Read only when that start is tried. */
+  snapshotAt(seq: number): Promise<ShopMapDocument>;
+  /** Every entry after `seq`, with its events, in `seq` order. */
+  entriesAfter(seq: number): Promise<ShopWalkEntryView[]>;
 }
 
 /**
  * The fold of an entry that replaces the state (a rewind or a discard): the
  * log read back from a snapshot, plus the new entry.
  *
- * `starts` are tried newest first. `foldWalk` throws when the entry reaches
- * before the first entry it was given (a rewind to a time before the snapshot,
- * or a discard of a segment the snapshot already holds), and the next older
- * start is tried then. The start of the walk (`seq` 0, no document) never
- * throws, so the loop always ends with a document.
+ * Snapshots are tried newest first, and each document is read only when its
+ * turn comes. `foldWalk` throws when the entry reaches before the first entry
+ * it was given (a rewind to a time before the snapshot, or a discard of a
+ * segment the snapshot already holds), and the next older start is tried
+ * then. The start of the walk (`seq` 0, no document) never throws, so the loop
+ * always ends with a document.
  */
 export async function foldReplaying(
-  starts: readonly FoldStart[],
-  entriesAfter: (seq: number) => Promise<ShopWalkEntryView[]>,
+  source: ReplaySource,
   entry: ShopWalkEntryView
 ): Promise<ShopMapDocument> {
-  const ordered = [...starts].sort((a, b) => b.seq - a.seq);
-  if (!ordered.some((start) => start.seq === 0)) {
-    ordered.push({ seq: 0, document: null });
-  }
+  const seqs = [...new Set(source.snapshotSeqs)]
+    .filter((seq) => seq > 0)
+    .sort((a, b) => b - a);
   let last: unknown;
-  for (const start of ordered) {
-    const log = [...(await entriesAfter(start.seq)), entry].map(toModelEntry);
+  for (const seq of [...seqs, 0]) {
+    const start = seq === 0 ? null : await source.snapshotAt(seq);
+    const log = [...(await source.entriesAfter(seq)), entry].map(toModelEntry);
     try {
-      return start.document === null
+      return start === null
         ? foldWalk(log)
-        : foldWalk(log, toModelDocument(start.document));
+        : foldWalk(log, toModelDocument(start));
     } catch (error) {
       last = error;
     }

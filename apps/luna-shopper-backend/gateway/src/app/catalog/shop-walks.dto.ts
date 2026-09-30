@@ -22,11 +22,35 @@ import {
   IsUUID,
   MaxLength,
   Min,
+  registerDecorator,
+  type ValidationArguments,
 } from 'class-validator';
 import { componentRef, hoistContractSchema } from '../docs';
 
 /** The event schema the contracts publish, so the document names one shape for both halves. */
 const EVENT_SCHEMA = hoistContractSchema(SHOP_WALK_SCHEMA_IDS.shopWalkEvent);
+
+/**
+ * A field that only an entry of `kind` may carry: present on any other kind,
+ * it is refused. Absent passes, and `IsOptional` beside it keeps it so.
+ */
+function OnlyOnKind(kind: ShopWalkEntryKind): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'onlyOnKind',
+      target: target.constructor,
+      propertyName: String(propertyName),
+      constraints: [kind],
+      validator: {
+        validate: (value: unknown, args: ValidationArguments) =>
+          value === undefined ||
+          (args.object as { kind?: unknown }).kind === kind,
+        defaultMessage: (args: ValidationArguments) =>
+          `${args.property} is only for a ${kind} entry`,
+      },
+    });
+  };
+}
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -98,7 +122,7 @@ export class AppendShopWalkEntryDto {
   @ApiProperty({
     minimum: 0,
     description:
-      'The walk’s `lastSeq` this entry was built on. Anything else is refused with `walk_changed`.',
+      'The `seq` this entry was built on: the walk’s `lastSeq` when the walk was read, then the answered `entry.seq` of each append (never `walk.lastSeq` of an answer). Anything but the walk’s current `lastSeq` is refused with `walk_changed`.',
   })
   @IsInt()
   @Min(0)
@@ -137,6 +161,7 @@ export class AppendShopWalkEntryDto {
     description:
       'Kind `rewound` only: the point of the log the map returns to.',
   })
+  @OnlyOnKind('rewound')
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -146,6 +171,7 @@ export class AppendShopWalkEntryDto {
     enum: SHOP_WALK_STOP_REASONS,
     description: 'Kind `stopped` only: why.',
   })
+  @OnlyOnKind('stopped')
   @IsOptional()
   @IsIn(SHOP_WALK_STOP_REASONS)
   reason?: ShopWalkStopReason;
