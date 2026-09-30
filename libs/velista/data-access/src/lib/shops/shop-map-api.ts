@@ -1,12 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import type { ShopMapRead } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous } from '../auth/http-context';
 import { GatewayError } from '../errors';
 import { toShopMapRead } from '../mapping/shop-map-mappers';
-import type { ShopMapServiceI } from './shop-map-service';
+import type { ShopMapAnswer, ShopMapServiceI } from './shop-map-service';
 
 /**
  * A shop's map over HTTP. The default behind `SHOP_MAP_SERVICE`.
@@ -19,7 +18,7 @@ export class ShopMapApi implements ShopMapServiceI {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);
 
-  async map(locationId: string): Promise<ShopMapRead> {
+  async map(locationId: string): Promise<ShopMapAnswer> {
     try {
       const body = await firstValueFrom(
         this._http.get<unknown>(
@@ -32,12 +31,12 @@ export class ShopMapApi implements ShopMapServiceI {
           { context: anonymous('catalog.locationMap') }
         )
       );
-      return toShopMapRead(body);
+      return { read: toShopMapRead(body), body };
     } catch (error) {
       // An unknown shop has no map, and asking again would not give it one.
       return error instanceof GatewayError && error.code === 'not_found'
-        ? { kind: 'none' }
-        : { kind: 'failed' };
+        ? { read: { kind: 'none' }, body: null }
+        : { read: { kind: 'failed' }, body: null };
     }
   }
 }

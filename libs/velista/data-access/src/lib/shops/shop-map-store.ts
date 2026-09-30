@@ -1,5 +1,4 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { shopperView } from '@portfolio/luna-shopper/shop-map/model';
 import {
   BASKET_ROW_STATES,
   shopMapLinesOf,
@@ -9,11 +8,16 @@ import {
   type ShopMapRead,
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { SessionStore } from '../auth/session-store';
 import { BASKET_SERVICE, type BasketServiceI } from '../baskets/basket-service';
 import { BASKET_VIEW_LIFETIME_MS } from '../baskets/basket-view-memory';
 import { isRecord, mapArray, numOr, str } from '../mapping/primitives';
 import { toShopMapRead } from '../mapping/shop-map-mappers';
-import { SHOP_MAP_SERVICE, type ShopMapServiceI } from './shop-map-service';
+import {
+  SHOP_MAP_SERVICE,
+  type ShopMapAnswer,
+  type ShopMapServiceI,
+} from './shop-map-service';
 
 /** Where the map page stands: reading, a map, no map for this shop, or no answer. */
 export type ShopMapStatus = 'idle' | 'loading' | 'map' | 'none' | 'failed';
@@ -30,9 +34,13 @@ interface ShopMapRecord {
   readonly locationId: string;
   /** ISO instant after which the record is ignored. */
   readonly until: string;
-  /** The map in the wire's shape, read back through the wire's mapper. */
+  /** The body exactly as the wire sent it, read back through the wire's mapper. */
   readonly body: unknown;
-  readonly basket: ShopMapBasketRef;
+  /**
+   * The basket the lines came from: its id, or `live:<account id>` for the basket
+   * that is always there, whose id is the same word for every account.
+   */
+  readonly basket: string | null;
   readonly lines: readonly ShopMapLine[] | null;
 }
 
@@ -69,6 +77,7 @@ export class ShopMapStore {
   private readonly _service = inject<ShopMapServiceI>(SHOP_MAP_SERVICE);
   private readonly _baskets = inject<BasketServiceI>(BASKET_SERVICE);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _session = inject(SessionStore, { optional: true });
 
   private readonly _locationId = signal<string | null>(null);
   private readonly _basket = signal<ShopMapBasketRef>(null);
@@ -125,7 +134,7 @@ export class ShopMapStore {
       this._fromDevice.set(false);
     }
 
-    const [read, lines] = await Promise.all([
+    const [answer, lines] = await Promise.all([
       this._readMap(locationId),
       basket === null
         ? Promise.resolve<readonly ShopMapLine[] | null>(null)
@@ -134,6 +143,7 @@ export class ShopMapStore {
     if (seq !== this._seq) {
       return;
     }
+    const read = answer.read;
 
     if (read.kind === 'failed') {
       const kept = this._recall(locationId, basket);
@@ -155,7 +165,7 @@ export class ShopMapStore {
     this._lines.set(lines);
     this._fromDevice.set(false);
     if (read.kind === 'map') {
-      this._remember(locationId, basket, read.map, lines);
+      this._remember(locationId, basket, answer.body, lines);
     }
   }
 
@@ -167,12 +177,20 @@ export class ShopMapStore {
     }
   }
 
-  private async _readMap(locationId: string): Promise<ShopMapRead> {
+  private async _readMap(locationId: string): Promise<ShopMapAnswer> {
     try {
       return await this._service.map(locationId);
     } catch {
-      return { kind: 'failed' };
+      return { read: { kind: 'failed' }, body: null };
     }
+  }
+
+  /** The basket as the record names it, so one account never reads another's lines. */
+  private _basketKey(basket: ShopMapBasketRef): string | null {
+    if (basket !== 'live') {
+      return basket;
+    }
+    return `live:${this._session?.userId() ?? 'guest'}`;
   }
 
   private async _readLines(
@@ -193,7 +211,7 @@ export class ShopMapStore {
   private _remember(
     locationId: string,
     basket: ShopMapBasketRef,
-    map: ShopMap,
+    body: unknown,
     lines: readonly ShopMapLine[] | null
   ): void {
     const kept = BASKET_VIEW_LIFETIME_MS.location;
@@ -202,15 +220,8 @@ export class ShopMapStore {
       version: 1,
       locationId,
       until: new Date(Date.now() + lifetime).toISOString(),
-      body: {
-        map: {
-          walkId: map.walkId,
-          savedAt: map.savedAt?.toISOString() ?? null,
-          view: shopperView(map.document),
-          sections: map.sections,
-        },
-      },
-      basket,
+      body,
+      basket: this._basketKey(basket),
       lines,
     };
     try {
@@ -228,21 +239,12 @@ export class ShopMapStore {
     readonly read: ShopMapRead;
     readonly lines: readonly ShopMapLine[] | null;
   } | null {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(this._browser.readStorage(StorageKeys.shopMap) ?? '');
-    } catch {
-      return null;
-    }
-    if (!isRecord(raw) || raw['version'] !== 1) {
-      return null;
-    }
-    const until = Date.parse(str(raw['until']) ?? '');
-    if (
-      raw['locationId'] !== locationId ||
-      !Number.isFinite(until) ||
-      until <= Date.now()
-    ) {
+    const raw = keptRecord(
+      this._browser.readStorage(StorageKeys.shopMap),
+      locationId,
+      Date.now()
+    );
+    if (raw === null) {
       return null;
     }
     const read = toShopMapRead(raw['body']);
@@ -250,11 +252,56 @@ export class ShopMapStore {
       return null;
     }
     const lines =
-      basket !== null && raw['basket'] === basket && Array.isArray(raw['lines'])
+      basket !== null &&
+      raw['basket'] === this._basketKey(basket) &&
+      Array.isArray(raw['lines'])
         ? mapArray(raw['lines'], toStoredLine)
         : null;
     return { read, lines };
   }
+}
+
+/**
+ * The record kept for a shop, while it lasts: the right version, this shop, and
+ * a date still ahead. Null for anything else, stored text included.
+ */
+function keptRecord(
+  stored: string | null,
+  locationId: string,
+  now: number
+): Record<string, unknown> | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stored ?? '');
+  } catch {
+    return null;
+  }
+  if (!isRecord(raw) || raw['version'] !== 1) {
+    return null;
+  }
+  const until = Date.parse(str(raw['until']) ?? '');
+  return raw['locationId'] === locationId &&
+    Number.isFinite(until) &&
+    until > now
+    ? raw
+    : null;
+}
+
+/**
+ * Whether this device keeps a map of this shop it can still open (velista
+ * `0121`, target 6): what the basket asks before it offers the Map button when
+ * the shop itself could not be read, which is the shop with no signal.
+ *
+ * `stored` is what `StorageKeys.shopMap` holds. The kept body must map to a map,
+ * so a record the map page could not draw offers nothing.
+ */
+export function keepsShopMap(
+  stored: string | null,
+  locationId: string,
+  now: number
+): boolean {
+  const raw = keptRecord(stored, locationId, now);
+  return raw !== null && toShopMapRead(raw['body']).kind === 'map';
 }
 
 /** One stored line, read back as untrusted as a response. */

@@ -4,10 +4,11 @@ import {
   provideFakeBrowserFacade,
   StorageKeys,
 } from '@portfolio/velista/platform';
+import { SessionStore } from '../auth/session-store';
 import { BASKET_SERVICE } from '../baskets/basket-service';
-import { ShopMapMemory } from './shop-map-memory';
+import { MEMORY_SHOP_MAPS, ShopMapMemory } from './shop-map-memory';
 import { SHOP_MAP_SERVICE } from './shop-map-service';
-import { ShopMapStore } from './shop-map-store';
+import { keepsShopMap, ShopMapStore } from './shop-map-store';
 
 function row(
   rowKey: string,
@@ -47,6 +48,7 @@ function harness(
   options: {
     readonly storage?: Map<string, string>;
     readonly basket?: () => Promise<Basket>;
+    readonly userId?: string | null;
   } = {}
 ) {
   const memory = new ShopMapMemory();
@@ -71,6 +73,12 @@ function harness(
         },
       },
       provideFakeBrowserFacade(options.storage ?? new Map()),
+      {
+        provide: SessionStore,
+        useValue: {
+          userId: () => (options.userId === undefined ? 'u-1' : options.userId),
+        },
+      },
     ],
   });
   return { store: TestBed.inject(ShopMapStore), memory, reads };
@@ -202,5 +210,72 @@ describe('ShopMapStore', () => {
     await store.retry();
 
     expect(store.status()).toBe('map');
+  });
+
+  it('keeps the body exactly as the wire sent it', async () => {
+    const storage = new Map<string, string>();
+    const { store } = harness({ storage });
+
+    await store.open('loc-tejares', null);
+
+    const record = JSON.parse(storage.get(StorageKeys.shopMap) ?? '{}');
+    expect(record.body).toEqual(MEMORY_SHOP_MAPS['loc-tejares']);
+  });
+
+  it('keys the live basket by account, so another account on the phone reads no lines', async () => {
+    const storage = new Map<string, string>();
+    const first = harness({
+      storage,
+      basket: async () => basket([row('eggs', 'WANTED', ['i-eggs'])]),
+    });
+    await first.store.open('loc-tejares', 'live');
+    expect(JSON.parse(storage.get(StorageKeys.shopMap) ?? '{}').basket).toBe(
+      'live:u-1'
+    );
+
+    const other = harness({
+      storage,
+      userId: 'u-2',
+      basket: () => Promise.reject(new Error('offline')),
+    });
+    other.memory.failing = true;
+    await other.store.open('loc-tejares', 'live');
+
+    expect(other.store.status()).toBe('map');
+    expect(other.store.lines()).toBeNull();
+  });
+});
+
+describe('keepsShopMap', () => {
+  const now = Date.parse('2026-09-30T10:00:00.000Z');
+  const record = (patch: Record<string, unknown>) =>
+    JSON.stringify({
+      version: 1,
+      locationId: 'loc-tejares',
+      until: '2026-09-30T11:00:00.000Z',
+      body: MEMORY_SHOP_MAPS['loc-tejares'],
+      basket: null,
+      lines: null,
+      ...patch,
+    });
+
+  it('answers yes for a map of this shop still in its time', () => {
+    expect(keepsShopMap(record({}), 'loc-tejares', now)).toBe(true);
+  });
+
+  it('answers no for another shop, a time gone by, a map it cannot draw or nothing', () => {
+    expect(keepsShopMap(record({}), 'loc-centro', now)).toBe(false);
+    expect(
+      keepsShopMap(
+        record({ until: '2026-09-30T09:00:00.000Z' }),
+        'loc-tejares',
+        now
+      )
+    ).toBe(false);
+    expect(
+      keepsShopMap(record({ body: { map: null } }), 'loc-tejares', now)
+    ).toBe(false);
+    expect(keepsShopMap(null, 'loc-tejares', now)).toBe(false);
+    expect(keepsShopMap('{', 'loc-tejares', now)).toBe(false);
   });
 });

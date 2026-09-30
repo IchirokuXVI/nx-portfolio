@@ -33,8 +33,9 @@
 
     <!--
       The map of the shop the basket is read at (velista 0121, target 5), when
-      that shop has one. A word beside the glyph, because "Map" is the whole
-      offer and a glyph alone would be a guess.
+      that shop has one. A glyph in a round button, named by its label: with the
+      history, the faces and the share control in the same bar, the word "Map"
+      left the basket's title ellipsised at a phone's width.
     -->
     @if (mapShop(); as shop) {
       <button
@@ -44,7 +45,6 @@
         type="button"
       >
         <lib-map-icon class="map-glyph" />
-        {{ 'basket.map.open' | rokuT }}
       </button>
     }
 

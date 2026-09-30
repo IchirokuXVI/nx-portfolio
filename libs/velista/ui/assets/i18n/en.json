@@ -1641,7 +1641,6 @@
       "cheaper": "cheaper option"
     },
     "map": {
-      "open": "Map",
       "openLabel": "Map of {{shop}}"
     }
   },

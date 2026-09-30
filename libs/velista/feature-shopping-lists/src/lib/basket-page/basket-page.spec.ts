@@ -23,6 +23,7 @@ import {
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  MEMORY_SHOP_MAPS,
   provideFakeGroupMembers,
   provideFakeShopDetailStore,
   provideFakeShopSectionsStore,
@@ -30,6 +31,7 @@ import {
   type FakeGroupMembers,
   type FakeShopDetailStore,
   type FakeShopSectionsStore,
+  type ShopDetailRead,
 } from '@portfolio/velista/data-access';
 import type {
   BasketAccessEnded,
@@ -50,6 +52,7 @@ import {
   NavChrome,
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  StorageKeys,
 } from '@portfolio/velista/platform';
 import { LineComposer } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -3628,12 +3631,28 @@ describe('BasketPage: the map of the shop you are in', () => {
     };
   }
 
+  /** What `ShopMapStore` keeps on the device after opening a map. */
+  function keptMap(locationId: string, until: Date): string {
+    return JSON.stringify({
+      version: 1,
+      locationId,
+      until: until.toISOString(),
+      body: MEMORY_SHOP_MAPS['loc-tejares'],
+      basket: 'live:u-1',
+      lines: [],
+    });
+  }
+
   async function atElJamon(options: {
-    readonly hasMap: boolean;
+    readonly hasMap: boolean | 'failed';
     readonly me?: BasketParticipant;
+    readonly storage?: Map<string, string>;
   }) {
     const shopDetails = fakeShopDetailStore({
-      'loc-jamon': detail(options.hasMap),
+      'loc-jamon':
+        options.hasMap === 'failed'
+          ? { kind: 'failed' }
+          : detail(options.hasMap),
     });
     const shopSections = fakeShopSectionsStore({
       'loc-jamon': [
@@ -3654,6 +3673,7 @@ describe('BasketPage: the map of the shop you are in', () => {
       shopDetails,
       shopSections,
       ...(options.me === undefined ? {} : { me: options.me }),
+      ...(options.storage === undefined ? {} : { storage: options.storage }),
     });
     return { ...rendered, shopDetails };
   }
@@ -3668,8 +3688,46 @@ describe('BasketPage: the map of the shop you are in', () => {
     const { fixture } = await atElJamon({ hasMap: true });
     const button = query(fixture, '.bar button.map');
 
-    expect(button?.textContent).toContain('basket.map.open');
+    // A glyph and no word, so the title keeps its width; the label names it.
+    expect(button?.textContent?.trim()).toBe('');
     expect(button?.getAttribute('aria-label')).toBe('basket.map.openLabel');
+  });
+
+  it('offers the map kept on this device when the shop read fails, as it does with no signal', async () => {
+    const storage = new Map([
+      [
+        StorageKeys.shopMap,
+        keptMap('loc-jamon', new Date(Date.now() + 60 * 60 * 1000)),
+      ],
+    ]);
+    const { fixture } = await atElJamon({ hasMap: 'failed', storage });
+
+    expect(query(fixture, '.bar button.map')).not.toBeNull();
+  });
+
+  it('offers no kept map once its time is up, or one of another shop', async () => {
+    const late = new Map([
+      [StorageKeys.shopMap, keptMap('loc-jamon', new Date(Date.now() - 1000))],
+    ]);
+    expect(
+      query(
+        (await atElJamon({ hasMap: 'failed', storage: late })).fixture,
+        '.bar button.map'
+      )
+    ).toBeNull();
+
+    const other = new Map([
+      [
+        StorageKeys.shopMap,
+        keptMap('loc-other', new Date(Date.now() + 60 * 60 * 1000)),
+      ],
+    ]);
+    expect(
+      query(
+        (await atElJamon({ hasMap: 'failed', storage: other })).fixture,
+        '.bar button.map'
+      )
+    ).toBeNull();
   });
 
   it('offers nothing when the shop has no map', async () => {
