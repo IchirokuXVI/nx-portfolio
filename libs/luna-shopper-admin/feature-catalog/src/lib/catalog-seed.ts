@@ -126,6 +126,9 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: 'node/1156230891',
     externalProvider: 'osm',
     sections: [],
+    // The one shop with a walk shown to shoppers, whose section list the
+    // map rewrites on every save (backend plan 0168, admin plan 0040).
+    hasMap: true,
   },
   {
     id: 'loc_cordoba_oeste',
@@ -145,6 +148,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: 'way/48821004',
     externalProvider: 'osm',
     sections: [],
+    hasMap: false,
   },
   {
     id: 'loc_sierra',
@@ -165,6 +169,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: 'node/9920011234',
     externalProvider: 'osm',
     sections: [],
+    hasMap: false,
   },
   {
     id: 'loc_consum_centro',
@@ -182,6 +187,7 @@ export const LOCATION_SEED: readonly Wire.CatalogSupermarketLocationView[] = [
     externalRef: null,
     externalProvider: null,
     sections: [],
+    hasMap: false,
   },
 ];
 

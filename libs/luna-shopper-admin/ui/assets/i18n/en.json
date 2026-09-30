@@ -304,7 +304,12 @@
       "save": "Save this order",
       "discard": "Discard changes",
       "useChain": "Use the chain's default",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
+      "mapConfirm": {
+        "heading": "Change a list that follows a map?",
+        "confirm": "Change it anyway"
+      }
     },
     "itemSections": {
       "heading": "Where it is, per chain",
