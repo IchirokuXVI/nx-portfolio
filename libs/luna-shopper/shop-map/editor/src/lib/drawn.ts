@@ -36,18 +36,26 @@ export const AISLE_PROBE_METRES = 0.4;
 
 /**
  * The first word of a section name that means fruit and vegetables, in
- * Spanish and English, without accents and in lower case. A section is a crate
- * when its name starts with one of them: `Frutería`, `Fruta y verdura`,
- * `Frutas y verduras`, `Verdulería`, `Fruit and vegetables`, `Produce`. A name
- * that only mentions fruit further on (`Zumos de fruta`, `Frutos secos`) is not.
+ * Spanish, Catalan, Galician and English, without accents and in lower case. A
+ * section is a crate when its first word is one of them: `Frutería`,
+ * `Fruta y verdura`, `Verdulerías`, `Fruita`, `Froita`, `Fruit and
+ * vegetables`, `Produce`. Numbers and signs before it are skipped
+ * (`01 Frutería`), and so is an English `fresh` (`Fresh produce`). A name that
+ * only mentions fruit further on (`Zumos de fruta`, `Frutos secos`) is not.
  */
 export const PRODUCE_SECTION_WORDS: readonly string[] = [
   'fruta',
   'frutas',
   'fruteria',
+  'fruterias',
+  'fruita',
+  'fruites',
+  'froita',
+  'froitas',
   'verdura',
   'verduras',
   'verduleria',
+  'verdulerias',
   'hortaliza',
   'hortalizas',
   'fruit',
@@ -60,16 +68,22 @@ export const PRODUCE_SECTION_WORDS: readonly string[] = [
   'greengrocery',
 ];
 
+/** A word before the first one that is read past, as in `Fresh produce`. */
+const PRODUCE_ADJECTIVES: readonly string[] = ['fresh'];
+
 /** Whether a section is fruit and vegetables, by the first word of its name. */
 export function isProduceSection(name: string | undefined): boolean {
   if (!name) return false;
-  const first = name
+  const words = name
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .trim()
-    .split(/[^a-z]+/)[0];
-  return PRODUCE_SECTION_WORDS.includes(first);
+    .split(/[^a-z]+/)
+    .filter((w) => w.length > 0);
+  const first = PRODUCE_ADJECTIVES.includes(words[0] ?? '')
+    ? words[1]
+    : words[0];
+  return first !== undefined && PRODUCE_SECTION_WORDS.includes(first);
 }
 
 export type Drawing = 'shelf' | 'counter' | 'crate' | 'till' | 'door' | null;
@@ -228,8 +242,13 @@ function rect(
 /** Metres keep four decimals: a tenth of a millimetre. */
 const px4 = (n: number) => Math.round(n * 10000) / 10000;
 
-/** A pattern tile this long across its strip, so one tile covers any shelf. */
-const ACROSS = 1000;
+/**
+ * A strip pattern's tile across its strip, where its content does not vary:
+ * the products fill it across, so it only repeats. It stays short on purpose,
+ * because WebKit and Firefox draw a tile into a bitmap capped near 4096 px and
+ * scale a larger one down, which smears the bands and redraws on every zoom.
+ */
+const ACROSS = px4(21 * MOCK_PX);
 
 /**
  * The patterns and the till the drawn look uses, created once per mount in

@@ -121,6 +121,30 @@ export function drawTaggedLabel(
   node.textContent = text;
   let measured: number | null = null;
   let shown = false;
+  const measure = () => {
+    const length = node.getComputedTextLength?.() ?? 0;
+    measured = length > 0 ? length : (measured ?? textWidth(text));
+    const w = measured + 2 * TAG_PAD_PX;
+    tag.setAttribute('x', `${px(-w / 2)}`);
+    tag.setAttribute('width', `${px(w)}`);
+  };
+  /**
+   * A web font that loads after the first measure changes the text's width,
+   * so the tag is measured once more when the document's fonts are ready.
+   * Nothing happens where `document.fonts` does not exist, or when every font
+   * had loaded already.
+   */
+  const remeasureWhenFontsLoad = () => {
+    const fonts = t.doc.fonts as FontFaceSet | undefined;
+    if (!fonts?.ready || fonts.status === 'loaded') return;
+    void fonts.ready.then(() => {
+      if (!g.isConnected) return;
+      const display = g.getAttribute('display');
+      g.setAttribute('display', 'inline');
+      measure();
+      if (display !== null) g.setAttribute('display', display);
+    });
+  };
   t.positioners.push((v) => {
     const b = screenBox(v, box);
     const vertical = b.h > b.w;
@@ -129,12 +153,9 @@ export function drawTaggedLabel(
     // Measured once, the first time the box is big enough to try.
     if (measured === null && across >= TAG_HEIGHT_PX) {
       g.setAttribute('display', 'inline');
-      const length = node.getComputedTextLength?.() ?? 0;
-      measured = length > 0 ? length : textWidth(text);
-      const w = measured + 2 * TAG_PAD_PX;
-      tag.setAttribute('x', `${px(-w / 2)}`);
-      tag.setAttribute('width', `${px(w)}`);
+      measure();
       shown = true;
+      remeasureWhenFontsLoad();
     }
     const fits =
       measured !== null &&
