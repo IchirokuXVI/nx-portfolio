@@ -20,6 +20,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import type { ShopMapLive } from '@portfolio/luna-shopper/shop-map/editor';
 import type {
+  LiveSnapshot,
   MapArea,
   MapMark,
   MarkKind,
@@ -51,6 +52,7 @@ import {
   type WalkSensorSession,
 } from '@portfolio/velista/platform';
 import {
+  CheckIcon,
   ChevronLeftIcon,
   CloseIcon,
   CommentIcon,
@@ -60,7 +62,6 @@ import {
   StopIcon,
   StoreIcon,
   WarningIcon,
-  CheckIcon,
 } from '@portfolio/velista/ui';
 import { AREA_SHEET_RENAME_PARAM } from '../edit/area-sheet';
 import { HoldMenu, type HoldChoice } from '../edit/hold-menu';
@@ -179,9 +180,7 @@ export type RecordNotice =
     },
   ],
 })
-export class RecordWalkPage
-  implements MapEditSession, LeavesWithUnsavedWork
-{
+export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
   private readonly _walks = inject(ShopWalksStore);
   private readonly _shops = inject(ShopDetailStore);
   private readonly _settings = inject(MappingSettingsStore);
@@ -235,6 +234,8 @@ export class RecordWalkPage
   private _recording: WalkRecording | null = null;
   private _session: WalkSensorSession | null = null;
   private _drawTimer: ReturnType<typeof setInterval> | null = null;
+  /** What the walk answered last. */
+  private _snapshot: LiveSnapshot | null = null;
   /** True while leaving a hidden or closing page: saves go out with `keepalive`. */
   private _keepalive = false;
   /** Areas drawn by hand on this page, by id. */
@@ -351,7 +352,10 @@ export class RecordWalkPage
     if (at === null) {
       return null;
     }
-    const seconds = Math.max(0, Math.round((this._now() - at.getTime()) / 1000));
+    const seconds = Math.max(
+      0,
+      Math.round((this._now() - at.getTime()) / 1000)
+    );
     if (seconds < 5) {
       return { key: 'shopWalkRecord.saved.justNow', ok: true };
     }
@@ -582,7 +586,9 @@ export class RecordWalkPage
     if (this._phase() !== 'walking' || this._mode() !== 'recording') {
       return;
     }
-    const found = this.live()?.snapshot.suggestions.find((one) => one.id === id);
+    const found = this.live()?.snapshot.suggestions.find(
+      (one) => one.id === id
+    );
     if (found !== undefined) {
       this.suggestion.set(found);
     }
@@ -601,7 +607,12 @@ export class RecordWalkPage
       return;
     }
     const before = new Set(this._doc()?.areas.map((area) => area.id) ?? []);
-    recording.acceptSuggestion(suggestion.id);
+    // The walk went on while the sheet was open, so the suggestion may have
+    // grown under a new id: take the one that covers most of what was asked.
+    recording.acceptSuggestion(
+      sameSuggestion(suggestion, this._snapshot?.suggestions ?? [])?.id ??
+        suggestion.id
+    );
     this._draw();
     // The live map names the shelf from a mark that faced it. A section the
     // person chose instead is one more change to the area it made.
@@ -613,7 +624,9 @@ export class RecordWalkPage
       answer.section !== null &&
       answer.section !== made.section
     ) {
-      this._edit([{ type: 'area-put', area: renamedArea(made, answer.section) }]);
+      this._edit([
+        { type: 'area-put', area: renamedArea(made, answer.section) },
+      ]);
     }
   }
 
@@ -878,7 +891,8 @@ export class RecordWalkPage
     if (recording === null) {
       return;
     }
-    const snapshot = recording.flush();
+    const snapshot = recording.flush(false);
+    this._snapshot = snapshot;
     this._sync();
     if (this._mode() === 'where') {
       this._drawWhere();
@@ -895,7 +909,9 @@ export class RecordWalkPage
       ...(person !== null ? { person } : {}),
       ...(purple.length > 0 ? { unconfirmed: purple } : {}),
     });
-    this.sectionRun.set(walking ? (snapshot.sectionRun?.section ?? null) : null);
+    this.sectionRun.set(
+      walking ? (snapshot.sectionRun?.section ?? null) : null
+    );
   }
 
   /** While choosing a mark: the chosen one drawn as where to stand, facing its arrow. */
@@ -998,7 +1014,8 @@ export class RecordWalkPage
       document: detail.document,
       settings: {
         idPrefix: `live-${newId().slice(0, 8)}-`,
-        walkingAcrossMakesPath: this._settings.settings().walkingAcrossMakesPath,
+        walkingAcrossMakesPath:
+          this._settings.settings().walkingAcrossMakesPath,
       },
       baseline: readWalkBaseline(this._browser, walkId),
       createId: newId,
@@ -1037,6 +1054,33 @@ export class RecordWalkPage
       page
     );
   }
+}
+
+/**
+ * The suggestion of `current` that is `asked`, or has grown out of it: the same
+ * id, else the one that overlaps it most. Null when none overlaps.
+ */
+export function sameSuggestion(
+  asked: ShelfSuggestion,
+  current: readonly ShelfSuggestion[]
+): ShelfSuggestion | null {
+  const same = current.find((one) => one.id === asked.id);
+  if (same !== undefined) {
+    return same;
+  }
+  let best: ShelfSuggestion | null = null;
+  let bestArea = 0;
+  for (const one of current) {
+    const w =
+      Math.min(one.x + one.w, asked.x + asked.w) - Math.max(one.x, asked.x);
+    const h =
+      Math.min(one.y + one.h, asked.y + asked.h) - Math.max(one.y, asked.y);
+    if (w > 0 && h > 0 && w * h > bestArea) {
+      best = one;
+      bestArea = w * h;
+    }
+  }
+  return best;
 }
 
 function delay(ms: number): Promise<void> {

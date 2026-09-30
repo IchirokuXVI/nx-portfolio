@@ -92,7 +92,17 @@ function walk(
 function lose(rec: WalkRecording, from: number, to: number): void {
   for (let t = from; t < to; t += 100) {
     rec.compass(compassAt(t, OFFSET));
-    rec.pose({ t, x: 0, y: 0, z: 0, qx: 0, qy: 0, qz: 0, qw: 1, tracked: false });
+    rec.pose({
+      t,
+      x: 0,
+      y: 0,
+      z: 0,
+      qx: 0,
+      qy: 0,
+      qz: 0,
+      qw: 1,
+      tracked: false,
+    });
   }
 }
 
@@ -128,7 +138,11 @@ describe('WalkRecording (velista 0126)', () => {
     const mark = rec.mark('section', 'Lácteos');
     const snapshot = rec.flush();
 
-    expect(mark).toMatchObject({ kind: 'section', text: 'Lácteos', logMs: 4_900 });
+    expect(mark).toMatchObject({
+      kind: 'section',
+      text: 'Lácteos',
+      logMs: 4_900,
+    });
     expect(mark?.heading).toBeCloseTo(90, 1);
     // Walking along +y and facing heading 90 (-x) is facing your right.
     expect(rec.pointing()).toBe('right');

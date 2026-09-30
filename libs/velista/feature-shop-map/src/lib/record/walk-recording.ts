@@ -82,6 +82,9 @@ export interface WalkRecordingOptions {
   readonly createId: () => string;
 }
 
+/** The page flushes path points to the log once this many have been kept (about 2 s of walking). */
+export const PATH_BATCH_POINTS = 8;
+
 /** Where the phone points, next to where the person walks. */
 export type RecordingPointing = 'left' | 'right' | 'ahead' | 'behind';
 
@@ -191,13 +194,15 @@ export class WalkRecording {
     const pose = this._lastAligned;
     const last = this._recent[this._recent.length - 1];
     const from = this._recent.find(
-      (one) => last !== undefined && Math.hypot(last.x - one.x, last.y - one.y) >= 1
+      (one) =>
+        last !== undefined && Math.hypot(last.x - one.x, last.y - one.y) >= 1
     );
     if (this._phase !== 'walking' || pose === null || !last || !from) {
       return null;
     }
     // Heading h points along (-sin h, cos h).
-    const walking = (Math.atan2(-(last.x - from.x), last.y - from.y) * 180) / Math.PI;
+    const walking =
+      (Math.atan2(-(last.x - from.x), last.y - from.y) * 180) / Math.PI;
     const turn = normalizeDegrees(cameraHeading(pose) - walking);
     if (turn <= 45 || turn >= 315) {
       return 'ahead';
@@ -316,12 +321,20 @@ export class WalkRecording {
   /**
    * What the canvas draws, and the events the log keeps since the last call:
    * the kept path points first, then what the live map made. The page calls it
-   * at most ten times a second.
+   * at most ten times a second with `force` false, so path points wait for a
+   * few more; every other caller takes them all.
    */
-  flush(): LiveSnapshot {
+  flush(force = true): LiveSnapshot {
     const snapshot = this._live.snapshot();
     const events: WalkEvent[] = [];
-    if (this._pending.length > 0) {
+    // Path points go out a few at a time, so an entry holds a handful of path
+    // events rather than one per point; anything else, and every stop, takes
+    // them along at once.
+    const due =
+      force ||
+      snapshot.events.length > 0 ||
+      this._pending.length >= PATH_BATCH_POINTS;
+    if (due && this._pending.length > 0) {
       events.push({ type: 'path', points: this._pending });
       this._pending = [];
     }
@@ -422,7 +435,8 @@ export class WalkRecording {
     const waiting = this._phase === 'unconfirmed' || this._phase === 'lost';
     this._purple = [];
     this.flush();
-    const at = waiting && this._lossLog !== null ? this._lossLog : this._lastLog;
+    const at =
+      waiting && this._lossLog !== null ? this._lossLog : this._lastLog;
     this._output.push({ kind: 'stopped', reason, logTo: at });
     this._stopped(reason);
   }

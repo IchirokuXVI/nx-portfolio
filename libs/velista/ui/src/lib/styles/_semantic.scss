@@ -333,6 +333,9 @@ $app-content-max: 480px;
   --app-map-menu-width: 236px;
   // The border a colour swatch is drawn with, darker than its fill.
   --app-map-swatch-border: 2px;
+  // The border of a warning over a walk being recorded: the walk stopped, or a
+  // path to check (velista 0126). Heavier than a rule, so it reads as a stop.
+  --app-map-warn-border: 2px;
   // One product inside an opened group: name, brand and price on a single line.
   --app-suggestion-inside-row: 22px;
   // The group popover, wide enough for its two sentences at four lines each.

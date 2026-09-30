@@ -82,8 +82,9 @@ async function renderPage(
   await flush(fixture);
   await flush(fixture);
   const view = () =>
-    fixture.debugElement.query(By.directive(ShopMapView))
-      ?.componentInstance as ShopMapView | undefined;
+    fixture.debugElement.query(By.directive(ShopMapView))?.componentInstance as
+      | ShopMapView
+      | undefined;
   return { fixture, navigate, view, walkId, ...harness };
 }
 
@@ -134,7 +135,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     ]);
 
     // The saver's 20 s save: one started entry with the kept path.
-    walkFor(harness, 5_000, 16_000);
+    walkFor(harness, 5_000, 20_000);
     await flush(fixture);
     expect(walks.appended[0]).toEqual(
       expect.objectContaining({ kind: 'started', baseSeq: 0, logFrom: 0 })
@@ -143,7 +144,7 @@ describe('RecordWalkPage (velista 0126)', () => {
       expect.objectContaining({ type: 'path' })
     );
     // The next 20 s save is a new continued entry built on the answered seq.
-    walkFor(harness, 21_000, 21_000);
+    walkFor(harness, 25_000, 21_000);
     await flush(fixture);
     expect(walks.appended[1]).toEqual(
       expect.objectContaining({ kind: 'continued', baseSeq: 1 })
@@ -400,9 +401,9 @@ describe('the shelf suggestion (velista 0126)', () => {
 
     expect(all(fixture, '.card-name')).toEqual(['Congelados']);
     click(fixture, '.change');
-    const chips = (fixture.nativeElement as HTMLElement).querySelectorAll<
-      HTMLElement
-    >('.chip');
+    const chips = (
+      fixture.nativeElement as HTMLElement
+    ).querySelectorAll<HTMLElement>('.chip');
     chips[1].click();
     fixture.detectChanges();
     click(fixture, '.buttons .primary');

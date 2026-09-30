@@ -33,7 +33,7 @@
           {{ pill.key | rokuT }}
         </span>
       }
-      @if (view === 'walking' || view === 'lost' || view === 'unconfirmed') {
+      @if (view === 'walking') {
         <button (click)="stop()" class="stop" type="button">
           <lib-stop-icon class="stop-glyph" />
           {{ 'shopWalkRecord.stop' | rokuT }}
@@ -248,7 +248,10 @@
                   class="chip"
                   type="button"
                 >
-                  {{ mark.text || ('shopWalkRecord.where.kind.' + mark.kind | rokuT) }}
+                  {{
+                    mark.text ||
+                      ('shopWalkRecord.where.kind.' + mark.kind | rokuT)
+                  }}
                 </button>
               }
             </div>
@@ -267,7 +270,8 @@
                 }
                 <div class="picked-text">
                   <span class="picked-name">{{
-                    mark.text || ('shopWalkRecord.where.kind.' + mark.kind | rokuT)
+                    mark.text ||
+                      ('shopWalkRecord.where.kind.' + mark.kind | rokuT)
                   }}</span>
                   <span class="picked-detail">
                     {{ markKindKey(mark.kind) | rokuT }}
@@ -307,7 +311,9 @@
     }
   } @else if (view === 'unsupported') {
     <div class="state" role="alert">
-      <h2 class="state-title">{{ 'shopWalkRecord.unsupported.title' | rokuT }}</h2>
+      <h2 class="state-title">
+        {{ 'shopWalkRecord.unsupported.title' | rokuT }}
+      </h2>
       <p class="state-text">{{ 'shopWalkRecord.unsupported.body' | rokuT }}</p>
       <button (click)="leave()" class="retry" type="button">
         {{ 'shopWalkRecord.unsupported.back' | rokuT }}

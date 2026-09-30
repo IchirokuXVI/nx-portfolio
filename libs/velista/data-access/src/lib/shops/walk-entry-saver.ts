@@ -374,8 +374,7 @@ export class WalkEntrySaver {
       this._open = {
         id: newEntryId(),
         kind:
-          this._nextKind ??
-          (this._opened === 0 ? this._kind : this._thenKind),
+          this._nextKind ?? (this._opened === 0 ? this._kind : this._thenKind),
         logFrom: this._logEnd,
         logTo: this._logEnd,
         events: [],

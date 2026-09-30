@@ -80,9 +80,7 @@ export class MarkSheet {
   private readonly _chosen = signal<MarkKind | null>(null);
   protected readonly current = computed(() => this._chosen() ?? this.kind());
   protected readonly text = signal('');
-  protected readonly canSave = computed(
-    () => this.text().trim().length > 0
-  );
+  protected readonly canSave = computed(() => this.text().trim().length > 0);
 
   protected readonly recentNames = computed(() => {
     const kind = this.current();
@@ -105,8 +103,7 @@ export class MarkSheet {
   protected readonly inset = signal(0);
   protected readonly room = signal<number | null>(null);
 
-  private readonly _field =
-    viewChild<ElementRef<HTMLInputElement>>('field');
+  private readonly _field = viewChild<ElementRef<HTMLInputElement>>('field');
 
   constructor() {
     const stop = watchKeyboardInset(inject(DOCUMENT).defaultView, (inset) => {

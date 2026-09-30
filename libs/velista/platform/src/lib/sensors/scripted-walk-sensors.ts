@@ -114,7 +114,13 @@ export function scriptSegments(script: ScriptedWalk): Segment[] {
   let p = 0;
   let frame = IDENTITY;
   for (const incident of script.incidents) {
-    segments.push({ kind: 'walk', from: s, to: incident.at, pathFrom: p, frame });
+    segments.push({
+      kind: 'walk',
+      from: s,
+      to: incident.at,
+      pathFrom: p,
+      frame,
+    });
     p += incident.at - s;
     s = incident.at;
     segments.push({ kind: 'lost', from: s, to: s + incident.lostMs });

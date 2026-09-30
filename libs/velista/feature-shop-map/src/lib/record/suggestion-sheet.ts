@@ -50,8 +50,16 @@ export function suggestionSection(
     if (mark.kind !== 'section' || !mark.text) {
       continue;
     }
-    const dx = Math.max(suggestion.x - mark.x, 0, mark.x - (suggestion.x + suggestion.w));
-    const dy = Math.max(suggestion.y - mark.y, 0, mark.y - (suggestion.y + suggestion.h));
+    const dx = Math.max(
+      suggestion.x - mark.x,
+      0,
+      mark.x - (suggestion.x + suggestion.w)
+    );
+    const dy = Math.max(
+      suggestion.y - mark.y,
+      0,
+      mark.y - (suggestion.y + suggestion.h)
+    );
     const metres = Math.hypot(dx, dy);
     if (
       metres <= SUGGESTION_SECTION_REACH_METRES &&
@@ -119,7 +127,10 @@ export class SuggestionSheet {
     const section = this.section();
     return section === null
       ? null
-      : metresText(Math.max(0.5, Math.round(section.metres * 2) / 2), this._locale());
+      : metresText(
+          Math.max(0.5, Math.round(section.metres * 2) / 2),
+          this._locale()
+        );
   });
 
   protected readonly inset = signal(0);

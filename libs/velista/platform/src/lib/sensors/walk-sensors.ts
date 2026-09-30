@@ -203,8 +203,7 @@ export class WebXrWalkSensors implements WalkSensorsI {
     camera = opened.camera;
     const session = opened.camera.session;
     return {
-      showing: () =>
-        camera !== null && session.visibilityState !== 'hidden',
+      showing: () => camera !== null && session.visibilityState !== 'hidden',
       end,
     };
   }
