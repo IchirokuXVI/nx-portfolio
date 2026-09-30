@@ -261,8 +261,7 @@ export class ScriptedWalkSensors implements WalkSensorsI {
     listener: WalkSensorListener
   ): Promise<WalkSensorSession> {
     const win = this._document.defaultView;
-    const now = () => win?.performance.now() ?? Date.now();
-    const base = now();
+    const base = win?.performance.now() ?? Date.now();
     const tickMs = this._options.tickMs ?? 100;
     const step = tickMs * this._options.speed;
     let s = 0;
@@ -274,8 +273,16 @@ export class ScriptedWalkSensors implements WalkSensorsI {
         this._segments.find((one) => at >= one.from && at < one.to) ??
         this._segments[this._segments.length - 1];
       const t = base + at;
+      const compass = () => {
+        const [cx, cy, cz, cw] = compassQuaternion(
+          heading + SCRIPTED_COMPASS_OFFSET
+        );
+        listener.compass({ t, qx: cx, qy: cy, qz: cz, qw: cw });
+      };
       if (segment.kind === 'lost') {
+        // The camera lost its place; the compass did not.
         listener.pose(untrackedAt(t));
+        compass();
         return;
       }
       const pathMs =
@@ -288,11 +295,18 @@ export class ScriptedWalkSensors implements WalkSensorsI {
       const [qx, qy, qz, qw] = uprightQuaternion(
         heading + segment.frame.rotation
       );
-      listener.pose({ t, x: raw.x, y: HEIGHT, z: raw.y, qx, qy, qz, qw, tracked: true });
-      const [cx, cy, cz, cw] = compassQuaternion(
-        heading + SCRIPTED_COMPASS_OFFSET
-      );
-      listener.compass({ t, qx: cx, qy: cy, qz: cz, qw: cw });
+      listener.pose({
+        t,
+        x: raw.x,
+        y: HEIGHT,
+        z: raw.y,
+        qx,
+        qy,
+        qz,
+        qw,
+        tracked: true,
+      });
+      compass();
     };
 
     const timer = setInterval(() => {

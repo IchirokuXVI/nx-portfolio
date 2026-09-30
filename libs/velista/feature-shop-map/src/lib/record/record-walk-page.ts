@@ -47,6 +47,7 @@ import {
   WALK_SENSORS,
   WALK_TONES,
   walkIdOf,
+  type LeavesWithUnsavedWork,
   type WalkSensorSession,
 } from '@portfolio/velista/platform';
 import {
@@ -62,7 +63,6 @@ import {
   CheckIcon,
 } from '@portfolio/velista/ui';
 import { AREA_SHEET_RENAME_PARAM } from '../edit/area-sheet';
-import type { LeavesWithUnsavedEntries } from '../edit/edit-map-page';
 import { HoldMenu, type HoldChoice } from '../edit/hold-menu';
 import {
   applyEdits,
@@ -180,7 +180,7 @@ export type RecordNotice =
   ],
 })
 export class RecordWalkPage
-  implements MapEditSession, LeavesWithUnsavedEntries
+  implements MapEditSession, LeavesWithUnsavedWork
 {
   private readonly _walks = inject(ShopWalksStore);
   private readonly _shops = inject(ShopDetailStore);
@@ -421,12 +421,15 @@ export class RecordWalkPage
       }
     };
     const onPageHide = () => this._leavePage(true);
+    const onClick = (event: MouseEvent) => this._mapClicked(event);
+    this._host.nativeElement.addEventListener('click', onClick);
     view?.addEventListener('beforeunload', beforeUnload);
     view?.addEventListener('pagehide', onPageHide);
     this._document.addEventListener('visibilitychange', onHidden);
 
     inject(DestroyRef).onDestroy(() => {
       clearInterval(clock);
+      this._host.nativeElement.removeEventListener('click', onClick);
       view?.removeEventListener('beforeunload', beforeUnload);
       view?.removeEventListener('pagehide', onPageHide);
       this._document.removeEventListener('visibilitychange', onHidden);
@@ -492,9 +495,14 @@ export class RecordWalkPage
     }
   }
 
-  /** A tap on the map while choosing where you are. */
-  protected mapClicked(event: MouseEvent): void {
-    if (this._mode() !== 'where') {
+  /**
+   * A tap on the map while choosing where you are. Listened for on the host, not
+   * in the template: the map is not a control, and the chips below it are the
+   * way to choose a mark without touching the map.
+   */
+  private _mapClicked(event: MouseEvent): void {
+    const target = event.target as Element | null;
+    if (this._mode() !== 'where' || !target?.closest('.map')) {
       return;
     }
     const index = this._view()?.markAt({ x: event.clientX, y: event.clientY });

@@ -1,4 +1,4 @@
-import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import { type BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 
 /**
  * The compass baseline this device learned for a walk, in degrees, or null

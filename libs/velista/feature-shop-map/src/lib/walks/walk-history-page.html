@@ -28,7 +28,6 @@
 
   @let state = read();
   @if (state.kind === 'walk') {
-    <!-- Resume walking (velista 0126) joins these when that plan adds its route. -->
     <div class="actions">
       <div class="pair">
         <button
@@ -43,6 +42,13 @@
           {{ 'shopWalks.history.editMap' | rokuT }}
         </button>
       </div>
+      @if (canRecord() === true) {
+        <button (click)="resume()" class="primary resume" type="button">
+          {{ 'shopWalks.history.resume' | rokuT }}
+        </button>
+      } @else if (canRecord() === false) {
+        <p class="no-camera">{{ 'shopWalks.history.noCamera' | rokuT }}</p>
+      }
     </div>
 
     @if (days().length === 0) {

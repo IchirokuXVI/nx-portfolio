@@ -1,0 +1,365 @@
+@let view = screen();
+<main class="page">
+  <header class="bar">
+    @if (view === 'where') {
+      <button
+        (click)="closeWhere()"
+        [attr.aria-label]="'shopWalkRecord.where.close' | rokuT"
+        class="back"
+        type="button"
+      >
+        <lib-close-icon class="back-glyph" />
+      </button>
+      <div class="heading">
+        <h1 class="title">{{ 'shopWalkRecord.where.title' | rokuT }}</h1>
+      </div>
+    } @else {
+      <button
+        (click)="leave()"
+        [attr.aria-label]="'shopWalks.back' | rokuT"
+        class="back"
+        type="button"
+      >
+        <lib-chevron-left-icon class="back-glyph" />
+      </button>
+      <div class="heading">
+        <h1 class="title">
+          {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
+        </h1>
+      </div>
+      @if (statusPill(view); as pill) {
+        <span [class]="'pill ' + pill.tone" aria-live="polite" role="status">
+          <span aria-hidden="true" class="pill-dot"></span>
+          {{ pill.key | rokuT }}
+        </span>
+      }
+      @if (view === 'walking' || view === 'lost' || view === 'unconfirmed') {
+        <button (click)="stop()" class="stop" type="button">
+          <lib-stop-icon class="stop-glyph" />
+          {{ 'shopWalkRecord.stop' | rokuT }}
+        </button>
+      }
+    }
+  </header>
+
+  @if (read().kind === 'ready' && view !== 'unsupported') {
+    <div class="map">
+      @if (document(); as document) {
+        <lib-shop-map-view
+          (areaSelected)="areaSelected($event)"
+          (changed)="changed($event)"
+          (longPressed)="longPressed($event)"
+          (suggestionTapped)="suggestionTapped($event)"
+          [document]="document"
+          [label]="'shopWalkRecord.label' | rokuT"
+          [live]="live()"
+          [sizeLabel]="sizeLabel"
+          [snap]="snap()"
+          [suggestionLabel]="suggestionLabel()"
+          class="canvas"
+          look="mapper"
+        />
+      }
+
+      @if (view === 'lost' || view === 'stopped') {
+        <div aria-hidden="true" class="veil"></div>
+        <div class="warn" role="alert">
+          <lib-warning-icon class="warn-glyph" />
+          <div class="warn-text">
+            <span class="warn-title">{{
+              'shopWalkRecord.stopped.title' | rokuT
+            }}</span>
+            <p class="warn-body">
+              {{
+                (view === 'lost' ? 'shopWalkRecord.stopped.lost' : stopKey())
+                  | rokuT
+              }}
+            </p>
+            <p class="warn-note">
+              {{ 'shopWalkRecord.stopped.saved' | rokuT }}
+            </p>
+          </div>
+        </div>
+      }
+
+      @if (view === 'where') {
+        <div class="remind">
+          <lib-locate-icon class="remind-glyph" />
+          <span>{{ 'shopWalkRecord.where.remind' | rokuT }}</span>
+        </div>
+      }
+
+      @if (view === 'start') {
+        <div class="intro">
+          <span class="intro-title">{{
+            'shopWalkRecord.start.title' | rokuT
+          }}</span>
+          <p class="intro-body">{{ 'shopWalkRecord.start.body' | rokuT }}</p>
+        </div>
+      }
+
+      @if (savedChip(); as chip) {
+        <span [class.unsent]="!chip.ok" aria-live="polite" class="saved">
+          @if (chip.ok) {
+            <lib-check-icon class="saved-glyph" />
+          }
+          {{ chip.key | rokuT: { count: chip.count ?? 0 } }}
+        </span>
+      }
+      <span class="scale">{{ 'shopWalkRecord.scale' | rokuT }}</span>
+
+      @if (press(); as press) {
+        <lib-hold-menu
+          (chosen)="chosen($event)"
+          (dismissed)="dismissed()"
+          [press]="press"
+        />
+      }
+
+      @if (notice(); as notice) {
+        <div class="notice" role="status">
+          <p class="notice-text">
+            {{ 'shopWalkRecord.notice.' + notice | rokuT }}
+          </p>
+          <button
+            (click)="closeNotice()"
+            [attr.aria-label]="'shopMapEdit.close' | rokuT"
+            class="notice-close"
+            type="button"
+          >
+            {{ 'shopMapEdit.ok' | rokuT }}
+          </button>
+        </div>
+      }
+    </div>
+
+    @switch (view) {
+      @case ('walking') {
+        @if (selected(); as area) {
+          <lib-resize-controls
+            (finished)="finishedArea()"
+            (opened)="openSelected()"
+            (snapChanged)="snapChanged($event)"
+            [area]="area"
+            [snap]="snap()"
+          />
+        } @else {
+          @if (sectionRun(); as section) {
+            <div class="insection">
+              <div class="insection-text">
+                <span class="insection-label">{{
+                  'shopWalkRecord.inSection' | rokuT
+                }}</span>
+                <span class="insection-name">{{ section }}</span>
+              </div>
+              <button
+                (click)="sectionLeft()"
+                class="insection-left"
+                type="button"
+              >
+                {{ 'shopWalkRecord.sectionLeft' | rokuT }}
+              </button>
+            </div>
+          }
+          <div class="controls">
+            <div
+              [attr.aria-label]="'shopWalkRecord.marks.group' | rokuT"
+              class="marks"
+              role="group"
+            >
+              <button
+                (click)="openMark('section')"
+                class="mark primary"
+                type="button"
+              >
+                <lib-flag-icon class="mark-glyph" />
+                {{ 'shopWalkRecord.marks.section' | rokuT }}
+              </button>
+              <button (click)="openMark('counter')" class="mark" type="button">
+                <lib-store-icon class="mark-glyph" />
+                {{ 'shopWalkRecord.marks.counter' | rokuT }}
+              </button>
+              <button (click)="openMark('note')" class="mark" type="button">
+                <lib-comment-icon class="mark-glyph" />
+                {{ 'shopWalkRecord.marks.note' | rokuT }}
+              </button>
+            </div>
+            <p class="hint">{{ 'shopWalkRecord.hint' | rokuT }}</p>
+          </div>
+        }
+      }
+      @case ('lost') {
+        <div class="controls ruled">
+          <button (click)="resumeFromMark()" class="primary" type="button">
+            {{ 'shopWalkRecord.stopped.resume' | rokuT }}
+          </button>
+          <p class="hint">{{ 'shopWalkRecord.stopped.resumeHint' | rokuT }}</p>
+        </div>
+      }
+      @case ('stopped') {
+        <div class="controls ruled">
+          <button (click)="resumeFromMark()" class="primary" type="button">
+            {{ 'shopWalkRecord.stopped.resume' | rokuT }}
+          </button>
+          <p class="hint">{{ 'shopWalkRecord.stopped.resumeHint' | rokuT }}</p>
+        </div>
+      }
+      @case ('unconfirmed') {
+        <div class="controls ruled">
+          <div class="check" role="alert">
+            <div class="check-head">
+              <lib-info-icon class="check-glyph" />
+              <div class="check-text">
+                <span class="check-title">{{
+                  'shopWalkRecord.check.title' | rokuT
+                }}</span>
+                <p class="check-body">
+                  {{ 'shopWalkRecord.check.body' | rokuT }}
+                </p>
+              </div>
+            </div>
+            <div class="pair">
+              <button (click)="discardPath()" class="secondary" type="button">
+                {{ 'shopWalkRecord.check.no' | rokuT }}
+              </button>
+              <button (click)="confirmPath()" class="primary" type="button">
+                {{ 'shopWalkRecord.check.yes' | rokuT }}
+              </button>
+            </div>
+          </div>
+          <p class="hint">{{ 'shopWalkRecord.check.hint' | rokuT }}</p>
+        </div>
+      }
+      @case ('where') {
+        <div class="controls ruled">
+          @if (marks().length === 0) {
+            <p class="hint">{{ 'shopWalkRecord.where.none' | rokuT }}</p>
+          } @else {
+            <div
+              [attr.aria-label]="'shopWalkRecord.where.marks' | rokuT"
+              class="chips"
+              role="group"
+            >
+              @for (mark of marks(); track mark.id) {
+                <button
+                  (click)="pick(mark)"
+                  [attr.aria-pressed]="picked()?.id === mark.id"
+                  [class.on]="picked()?.id === mark.id"
+                  class="chip"
+                  type="button"
+                >
+                  {{ mark.text || ('shopWalkRecord.where.kind.' + mark.kind | rokuT) }}
+                </button>
+              }
+            </div>
+            @if (picked(); as mark) {
+              <div class="picked">
+                @switch (mark.kind) {
+                  @case ('section') {
+                    <lib-flag-icon class="picked-glyph" />
+                  }
+                  @case ('counter') {
+                    <lib-store-icon class="picked-glyph" />
+                  }
+                  @default {
+                    <lib-comment-icon class="picked-glyph" />
+                  }
+                }
+                <div class="picked-text">
+                  <span class="picked-name">{{
+                    mark.text || ('shopWalkRecord.where.kind.' + mark.kind | rokuT)
+                  }}</span>
+                  <span class="picked-detail">
+                    {{ markKindKey(mark.kind) | rokuT }}
+                    <span aria-hidden="true"> · </span>
+                    {{ 'shopWalkRecord.where.point' | rokuT }}
+                  </span>
+                </div>
+              </div>
+            } @else {
+              <p class="hint">{{ 'shopWalkRecord.where.pick' | rokuT }}</p>
+            }
+            <button
+              (click)="startFromHere()"
+              [attr.aria-disabled]="picked() === null"
+              class="primary"
+              type="button"
+            >
+              {{ 'shopWalkRecord.where.start' | rokuT }}
+            </button>
+          }
+        </div>
+      }
+      @case ('start') {
+        <div class="controls ruled">
+          <button (click)="startWalking()" class="primary" type="button">
+            {{ 'shopWalkRecord.start.button' | rokuT }}
+          </button>
+        </div>
+      }
+      @case ('starting') {
+        <div class="controls ruled">
+          <button aria-disabled="true" class="primary" type="button">
+            {{ 'shopWalkRecord.status.starting' | rokuT }}
+          </button>
+        </div>
+      }
+    }
+  } @else if (view === 'unsupported') {
+    <div class="state" role="alert">
+      <h2 class="state-title">{{ 'shopWalkRecord.unsupported.title' | rokuT }}</h2>
+      <p class="state-text">{{ 'shopWalkRecord.unsupported.body' | rokuT }}</p>
+      <button (click)="leave()" class="retry" type="button">
+        {{ 'shopWalkRecord.unsupported.back' | rokuT }}
+      </button>
+    </div>
+  } @else if (view === 'missing') {
+    <p class="empty" role="alert">{{ 'shopWalks.history.missing' | rokuT }}</p>
+  } @else if (view === 'failed') {
+    <div class="state" role="alert">
+      <p class="state-text">{{ 'shopWalks.history.failed' | rokuT }}</p>
+      <button (click)="retry()" class="retry" type="button">
+        {{ 'shopWalks.retry' | rokuT }}
+      </button>
+    </div>
+  } @else {
+    <div
+      [attr.aria-label]="'shopWalks.history.loading' | rokuT"
+      class="map is-loading"
+      role="status"
+    ></div>
+  }
+</main>
+
+@if (markKind(); as kind) {
+  <lib-mark-sheet
+    (closed)="closeMark()"
+    (saved)="saveMark($event)"
+    [kind]="kind"
+    [pointing]="pointing()"
+    [recent]="recent()"
+    [sections]="shopSections()"
+  />
+}
+
+@if (suggestion(); as suggestion) {
+  <lib-suggestion-sheet
+    (answered)="answerSuggestion($event)"
+    (closed)="closeSuggestion()"
+    [names]="sectionNames()"
+    [section]="suggestionSectionNearby()"
+    [suggestion]="suggestion"
+  />
+}
+
+@if (asking()) {
+  <lib-unsaved-dialog
+    (leave)="leaveAnyway()"
+    (stay)="stay()"
+    [nextTryAt]="nextTryAt()"
+    [status]="status()"
+    bodyKey="shopWalkRecord.unsaved.body"
+  />
+}
+
+<router-outlet />

@@ -95,7 +95,8 @@ export class NewWalkSheet {
           this._locale(),
           this._basePath,
           this.locationId(),
-          outcome.value.id
+          outcome.value.id,
+          'record'
         )
       );
     } finally {

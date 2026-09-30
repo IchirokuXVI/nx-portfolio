@@ -1140,6 +1140,34 @@ export const AppShellRoutes: Route[] = [
             ],
           },
           {
+            /**
+             * Recording a walk with the camera (velista `0126`), with the sheet of
+             * one area over it for editing while walking. Leaving stops the walk,
+             * and leaving with a save the server has not answered asks first.
+             * No bar and `WORKS_WITHOUT_BACKEND`, for the edit page's reasons: the
+             * map needs the height, and a shop is where the signal is worst.
+             */
+            path: 'shops/:locationId/walks/:walkId/record',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            canDeactivate: [unsavedWalkGuard],
+            data: editMapData,
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.RecordWalkPage
+              ),
+            children: [
+              sheet({
+                path: 'areas/:areaId',
+                data: editMapData,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.AreaSheet
+                  ),
+              }),
+            ],
+          },
+          {
             path: 'shops/:locationId/walks/:walkId/settings',
             canMatch: [walkIdGuard],
             canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
