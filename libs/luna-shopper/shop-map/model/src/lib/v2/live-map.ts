@@ -81,6 +81,19 @@ function markFaces(mark: MapMark, shelf: MapArea): boolean {
   return hx * vx + hy * vy > EPS;
 }
 
+/**
+ * Whether a mark stood within 1.5 m of a strip across its length, with its
+ * heading towards it. Distance along the strip does not count, so the mark
+ * that named a strip still names it after a crossing cut the strip short.
+ */
+function facesAcross(mark: MapMark, shelf: MapArea, acrossY: boolean): boolean {
+  const [vx, vy] = toShelf(shelf, mark.x, mark.y);
+  const v = acrossY ? vy : vx;
+  if (Math.abs(v) > SECTION_REACH_METRES + EPS) return false;
+  const [hx, hy] = headingVector(mark.heading);
+  return (acrossY ? hy : hx) * v > EPS;
+}
+
 function distanceToSegment(
   px: number,
   py: number,
@@ -513,11 +526,16 @@ class LiveMap implements LiveMapHandle {
         (prev.x < a.x || prev.x >= a.x + a.w) &&
         prev.y >= a.y &&
         prev.y < a.y + a.h;
-      const alongX = overTopOrBottom
-        ? true
-        : overLeftOrRight
-          ? false
-          : a.w >= a.h;
+      // The entry face decides only when the shelf is a strip's depth that
+      // way (2 m at most). Clipping the end of a long gondola enters over its
+      // short side, and must cut one column, not the whole length.
+      const strip = SUGGESTION_MAX_ACROSS_CELLS * CELL + EPS;
+      const alongX =
+        overTopOrBottom && a.h <= strip
+          ? true
+          : overLeftOrRight && a.w <= strip
+            ? false
+            : a.w >= a.h;
       const [lo, hi] = alongX ? [r.i0, r.i1] : [r.j0, r.j1];
       const at = alongX ? p.x : p.y;
       const s0 = Math.max(
@@ -800,7 +818,7 @@ class LiveMap implements LiveMapHandle {
         (m) =>
           m.id !== mark.id &&
           key(m.text) === key(shelf.section) &&
-          markFaces(m, shelf)
+          facesAcross(m, shelf, acrossY)
       );
     const mine = sideOf(mark);
     if (!namer || mine === 0 || sideOf(namer) !== -mine) return null;
