@@ -38,6 +38,13 @@ live('OpenStreetMap, live', () => {
       expect(Number.isFinite(place.longitude)).toBe(true);
       expect(place.externalRef).toMatch(/^(node|way|relation)\/\d+$/);
       expect(place.tags['shop']).toBe('supermarket');
+      // Plan 0176: a size only for an outline, and a whole positive number.
+      if (place.externalRef.startsWith('node/')) {
+        expect(place.footprintM2).toBeNull();
+      } else if (place.footprintM2 !== null) {
+        expect(Number.isInteger(place.footprintM2)).toBe(true);
+        expect(place.footprintM2).toBeGreaterThan(0);
+      }
     }
 
     // At least one carries the tag the whole chain identity rests on.

@@ -174,6 +174,7 @@ export function toSupermarketLocationView(
     longitude: row.longitude,
     externalRef: row.externalRef,
     externalProvider: row.externalProvider,
+    footprintM2: row.footprintM2 ?? null,
     sections: [...sections],
   };
 }

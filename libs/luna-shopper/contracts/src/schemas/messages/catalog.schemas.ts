@@ -409,6 +409,8 @@ const supermarketLocationView = object(
     longitude: numberOrNull(),
     externalRef: nullableString(),
     externalProvider: nullableString(),
+    // Plan 0176: the mapped outline's area in whole square metres, or null.
+    footprintM2: { type: ['integer', 'null'], minimum: 1 },
     // Plan 0170: the shop's section names in its order, always present.
     sections: array(ref(CATALOG_SCHEMA_IDS.locationSectionNameView)),
   },
@@ -427,6 +429,7 @@ const supermarketLocationView = object(
     'longitude',
     'externalRef',
     'externalProvider',
+    'footprintM2',
     'sections',
   ]
 );
@@ -1090,6 +1093,8 @@ const locationFields = {
   longitude: numberOrNull(),
   externalRef: nullableString(),
   externalProvider: nullableString(),
+  // Plan 0176: never null, so a place that carries no size cannot clear one.
+  footprintM2: integer({ minimum: 1 }),
 };
 const createLocationRequest = object(
   CATALOG_SCHEMA_IDS.createLocationRequest,

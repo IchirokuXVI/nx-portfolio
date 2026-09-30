@@ -1,3 +1,5 @@
+> **PR:** [#548](https://github.com/IchirokuXVI/nx-portfolio/pull/548)
+
 # 0176: a shop knows its size from OpenStreetMap
 
 > Part of the shop map series as rewritten on 2026-09-29. Consumed by velista `0121`, whose
