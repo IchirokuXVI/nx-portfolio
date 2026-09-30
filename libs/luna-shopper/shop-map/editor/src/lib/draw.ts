@@ -121,6 +121,8 @@ export function drawTaggedLabel(
   node.textContent = text;
   let measured: number | null = null;
   let shown = false;
+  // The last frame's view, so a late re-measure can decide again whether it fits.
+  let lastView: View | null = null;
   const measure = () => {
     const length = node.getComputedTextLength?.() ?? 0;
     measured = length > 0 ? length : (measured ?? textWidth(text));
@@ -143,9 +145,11 @@ export function drawTaggedLabel(
       g.setAttribute('display', 'inline');
       measure();
       if (display !== null) g.setAttribute('display', display);
+      if (lastView !== null) place(lastView);
     });
   };
-  t.positioners.push((v) => {
+  const place: Positioner = (v) => {
+    lastView = v;
     const b = screenBox(v, box);
     const vertical = b.h > b.w;
     const along = vertical ? b.h : b.w;
@@ -172,7 +176,8 @@ export function drawTaggedLabel(
       'transform',
       `translate(${cx} ${cy})${vertical ? ' rotate(-90)' : ''}`
     );
-  });
+  };
+  t.positioners.push(place);
 }
 
 /** An area's rectangle. A custom colour is its fill with a border 40 percent darker. */

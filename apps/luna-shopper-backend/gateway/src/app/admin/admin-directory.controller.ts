@@ -61,6 +61,11 @@ import { ActingAdmin } from './current-admin.decorator';
  * missing control finds the reason rather than concluding the screen is
  * unfinished.
  *
+ * **Roles are a third editable thing** (backend plan 0175, admin plan 0038), set
+ * through their own `PUT :id/roles` rather than the user edit, because they
+ * decide what the account may do rather than who it is. The change reaches the
+ * account's access token at its next refresh.
+ *
  * Guarded by {@link AdminJwtGuard} like everything under `/v1/admin/**`, and
  * gated **again** inside auth against the forwarded token, which is plan 0072
  * section 3's property: a route added here without the guard still cannot read

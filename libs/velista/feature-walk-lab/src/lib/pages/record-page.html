@@ -214,7 +214,7 @@
             }}
           }
         </p>
-        @if (lastMark()) {
+        @if (lastMark() && !panel()) {
           <button (click)="deleteLastMark()" class="delete-last" type="button">
             {{ 'walkLab.record.deleteLastMark' | rokuT }}
           </button>

@@ -1,5 +1,5 @@
 import { elJamonLive, replayElJamon } from '../__fixtures__/el-jamon-live';
-import { createLiveMap } from './live-map';
+import { createLiveMap, SECTION_REACH_METRES } from './live-map';
 import type { LiveMapHandle, LiveSnapshot } from './live-types';
 import { area, doc, mark } from './testing';
 import type { MapArea, ShopMapDocumentV2, WalkEvent } from './types';
@@ -614,6 +614,45 @@ describe('createLiveMap', () => {
       expect(
         [...areas.values()].filter((a) => a.section === 'Yogures')
       ).toEqual([]);
+    });
+
+    it('takes a namer within the section reach past the strip end, and not beyond it', () => {
+      /** Whether the other face splits off when its namer stood `past` metres beyond the strip's end. */
+      function splitsWithNamerPast(past: number): boolean {
+        const map = live();
+        aisles(map, 2.5, 9);
+        map.acceptSuggestion(map.snapshot().suggestions[0].id);
+        const strip = areasOf(map.snapshot().events).get('a1');
+        if (!strip) throw new Error('no tapped strip');
+        map.setTracking('lost');
+        map.setTracking('good');
+        walk(map, [0, 2.5], [1, 2.5]);
+        map.mark(
+          mark('m1', clock, { x: 1, y: 2.5, heading: 180, text: 'Lacteos' })
+        );
+        map.sectionLeft();
+        // The same name on the other aisle, `past` metres beyond the strip's end.
+        const end = strip.x + strip.w;
+        map.mark(
+          mark('m2', clock, {
+            x: end + past,
+            y: 0,
+            heading: 0,
+            text: 'Lacteos',
+          })
+        );
+        map.sectionLeft();
+        walk(map, [1, 2.5], [5, 2.5]);
+        map.mark(
+          mark('m3', clock, { x: 5, y: 2.5, heading: 180, text: 'Yogures' })
+        );
+        return [...areasOf(map.snapshot().events).values()].some(
+          (a) => a.section === 'Yogures'
+        );
+      }
+      expect(SECTION_REACH_METRES).toBe(1.5);
+      expect(splitsWithNamerPast(1)).toBe(true);
+      expect(splitsWithNamerPast(2)).toBe(false);
     });
 
     it('keeps the spelling of a shelf already named the same', () => {

@@ -23,7 +23,7 @@ import {
   type WalkMark,
 } from '@portfolio/luna-shopper/shop-map/recorder';
 import { APP_VERSION } from '@portfolio/velista/models';
-import { ReloadBlocker } from '@portfolio/velista/platform';
+import { ReloadBlocker, watchKeyboardInset } from '@portfolio/velista/platform';
 import { replayRows } from '../capture/replay';
 import { WalkCapture, type StopReason } from '../capture/walk-capture';
 import { formatDuration, formatMetres } from '../format';
@@ -421,29 +421,19 @@ export class RecordPage {
    * overlay nothing does), so a panel drawn in the flow would sit under the keyboard
    * with its Save button out of reach. Chrome for Android reports the keyboard
    * through `visualViewport` in the overlay too. Without `visualViewport` the panel
-   * stays at the bottom of the layout viewport.
+   * stays at the bottom of the layout viewport. It uses platform's
+   * `watchKeyboardInset`, which the recording screen uses too.
    */
   private _watchViewport(): void {
     this._unwatchViewport();
     const win = this._document.defaultView;
-    const viewport = win?.visualViewport;
-    if (!win || !viewport) {
+    if (!win?.visualViewport) {
       return;
     }
-
-    const update = () => {
-      const below = win.innerHeight - (viewport.offsetTop + viewport.height);
-      this.panelInset.set(Math.max(0, Math.round(below)));
-      this.panelMaxHeight.set(Math.floor(viewport.height));
-    };
-    viewport.addEventListener('resize', update);
-    viewport.addEventListener('scroll', update);
-    update();
-
-    this._unwatch = () => {
-      viewport.removeEventListener('resize', update);
-      viewport.removeEventListener('scroll', update);
-    };
+    this._unwatch = watchKeyboardInset(win, (inset) => {
+      this.panelInset.set(inset.bottom);
+      this.panelMaxHeight.set(inset.height);
+    });
   }
 
   private _unwatchViewport(): void {

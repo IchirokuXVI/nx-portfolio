@@ -60,8 +60,9 @@ on `GET /v1/account/me`, and let the back office set an account's roles with an 
 - The back office's user rows and account read (`/v1/admin/users`) carry `roles`, and the
   list filters by role.
 - `PUT /v1/admin/users/:id/roles { roles }` sets the roles, writes an `auth_audit` row with
-  the operator as actor, and revokes the account's refresh tokens so the next refresh (at
-  most one access token lifetime later) carries the new permissions.
+  the operator as actor, and does not revoke the account's refresh tokens. It has no need
+  to: a refresh re-reads the account's row, so the next refresh carries the new
+  permissions, and they lag at most one access token lifetime.
 - `openapi.json` and `wire-types.ts` are regenerated.
 
 ### Scope

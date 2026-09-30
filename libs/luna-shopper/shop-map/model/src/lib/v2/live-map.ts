@@ -94,7 +94,10 @@ function facesAcross(mark: MapMark, shelf: MapArea, acrossY: boolean): boolean {
   return (acrossY ? hy : hx) * v > EPS;
 }
 
-/** Whether a mark stands beside a strip's extent along its length. */
+/**
+ * Whether a mark stands beside a strip's extent along its length, with the same
+ * reach as across it, so a mark just past a strip's end still names it.
+ */
 function alongInside(
   mark: MapMark,
   whole: { x0: number; y0: number; x1: number; y1: number },
@@ -102,7 +105,8 @@ function alongInside(
 ): boolean {
   const at = acrossY ? mark.x : mark.y;
   const [lo, hi] = acrossY ? [whole.x0, whole.x1] : [whole.y0, whole.y1];
-  return at >= lo - EPS && at <= hi + EPS;
+  const reach = SECTION_REACH_METRES + EPS;
+  return at >= lo - reach && at <= hi + reach;
 }
 
 function distanceToSegment(

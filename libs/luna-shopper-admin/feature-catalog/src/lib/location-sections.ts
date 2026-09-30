@@ -434,6 +434,11 @@ export class LocationSections {
       const supermarketId = this.supermarketId();
       untracked(() => void this._read(locationId, supermarketId));
     });
+    // Accepting that a map writes the list holds for one shop only.
+    effect(() => {
+      this.locationId();
+      untracked(() => this.mapEditAccepted.set(false));
+    });
   }
 
   nameOf(section: ShopSection): string {
