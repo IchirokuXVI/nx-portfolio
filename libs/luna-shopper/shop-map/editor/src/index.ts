@@ -6,6 +6,11 @@
  * the host's, reached through the callbacks of `MountOptions`.
  */
 export {
+  PRODUCE_SECTION_WORDS,
+  SHELF_UNIT_METRES,
+  isProduceSection,
+} from './lib/drawn';
+export {
   HANDLE_HIT_PX,
   LONG_PRESS_MS,
   SLOP_PX,

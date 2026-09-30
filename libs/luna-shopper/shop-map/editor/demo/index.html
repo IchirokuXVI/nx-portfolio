@@ -77,9 +77,28 @@
         color: #0a0c14;
         font-weight: 600;
       }
-      #map {
+      #frame.compare {
+        max-width: 960px;
+      }
+      #maps {
         flex: 1;
         min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+      }
+      #frame.compare #maps {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      #map,
+      #map2 {
+        min-height: 0;
+      }
+      #map2 {
+        display: none;
+      }
+      #frame.compare #map2 {
+        display: block;
       }
       #status {
         margin: 0;
@@ -97,12 +116,17 @@
       <div class="bar">
         <button type="button" data-look="mapper">Mapper</button>
         <button type="button" data-look="shopper">Shopper</button>
+        <button type="button" data-look="shopper-drawn">Drawn</button>
+        <button id="compare" type="button">Side by side</button>
         <button type="button" data-theme-to="day">Day</button>
         <button type="button" data-theme-to="night">Night</button>
         <button id="replay" type="button">Replay</button>
         <label><input id="snap" type="checkbox" /> Snap</label>
       </div>
-      <div id="map"></div>
+      <div id="maps">
+        <div id="map"></div>
+        <div id="map2"></div>
+      </div>
       <p id="status"></p>
     </div>
     <script src="demo.js"></script>

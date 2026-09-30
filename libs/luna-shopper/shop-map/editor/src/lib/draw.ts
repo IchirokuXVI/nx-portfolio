@@ -77,6 +77,83 @@ export function drawLabel(
   });
 }
 
+/** A label's tag is the text plus this much on each side, and this tall. */
+const TAG_PAD_PX = 6;
+const TAG_HEIGHT_PX = 15;
+
+/**
+ * The drawn look's label (velista plan 0128): the text on a small tag in the
+ * area's colour, so it stays readable over the drawing. A custom colour tags
+ * it in that colour, with dark or light text, whichever reads better on it.
+ * The tag and the text move as one group, so a frame sets two attributes.
+ */
+export function drawTaggedLabel(
+  t: DrawTarget,
+  box: Box,
+  text: string,
+  className: string,
+  custom: { fill: string; ink: 'dark' | 'light' } | null
+): void {
+  if (!text) return;
+  const g = svg(t.doc, 'g', { display: 'none' }, t.parent);
+  const tag = svg(
+    t.doc,
+    'rect',
+    {
+      class: 'sm-label-tag',
+      y: -TAG_HEIGHT_PX / 2,
+      height: TAG_HEIGHT_PX,
+      rx: 5,
+      style: custom ? `fill:${custom.fill}` : undefined,
+    },
+    g
+  );
+  const node = svg(
+    t.doc,
+    'text',
+    {
+      class: custom ? `${className} sm-ink-${custom.ink}` : className,
+      x: 0,
+      y: 0,
+    },
+    g
+  );
+  node.textContent = text;
+  let measured: number | null = null;
+  let shown = false;
+  t.positioners.push((v) => {
+    const b = screenBox(v, box);
+    const vertical = b.h > b.w;
+    const along = vertical ? b.h : b.w;
+    const across = vertical ? b.w : b.h;
+    // Measured once, the first time the box is big enough to try.
+    if (measured === null && across >= TAG_HEIGHT_PX) {
+      g.setAttribute('display', 'inline');
+      const length = node.getComputedTextLength?.() ?? 0;
+      measured = length > 0 ? length : textWidth(text);
+      const w = measured + 2 * TAG_PAD_PX;
+      tag.setAttribute('x', `${px(-w / 2)}`);
+      tag.setAttribute('width', `${px(w)}`);
+      shown = true;
+    }
+    const fits =
+      measured !== null &&
+      across >= TAG_HEIGHT_PX &&
+      measured + 2 * TAG_PAD_PX <= along - 4;
+    if (fits !== shown) {
+      g.setAttribute('display', fits ? 'inline' : 'none');
+      shown = fits;
+    }
+    if (!fits) return;
+    const cx = px(b.x + b.w / 2);
+    const cy = px(b.y + b.h / 2);
+    g.setAttribute(
+      'transform',
+      `translate(${cx} ${cy})${vertical ? ' rotate(-90)' : ''}`
+    );
+  });
+}
+
 /** An area's rectangle. A custom colour is its fill with a border 40 percent darker. */
 export function drawArea(
   t: DrawTarget,

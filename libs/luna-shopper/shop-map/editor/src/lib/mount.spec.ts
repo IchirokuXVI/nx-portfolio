@@ -678,3 +678,110 @@ describe('mountShopMap, the shopper look', () => {
     expect(onSection).toHaveBeenCalledWith('Congelados');
   });
 });
+
+/** Velista plan 0128: the drawn shopper look. */
+describe('mountShopMap, the drawn shopper look', () => {
+  const drawnDoc: ShopMapDocumentV2 = {
+    ...doc,
+    areas: [
+      ...doc.areas,
+      area('a5', { x: 3, y: 7, w: 2, h: 1, section: 'Frutería' }),
+      area('a6', { kind: 'checkout', x: 6, y: 8, w: 1, h: 1 }),
+    ],
+  };
+
+  const mountDrawn = (onSection?: (s: string) => void) =>
+    (handle = mountShopMap(host, {
+      document: drawnDoc,
+      look: 'shopper-drawn',
+      labelOf: (a) => (a.kind === 'entrance' ? 'Entrance' : (a.section ?? '')),
+      onSection,
+    }));
+
+  it('draws shelves with products, a counter with glass, a crate, a till and the door', () => {
+    mountDrawn();
+    const fills = [...host.querySelectorAll('[fill]')]
+      .map((n) => n.getAttribute('fill'))
+      .filter((f) => f?.startsWith('url('));
+    // Two shelves, each with its dividers and a product row on both sides.
+    expect(fills.filter((f) => /-units-v\)$/.test(f ?? ''))).toHaveLength(2);
+    expect(fills.filter((f) => /-strip-a-v\)$/.test(f ?? ''))).toHaveLength(2);
+    expect(fills.filter((f) => /-strip-b-v\)$/.test(f ?? ''))).toHaveLength(2);
+    expect(
+      host.querySelectorAll('rect.sm-shelf-line:not(pattern *)')
+    ).toHaveLength(2);
+    expect(host.querySelectorAll('rect.sm-glass')).toHaveLength(1);
+    expect(fills.filter((f) => /-crate\)$/.test(f ?? ''))).toHaveLength(1);
+    expect(host.querySelector('use')?.getAttribute('href')).toMatch(
+      /^#sm\d+-till$/
+    );
+    expect(host.querySelector('symbol')).not.toBeNull();
+    expect(host.querySelectorAll('rect.sm-door')).toHaveLength(2);
+    // The areas, badges and entrance chip are the plain look's.
+    expect(host.querySelectorAll('rect.sm-area')).toHaveLength(5);
+    expect(host.querySelector('text.sm-entrance-text')?.textContent).toBe(
+      'Entrance'
+    );
+  });
+
+  it('draws only inline SVG: no image, no file behind any url()', () => {
+    mountDrawn();
+    expect(host.querySelector('image')).toBeNull();
+    for (const n of host.querySelectorAll('[fill],[href]')) {
+      const fill = n.getAttribute('fill') ?? '';
+      if (fill.startsWith('url(')) expect(fill).toMatch(/^url\(#/);
+      const href = n.getAttribute('href');
+      if (href !== null) expect(href).toMatch(/^#/);
+    }
+  });
+
+  it('puts every label on a tag in the area colour, with readable ink on a custom colour', () => {
+    mountDrawn();
+    const tags = [...host.querySelectorAll('rect.sm-label-tag')];
+    // The checkout has no label, so four.
+    expect(tags).toHaveLength(4);
+    const horno = [...host.querySelectorAll('text.sm-label')].find(
+      (t) => t.textContent === 'Horno'
+    );
+    expect(horno?.getAttribute('class')).toContain('sm-ink-light');
+    expect(horno?.previousElementSibling?.getAttribute('style')).toBe(
+      'fill:#c0392b'
+    );
+  });
+
+  it('moves every drawing with one transform, in step with the walkway', () => {
+    mountDrawn();
+    const walkway = host.querySelector('path[fill-rule="evenodd"]')
+      ?.parentElement as Element;
+    const drawings = host.querySelector('rect.sm-glass')
+      ?.parentElement as Element;
+    expect(drawings.getAttribute('transform')).toBe(
+      walkway.getAttribute('transform')
+    );
+  });
+
+  it('draws badges and taps sections as the shopper look does', () => {
+    const onSection = jest.fn();
+    mountDrawn(onSection);
+    handle?.setBadges({ Lácteos: { count: 2, done: false } });
+    expect(host.querySelectorAll('rect.sm-badge')).toHaveLength(1);
+    const v = (host.querySelector('g[transform]') as SVGGElement).getAttribute(
+      'transform'
+    ) as string;
+    const [s, , , , tx, ty] =
+      /matrix\(([^)]+)\)/.exec(v)?.[1].split(' ').map(Number) ?? [];
+    const p: [number, number] = [6.5 * s + tx, 3 * s + ty];
+    pointer('pointerdown', p);
+    pointer('pointerup', p);
+    expect(onSection).toHaveBeenCalledWith('Congelados');
+  });
+
+  it('switches between the plain and the drawn look', () => {
+    mountDrawn();
+    handle?.setLook('shopper');
+    expect(host.querySelectorAll('rect.sm-glass')).toHaveLength(0);
+    expect(host.querySelectorAll('rect.sm-label-tag')).toHaveLength(0);
+    handle?.setLook('shopper-drawn');
+    expect(host.querySelectorAll('rect.sm-glass')).toHaveLength(1);
+  });
+});
