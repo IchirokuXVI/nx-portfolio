@@ -74,8 +74,9 @@ export const StorageKeys = {
    * `0121`, target 6), so the map opens in a shop with poor signal.
    *
    * One record for the device, and with the basket shop's lifetime for the basket
-   * shop's reason: the map is wanted for the trip. It holds the map as the wire sent
-   * it, and it is read back through the same mapper as a response.
+   * shop's reason: the map is wanted for the trip. It holds the body exactly as the
+   * wire sent it, read back through the same mapper as a response, and the lines of
+   * the basket it counted, the live basket keyed by the account.
    */
   shopMap: `shop-map:${APP_KEY}`,
   /**

@@ -4,6 +4,18 @@ import type { ShopMapRead } from '@portfolio/velista/models';
 import { ShopMapApi } from './shop-map-api';
 
 /**
+ * One answer of the map read: what it means, and the body it came from.
+ *
+ * The body travels beside the mapped read so the store can keep it on the device
+ * exactly as the wire sent it, and map it again when it reads it back (velista
+ * `0121`, target 6). Null when there was no body to keep.
+ */
+export interface ShopMapAnswer {
+  readonly read: ShopMapRead;
+  readonly body: unknown;
+}
+
+/**
  * A shop's map, the one every shopper sees (velista `0121`; backend `0168`).
  *
  * `GET /v1/catalog/locations/:id/map`, which **takes no account**, so a guest on
@@ -16,7 +28,7 @@ export interface ShopMapServiceI {
    * know, which has none either), and `failed` for a read that did not answer or a
    * map that could not be drawn. **Never throws.**
    */
-  map(locationId: string): Promise<ShopMapRead>;
+  map(locationId: string): Promise<ShopMapAnswer>;
 }
 
 /**

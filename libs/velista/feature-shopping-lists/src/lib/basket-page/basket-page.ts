@@ -24,6 +24,7 @@ import {
   BasketStore,
   BasketViewStore,
   GroupMembers,
+  keepsShopMap,
   SessionStore,
   ShopDetailStore,
   ShopSectionsStore,
@@ -59,6 +60,7 @@ import {
   searchOpenOf,
   sheetSegments,
   shopMapPath,
+  StorageKeys,
   visitNoticeKey,
 } from '@portfolio/velista/platform';
 import {
@@ -270,6 +272,10 @@ export class BasketPage {
    *
    * Only for a reader with an account, because the shop read takes one. A guest on
    * a shared basket keeps the basket as it was.
+   *
+   * **Also when the shop could not be read but this device keeps its map** (target
+   * 6). In a shop with no signal the read fails after a reload, and the kept map is
+   * exactly what the button exists to open there. A read that answers decides.
    */
   protected readonly mapShop = computed<{
     readonly id: string;
@@ -280,7 +286,16 @@ export class BasketPage {
       return null;
     }
     const read = this._shopDetails.read(shop.id);
-    if (read.kind !== 'shop' || !read.shop.hasMap) {
+    const offered =
+      read.kind === 'shop'
+        ? read.shop.hasMap
+        : read.kind === 'failed' &&
+          keepsShopMap(
+            this._browser.readStorage(StorageKeys.shopMap),
+            shop.id,
+            Date.now()
+          );
+    if (!offered) {
       return null;
     }
     const locale = this._locale();
