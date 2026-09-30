@@ -2,7 +2,7 @@
 
 Turns a walk through a shop into positions, and positions into a draft shop map.
 Framework free and with no runtime dependency: no DOM, no Node API and no framework
-inside `src/`, because velista compiles it under Angular and the Android app ports it.
+inside `src/`, because velista compiles it under Angular.
 
 - Recorder plan 0001 (`plans/0001-steps-turns-and-scans.md`): `createWalkRecorder`,
   `Walk` and `walkToDocument`.
@@ -29,7 +29,6 @@ test of 2026-09-28. Never edit a fixture by hand. Rerun the generator.
 - `walks/<name>/<walk file name>.geojson`: the exported file of plan 0002 section 3.
 - `walks/<name>/expected.json`: per mode, and for PDR modes per step model (`fixed`,
   `weinberg`), the numbers this implementation computes, and the true path's numbers.
-  The Android app replays the same files and asserts the same numbers within 1e-3.
 - `traces/<name>.trace.json` and `.expected.json`: plan 0001's motion samples
   (`[t, ax, ay, az, yawRate]` plus the host's marks and scans) and the `Walk` its
   recorder answers.
@@ -37,7 +36,7 @@ test of 2026-09-28. Never edit a fixture by hand. Rerun the generator.
 ## Rules the plan left open
 
 Plan 0002 fixes the numbers. These are the choices this implementation makes where the
-plan says nothing, and the Kotlin port makes the same ones.
+plan says nothing.
 
 1. **Merging streams.** `computeTrack` feeds every row of every stream in `t` order.
    At an equal `t` the order is the key order of section 2: `motion`, `game`,

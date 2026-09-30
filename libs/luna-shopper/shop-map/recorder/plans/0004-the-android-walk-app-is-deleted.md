@@ -1,3 +1,5 @@
+> **PR:** [#543](https://github.com/IchirokuXVI/nx-portfolio/pull/543)
+
 # 0004: the Android walk app is deleted
 
 > Decided by the user on 2026-09-29. `apps/shop-walk-android` (PR #522) was built for the

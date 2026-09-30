@@ -1,6 +1,48 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { computeTrack } from './engine';
 import { emptyWalk } from './testing';
 import type { WalkFile } from './walk-file';
 import { parseWalkImport, WalkFileError, walkFileName } from './walk-import';
+
+describe('a walk file from the deleted Android app (recorder plan 0004)', () => {
+  const text = readFileSync(
+    join(
+      __dirname,
+      '..',
+      '__fixtures__',
+      'walks',
+      'l-shape',
+      'walk-20260928-1010-l-shape.geojson'
+    ),
+    'utf8'
+  );
+  const geo = JSON.parse(text) as { walk: WalkFile };
+  const android = {
+    ...geo,
+    walk: {
+      ...geo.walk,
+      source: {
+        platform: 'android',
+        app: 'the Android walk app',
+        appVersion: '1',
+        device: 'Pixel 10a',
+      },
+    },
+  };
+
+  it('still reads, and replays to the same track as the web copy', () => {
+    const web = parseWalkImport(text);
+    const read = parseWalkImport(JSON.stringify(android));
+    if (web.kind !== 'walk' || read.kind !== 'walk') {
+      throw new Error('the l-shape walk did not replay');
+    }
+    expect(read.walk.source.platform).toBe('android');
+    expect(read.walk.source.device).toBe('Pixel 10a');
+    const mode = 'pdr:own:gyro:snap';
+    expect(computeTrack(read.walk, mode)).toEqual(computeTrack(web.walk, mode));
+  });
+});
 
 function codeOf(text: string): string | undefined {
   try {
