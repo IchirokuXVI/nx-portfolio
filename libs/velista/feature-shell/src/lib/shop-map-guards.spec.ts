@@ -11,7 +11,7 @@ import {
   type RouterStateSnapshot,
 } from '@angular/router';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
-import { ProfileStore } from '@portfolio/velista/data-access';
+import { ProfileStore, SessionStore } from '@portfolio/velista/data-access';
 import type { AccountPermission } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import {
@@ -30,13 +30,14 @@ function profile(held: readonly AccountPermission[] | null, loaded = held) {
   };
 }
 
-async function decide(store: ReturnType<typeof profile>) {
+async function decide(store: ReturnType<typeof profile>, signedIn = true) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
       provideVelistaTesting(),
       { provide: ProfileStore, useValue: store },
+      { provide: SessionStore, useValue: { isAuthenticated: () => signedIn } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   });
@@ -70,6 +71,13 @@ describe('shopMapRecordGuard', () => {
 
     expect(await decide(store)).toBe(true);
     expect(store.load).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a signed out visitor to the sign in guard, and reads nothing', async () => {
+    const store = profile(null);
+
+    expect(await decide(store, false)).toBe(true);
+    expect(store.load).not.toHaveBeenCalled();
   });
 
   it('turns them away when me does not answer', async () => {
