@@ -413,29 +413,38 @@ describe('mountShopMap, the mapper gestures', () => {
       });
     });
 
-    it('grabs the nearest corner when the corner targets overlap', () => {
-      const onChange = jest.fn<void, [WalkEvent[]]>();
-      const small = area('s1', { kind: 'blocked', x: 5, y: 5, w: 0.4, h: 0.4 });
-      handle = mountShopMap(host, {
-        document: { ...doc, areas: [...doc.areas, small] },
-        look: 'mapper',
-        onChange,
-      });
-      expect(mapperView().s).toBeCloseTo(36.8);
-      handle.setSelected('s1');
-      // 2 px right of and 10 px below the bottom left corner, also in reach of
-      // the bottom right one.
-      const [bx, by] = at(5, 5.4);
-      drag([bx + 2, by + 10], at(4, 6.5));
-      const put = onChange.mock.calls[0][0][0] as Extract<
-        WalkEvent,
-        { type: 'area-put' }
-      >;
-      expect(put.area.x).toBeCloseTo(4);
-      expect(put.area.w).toBeCloseTo(1.4);
-      expect(put.area.y).toBeCloseTo(5);
-      expect(put.area.h).toBeCloseTo(1.5);
-    });
+    // 2 px right of the bottom left corner and some px below it, also in reach
+    // of the bottom right one. At 15 px the larger axis ties the two corners.
+    it.each([10, 15])(
+      'grabs the nearest corner when the corner targets overlap, %i px below',
+      (below) => {
+        const onChange = jest.fn<void, [WalkEvent[]]>();
+        const small = area('s1', {
+          kind: 'blocked',
+          x: 5,
+          y: 5,
+          w: 0.4,
+          h: 0.4,
+        });
+        handle = mountShopMap(host, {
+          document: { ...doc, areas: [...doc.areas, small] },
+          look: 'mapper',
+          onChange,
+        });
+        expect(mapperView().s).toBeCloseTo(36.8);
+        handle.setSelected('s1');
+        const [bx, by] = at(5, 5.4);
+        drag([bx + 2, by + below], at(4, 6.5));
+        const put = onChange.mock.calls[0][0][0] as Extract<
+          WalkEvent,
+          { type: 'area-put' }
+        >;
+        expect(put.area.x).toBeCloseTo(4);
+        expect(put.area.w).toBeCloseTo(1.4);
+        expect(put.area.y).toBeCloseTo(5);
+        expect(put.area.h).toBeCloseTo(1.5);
+      }
+    );
 
     it('moves an area smaller than the drawn handle from a press inside it', () => {
       const onChange = jest.fn<void, [WalkEvent[]]>();

@@ -362,8 +362,14 @@ export function mountShopMap(
       let best = Infinity;
       for (let i = 0; i < 4; i++) {
         const [sx, sy] = toScreen(view, cs[i][0], cs[i][1]);
-        const d = Math.max(Math.abs(sx - p.x), Math.abs(sy - p.y));
-        if (d <= reach && d < best) {
+        // Reach is a square per axis, but the rank is the true distance: the
+        // larger axis alone ties two corners of one edge beside that edge.
+        const d = Math.hypot(sx - p.x, sy - p.y);
+        if (
+          Math.abs(sx - p.x) <= reach &&
+          Math.abs(sy - p.y) <= reach &&
+          d < best
+        ) {
           nearest = i;
           best = d;
         }
