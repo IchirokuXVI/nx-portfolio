@@ -1,81 +1,647 @@
 {
   "version": 0.6,
-  "generator": "Overpass API 0.7.62.1",
+  "generator": "Overpass API 0.7.62.11 87bfad18",
   "osm3s": {
-    "timestamp_osm_base": "2026-08-27T09:14:22Z",
+    "timestamp_osm_base": "2026-09-29T22:04:30Z",
     "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
   },
   "elements": [
     {
       "type": "node",
       "id": 1156230891,
-      "lat": 37.8901234,
-      "lon": -4.7756789,
+      "lat": 37.884755,
+      "lon": -4.7915435,
+      "tags": {
+        "brand": "Mercadona",
+        "brand:wikidata": "Q377705",
+        "brand:wikipedia": "es:Mercadona",
+        "name": "Mercadona",
+        "shop": "supermarket",
+        "website": "https://www.mercadona.es"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3101252681,
+      "lat": 37.8840501,
+      "lon": -4.7808373,
+      "tags": {
+        "addr:city": "Córdoba",
+        "brand": "Dia",
+        "brand:wikidata": "Q925132",
+        "brand:wikipedia": "es:DIA (supermercados)",
+        "check_date": "2025-04-14",
+        "check_date:opening_hours": "2025-04-14",
+        "name": "Dia",
+        "opening_hours": "Mo-Sa 09:00-21:30",
+        "shop": "supermarket",
+        "wheelchair": "no"
+      }
+    },
+    {
+      "type": "node",
+      "id": 3647840964,
+      "lat": 37.8780024,
+      "lon": -4.7846071,
+      "tags": {
+        "name": "Piedra",
+        "opening_hours": "Mo-Sa 09:00-21:00",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5171267859,
+      "lat": 37.8773073,
+      "lon": -4.7846564,
+      "tags": {
+        "name": "alcoop",
+        "opening_hours": "Mo-Fr 09:15-21:00; Sa 09:15-14:00",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 7579932313,
+      "lat": 37.8818575,
+      "lon": -4.7935368,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "23",
+        "addr:postcode": "14005",
+        "addr:street": "Gran Vía Parque",
+        "name": "El Jamón (Proxi)",
+        "payment:contactless": "yes",
+        "payment:debit_cards": "yes",
+        "payment:visa": "yes",
+        "phone": "+34 957 45 41 21",
+        "shop": "supermarket",
+        "website": "https://tiendasproxi.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 7843125384,
+      "lat": 37.8814259,
+      "lon": -4.7900432,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "5",
+        "addr:postcode": "14004",
+        "addr:street": "Camino de los Sastres",
+        "brand": "masymas",
+        "brand:wikidata": "Q6135987",
+        "brand:wikipedia": "es:Supermercados Masymas",
+        "name": "masymas",
+        "operator": "Luis Piña, S.A.",
+        "operator:wikidata": "Q111520769",
+        "phone": "+34 957 45 01 33",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 7868611485,
+      "lat": 37.8822346,
+      "lon": -4.788805,
+      "tags": {
+        "addr:street": "Marruecos",
+        "brand": "El Jamón",
+        "brand:wikidata": "Q6135982",
+        "name": "El Jamón",
+        "phone": "+34 959 645 060",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 8240096918,
+      "lat": 37.8792815,
+      "lon": -4.7664588,
+      "tags": {
+        "addr:postcode": "14010",
+        "addr:street": "Avenida del Arcángel",
+        "brand": "Supeco",
+        "brand:wikidata": "Q110067041",
+        "name": "Supeco",
+        "shop": "supermarket",
+        "website": "https://www.supeco.es/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 8595048675,
+      "lat": 37.8844397,
+      "lon": -4.7785212,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "19",
+        "addr:postcode": "14002",
+        "addr:street": "Calle Claudio Marcelo",
+        "brand": "ALDI",
+        "brand:wikidata": "Q41171373",
+        "brand:wikipedia": "en:Aldi",
+        "name": "ALDI",
+        "opening_hours": "Mo-Sa 09:00-21:30",
+        "shop": "supermarket",
+        "website": "https://www.aldi.es/supermercados/encuentra-tu-supermercado/cordoba/cordoba/c-claudio-marcelo-19.html"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9605812202,
+      "lat": 37.8805078,
+      "lon": -4.7982616,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:postcode": "14005",
+        "addr:street": "Calle José María Martorell",
+        "name": "Deza",
+        "opening_hours": "Mo-Sa 09:30-21:30",
+        "operator": "Deza Calidad, S.A.",
+        "payment:cash": "yes",
+        "payment:contactless": "yes",
+        "payment:credit_cards": "yes",
+        "payment:debit_cards": "yes",
+        "phone": "+34 957 45 61 25",
+        "shop": "supermarket",
+        "toilets": "yes",
+        "website": "https://www.dezacalidad.es/centros/centro-comercial-zoco-calle-jose-maria-martorell/",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9773497332,
+      "lat": 37.8814807,
+      "lon": -4.7760351,
+      "tags": {
+        "brand": "Alsara",
+        "name": "Ana",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 9817258517,
+      "lat": 37.883191,
+      "lon": -4.7871457,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "2",
+        "addr:postcode": "14004",
+        "addr:street": "Calle Antonio Maura",
+        "brand": "Dia",
+        "brand:wikidata": "Q925132",
+        "name": "Dia",
+        "opening_hours": "Mo-Sa 09:00-21:00",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10579977238,
+      "lat": 37.8636824,
+      "lon": -4.7825942,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "38",
+        "addr:postcode": "14013",
+        "addr:street": "Calle Libertador Sucre",
+        "name": "Supercash Sector Sur",
+        "opening_hours": "Mo-Sa 09:00-21:30",
+        "operator": "Deza Calidad, S.A.",
+        "payment:cash": "yes",
+        "payment:contactless": "yes",
+        "payment:credit_cards": "yes",
+        "payment:debit_cards": "yes",
+        "phone": "+34 957 76 06 89",
+        "shop": "supermarket",
+        "toilets": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10579989743,
+      "lat": 37.8794218,
+      "lon": -4.7646008,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "1",
+        "addr:postcode": "14010",
+        "addr:street": "Calle Camino de la Barca",
+        "name": "Deza",
+        "opening_hours": "Mo-Sa 09:00-21:00",
+        "operator": "Deza Calidad, S.A.",
+        "payment:cash": "yes",
+        "payment:contactless": "yes",
+        "payment:credit_cards": "yes",
+        "payment:debit_cards": "yes",
+        "phone": "+34 957 07 69 20",
+        "shop": "supermarket",
+        "toilets": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10579989744,
+      "lat": 37.8706331,
+      "lon": -4.7761959,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "42",
+        "addr:postcode": "14009",
+        "addr:street": "Carretera de Castro",
+        "name": "Deza",
+        "opening_hours": "Mo-Sa 09:00-21:00",
+        "operator": "Deza Calidad, S.A.",
+        "payment:cash": "yes",
+        "payment:contactless": "yes",
+        "payment:credit_cards": "yes",
+        "payment:debit_cards": "yes",
+        "phone": "+34 957 07 80 25",
+        "shop": "supermarket",
+        "toilets": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 10600962042,
+      "lat": 37.8759624,
+      "lon": -4.7887366,
+      "tags": {
+        "name": "Cooperativa Almocafre",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11529014913,
+      "lat": 37.8786629,
+      "lon": -4.7963175,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "19",
+        "addr:postcode": "14005",
+        "addr:street": "Calle Manuel Fuentes \"Bocanegra\"",
+        "brand": "El Jamón",
+        "brand:wikidata": "Q6135982",
+        "name": "El Jamón",
+        "opening_hours": "Mo-Sa 09:00-21:00",
+        "phone": "+34 959 645 060",
+        "shop": "supermarket",
+        "website": "https://www.supermercadoseljamon.com/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 11575821812,
+      "lat": 37.8587473,
+      "lon": -4.7859698,
       "tags": {
         "brand": "Mercadona",
         "brand:wikidata": "Q377705",
         "name": "Mercadona",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12319010840,
+      "lat": 37.8800504,
+      "lon": -4.781081,
+      "tags": {
+        "addr:housenumber": "5",
+        "addr:street": "Calle Deanes",
+        "brand": "Carrefour Express",
+        "brand:wikidata": "Q2940190",
+        "name": "Carrefour express",
+        "opening_hours": "Mo-Su 09:00-22:00",
+        "payment:credit_cards": "yes",
+        "payment:debit_cards": "yes",
         "shop": "supermarket",
-        "website": "https://www.mercadona.es/",
-        "opening_hours": "Mo-Sa 09:00-21:30",
-        "addr:street": "Avenida del Aeropuerto",
-        "addr:housenumber": "22",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12801597031,
+      "lat": 37.8844393,
+      "lon": -4.7785141,
+      "tags": {
+        "brand": "Aldi",
+        "brand:wikidata": "Q41171373",
+        "name": "Aldi",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12802209024,
+      "lat": 37.8838374,
+      "lon": -4.7788689,
+      "tags": {
+        "brand": "El Jamón",
+        "brand:wikidata": "Q6135982",
+        "check_date": "2026-02-21",
+        "name": "El Jamón",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "node",
+      "id": 12999471201,
+      "lat": 37.8806904,
+      "lon": -4.7976093,
+      "tags": {
         "addr:city": "Córdoba",
-        "addr:postcode": "14004"
+        "addr:housenumber": "3",
+        "addr:postcode": "14005",
+        "addr:street": "Calle Manuel Fuentes \"Bocanegra\"",
+        "email": "hola@supernatura.es",
+        "name": "Supernatura",
+        "opening_hours": "Mo-Sa 09:00-15:00,17:00-21:00",
+        "organic": "only",
+        "phone": "+34 680 229 334",
+        "shop": "supermarket",
+        "website": "https://supernatura.es/"
+      }
+    },
+    {
+      "type": "node",
+      "id": 14166743654,
+      "lat": 37.8645359,
+      "lon": -4.7814431,
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "5",
+        "addr:postcode": "14013",
+        "addr:street": "Calle de Ronda",
+        "brand": "El Jamón",
+        "brand:wikidata": "Q6135982",
+        "name": "El Jamón",
+        "opening_hours": "Mo-Sa 09:00-21:30",
+        "phone": "+34 600 43 15 70",
+        "shop": "supermarket"
       }
     },
     {
       "type": "way",
-      "id": 442100731,
-      "center": { "lat": 37.8812345, "lon": -4.7801234 },
-      "nodes": [1, 2, 3, 4],
+      "id": 379954498,
+      "bounds": {
+        "minlat": 37.8668018,
+        "minlon": -4.7824258,
+        "maxlat": 37.8672679,
+        "maxlon": -4.7816153
+      },
+      "nodes": [
+        3832987870,
+        3832987871,
+        5738751130,
+        5738751131,
+        3832987872,
+        5738751129,
+        5738751128,
+        3832987873,
+        9311808897,
+        5738751127,
+        5738751126,
+        3832987870
+      ],
+      "geometry": [
+        {
+          "lat": 37.8670431,
+          "lon": -4.7816153
+        },
+        {
+          "lat": 37.8668018,
+          "lon": -4.7817843
+        },
+        {
+          "lat": 37.8669035,
+          "lon": -4.7820035
+        },
+        {
+          "lat": 37.8668571,
+          "lon": -4.7820368
+        },
+        {
+          "lat": 37.8670301,
+          "lon": -4.7824258
+        },
+        {
+          "lat": 37.8671352,
+          "lon": -4.7823494
+        },
+        {
+          "lat": 37.8671214,
+          "lon": -4.7823137
+        },
+        {
+          "lat": 37.8672679,
+          "lon": -4.7822228
+        },
+        {
+          "lat": 37.8672541,
+          "lon": -4.7821916
+        },
+        {
+          "lat": 37.8671006,
+          "lon": -4.781844
+        },
+        {
+          "lat": 37.8671399,
+          "lon": -4.7818174
+        },
+        {
+          "lat": 37.8670431,
+          "lon": -4.7816153
+        }
+      ],
       "tags": {
+        "addr:city": "Córdoba",
+        "addr:housenumber": "68",
+        "addr:postcode": "14013",
+        "addr:street": "Avenida de Cádiz",
+        "brand": "Lidl",
+        "brand:website": "https://www.lidl.es",
+        "brand:wikidata": "Q151954",
+        "brand:wikipedia": "en:Lidl",
+        "building": "yes",
+        "name": "Lidl",
+        "opening_hours": "Mo-Sa 09:00-22:00",
+        "shop": "supermarket"
+      }
+    },
+    {
+      "type": "way",
+      "id": 533825505,
+      "bounds": {
+        "minlat": 37.8771879,
+        "minlon": -4.8020443,
+        "maxlat": 37.8777991,
+        "maxlon": -4.8010828
+      },
+      "nodes": [
+        5178424325,
+        5178424326,
+        5178424327,
+        5178424328,
+        5178424329,
+        5178424330,
+        5178424331,
+        5178424332,
+        5178424333,
+        5178424325
+      ],
+      "geometry": [
+        {
+          "lat": 37.8771879,
+          "lon": -4.8017796
+        },
+        {
+          "lat": 37.8774196,
+          "lon": -4.801177
+        },
+        {
+          "lat": 37.8773797,
+          "lon": -4.8011534
+        },
+        {
+          "lat": 37.8774051,
+          "lon": -4.8010828
+        },
+        {
+          "lat": 37.8777498,
+          "lon": -4.8011304
+        },
+        {
+          "lat": 37.8777991,
+          "lon": -4.8012305
+        },
+        {
+          "lat": 37.8774782,
+          "lon": -4.8020443
+        },
+        {
+          "lat": 37.8774367,
+          "lon": -4.8020135
+        },
+        {
+          "lat": 37.8774586,
+          "lon": -4.8019548
+        },
+        {
+          "lat": 37.8771879,
+          "lon": -4.8017796
+        }
+      ],
+      "tags": {
+        "addr:city": "Córdoba",
+        "addr:postcode": "14004",
+        "addr:street": "Calle Escritor Conde de Zamora",
         "brand": "Mercadona",
         "brand:wikidata": "Q377705",
+        "brand:wikipedia": "es:Mercadona",
+        "building": "yes",
         "name": "Mercadona",
+        "opening_hours": "Mo-Sa 09:00-21:30",
+        "operator": "Mercadona",
+        "phone": "+34 957 73 18 29",
         "shop": "supermarket",
-        "building": "retail"
+        "source": "https://info.mercadona.es/es/supermercados?l=true&k=883185315786"
       }
     },
     {
-      "type": "node",
-      "id": 3310092211,
-      "lat": 37.8723456,
-      "lon": -4.7912345,
+      "type": "way",
+      "id": 593426260,
+      "bounds": {
+        "minlat": 37.8799527,
+        "minlon": -4.8026958,
+        "maxlat": 37.8804917,
+        "maxlon": -4.8019654
+      },
+      "nodes": [
+        5661208927,
+        5661208924,
+        5661208925,
+        5661208926,
+        5661208928,
+        5661208929,
+        5661208930,
+        5661208931,
+        5661208932,
+        6068272971,
+        6068272969,
+        6068272970,
+        5661208927
+      ],
+      "geometry": [
+        {
+          "lat": 37.8802202,
+          "lon": -4.8020033
+        },
+        {
+          "lat": 37.8804917,
+          "lon": -4.8020281
+        },
+        {
+          "lat": 37.8804512,
+          "lon": -4.8026958
+        },
+        {
+          "lat": 37.8801782,
+          "lon": -4.8026707
+        },
+        {
+          "lat": 37.8801815,
+          "lon": -4.8026452
+        },
+        {
+          "lat": 37.880143,
+          "lon": -4.8026398
+        },
+        {
+          "lat": 37.8801465,
+          "lon": -4.802583
+        },
+        {
+          "lat": 37.8799527,
+          "lon": -4.8025646
+        },
+        {
+          "lat": 37.8799874,
+          "lon": -4.8019803
+        },
+        {
+          "lat": 37.8801674,
+          "lon": -4.8019974
+        },
+        {
+          "lat": 37.8801693,
+          "lon": -4.8019654
+        },
+        {
+          "lat": 37.8802217,
+          "lon": -4.8019714
+        },
+        {
+          "lat": 37.8802202,
+          "lon": -4.8020033
+        }
+      ],
       "tags": {
-        "brand": "Dia",
-        "brand:wikidata": "Q925132",
-        "name": "Dia",
+        "brand": "ALDI",
+        "brand:website": "https://www.aldi.es",
+        "brand:wikidata": "Q41171373",
+        "brand:wikipedia": "en:Aldi",
+        "building": "yes",
+        "name": "ALDI",
         "shop": "supermarket"
       }
-    },
-    {
-      "type": "node",
-      "id": 3310092212,
-      "lat": 37.8654321,
-      "lon": -4.7845678,
-      "tags": {
-        "brand": "Maxi Dia",
-        "brand:wikidata": "Q925132",
-        "name": "Maxi Dia",
-        "shop": "supermarket",
-        "addr:city": "Córdoba"
-      }
-    },
-    {
-      "type": "node",
-      "id": 5512300987,
-      "lat": 37.8698765,
-      "lon": -4.7789012,
-      "tags": {
-        "name": "Supermercado La Plaza",
-        "shop": "supermarket"
-      }
-    },
-    {
-      "type": "relation",
-      "id": 88123,
-      "tags": { "shop": "supermarket", "name": "Sin posición" }
     }
   ]
 }
