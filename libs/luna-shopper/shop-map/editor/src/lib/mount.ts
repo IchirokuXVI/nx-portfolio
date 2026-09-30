@@ -190,7 +190,8 @@ export function mountShopMap(
   let shopper: ShopperView | null = null;
   let draft: Draft | null = null;
   let refusedTimer: ReturnType<typeof setTimeout> | null = null;
-  let held: [number, number] | null = null;
+  /** The point a long press marked, in metres, and the area under it. */
+  let held: { at: [number, number]; areaId: string | null } | null = null;
 
   let view: View = { s: 56, tx: 0, ty: 0 };
   let width = 0;
@@ -346,15 +347,28 @@ export function mountShopMap(
       // Outside the area, the whole touch target grabs the handle. Inside it,
       // only the drawn square does, and the rest is the body, so a shelf a
       // few pixels deep can still be both moved and resized at any zoom.
+      // Once the area is small on screen the corner targets overlap, so the
+      // nearest corner wins rather than the first in list order: a resize is
+      // drawn from the opposite corner, and grabbing the wrong one resizes
+      // from the wrong side. Inside an area smaller than the drawn square, the
+      // body wins, so a tiny area can still be moved; zoom in to resize it.
       const inside = contains(sel, wx, wy);
+      const tiny =
+        sel.w * view.s < HANDLE_GLYPH_PX || sel.h * view.s < HANDLE_GLYPH_PX;
+      if (inside && tiny) return { type: 'selected', area: sel };
       const reach = inside ? HANDLE_GLYPH_PX / 2 : HANDLE_HIT_PX / 2;
       const cs = corners(sel);
+      let nearest = -1;
+      let best = Infinity;
       for (let i = 0; i < 4; i++) {
         const [sx, sy] = toScreen(view, cs[i][0], cs[i][1]);
-        if (Math.abs(sx - p.x) <= reach && Math.abs(sy - p.y) <= reach) {
-          return { type: 'handle', corner: i, area: sel };
+        const d = Math.max(Math.abs(sx - p.x), Math.abs(sy - p.y));
+        if (d <= reach && d < best) {
+          nearest = i;
+          best = d;
         }
       }
+      if (nearest >= 0) return { type: 'handle', corner: nearest, area: sel };
       if (inside) return { type: 'selected', area: sel };
     }
     for (const s of live?.snapshot.suggestions ?? []) {
@@ -542,8 +556,8 @@ export function mountShopMap(
     if (held) {
       const node = svg(doc, 'rect', { class: 'sm-held' }, screen);
       const cell = {
-        x: Math.floor(held[0] / CELL_METRES) * CELL_METRES,
-        y: Math.floor(held[1] / CELL_METRES) * CELL_METRES,
+        x: Math.floor(held.at[0] / CELL_METRES) * CELL_METRES,
+        y: Math.floor(held.at[1] / CELL_METRES) * CELL_METRES,
         w: CELL_METRES,
         h: CELL_METRES,
       };
@@ -808,11 +822,14 @@ export function mountShopMap(
         if (gesture !== g) return;
         gesture = { kind: 'done' };
         const [wx, wy] = toWorld(view, p.x, p.y);
+        // A handle belongs to the selected area, so a press on it is on that area.
         const area =
-          target.type === 'area' || target.type === 'selected'
+          target.type === 'area' ||
+          target.type === 'selected' ||
+          target.type === 'handle'
             ? target.area
             : null;
-        held = [wx, wy];
+        held = { at: [wx, wy], areaId: area?.id ?? null };
         rebuild();
         options.onLongPress?.({ x: round2(wx), y: round2(wy) }, area, {
           x: e.clientX,
@@ -1031,8 +1048,10 @@ export function mountShopMap(
       rebuild();
     },
     setSelected(areaId) {
-      // Selecting the pressed area from inside onLongPress keeps the square.
-      if (areaId !== selectedId) held = null;
+      // Selecting the pressed area (usually from inside onLongPress) keeps the
+      // square; any other change of selection removes it.
+      if (areaId !== selectedId && (areaId === null || areaId !== held?.areaId))
+        held = null;
       selectedId = areaId;
       rebuild();
     },
