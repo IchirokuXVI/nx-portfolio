@@ -201,6 +201,31 @@ describe('RecordPage', () => {
     );
   });
 
+  it('hides Delete last mark while a panel is open', async () => {
+    const fixture = TestBed.createComponent(RecordPage);
+    const page = fixture.componentInstance;
+    const deleteButton = (): HTMLButtonElement | null =>
+      (fixture.nativeElement as HTMLElement).querySelector('.delete-last');
+
+    page.start();
+    await Promise.resolve();
+    await Promise.resolve();
+    page.markNow('entrance');
+    fixture.detectChanges();
+    expect(deleteButton()?.textContent?.trim()).toBe(
+      'walkLab.record.deleteLastMark'
+    );
+
+    // A tap on it would delete a mark from under the label being typed.
+    page.openPanel('checkpoint');
+    fixture.detectChanges();
+    expect(deleteButton()).toBeNull();
+
+    page.closePanel();
+    fixture.detectChanges();
+    expect(deleteButton()).not.toBeNull();
+  });
+
   it('pins the open panel to the bottom of the visual viewport', () => {
     const viewport = Object.assign(new EventTarget(), {
       height: window.innerHeight,
