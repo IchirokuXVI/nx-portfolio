@@ -1,3 +1,4 @@
+import type { Permission } from '../enums/account-role.enums';
 import type { UserKind, UsernamePropagation } from '../enums/auth.enums';
 
 /**
@@ -97,6 +98,15 @@ export interface AccessTokenClaims {
   /** userId. */
   sub: string;
   kind: UserKind;
+  /**
+   * What this account may do beyond the ordinary, computed at signing from its
+   * roles with `permissionsOf` (plan 0175). Never a role name.
+   *
+   * Optional in the type because a token signed before plan 0175 has no such
+   * claim, and a reader must treat its absence as no permissions rather than
+   * fail. Every token signed since carries it, empty or not.
+   */
+  perms?: Permission[];
   iat?: number;
   exp?: number;
 }

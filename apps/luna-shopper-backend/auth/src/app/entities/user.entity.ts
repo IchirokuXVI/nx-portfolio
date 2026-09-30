@@ -1,4 +1,4 @@
-import { UserKind } from '@portfolio/luna-shopper/contracts';
+import { UserKind, type AccountRole } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index } from 'typeorm';
 import { BaseEntity } from './base.entity';
 
@@ -39,4 +39,16 @@ export class User extends BaseEntity {
   @Index('ix_users_username')
   @Column({ type: 'varchar' })
   username!: string;
+
+  /**
+   * The account's roles (plan 0175), values of `AccountRole`. Empty for almost
+   * everybody and always for a guest.
+   *
+   * Roles only: what they grant is derived from `PERMISSIONS_OF` every time a
+   * token is signed, and never stored, so changing that table changes every
+   * account at its next refresh. Only an operator sets this, through
+   * `adminUser.setRoles`; nothing an account sends reaches it.
+   */
+  @Column({ type: 'text', array: true, default: () => "'{}'" })
+  roles!: AccountRole[];
 }

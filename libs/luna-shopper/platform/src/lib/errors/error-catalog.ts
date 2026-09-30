@@ -212,6 +212,14 @@ export const ERROR_CATALOG: Record<
     en: 'That shop does not exist.',
     es: 'Esa tienda no existe.',
   },
+  [ERROR_CODES.PERMISSION_REQUIRED]: {
+    en: 'Your account is not allowed to do that.',
+    es: 'Tu cuenta no tiene permiso para hacer eso.',
+  },
+  [ERROR_CODES.GUEST_HAS_NO_ROLES]: {
+    en: 'A guest account cannot hold a role. Grant it once the account is registered.',
+    es: 'Una cuenta de invitado no puede tener roles. Asígnalos cuando la cuenta esté registrada.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

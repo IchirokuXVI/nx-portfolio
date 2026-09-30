@@ -1,6 +1,7 @@
 import { InitialAuthSchema1756000000000 } from './1756000000000-InitialAuthSchema';
 import { AdminUsers1772400000000 } from './1772400000000-AdminUsers';
 import { AuthAudit1772500000000 } from './1772500000000-AuthAudit';
+import { UserRoles1772600000000 } from './1772600000000-UserRoles';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -25,4 +26,7 @@ export const AUTH_MIGRATIONS = [
   // A new table that references nothing, and that nothing references, so it
   // follows everything and depends on none of it (plan 0077, section 8).
   AuthAudit1772500000000,
+  // A column on `users` with a default, so every existing row starts with no
+  // role (plan 0175).
+  UserRoles1772600000000,
 ];
