@@ -235,6 +235,13 @@ export class BasketRow {
   readonly atShop = input(false);
 
   /**
+   * The section of the shop the basket is read at that holds this row's product,
+   * named, or null (velista `0121`, target 5). The page decides, because it is
+   * the page that knows whether the shop has a map.
+   */
+  readonly section = input<string | null>(null);
+
+  /**
    * What the chosen shop is known not to have on this row, or null (velista
    * `0102`).
    *

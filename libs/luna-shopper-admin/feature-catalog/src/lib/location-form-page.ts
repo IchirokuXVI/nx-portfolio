@@ -55,7 +55,11 @@ import { LocationSections } from './location-sections';
     @if (locationId(); as id) {
       @if (chainId(); as chain) {
         <div class="beside">
-          <lib-location-sections [locationId]="id" [supermarketId]="chain" />
+          <lib-location-sections
+            [hasMap]="hasMap()"
+            [locationId]="id"
+            [supermarketId]="chain"
+          />
         </div>
       }
     }
@@ -108,6 +112,12 @@ export class LocationFormPage extends ResourceFormPage {
       ? (this._shopRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
       : null
   );
+
+  /**
+   * Whether the shop has a walk shown to shoppers, from the location read
+   * (backend plan 0168). Its section list follows that map (admin plan 0040).
+   */
+  readonly hasMap = computed(() => this.store.row()?.['hasMap'] === true);
 
   /** The shop's chain, once the row has been read. */
   readonly chainId = computed(() => {

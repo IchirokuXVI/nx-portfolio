@@ -12,6 +12,7 @@ import type {
   ZoneStatus,
 } from './enums';
 import type { ProductCategory } from './product-category';
+import type { AccountPermission } from './shop-walks';
 import type { LocalizedName, Supermarket } from './shopping-profile';
 
 /**
@@ -746,6 +747,14 @@ export interface UserProfile {
    * keeps the copy it held rather than forgetting it.
    */
   readonly appState?: AppState;
+  /**
+   * What the account may do beyond shopping (backend `0175`), for example
+   * `shopMap.record`, which opens a shop's walks (velista `0122`).
+   *
+   * Optional for `appState`'s reason: only `GET /v1/account/me` carries it, and a
+   * rename's answer has none, so `ProfileStore` keeps the list it held.
+   */
+  readonly permissions?: readonly AccountPermission[];
 }
 
 /**

@@ -1,0 +1,58 @@
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="shop-section-title">
+  <div class="head">
+    <div class="head-text">
+      <h2 class="title" id="shop-section-title">
+        {{ name() ?? ('shopMap.section.unknown' | rokuT) }}
+      </h2>
+      @if (detail() !== '') {
+        <p class="detail">{{ detail() }}</p>
+      }
+    </div>
+    <!-- Through the shell, so Close plays the same fall the scrim and Escape do. -->
+    <button
+      (click)="shell.requestDismiss()"
+      [attr.aria-label]="'shopMap.section.close' | rokuT"
+      class="close"
+      type="button"
+    >
+      <lib-close-icon class="close-glyph" />
+    </button>
+  </div>
+
+  @if (lines(); as lines) {
+    @if (lines.length > 0) {
+      <ul class="lines">
+        @for (line of lines; track line.rowKey) {
+          <li [class.is-settled]="settled(line)" class="line">
+            <span
+              [attr.aria-label]="
+                (settled(line)
+                  ? 'shopMap.section.got'
+                  : 'shopMap.section.toGet'
+                ) | rokuT
+              "
+              [class.is-settled]="settled(line)"
+              class="settle"
+              role="img"
+            >
+              @if (settled(line)) {
+                <lib-check-icon class="settle-tick" />
+              }
+            </span>
+            <span class="content">{{ line.content }}</span>
+            <span class="quantity">{{ line.quantity }}</span>
+          </li>
+        }
+      </ul>
+    }
+  }
+
+  @if (note(); as note) {
+    <div class="note">
+      <p class="note-text">
+        <span class="note-heading">{{ 'shopMap.section.note' | rokuT }}</span>
+        <span>{{ note.text }}</span>
+      </p>
+    </div>
+  }
+</lib-sheet-shell>

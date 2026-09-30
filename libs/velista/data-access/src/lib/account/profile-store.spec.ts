@@ -636,4 +636,38 @@ describe('ProfileStore', () => {
       expect(store.username()).toBeNull();
     });
   });
+
+  describe('permissions (velista 0122)', () => {
+    it('knows none until me answers, and then what it said', async () => {
+      const { store, tokens } = setUp(
+        fakeAccount({ profile: profile({ permissions: ['shopMap.record'] }) })
+      );
+      signIn(tokens);
+
+      expect(store.permissions()).toBeNull();
+      expect(store.can('shopMap.record')).toBe(false);
+
+      await store.load();
+
+      expect(store.permissions()).toEqual(['shopMap.record']);
+      expect(store.can('shopMap.record')).toBe(true);
+    });
+
+    it('keeps them through a rename, whose answer carries none', async () => {
+      const account = fakeAccount({
+        profile: profile({ permissions: ['shopMap.record'] }),
+      });
+      const { store, tokens } = setUp({
+        ...account,
+        setUsername: async (username: string) => profile({ username }),
+      });
+      signIn(tokens);
+      await store.load();
+
+      await store.rename('Nuevo', 'MY_GROUPS_TOO');
+
+      expect(store.username()).toBe('Nuevo');
+      expect(store.can('shopMap.record')).toBe(true);
+    });
+  });
 });

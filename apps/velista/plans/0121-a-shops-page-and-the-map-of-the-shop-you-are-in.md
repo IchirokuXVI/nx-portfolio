@@ -1,3 +1,5 @@
+> **PR:** [#568](https://github.com/IchirokuXVI/nx-portfolio/pull/568)
+
 # 0121: a shop's page, and the map of the shop you are in
 
 > Rewritten on 2026-09-29 after five rounds of the mock. The first version mounted a grid

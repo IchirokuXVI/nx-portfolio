@@ -55,6 +55,14 @@ export class DiscoveredPlace extends BaseEntity {
   @Column({ type: 'double precision' })
   longitude!: number;
 
+  /**
+   * The area of the shop's mapped outline in whole square metres (plan 0176),
+   * null for a place mapped as a point. Kept here because import is a later,
+   * separate step, and it is what writes the number onto the location.
+   */
+  @Column({ type: 'int', nullable: true })
+  footprintM2!: number | null;
+
   @Column({ type: 'varchar', nullable: true })
   street!: string | null;
 

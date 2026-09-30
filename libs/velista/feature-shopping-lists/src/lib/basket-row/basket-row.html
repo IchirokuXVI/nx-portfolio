@@ -206,6 +206,14 @@
       }
 
       <!--
+        The section of the shop it is found in (velista 0121, target 5), under the
+        product, so the row names what the shop's map calls it.
+      -->
+      @if (section(); as section) {
+        <span class="section">{{ section }}</span>
+      }
+
+      <!--
         What the chosen shop is known not to have (velista 0102). Under the product
         and never instead of it: the row keeps its place, its controls and its
         number, because the shelf may be restocked. "Not available" is the danger

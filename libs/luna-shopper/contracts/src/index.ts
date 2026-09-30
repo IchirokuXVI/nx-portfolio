@@ -10,6 +10,7 @@ export * from './lib/pagination';
 export * from './lib/brands/brand-key';
 
 // Enums
+export * from './lib/enums/account-role.enums';
 export * from './lib/enums/assistant.enums';
 export * from './lib/enums/auth.enums';
 export * from './lib/enums/basket.enums';
@@ -30,9 +31,9 @@ export * from './lib/messages/app-state.messages';
 export * from './lib/messages/assistant.messages';
 export * from './lib/messages/auth.messages';
 export * from './lib/messages/basket-changes.messages';
+export * from './lib/messages/basket-sharing.messages';
 export * from './lib/messages/basket.messages';
 export * from './lib/messages/catalog.messages';
-export * from './lib/messages/basket-sharing.messages';
 export * from './lib/messages/harvest.messages';
 export * from './lib/messages/list.messages';
 export * from './lib/messages/merge.messages';
@@ -40,6 +41,7 @@ export * from './lib/messages/profile.messages';
 export * from './lib/messages/purchase.messages';
 export * from './lib/messages/realtime.messages';
 export * from './lib/messages/reconciliation.messages';
+export * from './lib/messages/shop-walk.messages';
 export * from './lib/messages/stats.messages';
 export * from './lib/messages/zone.messages';
 

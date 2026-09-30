@@ -1,3 +1,5 @@
+> **PR:** [#574](https://github.com/IchirokuXVI/nx-portfolio/pull/574)
+
 # 0128: drawn shelves, counters and tills on the shop map
 
 > **Low priority.** The user decided on 2026-09-29 that the drawn look is built, in a plan

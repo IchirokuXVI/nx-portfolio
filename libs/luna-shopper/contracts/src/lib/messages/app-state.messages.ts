@@ -1,3 +1,4 @@
+import type { Permission } from '../enums/account-role.enums';
 import type { UserProfileView } from './auth.messages';
 
 /**
@@ -75,4 +76,11 @@ export interface UserAppStateView {
  */
 export interface AccountMeView extends UserProfileView {
   appState: UserAppStateView;
+  /**
+   * What this account may do beyond the ordinary (plan 0175), read from the
+   * access token that made the request, so it always agrees with what the
+   * gateway enforces on that same token. Derived from the account's roles and
+   * never a role name. Empty for almost everybody, and always for a guest.
+   */
+  permissions: Permission[];
 }

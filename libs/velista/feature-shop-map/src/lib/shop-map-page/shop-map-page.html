@@ -1,0 +1,107 @@
+<main class="page">
+  <header class="bar">
+    <button
+      (click)="back()"
+      [attr.aria-label]="'shopMap.back' | rokuT"
+      class="back"
+      type="button"
+    >
+      <lib-chevron-left-icon class="back-glyph" />
+    </button>
+    <div class="heading">
+      <h1 class="title">{{ 'shopMap.title' | rokuT }}</h1>
+      @if (subtitle(); as subtitle) {
+        <p class="subtitle">{{ subtitle }}</p>
+      }
+    </div>
+    @if (canMap()) {
+      <button (click)="openWalks()" class="walks" type="button">
+        <lib-walk-icon class="walks-glyph" />
+        <span>{{ 'shopWalks.open' | rokuT }}</span>
+      </button>
+    }
+  </header>
+
+  @if (hasList()) {
+    <!--
+      Two chips and not a switch: each says what it shows, and "My list" carries
+      how many lines there are to find here.
+    -->
+    <div [attr.aria-label]="'shopMap.show' | rokuT" class="chips" role="group">
+      <button
+        (click)="setShow('mine')"
+        [attr.aria-pressed]="show() === 'mine'"
+        [class.is-on]="show() === 'mine'"
+        class="chip"
+        type="button"
+      >
+        {{ 'shopMap.mine' | rokuT: { count: lineCount() } }}
+      </button>
+      <button
+        (click)="setShow('all')"
+        [attr.aria-pressed]="show() === 'all'"
+        [class.is-on]="show() === 'all'"
+        class="chip"
+        type="button"
+      >
+        {{ 'shopMap.all' | rokuT }}
+      </button>
+    </div>
+  }
+
+  @switch (status()) {
+    @case ('map') {
+      @if (map(); as map) {
+        <lib-shop-map-view
+          (sectionTapped)="openSection($event)"
+          [badges]="badges()"
+          [document]="map.document"
+          [label]="'shopMap.label' | rokuT"
+          class="canvas"
+          look="shopper-drawn"
+        />
+
+        <p class="legend">
+          @if (show() === 'mine') {
+            <span aria-hidden="true" class="badge">2</span>
+            <span>{{ 'shopMap.legendLeft' | rokuT }}</span>
+            <span aria-hidden="true" class="badge is-done">
+              <lib-check-icon class="badge-tick" />1
+            </span>
+            <span>{{ 'shopMap.legendDone' | rokuT }}</span>
+          }
+          <span aria-hidden="true" class="walkway"></span>
+          <span>{{ 'shopMap.legendWalkway' | rokuT }}</span>
+          @if (fromDevice()) {
+            <span class="saved">{{ 'shopMap.saved' | rokuT }}</span>
+          }
+        </p>
+        <p class="hint">
+          {{ (show() === 'mine' ? 'shopMap.hint' : 'shopMap.hintAll') | rokuT }}
+        </p>
+      }
+    }
+    @case ('none') {
+      <div class="state">
+        <p class="state-text">{{ 'shopMap.none' | rokuT }}</p>
+      </div>
+    }
+    @case ('failed') {
+      <div class="state" role="alert">
+        <p class="state-text">{{ 'shopMap.failed' | rokuT }}</p>
+        <button (click)="retry()" class="retry" type="button">
+          {{ 'shopMap.retry' | rokuT }}
+        </button>
+      </div>
+    }
+    @default {
+      <div
+        [attr.aria-label]="'shopMap.loading' | rokuT"
+        class="canvas is-loading"
+        role="status"
+      ></div>
+    }
+  }
+</main>
+
+<router-outlet />

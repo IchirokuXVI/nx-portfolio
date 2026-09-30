@@ -1,0 +1,140 @@
+{
+  "sections": [
+    {
+      "name": "Horno de pan",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000001"
+      ],
+      "atMetres": 16.5
+    },
+    {
+      "name": "Desayuno y dulces",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000002"
+      ],
+      "atMetres": 33
+    },
+    {
+      "name": "Menaje",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000003"
+      ],
+      "atMetres": 37
+    },
+    {
+      "name": "Bodega",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000004"
+      ],
+      "atMetres": 48
+    },
+    {
+      "name": "Pescadería",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000005"
+      ],
+      "atMetres": 73
+    },
+    {
+      "name": "Carnicería",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000006"
+      ],
+      "atMetres": 78.5
+    },
+    {
+      "name": "Charcutería",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000007"
+      ],
+      "atMetres": 82
+    },
+    {
+      "name": "Mascotas",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000008"
+      ],
+      "atMetres": 86.5
+    },
+    {
+      "name": "Limpieza",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000009"
+      ],
+      "atMetres": 98.5
+    },
+    {
+      "name": "Hogar",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000010"
+      ],
+      "atMetres": 103
+    },
+    {
+      "name": "Agua",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000011"
+      ],
+      "atMetres": 122
+    },
+    {
+      "name": "Bebida y cervezas",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000012"
+      ],
+      "atMetres": 124.5
+    },
+    {
+      "name": "Abrir y comer",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000015"
+      ],
+      "atMetres": 139
+    },
+    {
+      "name": "Congelados",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000017"
+      ],
+      "atMetres": 153
+    },
+    {
+      "name": "Despensa",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000016"
+      ],
+      "atMetres": 160
+    },
+    {
+      "name": "Lácteos",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000018"
+      ],
+      "atMetres": 167
+    },
+    {
+      "name": "Higiene y perfumería",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000013",
+        "bb000000-0000-4000-8000-000000000020"
+      ],
+      "atMetres": 170
+    },
+    {
+      "name": "Bebe",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000014"
+      ],
+      "atMetres": 175.5
+    },
+    {
+      "name": "Frutería",
+      "areaIds": [
+        "bb000000-0000-4000-8000-000000000019"
+      ],
+      "atMetres": 188
+    }
+  ],
+  "startsAtEntrance": true,
+  "endsAtCheckout": true
+}

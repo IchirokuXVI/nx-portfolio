@@ -1,0 +1,200 @@
+@use '../shop-map' as shop;
+
+// The map every shopper sees (velista 0121, the `ShopMap` board of
+// `mocks/shop-map/`): the bar, the chips, the canvas filling what is left of the
+// screen, the legend and the hint.
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+// Exactly as tall as the page slot, which is `100svh` less the bar at the foot,
+// so the canvas takes what the words around it leave.
+.page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
+}
+
+.bar {
+  @include shop.bar;
+}
+
+.back {
+  @include shop.back;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.heading {
+  @include shop.heading;
+}
+
+.title {
+  @include shop.title;
+}
+
+.subtitle {
+  @include shop.subtitle;
+}
+
+// A shop's walks (velista 0122), for an account that maps: outlined, so the map
+// stays the page's one strong thing.
+.walks {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.walks-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.chips {
+  flex: none;
+  display: flex;
+  gap: var(--app-space-3);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-attention-row-height);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-chip-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  cursor: pointer;
+
+  &.is-on {
+    border-color: transparent;
+    background: var(--app-action-quiet-bg);
+    color: var(--app-action-quiet-fg);
+    font-weight: 600;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.canvas {
+  flex: 1;
+  min-block-size: 0;
+  margin: var(--app-space-3) var(--app-space-5) 0;
+
+  &.is-loading {
+    border-radius: var(--app-card-radius);
+    background: var(--app-surface-sunken);
+  }
+}
+
+.legend {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin: var(--app-space-4) var(--app-space-5) 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// The canvas's own badge, drawn in words' company so the legend reads it.
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-hair);
+  min-inline-size: var(--app-map-badge);
+  block-size: var(--app-map-badge);
+  padding: 0 var(--app-space-2);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-bg);
+  color: var(--app-text-on-action);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+
+  &.is-done {
+    margin-inline-start: var(--app-space-3);
+    background: var(--app-status-success-fg);
+    color: var(--app-surface-raised);
+  }
+}
+
+.badge-tick {
+  font-size: var(--app-text-2xs);
+}
+
+.walkway {
+  inline-size: var(--app-icon-sm);
+  block-size: var(--app-icon-sm);
+  margin-inline-start: var(--app-space-3);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-sm);
+  background-color: var(--shop-map-walkway);
+  background-image: radial-gradient(
+    var(--shop-map-walkway-dot) 1px,
+    transparent 1px
+  );
+  background-size: var(--app-space-3) var(--app-space-3);
+}
+
+.saved {
+  margin-inline-start: auto;
+  color: var(--app-status-info-fg);
+}
+
+.hint {
+  flex: none;
+  margin: var(--app-space-3) var(--app-space-5) 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-5);
+  padding: var(--app-space-8) var(--app-space-5);
+  text-align: center;
+}
+
+.state-text {
+  margin: 0;
+  font-size: var(--app-text-base);
+  color: var(--app-text-secondary);
+}
+
+.retry {
+  @include shop.retry;
+}

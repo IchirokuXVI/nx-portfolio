@@ -334,6 +334,7 @@ describe('the users descriptor', () => {
       'email',
       'kind',
       'verified',
+      'role',
       'createdAfter',
       'createdBefore',
     ]);

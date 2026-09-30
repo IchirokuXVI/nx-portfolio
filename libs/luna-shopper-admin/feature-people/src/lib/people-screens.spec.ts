@@ -7,6 +7,7 @@ import {
   ContentLocaleStore,
   DeploymentStore,
   DIRECTORY_SERVICE,
+  GatewayError,
   ServerReachability,
   SessionStorage,
   SessionStore,
@@ -51,6 +52,8 @@ function recordingDirectory() {
   const directory: DirectoryServiceI = {
     deleteUser: async (id) => void calls.push(`deleteUser:${id}`),
     resendVerification: async (id) => void calls.push(`resend:${id}`),
+    setUserRoles: async (id, roles) =>
+      void calls.push(`roles:${id}:${roles.join(',')}`),
     deleteZone: async (id) => void calls.push(`deleteZone:${id}`),
     regenerateJoinCode: async (id) => {
       calls.push(`joinCode:${id}`);
@@ -224,6 +227,153 @@ describe('the user detail screen', () => {
     await settle(fixture);
 
     expect(calls).toEqual([`resend:${USER_SEED[1].userId}`]);
+  });
+});
+
+/** The Roles section's switches, in the order the server lists roles. */
+const switches = (fixture: ComponentFixture<TestHost>) =>
+  [
+    ...fixture.nativeElement.querySelectorAll('button[role="switch"]'),
+  ] as HTMLButtonElement[];
+
+/**
+ * An account's roles (admin plan 0038, on backend plan 0175).
+ *
+ * The in memory gateway holds one account with a role, `marc` with `admin`, so
+ * the column, the filter and a switch that is already on each have something
+ * to show with no server.
+ */
+describe("an account's roles", () => {
+  const [rosa, marc, , guest] = USER_SEED;
+
+  it('shows them as a column on the users list', async () => {
+    const fixture = await boot('/users');
+
+    expect(text(fixture)).toContain('people.users.roles.label');
+    expect(text(fixture)).toContain('people.users.roles.cell.admin');
+    expect(text(fixture)).toContain('people.users.roles.cell.none');
+  });
+
+  it('filters the users list by role', async () => {
+    const fixture = await boot('/users?role=admin');
+
+    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(
+      (rows[0] as HTMLElement).querySelector('.title')?.textContent?.trim()
+    ).toBe('marc');
+  });
+
+  /** A role is only ever changed on the account's page, with a confirmation. */
+  it('offers no way to change a role from the list', async () => {
+    const fixture = await boot('/users');
+
+    expect(switches(fixture)).toHaveLength(0);
+  });
+
+  it('draws a switch per role, on where the account holds it', async () => {
+    const fixture = await boot(`/users/${marc.userId}`);
+
+    expect(
+      switches(fixture).map((button) => button.getAttribute('aria-checked'))
+    ).toEqual(['true', 'false']);
+    expect(text(fixture)).toContain('people.users.roles.admin.grants');
+    expect(text(fixture)).toContain('people.users.roles.premium.grants');
+  });
+
+  it('grants a role once confirmed, and says when the account sees it', async () => {
+    const fixture = await boot(`/users/${rosa.userId}`);
+
+    switches(fixture)[0].click();
+    await settle(fixture);
+
+    expect(text(fixture)).toContain('people.users.confirm.grantRole.heading');
+    // Nothing moves until the operator says yes.
+    expect(switches(fixture)[0].getAttribute('aria-checked')).toBe('false');
+
+    buttonSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(switches(fixture)[0].getAttribute('aria-checked')).toBe('true');
+    expect(text(fixture)).toContain('people.users.roles.saved');
+  });
+
+  it('removes a role by sending the whole set without it', async () => {
+    const { calls, directory } = recordingDirectory();
+    const fixture = await boot(`/users/${marc.userId}`, directory);
+
+    switches(fixture)[0].click();
+    await settle(fixture);
+    expect(text(fixture)).toContain('people.users.confirm.removeRole.heading');
+
+    buttonSaying(fixture, 'people.users.confirm.removeRole.confirm')?.click();
+    await settle(fixture);
+
+    expect(calls).toEqual([`roles:${marc.userId}:`]);
+  });
+
+  it('sends the roles already held beside the one granted', async () => {
+    const { calls, directory } = recordingDirectory();
+    const fixture = await boot(`/users/${marc.userId}`, directory);
+
+    switches(fixture)[1].click();
+    await settle(fixture);
+    buttonSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
+    await settle(fixture);
+
+    expect(calls).toEqual([`roles:${marc.userId}:admin,premium`]);
+  });
+
+  it('changes nothing when the confirmation is dismissed', async () => {
+    const { calls, directory } = recordingDirectory();
+    const fixture = await boot(`/users/${rosa.userId}`, directory);
+
+    switches(fixture)[0].click();
+    await settle(fixture);
+    buttonSaying(fixture, 'resource.action.cancel')?.click();
+    await settle(fixture);
+
+    expect(calls).toEqual([]);
+    expect(text(fixture)).not.toContain('people.users.roles.saved');
+  });
+
+  it('shows a guest the section disabled, and why', async () => {
+    const fixture = await boot(`/users/${guest.userId}`);
+
+    expect(text(fixture)).toContain('people.users.roles.guest');
+    expect(switches(fixture)).toHaveLength(2);
+    expect(switches(fixture).every((button) => button.disabled)).toBe(true);
+  });
+
+  /**
+   * The server's refusal for a guest, named rather than the generic conflict.
+   * The screen disables the switches for a guest, so reaching this takes a
+   * stale screen; the memory twin refuses the same way auth does.
+   */
+  it('says why the server refused a guest', async () => {
+    const { directory } = recordingDirectory();
+    const refusing: DirectoryServiceI = {
+      ...directory,
+      setUserRoles: async () => {
+        throw new GatewayError({
+          code: 'guest_has_no_roles',
+          status: 409,
+          correlationId: '',
+        });
+      },
+    };
+    const fixture = await boot(`/users/${rosa.userId}`, refusing);
+
+    switches(fixture)[0].click();
+    await settle(fixture);
+    buttonSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
+    await settle(fixture);
+
+    expect(
+      fixture.nativeElement.querySelector('[role="alert"]')?.textContent
+    ).toContain('people.users.roles.guestRefused');
+    expect(text(fixture)).not.toContain('people.users.roles.saved');
   });
 });
 

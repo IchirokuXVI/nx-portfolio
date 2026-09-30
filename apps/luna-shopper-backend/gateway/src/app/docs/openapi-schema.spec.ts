@@ -91,8 +91,14 @@ function sampleOf(schema: Record<string, unknown>): unknown {
       return typeof schema['minimum'] === 'number' ? schema['minimum'] : 1;
     case 'boolean':
       return true;
-    case 'array':
-      return [sampleOf((schema['items'] ?? {}) as Record<string, unknown>)];
+    case 'array': {
+      // As many items as the schema requires, so a fixed length list such as
+      // a point `[x, y]` (plan 0168) samples to something it accepts.
+      const minItems = schema['minItems'];
+      const count = typeof minItems === 'number' ? Math.max(1, minItems) : 1;
+      const item = sampleOf((schema['items'] ?? {}) as Record<string, unknown>);
+      return Array.from({ length: count }, () => item);
+    }
     case 'object': {
       const properties = (schema['properties'] ?? {}) as Record<
         string,

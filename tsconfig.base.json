@@ -179,6 +179,9 @@
       "@portfolio/velista/feature-shopping-lists": [
         "./libs/velista/feature-shopping-lists/src/index.ts"
       ],
+      "@portfolio/velista/feature-shop-map": [
+        "./libs/velista/feature-shop-map/src/index.ts"
+      ],
       "@portfolio/velista/feature-shell": [
         "./libs/velista/feature-shell/src/index.ts"
       ],
@@ -211,6 +214,9 @@
       ],
       "@portfolio/luna-shopper-admin/feature-brands": [
         "./libs/luna-shopper-admin/feature-brands/src/index.ts"
+      ],
+      "@portfolio/luna-shopper/shop-map/editor": [
+        "./libs/luna-shopper/shop-map/editor/src/index.ts"
       ]
     }
   },

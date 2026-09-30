@@ -18,7 +18,11 @@ import { UpdateAppStateDto } from './account.dto';
  * `user-app-state.integration.spec.ts`.
  */
 
-const USER: CurrentUser = { userId: 'user-1', kind: UserKind.REGISTERED };
+const USER: CurrentUser = {
+  userId: 'user-1',
+  kind: UserKind.REGISTERED,
+  permissions: ['shopMap.record'],
+};
 
 /** What auth answers for {@link USER}. */
 const PROFILE: UserProfileView = {
@@ -72,6 +76,8 @@ describe('AccountController, on what an account has been shown', () => {
       await expect(controller.me(USER)).resolves.toEqual({
         ...PROFILE,
         appState: STATE,
+        // From the token, not from auth (plan 0175).
+        permissions: ['shopMap.record'],
       });
 
       expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.getProfile, {
@@ -91,6 +97,7 @@ describe('AccountController, on what an account has been shown', () => {
       await expect(controller.me(USER)).resolves.toEqual({
         ...PROFILE,
         appState: { setupCompletedAt: null, tourSeenAt: null },
+        permissions: ['shopMap.record'],
       });
     });
 

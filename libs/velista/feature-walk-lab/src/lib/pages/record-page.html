@@ -200,22 +200,38 @@
         </p>
       </div>
 
-      <p aria-live="polite" class="last" role="status">
-        @if (lastMark(); as mark) {
-          {{
-            'walkLab.record.lastMark'
-              | rokuT
-                : {
-                    kind: ('walkLab.mark.' + mark.kind | rokuT),
-                    label: mark.label ?? '',
-                    time: markTime(mark),
-                  }
-          }}
+      <div class="last-row">
+        <p aria-live="polite" class="last" role="status">
+          @if (lastMark(); as mark) {
+            {{
+              'walkLab.record.lastMark'
+                | rokuT
+                  : {
+                      kind: ('walkLab.mark.' + mark.kind | rokuT),
+                      label: mark.label ?? '',
+                      time: markTime(mark),
+                    }
+            }}
+          }
+        </p>
+        @if (lastMark() && !panel()) {
+          <button (click)="deleteLastMark()" class="delete-last" type="button">
+            {{ 'walkLab.record.deleteLastMark' | rokuT }}
+          </button>
         }
-      </p>
+      </div>
 
       @if (panel(); as kind) {
-        <form (submit)="$event.preventDefault(); saveLabel()" class="panel">
+        <!--
+          Pinned to the bottom of the visual viewport, so Save sits right above the
+          on screen keyboard: the page cannot scroll to it.
+        -->
+        <form
+          (submit)="$event.preventDefault(); saveLabel()"
+          [style.bottom.px]="panelInset()"
+          [style.max-height.px]="panelMaxHeight()"
+          class="panel"
+        >
           <h2 class="panel-title">
             {{
               (kind === 'checkpoint'
@@ -227,7 +243,7 @@
           @if (kind === 'checkpoint') {
             <p class="muted">{{ 'walkLab.record.checkpointHelp' | rokuT }}</p>
             @if (usedLabels().length > 0) {
-              <div class="chips">
+              <div class="chips used-row">
                 @for (label of usedLabels(); track label) {
                   <button
                     (click)="saveLabel(label)"

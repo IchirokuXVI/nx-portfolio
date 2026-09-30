@@ -1,0 +1,156 @@
+// One section of the map (velista 0121, the `SectionSheet` board of
+// `mocks/shop-map/`).
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+}
+
+.head-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.close {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-end: calc(-1 * var(--app-space-3));
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.close-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.lines {
+  margin: var(--app-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding-block: var(--app-space-3);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+// The basket's settle circle, drawn as where the line stands: empty, or filled
+// with a tick once it is got. A shape and a word for a screen reader, never only
+// the colour.
+.settle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-map-settle);
+  block-size: var(--app-map-settle);
+  box-sizing: border-box;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  color: var(--app-surface-raised);
+
+  &.is-settled {
+    border: none;
+    background: var(--app-status-success-fg);
+  }
+}
+
+.settle-tick {
+  font-size: var(--app-text-sm);
+}
+
+.content {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--app-text-lg);
+  color: var(--app-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.line.is-settled .content {
+  color: var(--app-text-muted);
+}
+
+.quantity {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-quantity-width);
+  block-size: var(--app-attention-row-height);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+.line.is-settled .quantity {
+  border-color: transparent;
+  background: transparent;
+  color: var(--app-text-muted);
+}
+
+.note {
+  margin-block-start: var(--app-space-5);
+  padding: var(--app-space-4);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-status-attention-bg);
+  color: var(--app-text-primary);
+}
+
+.note-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.note-heading {
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-status-attention-fg);
+}

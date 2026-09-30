@@ -38,3 +38,44 @@ export type {
 } from './lib/types';
 export { PROBLEM_ORDER, validateShopMap } from './lib/validate';
 export { walkOrder } from './lib/walk-order';
+
+/**
+ * Version 2 (shop-map plan 0002): the document in metres, the walk log that
+ * folds to it, the walk order over it and what a shopper is shown. Every new
+ * piece reads and writes this one; nothing new reads version 1.
+ */
+export { normalizeShopMapV2 } from './lib/v2/normalize';
+export { shopperView } from './lib/v2/shopper-view';
+export type {
+  AreaColour,
+  AreaKind,
+  AreaOrigin,
+  MapArea,
+  MapMark,
+  MarkKind,
+  ShopMapDocumentV2,
+  ShopMapProblemCodeV2,
+  ShopMapProblemV2,
+  ShopperArea,
+  ShopperNote,
+  ShopperView,
+  WalkEntry,
+  WalkEntryKind,
+  WalkEvent,
+  WalkOrderV2,
+  WalkTimelineMarker,
+} from './lib/v2/types';
+export { PROBLEM_ORDER_V2, validateShopMapV2 } from './lib/v2/validate';
+export { foldWalk, stateAt, walkTimeline } from './lib/v2/walk-log';
+export { walkOrderV2 } from './lib/v2/walk-order';
+
+/** The live map (shop-map plan 0003): suggestions and section runs while walking. */
+export { createLiveMap } from './lib/v2/live-map';
+export type {
+  LiveMapHandle,
+  LiveMapOptions,
+  LiveMapSettings,
+  LivePoint,
+  LiveSnapshot,
+  LiveTracking,
+} from './lib/v2/live-types';

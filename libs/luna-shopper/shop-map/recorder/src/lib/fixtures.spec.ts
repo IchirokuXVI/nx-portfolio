@@ -9,8 +9,8 @@ import type { WalkFile } from './walk-file';
 import { parseWalkImport } from './walk-import';
 
 /**
- * The golden fixtures of plan 0002. The Android app replays the same files
- * and asserts the same numbers, so a change here is a change on both sides.
+ * The golden fixtures of plan 0002: every walk replays to the numbers of its
+ * `expected.json`.
  */
 const FIXTURES = join(__dirname, '..', '__fixtures__');
 const WALKS = join(FIXTURES, 'walks');

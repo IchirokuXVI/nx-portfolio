@@ -1,3 +1,4 @@
+import { ACCOUNT_ROLES, PERMISSIONS } from '../lib/enums/account-role.enums';
 import {
   AssistantRole,
   ListResolutionBranch,
@@ -37,6 +38,10 @@ import { enumOf, JsonSchema, schemaId } from './builders';
  */
 export const ENUM_IDS = {
   userKind: schemaId('enums/UserKind'),
+  /** A role on a velista account (plan 0175). */
+  accountRole: schemaId('enums/AccountRole'),
+  /** What a role grants (plan 0175). */
+  permission: schemaId('enums/Permission'),
   authProvider: schemaId('enums/AuthProvider'),
   usernamePropagation: schemaId('enums/UsernamePropagation'),
   zoneStatus: schemaId('enums/ZoneStatus'),
@@ -64,6 +69,8 @@ export const ENUM_IDS = {
 
 export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.userKind, Object.values(UserKind)),
+  enumOf(ENUM_IDS.accountRole, ACCOUNT_ROLES),
+  enumOf(ENUM_IDS.permission, PERMISSIONS),
   enumOf(ENUM_IDS.authProvider, Object.values(AuthProvider)),
   enumOf(ENUM_IDS.usernamePropagation, Object.values(UsernamePropagation)),
   enumOf(ENUM_IDS.zoneStatus, Object.values(ZoneStatus)),

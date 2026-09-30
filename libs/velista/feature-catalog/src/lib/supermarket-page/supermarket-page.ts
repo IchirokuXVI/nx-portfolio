@@ -27,7 +27,11 @@ import {
   type FranchiseButton,
   type Shop,
 } from '@portfolio/velista/models';
-import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import {
+  appPath,
+  PageNavigation,
+  shopPageOpener,
+} from '@portfolio/velista/platform';
 import {
   catalogShopRow,
   ChainLogo,
@@ -102,6 +106,9 @@ export const SUPERMARKET_PARAM = 'supermarketId';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CatalogSupermarketPage {
+  /** A shop row's round button: that shop's own page (velista `0121`). */
+  protected readonly openShop = shopPageOpener();
+
   private readonly _shops = inject(ShopStore);
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _finder = inject(ShopFinder);

@@ -21,8 +21,10 @@ import {
   AssistantApi,
   AUTH_SERVICE,
   AuthApi,
+  BASKET_LIST_SERVICE,
   BASKET_SERVICE,
   BasketApi,
+  BasketListApi,
   CATALOG_BROWSE_SERVICE,
   CATALOG_SERVICE,
   CatalogApi,
@@ -35,8 +37,6 @@ import {
   DUE_LINE_SERVICE,
   DueLineApi,
   gatewayInterceptor,
-  BASKET_LIST_SERVICE,
-  BasketListApi,
   LINE_SERVICE,
   LineApi,
   LIST_SERVICE,
@@ -50,14 +50,20 @@ import {
   RealtimeSocket,
   SessionStore,
   SessionValidation,
+  SHOP_DETAIL_SERVICE,
   SHOP_FINDER_SERVICE,
+  SHOP_MAP_SERVICE,
   SHOP_SECTIONS_SERVICE,
   SHOP_SERVICE,
+  SHOP_WALK_SERVICE,
   ShopApi,
+  ShopDetailApi,
   ShopFinderApi,
-  ShopSectionsApi,
+  ShopMapApi,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileApi,
+  ShopSectionsApi,
+  ShopWalkApi,
   StartupProbe,
   TRIP_SERVICE,
   TripApi,
@@ -79,8 +85,8 @@ import {
   AppUpdates,
   InstallStore,
   NavChrome,
-  TourStore,
   tourHoldingsOf,
+  TourStore,
   VELISTA_PLATFORM_PROVIDERS,
 } from '@portfolio/velista/platform';
 import { environment } from '../environments/environment';
@@ -279,6 +285,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // is walked. Bound apart so aisles that do not answer cost the basket nothing but
   // its category headings.
   provideService(SHOP_SECTIONS_SERVICE, ShopSectionsApi),
+  // One shop for its own page, and the map every shopper sees (velista 0121).
+  // Bound apart so a map that does not answer costs the map page and nothing else.
+  provideService(SHOP_DETAIL_SERVICE, ShopDetailApi),
+  provideService(SHOP_MAP_SERVICE, ShopMapApi),
+  // A shop's walks and their logs (velista 0122), for accounts that map shops.
+  provideService(SHOP_WALK_SERVICE, ShopWalkApi),
 
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
@@ -407,7 +419,9 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
       );
     });
 
-    effect(() => tour.setSeen((profile.appState()?.tourSeenAt ?? null) !== null));
+    effect(() =>
+      tour.setSeen((profile.appState()?.tourSeenAt ?? null) !== null)
+    );
 
     effect(() => {
       if (tour.ended() > 0) {

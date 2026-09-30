@@ -5,17 +5,19 @@ import type {
   WalkFile,
   WalkMark,
 } from '@portfolio/luna-shopper/shop-map/recorder';
+import {
+  describeError,
+  immersiveArSupported,
+  listenToOrientation,
+  motionRow,
+  openXrCamera,
+  roundTo,
+  type CaptureNavigator,
+  type CaptureWindow,
+  type OrientationSource,
+  type XrCamera,
+} from '@portfolio/velista/platform';
 import { WalkDb } from '../storage/walk-db';
-import type {
-  CaptureNavigator,
-  CaptureWindow,
-  OrientationSensorConstructor,
-  OrientationSensorLike,
-  SensorErrorEventLike,
-  XrFrameLike,
-  XrSessionLike,
-} from './browser-types';
-import { eulerToQuaternion, motionRow, roundTo } from './orientation-math';
 import { WalkBuilder, type WalkHeader } from './walk-builder';
 
 /** How often the rows of a recording are saved (section 7, "a closed tab loses little"). */
@@ -24,7 +26,7 @@ export const SAVE_EVERY_MS = 10_000;
 /** How long a stream may stay silent after Start before the walk says it is missing. */
 const SILENCE_MS = 3_000;
 
-export type OrientationSource = 'sensor' | 'event' | 'none';
+export type { OrientationSource };
 export type CameraState = 'off' | 'starting' | 'tracking' | 'lost' | 'failed';
 export type StopReason = 'finished' | 'hidden' | 'left';
 
@@ -111,7 +113,7 @@ export class WalkCapture {
   private readonly _lastT = new Map<string, number>();
   private readonly _cleanups: (() => void)[] = [];
   private _wakeLock: WakeLockSentinel | null = null;
-  private _xr: XrSessionLike | null = null;
+  private _xr: XrCamera | null = null;
   private _accuracy: number | null = null;
   private _savedAt: number | null = null;
   private _sources = {
@@ -130,13 +132,8 @@ export class WalkCapture {
   }
 
   /** Whether camera tracking can be offered: `isSessionSupported('immersive-ar')`. */
-  async cameraSupported(): Promise<boolean> {
-    try {
-      const xr = this._navigator?.xr;
-      return xr ? await xr.isSessionSupported('immersive-ar') : false;
-    } catch {
-      return false;
-    }
+  cameraSupported(): Promise<boolean> {
+    return immersiveArSupported(this._navigator);
   }
 
   /** Milliseconds since Start, on the clock every row is stamped with. */
@@ -230,6 +227,19 @@ export class WalkCapture {
   }
 
   /**
+   * Takes back the most recent mark still standing and answers the marks left, or
+   * null when nothing was taken back. `WalkBuilder.deleteLastMark` says how a mark
+   * already saved is cancelled.
+   */
+  deleteLastMark(): WalkMark[] | null {
+    if (!this._builder || !this._recording()) {
+      return null;
+    }
+    const deleted = this._builder.deleteLastMark(roundTo(this.now(), 1));
+    return deleted ? this._builder.liveMarks : null;
+  }
+
+  /**
    * Stop, save the whole walk, and answer it.
    *
    * Safe to call twice, and from a component being destroyed: the second call answers
@@ -303,7 +313,7 @@ export class WalkCapture {
         await askOrientation.call(this._window?.DeviceOrientationEvent);
       }
     } catch (error) {
-      this._event('permission-denied', `motion: ${describe(error)}`);
+      this._event('permission-denied', `motion: ${describeError(error)}`);
     }
   }
 
@@ -337,150 +347,26 @@ export class WalkCapture {
    * `game` and `absolute`: the Generic Sensor API at 50 Hz where it can be built and
    * started, else the `deviceorientation` events converted to quaternions. Each of
    * the two falls back on its own, since a phone can grant one and not the other.
+   * The listening itself is `listenToOrientation`, shared with velista `0126`.
    */
   private _listenToOrientation(): void {
-    const win = this._window;
-    this._startOrientation(
-      'game',
-      win?.RelativeOrientationSensor,
-      'deviceorientation'
-    );
-    this._startOrientation(
-      'absolute',
-      win?.AbsoluteOrientationSensor,
-      'deviceorientationabsolute'
-    );
-  }
-
-  private _startOrientation(
-    stream: 'game' | 'absolute',
-    Sensor: OrientationSensorConstructor | undefined,
-    fallbackEvent: 'deviceorientation' | 'deviceorientationabsolute'
-  ): void {
-    const fallback = (why: string) => {
-      this._event(
-        'sensor-missing',
-        `${stream} sensor: ${why}; using ${fallbackEvent}`
-      );
-      this._listenToOrientationEvent(stream, fallbackEvent);
-    };
-
-    if (typeof Sensor !== 'function') {
-      this._listenToOrientationEvent(stream, fallbackEvent);
-      return;
+    for (const stream of ['game', 'absolute'] as const) {
+      const stop = listenToOrientation(this._window, stream, {
+        reading: (source, q, eventTime) => {
+          this._sources[stream] = source;
+          const t = this._stamp(stream, eventTime);
+          this._push(stream, [
+            roundTo(t, 1),
+            roundTo(q[0], 6),
+            roundTo(q[1], 6),
+            roundTo(q[2], 6),
+            roundTo(q[3], 6),
+          ]);
+        },
+        event: (kind, detail) => this._event(kind, detail),
+      });
+      this._cleanups.push(stop);
     }
-
-    let sensor: OrientationSensorLike;
-    try {
-      sensor = new Sensor({ frequency: 50, referenceFrame: 'device' });
-    } catch (error) {
-      // SecurityError: blocked by a permissions policy. ReferenceError: not exposed.
-      fallback(describe(error));
-      return;
-    }
-
-    let fellBack = false;
-    let readings = 0;
-    const giveUp = (why: string) => {
-      if (fellBack) {
-        return;
-      }
-      fellBack = true;
-      try {
-        sensor.stop();
-      } catch {
-        // Already stopped, which is what was wanted.
-      }
-      fallback(why);
-    };
-
-    const onReading = () => {
-      const q = sensor.quaternion;
-      if (!q || q.length < 4 || fellBack) {
-        return;
-      }
-      readings++;
-      this._sources[stream] = 'sensor';
-      const t = this._stamp(stream, sensor.timestamp ?? undefined);
-      this._push(stream, [
-        roundTo(t, 1),
-        roundTo(q[0], 6),
-        roundTo(q[1], 6),
-        roundTo(q[2], 6),
-        roundTo(q[3], 6),
-      ]);
-    };
-
-    // NotAllowedError: the permission was refused. NotReadableError: the sensor
-    // could not be started. Either way the event based fallback may still work.
-    const onError = (event: Event) => {
-      const error = (event as SensorErrorEventLike).error;
-      if (error?.name === 'NotAllowedError') {
-        this._event('permission-denied', `${stream} sensor`);
-      }
-      giveUp(error ? `${error.name}: ${error.message}` : 'error');
-    };
-
-    sensor.addEventListener('reading', onReading);
-    sensor.addEventListener('error', onError);
-
-    try {
-      sensor.start();
-    } catch (error) {
-      giveUp(describe(error));
-      return;
-    }
-
-    // A sensor that starts and never reads is as missing as one that throws.
-    const watchdog = setTimeout(() => {
-      if (readings === 0) {
-        giveUp('no readings');
-      }
-    }, SILENCE_MS);
-
-    this._cleanups.push(() => {
-      clearTimeout(watchdog);
-      sensor.removeEventListener('reading', onReading);
-      sensor.removeEventListener('error', onError);
-      try {
-        sensor.stop();
-      } catch {
-        // Nothing to stop.
-      }
-    });
-  }
-
-  private _listenToOrientationEvent(
-    stream: 'game' | 'absolute',
-    type: 'deviceorientation' | 'deviceorientationabsolute'
-  ): void {
-    const win = this._window;
-    if (!win) {
-      return;
-    }
-
-    const onOrientation = (event: DeviceOrientationEvent) => {
-      // `deviceorientation` on a browser that only has absolute data says so with
-      // `absolute: true`; it is still the best the `game` stream can get.
-      const q = eulerToQuaternion(event.alpha, event.beta, event.gamma);
-      if (!q) {
-        return;
-      }
-      this._sources[stream] = 'event';
-      const t = this._stamp(stream, event.timeStamp);
-      this._push(stream, [
-        roundTo(t, 1),
-        roundTo(q[0], 6),
-        roundTo(q[1], 6),
-        roundTo(q[2], 6),
-        roundTo(q[3], 6),
-      ]);
-    };
-
-    win.addEventListener(type, onOrientation as EventListener);
-    this._cleanups.push(() =>
-      win.removeEventListener(type, onOrientation as EventListener)
-    );
   }
 
   private _watchLocation(): void {
@@ -519,7 +405,7 @@ export class WalkCapture {
       );
       this._cleanups.push(() => geo.clearWatch(id));
     } catch (error) {
-      this._event('sensor-missing', `geolocation: ${describe(error)}`);
+      this._event('sensor-missing', `geolocation: ${describeError(error)}`);
     }
   }
 
@@ -542,7 +428,7 @@ export class WalkCapture {
 
       if (doc.visibilityState === 'hidden') {
         const xrVisible =
-          this._xr !== null && this._xr.visibilityState !== 'hidden';
+          this._xr !== null && this._xr.session.visibilityState !== 'hidden';
         if (xrVisible) {
           this._event('hidden', 'ignored while camera tracking is on');
           return;
@@ -582,7 +468,7 @@ export class WalkCapture {
         await this._releaseWakeLock();
       }
     } catch (error) {
-      this._event('wake-lock-failed', describe(error));
+      this._event('wake-lock-failed', describeError(error));
     }
   }
 
@@ -601,66 +487,22 @@ export class WalkCapture {
   /**
    * WebXR `immersive-ar` with a DOM overlay, `local` reference space, the viewer pose
    * each frame into `pose`. Best effort from end to end: a failure at any step writes
-   * an event and the walk goes on without the camera.
+   * an event and the walk goes on without the camera. The session itself is
+   * `openXrCamera`, shared with velista `0126`.
    */
   private async _startCamera(root: Element | null): Promise<void> {
-    const win = this._window;
-    const xr = this._navigator?.xr;
-    if (!win || !xr || !win.XRWebGLLayer) {
-      this._camera.set('failed');
-      this._event('tracking-failed', 'WebXR is not available');
-      return;
-    }
-
-    this._camera.set('starting');
-    let session: XrSessionLike;
-    try {
-      session = await xr.requestSession('immersive-ar', {
-        optionalFeatures: ['dom-overlay'],
-        ...(root ? { domOverlay: { root } } : {}),
-      });
-    } catch (error) {
-      this._camera.set('failed');
-      this._event('tracking-failed', `requestSession: ${describe(error)}`);
-      return;
-    }
-
-    if (!this._recording()) {
-      void session.end().catch(() => undefined);
-      return;
-    }
-    this._xr = session;
-
-    try {
-      const canvas = this._document.createElement('canvas');
-      const gl = canvas.getContext('webgl', {
-        xrCompatible: true,
-        alpha: true,
-      } as WebGLContextAttributes) as WebGLRenderingContext | null;
-      if (!gl) {
-        throw new Error('no WebGL context');
-      }
-      session.updateRenderState({
-        baseLayer: new win.XRWebGLLayer(session, gl),
-      });
-      const space = await session.requestReferenceSpace('local');
-
-      let tracking = false;
-      const onFrame = (time: number, frame: XrFrameLike) => {
-        if (this._xr !== session) {
-          return;
-        }
-        session.requestAnimationFrame(onFrame);
-
-        // Clear to transparent so the camera shows through; nothing is drawn.
-        const layer = session.renderState.baseLayer;
-        if (layer) {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        }
-
-        const pose = frame.getViewerPose(space);
+    let tracking = false;
+    const opened = await openXrCamera({
+      window: this._window,
+      navigator: this._navigator,
+      document: this._document,
+      overlayRoot: root,
+      requesting: () => this._camera.set('starting'),
+      // Held from the moment the session exists, as before the move: a hidden
+      // page while it is set up is the camera taking the screen.
+      opened: (camera) => (this._xr = camera),
+      wanted: () => this._recording(),
+      frame: (time, pose) => {
         const tracked = pose !== null && !pose.emulatedPosition;
         if (tracked !== tracking) {
           tracking = tracked;
@@ -683,26 +525,26 @@ export class WalkCapture {
           roundTo(o.z, 6),
           roundTo(o.w, 6),
         ]);
-      };
-
-      session.addEventListener('end', () => {
-        if (this._xr === session) {
-          this._xr = null;
-          if (this._recording()) {
-            this._camera.set('failed');
-            this._event('tracking-ended', 'the camera session ended');
-          } else {
-            this._camera.set('off');
-          }
+      },
+      ended: () => {
+        this._xr = null;
+        if (this._recording()) {
+          this._camera.set('failed');
+          this._event('tracking-ended', 'the camera session ended');
+        } else {
+          this._camera.set('off');
         }
-      });
+      },
+    });
 
-      session.requestAnimationFrame(onFrame);
-    } catch (error) {
-      this._camera.set('failed');
-      this._event('tracking-failed', describe(error));
+    if (opened.kind !== 'open') {
       this._xr = null;
-      void session.end().catch(() => undefined);
+    }
+    if (opened.kind === 'failed') {
+      this._camera.set('failed');
+      this._event('tracking-failed', opened.detail);
+    } else if (opened.kind === 'open') {
+      this._xr = opened.camera;
     }
   }
 
@@ -835,11 +677,9 @@ export class WalkCapture {
       }
     }
 
-    const session = this._xr;
+    const camera = this._xr;
     this._xr = null;
-    if (session) {
-      void session.end().catch(() => undefined);
-    }
+    camera?.end();
     if (this._camera() !== 'failed') {
       this._camera.set('off');
     }
@@ -877,11 +717,4 @@ export function isoWithOffset(date: Date): string {
     `.${pad(date.getMilliseconds(), 3)}` +
     `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
   );
-}
-
-function describe(error: unknown): string {
-  if (error instanceof Error || error instanceof DOMException) {
-    return `${error.name}: ${error.message}`;
-  }
-  return String(error);
 }

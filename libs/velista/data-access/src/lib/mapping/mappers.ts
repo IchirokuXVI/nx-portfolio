@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_PERMISSIONS,
   BASKET_KIND_FALLBACK,
   BASKET_KINDS,
   BASKET_STATUS_FALLBACK,
@@ -986,6 +987,19 @@ export function toUserProfile(raw: unknown): UserProfile | null {
     // account and send the setup guard after somebody who finished it an hour ago.
     ...(isRecord(raw['appState'])
       ? { appState: toAppState(raw['appState']) }
+      : {}),
+    // Left off when the body carries no list, for `appState`'s reason: a rename's
+    // answer has none, and an empty list there would take the Walks button away from
+    // a mapper who only changed their name. A permission this build does not know is
+    // dropped, which is the safe direction: no control is drawn for it.
+    ...(Array.isArray(raw['permissions'])
+      ? {
+          permissions: raw['permissions'].filter(
+            (one): one is (typeof ACCOUNT_PERMISSIONS)[number] =>
+              typeof one === 'string' &&
+              (ACCOUNT_PERMISSIONS as readonly string[]).includes(one)
+          ),
+        }
       : {}),
   };
 }
