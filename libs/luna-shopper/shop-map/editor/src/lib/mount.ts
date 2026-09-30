@@ -69,6 +69,8 @@ const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_PX = 24;
 /** A resize handle's touch target, in css pixels. The square drawn is 16. */
 export const HANDLE_HIT_PX = 36;
+/** The resize handle's drawn square, in css pixels. */
+export const HANDLE_GLYPH_PX = 16;
 /** How long a refused draw, move or resize stays in the refusal colour. */
 const REFUSED_MS = 900;
 
@@ -278,9 +280,11 @@ export function mountShopMap(
    * weigh the same, so a Day host inside a Night page drew Night.
    */
   function applyTheme(): void {
-    const theme = host.closest('[data-theme]')?.getAttribute('data-theme');
-    if (theme === 'day' || theme === 'night')
-      root.setAttribute('data-sm-theme', theme);
+    const found = host.closest('[data-theme]')?.getAttribute('data-theme');
+    const theme = found === 'day' || found === 'night' ? found : null;
+    // Unchanged is left alone, so no style is recalculated for nothing.
+    if (root.getAttribute('data-sm-theme') === theme) return;
+    if (theme) root.setAttribute('data-sm-theme', theme);
     else root.removeAttribute('data-sm-theme');
   }
   applyTheme();
@@ -338,23 +342,20 @@ export function mountShopMap(
     }
     const sel = selectedArea();
     if (sel) {
-      // Below two touch targets a side, the corner targets would cover the
-      // whole area and it could never be moved, so a small area has no handles
-      // to grab until it is zoomed in.
-      const grabbable =
-        sel.w * view.s >= 2 * HANDLE_HIT_PX &&
-        sel.h * view.s >= 2 * HANDLE_HIT_PX;
-      const cs = grabbable ? corners(sel) : [];
-      for (let i = 0; i < cs.length; i++) {
+      // A handle is hit by where the press lands, not by the area's size.
+      // Outside the area, the whole touch target grabs the handle. Inside it,
+      // only the drawn square does, and the rest is the body, so a shelf a
+      // few pixels deep can still be both moved and resized at any zoom.
+      const inside = contains(sel, wx, wy);
+      const reach = inside ? HANDLE_GLYPH_PX / 2 : HANDLE_HIT_PX / 2;
+      const cs = corners(sel);
+      for (let i = 0; i < 4; i++) {
         const [sx, sy] = toScreen(view, cs[i][0], cs[i][1]);
-        if (
-          Math.abs(sx - p.x) <= HANDLE_HIT_PX / 2 &&
-          Math.abs(sy - p.y) <= HANDLE_HIT_PX / 2
-        ) {
+        if (Math.abs(sx - p.x) <= reach && Math.abs(sy - p.y) <= reach) {
           return { type: 'handle', corner: i, area: sel };
         }
       }
-      if (contains(sel, wx, wy)) return { type: 'selected', area: sel };
+      if (inside) return { type: 'selected', area: sel };
     }
     for (const s of live?.snapshot.suggestions ?? []) {
       if (contains(s, wx, wy)) return { type: 'suggestion', id: s.id };
@@ -570,7 +571,14 @@ export function mountShopMap(
       svg(
         doc,
         'rect',
-        { class: 'sm-handle', x: -8, y: -8, width: 16, height: 16, rx: 3 },
+        {
+          class: 'sm-handle',
+          x: -HANDLE_GLYPH_PX / 2,
+          y: -HANDLE_GLYPH_PX / 2,
+          width: HANDLE_GLYPH_PX,
+          height: HANDLE_GLYPH_PX,
+          rx: 3,
+        },
         g
       );
       return g;
@@ -992,8 +1000,10 @@ export function mountShopMap(
 
   return {
     setDocument(next) {
+      applyTheme();
       map = next;
       shopper = null;
+      // The document the square was held over is gone, so is the square.
       held = null;
       if (selectedId !== null && !map.areas.some((a) => a.id === selectedId))
         selectedId = null;
@@ -1021,8 +1031,9 @@ export function mountShopMap(
       rebuild();
     },
     setSelected(areaId) {
+      // Selecting the pressed area from inside onLongPress keeps the square.
+      if (areaId !== selectedId) held = null;
       selectedId = areaId;
-      held = null;
       rebuild();
     },
     clearHeld() {
@@ -1037,6 +1048,7 @@ export function mountShopMap(
       drawKind = kind;
     },
     fitToContent() {
+      applyTheme();
       fit();
       schedulePlace();
     },

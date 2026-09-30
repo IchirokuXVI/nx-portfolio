@@ -44,11 +44,13 @@ drawn in the refusal colour and not committed. It stays for under a second, and 
 touch clears it at once.
 
 A long press marks the square under the finger. Then it calls `onLongPress`, and the host
-opens its menu. The next touch removes the square. `setDocument` and `setSelected` remove
-it too. If the host closes its menu with no action, it calls `clearHeld()`.
+opens its menu. The next touch removes the square. Any `setDocument` removes it too, also
+one from a live walk while the menu is open. When the selection changes, `setSelected`
+removes it. If the host closes its menu with no action, it calls `clearHeld()`.
 
-A selected area has four corner handles to resize it. A small area has no handles to grab:
-under 72 css pixels on a side, a press on a corner moves the area. Zoom in to resize it.
+A selected area has four corner handles to resize it, at every size and zoom. Where the
+press lands decides. Outside the area, the 36 px touch target around a corner grabs the
+handle. Inside the area, only the drawn 16 px square does, and the rest moves the area.
 
 Three optional options exist for what the plan leaves to the host: `createId` (the id of
 an area drawn by hand, `crypto.randomUUID()` by default), `suggestionLabel` (the words on
