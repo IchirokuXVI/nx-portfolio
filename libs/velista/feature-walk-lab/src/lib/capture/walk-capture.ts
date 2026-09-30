@@ -498,6 +498,9 @@ export class WalkCapture {
       document: this._document,
       overlayRoot: root,
       requesting: () => this._camera.set('starting'),
+      // Held from the moment the session exists, as before the move: a hidden
+      // page while it is set up is the camera taking the screen.
+      opened: (camera) => (this._xr = camera),
       wanted: () => this._recording(),
       frame: (time, pose) => {
         const tracked = pose !== null && !pose.emulatedPosition;
@@ -534,6 +537,9 @@ export class WalkCapture {
       },
     });
 
+    if (opened.kind !== 'open') {
+      this._xr = null;
+    }
     if (opened.kind === 'failed') {
       this._camera.set('failed');
       this._event('tracking-failed', opened.detail);

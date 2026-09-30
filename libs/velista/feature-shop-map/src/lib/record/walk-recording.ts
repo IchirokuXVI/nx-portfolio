@@ -136,7 +136,10 @@ export class WalkRecording {
   /** The log time the session started at. */
   private _logBase = 0;
 
+  /** The last pose, while it is tracked: null from the first untracked one. */
   private _lastRaw: WalkPoseReading | null = null;
+  /** The camera time of the last pose, tracked or not. */
+  private _lastT = 0;
   private _lastAligned: PoseSample | null = null;
   private _lastKept: PathPoint | null = null;
   /** The last few kept points, for the direction the person walks. */
@@ -171,9 +174,21 @@ export class WalkRecording {
     return this._baseline;
   }
 
-  /** Whether a manual resume can line up now: a tracked pose has arrived. */
+  /** Whether a manual resume can line up now: the camera is tracking. */
   get canResume(): boolean {
-    return this._lastRaw?.tracked === true;
+    return this._lastRaw !== null;
+  }
+
+  /**
+   * Whether a manual resume can line up by the compass: the camera is tracking,
+   * and when the walk's baseline is known, the probe has a compass offset too.
+   * Without a baseline there is nothing to wait for: it lines up by pointing.
+   */
+  get readyToResume(): boolean {
+    return (
+      this.canResume &&
+      (this._baseline === null || this._probe?.state().offset !== undefined)
+    );
   }
 
   /** Where the person stands and faces, while walking. */
@@ -240,6 +255,8 @@ export class WalkRecording {
     if (raw === null || !raw.tracked) {
       return false;
     }
+    // A resume always follows a stop.
+    this.endSession();
     const offset = this._probe?.state().offset;
     const standingAt = mapPoint(raw);
     let baseline = this._baseline;
@@ -268,9 +285,8 @@ export class WalkRecording {
 
   /** One camera frame. */
   pose(raw: WalkPoseReading): void {
-    if (raw.tracked) {
-      this._lastRaw = raw;
-    }
+    this._lastT = raw.t;
+    this._lastRaw = raw.tracked ? raw : null;
     this._probe?.pushPose(sampleOf(raw));
     const guard = this._guard;
     if (guard === null || this._phase === 'idle' || this._phase === 'stopped') {
@@ -392,7 +408,7 @@ export class WalkRecording {
     if (this._phase !== 'unconfirmed' || guard === null) {
       return;
     }
-    this._handle(guard.confirm(this._lastRaw?.t ?? 0));
+    this._handle(guard.confirm(this._lastT));
     this._live.setTracking('good');
     const purple = this._purple;
     this._purple = [];
@@ -418,13 +434,43 @@ export class WalkRecording {
     if (this._phase !== 'unconfirmed' || guard === null) {
       return;
     }
-    guard.discard(this._lastRaw?.t ?? 0);
+    guard.discard(this._lastT);
     this._purple = [];
     this.flush();
     const at = this._lossLog ?? this._lastLog;
     this._output.push({ kind: 'stopped', reason: 'tracking-lost', logTo: at });
     this._output.push({ kind: 'discarded', logTo: at });
     this._stopped('discarded');
+  }
+
+  /**
+   * Ends what is left of the session before a manual resume, so the new session
+   * always follows a `stopped` entry: a loss still waiting stops at the loss, an
+   * unconfirmed path is discarded as "No, stop here" would, and walking stops as
+   * Stop would. Nothing when the walk is already stopped or never started.
+   */
+  endSession(): void {
+    switch (this._phase) {
+      case 'walking':
+        this.stopWalk('button');
+        break;
+      case 'unconfirmed':
+        this.discard();
+        break;
+      case 'lost': {
+        this.flush();
+        const at = this._lossLog ?? this._lastLog;
+        this._output.push({
+          kind: 'stopped',
+          reason: 'tracking-lost',
+          logTo: at,
+        });
+        this._stopped('tracking-lost');
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   /** Stop, or leaving the page (target 6). Nothing of an unconfirmed path is kept. */
