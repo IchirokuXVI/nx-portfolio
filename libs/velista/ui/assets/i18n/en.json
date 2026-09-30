@@ -1173,7 +1173,8 @@
     },
     "row": {
       "excluded": "Off",
-      "chainExcluded": "Brand off"
+      "chainExcluded": "Brand off",
+      "about": "About {{shop}}"
     },
     "empty": {
       "noCodes": {
@@ -1638,6 +1639,10 @@
       "failed": "The change did not save. Try again.",
       "cancel": "Cancel",
       "cheaper": "cheaper option"
+    },
+    "map": {
+      "open": "Map",
+      "openLabel": "Map of {{shop}}"
     }
   },
   "getList": {
@@ -1983,6 +1988,49 @@
       "stepSetting": "Step length when recorded",
       "app": "Recorded with",
       "events": "Events"
+    }
+  },
+  "shopPage": {
+    "back": "Back",
+    "loading": "Loading the shop",
+    "failed": "This shop would not load",
+    "missing": "We could not find this shop",
+    "retry": "Try again",
+    "address": "Address",
+    "size": "About {{size}} m²",
+    "sizeSource": "Building size from OpenStreetMap",
+    "seeMap": "See the map",
+    "sections": "Sections",
+    "sectionsHint": "in the order you walk them"
+  },
+  "shopMap": {
+    "title": "Where things are",
+    "back": "Back",
+    "loading": "Loading the map",
+    "failed": "The map would not load",
+    "none": "This shop has no map yet",
+    "retry": "Try again",
+    "saved": "Saved on this phone",
+    "label": "Map of the shop",
+    "show": "Show",
+    "mine": "My list · {{count}}",
+    "all": "All sections",
+    "legendLeft": "Still to get",
+    "legendDone": "All got",
+    "legendWalkway": "Walkway",
+    "hint": "Tap a section to see what you need there.",
+    "hintAll": "Tap a section to see its name and any note.",
+    "section": {
+      "close": "Close",
+      "position": "Stop {{position}} of {{total}}",
+      "left_one": "{{count}} thing still to get",
+      "left_other": "{{count}} things still to get",
+      "allGot": "You got everything here",
+      "nothing": "Nothing on your list here",
+      "got": "Got",
+      "toGet": "Still to get",
+      "note": "Note on the map",
+      "unknown": "This section is not on the map any more"
     }
   }
 }

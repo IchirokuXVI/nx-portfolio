@@ -56,6 +56,16 @@ function paramSignal(route: ActivatedRoute, name: string): Signal<string> {
   });
 }
 
+/** The shop a shop page, its map or a sheet over the map is about (velista `0121`). */
+export function locationIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'locationId');
+}
+
+/** The section the map's section sheet is about (velista `0121`). */
+export function sectionIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'sectionId');
+}
+
 /** The group this screen is about. Empty string only if the route is misdeclared. */
 export function zoneIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'zoneId');

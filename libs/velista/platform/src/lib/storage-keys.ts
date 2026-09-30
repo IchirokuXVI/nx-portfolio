@@ -70,6 +70,15 @@ export const StorageKeys = {
    */
   boughtShop: `bought-shop:${APP_KEY}`,
   /**
+   * The last shop map opened, with the basket lines it was opened with (velista
+   * `0121`, target 6), so the map opens in a shop with poor signal.
+   *
+   * One record for the device, and with the basket shop's lifetime for the basket
+   * shop's reason: the map is wanted for the trip. It holds the map as the wire sent
+   * it, and it is read back through the same mapper as a response.
+   */
+  shopMap: `shop-map:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

@@ -32,6 +32,23 @@
     <h1 class="title">{{ title() }}</h1>
 
     <!--
+      The map of the shop the basket is read at (velista 0121, target 5), when
+      that shop has one. A word beside the glyph, because "Map" is the whole
+      offer and a glyph alone would be a guess.
+    -->
+    @if (mapShop(); as shop) {
+      <button
+        (click)="openMap()"
+        [attr.aria-label]="'basket.map.openLabel' | rokuT: { shop: shop.name }"
+        class="map"
+        type="button"
+      >
+        <lib-map-icon class="map-glyph" />
+        {{ 'basket.map.open' | rokuT }}
+      </button>
+    }
+
+    <!--
       Who is holding this basket open **right now**, guests marked by a dashed ring.
       No sentence: a row of faces does the job, and the word "anonymous" appears
       nowhere in this product (section 5.1).
@@ -316,6 +333,7 @@
                     [priceMark]="row.priceMark"
                     [products]="products()"
                     [row]="row.row"
+                    [section]="rowSection(row.row)"
                     [shelf]="row.shelf"
                     [usual]="row.usual"
                   />
@@ -622,6 +640,7 @@
                         [priceMark]="row.priceMark"
                         [products]="products()"
                         [row]="row.row"
+                        [section]="rowSection(row.row)"
                         [shelf]="row.shelf"
                         [usual]="row.usual"
                       />

@@ -55,6 +55,7 @@
     and the chain buttons at the root, or one chain's shops once it is open.
   -->
   <lib-shop-picker
+    (about)="openShop($event)"
     (chosen)="select($event)"
     (picked)="pickShop($event)"
     (queried)="onQuery($event)"

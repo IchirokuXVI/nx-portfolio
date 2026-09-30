@@ -32,6 +32,7 @@ export * from './lib/product-group';
 export * from './lib/purchases';
 export * from './lib/requests';
 export * from './lib/shop';
+export * from './lib/shop-map';
 export * from './lib/shop-section';
 export * from './lib/shopping-lists-view';
 export * from './lib/shopping-profile';

@@ -29,7 +29,7 @@ import {
   type FranchiseButton,
   type ShopSectionName,
 } from '@portfolio/velista/models';
-import { SheetNavigation } from '@portfolio/velista/platform';
+import { SheetNavigation, shopPageOpener } from '@portfolio/velista/platform';
 import {
   ChainLogo,
   ChevronLeftIcon,
@@ -126,6 +126,9 @@ interface PickerShop {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShopPickerSheet {
+  /** A shop row's round button: that shop's own page (velista `0121`). */
+  protected readonly openShop = shopPageOpener();
+
   private readonly _view = inject(BasketViewStore);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _basePath = inject(APP_BASE_PATH);
