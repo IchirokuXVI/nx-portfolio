@@ -22,6 +22,11 @@ export interface PendingConfirm {
    * would not say what to do. Codes not named here take `gatewayErrorKey`.
    */
   readonly refusals?: Readonly<Record<string, string>>;
+  /**
+   * `primary` for an act that can be undone, so red stays for the ones that
+   * cannot. Absent means `danger`, which every older action here is.
+   */
+  readonly tone?: 'danger' | 'primary';
   run(): Promise<void>;
 }
 

@@ -165,6 +165,7 @@ const ZONE_LIMIT = 50;
         [busy]="busy()"
         [confirmKey]="pending.confirm"
         [headingKey]="pending.heading"
+        [tone]="pending.tone ?? 'danger'"
       />
     }
   `,
@@ -451,6 +452,8 @@ export class UserDetailPage extends DetailPage<UserRow> {
         grants: this.translator.t(this.grantsKey(role)),
       },
       refusals: { guest_has_no_roles: 'people.users.roles.guestRefused' },
+      // A role is given back or taken away with the same switch.
+      tone: 'primary',
       run: async () => {
         await this._directory.setUserRoles(user.userId, next);
         this.rolesSaved.set(true);
