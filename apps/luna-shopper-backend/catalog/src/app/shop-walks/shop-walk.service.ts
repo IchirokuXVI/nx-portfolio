@@ -109,6 +109,13 @@ const SUMMARY_COLUMNS = `
 const VIEW_CACHE_SIZE = 64;
 
 /**
+ * How many times the public read tries the seq filtered document read before
+ * it serves whatever the shown walk holds now. Under continuous appends every
+ * filtered read could miss, and the read would never return.
+ */
+const MAP_READ_ATTEMPTS = 2;
+
+/**
  * A shop's walks, their append only log, and the map shoppers see (backend
  * plan 0168).
  *
@@ -144,7 +151,8 @@ export class ShopWalkService {
 
   /** The shown walk's map, through `shopperView`, or null. No account. */
   async mapForLocation(
-    req: LocationShopMapRequest
+    req: LocationShopMapRequest,
+    attempt = 1
   ): Promise<LocationShopMapView> {
     await this.requireShop(this.dataSource.manager, req.supermarketLocationId);
     // The row without its document first: on a cache hit the document, up to
@@ -171,27 +179,16 @@ export class ShopWalkService {
         where: { id: walk.id, lastSeq },
       });
       if (!row) {
-        // The walk moved on (or was hidden) between the two reads: read again.
-        return this.mapForLocation(req);
+        // The walk moved on (or was hidden) between the two reads: read again,
+        // and once the attempts run out, serve what it holds now.
+        return attempt < MAP_READ_ATTEMPTS
+          ? this.mapForLocation(req, attempt + 1)
+          : this.currentMap(req, walk.id);
       }
-      derived = {
-        view: shopperView(row.document),
-        sectionNames: walkOrderV2(row.document).sections.map(
-          (stop) => stop.name
-        ),
-      };
+      derived = deriveMap(row.document);
       this.remember(key, derived);
     }
-    const map: ShopMapView = {
-      walkId: walk.id,
-      savedAt: await this.savedAt(walk.id, lastSeq, walk),
-      view: derived.view,
-      sections: await this.sections.resolveWalkNames(
-        req.supermarketLocationId,
-        derived.sectionNames
-      ),
-    };
-    return { map };
+    return { map: await this.mapView(req, walk, lastSeq, derived) };
   }
 
   /** A shop's walks that are not deleted: the shown one first, then by last change. */
@@ -510,6 +507,53 @@ export class ShopWalkService {
     return rows.map(toEntryView);
   }
 
+  /**
+   * The public read's last resort, once every seq filtered read has missed:
+   * the walk's document as it is now, cached under its own `walkId:lastSeq`,
+   * since the row read with it names the seq it folds to. A walk hidden or
+   * deleted in between answers no map.
+   */
+  private async currentMap(
+    req: LocationShopMapRequest,
+    walkId: string
+  ): Promise<LocationShopMapView> {
+    const row = await this.dataSource.getRepository(ShopWalk).findOne({
+      select: {
+        id: true,
+        document: true,
+        lastSeq: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      where: { id: walkId, shown: true, deletedAt: IsNull() },
+    });
+    if (!row) {
+      return { map: null };
+    }
+    const lastSeq = Number(row.lastSeq);
+    const derived = deriveMap(row.document);
+    this.remember(`${row.id}:${lastSeq}`, derived);
+    return { map: await this.mapView(req, row, lastSeq, derived) };
+  }
+
+  /** The public read's answer for one fold of the shown walk. */
+  private async mapView(
+    req: LocationShopMapRequest,
+    walk: { id: string; createdAt: Date; updatedAt: Date },
+    lastSeq: number,
+    derived: DerivedMap
+  ): Promise<ShopMapView> {
+    return {
+      walkId: walk.id,
+      savedAt: await this.savedAt(walk.id, lastSeq, walk),
+      view: derived.view,
+      sections: await this.sections.resolveWalkNames(
+        req.supermarketLocationId,
+        derived.sectionNames
+      ),
+    };
+  }
+
   /** When the walk's document last changed: its newest entry, else the walk's creation. */
   private async savedAt(
     walkId: string,
@@ -603,6 +647,14 @@ export class ShopWalkService {
       throw new NotFoundException('Supermarket location not found');
     }
   }
+}
+
+/** The two expensive halves of the public read, from one fold of a walk. */
+function deriveMap(document: ShopMapDocument): DerivedMap {
+  return {
+    view: shopperView(document),
+    sectionNames: walkOrderV2(document).sections.map((stop) => stop.name),
+  };
 }
 
 function toSummary(row: SummaryRow): ShopWalkSummaryView {
