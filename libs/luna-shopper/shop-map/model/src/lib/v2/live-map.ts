@@ -94,6 +94,17 @@ function facesAcross(mark: MapMark, shelf: MapArea, acrossY: boolean): boolean {
   return (acrossY ? hy : hx) * v > EPS;
 }
 
+/** Whether a mark stands beside a strip's extent along its length. */
+function alongInside(
+  mark: MapMark,
+  whole: { x0: number; y0: number; x1: number; y1: number },
+  acrossY: boolean
+): boolean {
+  const at = acrossY ? mark.x : mark.y;
+  const [lo, hi] = acrossY ? [whole.x0, whole.x1] : [whole.y0, whole.y1];
+  return at >= lo - EPS && at <= hi + EPS;
+}
+
 function distanceToSegment(
   px: number,
   py: number,
@@ -175,6 +186,15 @@ class LiveMap implements LiveMapHandle {
   private readonly dismissed = new Set<string>();
   /** Path areas made by walking across a suggested shelf, which later crossings extend. */
   private readonly crossings = new Set<string>();
+  /**
+   * Each cut strip's extent before any cut, in metres. Pieces a crossing or
+   * a split leaves share it, so the mark that named the whole strip is still
+   * found beside any piece, and a mark past its ends is not.
+   */
+  private readonly extents = new Map<
+    string,
+    { x0: number; y0: number; x1: number; y1: number }
+  >();
   private events: WalkEvent[] = [];
   private next: number;
   private run: Run | null = null;
@@ -555,8 +575,9 @@ class LiveMap implements LiveMapHandle {
         s1 < hi ? piece(s1 + 1, hi) : null,
       ].filter((x): x is CellRect => x !== null);
       if (pieces.length === 0) this.removeArea(a.id);
+      const whole = this.extentOf(a);
       pieces.forEach((pc, k) =>
-        this.putArea({
+        this.putPiece(whole, {
           ...a,
           id: k === 0 ? a.id : this.newId(),
           ...rectMetres(pc),
@@ -818,7 +839,8 @@ class LiveMap implements LiveMapHandle {
         (m) =>
           m.id !== mark.id &&
           key(m.text) === key(shelf.section) &&
-          facesAcross(m, shelf, acrossY)
+          facesAcross(m, shelf, acrossY) &&
+          alongInside(m, this.extentOf(shelf), acrossY)
       );
     const mine = sideOf(mark);
     if (!namer || mine === 0 || sideOf(namer) !== -mine) return null;
@@ -833,7 +855,8 @@ class LiveMap implements LiveMapHandle {
       acrossY
         ? { i0: r.i0, i1: r.i1, j0: c0, j1: c1 }
         : { i0: c0, i1: c1, j0: r.j0, j1: r.j1 };
-    this.putArea({ ...shelf, ...rectMetres(piece(f0, f1)) });
+    const whole = this.extentOf(shelf);
+    this.putPiece(whole, { ...shelf, ...rectMetres(piece(f0, f1)) });
     const near: MapArea = {
       id: this.newId(),
       kind: 'shelf',
@@ -841,8 +864,34 @@ class LiveMap implements LiveMapHandle {
       colour: { mode: 'default' },
       origin: 'suggested',
     };
-    this.putArea(near);
+    this.putPiece(whole, near);
     return near;
+  }
+
+  /** A strip's extent before any cut: its own rectangle until one is recorded. */
+  private extentOf(a: MapArea): {
+    x0: number;
+    y0: number;
+    x1: number;
+    y1: number;
+  } {
+    return (
+      this.extents.get(a.id) ?? {
+        x0: a.x,
+        y0: a.y,
+        x1: a.x + a.w,
+        y1: a.y + a.h,
+      }
+    );
+  }
+
+  /** Puts a piece of a cut strip, remembering the strip it came from. */
+  private putPiece(
+    whole: { x0: number; y0: number; x1: number; y1: number },
+    piece: MapArea
+  ): void {
+    this.extents.set(piece.id, whole);
+    this.putArea(piece);
   }
 
   private runRect(run: Run): CellRect {

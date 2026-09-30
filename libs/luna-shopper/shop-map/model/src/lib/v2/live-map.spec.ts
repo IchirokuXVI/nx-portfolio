@@ -592,6 +592,30 @@ describe('createLiveMap', () => {
       expect(piece('Yogures')).toEqual([[1.5, 0.5]]);
     });
 
+    it('never takes a mark of the same name past the ends of the strip as its namer', () => {
+      const map = live();
+      aisles(map, 2.5, 9);
+      map.acceptSuggestion(map.snapshot().suggestions[0].id);
+      map.setTracking('lost');
+      map.setTracking('good');
+      walk(map, [0, 2.5], [1, 2.5]);
+      map.mark(
+        mark('m1', clock, { x: 1, y: 2.5, heading: 180, text: 'Lacteos' })
+      );
+      map.sectionLeft();
+      // The same name on the same row line, 21 m past the strip's end.
+      map.mark(mark('m2', clock, { x: 30, y: 0, heading: 0, text: 'Lacteos' }));
+      walk(map, [1, 2.5], [5, 2.5]);
+      map.mark(
+        mark('m3', clock, { x: 5, y: 2.5, heading: 180, text: 'Yogures' })
+      );
+      const areas = areasOf(map.snapshot().events);
+      expect(areas.get('a1')).toMatchObject({ section: 'Lacteos', h: 1.5 });
+      expect(
+        [...areas.values()].filter((a) => a.section === 'Yogures')
+      ).toEqual([]);
+    });
+
     it('keeps the spelling of a shelf already named the same', () => {
       const map = live();
       aisles(map, 1.5);
