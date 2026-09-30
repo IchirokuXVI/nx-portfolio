@@ -1,0 +1,245 @@
+@use '../shop-map' as shop;
+@use '../walks';
+
+// Rewind (velista 0122, the `Rewind` board of `mocks/shop-map/`): the map filling
+// what the panel leaves, and the panel at the foot with the moment, the slider,
+// the jumps and "Continue from here".
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+.bar {
+  @include shop.bar;
+}
+
+.back {
+  @include shop.back;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.heading {
+  @include shop.heading;
+}
+
+.title {
+  @include shop.title;
+}
+
+.subtitle {
+  @include shop.subtitle;
+}
+
+.map {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+
+  &.is-loading {
+    background: var(--app-surface-sunken);
+  }
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.faded-note {
+  position: absolute;
+  inset-block-end: var(--app-space-4);
+  inset-inline-start: var(--app-space-4);
+  margin: 0;
+  padding: var(--app-space-2) var(--app-space-4);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  pointer-events: none;
+}
+
+.panel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-5) var(--app-space-5)
+    calc(var(--app-space-5) + var(--app-safe-bottom));
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+}
+
+.moment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-2) var(--app-space-4);
+}
+
+.moment-time {
+  margin: 0;
+  font-size: var(--app-text-2xl);
+  font-weight: 700;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.moment-since {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.slider {
+  position: relative;
+  padding-block-start: var(--app-space-4);
+}
+
+// A tick per entry, above the track, in the attention colour the mock draws them
+// in: the one mark on this screen that is not the action.
+.ticks {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: var(--app-space-4);
+  block-size: var(--app-space-5);
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  inset-block-start: 0;
+  inline-size: var(--app-space-hair);
+  block-size: var(--app-space-5);
+  border-radius: var(--app-radius-full);
+  background: var(--app-status-attention-fg);
+}
+
+.range {
+  display: block;
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin: 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.scale-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.scale-tick {
+  inline-size: var(--app-space-hair);
+  block-size: var(--app-space-4);
+  background: var(--app-status-attention-fg);
+}
+
+// Sideways, so however long the history is the panel keeps its height.
+.jumps {
+  display: flex;
+  gap: var(--app-space-3);
+  margin-inline: calc(-1 * var(--app-space-5));
+  padding-inline: var(--app-space-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.jump {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--app-space-hair);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-3) var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &.is-on {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-quiet-bg);
+  }
+
+  @include walks.focus-ring;
+}
+
+.jump-time {
+  font-size: var(--app-text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.jump-title {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+}
+
+.notice {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
+.primary {
+  @include walks.primary;
+}
+
+.spinning {
+  font-size: var(--app-icon-sm);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--app-space-6) var(--app-space-5);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-5);
+  padding: var(--app-space-8) var(--app-space-5);
+  text-align: center;
+}
+
+.state-text {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
+.retry {
+  @include shop.retry;
+}

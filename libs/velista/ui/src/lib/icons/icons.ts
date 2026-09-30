@@ -1075,6 +1075,36 @@ export class FloorAreaIcon {
   );
 }
 
+/** A person walking (velista `0122`): a shop's walks, on the map page's Walks button. */
+@Component({
+  selector: 'lib-walk-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class WalkIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./walk-icon.svg?raw')
+  );
+}
+
+/** Three sliders (velista `0122`): settings that apply to many things at once. */
+@Component({
+  selector: 'lib-sliders-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class SlidersIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./sliders-icon.svg?raw')
+  );
+}
+
 /** Two arrows passing each other: take one product instead of another. */
 @Component({
   selector: 'lib-swap-icon',

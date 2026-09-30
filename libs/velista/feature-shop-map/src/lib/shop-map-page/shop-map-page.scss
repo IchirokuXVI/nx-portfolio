@@ -42,6 +42,34 @@
   @include shop.subtitle;
 }
 
+// A shop's walks (velista 0122), for an account that maps: outlined, so the map
+// stays the page's one strong thing.
+.walks {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.walks-glyph {
+  font-size: var(--app-icon-sm);
+}
+
 .chips {
   flex: none;
   display: flex;

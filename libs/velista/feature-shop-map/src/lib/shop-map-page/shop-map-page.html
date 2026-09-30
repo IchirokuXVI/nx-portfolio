@@ -14,6 +14,12 @@
         <p class="subtitle">{{ subtitle }}</p>
       }
     </div>
+    @if (canMap()) {
+      <button (click)="openWalks()" class="walks" type="button">
+        <lib-walk-icon class="walks-glyph" />
+        <span>{{ 'shopWalks.open' | rokuT }}</span>
+      </button>
+    }
   </header>
 
   @if (hasList()) {

@@ -79,6 +79,15 @@ export const StorageKeys = {
    */
   shopMap: `shop-map:${APP_KEY}`,
   /**
+   * The settings for every walk this device records (velista `0122`, target 6):
+   * today one, "Walking across a shelf makes it a path".
+   *
+   * One record for the device, like `basketView`, and with no expiry: it is how
+   * somebody likes to map, not a fact about one trip. Not on the server, which the
+   * plan leaves for later.
+   */
+  mappingSettings: `mapping-settings:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

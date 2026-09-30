@@ -1,5 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import type {
+  AccountPermission,
   AppState,
   AppStateFlags,
   UsernameScope,
@@ -73,6 +74,12 @@ export class AccountMemory implements AccountServiceI {
    * setup exists for; stamps are kept once and never moved, as the server keeps them.
    */
   private _appState: AppState = { setupCompletedAt: null, tourSeenAt: null };
+
+  /**
+   * What the account may do beyond shopping (backend `0175`). None by default, which
+   * is every account but an admin; a spec that needs a mapper sets it.
+   */
+  permissions: AccountPermission[] = [];
 
   private _suggested = 0;
 
@@ -159,6 +166,7 @@ export class AccountMemory implements AccountServiceI {
       emailVerified: !guest,
       displayName: null,
       appState: this._appState,
+      permissions: [...this.permissions],
     };
   }
 }

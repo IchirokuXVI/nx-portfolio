@@ -29,6 +29,7 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { setupGuard } from './setup-guard';
+import { shopMapRecordGuard, walkIdGuard } from './shop-map-guards';
 import { APP_USABLE_LOCALES } from './usable-locales';
 import {
   basketIdGuard,
@@ -1066,6 +1067,87 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.CatalogSupermarketPage
               ),
+          },
+          /*
+           * The walks of a shop and their history (velista `0122`). Every one of
+           * them takes an account with `shopMap.record`: anybody else is sent to
+           * the shop's map. The settings for every walk come before the walk's
+           * pages, and `walkIdGuard` keeps a word from being read as a walk id,
+           * by the house rule that the more specific path comes first. Velista
+           * `0123` adds `walks/:walkId/edit` and `0126` adds `walks/:walkId/record`
+           * beside them.
+           */
+          {
+            path: 'shops/:locationId/walks/settings',
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.MappingSettingsPage
+              ),
+          },
+          {
+            path: 'shops/:locationId/walks/:walkId/rewind',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkRewindPage
+              ),
+          },
+          {
+            path: 'shops/:locationId/walks/:walkId/settings',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkSettingsPage
+              ),
+            children: [
+              sheet({
+                path: 'delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.DeleteWalkSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /** A walk's history, with the warning before resuming the shown walk over it. */
+            path: 'shops/:locationId/walks/:walkId',
+            canMatch: [walkIdGuard],
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.WalkHistoryPage
+              ),
+            children: [
+              sheet({
+                path: 'resume',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.ResumeWarningSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /** A shop's walks, with the sheet that names a new one over it. */
+            path: 'shops/:locationId/walks',
+            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-shop-map').then(
+                (m) => m.ShopWalksPage
+              ),
+            children: [
+              sheet({
+                path: 'new',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.NewWalkSheet
+                  ),
+              }),
+            ],
           },
           {
             /**

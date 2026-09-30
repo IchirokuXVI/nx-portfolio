@@ -1,0 +1,58 @@
+<!--
+  One value to type and nothing to read first, so the field takes focus: the
+  one kind of sheet `initialFocus="first"` is for.
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!busy()"
+  #shell
+  initialFocus="first"
+  labelledBy="new-walk-title"
+>
+  <h2 class="title" id="new-walk-title">
+    {{ 'shopWalks.new.title' | rokuT }}
+  </h2>
+  <p class="body">{{ 'shopWalks.new.body' | rokuT }}</p>
+
+  <form (submit)="onSubmit($event)">
+    <label class="label" for="new-walk-name">
+      {{ 'shopWalks.name' | rokuT }}
+    </label>
+    <input
+      (input)="onTyped($event)"
+      [attr.aria-describedby]="failed() ? 'new-walk-error' : null"
+      [attr.maxlength]="maxLength"
+      [readonly]="busy()"
+      [value]="typed()"
+      autocomplete="off"
+      class="field"
+      enterkeyhint="go"
+      id="new-walk-name"
+      type="text"
+    />
+
+    @if (failed()) {
+      <p class="error" id="new-walk-error" role="alert">
+        {{ 'shopWalks.new.failed' | rokuT }}
+      </p>
+    }
+
+    <button
+      [attr.aria-busy]="busy()"
+      [disabled]="!canStart()"
+      class="primary"
+      type="submit"
+    >
+      @if (busy()) {
+        <lib-spinner-icon class="spinning" />
+      }
+      <span>{{ 'shopWalks.new.start' | rokuT }}</span>
+    </button>
+  </form>
+
+  @if (!busy()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'shopWalks.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

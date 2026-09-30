@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import type {
+  AccountPermission,
   AppState,
   ProfileLoad,
   UsernameScope,
@@ -170,6 +171,20 @@ export class ProfileStore {
   );
 
   /**
+   * What the account may do beyond shopping (backend `0175`), or null while `me` has
+   * not answered. Null is "not known", never "none": a guard that must decide waits
+   * for {@link load}, and a button that may appear later simply appears.
+   */
+  readonly permissions = computed<readonly AccountPermission[] | null>(
+    () => this._profile()?.permissions ?? null
+  );
+
+  /** Whether the account holds a permission. False while it is not known. */
+  can(permission: AccountPermission): boolean {
+    return this.permissions()?.includes(permission) ?? false;
+  }
+
+  /**
    * Whether the setup is still owed: true, false, or null for "not known yet".
    *
    * The setup guard's whole question, answered from what is already held so that the
@@ -260,11 +275,17 @@ export class ProfileStore {
     // the profile alone and has none. Dropping it would make `setupPending` unknown
     // again in the middle of the setup's own name step.
     const held = this._profile()?.appState;
-    this._profile.set(
-      outcome.value.appState === undefined && held !== undefined
-        ? { ...outcome.value, appState: held }
-        : outcome.value
-    );
+    const heldPermissions = this._profile()?.permissions;
+    this._profile.set({
+      ...outcome.value,
+      ...(outcome.value.appState === undefined && held !== undefined
+        ? { appState: held }
+        : {}),
+      ...(outcome.value.permissions === undefined &&
+      heldPermissions !== undefined
+        ? { permissions: heldPermissions }
+        : {}),
+    });
     this._state.set('loaded');
 
     return { state: 'renamed' };

@@ -67,6 +67,19 @@ export class ShopDetailStore {
     return read;
   }
 
+  /**
+   * Drop what is held for a shop, so the next {@link ensure} reads it again. A
+   * walk shown or hidden changes `hasMap` (velista `0122`), and that is the one
+   * thing held here that a screen in this app can change.
+   */
+  forget(locationId: string): void {
+    this._held.update((held) => {
+      const next = new Map(held);
+      next.delete(locationId);
+      return next;
+    });
+  }
+
   private async _read(locationId: string): Promise<void> {
     this._failed.update((failed) => {
       const next = new Set(failed);

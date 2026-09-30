@@ -19,7 +19,63 @@ export const SHOP_PATHS = {
   map: 'map',
   /** The query parameter that names the basket the map counts from. */
   basketParam: 'basket',
+  /** `shops/:locationId/walks`: a shop's walks (velista `0122`). */
+  walks: 'walks',
+  /** `.../walks/settings` and `.../walks/:walkId/settings`. */
+  settings: 'settings',
+  /** `.../walks/:walkId/rewind`. */
+  rewind: 'rewind',
+  /**
+   * `.../walks/:walkId/record`, the recording screen of velista `0126`. Named
+   * here so the resume warning can lead to it; the route is 0126's to add.
+   */
+  record: 'record',
+  /** The sheet over the walks list that names a new walk. */
+  newWalk: 'new',
+  /** The sheet over a walk's settings that confirms deleting it. */
+  deleteWalk: 'delete',
+  /** The warning over a walk's history before resuming the shown walk. */
+  resume: 'resume',
 } as const;
+
+/** A shop's walks (velista `0122`). */
+export function shopWalksPath(
+  locale: string,
+  basePath: string,
+  locationId: string
+): string {
+  return appPath(
+    locale,
+    basePath,
+    SHOP_PATHS.shop,
+    locationId,
+    SHOP_PATHS.walks
+  );
+}
+
+/** The settings for every walk. */
+export function mappingSettingsPath(
+  locale: string,
+  basePath: string,
+  locationId: string
+): string {
+  return `${shopWalksPath(locale, basePath, locationId)}/${SHOP_PATHS.settings}`;
+}
+
+/**
+ * One walk's page: its history with no `page`, else `rewind`, `settings`, or
+ * `record` once velista `0126` adds it.
+ */
+export function shopWalkPath(
+  locale: string,
+  basePath: string,
+  locationId: string,
+  walkId: string,
+  page: 'rewind' | 'settings' | 'record' | null = null
+): string {
+  const path = `${shopWalksPath(locale, basePath, locationId)}/${encodeURIComponent(walkId)}`;
+  return page === null ? path : `${path}/${SHOP_PATHS[page]}`;
+}
 
 /** A shop's own page. */
 export function shopPagePath(

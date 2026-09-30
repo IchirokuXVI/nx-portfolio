@@ -205,4 +205,33 @@ describe('ShopMapPage', () => {
       fixture.debugElement.query(By.directive(ShopMapView))
     ).not.toBeNull();
   });
+
+  describe('the Walks button (velista 0122)', () => {
+    it('is drawn for an account that maps, and opens the shop’s walks', async () => {
+      const { fixture } = await render({
+        params: { locationId: 'loc-tejares' },
+      });
+      const navigate = jest
+        .spyOn(TestBed.inject(Router), 'navigateByUrl')
+        .mockResolvedValue(true);
+
+      expect(text(fixture, '.walks > span')).toEqual(['shopWalks.open']);
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLButtonElement>('.walks')
+        ?.click();
+
+      expect(navigate).toHaveBeenCalledWith('/en/shops/loc-tejares/walks');
+    });
+
+    it('is absent for anybody else, and while me has not answered', async () => {
+      for (const permissions of [[], null]) {
+        const { fixture } = await render({
+          params: { locationId: 'loc-tejares' },
+          permissions,
+        });
+
+        expect(text(fixture, '.walks')).toEqual([]);
+      }
+    });
+  });
 });

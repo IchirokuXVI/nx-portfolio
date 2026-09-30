@@ -12,6 +12,7 @@ import { join, relative, resolve, sep } from 'path';
 import { authenticatedGuard } from './auth-guards';
 import { AppShellRoutes } from './routes';
 import { setupGuard } from './setup-guard';
+import { shopMapRecordGuard, walkIdGuard } from './shop-map-guards';
 
 /**
  * What every signed in page carries: an account, and the setup's one offer
@@ -1075,7 +1076,11 @@ describe('the sheets and their exit animation', () => {
     // popover at the moment of adding, which has no URL.
     //
     // `0121` added one: a section of a shop's map, over the map.
-    expect(sheets).toHaveLength(44);
+    //
+    // `0122` added three: naming a new walk over the walks list, deleting a walk
+    // over its settings, and the warning before resuming the shown walk over its
+    // history.
+    expect(sheets).toHaveLength(47);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1326,8 +1331,10 @@ describe('the setup (velista 0098)', () => {
     );
 
     expect(signedIn.length).toBeGreaterThan(5);
+    // First, and in this order. A page may add a guard of its own after them: a
+    // shop's walks add `shopMapRecordGuard` (velista 0122).
     for (const page of signedIn) {
-      expect(page.canActivate).toEqual(
+      expect(page.canActivate?.slice(0, 2)).toEqual(
         page.path === 'setup' ? [authenticatedGuard] : SIGNED_IN
       );
     }
@@ -1427,6 +1434,71 @@ describe('the walk lab', () => {
       expect(map?.loadComponent).toBeDefined();
       expect(shop?.loadComponent).toBeDefined();
       expect(shop?.children).toBeUndefined();
+    });
+  });
+
+  describe('the walks of a shop', () => {
+    const walks = `${SHOP_PATHS.shop}/:locationId/${SHOP_PATHS.walks}`;
+    const walk = `${walks}/:walkId`;
+    const paths = {
+      list: walks,
+      settings: `${walks}/${SHOP_PATHS.settings}`,
+      history: walk,
+      rewind: `${walk}/${SHOP_PATHS.rewind}`,
+      walkSettings: `${walk}/${SHOP_PATHS.settings}`,
+    };
+    const find = (path: string) => pages.find((route) => route.path === path);
+    const order = pages.map((route) => route.path);
+
+    it('declares every page, each before anything that would swallow it', () => {
+      for (const path of Object.values(paths)) {
+        expect(find(path)).toBeDefined();
+      }
+      expect(order.indexOf(paths.settings)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.rewind)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.walkSettings)).toBeLessThan(
+        order.indexOf(paths.history)
+      );
+      expect(order.indexOf(paths.history)).toBeLessThan(
+        order.indexOf(paths.list)
+      );
+      expect(order.indexOf(paths.list)).toBeLessThan(
+        order.indexOf(`${SHOP_PATHS.shop}/:locationId`)
+      );
+    });
+
+    it('lets nobody without shopMap.record reach any of them', () => {
+      for (const path of Object.values(paths)) {
+        expect(find(path)?.canActivate).toEqual([
+          authenticatedGuard,
+          setupGuard,
+          shopMapRecordGuard,
+        ]);
+      }
+    });
+
+    it('reads a walk id only where a uuid stands', () => {
+      for (const path of [paths.history, paths.rewind, paths.walkSettings]) {
+        expect(find(path)?.canMatch).toEqual([walkIdGuard]);
+      }
+    });
+
+    it('puts one sheet over the list, the settings and the history', () => {
+      expect(sheetsOf(paths.list).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.newWalk}`,
+      ]);
+      expect(sheetsOf(paths.walkSettings).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.deleteWalk}`,
+      ]);
+      expect(sheetsOf(paths.history).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.resume}`,
+      ]);
+      expect(sheetsOf(paths.settings)).toEqual([]);
+      expect(sheetsOf(paths.rewind)).toEqual([]);
     });
   });
 });

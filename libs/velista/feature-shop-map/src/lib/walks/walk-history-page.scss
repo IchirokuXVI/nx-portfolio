@@ -1,0 +1,152 @@
+@use '../shop-map' as shop;
+@use '../walks';
+
+// A walk's history (velista 0122, the `History` board of `mocks/shop-map/`).
+
+:host {
+  display: block;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+  padding-block-end: calc(var(--app-space-7) + var(--app-safe-bottom));
+}
+
+.bar {
+  @include shop.bar;
+}
+
+.back {
+  @include shop.back;
+}
+
+.back-glyph {
+  font-size: var(--app-icon-md);
+}
+
+.heading {
+  @include shop.heading;
+}
+
+.title {
+  @include shop.title;
+}
+
+.subtitle {
+  @include shop.subtitle;
+}
+
+.icon-button {
+  @include walks.icon-button;
+}
+
+.actions {
+  display: grid;
+  gap: var(--app-space-3);
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-2);
+}
+
+.secondary {
+  @include walks.secondary;
+}
+
+.day-name {
+  @include walks.group-heading;
+}
+
+.entries {
+  @include walks.rows;
+}
+
+// The time in a column of its own, so a glance down the page reads the clock.
+.entry {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-5);
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-4) var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.entry-time {
+  flex: none;
+  inline-size: var(--app-space-10);
+  font-size: var(--app-text-sm);
+  font-weight: 700;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  min-inline-size: 0;
+}
+
+.entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-3);
+}
+
+.entry-title {
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.latest {
+  padding: var(--app-space-hair) var(--app-space-3);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-bg);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-xs);
+  font-weight: 700;
+}
+
+.entry-detail {
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--app-space-6) var(--app-space-5);
+  color: var(--app-text-secondary);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-5);
+  padding: var(--app-space-8) var(--app-space-5);
+  text-align: center;
+}
+
+.state-text {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
+.retry {
+  @include shop.retry;
+}
+
+.bones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding: var(--app-space-5);
+}
+
+.bone {
+  block-size: var(--app-space-11);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-sunken);
+}
