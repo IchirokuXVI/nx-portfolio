@@ -89,6 +89,20 @@ export const StorageKeys = {
    */
   mappingSettings: `mapping-settings:${APP_KEY}`,
   /**
+   * The compass baseline of each walk this device recorded (velista `0126`,
+   * target 7): the circular median of compass minus camera heading over the first
+   * minute of good tracking, in degrees, by walk id. A manual resume turns the new
+   * camera session by the difference between its own offset and this. Not on the
+   * server, which has no field for it; a walk resumed on another phone lines up by
+   * the direction the phone points at the chosen mark instead.
+   */
+  walkBaselines: `walk-baselines:${APP_KEY}`,
+  /**
+   * That this tab replays the scripted walk instead of the camera (velista `0126`,
+   * dev builds only), and how fast. In `sessionStorage`, so it dies with the tab.
+   */
+  fakeWalk: `fake-walk:${APP_KEY}`,
+  /**
    * That this document already spent its one reload on a build the server refuses
    * (plan 0072 D4).
    *

@@ -1,0 +1,86 @@
+<section
+  [style.bottom.px]="inset()"
+  aria-labelledby="suggestion-title"
+  class="sheet"
+  role="dialog"
+>
+  <div aria-hidden="true" class="handle"></div>
+  <div class="head">
+    <h2 class="title" id="suggestion-title">
+      {{ 'shopWalkRecord.suggestion.title' | rokuT }}
+    </h2>
+    <button
+      (click)="closed.emit()"
+      [attr.aria-label]="'shopWalkRecord.suggestion.close' | rokuT"
+      class="close"
+      type="button"
+    >
+      <lib-close-icon />
+    </button>
+  </div>
+
+  <p class="why">
+    {{
+      'shopWalkRecord.suggestion.why'
+        | rokuT: { width: width(), length: length() }
+    }}
+  </p>
+
+  <div class="card">
+    <lib-flag-icon class="card-glyph" />
+    <div class="card-text">
+      <span class="label">{{ 'shopWalkRecord.suggestion.section' | rokuT }}</span>
+      <span class="card-name">{{
+        chosen() ?? ('shopWalkRecord.suggestion.none' | rokuT)
+      }}</span>
+      @if (distance(); as distance) {
+        @if (chosen() === section()?.name) {
+          <span class="card-note">{{
+            'shopWalkRecord.suggestion.from' | rokuT: { distance: distance }
+          }}</span>
+        }
+      }
+    </div>
+    @if (!changing()) {
+      <button (click)="change()" class="change" type="button">
+        {{ 'shopWalkRecord.suggestion.change' | rokuT }}
+      </button>
+    }
+  </div>
+
+  @if (changing()) {
+    <div class="change-block">
+      <label class="label" for="suggestion-section">{{
+        'shopWalkRecord.suggestion.sectionName' | rokuT
+      }}</label>
+      <input
+        (input)="typed($event)"
+        [maxLength]="maxLength"
+        [value]="chosen() ?? ''"
+        autocomplete="off"
+        class="field"
+        enterkeyhint="done"
+        id="suggestion-section"
+        type="text"
+      />
+      @if (names().length > 0) {
+        <div class="chips">
+          @for (name of names(); track name) {
+            <button (click)="pick(name)" class="chip" type="button">
+              {{ name }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <div class="buttons">
+    <button (click)="notShelf()" class="secondary" type="button">
+      {{ 'shopWalkRecord.suggestion.notShelf' | rokuT }}
+    </button>
+    <button (click)="fill()" class="primary" type="button">
+      {{ 'shopWalkRecord.suggestion.fill' | rokuT }}
+    </button>
+  </div>
+</section>

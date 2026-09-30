@@ -1,0 +1,134 @@
+@use '../walks';
+@use 'record';
+
+// "Is this a shelf?" (velista 0126, the `Suggestion` board): a sheet on the foot
+// of the screen with no scrim, kept above the keyboard while a section is typed.
+
+:host {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: var(--app-tour-z);
+  display: block;
+}
+
+.sheet {
+  @include record.sheet;
+
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding-block-end: calc(var(--app-space-5) + var(--app-safe-bottom));
+}
+
+.handle {
+  @include record.handle;
+}
+
+.head {
+  @include record.head;
+}
+
+.title {
+  @include record.title;
+}
+
+.close {
+  @include walks.icon-button;
+}
+
+.why {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.card-glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-secondary);
+}
+
+.card-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.label {
+  @include record.label;
+}
+
+.card-name {
+  overflow: hidden;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-note {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.change {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  cursor: pointer;
+
+  @include walks.focus-ring;
+}
+
+.change-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.field {
+  @include record.field;
+}
+
+.chips {
+  @include record.chips;
+}
+
+.chip {
+  @include record.chip;
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+}
+
+.primary {
+  @include walks.primary;
+}
+
+.secondary {
+  @include walks.secondary;
+}
