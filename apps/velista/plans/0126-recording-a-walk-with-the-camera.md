@@ -1,3 +1,5 @@
+> **PR:** [#576](https://github.com/IchirokuXVI/nx-portfolio/pull/576)
+
 # 0126: recording a walk with the camera
 
 > Part of the shop map series as rewritten on 2026-09-29. It replaces the step counting
