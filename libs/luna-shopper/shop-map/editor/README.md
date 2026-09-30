@@ -40,7 +40,15 @@ finger draws).
 Every gesture of the mapper look reports a finished change as `area-put` events through
 `onChange` and applies it at once. The host appends the events to the log and then calls
 `setDocument` with the fold. A draw, move or resize that `validateShopMapV2` refuses is
-drawn in the refusal colour and not committed.
+drawn in the refusal colour and not committed. It stays for under a second, and the next
+touch clears it at once.
+
+A long press marks the square under the finger. Then it calls `onLongPress`, and the host
+opens its menu. The next touch removes the square. `setDocument` and `setSelected` remove
+it too. If the host closes its menu with no action, it calls `clearHeld()`.
+
+A selected area has four corner handles to resize it. A small area has no handles to grab:
+under 72 css pixels on a side, a press on a corner moves the area. Zoom in to resize it.
 
 Three optional options exist for what the plan leaves to the host: `createId` (the id of
 an area drawn by hand, `crypto.randomUUID()` by default), `suggestionLabel` (the words on
@@ -57,7 +65,8 @@ listed with both values in `SHOP_MAP_PROPERTIES`. Set any of them on the host el
 an ancestor) to restyle, for example `--shop-map-area: #d8e8f8`.
 
 The theme follows `prefers-color-scheme`. Set `data-theme="day"` or `data-theme="night"`
-on the host element or any ancestor to choose one instead.
+on the host element or any ancestor to choose one instead. The closest one wins. A Day
+host inside a Night page draws Day. When the attribute changes, the map changes too.
 
 ## The demo
 

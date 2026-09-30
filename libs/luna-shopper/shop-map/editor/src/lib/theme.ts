@@ -7,7 +7,9 @@
  * the defaults live on private properties the host never needs to name.
  *
  * The theme follows `prefers-color-scheme`, and `data-theme="day"` or
- * `data-theme="night"` on the host or any ancestor overrides it.
+ * `data-theme="night"` on the host or any ancestor overrides it. The closest
+ * one wins: the mount copies it onto the root as `data-sm-theme`, which is
+ * what these rules read.
  */
 export const SHOP_MAP_PROPERTIES = {
   // The twelve of the plan.
@@ -69,8 +71,8 @@ export function shopMapCss(): string {
   return [
     `.sm-root{${day}position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;font-family:inherit}`,
     `@media (prefers-color-scheme: dark){.sm-root{${night}}}`,
-    `[data-theme="day"] .sm-root{${day}}`,
-    `[data-theme="night"] .sm-root{${night}}`,
+    `.sm-root[data-sm-theme="day"]{${day}}`,
+    `.sm-root[data-sm-theme="night"]{${night}}`,
     `.sm-root svg{display:block;width:100%;height:100%}`,
     `.sm-ground{fill:${cssVar('ground')}}`,
     `.sm-walked{fill:${cssVar('walked')}}`,

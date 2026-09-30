@@ -271,6 +271,28 @@ export function mountShopMap(
   const gestureLayer = svg(doc, 'g', {}, canvas);
   host.appendChild(root);
 
+  /**
+   * The closest `data-theme` on the host or an ancestor chooses the theme,
+   * copied onto the root as `data-sm-theme`. A stylesheet alone cannot say
+   * "closest": `[data-theme="day"] .sm-root` and `[data-theme="night"] .sm-root`
+   * weigh the same, so a Day host inside a Night page drew Night.
+   */
+  function applyTheme(): void {
+    const theme = host.closest('[data-theme]')?.getAttribute('data-theme');
+    if (theme === 'day' || theme === 'night')
+      root.setAttribute('data-sm-theme', theme);
+    else root.removeAttribute('data-sm-theme');
+  }
+  applyTheme();
+  const themeWatch = win?.MutationObserver
+    ? new win.MutationObserver(applyTheme)
+    : null;
+  themeWatch?.observe(doc.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+    subtree: true,
+  });
+
   // Bounds and hit testing.
   const shopperOf = () => (shopper ??= shopperView(map));
 
@@ -316,8 +338,14 @@ export function mountShopMap(
     }
     const sel = selectedArea();
     if (sel) {
-      const cs = corners(sel);
-      for (let i = 0; i < 4; i++) {
+      // Below two touch targets a side, the corner targets would cover the
+      // whole area and it could never be moved, so a small area has no handles
+      // to grab until it is zoomed in.
+      const grabbable =
+        sel.w * view.s >= 2 * HANDLE_HIT_PX &&
+        sel.h * view.s >= 2 * HANDLE_HIT_PX;
+      const cs = grabbable ? corners(sel) : [];
+      for (let i = 0; i < cs.length; i++) {
         const [sx, sy] = toScreen(view, cs[i][0], cs[i][1]);
         if (
           Math.abs(sx - p.x) <= HANDLE_HIT_PX / 2 &&
@@ -735,15 +763,20 @@ export function mountShopMap(
     const p = local(e);
     pointers.set(e.pointerId, p);
     canvas.setPointerCapture?.(e.pointerId);
+    // A refused draft still on screen goes at once, and a refused move or
+    // resize draws its area back where it was: the full rebuild does both.
+    let redraw = false;
     if (refusedTimer) {
       clearTimeout(refusedTimer);
       refusedTimer = null;
       draft = null;
+      redraw = true;
     }
     if (held) {
       held = null;
-      rebuild();
+      redraw = true;
     }
+    if (redraw) rebuild();
     if (pointers.size === 2) {
       startPinch();
       return;
@@ -961,11 +994,13 @@ export function mountShopMap(
     setDocument(next) {
       map = next;
       shopper = null;
+      held = null;
       if (selectedId !== null && !map.areas.some((a) => a.id === selectedId))
         selectedId = null;
       changed();
     },
     setLook(next) {
+      applyTheme();
       if (next === look) return;
       look = next;
       clearDraftState();
@@ -987,6 +1022,12 @@ export function mountShopMap(
     },
     setSelected(areaId) {
       selectedId = areaId;
+      held = null;
+      rebuild();
+    },
+    clearHeld() {
+      if (!held) return;
+      held = null;
       rebuild();
     },
     setSnap(on) {
@@ -1006,6 +1047,7 @@ export function mountShopMap(
       if (refusedTimer) clearTimeout(refusedTimer);
       if (frame && win?.cancelAnimationFrame) win.cancelAnimationFrame(frame);
       resize?.disconnect();
+      themeWatch?.disconnect();
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerup', onUp);
