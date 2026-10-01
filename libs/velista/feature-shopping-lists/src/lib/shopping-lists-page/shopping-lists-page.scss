@@ -34,6 +34,10 @@
   flex: 1;
   min-block-size: 0;
   padding: var(--app-space-4) var(--app-space-5) 0;
+  // Every state scrolls inside this box, and not only the list of rows (velista 0130,
+  // H1). The empty state is taller than the room a short screen leaves it, and without
+  // this it spilled into the layout's own scroller, which carried the header away.
+  overflow-y: auto;
 }
 
 .scroller {

@@ -15,9 +15,16 @@
     </ng-container>
   </lib-page-header>
 
-  @if (statusKey(status()); as key) {
-    <p aria-live="polite" class="subtitle">{{ key | rokuT }}</p>
-  }
+  <!--
+    Always drawn, and empty until there is something to say. The strip appearing with
+    the first edit took its height from the map under the finger that was drawing, and
+    a live region created together with its text is often not announced.
+  -->
+  <p aria-live="polite" class="subtitle">
+    @if (statusKey(status()); as key) {
+      {{ key | rokuT }}
+    }
+  </p>
 
   @let state = read();
   @if (state.kind === 'ready') {

@@ -437,22 +437,6 @@ export class BasketPage {
   protected readonly finished = this._store.finished;
 
   /**
-   * Whether to draw the control that ends the trip, and it is the **owner's alone**.
-   *
-   * Absent for a registered participant and absent for a guest, not disabled, which
-   * is `0030`'s rule and the treatment the share control beside it already gets.
-   * Finishing ends the trip for four people at once, which is why it is not handed to
-   * whoever happens to be holding a link; somebody who is not the owner and thinks
-   * the shopping is over can say so in the basket's own chat.
-   *
-   * The server agrees rather than being trusted to: the route behind it is account
-   * authenticated and scoped to the owner, so a guest cannot reach it with any token
-   * they hold. {@link isOwner} already existed for the share control and this is its
-   * second reader.
-   */
-  protected readonly canFinish = this._doors.canFinish;
-
-  /**
    * Whether the header draws the menu button (velista `0130`, section 6.1): only
    * when the menu would hold a row. People, the history, composing a new list and
    * finishing live there, each under the condition its own button had, and a menu
@@ -919,24 +903,6 @@ export class BasketPage {
       });
   });
 
-  /**
-   * Whether there is anybody to read about in the people sheet.
-   *
-   * Not the same question as {@link faces}. Presence empties when the socket drops
-   * and when everybody has gone home, and in both cases the sheet still answers
-   * something worth knowing — everybody who *can* open this basket — so the way into
-   * it has to survive the face row going away.
-   *
-   * **No longer asks about presence** (velista `0094`, section 7). It used to,
-   * which meant the basket that is always there had no way into the sheet at
-   * all: a `LIVE` basket has no presence room, so the condition was false for
-   * it whatever its participant list said. A `LIVE` basket can be shared and can
-   * have named people on it, so the sheet has an answer worth reading and the
-   * header keeps the door to it. What is gated on presence is the **faces**,
-   * which are a claim about who is here right now.
-   */
-  protected readonly hasPeople = this._doors.hasPeople;
-
   /** The overflow count, collapsing into a stacked chip like the price display. */
   protected readonly overflow = computed(() =>
     Math.max(0, this._store.present().length - 3)
@@ -1053,10 +1019,41 @@ export class BasketPage {
    */
   private _followBasket(id: string): void {
     this._id = id;
+    this._forget();
     this._letGo();
     void this._store.open(id).then(() => {
       this._view.restore();
     });
+  }
+
+  /**
+   * What this page itself remembers about the basket it is leaving.
+   *
+   * {@link _letGo} empties the stores, and a page that is destroyed takes the rest
+   * with it. A page that is **kept** takes nothing, so everything below would be
+   * drawn over the next basket: a refusal under a row it does not hold, a reopen
+   * that failed on another trip, and the live region still holding the last
+   * sentence said about the old one.
+   */
+  private _forget(): void {
+    this._reopenFailed.set(false);
+    this._statusBusy.set(false);
+    this._notice.set(null);
+    this.outstandingSaid.set('');
+    this.uncoveredInfoOpen.set(false);
+
+    // The words in the field were a search of the old basket's rows and a question
+    // about a line for one of its lists. The composer empties itself and says so,
+    // which also closes the picker; a finished basket draws none, so the rest is
+    // cleared here too. The sequence moves on so an answer still on its way for the
+    // old words cannot land.
+    this._composer()?.clear();
+    this._closePicker();
+    this._suggestSeq += 1;
+    this._query.set('');
+    this.suggestions.set([]);
+    this.suggesting.set(false);
+    this.suggestedFor.set(null);
   }
 
   protected isBusy(row: BasketRowModel): boolean {
@@ -1486,12 +1483,21 @@ export class BasketPage {
 
     // The id off the basket rather than off the URL: this control is the owner's
     // on a generated basket, where the two agree, and one source cannot drift.
+    const asked = this._id;
     const landed = await this._generated.setStatus(
       this._store.basket()?.id ?? this._id,
       'OPEN'
     );
+    // The page moved to another basket while this was out: the answer is about a
+    // banner that is no longer drawn.
+    if (this._id !== asked) {
+      return;
+    }
     if (landed) {
       await this._store.refresh();
+    }
+    if (this._id !== asked) {
+      return;
     }
 
     this._reopenFailed.set(!landed);

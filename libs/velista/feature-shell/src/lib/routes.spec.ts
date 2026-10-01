@@ -983,7 +983,7 @@ describe('AppShellRoutes', () => {
       expect(paths.some((path) => path.endsWith('/units'))).toBe(false);
     });
 
-    it('guards none of the sheets, because what a reader may do is not a route', () => {
+    it('guards none of the sheets but one, because what a reader may do is not a route', () => {
       // Which of them a caller may **use** is decided by the page from the
       // caller's own facts, and the server refuses the rest regardless of what is
       // drawn. The share sheet is the owner's alone and is not drawn for anybody
@@ -991,8 +991,31 @@ describe('AppShellRoutes', () => {
       const sheets = routeAt(basketPath)?.children ?? [];
 
       expect(sheets).toHaveLength(11);
-      for (const entry of sheets) {
+      for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
+      }
+    });
+
+    it('demands an account of Create your shopping list, over both baskets', () => {
+      // The one sheet here that composes for an account, over a page a guest
+      // reaches without one. The menu draws no row to it for a guest, and a typed
+      // URL must not construct it either. The guard's redirect keeps what is above
+      // the route it sits on, which for a sheet is the basket (`auth-guards.spec`).
+      for (const basket of [basketPath, 'shopping-lists/live']) {
+        const get = routeAt(basket)?.children?.find(
+          (route) => route.path === 'sheet/get'
+        );
+
+        expect(get?.canActivate).toEqual([authenticatedGuard]);
+        // And it still falls like every other sheet.
+        expect(get?.canDeactivate).toEqual([sheetFallGuard]);
+      }
+    });
+
+    it('adds no guard to the copies whose page already demands an account', () => {
+      for (const page of ['shopping-lists', 'shopping-lists/current']) {
+        expect(routeAt(page)?.canActivate).toEqual(SIGNED_IN);
+        expect(sheetsOf(page)[0]?.canActivate).toBeUndefined();
       }
     });
 

@@ -23,6 +23,7 @@
       "newList": "Nueva lista",
       "settings": "Ajustes del grupo",
       "stale": "Ahora mismo no se actualiza en directo",
+      "waiting": "{{count}} esperando entrar",
       "empty": {
         "title": "Todavía no hay listas",
         "body": "Empieza una y todos los del grupo podrán comprar con ella"
@@ -1480,7 +1481,6 @@
       "cancel": "Conservarlo"
     },
     "finish": {
-      "open": "Terminar la compra",
       "prompt": "Todo listo. ¿Terminar la compra?",
       "action": "Terminar la compra",
       "title": "¿Terminar la compra?",

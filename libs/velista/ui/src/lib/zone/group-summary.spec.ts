@@ -16,7 +16,6 @@ function group(overrides: Partial<GroupHeaderVm> = {}): GroupHeaderVm {
   return {
     id: 'z1',
     name: 'Flat 3B',
-    initial: 'F',
     role: 'OWNER',
     memberCount: 5,
     online: [],
@@ -69,7 +68,7 @@ describe('GroupSummary', () => {
     });
 
     it('does not repeat the name, and draws no initial tile', async () => {
-      const fixture = await render(group({ name: 'Flat 3B', initial: 'F' }));
+      const fixture = await render(group({ name: 'Flat 3B' }));
 
       expect(host(fixture).textContent).not.toContain('Flat 3B');
       expect(host(fixture).querySelector('.tile')).toBeNull();
@@ -141,6 +140,27 @@ describe('GroupSummary', () => {
         'pip',
         'action-chevron',
       ]);
+    });
+
+    // Read aloud, the row's content is "Members 5 3". The name says which is which.
+    it('is named in words: how many members, and how many are waiting', async () => {
+      const fixture = await render(
+        group({ memberCount: 5, pendingRequestCount: 3 })
+      );
+
+      expect(
+        host(fixture).querySelector('.action')?.getAttribute('aria-label')
+      ).toBe('home.zone.members, zone.detail.waiting');
+    });
+
+    it('names only the members when nobody is waiting, or the queue is not theirs', async () => {
+      for (const pendingRequestCount of [0, null]) {
+        const fixture = await render(group({ pendingRequestCount }));
+
+        expect(
+          host(fixture).querySelector('.action')?.getAttribute('aria-label')
+        ).toBe('home.zone.members');
+      }
     });
 
     it('draws no pip for a caller who may not see the queue', async () => {

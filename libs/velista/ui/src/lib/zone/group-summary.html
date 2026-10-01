@@ -32,8 +32,24 @@
     <!--
       Members is a route and not a sheet: it has its own scroll, its own paging and
       its own deep link, which is what makes it a destination (section 4.2).
+
+      Named in words. Its content is the word, the member count and the number waiting,
+      which read aloud is "Members 5 2": two bare numbers and no way to tell which is
+      which. The name says both, and begins with the count sentence so it still holds
+      the word that is drawn.
     -->
-    <button (click)="openMembers.emit()" class="action" type="button">
+    @let waitingCount = group().pendingRequestCount;
+    <button
+      (click)="openMembers.emit()"
+      [attr.aria-label]="
+        ('home.zone.members' | rokuT: { count: group().memberCount }) +
+        (waitingCount
+          ? ', ' + ('zone.detail.waiting' | rokuT: { count: waitingCount })
+          : '')
+      "
+      class="action"
+      type="button"
+    >
       <lib-person-icon class="action-glyph" />
       <span class="action-label">{{ 'zone.detail.members' | rokuT }}</span>
 

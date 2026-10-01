@@ -1,3 +1,5 @@
+> **PR:** [#586](https://github.com/IchirokuXVI/nx-portfolio/pull/586)
+
 # 0130: one header for every page
 
 > Mock: `mocks/header/`, published at https://claude.ai/artifact/B7dtX8AowX73ABuQPBfPzZ, and
@@ -156,7 +158,9 @@ Tokens, in `_semantic.scss`:
 
 - `--app-header-height`: the home bar's height today, which is the touch target plus its
   block padding (44px, 12px and 8px, so 64px). Measure the home bar in a browser before you
-  fix the value, and write the measured number.
+  fix the value, and write the measured number. **Measured on 2026-10-01: 64px**, with the
+  bottom border inside it, on every page in section 4 that a browser could reach, on velista's
+  own origin and through the shell.
 - `--app-header-title-size`: **one size for every title, and it can be smaller than home's
   today.** Home sets its word at `--app-text-2xl`, which is about 27px on a 390px phone. A
   title beside a back button and two actions has about 210px, which is some fourteen letters
@@ -225,7 +229,7 @@ bar shows.
 | `shops/:locationId/map` | back | Where things are | Walks |
 | `shops/:locationId/walks` | back | Walks | mapping settings |
 | `.../walks/settings`, `.../:walkId/settings` | back | as today | none |
-| `.../walks/:walkId` | back | the walk's name. **Walk** while it loads | the ellipsis |
+| `.../walks/:walkId` | back | the walk's name. **Walk** while it loads | none (the page has no ellipsis: Delete is a button in the content) |
 | `.../walks/:walkId/rewind` | close | as today | none |
 | `.../walks/:walkId/edit` | back | the walk's name | the status pill, Done |
 | `.../walks/:walkId/record` | close, or back, as today | as today | the status pill, Stop |

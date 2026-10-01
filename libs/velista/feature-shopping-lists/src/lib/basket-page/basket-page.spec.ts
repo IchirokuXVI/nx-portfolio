@@ -58,6 +58,7 @@ import { LineComposer } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
+import { basketDoors } from '../basket-menu';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
 import { BasketPage } from './basket-page';
 
@@ -1371,11 +1372,12 @@ describe('the number on a row', () => {
 describe('finishing the shopping', () => {
   /**
    * Whether this reader is offered the end of the trip. The control is a row of the
-   * menu since velista `0130`, and the menu sheet's own spec draws the row; what
-   * the page owns is the answer both read.
+   * menu since velista `0130`, and the menu sheet's own spec draws the row. The
+   * page holds no copy of the answer: it is asked of the store the page was
+   * rendered with, through the one function the page and the menu both read.
    */
-  const canFinish = (fixture: ComponentFixture<BasketPage>): boolean =>
-    fixture.componentInstance['canFinish']();
+  const canFinish = (_fixture: ComponentFixture<BasketPage>): boolean =>
+    basketDoors(TestBed.inject(BasketStore)).canFinish();
 
   const rows = (fixture: ComponentFixture<BasketPage>) =>
     fixture.debugElement
@@ -2666,6 +2668,99 @@ describe('another basket at the same route', () => {
 
     expect(store.opened).toEqual(['live']);
   });
+
+  /**
+   * The page is kept, so what it remembers by itself has to be let go by hand: the
+   * stores are emptied by `leave`, and nothing else is.
+   */
+  describe('what the page itself remembered about the old one', () => {
+    const served = [
+      {
+        listId: 'l-weekly',
+        name: 'Weekly shop',
+        zoneId: 'z1',
+        zoneName: 'Flat',
+      },
+    ];
+
+    it('says nothing more about it, and leaves no refusal under a row', async () => {
+      // The live region stays in the DOM, so the last sentence about the old
+      // basket would sit in it for as long as the new one is open.
+      const { fixture, store } = await render({
+        lines: [line('Milk', { left: 5 })],
+      });
+      const row = () =>
+        fixture.debugElement.query(By.directive(BasketRowComponent))
+          .componentInstance as BasketRowComponent;
+      store.setLeft.mockResolvedValue(null);
+
+      row().left.emit({ from: 5, to: 3 });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(query(fixture, '.said')?.textContent?.trim()).not.toBe('');
+      expect(row().notice()).not.toBeNull();
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.said')?.textContent?.trim()).toBe('');
+      expect(row().notice()).toBeNull();
+    });
+
+    it('does not carry a reopen that failed onto the next banner', async () => {
+      const { fixture } = await render({
+        finished: true,
+        lines: [line('Milk')],
+        statusWriteLands: false,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(query(fixture, '.finished-failed')).not.toBeNull();
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.finished-failed')).toBeNull();
+    });
+
+    it('drops a reopen answered after the page moved on', async () => {
+      const { fixture, store } = await render({
+        finished: true,
+        lines: [line('Milk')],
+        statusWriteLands: false,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      moveTo('basket-sunday');
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(query(fixture, '.finished-failed')).toBeNull();
+      expect(store.refresh).not.toHaveBeenCalled();
+    });
+
+    it('empties the field, and the search of the old rows with it', async () => {
+      const { fixture } = await render({
+        lines: [line('Milk'), line('Eggs')],
+        served,
+      });
+
+      typeInto(fixture, 'milk');
+      expect(TestBed.inject(BasketViewStore).query()).toBe('milk');
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(TestBed.inject(BasketViewStore).query()).toBe('');
+      expect(fixture.componentInstance['suggestions']()).toEqual([]);
+    });
+  });
 });
 
 describe('the basket that is always there', () => {
@@ -2684,7 +2779,7 @@ describe('the basket that is always there', () => {
       me: participant(owner()),
     });
 
-    expect(fixture.componentInstance['canFinish']()).toBe(false);
+    expect(basketDoors(TestBed.inject(BasketStore)).canFinish()).toBe(false);
     expect(query(fixture, '.finish')).toBeNull();
   });
 
@@ -2736,7 +2831,7 @@ describe('the basket that is always there', () => {
       participants: [participant(owner())],
     });
 
-    expect(fixture.componentInstance['hasPeople']()).toBe(true);
+    expect(basketDoors(TestBed.inject(BasketStore)).hasPeople()).toBe(true);
     expect(query(fixture, MENU)).not.toBeNull();
   });
 

@@ -23,6 +23,7 @@
       "newList": "New list",
       "settings": "Group settings",
       "stale": "Not updating live right now",
+      "waiting": "{{count}} waiting to join",
       "empty": {
         "title": "No lists yet",
         "body": "Start one and everyone here can shop from it"
@@ -1480,7 +1481,6 @@
       "cancel": "Keep it"
     },
     "finish": {
-      "open": "Finish shopping",
       "prompt": "All done. Finish shopping?",
       "action": "Finish shopping",
       "title": "Finish shopping?",

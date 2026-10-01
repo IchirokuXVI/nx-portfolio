@@ -59,7 +59,8 @@ const PAGE_HEADER = 'ui/src/lib/layout/page-header.html';
  */
 const OUTSIDE = [
   'feature-auth/',
-  'feature-entry/',
+  // `join/:code` only. The two sheets beside it draw over home, so they are inside.
+  'feature-entry/src/lib/join-link-page/',
   'feature-landing/',
   'feature-setup/',
   'feature-walk-lab/',

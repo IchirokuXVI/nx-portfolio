@@ -208,6 +208,15 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
  * path, so there is no string to hand over. `parent` says "the page under me", and
  * the sheet reads that page's address from its own parent route, which is the one
  * thing here that knows the id.
+ *
+ * **And over a basket it carries `authenticatedGuard` itself**, which is the one
+ * exception to "no guard beyond the page's own". The history and the third tab
+ * demand an account, so their copy inherits one. `shopping-lists/:basketId` demands
+ * none, because a guest holding a share link is a participant there, and this sheet
+ * composes a list for an account: the menu draws no row to it for a guest, but a
+ * typed URL would still have constructed it. On a child route the guard's redirect
+ * keeps everything above the sheet, so the guest lands on the basket they were
+ * reading and not on the front door.
  */
 function getListSheetRoutes(
   returnTo: 'shopping-lists' | 'shopping-lists/current' | 'parent'
@@ -216,6 +225,7 @@ function getListSheetRoutes(
     sheet({
       path: 'get',
       data: { returnTo },
+      ...(returnTo === 'parent' ? { canActivate: [authenticatedGuard] } : {}),
       loadComponent: () =>
         import('@portfolio/velista/feature-home').then((m) => m.GetListSheet),
     }),
@@ -234,8 +244,8 @@ function getListSheetRoutes(
 function basketSheetRoutes(options: { finish: boolean }): Route[] {
   return [
     // Rule E1: each sheet covers the page without losing it, and Android's
-    // back button dismisses it. None is guarded, because which of them a
-    // caller may **use** is decided from the caller's own facts by the
+    // back button dismisses it. None is guarded but `get`, because which of
+    // them a caller may **use** is decided from the caller's own facts by the
     // page, and the server refuses the rest regardless of what is drawn.
     // Addressed by the **row key** since velista `0090`: a basket stores
     // no lines, so there is nothing here to address one by. The key is an
@@ -305,6 +315,8 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
     // Create your shopping list, which the menu offers. The same sheet the
     // history and the third tab carry, covering the basket it was opened over:
     // `parent` is how Cancel finds that basket on a route with an id in it.
+    // The one guarded sheet here: it composes for an account, and a guest
+    // reaches this page without one. See `getListSheetRoutes`.
     ...getListSheetRoutes('parent'),
     // Ending the trip, confirmed (velista `0057`). Unguarded like its
     // siblings: the control that reaches it is the owner's alone, drawn

@@ -14,9 +14,15 @@
   @include shop.page;
 }
 
-// What a save is doing, on a slim line directly under the header.
+// What a save is doing, on a slim line directly under the header. The line is there
+// before it has anything to say, so its height is held open for it: one line of its
+// own text and its two paddings, which is what it measures once the words arrive.
 .subtitle {
   @include shop.subtitle-strip;
+
+  box-sizing: content-box;
+  min-block-size: calc(var(--app-text-xs) * var(--app-leading-body));
+  line-height: var(--app-leading-body);
 }
 
 // "Not walking", in the header's actions before Done. A pill and not a button.

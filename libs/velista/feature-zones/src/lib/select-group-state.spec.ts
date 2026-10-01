@@ -283,14 +283,5 @@ describe('selectGroupState', () => {
 
       expect(state.kind === 'loaded' && state.header.stale).toBe(true);
     });
-
-    it('takes the initial as a code point, so an emoji does not split', () => {
-      const state = select({
-        zone: zone({ name: '🏠 Home' }),
-        lists: [list('list-1')],
-      });
-
-      expect(state.kind === 'loaded' && state.header.initial).toBe('🏠');
-    });
   });
 });

@@ -328,18 +328,25 @@ describe('EditMapPage', () => {
 
   it('says what a save is doing on a polite line under the header', async () => {
     const { fixture, view } = await renderPage();
+    const strip = () =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-page-header + .subtitle'
+      );
+
+    // There before the first edit, and empty: a strip that arrived with its words
+    // took its height from the map under the finger, and a live region created
+    // together with its text is often not announced.
+    const before = strip();
+    expect(before?.getAttribute('aria-live')).toBe('polite');
+    expect(before?.textContent?.trim()).toBe('');
 
     view().changed.emit([{ type: 'area-put', area: counter }]);
     fixture.detectChanges();
 
     expect(all(fixture, 'lib-page-header .subtitle')).toEqual([]);
-    expect(
-      Array.from(
-        (fixture.nativeElement as HTMLElement).querySelectorAll(
-          'lib-page-header + .subtitle'
-        )
-      ).map((line) => line.getAttribute('aria-live'))
-    ).toEqual(['polite']);
+    // The same element, now holding the words.
+    expect(strip()).toBe(before);
+    expect(strip()?.textContent?.trim()).toMatch(/^shopMapEdit\.status\./);
   });
 
   it('saves a drawn area as one edited entry on Done, at the log’s end', async () => {
@@ -385,7 +392,7 @@ describe('EditMapPage', () => {
     expect(page.apply([{ type: 'area-put', area: { ...eggs } }])).toBe(true);
     fixture.detectChanges();
 
-    expect(all(fixture, '.subtitle')).toEqual([]);
+    expect(all(fixture, '.subtitle')).toEqual(['']);
     expect(await fixture.componentInstance.canLeave()).toBe(true);
     click(fixture, '[libPageHeaderAction]');
     await settle(() => fixture.detectChanges());
