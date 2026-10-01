@@ -38,7 +38,12 @@ import {
   shopPagePath,
   shopWalksPath,
 } from '@portfolio/velista/platform';
-import { CheckIcon, ChevronLeftIcon, WalkIcon } from '@portfolio/velista/ui';
+import {
+  CheckIcon,
+  PageHeader,
+  PageHeaderAction,
+  WalkIcon,
+} from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { shopPageText } from '../shop-page/shop-page';
 
@@ -63,7 +68,8 @@ export type ShopMapShow = 'mine' | 'all';
   selector: 'lib-shop-map-page',
   imports: [
     CheckIcon,
-    ChevronLeftIcon,
+    PageHeader,
+    PageHeaderAction,
     RokuTranslatorPipe,
     RouterOutlet,
     ShopMapView,

@@ -175,6 +175,30 @@ describe('CatalogPage', () => {
     expect(rows(fixture)).toBeGreaterThan(5);
   });
 
+  it('heads the page with the one page header: the catalog tab’s glyph, the title and no action', async () => {
+    const { fixture } = await render();
+    const header = host(fixture).querySelector('lib-page-header');
+
+    expect(header?.querySelector('h1')?.textContent?.trim()).toBe(
+      'catalog.title'
+    );
+    expect(header?.querySelector('.icon lib-product-icon')).not.toBeNull();
+    expect(header?.querySelector('button')).toBeNull();
+    expect(host(fixture).querySelectorAll('h1')).toHaveLength(1);
+    // Outside the scroller, so it stays while the list scrolls.
+    expect(host(fixture).querySelector('.page lib-page-header')).toBeNull();
+  });
+
+  it('says where the prices are from at the end of the tools row, not in the header', async () => {
+    const { fixture } = await render();
+    const near = host(fixture).querySelector('.near');
+
+    expect(near?.textContent).toContain('catalog.near');
+    expect(near?.closest('.tools')).not.toBeNull();
+    expect(near?.closest('lib-page-header')).toBeNull();
+    expect(near?.previousElementSibling?.tagName).toBe('LIB-ORDER-PILLS');
+  });
+
   it('switches to Best match once typing settles, and not on every keystroke', async () => {
     const { fixture, browse } = await render();
     jest.useFakeTimers();

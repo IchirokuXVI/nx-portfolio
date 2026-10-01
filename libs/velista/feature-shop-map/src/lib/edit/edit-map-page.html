@@ -1,29 +1,23 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="toHistory()"
-      [attr.aria-label]="'shopWalks.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      <h1 class="title">
-        {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
-      </h1>
-      @if (statusKey(status()); as key) {
-        <p aria-live="polite" class="subtitle">{{ key | rokuT }}</p>
-      }
-    </div>
-    <span class="walking">
-      <span aria-hidden="true" class="walking-dot"></span>
-      {{ 'shopMapEdit.notWalking' | rokuT }}
-    </span>
-    <button (click)="done()" class="done" type="button">
-      {{ 'shopMapEdit.done' | rokuT }}
-    </button>
-  </header>
+  <lib-page-header
+    (back)="toHistory()"
+    [backLabel]="'shopWalks.back' | rokuT"
+    [title]="name() ?? ('shopWalks.history.loadingTitle' | rokuT)"
+  >
+    <ng-container pageHeaderActions>
+      <span class="walking">
+        <span aria-hidden="true" class="walking-dot"></span>
+        {{ 'shopMapEdit.notWalking' | rokuT }}
+      </span>
+      <button (click)="done()" kind="text" libPageHeaderAction type="button">
+        {{ 'shopMapEdit.done' | rokuT }}
+      </button>
+    </ng-container>
+  </lib-page-header>
+
+  @if (statusKey(status()); as key) {
+    <p aria-live="polite" class="subtitle">{{ key | rokuT }}</p>
+  }
 
   @let state = read();
   @if (state.kind === 'ready') {

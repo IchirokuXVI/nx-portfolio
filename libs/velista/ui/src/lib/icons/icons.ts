@@ -1090,21 +1090,6 @@ export class WalkIcon {
   );
 }
 
-/** Three sliders (velista `0122`): settings that apply to many things at once. */
-@Component({
-  selector: 'lib-sliders-icon',
-  template: TEMPLATE,
-  styleUrl: './icon.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-})
-export class SlidersIcon {
-  readonly svg = inlineSvg(
-    () =>
-      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
-      import('./sliders-icon.svg?raw')
-  );
-}
-
 /**
  * Settings (velista `0130`): the list's, and the mapping settings on the walks page.
  *

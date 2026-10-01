@@ -10,14 +10,6 @@
   @include zone-page.page;
 }
 
-.back {
-  @include zone-page.back;
-}
-
-.back-glyph {
-  @include zone-page.back-glyph;
-}
-
 // Visually hidden, and never `display: none`: a region that is not rendered is not
 // announced. This is how a row leaving is reported to somebody who cannot see it.
 .live {
@@ -29,14 +21,6 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-.title {
-  margin: 0;
-  font-size: var(--app-text-xl);
-  font-weight: 650;
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
 }
 
 .error {

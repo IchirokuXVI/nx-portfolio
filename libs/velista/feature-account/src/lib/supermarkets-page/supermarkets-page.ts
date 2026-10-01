@@ -13,10 +13,8 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  REALTIME_CLIENT,
   ShoppingProfileStore,
   ShopStore,
-  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -31,9 +29,8 @@ import {
   profileIdOf,
 } from '@portfolio/velista/platform';
 import {
-  AppBar,
-  ChevronLeftIcon,
   FranchiseButtons,
+  PageHeader,
   SearchIcon,
   ShopList,
   type ShopGroup,
@@ -89,10 +86,9 @@ const SEARCH_DEBOUNCE_MS = 250;
   selector: 'lib-supermarkets-page',
   imports: [
     RokuTranslatorPipe,
-    AppBar,
     AttributionNote,
-    ChevronLeftIcon,
     FranchiseButtons,
+    PageHeader,
     SearchIcon,
     ShopList,
   ],
@@ -110,24 +106,15 @@ export class SupermarketsPage {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
 
-  /** For the app bar's offline mark and nothing else. This page subscribes to no room. */
-  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
-
   /** The profile this screen is about, from the URL. */
   protected readonly profileId = profileIdOf(this._route);
 
   protected readonly profileState = this._profiles.state;
-  protected readonly connected = this._realtime.connected;
   protected readonly state = this._shops.state;
   protected readonly shopState = this._shops.shopState;
   protected readonly chains = this._shops.chains;
   protected readonly selection = this._shops.selection;
   protected readonly noShops = this._shops.noShops;
-
-  /** Where the header's lockup leads. Home, from every screen that is not home. */
-  protected readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
 
   /** Back, and the page this screen is reached from. */
   protected readonly profilesUrl = computed(() =>
@@ -330,13 +317,6 @@ export class SupermarketsPage {
   /** Back to the profiles page, which is the only place this page is reached from. */
   async back(): Promise<void> {
     await this._pages.back(this.profilesUrl());
-  }
-
-  /** The assistant, which is the one app bar button that goes anywhere from here. */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
-    );
   }
 
   /** The way out of the first empty state: the screen that holds the postal codes. */

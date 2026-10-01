@@ -1,8 +1,8 @@
 // The page furniture this library's one screen uses.
 //
 // A mixin file rather than a component in `ui`, for the reason `feature-zones`'
-// `_zone-page.scss` gives: what is shared here is a column, its padding, a back button
-// and two button shapes, and a component taking all of that as inputs would be a layout
+// `_zone-page.scss` gives: what is shared here is a column, its padding and two button
+// shapes, and a component taking all of that as inputs would be a layout
 // framework by the end of it.
 //
 // Sass resolves `@use` against the filesystem rather than against this workspace's
@@ -29,34 +29,6 @@
   padding: var(--app-space-5);
   padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
   overflow-y: auto;
-}
-
-// A destination's back, not a sheet's dismiss: this screen is reached by deep link as
-// readily as from the dashboard, so there may be no history entry behind it and the
-// control has to be a real navigation (plan 0009, section 4.1).
-//
-// The negative inline start margin keeps the glyph optically aligned with the content
-// below it. The button is wider than the caret, so without it the caret sits indented
-// from the column it heads.
-@mixin back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  margin-inline-start: calc(var(--app-space-2) * -1);
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  @include focus-ring;
-}
-
-@mixin back-glyph {
-  font-size: var(--app-icon-md);
 }
 
 @mixin primary-action {

@@ -1,102 +1,96 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="back()"
-      [attr.aria-label]="'shopPage.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      @if (text(); as words) {
-        <h1 class="title">{{ words.title }}</h1>
-        @if (words.chain; as chain) {
+  <!--
+    The title is the shop's name, and the word for the kind of page until it is
+    known (velista 0130, H6). The sentence a read that is slow, missing or failed
+    has to say is in the content.
+  -->
+  <lib-page-header
+    (back)="back()"
+    [backLabel]="'shopPage.back' | rokuT"
+    [title]="text()?.title || ('shopPage.loadingTitle' | rokuT)"
+  />
+
+  <div class="content">
+    @if (shop(); as shop) {
+      @let words = text();
+      <section class="facts">
+        @if (words?.chain; as chain) {
           <p class="subtitle">{{ chain }}</p>
         }
-      } @else {
-        <h1 class="title">
-          @switch (read().kind) {
-            @case ('missing') {
-              {{ 'shopPage.missing' | rokuT }}
-            }
-            @case ('failed') {
-              {{ 'shopPage.failed' | rokuT }}
-            }
-            @default {
-              {{ 'shopPage.loading' | rokuT }}
-            }
-          }
-        </h1>
-      }
-    </div>
-  </header>
+        @if (words?.street; as street) {
+          <div class="fact">
+            <lib-pin-icon class="fact-glyph" />
+            <p class="fact-text">
+              <span class="sr-label">{{ 'shopPage.address' | rokuT }}</span>
+              <span class="fact-main">{{ street }}</span>
+              @if (words?.place; as place) {
+                <span class="fact-sub">{{ place }}</span>
+              }
+            </p>
+          </div>
+        }
 
-  @if (shop(); as shop) {
-    @let words = text();
-    <section class="facts">
-      @if (words?.street; as street) {
-        <div class="fact">
-          <lib-pin-icon class="fact-glyph" />
-          <p class="fact-text">
-            <span class="sr-label">{{ 'shopPage.address' | rokuT }}</span>
-            <span class="fact-main">{{ street }}</span>
-            @if (words?.place; as place) {
-              <span class="fact-sub">{{ place }}</span>
-            }
-          </p>
-        </div>
-      }
+        @if (size(); as size) {
+          <div class="fact">
+            <lib-floor-area-icon class="fact-glyph" />
+            <p class="fact-text">
+              <span class="fact-main">{{
+                'shopPage.size' | rokuT: { size: size }
+              }}</span>
+              <span class="fact-sub">{{ 'shopPage.sizeSource' | rokuT }}</span>
+            </p>
+          </div>
+        }
 
-      @if (size(); as size) {
-        <div class="fact">
-          <lib-floor-area-icon class="fact-glyph" />
-          <p class="fact-text">
-            <span class="fact-main">{{
-              'shopPage.size' | rokuT: { size: size }
-            }}</span>
-            <span class="fact-sub">{{ 'shopPage.sizeSource' | rokuT }}</span>
-          </p>
-        </div>
-      }
-
-      <!--
-        For every shop (velista 0129): one with no walk shown to shoppers opens
-        the map page saying so, where an account that maps finds the Walks button.
-      -->
-      <button (click)="openMap()" class="see-map" type="button">
-        <lib-map-icon class="see-map-glyph" />
-        {{ 'shopPage.seeMap' | rokuT }}
-      </button>
-    </section>
-
-    @if (sections().length > 0) {
-      <section aria-labelledby="shop-sections-heading" class="sections">
-        <h2 class="sections-heading" id="shop-sections-heading">
-          {{ 'shopPage.sections' | rokuT }} ·
-          {{ 'shopPage.sectionsHint' | rokuT }}
-        </h2>
-        <ol class="section-list">
-          @for (section of sections(); track section.id; let i = $index) {
-            <li class="section-row">
-              <span aria-hidden="true" class="section-number">{{ i + 1 }}</span>
-              <span class="section-name">{{ section.name }}</span>
-            </li>
-          }
-        </ol>
+        <!--
+          For every shop (velista 0129): one with no walk shown to shoppers opens
+          the map page saying so, where an account that maps finds the Walks button.
+        -->
+        <button (click)="openMap()" class="see-map" type="button">
+          <lib-map-icon class="see-map-glyph" />
+          {{ 'shopPage.seeMap' | rokuT }}
+        </button>
       </section>
+
+      @if (sections().length > 0) {
+        <section aria-labelledby="shop-sections-heading" class="sections">
+          <h2 class="sections-heading" id="shop-sections-heading">
+            {{ 'shopPage.sections' | rokuT }} ·
+            {{ 'shopPage.sectionsHint' | rokuT }}
+          </h2>
+          <ol class="section-list">
+            @for (section of sections(); track section.id; let i = $index) {
+              <li class="section-row">
+                <span aria-hidden="true" class="section-number">{{
+                  i + 1
+                }}</span>
+                <span class="section-name">{{ section.name }}</span>
+              </li>
+            }
+          </ol>
+        </section>
+      }
+    } @else if (read().kind === 'failed') {
+      <div class="state" role="alert">
+        <p class="state-text">{{ 'shopPage.failed' | rokuT }}</p>
+        <button (click)="retry()" class="retry" type="button">
+          {{ 'shopPage.retry' | rokuT }}
+        </button>
+      </div>
+    } @else if (read().kind === 'missing') {
+      <div class="state" role="alert">
+        <p class="state-text">{{ 'shopPage.missing' | rokuT }}</p>
+      </div>
+    } @else {
+      <div
+        [attr.aria-label]="'shopPage.loading' | rokuT"
+        class="bones"
+        role="status"
+      >
+        <span class="bone"></span>
+        <span class="bone"></span>
+        <span class="bone is-tall"></span>
+      </div>
     }
-  } @else if (read().kind === 'failed') {
-    <div class="state" role="alert">
-      <button (click)="retry()" class="retry" type="button">
-        {{ 'shopPage.retry' | rokuT }}
-      </button>
-    </div>
-  } @else if (read().kind === 'loading') {
-    <div aria-hidden="true" class="bones">
-      <span class="bone"></span>
-      <span class="bone"></span>
-      <span class="bone is-tall"></span>
-    </div>
-  }
+  </div>
 </main>

@@ -1,15 +1,15 @@
-<div class="page">
-  <header class="head">
-    <h1 class="title">{{ 'catalog.title' | rokuT }}</h1>
-    @if (near(); as code) {
-      <span class="near">{{ 'catalog.near' | rokuT: { code } }}</span>
-    }
-  </header>
+<!--
+  The one page header (velista 0130), outside the scroller, so it never scrolls
+  away. The catalog is a tab and has no way back, so it wears the tab's own glyph.
+-->
+<lib-page-header [title]="'catalog.title' | rokuT">
+  <lib-product-icon pageHeaderIcon />
+</lib-page-header>
 
+<div class="page">
   <!--
     The tools, all on the screen (rule C1), held at the top while the list scrolls
-    under them. The title scrolls away; the field, the Supermarket button, the
-    category and the order do not.
+    under them: the field, the Supermarket button, the category and the order.
   -->
   <div class="tools">
     <label class="visually-hidden" for="catalog-search">
@@ -89,11 +89,20 @@
       }
     </div>
 
-    <lib-order-pills
-      (chosen)="chooseOrder($event)"
-      [orders]="orders()"
-      [selected]="order()"
-    />
+    <!--
+      The order, and where the prices are from at the row's end. The quiet text is
+      not an action, so it is here and not in the header (velista 0130, rule H5).
+    -->
+    <div class="order-row">
+      <lib-order-pills
+        (chosen)="chooseOrder($event)"
+        [orders]="orders()"
+        [selected]="order()"
+      />
+      @if (near(); as code) {
+        <span class="near">{{ 'catalog.near' | rokuT: { code } }}</span>
+      }
+    </div>
 
     @if (shop() !== null && shopPlace() !== '') {
       <p class="note">

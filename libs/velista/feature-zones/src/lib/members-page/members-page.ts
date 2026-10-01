@@ -35,10 +35,9 @@ import {
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
-  AppBar,
-  ChevronLeftIcon,
   ErrorState,
   MemberRow,
+  PageHeader,
   PendingRequestRow,
   RowSkeleton,
 } from '@portfolio/velista/ui';
@@ -90,10 +89,9 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
-    AppBar,
-    ChevronLeftIcon,
     ErrorState,
     MemberRow,
+    PageHeader,
     PendingRequestRow,
     RowSkeleton,
   ],
@@ -138,8 +136,8 @@ export class MembersPage {
   readonly errorKey = signal<string | null>(null);
 
   /**
-   * What the screen is called, outside the state union so it is named while it is
-   * loading and while it is failing.
+   * What the screen is called, which is the page header's title (velista `0130`).
+   * Outside the state union so it is named while it is loading and while it is failing.
    *
    * On a cold deep link there is no cached group to put in "Members of {{name}}", so
    * it falls back to the plain label rather than rendering a sentence with a hole in
@@ -150,30 +148,6 @@ export class MembersPage {
     return name === ''
       ? { key: 'zone.detail.members', name: '' }
       : { key: 'zone.members.title', name };
-  });
-
-  /**
-   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
-   * section 5.3).
-   *
-   * Straight off the client rather than through a store: it is a fact about the
-   * transport, and every screen that draws the bar reports the same one.
-   */
-  readonly connected = this._realtime.connected;
-
-  /**
-   * Where the header's lockup leads. Home, from every screen that is not home.
-   *
-   * Built with `appPath` like every other link this page makes, so the locale and the
-   * mount are the ones actually in force rather than a string written down twice.
-   */
-  readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
-
-  readonly accountInitial = computed(() => {
-    const username = this._session.username();
-    return username === null ? null : initialOf(username);
   });
 
   /**
@@ -311,23 +285,6 @@ export class MembersPage {
   async back(): Promise<void> {
     await this._pages.back(
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
-    );
-  }
-
-  /**
-   * The app bar's account button, which was inert on this screen until plan 0015
-   * (section 4.4).
-   */
-  async openAccount(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'account')
-    );
-  }
-
-  /** The assistant (plan 0032). See the note on the group page. */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
     );
   }
 

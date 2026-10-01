@@ -6,6 +6,7 @@ import type { MapArea } from '@portfolio/luna-shopper/shop-map/model';
 import type { Basket, BasketRow } from '@portfolio/velista/models';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
+  headerOf,
   settle,
   shopMapTesting,
   type ShopMapHarnessOptions,
@@ -91,6 +92,28 @@ describe('ShopMapPage', () => {
     expect(text(fixture, '.subtitle')).toEqual([
       'Mercadona · Ronda de los Tejares 32',
     ]);
+    // Velista 0130: the shop is a line of the content, not of the header.
+    expect(text(fixture, 'lib-page-header .subtitle')).toEqual([]);
+  });
+
+  // Velista 0130: one header, the same in every state.
+  it.each([
+    ['with a map', 'loc-tejares', false],
+    ['with no map', 'loc-centro', false],
+    ['when the map would not load', 'loc-tejares', true],
+  ])('draws the header %s', async (_what, locationId, failing) => {
+    const { fixture } = await render({
+      params: { locationId },
+      permissions: [],
+      failing,
+    });
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopMap.back',
+      title: 'shopMap.title',
+      actions: [],
+    });
   });
 
   it('draws the map in the drawn look (velista 0128)', async () => {
@@ -246,7 +269,7 @@ describe('ShopMapPage', () => {
     });
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.back')
+      .querySelector<HTMLButtonElement>('lib-page-header .lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/en/shopping-lists/b-1');
@@ -258,7 +281,7 @@ describe('ShopMapPage', () => {
     });
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.back')
+      .querySelector<HTMLButtonElement>('lib-page-header .lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/en/shops/loc-tejares');
@@ -286,9 +309,13 @@ describe('ShopMapPage', () => {
         .spyOn(TestBed.inject(Router), 'navigateByUrl')
         .mockResolvedValue(true);
 
-      expect(text(fixture, '.walks > span')).toEqual(['shopWalks.open']);
+      // The word beside the glyph: Walks is a text action in the header.
+      expect(headerOf(fixture).actions).toHaveLength(1);
+      expect(text(fixture, '[libPageHeaderAction].is-text > span')).toEqual([
+        'shopWalks.open',
+      ]);
       (fixture.nativeElement as HTMLElement)
-        .querySelector<HTMLButtonElement>('.walks')
+        .querySelector<HTMLButtonElement>('[libPageHeaderAction]')
         ?.click();
 
       expect(navigate).toHaveBeenCalledWith('/en/shops/loc-tejares/walks');
@@ -301,7 +328,7 @@ describe('ShopMapPage', () => {
           permissions,
         });
 
-        expect(text(fixture, '.walks')).toEqual([]);
+        expect(headerOf(fixture).actions).toEqual([]);
       }
     });
   });

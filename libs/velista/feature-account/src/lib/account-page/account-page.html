@@ -1,16 +1,11 @@
 <!--
-  `(account)` is deliberately unbound on this one bar, and it is the only screen where
-  that is right: pressing it would navigate to the page it is already on. The button
-  stays drawn so the header does not change shape between screens.
-
-  `(openAssistant)` is bound, because that one does go somewhere from here (plan 0032).
+  The one header (velista `0130`), outside the scroller so it never scrolls away. The
+  brand bar that used to sit above it is home's now, so this page is one row shorter.
 -->
-<lib-app-bar
-  (openAssistant)="openAssistant()"
-  [accountInitial]="accountInitial()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'account.back' | rokuT"
+  [title]="'account.title' | rokuT"
 />
 
 <!--
@@ -18,17 +13,6 @@
   success to render and nothing to go back to (section 3.1).
 -->
 <main [attr.aria-busy]="busy()" class="page">
-  <button
-    (click)="back()"
-    [attr.aria-label]="'account.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
-  <h1 class="title">{{ 'account.title' | rokuT }}</h1>
-
   <!--
     One polite live region, outside every branch so it is never torn down and recreated:
     a region that appears at the same moment as its text is often not announced at all.

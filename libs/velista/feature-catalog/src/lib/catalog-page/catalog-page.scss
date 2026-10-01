@@ -1,18 +1,31 @@
 // The catalog tab (velista 0100), drawn as the mock draws it.
 //
-// **The page is its own scroller, and it draws no scrollbar** (velista 0112). Since
+// **The page has its own scroller, and it draws no scrollbar** (velista 0112). Since
 // 0106 the document never scrolls: the frame's page slot does, for every page without
 // a scroller of its own. The catalog takes one so that its scrollbar can be hidden
-// while every other page keeps the slot's. It is exactly as tall as the slot, so the slot
-// never overflows, and the tools stick to the top of this box, which is where they
-// stuck before.
+// while every other page keeps the slot's. The host is exactly as tall as the slot, so
+// the slot never overflows.
+//
+// The host is a column of the page header and then the scroller (velista 0130): the
+// header is outside the box that scrolls, so it stays, and the tools stick to the top
+// of that box, directly under it.
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// The scroller. `min-block-size: 0` is what lets it be shorter than the list in it.
 //
 // Hidden and not removed: the page still scrolls by touch, by wheel, and by the
 // keyboard from anything focused inside it, and a screen reader still moves through
 // it. The pattern is the one `chain-chips` and `suggestion-list` already use.
-:host {
-  display: block;
-  block-size: 100%;
+//
+// Not a flex column: its children would shrink to fit, and the list has to overflow.
+.page {
+  flex: 1;
+  min-block-size: 0;
+  padding-block-end: var(--app-space-7);
   overflow-y: auto;
   scrollbar-width: none;
 
@@ -21,34 +34,21 @@
   }
 }
 
-.page {
+// The pills, then the quiet text at the row's end. It wraps under them on a narrow
+// phone with four orders rather than squeezing a pill.
+.order-row {
   display: flex;
-  flex-direction: column;
-  padding-block-end: var(--app-space-7);
-}
-
-.head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--app-space-3);
-  padding: var(--app-space-4) var(--app-space-5) 0;
-}
-
-.title {
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-2xl);
-  line-height: var(--app-leading-heading);
-  letter-spacing: var(--app-tracking-wordmark);
-  color: var(--app-text-primary);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-2) var(--app-space-3);
 }
 
 .near {
   flex: none;
+  margin-inline-start: auto;
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
+  white-space: nowrap;
 }
 
 // Sticky on the page's own ground, so the rows passing under it never show through.

@@ -1,27 +1,15 @@
 @use '../picker-page' as picker;
 
+// A column of the page header and then the scroller (velista 0130), exactly as tall
+// as the frame's page slot, so the header stays while the rows scroll under it.
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
 }
 
 .page {
   @include picker.page;
-}
-
-.head {
-  @include picker.head;
-}
-
-.back {
-  @include picker.back;
-}
-
-.back-glyph {
-  @include picker.back-glyph;
-}
-
-.title {
-  @include picker.title;
 }
 
 .skeleton {

@@ -1,66 +1,18 @@
-.header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--app-space-3);
-}
-
-.titles {
-  flex: 1;
-  min-width: 0;
-}
-
-.name {
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-size: var(--app-text-xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-// A skeleton the width of a plausible name, not of the longest possible one: a bar
-// that fills the screen and is then replaced by "Weekly shop" reads as a layout jump.
-.name-skeleton {
+// A block in the page's column, so the column's gap is the only space around it.
+:host {
   display: block;
-  inline-size: 9ch;
-  block-size: 1.4em;
-  background: var(--app-surface-sunken);
-  border-radius: var(--app-radius-sm);
 }
 
+// The first line of the content, under the page header. The space is below it, so a
+// list whose group is not known yet starts on the progress line with no gap above.
 .in-group {
-  margin: var(--app-space-hair) 0 0;
+  margin: 0 0 var(--app-space-2);
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
 }
 
-.header-actions {
-  display: flex;
-  gap: var(--app-space-1);
-  flex-shrink: 0;
-}
-
-.header-action {
-  min-height: var(--app-touch-target);
-  padding: 0 var(--app-space-3);
-  background: none;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  font: inherit;
-  font-size: var(--app-text-xs);
-  color: var(--app-action-quiet-fg);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
 .progress-line {
-  margin: var(--app-space-3) 0 var(--app-space-1);
+  margin: 0 0 var(--app-space-1);
   font-size: var(--app-text-xs);
   font-variant-numeric: tabular-nums;
   color: var(--app-text-secondary);

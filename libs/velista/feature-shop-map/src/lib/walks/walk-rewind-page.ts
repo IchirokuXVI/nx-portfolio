@@ -35,7 +35,7 @@ import {
   shopWalkPath,
   walkIdOf,
 } from '@portfolio/velista/platform';
-import { CloseIcon, SpinnerIcon } from '@portfolio/velista/ui';
+import { PageHeader, SpinnerIcon } from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { historyRowView, type WalkPhrase } from './walk-history-page';
 import { clockText, dayName, shopLine, spanOf } from './walk-text';
@@ -80,7 +80,7 @@ export type RewindNotice = 'changed' | 'failed' | null;
  */
 @Component({
   selector: 'lib-walk-rewind-page',
-  imports: [CloseIcon, RokuTranslatorPipe, ShopMapView, SpinnerIcon],
+  imports: [PageHeader, RokuTranslatorPipe, ShopMapView, SpinnerIcon],
   templateUrl: './walk-rewind-page.html',
   styleUrl: './walk-rewind-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -387,12 +387,20 @@ describe('MembersPage', () => {
   });
 
   describe('the screen around the rows', () => {
-    it('opens with the app bar, like the group page it was opened from', async () => {
+    const host = (fixture: ComponentFixture<MembersPage>) =>
+      fixture.nativeElement as HTMLElement;
+
+    const title = (fixture: ComponentFixture<MembersPage>) =>
+      host(fixture).querySelector('lib-page-header h1')?.textContent?.trim();
+
+    it('opens with the one page header, and no brand bar above it', async () => {
+      // Velista `0130`. The header is the first thing the page draws, outside the
+      // column that scrolls, and the brand bar is home's alone.
       const { fixture } = await render();
 
-      expect(
-        (fixture.nativeElement as HTMLElement).querySelector('lib-app-bar')
-      ).not.toBeNull();
+      expect(host(fixture).firstElementChild?.tagName).toBe('LIB-PAGE-HEADER');
+      expect(host(fixture).querySelector('main lib-page-header')).toBeNull();
+      expect(host(fixture).querySelector('lib-app-bar')).toBeNull();
     });
 
     it('is titled before the rows are there', async () => {
@@ -400,26 +408,60 @@ describe('MembersPage', () => {
       // all while it was loading and while it was failing.
       const { fixture } = await render();
 
-      expect(text(fixture)).toContain('zone.members.title');
+      expect(title(fixture)).toBe('zone.members.title');
+    });
+
+    it('is titled while it fails, too', async () => {
+      const { fixture } = await render({
+        rejectWith: { listMembers: failure('internal_error', 500) },
+      });
+
+      expect(host(fixture).querySelector('lib-error-state')).not.toBeNull();
+      expect(title(fixture)).toBe('zone.members.title');
     });
 
     it('says plain Members when no group name is cached', async () => {
       // A cold deep link. "Members of " with a hole in it is worse than the label.
       const { fixture } = await render({ noZoneCached: true });
 
-      expect(text(fixture)).toContain('zone.detail.members');
+      expect(title(fixture)).toBe('zone.detail.members');
       expect(text(fixture)).not.toContain('zone.members.title');
+    });
+
+    it('holds the page’s only top heading, and no actions', async () => {
+      const { fixture } = await render();
+
+      expect(host(fixture).querySelectorAll('h1')).toHaveLength(1);
+      expect(host(fixture).querySelector('main h1')).toBeNull();
+      expect(host(fixture).querySelectorAll('header')).toHaveLength(1);
+      expect(
+        host(fixture).querySelector(
+          'lib-page-header button[libPageHeaderAction]'
+        )
+      ).toBeNull();
     });
 
     it('shows the back control as a caret, not as the word Back', async () => {
       const { fixture } = await render();
-      const back = (fixture.nativeElement as HTMLElement).querySelector(
-        '.back'
-      );
+      const back = host(fixture).querySelector('lib-page-header .lead');
 
       expect(back?.getAttribute('aria-label')).toBe('zone.detail.back');
       expect(back?.querySelector('lib-chevron-left-icon')).not.toBeNull();
       expect(back?.textContent?.trim()).toBe('');
+    });
+
+    it('goes back to the group when there is nothing behind it', async () => {
+      const { fixture, router } = await render();
+
+      host(fixture)
+        .querySelector<HTMLButtonElement>('lib-page-header .lead')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}`,
+        { replaceUrl: true }
+      );
     });
   });
 

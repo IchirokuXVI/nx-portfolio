@@ -14,12 +14,10 @@ import {
 import {
   AUTH_SERVICE,
   ProfileStore,
-  REALTIME_CLIENT,
   SessionStore,
   TokenStore,
   ZoneStore,
   type AuthServiceI,
-  type RealtimeClientI,
   type ResendOutcome,
 } from '@portfolio/velista/data-access';
 import {
@@ -38,9 +36,8 @@ import {
 } from '@portfolio/velista/platform';
 import {
   AccountRow,
-  AppBar,
   AppVersion,
-  ChevronLeftIcon,
+  PageHeader,
   SectionHeading,
 } from '@portfolio/velista/ui';
 import {
@@ -60,7 +57,7 @@ import { RenameAnnouncement } from '../rename-announcement';
  * ## The name never loads
  *
  * `SessionStore.username` is derived from the token pair, which is already in memory,
- * so the heading and the app bar's initial are correct on the first frame. The one
+ * so the name row is correct on the first frame. The one
  * request this screen makes is for the **email**, which is the one fact the app
  * genuinely does not have, and it is the only thing here that skeletons (section 3.1).
  *
@@ -96,9 +93,8 @@ import { RenameAnnouncement } from '../rename-announcement';
     RokuTranslatorPipe,
     RouterOutlet,
     AccountRow,
-    AppBar,
     AppVersion,
-    ChevronLeftIcon,
+    PageHeader,
     SectionHeading,
   ],
   templateUrl: './account-page.html',
@@ -109,12 +105,6 @@ export class AccountPage {
   private readonly _session = inject(SessionStore);
   private readonly _profile = inject(ProfileStore);
   private readonly _zones = inject(ZoneStore);
-  /**
-   * For the app bar's offline mark and nothing else (plan 0035, section 5.3). This
-   * screen subscribes to no room and applies no event; it draws the bar, so it answers
-   * the one question the bar asks.
-   */
-  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _tokens = inject(TokenStore);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _router = inject(Router);
@@ -206,25 +196,6 @@ export class AccountPage {
     () => (this._basePath === '' ? this._install.state() : 'elsewhere')
   );
 
-  /** Whether the live connection is up, for the app bar's offline mark. */
-  readonly connected = this._realtime.connected;
-
-  /**
-   * Where the header's lockup leads. Home, from every screen that is not home.
-   *
-   * Built with `appPath` like every other link this page makes, so the locale and the
-   * mount are the ones actually in force rather than a string written down twice.
-   */
-  readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
-
-  /** The letter in the app bar, which changes the moment a rename lands (rule A2). */
-  readonly accountInitial = computed(() => {
-    const username = this._session.username();
-    return username === null ? null : initialOf(username);
-  });
-
   /** The name just saved, for the live region. Read once and cleared. */
   readonly announced = this._announcement.name;
 
@@ -257,13 +228,6 @@ export class AccountPage {
   /** Back to the dashboard, which is where this screen is opened from. */
   async back(): Promise<void> {
     await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
-  }
-
-  /** The assistant (plan 0032), which is the one app bar button that works from here. */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
-    );
   }
 
   /**
@@ -449,17 +413,4 @@ export class AccountPage {
   private async _toFrontDoor(): Promise<void> {
     await this._router.navigateByUrl(appPath(this._locale(), this._basePath));
   }
-}
-
-/**
- * The letter in the account button.
- *
- * Code points rather than a slice, because slicing cuts a surrogate pair in half and a
- * name that starts with an emoji would render the replacement character.
- */
-function initialOf(name: string): string {
-  const trimmed = name.trim();
-  return trimmed === ''
-    ? ''
-    : (Array.from(trimmed)[0] ?? '').toLocaleUpperCase();
 }

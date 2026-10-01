@@ -6,24 +6,22 @@
     it too**, because a count that only exists as a dot over a glyph is a count a
     screen reader never hears.
   -->
-  @if (filter()) {
-    <button
-      (click)="openFilter.emit()"
-      [attr.aria-label]="
-        activeCount() === 0
-          ? ('basket.view.open' | rokuT)
-          : ('basket.view.openCount' | rokuT: { count: activeCount() })
-      "
-      [class.is-on]="activeCount() > 0"
-      class="tool"
-      type="button"
-    >
-      <lib-filter-icon class="tool-glyph" />
-      @if (activeCount() > 0) {
-        <span aria-hidden="true" class="tool-badge">{{ activeCount() }}</span>
-      }
-    </button>
-  }
+  <button
+    (click)="openFilter.emit()"
+    [attr.aria-label]="
+      activeCount() === 0
+        ? ('basket.view.open' | rokuT)
+        : ('basket.view.openCount' | rokuT: { count: activeCount() })
+    "
+    [class.is-on]="activeCount() > 0"
+    class="tool"
+    type="button"
+  >
+    <lib-filter-icon class="tool-glyph" />
+    @if (activeCount() > 0) {
+      <span aria-hidden="true" class="tool-badge">{{ activeCount() }}</span>
+    }
+  </button>
 </div>
 
 <ng-content select="[listToolsBelow]" />

@@ -11,6 +11,7 @@ import {
 import type { ShopWalkHistoryRow } from '@portfolio/velista/models';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
+  headerOf,
   settle,
   shopMapTesting,
   type ShopMapHarnessOptions,
@@ -32,7 +33,7 @@ const BASE = `/en/shops/${SHOP}/walks`;
 
 async function render<T>(
   component: Type<T>,
-  options: ShopMapHarnessOptions = {}
+  options: ShopMapHarnessOptions & { cold?: boolean } = {}
 ) {
   TestBed.resetTestingModule();
   const harness = shopMapTesting({
@@ -51,8 +52,10 @@ async function render<T>(
     .mockResolvedValue(true);
   const fixture = TestBed.createComponent(component);
   fixture.detectChanges();
-  await settle(() => fixture.detectChanges());
-  await settle(() => fixture.detectChanges());
+  if (!options.cold) {
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+  }
   return { fixture, navigate, navigateTo, ...harness };
 }
 
@@ -85,7 +88,7 @@ describe('ShopWalksPage', () => {
     const { fixture, navigate } = await render(ShopWalksPage);
 
     click(fixture, '.walk-main');
-    click(fixture, '.bar .icon-button');
+    click(fixture, '[libPageHeaderAction]');
 
     expect(navigate.mock.calls.map(([url]) => url)).toEqual([
       `${BASE}/${MEMORY_SHOWN_WALK_ID}`,
@@ -111,10 +114,34 @@ describe('ShopWalksPage', () => {
     expect(navigateTo.mock.calls[0][0]).toEqual(['sheet', 'new']);
   });
 
+  // Velista 0130: one header, with the gear for the settings of every walk.
+  it('draws the header before the walks arrive and after, with the shop under it', async () => {
+    const { fixture } = await render(ShopWalksPage, { cold: true });
+    const drawn = {
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'shopWalks.list.title',
+      actions: ['shopWalks.mapping.title'],
+    };
+
+    expect(headerOf(fixture)).toEqual(drawn);
+    expect(all(fixture, '.content [role="status"]')).toHaveLength(1);
+
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+
+    expect(headerOf(fixture)).toEqual(drawn);
+    expect(all(fixture, '[libPageHeaderAction] lib-gear-icon')).toHaveLength(1);
+    expect(all(fixture, 'lib-page-header .subtitle')).toEqual([]);
+    expect(all(fixture, '.content > :first-child')).toEqual([
+      'Mercadona · Ronda de los Tejares 32',
+    ]);
+  });
+
   it('goes back to the map when there is nothing to pop', async () => {
     const { fixture, pages } = await render(ShopWalksPage);
 
-    click(fixture, '.back');
+    click(fixture, 'lib-page-header .lead');
 
     expect(pages.back).toHaveBeenCalledWith(`/en/shops/${SHOP}/map`);
   });
@@ -247,9 +274,10 @@ describe('historyRowView', () => {
 describe('WalkHistoryPage', () => {
   it('holds everything about the walk, in the order somebody needs it', async () => {
     const { fixture } = await render(WalkHistoryPage);
+    // Under the header, whose own actions slot shares a class name with the page's.
     const order = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll(
-        '.field, .switch, .actions, .entries, .delete'
+        '.content :is(.field, .switch, .actions, .entries, .delete)'
       )
     ).map((node) => node.className.split(' ')[0]);
 
@@ -262,7 +290,29 @@ describe('WalkHistoryPage', () => {
       'shopWalks.settings.showHint',
     ]);
     // No button for a settings page: there is none any more.
-    expect(all(fixture, '.bar .icon-button')).toEqual([]);
+    expect(headerOf(fixture).actions).toEqual([]);
+  });
+
+  // Velista 0130: the header never waits for the walk.
+  it('titles the header Walk until the walk arrives, then with its name', async () => {
+    const { fixture } = await render(WalkHistoryPage, { cold: true });
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'shopWalks.history.loadingTitle',
+      actions: [],
+    });
+
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'Autumn layout',
+      actions: [],
+    });
   });
 
   it('renames the walk when the field is left, and says so', async () => {
@@ -407,6 +457,7 @@ describe('WalkHistoryPage', () => {
     });
 
     expect(all(fixture, '.empty')).toEqual(['shopWalks.history.missing']);
+    expect(headerOf(fixture).title).toBe('shopWalks.history.loadingTitle');
   });
 });
 
@@ -416,6 +467,31 @@ describe('WalkRewindPage', () => {
     return fixture.debugElement.query(By.directive(ShopMapView))
       .componentInstance as ShopMapView;
   }
+
+  // Velista 0130: left with the X, and the shop on a line under the header.
+  it('draws the header with a close, before the log arrives and after', async () => {
+    const { fixture, pages } = await render(WalkRewindPage, { cold: true });
+    const drawn = {
+      lead: 'close',
+      leadLabel: 'shopWalks.rewind.close',
+      title: 'shopWalks.rewind.title',
+      actions: [],
+    };
+
+    expect(headerOf(fixture)).toEqual(drawn);
+
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+
+    expect(headerOf(fixture)).toEqual(drawn);
+    expect(all(fixture, 'lib-page-header .subtitle')).toEqual([]);
+    expect(all(fixture, 'lib-page-header + .subtitle')).toEqual([
+      'Mercadona · Ronda de los Tejares 32',
+    ]);
+
+    click(fixture, 'lib-page-header .lead');
+    expect(pages.back).toHaveBeenCalledTimes(1);
+  });
 
   it('opens at now, with nothing faded and nothing to continue from', async () => {
     const { fixture } = await render(WalkRewindPage);
@@ -549,6 +625,21 @@ describe('ResumeWarningSheet', () => {
 
 /** Velista `0122`, target 6: the settings for every walk. */
 describe('MappingSettingsPage', () => {
+  // Velista 0130.
+  it('draws the header with a way back and no action', async () => {
+    const { fixture, pages } = await render(MappingSettingsPage);
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'shopWalks.mapping.title',
+      actions: [],
+    });
+
+    click(fixture, 'lib-page-header .lead');
+    expect(pages.back).toHaveBeenCalledTimes(1);
+  });
+
   it('turns walking across a shelf into a path on and off, on this device', async () => {
     const { fixture } = await render(MappingSettingsPage);
     const box = (fixture.nativeElement as HTMLElement).querySelector(

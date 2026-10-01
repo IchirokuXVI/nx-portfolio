@@ -1,31 +1,12 @@
-<header class="header">
-  <div class="titles">
-    <!--
-      The name, or a skeleton while a cold arrival is still finding it. Arriving from
-      the group page, `ListStore` has it cached and this is filled on the first frame,
-      which is the common path (rule L2).
-    -->
-    @if (header().listName !== null) {
-      <h1 class="name">{{ header().listName }}</h1>
-    } @else {
-      <span aria-hidden="true" class="name-skeleton"></span>
-    }
-
-    @if (header().zoneName !== null) {
-      <p class="in-group">
-        {{ 'list.header.inGroup' | rokuT: { name: header().zoneName } }}
-      </p>
-    }
-  </div>
-
-  @if (hasMenu()) {
-    <div class="header-actions">
-      <button (click)="openSettings.emit()" class="header-action" type="button">
-        {{ 'list.settings.title' | rokuT }}
-      </button>
-    </div>
-  }
-</header>
+<!--
+  Which group the list belongs to. The list's own name is not here: it is the title of
+  the page header above this block, with the settings button beside it (velista 0130).
+-->
+@if (header().zoneName !== null) {
+  <p class="in-group">
+    {{ 'list.header.inGroup' | rokuT: { name: header().zoneName } }}
+  </p>
+}
 
 <!--
   "7 of 12 pending", with the bar underneath. The number is what the list still wants,

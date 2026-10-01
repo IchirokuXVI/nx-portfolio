@@ -1,30 +1,16 @@
 <!--
-  `(account)` was unbound here until plan 0015, which is a defect rather than a design:
-  the button was drawn, focusable and named, and did nothing. The second button was the
-  same defect for longer, and plan 0032 ends it by spending the slot on the assistant
-  rather than by finally building the search that was never behind it.
+  The one page header (velista `0130`), outside the union below and outside `main`'s
+  scroll: it is drawn in every state and never scrolls away. The title is the group's
+  name whenever the cache holds one, and the word for the kind of page until it does,
+  so the header has its final height and a real title on a cold deep link (H6).
 -->
-<lib-app-bar
-  (account)="openAccount()"
-  (openAssistant)="openAssistant()"
-  [accountInitial]="accountInitial()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'zone.detail.back' | rokuT"
+  [title]="groupName() ?? ('zone.detail.title' | rokuT)"
 />
 
 <main class="page">
-  <!-- The string moves to the accessible name, so nothing is lost for a screen
-       reader when the label becomes a glyph. -->
-  <button
-    (click)="back()"
-    [attr.aria-label]="'zone.detail.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
   <!--
     One union, read once. The page cannot render two states at once, which is what a
     handful of independent booleans eventually does.
@@ -44,12 +30,13 @@
     />
   } @else {
     <!--
-      The header comes from the cache when the caller arrived from the dashboard, so
-      the common path shows a named group immediately and skeletons only the rows.
-      Null only on a deep link, where there is nothing cached to draw one from.
+      The summary comes from the cache when the caller arrived from the dashboard, so
+      the common path shows the group's role and its ways in immediately and skeletons
+      only the rows. Null only on a deep link, where there is nothing cached to draw
+      one from.
     -->
     @if (header(); as group) {
-      <lib-group-header
+      <lib-group-summary
         (openMembers)="openMembers()"
         (openSettings)="openSettings()"
         [group]="group"

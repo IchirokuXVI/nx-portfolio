@@ -23,24 +23,3 @@
   padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
   overflow-y: auto;
 }
-
-@mixin back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  margin-inline-start: calc(var(--app-space-2) * -1);
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  @include focus-ring;
-}
-
-@mixin back-glyph {
-  font-size: var(--app-icon-md);
-}

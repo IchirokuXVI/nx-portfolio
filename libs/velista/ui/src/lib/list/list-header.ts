@@ -3,7 +3,6 @@ import {
   Component,
   computed,
   input,
-  output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ListHeaderVm } from '@portfolio/velista/models';
@@ -11,16 +10,18 @@ import { OfflineIcon } from '../icons/icons';
 import { ListViewers } from '../presence/list-viewers';
 
 /**
- * The top of the list: what it is called, which group it belongs to, and how far the
- * shop has got.
+ * The first block of the list's content: which group it belongs to, how far the shop
+ * has got, who else has it open, and whether it is live.
  *
- * ## The title can be absent, and that is a designed state
+ * ## The name is not here
  *
- * Rule L2: the lines are requested from the list id alone and never wait on the request
- * that names the list. Finding the name means paging the zone's lists, which on a cold
- * arrival is a second round trip. So the title skeletons and fills in, while the body
- * is already usable. Somebody opening the app in an aisle should not wait for a heading
- * before they can see what to buy.
+ * It held the list's name and the settings button until velista `0130`. Both are in
+ * the page's `PageHeader` now, because a header holds only a title and everything else
+ * about the list is content under it. So this has no `h1` and is not a `header`
+ * element, and the name in `ListHeaderVm` is read by the page, for its title.
+ *
+ * Rule L2 still shapes it: the lines never wait on the request that names the list, so
+ * on a cold arrival the group line is absent and the counts are the lines' own.
  *
  * ## The progress moves with the thumb
  *
@@ -38,11 +39,6 @@ import { ListViewers } from '../presence/list-viewers';
 })
 export class ListHeader {
   readonly header = input.required<ListHeaderVm>();
-
-  /** Whether to offer the overflow at all. False when the caller may do nothing to it. */
-  readonly hasMenu = input(false);
-
-  readonly openSettings = output<void>();
 
   /**
    * The bar's fill, as a percentage.

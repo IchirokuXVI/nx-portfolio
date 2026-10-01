@@ -202,6 +202,36 @@ export function shopMapTesting(options: ShopMapHarnessOptions = {}) {
   };
 }
 
+/**
+ * What a page's `PageHeader` draws (velista `0130`): which control its left end
+ * holds and under what name, its title, and its actions, each by its accessible
+ * name or else its word.
+ */
+export function headerOf(fixture: { readonly nativeElement: unknown }): {
+  readonly lead: 'back' | 'close' | null;
+  readonly leadLabel: string | null;
+  readonly title: string;
+  readonly actions: readonly string[];
+} {
+  const header = (fixture.nativeElement as HTMLElement).querySelector(
+    'lib-page-header'
+  );
+  if (header === null) {
+    throw new Error('the page draws no lib-page-header');
+  }
+  const lead = header.querySelector('.lead');
+  const closes = lead?.querySelector('lib-close-icon') ?? null;
+  return {
+    lead: lead === null ? null : closes === null ? 'back' : 'close',
+    leadLabel: lead?.getAttribute('aria-label') ?? null,
+    title: header.querySelector('h1')?.textContent?.trim() ?? '',
+    actions: Array.from(header.querySelectorAll('[libPageHeaderAction]')).map(
+      (action) =>
+        action.getAttribute('aria-label') ?? action.textContent?.trim() ?? ''
+    ),
+  };
+}
+
 /** Let the stores' reads land: they are promises the components started. */
 export async function settle(detect: () => void): Promise<void> {
   for (let tick = 0; tick < 12; tick++) {

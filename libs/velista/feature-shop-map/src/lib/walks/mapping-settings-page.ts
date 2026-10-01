@@ -11,7 +11,7 @@ import {
   PageNavigation,
   shopWalksPath,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader } from '@portfolio/velista/ui';
 
 /**
  * The settings for every walk (velista `0122`, target 6; the `MapSettings`
@@ -23,7 +23,7 @@ import { ChevronLeftIcon } from '@portfolio/velista/ui';
  */
 @Component({
   selector: 'lib-mapping-settings-page',
-  imports: [ChevronLeftIcon, RokuTranslatorPipe],
+  imports: [PageHeader, RokuTranslatorPipe],
   templateUrl: './mapping-settings-page.html',
   styleUrl: './mapping-settings-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

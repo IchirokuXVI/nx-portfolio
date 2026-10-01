@@ -1,29 +1,19 @@
-<header class="header">
-  <div class="identity">
-    <span aria-hidden="true" class="tile">{{ group().initial }}</span>
+<!-- A `div`, and no heading: the page header above holds the name (velista `0130`). -->
+<div class="summary">
+  <!--
+    The first line of the content. The role leads it and is always there; the presence
+    row after it is absent when the caller is the only one here, and absent for
+    everybody the moment the socket drops, which the stale notice below explains once
+    for the whole screen (plan 0022, 3.2).
+  -->
+  <div class="here">
+    <lib-role-chip [role]="group().role" />
 
-    <div class="titles">
-      <div class="name-row">
-        <h1 class="name">{{ group().name }}</h1>
-        <lib-role-chip [role]="group().role" />
-      </div>
-
-      <p class="counts">
-        {{ 'home.zone.members' | rokuT: { count: group().memberCount } }}
-      </p>
-
-      <!--
-        Under the member count, which is the natural pairing: "six members" and "two
-        here now" answer the same question at two timescales. Absent when the caller is
-        the only one here, and absent for everybody the moment the socket drops, which
-        the stale notice below explains once for the whole screen (plan 0022, 3.2).
-      -->
-      <lib-presence-row
-        [names]="group().online"
-        countKey="home.presence.hereCount"
-        messageKey="home.presence.here"
-      />
-    </div>
+    <lib-presence-row
+      [names]="group().online"
+      countKey="home.presence.hereCount"
+      messageKey="home.presence.here"
+    />
   </div>
 
   <!--
@@ -47,11 +37,14 @@
       <lib-person-icon class="action-glyph" />
       <span class="action-label">{{ 'zone.detail.members' | rokuT }}</span>
 
+      <!-- How many are in the group, as the row's value: the row leads to them. -->
+      <span class="action-value">{{ group().memberCount }}</span>
+
       <!--
-        The number, and the **only** thing on this screen a non-null count decides.
-        Which controls exist is decided by `isStaff` below, from `myRole`, because the
-        two facts arrive on different events and a stale count must never leave an
-        action on screen for somebody who may no longer take it (rule G2).
+        The number waiting, and the **only** thing on this screen a non-null count
+        decides. Which controls exist is decided by `isStaff` below, from `myRole`,
+        because the two facts arrive on different events and a stale count must never
+        leave an action on screen for somebody who may no longer take it (rule G2).
       -->
       @if (group().pendingRequestCount; as waiting) {
         <span class="pip">{{ waiting }}</span>
@@ -67,4 +60,4 @@
       </button>
     }
   </nav>
-</header>
+</div>

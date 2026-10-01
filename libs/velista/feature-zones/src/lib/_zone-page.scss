@@ -2,7 +2,7 @@
 //
 // A mixin file in this library rather than a component in `ui`, for the reason
 // `feature-entry`'s `_sheet-body.scss` gives: what is shared here is page furniture
-// (the column, its padding, a back link, two button shapes), and a component taking
+// (the column, its padding, two button shapes), and a component taking
 // all of that as inputs would be a layout framework by the end of it.
 //
 // Sass resolves `@use` against the filesystem rather than against this workspace's
@@ -34,36 +34,8 @@
   overflow-y: auto;
 }
 
-// A destination's back, not a sheet's dismiss: these pages are reached by deep link
-// as readily as from the dashboard, so there may be no history entry behind them and
-// the control has to be a real navigation (plan 0009, section 4.1).
-// The shape is `AuthScreen`'s, copied rather than shared: as the header of this file
-// says, Sass cannot cross a library boundary, so a caret button that looks the same
-// on both surfaces is written twice on purpose.
-//
-// The negative inline start margin keeps the glyph optically aligned with the content
-// below it. The button is wider than the caret, so without it the caret sits indented
-// from the column it heads.
-@mixin back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  margin-inline-start: calc(var(--app-space-2) * -1);
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  @include focus-ring;
-}
-
-@mixin back-glyph {
-  font-size: var(--app-icon-md);
-}
+// The back control that used to be here is `PageHeader`'s now (velista `0130`): both
+// pages draw the one header above this column, and it never scrolls with it.
 
 @mixin primary-action {
   min-block-size: var(--app-button-height);

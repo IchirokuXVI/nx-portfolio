@@ -1,26 +1,16 @@
-<lib-app-bar
-  (openAssistant)="openAssistant()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
+<!--
+  The one header (velista `0130`), outside the scroller so it never scrolls away.
+
+  A destination's back, and its fallback is doing real work rather than satisfying a
+  rule: this page is deep linkable, so a cold arrival has nothing to pop onto.
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'account.back' | rokuT"
+  [title]="'shops.title' | rokuT"
 />
 
 <main class="page">
-  <!--
-    A destination's back, and its fallback is doing real work rather than satisfying a
-    rule: this page is deep linkable, so a cold arrival has nothing to pop onto.
-  -->
-  <button
-    (click)="back()"
-    [attr.aria-label]="'account.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
-  <h1 class="title">{{ 'shops.title' | rokuT }}</h1>
-
   @switch (profileState()) {
     @case ('loading') {
       <div aria-live="polite" class="skeleton" role="status">

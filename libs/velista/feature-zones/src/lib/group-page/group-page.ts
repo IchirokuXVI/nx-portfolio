@@ -37,14 +37,13 @@ import {
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
-  AppBar,
-  ChevronLeftIcon,
   EmptyState,
   ErrorState,
-  GroupHeader,
+  GroupSummary,
   InviteCard,
   ListRow,
   OwnerlessPanel,
+  PageHeader,
   RowSkeleton,
 } from '@portfolio/velista/ui';
 import { selectGroupState } from '../select-group-state';
@@ -84,14 +83,13 @@ import { correlationIdOf, zoneErrorKey } from '../zone-error-copy';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
-    AppBar,
-    ChevronLeftIcon,
     EmptyState,
     ErrorState,
-    GroupHeader,
+    GroupSummary,
     InviteCard,
     ListRow,
     OwnerlessPanel,
+    PageHeader,
     RowSkeleton,
   ],
   templateUrl: './group-page.html',
@@ -193,12 +191,25 @@ export class GroupPage {
   }
 
   /**
-   * The header, or null when there is nothing to draw one from.
+   * The page header's title: the group's name, or null while nothing is known.
+   *
+   * Straight off the cache and not through the state union, because the union's
+   * `error` carries no header and a group whose lists failed to load is still a group
+   * with a name. Null on a cold deep link until the zone lands, and the template
+   * then says the word for the kind of page instead (velista `0130`, rule H6).
+   */
+  readonly groupName = computed(() => {
+    const name = this._zones.zoneById(this.zoneId())?.name ?? '';
+    return name === '' ? null : name;
+  });
+
+  /**
+   * The summary under the page header, or null when there is nothing to draw one from.
    *
    * Pulled out of the union here rather than narrowed in the template, because an
    * `@else if` chain does not narrow a discriminated union far enough for the compiler
    * to accept `current.header` after the error branch. One `computed` is clearer than
-   * repeating the header markup inside five `@if` blocks that each narrow correctly.
+   * repeating the summary markup inside five `@if` blocks that each narrow correctly.
    */
   readonly header = computed(() => {
     const current = this.state();
@@ -244,32 +255,6 @@ export class GroupPage {
    * that is absent. Read through `BrowserFacade` rather than off `navigator`.
    */
   readonly canShare = this._browser.window?.navigator.share !== undefined;
-
-  /**
-   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
-   * section 5.3).
-   *
-   * Straight off the client rather than through a store: it is a fact about the
-   * transport, and every screen that draws the bar reports the same one.
-   */
-  readonly connected = this._realtime.connected;
-
-  /**
-   * Where the header's lockup leads. Home, from every screen that is not home.
-   *
-   * Built with `appPath` like every other link this page makes, so the locale and the
-   * mount are the ones actually in force rather than a string written down twice.
-   */
-  readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
-
-  readonly accountInitial = computed(() => {
-    const username = this._session.username();
-    return username === null
-      ? null
-      : (Array.from(username)[0] ?? '').toLocaleUpperCase();
-  });
 
   /**
    * Whether the lists may be asked for yet.
@@ -423,26 +408,6 @@ export class GroupPage {
   /** Back to wherever this group was opened from, the dashboard being the usual one. */
   async back(): Promise<void> {
     await this._pages.back(appPath(this._locale(), this._basePath, 'home'));
-  }
-
-  /**
-   * The app bar's account button, which was inert on this screen until plan 0015
-   * (section 4.4).
-   *
-   * The bar keeps emitting an output rather than taking a `routerLink`, so rule D1 holds
-   * and the `ui` library still knows nothing about the route table.
-   */
-  async openAccount(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'account')
-    );
-  }
-
-  /** The assistant (plan 0032), where the app bar's search button used to do nothing. */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
-    );
   }
 
   openMembers(): void {

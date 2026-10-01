@@ -12,7 +12,7 @@ import {
 import { CategoryStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, categoryName } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader } from '@portfolio/velista/ui';
 import { formatCount, visibleBranches } from '../category-choice';
 import {
   CategoryRows,
@@ -40,7 +40,7 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5, 6, 7];
  */
 @Component({
   selector: 'lib-categories-page',
-  imports: [CategoryRows, ChevronLeftIcon, RokuTranslatorPipe],
+  imports: [CategoryRows, PageHeader, RokuTranslatorPipe],
   templateUrl: './categories-page.html',
   styleUrl: './categories-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

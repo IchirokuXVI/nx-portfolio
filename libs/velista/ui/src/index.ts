@@ -87,7 +87,7 @@ export * from './lib/shops/shop-rows';
 export * from './lib/tabs/tabs';
 export * from './lib/translations';
 export * from './lib/zone/confirm-sheet';
-export * from './lib/zone/group-header';
+export * from './lib/zone/group-summary';
 export * from './lib/zone/list-row';
 export * from './lib/zone/member-row';
 export * from './lib/zone/ownerless-panel';

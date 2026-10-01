@@ -1,38 +1,19 @@
 <!--
-  `(account)` was unbound here until plan 0015 and the second button until plan 0032.
-  See the note on the group page.
+  The one page header (velista `0130`). Outside the state union and outside `main`'s
+  scroll, so the screen is named during the skeleton and during an error as well as
+  after it has loaded, and the name never scrolls away. `title()` falls back to the
+  plain label when there is no cached group name to say "Members of" about.
 -->
-<lib-app-bar
-  (account)="openAccount()"
-  (openAssistant)="openAssistant()"
-  [accountInitial]="accountInitial()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
+@let heading = title();
+
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'zone.detail.back' | rokuT"
+  [title]="heading.key | rokuT: { name: heading.name }"
 />
 
 <main class="page">
-  <!-- The string moves to the accessible name, so nothing is lost for a screen
-       reader when the label becomes a glyph. -->
-  <button
-    (click)="back()"
-    [attr.aria-label]="'zone.detail.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
   @let current = state();
-
-  <!--
-    Outside the state union, so the screen is named during the skeleton and during an
-    error as well as after it has loaded. `title()` falls back to the plain label when
-    there is no cached group name to say "Members of" about.
-  -->
-  @let heading = title();
-
-  <h1 class="title">{{ heading.key | rokuT: { name: heading.name } }}</h1>
 
   <!--
     A row that leaves announces why, through one polite live region on the screen, so

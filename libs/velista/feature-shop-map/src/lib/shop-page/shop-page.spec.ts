@@ -2,10 +2,10 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { MEMORY_SHOP_DETAILS } from '@portfolio/velista/data-access';
-import { settle, shopMapTesting } from '../shop-map.testing';
+import { headerOf, settle, shopMapTesting } from '../shop-map.testing';
 import { ShopPage, shopPageText } from './shop-page';
 
-async function render(locationId: string, failing = false) {
+async function render(locationId: string, failing = false, cold = false) {
   TestBed.resetTestingModule();
   const harness = shopMapTesting({ params: { locationId } });
   harness.details.failing = failing;
@@ -15,7 +15,9 @@ async function render(locationId: string, failing = false) {
   }).compileComponents();
   const fixture = TestBed.createComponent(ShopPage);
   fixture.detectChanges();
-  await settle(() => fixture.detectChanges());
+  if (!cold) {
+    await settle(() => fixture.detectChanges());
+  }
   return { fixture, ...harness };
 }
 
@@ -32,6 +34,41 @@ describe('ShopPage', () => {
 
     expect(text(fixture, '.title')).toEqual(['Ronda de los Tejares 32']);
     expect(text(fixture, '.subtitle')).toEqual(['Mercadona']);
+  });
+
+  // Velista 0130: one header, and it never waits for the shop.
+  it('draws the header before the shop arrives, titled Shop, with the sentence in the content', async () => {
+    const { fixture } = await render('loc-tejares', false, true);
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopPage.back',
+      title: 'shopPage.loadingTitle',
+      actions: [],
+    });
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.content [role="status"]')
+        ?.getAttribute('aria-label')
+    ).toBe('shopPage.loading');
+
+    await settle(() => fixture.detectChanges());
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopPage.back',
+      title: 'Ronda de los Tejares 32',
+      actions: [],
+    });
+  });
+
+  it('puts the chain in the content, as its first line, and never in the header', async () => {
+    const { fixture } = await render('loc-tejares');
+
+    expect(text(fixture, 'lib-page-header .subtitle')).toEqual([]);
+    expect(text(fixture, '.content .facts > :first-child')).toEqual([
+      'Mercadona',
+    ]);
   });
 
   it('draws the address, the size and See the map', async () => {
@@ -84,7 +121,7 @@ describe('ShopPage', () => {
     const { fixture, pages } = await render('loc-tejares');
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.back')
+      .querySelector<HTMLButtonElement>('lib-page-header .lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/en/home');
@@ -93,7 +130,8 @@ describe('ShopPage', () => {
   it('says so when the shop would not load, and tries again', async () => {
     const { fixture, details } = await render('loc-tejares', true);
 
-    expect(text(fixture, '.title')).toEqual(['shopPage.failed']);
+    expect(text(fixture, '.title')).toEqual(['shopPage.loadingTitle']);
+    expect(text(fixture, '.state-text')).toEqual(['shopPage.failed']);
     details.failing = false;
     (fixture.nativeElement as HTMLElement)
       .querySelector<HTMLButtonElement>('.retry')
@@ -106,7 +144,8 @@ describe('ShopPage', () => {
   it('says so for a shop the catalog does not know', async () => {
     const { fixture } = await render('loc-nowhere');
 
-    expect(text(fixture, '.title')).toEqual(['shopPage.missing']);
+    expect(text(fixture, '.title')).toEqual(['shopPage.loadingTitle']);
+    expect(text(fixture, '.state-text')).toEqual(['shopPage.missing']);
   });
 });
 

@@ -15,10 +15,8 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  REALTIME_CLIENT,
   ShoppingProfileStore,
   type ProfileField,
-  type RealtimeClientI,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -30,7 +28,7 @@ import {
   PageNavigation,
   sheetSegments,
 } from '@portfolio/velista/platform';
-import { AppBar, ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader } from '@portfolio/velista/ui';
 import { ChainPreferenceList } from '../chain-preference-list/chain-preference-list';
 import {
   PostalCodeList,
@@ -88,9 +86,8 @@ export const SCOPE_REQUIRED_VALUE = 'required';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
-    AppBar,
     ChainPreferenceList,
-    ChevronLeftIcon,
+    PageHeader,
     PostalCodeList,
     ProfileSelector,
   ],
@@ -108,9 +105,6 @@ export class ProfilesPage {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _injector = inject(Injector);
 
-  /** For the app bar's offline mark and nothing else. This page subscribes to no room. */
-  private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
-
   private readonly _nameField =
     viewChild<ElementRef<HTMLInputElement>>('nameField');
 
@@ -120,17 +114,6 @@ export class ProfilesPage {
   protected readonly profiles = this._store.profiles;
   protected readonly chains = this._store.chains;
   protected readonly selected = this._store.selected;
-  protected readonly connected = this._realtime.connected;
-
-  /**
-   * Where the header's lockup leads. Home, from every screen that is not home.
-   *
-   * Built with `appPath` like every other link this page makes, so the locale and the
-   * mount are the ones actually in force rather than a string written down twice.
-   */
-  protected readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
 
   /**
    * Whether the catalog sent them here.
@@ -219,13 +202,6 @@ export class ProfilesPage {
   /** Back to the account screen, which is the only place this page is reached from. */
   async back(): Promise<void> {
     await this._pages.back(appPath(this._locale(), this._basePath, 'account'));
-  }
-
-  /** The assistant, which is the one app bar button that goes anywhere from here. */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
-    );
   }
 
   /** The retry on a failed read. */

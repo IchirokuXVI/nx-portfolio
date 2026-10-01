@@ -1,101 +1,44 @@
-<header [class.bordered]="bordered()" class="bar">
+<header class="bar">
   <!--
-    The identity is the way back to the dashboard, which is what a lockup in a header
-    is taken to be everywhere else. It is an anchor and not a button so it can be
-    opened in a new tab and so its destination shows in the status bar, and it carries
-    no `aria-label` of its own: the wordmark already names it, and a label that did not
-    contain the visible word would break the visible name.
-
-    Only when the page hands one over. The front door and the dashboard both pass null,
-    because on those two the destination is the page being looked at, and a control
-    that leads nowhere is worse than no control (the same reasoning as the offline
-    mark below).
+    Plain, and not a link: this bar is drawn on the front door alone, where the
+    lockup's destination would be the page being looked at, and a control that leads
+    nowhere is worse than no control. It carries no `aria-label` of its own, because
+    the wordmark already names it.
   -->
-  @if (homeUrl(); as url) {
-    <a [routerLink]="url" class="lockup lockup-link">
-      <lib-brand-wordmark class="wordmark" />
-    </a>
-  } @else {
-    <div class="lockup">
-      <lib-brand-wordmark class="wordmark" />
-    </div>
-  }
+  <div class="lockup">
+    <lib-brand-wordmark class="wordmark" />
+  </div>
 
-  @if (signedIn()) {
-    <div class="actions">
-      <!--
-        The socket is down, said from every screen rather than only from a list
-        (plan 0035, section 5.3). Only in this branch, because R1 opens no socket at all
-        while anonymous, so a mark on the landing page would be permanently on and would
-        mean nothing.
-
-        A `span` and not a `button`: it reports a state and leads nowhere, and a control
-        that leads nowhere is worse than no control. Its accessible name sits on the
-        element rather than on the glyph, which is hidden like every other icon here.
-      -->
-      @if (!connected()) {
-        <span
-          [attr.aria-label]="'connection.notLive' | rokuT"
-          class="offline-mark"
-          role="img"
-        >
-          <lib-offline-icon aria-hidden="true" class="offline-glyph" />
-        </span>
+  <div class="locale-menu">
+    <button
+      (click)="toggleMenu()"
+      [attr.aria-expanded]="hasMenu() ? menuOpen() : null"
+      [attr.aria-haspopup]="hasMenu() ? 'menu' : null"
+      [attr.aria-label]="'home.action.changeLocale' | rokuT"
+      #localeTrigger
+      class="locale"
+      type="button"
+    >
+      <span aria-hidden="true">{{ locale() }}</span>
+      @if (hasMenu()) {
+        <lib-chevron-down-icon [class.open]="menuOpen()" class="chevron" />
       }
+    </button>
 
-      <button
-        (click)="openAssistant.emit()"
-        [attr.aria-label]="'home.action.assistant' | rokuT"
-        class="icon-button assistant"
-        libTourAnchor="assistant"
-        type="button"
-      >
-        <lib-comment-icon class="glyph" />
-      </button>
-
-      <button
-        (click)="account.emit()"
-        [attr.aria-label]="'home.action.account' | rokuT"
-        class="icon-button"
-        type="button"
-      >
-        <span aria-hidden="true" class="avatar">{{
-          accountInitial() ?? '·'
-        }}</span>
-      </button>
-    </div>
-  } @else {
-    <div class="locale-menu">
-      <button
-        (click)="toggleMenu()"
-        [attr.aria-expanded]="hasMenu() ? menuOpen() : null"
-        [attr.aria-haspopup]="hasMenu() ? 'menu' : null"
-        [attr.aria-label]="'home.action.changeLocale' | rokuT"
-        #localeTrigger
-        class="locale"
-        type="button"
-      >
-        <span aria-hidden="true">{{ locale() }}</span>
-        @if (hasMenu()) {
-          <lib-chevron-down-icon [class.open]="menuOpen()" class="chevron" />
+    @if (menuOpen()) {
+      <div class="menu" role="menu">
+        @for (option of locales(); track option) {
+          <button
+            (click)="pick(option)"
+            [attr.aria-current]="isCurrent(option) ? 'true' : null"
+            class="menu-item"
+            role="menuitem"
+            type="button"
+          >
+            {{ option.toLocaleUpperCase() }}
+          </button>
         }
-      </button>
-
-      @if (menuOpen()) {
-        <div class="menu" role="menu">
-          @for (option of locales(); track option) {
-            <button
-              (click)="pick(option)"
-              [attr.aria-current]="isCurrent(option) ? 'true' : null"
-              class="menu-item"
-              role="menuitem"
-              type="button"
-            >
-              {{ option.toLocaleUpperCase() }}
-            </button>
-          }
-        </div>
-      }
-    </div>
-  }
+      </div>
+    }
+  </div>
 </header>

@@ -11,20 +11,14 @@
   block-size: 100%;
 }
 
-// The one scroll container on this screen, in both run modes. The tools row sticks to
-// its top, and the composer is the next item of the host rather than a row inside it,
-// so the last line can always be scrolled to just above the field.
+// The one scroll container on this screen, in both run modes. The page header is the
+// item of the host before it and the composer is the item after it, rather than rows
+// inside it, so the header never scrolls away (velista 0130) and the last line can
+// always be scrolled to just above the field.
 .page {
   @include list-page.page;
 
   min-block-size: 0;
-}
-
-// The tools row (velista 0082, section 2), stretched over the column's own inline
-// padding so the ground it paints covers the lines scrolling under it edge to edge.
-lib-list-tools {
-  margin-inline: calc(var(--app-space-5) * -1);
-  padding-inline: var(--app-space-3);
 }
 
 // The one category on screen, a step below the list's name (section 10).
@@ -157,14 +151,6 @@ lib-line-composer {
   font-size: var(--app-icon-sm);
 }
 
-.back {
-  @include list-page.back;
-}
-
-.back-glyph {
-  @include list-page.back-glyph;
-}
-
 .state {
   padding: var(--app-space-7) var(--app-space-5);
   background: var(--app-surface-raised);
@@ -269,7 +255,7 @@ lib-line-composer {
 
 // What the composer's field found (velista 0117, rule F1), in place of the list. It
 // scrolls with the page from the top, and it is at least as tall as the column, so
-// the column can always scroll its heading up under the app bar however few lines
+// the column can always scroll its heading up under the header however few lines
 // matched: the page head goes above the fold while somebody types.
 .results {
   display: flex;

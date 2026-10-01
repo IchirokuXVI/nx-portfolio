@@ -71,7 +71,6 @@ import {
   LineComposer,
   LineList,
   ListHeader,
-  ListTools,
   ToBuyHeading,
   TripGroup,
 } from '@portfolio/velista/ui';
@@ -407,6 +406,35 @@ function query(fixture: ComponentFixture<ListPage>, selector: string) {
   return fixture.nativeElement.querySelector(selector) as HTMLElement | null;
 }
 
+/**
+ * The page header's controls (velista `0130`), found by the names a screen reader
+ * hears. The testing translator answers with the key, so the key is the name.
+ */
+function backControl(fixture: ComponentFixture<ListPage>) {
+  return query(fixture, 'lib-page-header [aria-label="list.header.back"]');
+}
+
+/** The filter action, whose name changes once something is on. */
+function filterAction(fixture: ComponentFixture<ListPage>) {
+  return query(
+    fixture,
+    'lib-page-header button[libPageHeaderAction][aria-label^="basket.view.open"]'
+  );
+}
+
+/** The count over the filter's glyph, or null when nothing is on. */
+function filterBadge(fixture: ComponentFixture<ListPage>): number | null {
+  const badge = filterAction(fixture)?.querySelector('.badge');
+  return badge == null ? null : Number(badge.textContent);
+}
+
+function settingsAction(fixture: ComponentFixture<ListPage>) {
+  return query(
+    fixture,
+    'lib-page-header button[libPageHeaderAction][aria-label="list.settings.title"]'
+  );
+}
+
 describe('ListPage', () => {
   /**
    * Plan 0038 section 5 shipped this strip's markup with no stylesheet and no way to
@@ -651,6 +679,157 @@ describe('ListPage', () => {
       const { fixture } = await render();
 
       expect(fixture.nativeElement.textContent).toContain('Weekly shop');
+    });
+  });
+
+  /**
+   * Velista `0130`. The page drew a grey block where the name would be and changed
+   * height when the list arrived. The header is `PageHeader` now, outside the scroller
+   * and in every state, and what a cold arrival shows is the word for the kind of page.
+   */
+  describe('the one page header (velista 0130)', () => {
+    it('titles a cold arrival List, and then with the name, in the same h1', async () => {
+      const { fixture, lists } = await render({
+        lists: [],
+        listsState: 'idle',
+      });
+
+      const title = query(fixture, 'lib-page-header h1');
+      expect(title?.textContent?.trim()).toBe('list.header.title');
+      // No grey block standing in for the name, anywhere on the page.
+      expect(query(fixture, '.name-skeleton')).toBeNull();
+
+      lists.set([list()]);
+      lists.setState('loaded');
+      fixture.detectChanges();
+
+      // The same element with different words in it, which is what keeps the header
+      // the size it was.
+      expect(query(fixture, 'lib-page-header h1')).toBe(title);
+      expect(title?.textContent?.trim()).toBe('Weekly shop');
+    });
+
+    it('is the only h1 and the only header element, and sits before the scroller', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelectorAll('header')).toHaveLength(1);
+      expect(query(fixture, 'main lib-page-header')).toBeNull();
+      expect(
+        query(fixture, 'lib-page-header')?.nextElementSibling?.matches(
+          'main.page'
+        )
+      ).toBe(true);
+    });
+
+    it('goes back through the page, by the name the back button always had', async () => {
+      const { fixture, router } = await render();
+
+      backControl(fixture)?.click();
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}`,
+        { replaceUrl: true }
+      );
+    });
+
+    it('ends reorder mode from the header’s back, without leaving', async () => {
+      const { fixture, router } = await render();
+      fixture.componentInstance.startReorder();
+      fixture.detectChanges();
+
+      backControl(fixture)?.click();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.reordering()).toBe(false);
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('is drawn while the lines load, with the name when it is cached', async () => {
+      const { fixture } = await render({ linesState: 'loading' });
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'Weekly shop'
+      );
+      expect(backControl(fixture)).not.toBeNull();
+      // Nothing to filter yet, and nothing said about what the caller may manage.
+      expect(filterAction(fixture)).toBeNull();
+      expect(settingsAction(fixture)).toBeNull();
+    });
+
+    it('is drawn on a list that is gone, with no actions, above the body’s own way out', async () => {
+      const { fixture } = await render({ lists: [], listsState: 'loaded' });
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'list.header.title'
+      );
+      expect(backControl(fixture)).not.toBeNull();
+      expect(filterAction(fixture)).toBeNull();
+      expect(settingsAction(fixture)).toBeNull();
+      expect(query(fixture, 'main .state-action')?.textContent?.trim()).toBe(
+        'list.header.back'
+      );
+    });
+
+    it('is drawn when the lines could not be read', async () => {
+      const { fixture, lines } = await render();
+
+      // The read failing on a retry, which reports through the same path as the first.
+      lines.setState('failed', new Error('offline'));
+      await fixture.componentInstance.retryLoad();
+      fixture.detectChanges();
+
+      expect(query(fixture, 'lib-error-state')).not.toBeNull();
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'list.header.title'
+      );
+      expect(backControl(fixture)).not.toBeNull();
+      expect(filterAction(fixture)).toBeNull();
+      expect(settingsAction(fixture)).toBeNull();
+    });
+
+    it('puts the filter before the settings', async () => {
+      const { fixture } = await render({ permissions: ADMIN });
+
+      const actions = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          'lib-page-header button[libPageHeaderAction]'
+        )
+      );
+
+      expect(actions).toEqual([filterAction(fixture), settingsAction(fixture)]);
+      expect(query(fixture, 'lib-list-tools')).toBeNull();
+    });
+
+    it('offers no filter on an empty list', async () => {
+      const { fixture } = await render({ lines: [] });
+
+      expect(filterAction(fixture)).toBeNull();
+      // The settings are about the list and not about its lines.
+      expect(settingsAction(fixture)).not.toBeNull();
+    });
+
+    it('takes both actions away in reorder mode', async () => {
+      const { fixture } = await render({
+        permissions: ADMIN,
+        lines: [line('ln-1'), line('ln-2')],
+      });
+      fixture.componentInstance.startReorder();
+      fixture.detectChanges();
+
+      expect(filterAction(fixture)).toBeNull();
+      expect(settingsAction(fixture)).toBeNull();
+    });
+
+    it('opens the filter sheet and the settings sheet from the header', async () => {
+      const { fixture, router } = await render({ permissions: ADMIN });
+
+      filterAction(fixture)?.click();
+      settingsAction(fixture)?.click();
+
+      expect(router.navigate).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -904,18 +1083,10 @@ describe('ListPage', () => {
       // Acceptance item 5, and its mirror. The overflow that opens the sheet is drawn
       // from `canManage` alone.
       const admin = await render({ permissions: ADMIN });
-      expect(
-        admin.fixture.debugElement
-          .query(By.directive(ListHeader))
-          .componentInstance.hasMenu()
-      ).toBe(true);
+      expect(settingsAction(admin.fixture)).not.toBeNull();
 
       const writer = await render({ permissions: WRITER });
-      expect(
-        writer.fixture.debugElement
-          .query(By.directive(ListHeader))
-          .componentInstance.hasMenu()
-      ).toBe(false);
+      expect(settingsAction(writer.fixture)).toBeNull();
     });
 
     it('does not move a quantity for somebody who may not decide', async () => {
@@ -1254,26 +1425,21 @@ describe('ListPage: searching and viewing one category', () => {
     line('ln-bags', { content: 'Bolsas', position: 3 }),
   ];
 
-  function tools(fixture: ComponentFixture<ListPage>) {
-    const found = fixture.debugElement.query(By.directive(ListTools));
-    return found === null ? null : (found.componentInstance as ListTools);
-  }
-
   function toBuyHeading(fixture: ComponentFixture<ListPage>) {
     return fixture.debugElement.query(By.directive(ToBuyHeading))
       .componentInstance as ToBuyHeading;
   }
 
-  it('draws the tools row above the lines, with no chip row, and not in reorder mode', async () => {
+  it('draws the filter in the page header, with no chip row, and not in reorder mode', async () => {
     const { fixture } = await render({ lines: LINES, items: ITEMS });
 
-    expect(tools(fixture)).not.toBeNull();
+    expect(filterAction(fixture)).not.toBeNull();
     expect(query(fixture, 'lib-chip-row')).toBeNull();
 
     fixture.componentInstance.startReorder();
     fixture.detectChanges();
 
-    expect(tools(fixture)).toBeNull();
+    expect(filterAction(fixture)).toBeNull();
   });
 
   it('asks for the products of the loaded lines, and for new ones as lines arrive', async () => {
@@ -1297,17 +1463,27 @@ describe('ListPage: searching and viewing one category', () => {
   it('counts A to Z and a picked category on the filter badge', async () => {
     const { fixture, view } = await render({ lines: LINES, items: ITEMS });
 
+    // Nothing on: no badge, and the plain name.
+    expect(filterBadge(fixture)).toBeNull();
+    expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
+      'basket.view.open'
+    );
+
     view.setOrder('alpha');
     fixture.detectChanges();
-    expect(tools(fixture)?.activeCount()).toBe(1);
+    expect(filterBadge(fixture)).toBe(1);
+    // The name carries the count too, for whoever cannot see the badge.
+    expect(filterAction(fixture)?.getAttribute('aria-label')).toBe(
+      'basket.view.openCount'
+    );
 
     view.setView('category');
     fixture.detectChanges();
-    expect(tools(fixture)?.activeCount()).toBe(1);
+    expect(filterBadge(fixture)).toBe(1);
 
     view.pickCategory('cat-milk');
     fixture.detectChanges();
-    expect(tools(fixture)?.activeCount()).toBe(2);
+    expect(filterBadge(fixture)).toBe(2);
   });
 
   it('draws only the picked category, under an h2 naming it from its data', async () => {
@@ -1410,23 +1586,21 @@ describe('ListPage: searching and viewing one category', () => {
       expect(query(fixture, '.results lib-line-list')).toBeNull();
     });
 
-    it('hides the tools row while the results show, and draws it again after', async () => {
+    it('hides the filter while the results show, and draws it again after', async () => {
       const { fixture } = await render({ lines: LINES, items: ITEMS });
 
       typeInto(fixture, 'le');
-      expect(query(fixture, 'lib-list-tools')).toBeNull();
+      expect(filterAction(fixture)).toBeNull();
 
       typeInto(fixture, '');
-      expect(query(fixture, 'lib-list-tools')).not.toBeNull();
+      expect(filterAction(fixture)).not.toBeNull();
     });
 
-    it('draws no search of its own in the tools row', async () => {
+    it('draws no search of its own beside the filter', async () => {
       const { fixture } = await render({ lines: LINES, items: ITEMS });
 
-      expect(tools(fixture)).not.toBeNull();
-      expect(
-        query(fixture, 'lib-list-tools [aria-label="basket.search.open"]')
-      ).toBeNull();
+      expect(filterAction(fixture)).not.toBeNull();
+      expect(query(fixture, '[aria-label="basket.search.open"]')).toBeNull();
     });
 
     it('empties the field and shows the list when back takes search=1 off', async () => {

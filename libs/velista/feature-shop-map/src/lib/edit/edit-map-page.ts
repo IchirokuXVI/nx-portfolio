@@ -38,7 +38,7 @@ import {
   walkIdOf,
   type LeavesWithUnsavedWork,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader, PageHeaderAction } from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { AREA_SHEET_RENAME_PARAM } from './area-sheet';
 import { HoldMenu, type HoldChoice } from './hold-menu';
@@ -86,8 +86,9 @@ type Read =
 @Component({
   selector: 'lib-edit-map-page',
   imports: [
-    ChevronLeftIcon,
     HoldMenu,
+    PageHeader,
+    PageHeaderAction,
     ResizeControls,
     RokuTranslatorPipe,
     RouterOutlet,
