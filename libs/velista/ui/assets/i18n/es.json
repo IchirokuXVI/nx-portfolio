@@ -1206,6 +1206,13 @@
     "failed": "Esta lista no se ha podido cargar",
     "retry": "Inténtalo de nuevo",
     "openHistory": "Historial",
+    "more": {
+      "open": "Más",
+      "title": "Más",
+      "people": "Personas",
+      "create": "Crea tu lista de la compra",
+      "finish": "Terminar"
+    },
     "live": {
       "title": "Todo por comprar",
       "titleOf": "{{name}}: todo por comprar",

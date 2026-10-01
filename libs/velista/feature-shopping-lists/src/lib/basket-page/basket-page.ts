@@ -53,7 +53,6 @@ import {
   VISIT_WARNING_MINUTES,
 } from '@portfolio/velista/models';
 import {
-  appPath,
   BrowserFacade,
   ListSearchNavigation,
   NavChrome,
@@ -66,11 +65,11 @@ import {
 import {
   AnchoredPopover,
   type AnchoredPopoverClose,
+  BasketIcon,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
-  ClockIcon,
-  FlagIcon,
+  EllipsisIcon,
   InfoIcon,
   LineComposer,
   type LineComposerSubmit,
@@ -79,7 +78,8 @@ import {
   ListTools,
   MapIcon,
   OfflineIcon,
-  PersonIcon,
+  PageHeader,
+  PageHeaderAction,
   ShareIcon,
   type SuggestionChoice,
   type SuggestionHolding,
@@ -94,7 +94,8 @@ import {
   participantInitials,
   visitTime,
 } from '../basket-labels';
-import { BASKET_PATHS, basketPath } from '../basket-paths';
+import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
+import { basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import { basketGroupScope } from '../swap-sheet/swap';
 import { ChangeAcknowledger } from './change-acknowledger';
@@ -169,20 +170,21 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
   selector: 'lib-basket-page',
   imports: [
     AnchoredPopover,
+    BasketIcon,
     BasketRow,
     CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
-    ClockIcon,
+    EllipsisIcon,
     SeenTarget,
-    FlagIcon,
     InfoIcon,
     LineComposer,
     ListPicker,
     ListTools,
     MapIcon,
     OfflineIcon,
-    PersonIcon,
+    PageHeader,
+    PageHeaderAction,
     RokuTranslatorPipe,
     RouterOutlet,
     ShareIcon,
@@ -260,7 +262,17 @@ export class BasketPage {
    */
   private readonly _live = this._route.snapshot.data['basket'] === 'live';
 
-  private readonly _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+  /**
+   * The id in the URL. Not `readonly`, because the router keeps this page when one
+   * basket's address is replaced by another's: see {@link _followBasket}.
+   */
+  private _id = this._route.snapshot.paramMap.get('basketId') ?? '';
+
+  /**
+   * What this reader may reach from here, which the menu sheet over this page asks
+   * too (velista `0130`, section 6.1). One answer, built from the store both hold.
+   */
+  private readonly _doors = basketDoors(this._store);
 
   /** The shop reads behind the Map button (velista `0121`, target 5). */
   private readonly _shopDetails = inject(ShopDetailStore);
@@ -400,17 +412,16 @@ export class BasketPage {
   );
 
   /**
-   * Whether the header offers the history (velista `0111`): the owner, and a
-   * registered member of a shared basket. A guest has no history, because it needs
-   * an account, and they arrived on a link that makes this screen the whole app.
+   * Whether this reader has a history (velista `0111`): the owner, and a registered
+   * member of a shared basket. A guest has none, because it needs an account, and
+   * they arrived on a link that makes this screen the whole app.
    *
-   * It takes the place of the back chevron on every basket. No basket page goes
-   * back: the bottom bar is the way out, and the history is the way to another basket.
+   * No basket page goes back: the bottom bar is the way out, and the history is the
+   * way to another basket. The way to it is a row of the menu since velista `0130`;
+   * what still reads this here is the map, which needs an account for the same
+   * reason.
    */
-  protected readonly canOpenHistory = computed(() => {
-    const kind = this._store.me()?.kind;
-    return kind === 'OWNER' || kind === 'REGISTERED';
-  });
+  protected readonly canOpenHistory = this._doors.canOpenHistory;
 
   /**
    * Whether the trip is over, which is what takes every control off this screen
@@ -439,8 +450,16 @@ export class BasketPage {
    * they hold. {@link isOwner} already existed for the share control and this is its
    * second reader.
    */
-  protected readonly canFinish = computed(
-    () => this.surface()?.finish === true
+  protected readonly canFinish = this._doors.canFinish;
+
+  /**
+   * Whether the header draws the menu button (velista `0130`, section 6.1): only
+   * when the menu would hold a row. People, the history, composing a new list and
+   * finishing live there, each under the condition its own button had, and a menu
+   * that opens onto nothing is a control that does nothing.
+   */
+  protected readonly hasMenu = computed(
+    () => basketMenuEntries(this._doors, hasFinishSheet(this._route)).length > 0
   );
 
   /**
@@ -916,9 +935,7 @@ export class BasketPage {
    * header keeps the door to it. What is gated on presence is the **faces**,
    * which are a claim about who is here right now.
    */
-  protected readonly hasPeople = computed(
-    () => this._store.participants().length > 0
-  );
+  protected readonly hasPeople = this._doors.hasPeople;
 
   /** The overflow count, collapsing into a stacked chip like the price display. */
   protected readonly overflow = computed(() =>
@@ -949,6 +966,25 @@ export class BasketPage {
       this._live ? this._store.openLive() : this._store.open(this._id)
     ).then(() => {
       this._view.restore();
+    });
+
+    /**
+     * Another basket at this same route (velista `0130`, section 6.1).
+     *
+     * Create your shopping list is offered over a basket now, and what it makes is
+     * a basket: the sheet at `shopping-lists/<a>/sheet/get` leaves for
+     * `shopping-lists/<b>`. Those are one route, so the router keeps this
+     * component and changes the parameter under it, and a page that read the id
+     * once would go on showing the basket the reader has just left.
+     *
+     * Subscribed by hand, because nothing created per app may use
+     * `rxjs-interop`.
+     */
+    const followed = this._route.paramMap.subscribe((params) => {
+      const id = params.get('basketId') ?? '';
+      if (!this._live && id !== this._id) {
+        this._followBasket(id);
+      }
     });
 
     /**
@@ -984,21 +1020,42 @@ export class BasketPage {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      followed.unsubscribe();
       // The bar comes back with whatever screen is next (velista `0117`).
       this._chrome.setComposing(false);
-      // The one timer this page owns. A route provider's `DestroyRef` never
-      // fires in this app, so a timer set in the store would outlive the screen
-      // and flip a signal for a basket nobody is looking at.
-      this._clearWarning();
-      this._store.leave();
-      // The view store is provided on the same route and has the same problem, so
-      // it is let go in the same place. Without this a basket opened later starts
-      // on whatever the last one was searched for, and the search is the one thing
-      // on this screen that is never remembered (section 4.7).
-      this._view.leave();
-      // The third one on this route, for the same reason: without this a
-      // basket opened later starts holding the previous basket's changes.
-      this._changes.reset();
+      this._letGo();
+    });
+  }
+
+  /** Let the basket on screen go: on the way out, and before another is opened. */
+  private _letGo(): void {
+    // The one timer this page owns. A route provider's `DestroyRef` never
+    // fires in this app, so a timer set in the store would outlive the screen
+    // and flip a signal for a basket nobody is looking at.
+    this._clearWarning();
+    this._store.leave();
+    // The view store is provided on the same route and has the same problem, so
+    // it is let go in the same place. Without this a basket opened later starts
+    // on whatever the last one was searched for, and the search is the one thing
+    // on this screen that is never remembered (section 4.7).
+    this._view.leave();
+    // The third one on this route, for the same reason: without this a
+    // basket opened later starts holding the previous basket's changes.
+    this._changes.reset();
+  }
+
+  /**
+   * Open the basket the URL now names, in this same page.
+   *
+   * Exactly what leaving and arriving again does, in that order: the stores are the
+   * route's and are handed back on every visit, so letting one basket go and
+   * opening the next is the sequence they already serve.
+   */
+  private _followBasket(id: string): void {
+    this._id = id;
+    this._letGo();
+    void this._store.open(id).then(() => {
+      this._view.restore();
     });
   }
 
@@ -1377,6 +1434,17 @@ export class BasketPage {
     });
   }
 
+  /**
+   * The menu (velista `0130`, section 6.1): a sheet over this page, like the ones
+   * its rows lead to.
+   */
+  protected openMore(): void {
+    void this._router.navigate(sheetSegments('more'), {
+      relativeTo: this._route,
+      queryParams: this._search.kept(this._route),
+    });
+  }
+
   protected openShare(): void {
     void this._router.navigate(sheetSegments('share'), {
       relativeTo: this._route,
@@ -1387,8 +1455,8 @@ export class BasketPage {
   /**
    * Ask before ending the trip (plan 0057, section 5).
    *
-   * Both ways in reach the same sheet: the control in the header, pressed at any
-   * point in a trip, and the prompt that appears once every line is settled. Two
+   * Both ways in reach the same sheet: the row in the menu, pressed at any point in
+   * a trip, and the prompt that appears once every line is settled. Two
    * gestures asking one question, so there is one place the question is written.
    */
   protected openFinish(): void {
@@ -2155,18 +2223,6 @@ export class BasketPage {
       this._translator.t('basket.added.announced', undefined, this._locale(), {
         content: result.row?.content ?? entry.content,
       })
-    );
-  }
-
-  /**
-   * The history, pushed, so back from it returns to this basket.
-   *
-   * By absolute URL: the basket is reached at `shopping-lists/live` and at
-   * `shopping-lists/<id>`, and one address serves both.
-   */
-  protected openHistory(): void {
-    void this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, BASKET_PATHS.list)
     );
   }
 }

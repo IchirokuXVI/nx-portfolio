@@ -16,6 +16,7 @@ import {
   newVisitor,
   nudge,
   openSettleSheet,
+  pressBasketMenuRow,
   readShareLinkFromSheet,
   reel,
   row,
@@ -100,9 +101,7 @@ test.describe('a registered participant', () => {
       // way in and core keeps no display name for a participant who did not. The
       // guest mark is the part that says which kind of participant she is, and
       // the absence of it is what the join fix bought.
-      await dana
-        .getByRole('button', { name: 'See who is on this list' })
-        .click();
+      await pressBasketMenuRow(dana, 'People');
       const people = sheet(dana, 'On this list');
       const her = people.locator('li.person', {
         has: dana.locator('.you-tag'),

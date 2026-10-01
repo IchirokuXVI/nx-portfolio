@@ -1,22 +1,29 @@
-<div class="page">
-  <!--
-    The clock is in the header while the listing is being read, so the history stays
-    one press from the tab even on a slow connection.
-  -->
-  <header class="bar">
-    <h1 class="title">{{ 'nav.basket' | rokuT }}</h1>
+<!--
+  The header first and outside the page, as on every screen (velista 0130). No back,
+  because there is nothing to go back to from a tab, so the left end holds the tab's
+  own icon (H4).
 
+  The clock is in the header while the listing is being read, so the history stays
+  one press from the tab even on a slow connection.
+-->
+<lib-page-header [title]="'nav.basket' | rokuT">
+  <lib-basket-icon pageHeaderIcon />
+
+  <ng-container pageHeaderActions>
     <button
       (click)="openHistory()"
       [attr.aria-label]="'basket.openHistory' | rokuT"
       [attr.title]="'basket.openHistory' | rokuT"
       class="history"
+      libPageHeaderAction
       type="button"
     >
-      <lib-clock-icon class="glyph" />
+      <lib-clock-icon />
     </button>
-  </header>
+  </ng-container>
+</lib-page-header>
 
+<div class="page">
   <!--
     A row shaped placeholder rather than a spinner: this screen is about to become a
     basket, and a skeleton of its rows is the honest shape of what is coming.

@@ -1206,6 +1206,13 @@
     "failed": "This list would not load",
     "retry": "Try again",
     "openHistory": "History",
+    "more": {
+      "open": "More",
+      "title": "More",
+      "people": "People",
+      "create": "Create your shopping list",
+      "finish": "Finish"
+    },
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",

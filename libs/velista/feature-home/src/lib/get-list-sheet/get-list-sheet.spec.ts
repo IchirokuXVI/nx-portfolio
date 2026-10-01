@@ -98,7 +98,12 @@ interface Options {
    * velista `0097` took the dashboard's copy away: home's button row was replaced by
    * the app's own bar, so the two copies left are the history and the third tab.
    */
-  readonly returnTo?: 'shopping-lists' | 'shopping-lists/current';
+  readonly returnTo?: 'shopping-lists' | 'shopping-lists/current' | 'parent';
+  /**
+   * The segments the router matched down to the page under the sheet, one array per
+   * route from the root, for the copy that returns to `parent`.
+   */
+  readonly pageBelow?: readonly (readonly string[])[];
   /** The profiles the chooser has to choose between. One unnamed default by default. */
   readonly profiles?: readonly ShoppingProfile[];
   /**
@@ -354,6 +359,16 @@ async function render(
               options.returnTo === undefined
                 ? {}
                 : { returnTo: options.returnTo },
+            // The page's route, as the router hands it to a child: its own matched
+            // segments and those of every route above it.
+            parent:
+              options.pageBelow === undefined
+                ? null
+                : {
+                    pathFromRoot: options.pageBelow.map((segments) => ({
+                      url: segments.map((path) => ({ path })),
+                    })),
+                  },
           },
         },
       },
@@ -639,6 +654,14 @@ describe('GetListSheet', () => {
       expect(fixture.componentInstance.showHistory).toBe(false);
       expect(query(fixture, '.history')).toBeNull();
     });
+
+    it('is offered over a basket, which is not the history either', async () => {
+      // Velista 0130, section 6.1: the basket's menu opens this sheet.
+      const fixture = await render({ returnTo: 'parent' });
+
+      expect(fixture.componentInstance.showHistory).toBe(true);
+      expect(query(fixture, '.history')).not.toBeNull();
+    });
   });
 
   /**
@@ -677,6 +700,48 @@ describe('GetListSheet', () => {
       expect(dismiss).toHaveBeenCalledWith(
         expect.stringContaining('/shopping-lists')
       );
+    });
+
+    /**
+     * The copy over a basket (velista `0130`, section 6.1). Its route is
+     * `shopping-lists/:basketId`, a pattern and not a path, so the page is read from
+     * the parent route as the router matched it: the mount, the locale and the id
+     * that are in the address bar.
+     */
+    it('is the basket it was opened over, with its id', async () => {
+      const fixture = await render({
+        returnTo: 'parent',
+        pageBelow: [[], ['velista'], ['en'], ['shopping-lists', 'gl-7']],
+      });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith('/velista/en/shopping-lists/gl-7');
+    });
+
+    it('is the live basket over the basket that is always there', async () => {
+      const fixture = await render({
+        returnTo: 'parent',
+        pageBelow: [[], ['en'], ['shopping-lists', 'live']],
+      });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith('/en/shopping-lists/live');
+    });
+
+    it('is the history when the route above it is missing', async () => {
+      const fixture = await render({ returnTo: 'parent' });
+      const sheet = TestBed.inject(SheetNavigation);
+      const dismiss = jest.spyOn(sheet, 'dismiss').mockResolvedValue(undefined);
+
+      await fixture.componentInstance.dismiss();
+
+      expect(dismiss).toHaveBeenCalledWith('/en/shopping-lists');
     });
 
     it('is the history for the history copy', async () => {

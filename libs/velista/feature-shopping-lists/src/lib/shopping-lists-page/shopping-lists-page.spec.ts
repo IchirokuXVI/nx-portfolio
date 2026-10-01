@@ -92,6 +92,39 @@ const all = (fixture: ComponentFixture<ShoppingListsPage>, selector: string) =>
   (fixture.nativeElement as HTMLElement).querySelectorAll(selector);
 
 describe('ShoppingListsPage', () => {
+  /**
+   * The one header every page draws (velista `0130`): a way back and the title, in
+   * every state, and no quick action.
+   */
+  describe('the header', () => {
+    it('is drawn before the listing answers, with its title and a way back', async () => {
+      const fixture = await render(
+        fakeBasketListStore([], { state: 'loading' })
+      );
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'history.title'
+      );
+      expect(
+        query(fixture, 'lib-page-header button.lead')?.getAttribute(
+          'aria-label'
+        )
+      ).toBe('history.back');
+      expect(query(fixture, 'lib-page-header .actions button')).toBeNull();
+    });
+
+    it('goes back through the page’s own handler', async () => {
+      const fixture = await render();
+      const back = jest
+        .spyOn(fixture.componentInstance, 'back')
+        .mockImplementation(() => undefined);
+
+      (query(fixture, 'lib-page-header button.lead') as HTMLElement).click();
+
+      expect(back).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('the states', () => {
     it('shows skeleton rows while the listing is on its way', async () => {
       const fixture = await render(
