@@ -1,5 +1,4 @@
 import type {
-  AreaKind,
   MapArea,
   MapMark,
   ShopMapDocumentV2,
@@ -131,7 +130,6 @@ type Gesture =
       target: Target;
       timer: ReturnType<typeof setTimeout> | null;
     }
-  | { kind: 'draw'; id: number; from: [number, number] }
   | { kind: 'move'; id: number; area: MapArea; from: [number, number] }
   | { kind: 'resize'; id: number; area: MapArea; fixed: [number, number] }
   | { kind: 'pan'; id: number; last: Pointer }
@@ -162,12 +160,11 @@ function sameArea(a: MapArea | undefined, b: MapArea): boolean {
   );
 }
 
-/** A draw, move or resize in progress, drawn above the map until it is committed. */
+/** A move or resize in progress, drawn above the map until it is committed. */
 interface Draft {
   box: Box;
-  kind: AreaKind;
-  /** The area it replaces, for a move or a resize. */
-  replaces: MapArea | null;
+  /** The area it replaces. */
+  replaces: MapArea;
   refused: boolean;
 }
 
@@ -187,12 +184,6 @@ export function mountShopMap(
   const labelOf = options.labelOf ?? defaultLabelOf;
   const sizeLabel = options.sizeLabel ?? defaultSizeLabel;
   const suggestionLabel = options.suggestionLabel ?? 'Shelf?';
-  let idCounter = 0;
-  const createId =
-    options.createId ??
-    (() =>
-      win?.crypto?.randomUUID?.() ??
-      `area-${Date.now().toString(36)}-${++idCounter}`);
 
   let map: ShopMapDocumentV2 = options.document;
   let look: ShopMapLook = options.look;
@@ -202,7 +193,6 @@ export function mountShopMap(
   let badges: Record<string, ShopMapBadge> = {};
   let selectedId: string | null = null;
   let snap = false;
-  let drawKind: AreaKind = 'shelf';
   let shopper: ShopperView | null = null;
   let draft: Draft | null = null;
   let refusedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -514,7 +504,7 @@ export function mountShopMap(
     const mapper = look === 'mapper';
     ground.setAttribute('display', mapper ? 'inline' : 'none');
     gridRect.setAttribute('display', mapper ? 'inline' : 'none');
-    const hidden = draft?.replaces?.id;
+    const hidden = draft?.replaces.id;
     if (mapper) drawMapper(t, hidden);
     else drawShopper(t);
     drawGesture();
@@ -755,20 +745,20 @@ export function mountShopMap(
       parent: gestureLayer,
       positioners: draftPositioners,
     };
-    const colour = draft.replaces?.colour ?? { mode: 'default' as const };
+    const { kind, colour } = draft.replaces;
     const node = drawArea(
       t,
       { ...box, colour },
-      `sm-area sm-${draft.kind}${draft.refused ? ' sm-refused' : ''}`,
+      `sm-area sm-${kind}${draft.refused ? ' sm-refused' : ''}`,
       3
     );
     if (draft.refused) node.removeAttribute('style');
-    if (draft.replaces && !draft.refused) {
+    else {
       drawLabel(
         t,
         box,
         labelOf({ ...draft.replaces, ...box }),
-        `sm-label sm-${draft.kind}`
+        `sm-label sm-${kind}`
       );
     }
     drawSelection(t, box);
@@ -786,25 +776,11 @@ export function mountShopMap(
   }
 
   function candidateOf(d: Draft): MapArea {
-    const base: MapArea = d.replaces ?? {
-      id: '__draft__',
-      kind: d.kind,
-      x: 0,
-      y: 0,
-      w: 0,
-      h: 0,
-      colour: { mode: 'default' },
-      origin: 'drawn',
-    };
-    return { ...base, x: d.box.x, y: d.box.y, w: d.box.w, h: d.box.h };
+    return { ...d.replaces, x: d.box.x, y: d.box.y, w: d.box.w, h: d.box.h };
   }
 
-  function updateDraft(
-    box: Box,
-    kind: AreaKind,
-    replaces: MapArea | null
-  ): void {
-    const next: Draft = { box, kind, replaces, refused: false };
+  function updateDraft(box: Box, replaces: MapArea): void {
+    const next: Draft = { box, replaces, refused: false };
     next.refused = refusedFor(candidateOf(next));
     const hadDraft = draft !== null;
     draft = next;
@@ -830,22 +806,16 @@ export function mountShopMap(
       }, REFUSED_MS);
       return;
     }
-    const area: MapArea = d.replaces
-      ? { ...d.replaces, ...d.box }
-      : { ...candidateOf(d), id: createId() };
+    const area: MapArea = { ...d.replaces, ...d.box };
     draft = null;
     map = {
       ...map,
-      areas: d.replaces
-        ? map.areas.map((a) => (a.id === area.id ? area : a))
-        : [...map.areas, area],
+      areas: map.areas.map((a) => (a.id === area.id ? area : a)),
     };
     shopper = null;
-    const isNew = !d.replaces;
     selectedId = area.id;
     rebuild();
     options.onChange?.([{ type: 'area-put', area }]);
-    if (isNew) options.onSelect?.(area);
   }
 
   function clearDraft(): void {
@@ -926,8 +896,8 @@ export function mountShopMap(
     pointers.set(e.pointerId, p);
     clickGuard?.();
     canvas.setPointerCapture?.(e.pointerId);
-    // A refused draft still on screen goes at once, and a refused move or
-    // resize draws its area back where it was: the full rebuild does both.
+    // A refused move or resize still on screen goes at once, and its area is
+    // drawn back where it was: the full rebuild does both.
     let redraw = false;
     if (refusedTimer) {
       clearTimeout(refusedTimer);
@@ -1010,15 +980,14 @@ export function mountShopMap(
       endPending();
       const from = toWorld(view, g.start.x, g.start.y);
       const target = g.target.type === 'mark' ? g.target.under : g.target;
-      if (look !== 'mapper') gesture = { kind: 'pan', id: g.id, last: g.start };
-      else if (target.type === 'handle') {
+      // The selected area is the only thing a drag edits. Everywhere else, in
+      // every look, one finger moves the map.
+      if (look === 'mapper' && target.type === 'handle') {
         const fixed = corners(target.area)[(target.corner + 2) % 4];
         gesture = { kind: 'resize', id: g.id, area: target.area, fixed };
-      } else if (target.type === 'selected') {
+      } else if (look === 'mapper' && target.type === 'selected') {
         gesture = { kind: 'move', id: g.id, area: target.area, from };
-      } else if (target.type === 'floor') {
-        gesture = { kind: 'draw', id: g.id, from };
-      } else gesture = { kind: 'done' };
+      } else gesture = { kind: 'pan', id: g.id, last: g.start };
     }
     const next = gesture;
     if (!next) return;
@@ -1033,16 +1002,9 @@ export function mountShopMap(
         true
       );
       next.last = p;
-    } else if (next.kind === 'draw') {
-      updateDraft(
-        snapBox(boxOf(next.from[0], next.from[1], wx, wy), snap),
-        drawKind,
-        null
-      );
     } else if (next.kind === 'move') {
       updateDraft(
         movedBox(next.area, wx - next.from[0], wy - next.from[1], snap),
-        next.area.kind,
         next.area
       );
     } else if (next.kind === 'resize') {
@@ -1050,7 +1012,6 @@ export function mountShopMap(
       const [cx, cy] = snapPoint(wx, wy, snap);
       updateDraft(
         snapBox(boxOf(next.fixed[0], next.fixed[1], cx, cy), false),
-        next.area.kind,
         next.area
       );
     }
@@ -1109,7 +1070,7 @@ export function mountShopMap(
     if (g.kind === 'pending') {
       endPending();
       if (e.type === 'pointerup') tap(g, e);
-    } else if (g.kind === 'draw' || g.kind === 'move' || g.kind === 'resize') {
+    } else if (g.kind === 'move' || g.kind === 'resize') {
       if (e.type === 'pointerup') commitDraft();
       else clearDraft();
     }
@@ -1210,9 +1171,6 @@ export function mountShopMap(
     },
     setSnap(on) {
       snap = on;
-    },
-    setDrawKind(kind) {
-      drawKind = kind;
     },
     fitToContent() {
       applyTheme();

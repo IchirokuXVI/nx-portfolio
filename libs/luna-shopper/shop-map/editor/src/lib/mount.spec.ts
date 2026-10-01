@@ -317,38 +317,42 @@ describe('mountShopMap, drawing', () => {
 });
 
 describe('mountShopMap, the mapper gestures', () => {
-  it('draws a rectangle of the chosen kind with a tap and drag on the floor', () => {
-    const onChange = jest.fn<void, [WalkEvent[]]>();
+  // The floor, an area that is not selected, and a suggestion.
+  it.each([
+    ['the floor', 4.5, 0.5],
+    ['an area that is not selected', 6.5, 3],
+    ['a suggestion', 4.5, 4],
+  ])('moves the map with a drag on %s, and draws nothing', async (_, x, y) => {
+    const onChange = jest.fn();
     const onSelect = jest.fn();
+    const onSuggestion = jest.fn();
     handle = mountShopMap(host, {
       document: doc,
       look: 'mapper',
       onChange,
       onSelect,
-      createId: () => 'new1',
+      onSuggestion,
     });
-    handle.setDrawKind('blocked');
-    handle.setSnap(true);
-    drag(at(2.6, 0.4), at(4.4, 1.6));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const [event] = onChange.mock.calls[0][0];
-    expect(event).toEqual({
-      type: 'area-put',
-      area: {
-        id: 'new1',
-        kind: 'blocked',
-        x: 2.5,
-        y: 0.5,
-        w: 2,
-        h: 1,
-        colour: { mode: 'default' },
-        origin: 'drawn',
+    handle.setLive({
+      snapshot: {
+        walkedCells: [],
+        suggestions: [{ id: 'sg1', x: 4, y: 2, w: 1, h: 4 }],
+        sectionRun: null,
+        events: [],
       },
     });
-    expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'new1' })
-    );
-    expect(host.querySelectorAll('rect.sm-handle')).toHaveLength(4);
+    const before = shownView();
+    const from = at(x, y);
+    drag(from, [from[0] + 40, from[1] + 30]);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const after = shownView();
+    expect(after.s).toBe(before.s);
+    expect(after.tx - before.tx).toBeCloseTo(40);
+    expect(after.ty - before.ty).toBeCloseTo(30);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onSuggestion).not.toHaveBeenCalled();
+    expect(host.querySelectorAll('rect.sm-handle')).toHaveLength(0);
   });
 
   it('selects an area with a tap, and clears the selection with a tap on the floor', () => {
@@ -512,27 +516,17 @@ describe('mountShopMap, the mapper gestures', () => {
     });
   });
 
-  it('refuses a draw that overlaps a shelf and commits nothing', () => {
+  it('refuses a move that overlaps a shelf and commits nothing', () => {
     jest.useFakeTimers();
     const onChange = jest.fn();
     handle = mountShopMap(host, { document: doc, look: 'mapper', onChange });
-    drag(at(0.2, 0.2), at(2.5, 4));
+    handle.setSelected('a2');
+    // Onto a1, which refuses.
+    drag(at(6.5, 3), at(1.5, 3));
     expect(onChange).not.toHaveBeenCalled();
     expect(host.querySelector('rect.sm-refused')).not.toBeNull();
     jest.advanceTimersByTime(1000);
     expect(host.querySelector('rect.sm-refused')).toBeNull();
-  });
-
-  it('clears a refused draw at once when the floor is touched again', () => {
-    jest.useFakeTimers();
-    handle = mountShopMap(host, { document: doc, look: 'mapper' });
-    drag(at(0.2, 0.2), at(2.5, 4));
-    expect(host.querySelector('rect.sm-refused')).not.toBeNull();
-    jest.advanceTimersByTime(300);
-    pointer('pointerdown', at(4.5, 0.5));
-    expect(host.querySelector('rect.sm-refused')).toBeNull();
-    expect(host.querySelectorAll('rect.sm-handle')).toHaveLength(0);
-    pointer('pointerup', at(4.5, 0.5));
   });
 
   it('draws the area back at once when a refused move is followed by a touch', () => {
@@ -726,25 +720,39 @@ describe('mountShopMap, the marks of the mapper look', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('draws from a drag that starts on a pin, as on the floor under it', () => {
+  it('moves the map from a drag that starts on a pin, as on the floor under it', async () => {
     const onMark = jest.fn();
-    const onChange = jest.fn<void, [WalkEvent[]]>();
+    const onChange = jest.fn();
     handle = mountShopMap(host, {
       document: doc,
       look: 'mapper',
       onMark,
       onChange,
-      createId: () => 'new1',
     });
-    handle.setSnap(true);
-    drag(at(3, 3), at(4, 4));
+    const before = shownView();
+    const from = at(3, 3);
+    drag(from, [from[0] + 40, from[1] + 30]);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(onMark).not.toHaveBeenCalled();
-    expect(onChange.mock.calls[0][0][0]).toEqual(
-      expect.objectContaining({
-        type: 'area-put',
-        area: expect.objectContaining({ id: 'new1', x: 3, y: 3, w: 1, h: 1 }),
-      })
-    );
+    expect(onChange).not.toHaveBeenCalled();
+    expect(shownView().tx - before.tx).toBeCloseTo(40);
+    expect(shownView().ty - before.ty).toBeCloseTo(30);
+  });
+
+  it('moves the selected area from a drag that starts on a pin over it', () => {
+    const onChange = jest.fn<void, [WalkEvent[]]>();
+    const onShelf = { ...doc.marks[0], id: 'm3', x: 6.5, y: 3 };
+    handle = mountShopMap(host, {
+      document: { ...doc, marks: [onShelf] },
+      look: 'mapper',
+      onChange,
+    });
+    handle.setSelected('a2');
+    drag(at(6.5, 3), at(7.5, 3.5));
+    expect(onChange.mock.calls[0][0][0]).toEqual({
+      type: 'area-put',
+      area: { ...doc.areas[1], x: 7, y: 2.5 },
+    });
   });
 
   it('reports the area under a pin for a long press on it', () => {

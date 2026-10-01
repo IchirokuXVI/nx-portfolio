@@ -2125,7 +2125,7 @@
     },
     "settings": {
       "show": "Mostrar este recorrido a los compradores",
-      "showHint": "Una tienda muestra el mapa de un recorrido. Si lo activas, se ocultan los demás. Los compradores ven los cambios después de cada guardado.",
+      "showHint": "Una tienda muestra el mapa de un recorrido. Si lo activas, se ocultan los demás.",
       "delete": "Borrar este recorrido",
       "notice": {
         "renamed": "Nombre guardado.",
@@ -2176,7 +2176,7 @@
     "ok": "Vale",
     "cancel": "Cancelar",
     "close": "Cerrar",
-    "hint": "Arrastra por el suelo para dibujar una estantería. Toca una zona para cambiarla. Mantén pulsado un cuadro para más.",
+    "hint": "Arrastra para mover el mapa. Toca una zona para cambiarla. Mantén pulsado un cuadro para más.",
     "size": "{{w}} m × {{h}} m",
     "status": {
       "unsent": "Sin guardar",
@@ -2280,7 +2280,7 @@
       "unsent": "Aún sin guardar"
     },
     "scale": "1 cuadro = 50 cm",
-    "hint": "Toca el mapa para dibujar o elegir. Mantén pulsado un cuadro para más.",
+    "hint": "Arrastra para mover el mapa. Toca una zona para elegirla. Mantén pulsado un cuadro para más.",
     "inSection": "En la sección",
     "sectionLeft": "Salí de la sección",
     "marks": {

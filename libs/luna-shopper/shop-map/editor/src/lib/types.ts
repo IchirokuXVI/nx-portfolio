@@ -1,5 +1,4 @@
 import type {
-  AreaKind,
   LiveSnapshot,
   MapArea,
   MapMark,
@@ -15,8 +14,9 @@ import type {
  * and the door drawn, and every label on a tag. It taps, badges and labels
  * as the shopper look does.
  *
- * In every look two fingers move the map and zoom it only on a pinch
- * (velista plan 0129, `pinch.ts`).
+ * In every look one finger moves the map, and two fingers move it and zoom it
+ * only on a pinch (velista plan 0129, `pinch.ts`). In the mapper look a drag
+ * that starts on the selected area moves or resizes that area instead.
  */
 export type ShopMapLook = 'mapper' | 'shopper' | 'shopper-drawn';
 
@@ -65,8 +65,6 @@ export interface ShopMapHandle {
    */
   clearHeld(): void;
   setSnap(on: boolean): void;
-  /** Mapper look: the kind a tap and drag on the floor draws. */
-  setDrawKind(kind: AreaKind): void;
   fitToContent(): void;
   destroy(): void;
 }
@@ -77,7 +75,7 @@ export interface MountOptions {
   labelOf?: (area: MapArea) => string;
   /** Mapper look: an area was tapped, or the selection was cleared. */
   onSelect?: (area: MapArea | null) => void;
-  /** Mapper look: a finished draw, move or resize, as log events. */
+  /** Mapper look: a finished move or resize, as log events. */
   onChange?: (events: WalkEvent[]) => void;
   /**
    * Mapper look: a long press, with the area under it and the point in metres.
@@ -106,11 +104,6 @@ export interface MountOptions {
   onArea?: (area: MapArea) => void;
   /** Shopper looks: a note was tapped. Notes are asked before the areas. */
   onNote?: (note: ShopperNote) => void;
-  /**
-   * The id of an area drawn by hand. The library never invents one unless
-   * this is left out, and then it uses `crypto.randomUUID()`.
-   */
-  createId?: () => string;
   /** The words on a shelf suggestion. `Shelf?` when left out. */
   suggestionLabel?: string;
   /** The size shown while an area is selected. `2.8 m × 1.4 m` when left out. */
