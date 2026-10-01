@@ -1,4 +1,5 @@
-import type { Route } from '@angular/router';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter, Router, type Route } from '@angular/router';
 import {
   NAV_CHROME,
   NO_NAV_CHROME,
@@ -62,6 +63,23 @@ describe('AppShellRoutes', () => {
 
     expect(emptyAt).toBeGreaterThanOrEqual(0);
     expect(paths.slice(emptyAt + 1)).toEqual([]);
+  });
+
+  /**
+   * Angular validates the whole table when the router is made, and one route
+   * it refuses takes every route with it: the app draws nothing. Velista 0129
+   * met that with a `redirectTo` beside a `canMatch` (NG04014), which no other
+   * test here could see, because they read the table and never hand it to the
+   * router.
+   */
+  it('is a table the router accepts', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [provideRouter(AppShellRoutes)],
+    });
+
+    expect(() => TestBed.inject(Router)).not.toThrow();
+    expect(TestBed.inject(Router).config).toHaveLength(AppShellRoutes.length);
   });
 
   it('has exactly one empty path among the pages', () => {
@@ -1530,7 +1548,6 @@ describe('the walk lab', () => {
       for (const path of [
         paths.history,
         paths.rewind,
-        walkSettings,
         paths.edit,
         paths.record,
       ]) {
@@ -1558,6 +1575,11 @@ describe('the walk lab', () => {
       expect(old?.redirectTo).toBe(walk);
       expect(old?.pathMatch).toBeUndefined();
       expect(old?.loadComponent).toBeUndefined();
+      // Angular refuses `redirectTo` beside `canMatch` or `canActivate`
+      // (NG04014), and the refusal takes the whole router with it.
+      expect(old?.canMatch).toBeUndefined();
+      expect(old?.canActivate).toBeUndefined();
+      expect(find(walk)?.canMatch).toEqual([walkIdGuard]);
       expect(find(paths.settings)?.loadComponent).toBeDefined();
     });
 

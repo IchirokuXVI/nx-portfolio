@@ -1190,9 +1190,13 @@ export const AppShellRoutes: Route[] = [
              * name, the shoppers switch and Delete on the walk's page. The old URL
              * leads there, and so does the old URL of its delete sheet: a redirect
              * that matches a prefix keeps what follows it.
+             *
+             * No `walkIdGuard` here: Angular refuses a route that carries both
+             * `redirectTo` and `canMatch` (NG04014), because a redirect happens
+             * before any guard runs. The walk's own route, where this leads,
+             * still reads a walk id only where a uuid stands.
              */
             path: 'shops/:locationId/walks/:walkId/settings',
-            canMatch: [walkIdGuard],
             redirectTo: 'shops/:locationId/walks/:walkId',
           },
           {
