@@ -1,0 +1,31 @@
+<header class="header">
+  <!--
+    H4: a back control or an icon, never neither and never both. The label is the
+    switch, because a back control with no name is a control nobody can be told about.
+  -->
+  @if (backLabel(); as label) {
+    <button
+      (click)="back.emit()"
+      [attr.aria-label]="label"
+      class="lead"
+      type="button"
+    >
+      @if (leading() === 'close') {
+        <lib-close-icon class="lead-glyph" />
+      } @else {
+        <lib-chevron-left-icon class="lead-glyph" />
+      }
+    </button>
+  } @else {
+    <!-- Decoration: the title beside it already names the page. -->
+    <span aria-hidden="true" class="icon">
+      <ng-content select="[pageHeaderIcon]" />
+    </span>
+  }
+
+  <h1 class="title">{{ title() }}</h1>
+
+  <div class="actions">
+    <ng-content select="[pageHeaderActions]" />
+  </div>
+</header>

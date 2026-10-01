@@ -1,0 +1,70 @@
+// A square of one touch target, and quiet: a header's actions are shortcuts, and one
+// that competed with the title would be the loudest thing on the page.
+:host {
+  // For the badge, which sits over the glyph's trailing corner.
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  gap: var(--app-space-2);
+  min-inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  // A glyph is 1em square, so this sizes whatever icon the page projects.
+  font-size: var(--app-icon-md);
+  cursor: pointer;
+}
+
+:host(:focus-visible) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+:host(:disabled) {
+  cursor: default;
+  opacity: 0.5;
+}
+
+// A word. It keeps the touch target's height and takes the quiet action colour, which
+// is what a text button is everywhere else in the app.
+:host(.is-text) {
+  padding-inline: var(--app-space-4);
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+// Something is on, or the action is the accent. Amber quiet, and never colour alone:
+// the badge and the accessible name say what is on.
+:host(.is-on),
+:host(.is-accent) {
+  color: var(--app-action-quiet-fg);
+}
+
+.badge {
+  position: absolute;
+  inset-block-start: var(--app-space-2);
+  inset-inline-end: var(--app-space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-inline-size: var(--app-badge-size);
+  block-size: var(--app-badge-size);
+  padding: 0 var(--app-space-2);
+  // The ring is the header's own ground, so the badge is punched out of the glyph.
+  border: var(--app-badge-ring) solid var(--app-surface-ground);
+  border-radius: var(--app-radius-full);
+  background: var(--app-action-quiet-fg);
+  color: var(--app-surface-ground);
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

@@ -15,6 +15,7 @@
       "pending": "PENDING"
     },
     "detail": {
+      "title": "Group",
       "back": "Back",
       "loading": "Loading this group",
       "lists": "Lists",
@@ -122,6 +123,7 @@
     }
   },
   "line": {
+    "title": "Product",
     "indicator": {
       "bought": "Bought",
       "notAvailable": "Not in the shop last time",
@@ -511,6 +513,7 @@
   },
   "list": {
     "header": {
+      "title": "List",
       "inGroup": "in {{name}}",
       "pending": "{{pending}} of {{total}} pending",
       "done": "Nothing left",
@@ -1990,6 +1993,7 @@
     }
   },
   "shopPage": {
+    "loadingTitle": "Shop",
     "back": "Back",
     "loading": "Loading the shop",
     "failed": "This shop would not load",

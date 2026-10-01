@@ -1105,6 +1105,27 @@ export class SlidersIcon {
   );
 }
 
+/**
+ * Settings (velista `0130`): the list's, and the mapping settings on the walks page.
+ *
+ * A gear and not `sliders`, because on the list page it sits beside the filter
+ * button, and sliders beside a filter glyph read as two filters. One glyph means
+ * settings in the whole app.
+ */
+@Component({
+  selector: 'lib-gear-icon',
+  template: TEMPLATE,
+  styleUrl: './icon.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class GearIcon {
+  readonly svg = inlineSvg(
+    () =>
+      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
+      import('./gear-icon.svg?raw')
+  );
+}
+
 /** Two arrows passing each other: take one product instead of another. */
 @Component({
   selector: 'lib-swap-icon',

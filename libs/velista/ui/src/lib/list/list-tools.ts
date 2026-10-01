@@ -49,5 +49,12 @@ export class ListTools {
   /** How many filter settings are on, for the badge and the button's name. */
   readonly activeCount = input(0);
 
+  /**
+   * Whether the row draws its own filter button. The zone list page turns it off,
+   * because its filter button is a quick action in the page header (velista `0130`,
+   * section 5.2). The basket keeps it here.
+   */
+  readonly filter = input(true);
+
   readonly openFilter = output<void>();
 }

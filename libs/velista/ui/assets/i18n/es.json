@@ -15,6 +15,7 @@
       "pending": "PENDIENTE"
     },
     "detail": {
+      "title": "Grupo",
       "back": "Atrás",
       "loading": "Cargando el grupo",
       "lists": "Listas",
@@ -122,6 +123,7 @@
     }
   },
   "line": {
+    "title": "Producto",
     "indicator": {
       "bought": "Comprado",
       "notAvailable": "No había la última vez",
@@ -511,6 +513,7 @@
   },
   "list": {
     "header": {
+      "title": "Lista",
       "inGroup": "en {{name}}",
       "pending": "{{pending}} de {{total}} pendientes",
       "done": "Nada pendiente",
@@ -1990,6 +1993,7 @@
     }
   },
   "shopPage": {
+    "loadingTitle": "Tienda",
     "back": "Atrás",
     "loading": "Cargando la tienda",
     "failed": "Esta tienda no se ha podido cargar",
