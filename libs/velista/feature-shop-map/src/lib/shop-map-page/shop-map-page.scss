@@ -151,20 +151,6 @@
   font-size: var(--app-text-2xs);
 }
 
-.walkway {
-  inline-size: var(--app-icon-sm);
-  block-size: var(--app-icon-sm);
-  margin-inline-start: var(--app-space-3);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-sm);
-  background-color: var(--shop-map-walkway);
-  background-image: radial-gradient(
-    var(--shop-map-walkway-dot) 1px,
-    transparent 1px
-  );
-  background-size: var(--app-space-3) var(--app-space-3);
-}
-
 .saved {
   margin-inline-start: auto;
   color: var(--app-status-info-fg);

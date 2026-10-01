@@ -200,11 +200,13 @@ describe('AppShellRoutes', () => {
         ...sheetsOf('shopping-lists'),
       ];
 
+      // A redirect loads nothing at all (velista 0129: a walk's old settings URL).
       expect(
         everyRoute.every(
           (route) =>
             route.loadComponent !== undefined ||
-            route.loadChildren !== undefined
+            route.loadChildren !== undefined ||
+            route.redirectTo !== undefined
         )
       ).toBe(true);
     });
@@ -292,11 +294,13 @@ describe('AppShellRoutes', () => {
         ...sheetsOf('shopping-lists'),
       ];
 
+      // A redirect loads nothing at all (velista 0129: a walk's old settings URL).
       expect(
         everyRoute.every(
           (route) =>
             route.loadComponent !== undefined ||
-            route.loadChildren !== undefined
+            route.loadChildren !== undefined ||
+            route.redirectTo !== undefined
         )
       ).toBe(true);
     });
@@ -1087,7 +1091,11 @@ describe('the sheets and their exit animation', () => {
     //
     // `0123` added one: an area's sheet over the edit page, and `0126` the same
     // sheet over the recording page.
-    expect(sheets).toHaveLength(49);
+    //
+    // `0129` added four: a mark's sheet over the edit page and over the recording
+    // page, and the place sheet over the map, for an area and for a note. The
+    // sheet that deletes a walk moved from its settings to the walk's page.
+    expect(sheets).toHaveLength(53);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {
@@ -1442,12 +1450,26 @@ describe('the walk lab', () => {
     it('offers the section sheet over the map, and keeps all three lazy', () => {
       const [section] = sheetsOf(mapPath);
 
-      expect(section?.path).toBe(`${SHEET_SEGMENT}/sections/:sectionId`);
+      expect(section?.path).toBe(
+        `${SHEET_SEGMENT}/${SHOP_PATHS.sections}/:sectionId`
+      );
       expect(section?.canDeactivate).toEqual([sheetFallGuard]);
       expect(section?.loadComponent).toBeDefined();
       expect(map?.loadComponent).toBeDefined();
       expect(shop?.loadComponent).toBeDefined();
       expect(shop?.children).toBeUndefined();
+    });
+
+    // Velista 0129: an area with no known section, and a note, open too.
+    it('offers the place sheet of an area and of a note over the map', () => {
+      expect(sheetsOf(mapPath).map((route) => route.path)).toEqual([
+        `${SHEET_SEGMENT}/${SHOP_PATHS.sections}/:sectionId`,
+        `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
+        `${SHEET_SEGMENT}/${SHOP_PATHS.notes}/:noteId`,
+      ]);
+      for (const route of sheetsOf(mapPath)) {
+        expect(route.canDeactivate).toEqual([sheetFallGuard]);
+      }
     });
   });
 
@@ -1459,10 +1481,11 @@ describe('the walk lab', () => {
       settings: `${walks}/${SHOP_PATHS.settings}`,
       history: walk,
       rewind: `${walk}/${SHOP_PATHS.rewind}`,
-      walkSettings: `${walk}/${SHOP_PATHS.settings}`,
       edit: `${walk}/${SHOP_PATHS.edit}`,
       record: `${walk}/${SHOP_PATHS.record}`,
     };
+    /** The settings page a walk had before velista 0129, now a redirect. */
+    const walkSettings = `${walk}/${SHOP_PATHS.settings}`;
     const find = (path: string) => pages.find((route) => route.path === path);
     const order = pages.map((route) => route.path);
 
@@ -1476,7 +1499,7 @@ describe('the walk lab', () => {
       expect(order.indexOf(paths.rewind)).toBeLessThan(
         order.indexOf(paths.history)
       );
-      expect(order.indexOf(paths.walkSettings)).toBeLessThan(
+      expect(order.indexOf(walkSettings)).toBeLessThan(
         order.indexOf(paths.history)
       );
       expect(order.indexOf(paths.edit)).toBeLessThan(
@@ -1507,7 +1530,7 @@ describe('the walk lab', () => {
       for (const path of [
         paths.history,
         paths.rewind,
-        paths.walkSettings,
+        walkSettings,
         paths.edit,
         paths.record,
       ]) {
@@ -1515,25 +1538,38 @@ describe('the walk lab', () => {
       }
     });
 
-    it('puts one sheet over the list, the settings and the history', () => {
+    it('puts one sheet over the list, and the resume warning and the delete question over the walk', () => {
       expect(sheetsOf(paths.list).map((route) => route.path)).toEqual([
         `${SHEET_SEGMENT}/${SHOP_PATHS.newWalk}`,
       ]);
-      expect(sheetsOf(paths.walkSettings).map((route) => route.path)).toEqual([
-        `${SHEET_SEGMENT}/${SHOP_PATHS.deleteWalk}`,
-      ]);
       expect(sheetsOf(paths.history).map((route) => route.path)).toEqual([
         `${SHEET_SEGMENT}/${SHOP_PATHS.resume}`,
+        `${SHEET_SEGMENT}/${SHOP_PATHS.deleteWalk}`,
       ]);
       expect(sheetsOf(paths.settings)).toEqual([]);
       expect(sheetsOf(paths.rewind)).toEqual([]);
     });
 
-    // Velista 0123: editing by hand, with one area's sheet over it.
-    it('puts the area sheet over the edit page and asks before leaving it', () => {
+    // Velista 0129: one page per walk. The old settings URL leads to it, and
+    // so does the old URL of the delete sheet, which a prefix redirect keeps.
+    it('redirects a walk’s old settings page to the walk', () => {
+      const old = find(walkSettings);
+
+      expect(old?.redirectTo).toBe(walk);
+      expect(old?.pathMatch).toBeUndefined();
+      expect(old?.loadComponent).toBeUndefined();
+      expect(find(paths.settings)?.loadComponent).toBeDefined();
+    });
+
+    // Velista 0123: editing by hand, with one area's sheet over it, and
+    // velista 0129: one mark's sheet beside it.
+    it('puts the area and mark sheets over the edit page and asks before leaving it', () => {
       expect(sheetsOf(paths.edit).map((route) => route.path)).toEqual([
         `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
+        `${SHEET_SEGMENT}/${SHOP_PATHS.marks}/:markId`,
       ]);
+      expect(sheetsOf(paths.edit)[1].data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
+      expect(sheetsOf(paths.edit)[1].data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
       expect(find(paths.edit)?.canDeactivate).toEqual([unsavedWalkGuard]);
       // A failed save must not bring the connection screen, whose reload would
       // throw the unsent edits away.
@@ -1544,10 +1580,14 @@ describe('the walk lab', () => {
 
     // Velista 0126: recording, with the same area sheet over it for editing
     // while walking, and the same question before leaving.
-    it('puts the area sheet over the recording page and asks before leaving it', () => {
+    it('puts the area and mark sheets over the recording page and asks before leaving it', () => {
       expect(sheetsOf(paths.record).map((route) => route.path)).toEqual([
         `${SHEET_SEGMENT}/${SHOP_PATHS.areas}/:areaId`,
+        `${SHEET_SEGMENT}/${SHOP_PATHS.marks}/:markId`,
       ]);
+      expect(sheetsOf(paths.record)[1].data?.[WORKS_WITHOUT_BACKEND]).toBe(
+        true
+      );
       expect(find(paths.record)?.canDeactivate).toEqual([unsavedWalkGuard]);
       expect(find(paths.record)?.data?.[WORKS_WITHOUT_BACKEND]).toBe(true);
       expect(sheetsOf(paths.record)[0].data?.[WORKS_WITHOUT_BACKEND]).toBe(

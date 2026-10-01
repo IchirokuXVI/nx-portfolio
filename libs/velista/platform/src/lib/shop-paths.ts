@@ -21,7 +21,11 @@ export const SHOP_PATHS = {
   basketParam: 'basket',
   /** `shops/:locationId/walks`: a shop's walks (velista `0122`). */
   walks: 'walks',
-  /** `.../walks/settings` and `.../walks/:walkId/settings`. */
+  /**
+   * `.../walks/settings`: the settings for every walk. A walk has no settings
+   * page of its own since velista `0129`: `.../walks/:walkId/settings` redirects
+   * to the walk's page, which holds them.
+   */
   settings: 'settings',
   /** `.../walks/:walkId/rewind`. */
   rewind: 'rewind',
@@ -32,13 +36,22 @@ export const SHOP_PATHS = {
   record: 'record',
   /** `.../walks/:walkId/edit`: editing a walk's map by hand (velista `0123`). */
   edit: 'edit',
-  /** `.../edit/sheet/areas/:areaId`: the sheet of one area over the edit page. */
+  /**
+   * `.../edit/sheet/areas/:areaId`: the sheet of one area over the edit page,
+   * and `.../map/sheet/areas/:areaId`: the place sheet over the shopper map.
+   */
   areas: 'areas',
+  /** `.../edit/sheet/marks/:markId`: the sheet of one mark (velista `0129`). */
+  marks: 'marks',
+  /** `.../map/sheet/sections/:sectionId`: the section sheet over the map. */
+  sections: 'sections',
+  /** `.../map/sheet/notes/:noteId`: the place sheet of a note (velista `0129`). */
+  notes: 'notes',
   /** The sheet over the walks list that names a new walk. */
   newWalk: 'new',
-  /** The sheet over a walk's settings that confirms deleting it. */
+  /** The sheet over a walk's page that confirms deleting it. */
   deleteWalk: 'delete',
-  /** The warning over a walk's history before resuming the shown walk. */
+  /** The warning over a walk's page before resuming the shown walk. */
   resume: 'resume',
 } as const;
 
@@ -67,15 +80,16 @@ export function mappingSettingsPath(
 }
 
 /**
- * One walk's page: its history with no `page`, else `rewind`, `settings`,
- * `edit` (velista `0123`), or `record` once velista `0126` adds it.
+ * One walk's page with no `page` (its name, whether shoppers see it, its
+ * history and Delete, velista `0129`), else `rewind`, `edit` (velista `0123`)
+ * or `record` (velista `0126`).
  */
 export function shopWalkPath(
   locale: string,
   basePath: string,
   locationId: string,
   walkId: string,
-  page: 'rewind' | 'settings' | 'record' | 'edit' | null = null
+  page: 'rewind' | 'record' | 'edit' | null = null
 ): string {
   const path = `${shopWalksPath(locale, basePath, locationId)}/${encodeURIComponent(walkId)}`;
   return page === null ? path : `${path}/${SHOP_PATHS[page]}`;

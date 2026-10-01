@@ -24,8 +24,6 @@
     </button>
   </header>
 
-  <p class="intro">{{ 'shopWalks.list.intro' | rokuT }}</p>
-
   @let state = read();
   @if (state.kind === 'walks') {
     @if (state.walks.length === 0) {
@@ -79,16 +77,6 @@
                 {{ 'shopWalks.list.marks' | rokuT: { count: walk.markCount } }}
               </span>
             </a>
-            <button
-              (click)="openSettings(walk)"
-              [attr.aria-label]="
-                'shopWalks.list.settingsFor' | rokuT: { name: walk.name }
-              "
-              class="icon-button"
-              type="button"
-            >
-              <lib-ellipsis-icon />
-            </button>
           </li>
         }
       </ul>
@@ -117,7 +105,6 @@
     <button (click)="startNew()" class="primary" type="button">
       {{ 'shopWalks.list.start' | rokuT }}
     </button>
-    <p class="foot-note">{{ 'shopWalks.list.startNote' | rokuT }}</p>
   </footer>
 </main>
 

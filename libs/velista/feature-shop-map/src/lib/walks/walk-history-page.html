@@ -12,22 +12,57 @@
       <h1 class="title">
         {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
       </h1>
-      <p class="subtitle">{{ 'shopWalks.history.subtitle' | rokuT }}</p>
     </div>
-    @if (read().kind === 'walk') {
-      <button
-        (click)="openSettings()"
-        [attr.aria-label]="'shopWalks.settings.title' | rokuT"
-        class="icon-button"
-        type="button"
-      >
-        <lib-ellipsis-icon />
-      </button>
-    }
   </header>
 
   @let state = read();
   @if (state.kind === 'walk') {
+    <form (submit)="onSubmit($event)" class="name">
+      <label class="label" for="walk-name">{{
+        'shopWalks.name' | rokuT
+      }}</label>
+      <input
+        (blur)="saveName()"
+        (input)="onTyped($event)"
+        [attr.maxlength]="maxLength"
+        [value]="typed()"
+        autocomplete="off"
+        class="field"
+        enterkeyhint="done"
+        id="walk-name"
+        type="text"
+      />
+    </form>
+
+    <!--
+      A real checkbox with the switch role, inside its label, so the words are its
+      accessible name and the whole row is the target.
+    -->
+    <label class="switch-row">
+      <span class="switch-body">
+        <span class="switch-title">{{
+          'shopWalks.settings.show' | rokuT
+        }}</span>
+        <span class="switch-hint">{{
+          'shopWalks.settings.showHint' | rokuT
+        }}</span>
+      </span>
+      <input
+        (change)="setShown($event)"
+        [attr.aria-busy]="busy()"
+        [checked]="state.detail.walk.shown"
+        class="switch"
+        role="switch"
+        type="checkbox"
+      />
+    </label>
+
+    <p aria-live="polite" class="notice" role="status">
+      @if (notice(); as notice) {
+        {{ 'shopWalks.settings.notice.' + notice | rokuT }}
+      }
+    </p>
+
     <div class="actions">
       <div class="pair">
         <button
@@ -51,6 +86,7 @@
       }
     </div>
 
+    <h2 class="group">{{ 'shopWalks.history.subtitle' | rokuT }}</h2>
     @if (days().length === 0) {
       <p class="empty">{{ 'shopWalks.history.empty' | rokuT }}</p>
     }
@@ -107,6 +143,12 @@
         </ol>
       </section>
     }
+
+    <div class="foot">
+      <button (click)="askDelete()" class="delete" type="button">
+        {{ 'shopWalks.settings.delete' | rokuT }}
+      </button>
+    </div>
   } @else if (state.kind === 'missing') {
     <p class="empty" role="alert">{{ 'shopWalks.history.missing' | rokuT }}</p>
   } @else if (state.kind === 'failed') {

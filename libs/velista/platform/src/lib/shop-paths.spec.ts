@@ -36,5 +36,8 @@ describe('shop paths', () => {
     expect(shopWalkPath('en', '', 'loc-1', 'w-1', 'record')).toBe(
       '/en/shops/loc-1/walks/w-1/record'
     );
+    expect(shopWalkPath('en', '', 'loc-1', 'w-1', 'edit')).toBe(
+      '/en/shops/loc-1/walks/w-1/edit'
+    );
   });
 });

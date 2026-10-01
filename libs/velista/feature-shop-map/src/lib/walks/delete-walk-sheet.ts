@@ -22,7 +22,7 @@ import {
 import { SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 
 /**
- * Deleting a walk (velista `0122`, target 5), over its settings. The walk leaves
+ * Deleting a walk (velista `0122`, target 5), over the walk's page. The walk leaves
  * every list and shoppers stop seeing it if it was shown; its entries are kept on
  * the server, and the sheet says only what somebody sees.
  */
@@ -73,8 +73,7 @@ export class DeleteWalkSheet {
         this._locale(),
         this._basePath,
         this.locationId(),
-        this.walkId(),
-        'settings'
+        this.walkId()
       )
     );
   }

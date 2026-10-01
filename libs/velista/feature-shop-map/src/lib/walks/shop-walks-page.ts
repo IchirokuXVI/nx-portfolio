@@ -25,11 +25,7 @@ import {
   shopMapPath,
   shopWalkPath,
 } from '@portfolio/velista/platform';
-import {
-  ChevronLeftIcon,
-  EllipsisIcon,
-  SlidersIcon,
-} from '@portfolio/velista/ui';
+import { ChevronLeftIcon, SlidersIcon } from '@portfolio/velista/ui';
 import { clockText, dateText, dayName, shopLine } from './walk-text';
 
 /** How a row says when its walk last changed. */
@@ -41,21 +37,16 @@ export type WalkChanged =
 /**
  * A shop's walks (velista `0122`, target 2; the `Walks` board): one row per walk
  * with its name, "Shown to shoppers" on the one shoppers see, when it last
- * changed, how many entries and marks it has, and a button for its settings. The
- * bar carries the settings for every walk, and "Start a new walk" sits at the
- * foot, asking for a name in a sheet.
+ * changed, and how many entries and marks it has. A row opens the walk, whose
+ * page holds its name, the shoppers switch and Delete (velista `0129`). The bar
+ * carries the settings for every walk, and "Start a new walk" sits at the foot,
+ * asking for a name in a sheet.
  *
  * `shops/:locationId/walks`, only with `shopMap.record`.
  */
 @Component({
   selector: 'lib-shop-walks-page',
-  imports: [
-    ChevronLeftIcon,
-    EllipsisIcon,
-    RokuTranslatorPipe,
-    RouterOutlet,
-    SlidersIcon,
-  ],
+  imports: [ChevronLeftIcon, RokuTranslatorPipe, RouterOutlet, SlidersIcon],
   templateUrl: './shop-walks-page.html',
   styleUrl: './shop-walks-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -113,18 +104,6 @@ export class ShopWalksPage {
 
   protected open(walk: ShopWalkSummary): void {
     void this._router.navigateByUrl(this.historyUrl(walk));
-  }
-
-  protected openSettings(walk: ShopWalkSummary): void {
-    void this._router.navigateByUrl(
-      shopWalkPath(
-        this._locale(),
-        this._basePath,
-        this.locationId(),
-        walk.id,
-        'settings'
-      )
-    );
   }
 
   protected openMappingSettings(): void {

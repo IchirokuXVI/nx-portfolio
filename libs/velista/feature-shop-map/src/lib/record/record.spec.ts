@@ -348,6 +348,14 @@ describe('RecordWalkPage (velista 0126)', () => {
     expect(person?.heading).toBeDefined();
     const off = Math.abs((((person?.heading ?? 0) - facing + 540) % 360) - 180);
     expect(off).toBeLessThan(2);
+    // A metre walked, so the session has something to save (velista 0129).
+    for (let t = 1_800; t < 2_800; t += 100) {
+      sensors.compass(compassAt(t, facing + 300));
+      sensors.pose(
+        uprightPose(t, -mark.y + (t - 1_800) / 1000, mark.x, facing + 90)
+      );
+      jest.advanceTimersByTime(100);
+    }
     await fixture.componentInstance.canLeave();
     await flush(fixture);
     expect(walks.appended[0]).toEqual(
@@ -386,6 +394,11 @@ describe('RecordWalkPage (velista 0126)', () => {
     }
     await flush(fixture);
     expect(all(fixture, '.pill')).toEqual(['shopWalkRecord.status.good']);
+    // A metre walked, so the session has something to save (velista 0129).
+    for (let t = 6_000; t < 7_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, (t - 6_000) / 1000, 0));
+      jest.advanceTimersByTime(100);
+    }
     await fixture.componentInstance.canLeave();
     await flush(fixture);
 
@@ -393,6 +406,76 @@ describe('RecordWalkPage (velista 0126)', () => {
       ['resumed', undefined],
       ['stopped', 'left-page'],
     ]);
+  });
+
+  // Velista 0129, target 9.
+  it('leaves the history as it was for a resume that is stopped at once', async () => {
+    const harness = await renderPage({ walkId: MEMORY_OTHER_WALK_ID });
+    const { fixture, sensors, walks, pages } = harness;
+    click(fixture, '.controls .chip');
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    // Standing still while the camera finds its place, and after.
+    for (let t = 0; t < 6_000; t += 100) {
+      sensors.pose(uprightPose(t, 0, 0, 0));
+      jest.advanceTimersByTime(100);
+      await Promise.resolve();
+    }
+    await flush(fixture);
+    expect(all(fixture, '.pill')).toEqual(['shopWalkRecord.status.good']);
+
+    click(fixture, '.bar .stop');
+    await flush(fixture);
+
+    expect(walks.appended).toEqual([]);
+    // Nothing is unsent, so Stop leaves without asking.
+    expect(pages.back).toHaveBeenCalled();
+    expect(all(fixture, 'lib-unsaved-dialog')).toEqual([]);
+  });
+
+  // Velista 0129, target 3: the canvas reports the tap, and the page decides.
+  it('picks the mark tapped on the map while choosing where you are', async () => {
+    const harness = await renderPage({ walkId: MEMORY_OTHER_WALK_ID });
+    const { fixture, navigate } = harness;
+    const mark = fixture.componentInstance.document()?.marks[0];
+    if (mark === undefined) {
+      throw new Error('no mark');
+    }
+    expect(all(fixture, '.bar .title')).toEqual(['shopWalkRecord.where.title']);
+
+    harness.view()?.markTapped.emit(mark);
+    fixture.detectChanges();
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('.controls .chip.on')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+    expect(harness.view()?.live()?.person).toEqual({
+      x: mark.x,
+      y: mark.y,
+      heading: mark.heading,
+    });
+  });
+
+  it('opens the sheet of a mark tapped at any other moment', async () => {
+    const harness = await renderPage({ fresh: true });
+    const { fixture, navigate } = harness;
+    const mark: MapMark = {
+      id: 'm-9',
+      kind: 'note',
+      x: 1,
+      y: 1,
+      heading: 0,
+      text: 'Door',
+      logMs: 0,
+    };
+
+    harness.view()?.markTapped.emit(mark);
+    fixture.detectChanges();
+
+    expect(navigate.mock.calls[0][0]).toEqual(['sheet', 'marks', 'm-9']);
   });
 
   it('resumes nothing when Close is tapped during the wait', async () => {

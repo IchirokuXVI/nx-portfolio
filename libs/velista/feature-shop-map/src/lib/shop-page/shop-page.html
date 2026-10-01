@@ -60,12 +60,14 @@
         </div>
       }
 
-      @if (shop.hasMap) {
-        <button (click)="openMap()" class="see-map" type="button">
-          <lib-map-icon class="see-map-glyph" />
-          {{ 'shopPage.seeMap' | rokuT }}
-        </button>
-      }
+      <!--
+        For every shop (velista 0129): one with no walk shown to shoppers opens
+        the map page saying so, where an account that maps finds the Walks button.
+      -->
+      <button (click)="openMap()" class="see-map" type="button">
+        <lib-map-icon class="see-map-glyph" />
+        {{ 'shopPage.seeMap' | rokuT }}
+      </button>
     </section>
 
     @if (sections().length > 0) {

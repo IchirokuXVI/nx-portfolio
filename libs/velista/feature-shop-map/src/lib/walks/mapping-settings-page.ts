@@ -25,7 +25,7 @@ import { ChevronLeftIcon } from '@portfolio/velista/ui';
   selector: 'lib-mapping-settings-page',
   imports: [ChevronLeftIcon, RokuTranslatorPipe],
   templateUrl: './mapping-settings-page.html',
-  styleUrl: './walk-settings-page.scss',
+  styleUrl: './mapping-settings-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MappingSettingsPage {

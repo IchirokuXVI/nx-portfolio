@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type {
   MapArea,
+  MapMark,
   ShopMapDocumentV2,
   WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -22,13 +23,16 @@ import { AreaSheet } from './area-sheet';
 import { EditMapPage } from './edit-map-page';
 import { HoldMenu, type HoldChoice } from './hold-menu';
 import {
+  changingEdits,
   heldSquare,
   holdActionsFor,
   holdEvents,
   MAP_EDIT_SESSION,
   renamedArea,
+  retextedMark,
   type MapEditSession,
 } from './map-edits';
+import { MarkEditSheet } from './mark-edit-sheet';
 import { ResizeControls } from './resize-controls';
 
 const SHOP = 'loc-tejares';
@@ -66,6 +70,93 @@ function click(fixture: ComponentFixture<unknown>, selector: string): void {
   node.click();
   fixture.detectChanges();
 }
+
+function mark(overrides: Partial<MapMark> = {}): MapMark {
+  return {
+    id: 'm-1',
+    kind: 'section',
+    x: 3,
+    y: 4,
+    heading: 90,
+    text: 'Lácteos',
+    logMs: 4_000,
+    ...overrides,
+  };
+}
+
+/** Velista `0129`, target 9: an edit that changes nothing is not an edit. */
+describe('changingEdits', () => {
+  const stored: ShopMapDocumentV2 = {
+    version: 2,
+    areas: [area()],
+    marks: [mark()],
+    path: [],
+  };
+
+  it('drops an area-put equal to the stored area, whatever order its keys are in', () => {
+    const same: MapArea = {
+      origin: 'drawn',
+      colour: { mode: 'default' },
+      section: 'Lácteos',
+      h: 11,
+      w: 1.4,
+      y: 2,
+      x: 2,
+      kind: 'shelf',
+      id: 'a-1',
+    };
+
+    expect(changingEdits(stored, [{ type: 'area-put', area: same }])).toEqual(
+      []
+    );
+  });
+
+  it('drops a mark-put equal to the stored mark', () => {
+    expect(changingEdits(stored, [{ type: 'mark-put', mark: mark() }])).toEqual(
+      []
+    );
+  });
+
+  it('keeps a put that changes one thing, and a put of something new', () => {
+    const moved: WalkEvent = { type: 'area-put', area: area({ x: 2.5 }) };
+    const recoloured: WalkEvent = {
+      type: 'area-put',
+      area: area({ colour: { mode: 'custom', value: '#c9e6f5' } }),
+    };
+    const retexted: WalkEvent = {
+      type: 'mark-put',
+      mark: mark({ text: 'Huevos' }),
+    };
+    const drawn: WalkEvent = { type: 'area-put', area: area({ id: 'a-2' }) };
+
+    for (const event of [moved, recoloured, retexted, drawn]) {
+      expect(changingEdits(stored, [event])).toEqual([event]);
+    }
+  });
+
+  it('drops the removal of something that is not there, and keeps a real one', () => {
+    expect(
+      changingEdits(stored, [
+        { type: 'area-removed', id: 'gone' },
+        { type: 'mark-removed', id: 'gone' },
+        { type: 'mark-removed', id: 'm-1' },
+      ])
+    ).toEqual([{ type: 'mark-removed', id: 'm-1' }]);
+  });
+
+  it('reads each edit against the map as the ones before it left it', () => {
+    const there: WalkEvent = { type: 'area-put', area: area({ x: 5 }) };
+    const back: WalkEvent = { type: 'area-put', area: area() };
+
+    // Moved and moved back is two changes, and the same put twice is one.
+    expect(changingEdits(stored, [there, back])).toEqual([there, back]);
+    expect(changingEdits(stored, [there, there])).toEqual([there]);
+  });
+
+  it('gives a mark new words and nothing else', () => {
+    expect(retextedMark(mark(), '  Huevos ')).toEqual(mark({ text: 'Huevos' }));
+  });
+});
 
 /** Velista `0123`: what the long press menu offers, and the events it makes. */
 describe('the map edits', () => {
@@ -230,6 +321,39 @@ describe('EditMapPage', () => {
         events: [{ type: 'area-put', area: counter }],
       }),
     ]);
+  });
+
+  // Velista 0129, target 9.
+  it('saves nothing for an edit that leaves the map as it was', async () => {
+    const { fixture, view, walks, page } = await renderPage();
+    const eggs = page.document()?.areas.find((one) => one.id === 'a-eggs');
+    if (eggs === undefined) {
+      throw new Error('the memory walk must hold the eggs');
+    }
+
+    // The canvas reports an area dragged back to where it was, and a sheet
+    // applies the area as it is.
+    view().changed.emit([{ type: 'area-put', area: { ...eggs } }]);
+    expect(page.apply([{ type: 'area-put', area: { ...eggs } }])).toBe(true);
+    fixture.detectChanges();
+
+    expect(all(fixture, '.subtitle')).toEqual([]);
+    expect(await fixture.componentInstance.canLeave()).toBe(true);
+    click(fixture, '.bar .done');
+    await settle(() => fixture.detectChanges());
+    expect(walks.appended).toEqual([]);
+  });
+
+  // Velista 0129, target 3.
+  it('opens the sheet of a mark somebody tapped', async () => {
+    const { view, navigate } = await renderPage();
+
+    view().markTapped.emit(mark({ id: 'm-7' }));
+
+    expect(navigate).toHaveBeenCalledWith(
+      ['sheet', 'marks', 'm-7'],
+      expect.objectContaining({})
+    );
   });
 
   it('opens the sheet of an area somebody tapped', async () => {
@@ -443,6 +567,125 @@ const doc = (areas: MapArea[]): ShopMapDocumentV2 => ({
   areas,
   marks: [],
   path: [],
+});
+
+async function renderMarkSheet(document: ShopMapDocumentV2, markId = 'm-1') {
+  TestBed.resetTestingModule();
+  const harness = shopMapTesting({
+    params: { locationId: SHOP, walkId: WALK, markId },
+  });
+  const { session, applied } = fakeSession(document);
+  await TestBed.configureTestingModule({
+    imports: [MarkEditSheet, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      ...harness.providers,
+      { provide: MAP_EDIT_SESSION, useValue: session },
+    ],
+  }).compileComponents();
+  const fixture = TestBed.createComponent(MarkEditSheet);
+  fixture.detectChanges();
+  await settle(() => fixture.detectChanges());
+  const field = () =>
+    (fixture.nativeElement as HTMLElement).querySelector(
+      '.field'
+    ) as HTMLInputElement;
+  const type = (text: string) => {
+    field().value = text;
+    field().dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  };
+  return { fixture, session, applied, field, type, ...harness };
+}
+
+const marked = (marks: MapMark[]): ShopMapDocumentV2 => ({
+  version: 2,
+  areas: [],
+  marks,
+  path: [],
+});
+
+/** Velista `0129`, target 3: the sheet of one mark. */
+describe('MarkEditSheet', () => {
+  it('shows the kind of the mark and its text in a field', async () => {
+    const { fixture, field } = await renderMarkSheet(marked([mark()]));
+
+    expect(all(fixture, '.title')).toEqual([
+      'shopWalkRecord.where.kind.section',
+    ]);
+    expect(all(fixture, '.field-label')).toEqual([
+      'shopWalkRecord.mark.name.section',
+    ]);
+    expect(field().value).toBe('Lácteos');
+  });
+
+  it('saves a changed text as the same mark, where and when it was made', async () => {
+    const { fixture, applied, sheets, type } = await renderMarkSheet(
+      marked([mark()])
+    );
+
+    type(' Huevos ');
+    await (fixture.componentInstance as MarkEditSheet).save();
+
+    expect(applied).toEqual([
+      [{ type: 'mark-put', mark: mark({ text: 'Huevos' }) }],
+    ]);
+    expect(sheets.dismiss).toHaveBeenCalledWith(EDIT);
+  });
+
+  it('sends nothing when the text did not change, and closes', async () => {
+    const { fixture, applied, sheets, type } = await renderMarkSheet(
+      marked([mark()])
+    );
+
+    type('Lácteos  ');
+    click(fixture, '.save');
+    await settle(() => fixture.detectChanges());
+
+    expect(applied).toEqual([]);
+    expect(sheets.dismiss).toHaveBeenCalledWith(EDIT);
+  });
+
+  it('refuses an empty text, says why, and stays open', async () => {
+    const { fixture, applied, sheets, type, field } = await renderMarkSheet(
+      marked([mark({ kind: 'note', text: 'Door' })])
+    );
+
+    type('   ');
+    await (fixture.componentInstance as MarkEditSheet).save();
+    fixture.detectChanges();
+
+    expect(applied).toEqual([]);
+    expect(sheets.dismiss).not.toHaveBeenCalled();
+    expect(all(fixture, '.field-error')).toEqual(['shopMapEdit.mark.unnamed']);
+    expect(field().getAttribute('aria-invalid')).toBe('true');
+
+    type('Back door');
+    expect(all(fixture, '.field-error')).toEqual([]);
+  });
+
+  it('deletes only after the confirmation, and leaves the sheet', async () => {
+    const { fixture, applied, sheets } = await renderMarkSheet(
+      marked([mark()])
+    );
+
+    click(fixture, '.delete');
+    expect(applied).toEqual([]);
+    expect(all(fixture, '.confirm-text')).toEqual([
+      'shopMapEdit.mark.deleteConfirm',
+    ]);
+    click(fixture, '.danger');
+    await settle(() => fixture.detectChanges());
+
+    expect(applied).toEqual([[{ type: 'mark-removed', id: 'm-1' }]]);
+    expect(sheets.dismiss).toHaveBeenCalledWith(EDIT);
+  });
+
+  it('says a mark that is gone is not on the map', async () => {
+    const { fixture } = await renderMarkSheet(marked([]));
+
+    expect(all(fixture, '.title')).toEqual(['shopMapEdit.mark.missing']);
+    expect(all(fixture, '.field')).toEqual([]);
+  });
 });
 
 /** Velista `0123`, target 3: the area sheet. */

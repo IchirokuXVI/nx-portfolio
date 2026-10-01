@@ -22,6 +22,9 @@ interface Output extends RecordingOutput {
 
 function output(): Output {
   let end = 0;
+  // As `WalkEntrySaver` answers: the entry `openNext` named waits until
+  // something is added.
+  let waits = false;
   const out: Output = {
     adds: [],
     pushes: [],
@@ -32,13 +35,21 @@ function output(): Output {
     add(events, logTo) {
       out.adds.push({ events, logTo });
       end = Math.max(end, logTo);
+      waits = false;
     },
     push(draft) {
       out.pushes.push(draft);
       end = Math.max(end, draft.logTo ?? end);
     },
-    openNext: (kind) => out.opened.push(kind),
+    openNext: (kind) => {
+      out.opened.push(kind);
+      waits = true;
+    },
     logEnd: () => end,
+    sessionOpened: () => !waits,
+    forgetNext: () => {
+      waits = false;
+    },
     save: () => (out.saves += 1),
     tone: (kind) => out.tones.push(kind),
     baseline: (degrees) => out.baselines.push(degrees),
@@ -110,6 +121,107 @@ const paths = (out: Output) =>
   out.adds.flatMap(({ events }) =>
     events.flatMap((event) => (event.type === 'path' ? event.points : []))
   );
+
+/** Velista `0129`, target 9: a session that adds nothing sends nothing. */
+describe('WalkRecording, a visit with no change', () => {
+  it('sends no entry for a first session stopped before it moved', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    // Three seconds standing: a point is kept every second.
+    walk(rec, 0, 3_000, { still: true });
+    rec.flush(false);
+    rec.stopWalk('button');
+
+    expect(rec.phase).toBe('stopped');
+    expect(out.adds).toEqual([]);
+    expect(out.pushes).toEqual([]);
+  });
+
+  it('sends no resumed and no stopped for a resume stopped at once', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 10_000);
+    rec.stopWalk('button');
+    const adds = out.adds.length;
+    expect(out.pushes.map((draft) => draft.kind)).toEqual(['stopped']);
+
+    rec.startProbe();
+    walk(rec, 20_000, 22_000, { still: true, startY: 9.9 });
+    expect(rec.resumeAt({ x: 0, y: 9.9, heading: 0 })).toBe(true);
+    walk(rec, 22_000, 24_000, { still: true, startY: 9.9 });
+    rec.stopWalk('button');
+
+    expect(out.opened).toEqual(['started', 'resumed']);
+    expect(out.adds).toHaveLength(adds);
+    expect(out.pushes.map((draft) => draft.kind)).toEqual(['stopped']);
+  });
+
+  it('sends no entry when leaving the page ends a session that added nothing', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 1_000, { still: true });
+    rec.stopWalk('left-page');
+
+    expect(out.adds).toEqual([]);
+    expect(out.pushes).toEqual([]);
+  });
+
+  it('holds the standing points until the session moves, then sends them all', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 2_000, { still: true });
+    rec.flush();
+    expect(out.adds).toEqual([]);
+
+    walk(rec, 2_000, 4_000);
+    rec.flush();
+    const points = paths(out);
+    expect(points[0]).toEqual([0, 0, 0]);
+    expect(points.length).toBeGreaterThan(3);
+
+    rec.stopWalk('button');
+    expect(out.pushes.map((draft) => draft.kind)).toEqual(['stopped']);
+  });
+
+  it('sends a mark made while standing, with the point it was made at, and the stop', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 1_000, { still: true });
+    rec.mark('note', 'Door');
+    rec.stopWalk('button');
+
+    const events = out.adds.flatMap((one) => one.events);
+    expect(events.map((event) => event.type)).toEqual(['path', 'mark-put']);
+    expect(out.pushes.map((draft) => draft.kind)).toEqual(['stopped']);
+  });
+
+  it('sends the stop of a session whose entry an edit on the page opened', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    walk(rec, 0, 1_000, { still: true });
+    // The page adds an edit straight to the saver, which opens the entry.
+    out.add([{ type: 'area-removed', id: 'a-1' }], 0);
+    rec.stopWalk('button');
+
+    expect(out.pushes.map((draft) => draft.kind)).toEqual(['stopped']);
+  });
+
+  it('forgets the kind of the session that ended, so a later edit is no resume', () => {
+    const out = output();
+    const rec = recording(out);
+    rec.beginFirst();
+    expect(out.sessionOpened()).toBe(false);
+    rec.stopWalk('button');
+
+    expect(out.sessionOpened()).toBe(true);
+  });
+});
 
 describe('WalkRecording (velista 0126)', () => {
   it('keeps path points while tracking is good and learns the baseline', () => {
@@ -299,6 +411,8 @@ describe('WalkRecording (velista 0126)', () => {
     rec.stopWalk('left-page');
     expect(out.pushes).toEqual([]);
     rec.beginFirst();
+    // Walked, so the session has an entry to stop (velista 0129, target 9).
+    walk(rec, 0, 2_000);
     rec.stopWalk('left-page');
     rec.stopWalk('button');
     expect(out.pushes.map((one) => one.reason)).toEqual(['left-page']);

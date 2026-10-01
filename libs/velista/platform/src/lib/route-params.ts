@@ -71,6 +71,16 @@ export function areaIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'areaId');
 }
 
+/** The mark the mark sheet of the edit and record pages is about (velista `0129`). */
+export function markIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'markId');
+}
+
+/** The note the map's place sheet is about (velista `0129`). */
+export function noteIdOf(route: ActivatedRoute): Signal<string> {
+  return paramSignal(route, 'noteId');
+}
+
 /** The section the map's section sheet is about (velista `0121`). */
 export function sectionIdOf(route: ActivatedRoute): Signal<string> {
   return paramSignal(route, 'sectionId');
