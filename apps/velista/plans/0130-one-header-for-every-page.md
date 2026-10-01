@@ -90,7 +90,8 @@ sheet, and any change to what a quick action does.
 - A back control calls `PageNavigation.back(fallbackUrl)` with the fallback the page names
   today. `PageHeader` emits, and the page decides where back goes.
 - `visually-hidden` is not a global class. Define it in the new stylesheet from the mixin.
-- Do not move a quick action into a menu or remove one, except where a section below says so.
+- Do not move a quick action into a menu or remove one, except where a section below says so
+  (section 6.1 is the only one).
 
 ### Action boundaries
 
@@ -98,7 +99,8 @@ sheet, and any change to what a quick action does.
   unreviewed mock.
 - Do not change `0002`, `0037` or `0051` beyond the notes that section 7 names.
 - If a page cannot fit its actions beside the title at 390px, do not shrink the title on
-  that page. Say so and stop: section 6 names the one case known today.
+  that page. Say so and stop. The basket page was the one known case, and section 6.1
+  answers it with a menu.
 
 ### Progress evidence
 
@@ -117,8 +119,9 @@ These are rules H1 to H6. No other plan uses the letter H.
   token, `--app-header-height`, and the top safe area inset is added to it as padding. A page
   cannot make it taller or shorter.
 - **H2. One title.** One line, cut with an ellipsis. One face, one size, one weight and one
-  tracking, which are the home header's today: the display face, `--app-text-2xl`, weight
-  400, `--app-tracking-wordmark`. The title is the page's `h1`.
+  tracking on every page, home included: the display face, weight 400,
+  `--app-tracking-wordmark`, at the size of one token, `--app-header-title-size`
+  (section 2). The title is the page's `h1`. No page sets a title size of its own.
 - **H3. Always a bottom border.** `1px solid var(--app-border-subtle)`. There is no input to
   turn it off.
 - **H4. The left end holds a back button or an icon, never neither and never both.** A page
@@ -153,6 +156,14 @@ Tokens, in `_semantic.scss`:
 - `--app-header-height`: the home bar's height today, which is the touch target plus its
   block padding (44px, 12px and 8px, so 64px). Measure the home bar in a browser before you
   fix the value, and write the measured number.
+- `--app-header-title-size`: **one size for every title, and it can be smaller than home's
+  today.** Home sets its word at `--app-text-2xl`, which is about 27px on a 390px phone. A
+  title beside a back button and two actions has about 210px, which is some fourteen letters
+  at that size and some nineteen at `--app-text-xl` (20px). The mock draws both sizes on the
+  longest real titles (a list's name beside two actions, "Your shopping lists", "Shopping
+  profiles"). The recommendation is the value of `--app-text-xl`. Whatever the review picks,
+  the home word takes it too, so home's title gets smaller with the rest. The brand mark
+  beside it keeps the proportion it has to the word today.
 - The header's inline padding is `--app-space-5` at both ends, as on home. The back button
   keeps the negative start margin its mixin has today, so the chevron's glyph lines up with
   the icon on a page that has no back.
@@ -170,7 +181,7 @@ The word Velista, the assistant button and the account button show **on the home
 
 - Home draws `PageHeader` with the brand mark in the icon slot, the `app-title` value as the
   title, and three actions: the offline mark, the assistant and the account. Its look does
-  not change. The assistant button keeps `libTourAnchor="assistant"`.
+  not change, except for the title's size if the review picks the smaller one (section 2). The assistant button keeps `libTourAnchor="assistant"`.
 - The group page, members, the list page, account, profiles and the account's supermarkets
   page lose the brand bar. Their own header takes its place, so each of them gets shorter by
   one row.
@@ -206,8 +217,8 @@ bar shows.
 | `catalog/categories/:parentSlug` | back | the category's name. **Categories** while it loads | none |
 | `catalog/supermarket` | back | Supermarket | Near me |
 | `catalog/supermarket/:supermarketId` | back | the chain's name. **Supermarket** while it loads | none |
-| `shopping-lists/current` | basket tab icon | Shopping list | history |
-| `shopping-lists/live`, `/:basketId` | basket tab icon | as today | section 6 |
+| `shopping-lists/current` | basket tab icon | Shopping list | none while it loads |
+| `shopping-lists/live`, `/:basketId` | basket tab icon | as today | share, map, the menu (section 6) |
 | `shopping-lists` (history) | back | Your shopping lists | none |
 | `shops/:locationId` | back | the shop's name. **Shop** while it loads | none |
 | `shops/:locationId/map` | back | Where things are | Walks |
@@ -262,11 +273,15 @@ for a product line, a shop and a walk. Reuse a key when one already says the wor
 ### 5.2 The list page
 
 - The list's name is the header's title, beside the back chevron.
-- **List settings becomes an icon button** in the header's actions: the `sliders` icon, which
-  is what the walks page uses for settings, with `list.settings.title` as its accessible
-  name. It shows under the same condition as today (`canManage`, and not while reordering).
-  Draw a gear in the mock beside it if the sliders glyph does not read as settings, and add
-  the gear to `icons.ts` only if the review picks it.
+- **List settings becomes an icon button** in the header's actions, with
+  `list.settings.title` as its accessible name. It shows under the same condition as today
+  (`canManage`, and not while reordering).
+- **The icon is a new gear.** The set has `sliders`, which the walks page uses for settings,
+  but here the button sits beside the filter button, and sliders beside a filter glyph read
+  as two filters. Add `lib-gear-icon` to `libs/velista/ui/src/lib/icons/icons.ts`, with its
+  SVG beside the others and drawn to the same grid and stroke. The walks page's mapping
+  settings button takes the gear too, so one glyph means settings in the whole app. `sliders`
+  stays in the set if something else still uses it, and goes if nothing does.
 - **The filter button moves into the header's actions**, with its count badge and its
   accessible names (`basket.view.open`, `basket.view.openCount`). It shows under the
   condition the tools row has today.
@@ -280,18 +295,52 @@ for a product line, a shop and a walk. Reuse a key when one already says the wor
   is the defect named in the brief: the header's height and the title's size must be the
   same before and after the list arrives.
 
-## 6. Two things the mock has to settle
+## 6. The basket page, and the catalog's quiet text
 
-1. **The basket page's actions.** It has no back button (`0111`), a history button at the
-   left, and up to four icon buttons at the right (map, people, share, finish). By H4 the
-   left end takes the basket icon, so history moves to the right and makes five. Five
-   targets, the icon and the padding leave about 100px for the title at 390px. The mock
-   draws this page and the review decides which actions stay in the header. The
-   recommendation is history, share and finish in the header, and map and people as the
-   first row of the content. Until that is decided, the basket page takes the new header
-   with its actions as they are, history included at the right.
-2. **The catalog's "near {{code}}" text.** It is a quiet text at the right of the head today.
-   It is not an action, so by H5 it leaves the header and joins the tools row under it.
+### 6.1 The basket page's actions
+
+The basket page (`shopping-lists/live` and `shopping-lists/:basketId`) has no back button
+(`0111`), a history button at the left, and up to four icon buttons at the right. Decided on
+2026-10-01:
+
+- **Left:** the basket icon, by H4. The history button leaves the left end.
+- **Right, in this order:** share, map, then a menu button (the ellipsis icon).
+- **The menu, in this order:**
+  1. People
+  2. History
+  3. Create your shopping list (**new**)
+  4. Finish
+
+Each of share, map, people, history and finish does what its button does today and shows
+under the condition it has today (`canOpenHistory()`, the `finish` option of
+`basketSheetRoutes`, and the others). A menu entry that is not allowed is absent. When the
+menu has no entry at all, the menu button is absent.
+
+**Create your shopping list** opens the sheet that the history page opens today:
+`GetListSheet`, on `sheet/get`, from `getListSheetRoutes` in `routes.ts`. That function is
+spread into `shopping-lists` and `shopping-lists/current` only, so:
+
+- spread it into both basket routes too, and widen `returnTo` so that Cancel lands on the
+  basket page the sheet was opened over. `returnTo` is a path and one of the two routes has
+  a parameter, so read how the sheet uses it before you choose the shape
+- reuse the words the history page's button already uses if they say this, else add a key
+  for "Create your shopping list" in both files
+- read what `GetListSheet` does when a basket is already live, and keep that behavior. If
+  it refuses, say so before you build the entry
+
+**The menu is a sheet**, a child route of the basket page named `more`, declared through
+`sheet()` inside `basketSheetRoutes` so that both basket routes get it. It draws one row per
+entry, with the entry's icon and its word. A row that opens another sheet leaves with
+`leaveTo`, so the menu is gone from the history and back from People lands on the basket.
+The History row navigates to the history page. The menu button's accessible name is a new
+key ("More").
+
+The mock draws the header with its three actions, and the menu sheet open.
+
+### 6.2 The catalog's "near {{code}}" text
+
+It is a quiet text at the right of the head today. It is not an action, so by H5 it leaves
+the header and joins the tools row under it.
 
 ## 7. What this changes in earlier plans
 
@@ -326,9 +375,12 @@ the folders keep describing the app.
      mock of the group page or the members page today, so this is their first
    - the list page, loaded and loading, with the two icon actions and the count badge
    - the account page and the picker page with Near me in the header
-   - the basket page with five actions, and with the recommended three
-   - a long title beside two actions, to show the ellipsis
-   - notes that state H1 to H6 and the two open points in section 6
+   - the basket page with share, map and the menu button, and the menu sheet open
+   - the title at both candidate sizes (section 2), on home and on the longest real titles,
+     with a long title beside two actions to show the ellipsis
+   - the gear beside the filter button, as on the list page
+   - notes that state H1 to H6 and the points the review must answer: the title's size, and
+     the place of the group's role and count
 2. **Redraw the header in the existing folders.** The artboards that draw one today:
    - the brand bar outside home: `assistant/AppBar`, `nav/Tabs`, `nav/Rules`,
      `shopping-lists/Home`, `shopping-lists/HomeNoList`
@@ -349,8 +401,8 @@ the folders keep describing the app.
    publish each `index.html` to that folder's existing URL. Never edit an `index.html` by
    hand. Add the `header/` row to `mocks/README.md`. `shop-map/` is published as a Design
    canvas and follows its own steps in that README.
-4. Stop for review. Write the review's answers to section 5.1 and section 6 into this plan
-   before any code.
+4. Stop for review. Write the review's answers to section 2 (the title's size) and section
+   5.1 into this plan before any code.
 
 ## 10. Build order
 
