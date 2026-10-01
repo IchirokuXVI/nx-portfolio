@@ -6,6 +6,7 @@ import {
   type AreaColour,
   type AreaKind,
   type MapArea,
+  type MapMark,
   type ShopMapDocumentV2,
   type WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -202,6 +203,95 @@ export function metresText(value: number, locale: string): string {
   }
 }
 
+/** A mark with a new text. Where it is, the way it points and when it was made stay. */
+export function retextedMark(mark: MapMark, text: string): MapMark {
+  return { ...mark, text: text.trim() };
+}
+
+/** The key of a mark's kind: "Section mark", "Counter mark" or "Note". */
+export function markKindKey(mark: Pick<MapMark, 'kind'>): string {
+  return `shopWalkRecord.where.kind.${mark.kind}`;
+}
+
+/** Whether two areas read the same, whatever order their keys were written in. */
+export function sameArea(a: MapArea, b: MapArea): boolean {
+  return (
+    a.id === b.id &&
+    a.kind === b.kind &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.w === b.w &&
+    a.h === b.h &&
+    a.section === b.section &&
+    a.label === b.label &&
+    a.origin === b.origin &&
+    sameColour(a.colour, b.colour)
+  );
+}
+
+/** Whether two marks read the same. */
+export function sameMark(a: MapMark, b: MapMark): boolean {
+  return (
+    a.id === b.id &&
+    a.kind === b.kind &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.heading === b.heading &&
+    a.text === b.text &&
+    a.logMs === b.logMs
+  );
+}
+
+/**
+ * The edits that change the map (velista `0129`, target 9): an `area-put`
+ * equal to the stored area, a `mark-put` equal to the stored mark and a removal
+ * of something that is not there are dropped, so a sheet saved with nothing
+ * changed, or an area dragged back to where it was, writes no history entry.
+ * Each edit is read against the map as the ones before it left it.
+ */
+export function changingEdits(
+  document: ShopMapDocumentV2,
+  events: readonly WalkEvent[]
+): WalkEvent[] {
+  const areas = new Map(document.areas.map((area) => [area.id, area]));
+  const marks = new Map(document.marks.map((mark) => [mark.id, mark]));
+  const kept: WalkEvent[] = [];
+  for (const event of events) {
+    switch (event.type) {
+      case 'area-put': {
+        const stored = areas.get(event.area.id);
+        if (stored !== undefined && sameArea(stored, event.area)) {
+          continue;
+        }
+        areas.set(event.area.id, event.area);
+        break;
+      }
+      case 'mark-put': {
+        const stored = marks.get(event.mark.id);
+        if (stored !== undefined && sameMark(stored, event.mark)) {
+          continue;
+        }
+        marks.set(event.mark.id, event.mark);
+        break;
+      }
+      case 'area-removed':
+        if (!areas.delete(event.id)) {
+          continue;
+        }
+        break;
+      case 'mark-removed':
+        if (!marks.delete(event.id)) {
+          continue;
+        }
+        break;
+      default:
+        break;
+    }
+    kept.push(event);
+  }
+  return kept;
+}
+
 /** Fold edits onto a map, as the server will. */
 export function applyEdits(
   document: ShopMapDocumentV2,
@@ -343,7 +433,11 @@ function darken(hex: string, amount: number): string {
 export interface MapEditSession {
   /** The map as edited so far. Null while the walk is read. */
   readonly document: Signal<ShopMapDocumentV2 | null>;
-  /** Apply edits to the map on screen and to what is saved. False when refused. */
+  /**
+   * Apply edits to the map on screen and to what is saved. False when refused.
+   * An edit that changes nothing is dropped and answers true: nothing was
+   * refused, and nothing is saved for it (velista `0129`).
+   */
   apply(events: readonly WalkEvent[]): boolean;
   /** Whether the area was drawn on this page, which ticks its category colour box. */
   isNew(areaId: string): boolean;

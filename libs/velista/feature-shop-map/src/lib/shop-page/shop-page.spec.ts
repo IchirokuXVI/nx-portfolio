@@ -51,12 +51,21 @@ describe('ShopPage', () => {
     expect(text(fixture, '.section-name')).toEqual(['Eggs']);
   });
 
-  it('leaves out the size, the map and the sections when the shop has none', async () => {
+  // Velista 0129, target 1: the map opens from every shop.
+  it('leaves out the size and the sections when the shop has none, and still offers the map', async () => {
     const { fixture } = await render('loc-centro');
+    const go = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+    go.mockResolvedValue(true);
 
     expect(text(fixture, '.fact-main')).toEqual(['Calle Gondomar 4']);
-    expect(text(fixture, '.see-map')).toEqual([]);
     expect(text(fixture, '.sections')).toEqual([]);
+    expect(text(fixture, '.see-map')).toEqual(['shopPage.seeMap']);
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('.see-map')
+      ?.click();
+
+    expect(go).toHaveBeenCalledWith('/en/shops/loc-centro/map');
   });
 
   it('opens the map with no basket', async () => {

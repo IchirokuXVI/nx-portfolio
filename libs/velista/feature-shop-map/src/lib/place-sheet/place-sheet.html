@@ -1,0 +1,37 @@
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="shop-place-title">
+  <div class="head">
+    <div class="head-text">
+      <h2 class="title" id="shop-place-title">
+        @if (area(); as area) {
+          {{ area.name ?? ('shopMap.place.kind.' + area.areaKind | rokuT) }}
+        } @else if (note()) {
+          {{ 'shopMap.place.note' | rokuT }}
+        } @else if (missing()) {
+          {{ 'shopMap.place.missing' | rokuT }}
+        }
+      </h2>
+      @if (area(); as area) {
+        @if (area.name !== null) {
+          <p class="detail">
+            {{ 'shopMap.place.kind.' + area.areaKind | rokuT }}
+          </p>
+        }
+      }
+    </div>
+    <!-- Through the shell, so Close plays the same fall the scrim and Escape do. -->
+    <button
+      (click)="shell.requestDismiss()"
+      [attr.aria-label]="'shopMap.section.close' | rokuT"
+      class="close"
+      type="button"
+    >
+      <lib-close-icon class="close-glyph" />
+    </button>
+  </div>
+
+  @if (note(); as note) {
+    <div class="note">
+      <p class="note-text">{{ note.text }}</p>
+    </div>
+  }
+</lib-sheet-shell>

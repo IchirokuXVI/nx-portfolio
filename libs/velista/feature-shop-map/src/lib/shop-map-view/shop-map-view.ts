@@ -20,7 +20,9 @@ import {
 import type {
   AreaKind,
   MapArea,
+  MapMark,
   ShopMapDocumentV2,
+  ShopperNote,
   WalkEntry,
   WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -33,7 +35,7 @@ import { ThemeStore } from '@portfolio/velista/platform';
  *
  * The canvas is framework free and draws nothing a person reads but the map, so
  * this is the whole of the Angular side: a sized host, the document, the badges,
- * and the tap on a section coming back out. Every colour it can take from
+ * and the taps coming back out. Every colour it can take from
  * velista's tokens is set on the host (see the stylesheet), and the theme is
  * velista's own, bound on the host, because the canvas would otherwise follow the
  * system's rather than the one somebody chose in the app.
@@ -78,10 +80,17 @@ export class ShopMapView {
   } | null>(null);
 
   /**
-   * A section's area was tapped: the name its area spells the section with.
-   * Named for what happened rather than `select`, which is a DOM event.
+   * Shopper looks: an area was tapped, of any kind but the walkway and what
+   * blocks it (velista `0129`, target 6). The page decides what opens. Named
+   * for what happened rather than `select`, which is a DOM event.
    */
-  readonly sectionTapped = output<string>();
+  readonly areaTapped = output<MapArea>();
+
+  /** Shopper looks: a note was tapped. */
+  readonly noteTapped = output<ShopperNote>();
+
+  /** Mapper look: a mark's pin was tapped (velista `0129`, target 3). */
+  readonly markTapped = output<MapMark>();
 
   /**
    * Mapper look (velista `0123`): whether a drawn or resized corner snaps to the
@@ -133,7 +142,9 @@ export class ShopMapView {
       this._handle = mountShopMap(this._canvas().nativeElement, {
         document: untracked(this.document),
         look: untracked(this.look),
-        onSection: (section) => this.sectionTapped.emit(section),
+        onArea: (area) => this.areaTapped.emit(area),
+        onNote: (note) => this.noteTapped.emit(note),
+        onMark: (mark) => this.markTapped.emit(mark),
         onChange: (events) => this.changed.emit(events),
         onSelect: (area) => this.areaSelected.emit(area),
         onLongPress: (at, area, client) =>
@@ -210,37 +221,6 @@ export class ShopMapView {
   /** Mapper look: drop the pressed square after a menu closed with no action. */
   clearHeld(): void {
     this._handle?.clearHeld();
-  }
-
-  /**
-   * Mapper look: which of the document's marks has its pin under a point of the
-   * screen, as an index into `document().marks`, or null. The canvas draws one pin
-   * per mark in the document's order and reports no tap on one, so the pins are
-   * found by what they draw (a round pin or a note square) and measured on screen.
-   * A pin counts within `reach` css pixels of its centre.
-   */
-  markAt(client: { x: number; y: number }, reach = 30): number | null {
-    const host = this._canvas().nativeElement;
-    const pins = Array.from(host.querySelectorAll('g')).filter((g) =>
-      g.firstElementChild?.matches('circle.sm-pin, rect.sm-note')
-    );
-    if (pins.length !== this.document().marks.length) {
-      return null;
-    }
-    let best: number | null = null;
-    let bestDistance = reach;
-    pins.forEach((pin, index) => {
-      const box = pin.getBoundingClientRect();
-      const distance = Math.hypot(
-        box.left + box.width / 2 - client.x,
-        box.top + box.height / 2 - client.y
-      );
-      if (distance <= bestDistance) {
-        best = index;
-        bestDistance = distance;
-      }
-    });
-    return best;
   }
 
   /** Fit the whole map in view again. */

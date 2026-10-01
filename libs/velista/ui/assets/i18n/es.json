@@ -2016,7 +2016,6 @@
     "all": "Todas las secciones",
     "legendLeft": "Por coger",
     "legendDone": "Todo cogido",
-    "legendWalkway": "Pasillo",
     "hint": "Toca una sección para ver lo que necesitas allí.",
     "hintAll": "Toca una sección para ver su nombre y sus notas.",
     "section": {
@@ -2030,6 +2029,16 @@
       "toGet": "Por coger",
       "note": "Nota en el mapa",
       "unknown": "Esta sección ya no está en el mapa"
+    },
+    "place": {
+      "note": "Nota en el mapa",
+      "missing": "Este sitio ya no está en el mapa",
+      "kind": {
+        "shelf": "Estantería",
+        "counter": "Mostrador",
+        "checkout": "Caja",
+        "entrance": "Entrada"
+      }
     }
   },
   "shopWalks": {
@@ -2040,7 +2049,6 @@
     "name": "Nombre",
     "list": {
       "title": "Recorridos",
-      "intro": "Los compradores ven el mapa de un recorrido. Abre un recorrido para ver su historial.",
       "empty": "Aún no hay recorridos. Empieza uno para hacer el mapa de esta tienda.",
       "missing": "No se ha encontrado esta tienda.",
       "failed": "Los recorridos no se han cargado",
@@ -2053,9 +2061,7 @@
       "entries_other": "{{count}} entradas",
       "marks_one": "{{count}} marca",
       "marks_other": "{{count}} marcas",
-      "settingsFor": "Ajustes de {{name}}",
-      "start": "Empezar un recorrido nuevo",
-      "startNote": "Un recorrido nuevo empieza con el mapa vacío."
+      "start": "Empezar un recorrido nuevo"
     },
     "mapping": {
       "title": "Ajustes del mapa",
@@ -2107,8 +2113,6 @@
       "noCamera": "Para seguir hace falta seguimiento con la cámara, y este navegador no lo tiene."
     },
     "settings": {
-      "title": "Ajustes del recorrido",
-      "shoppers": "Compradores",
       "show": "Mostrar este recorrido a los compradores",
       "showHint": "Una tienda muestra el mapa de un recorrido. Si lo activas, se ocultan los demás. Los compradores ven los cambios después de cada guardado.",
       "delete": "Borrar este recorrido",
@@ -2236,6 +2240,13 @@
       "waiting": "Esperando para guardar.",
       "ok": "Vale",
       "leave": "Salir sin guardar"
+    },
+    "mark": {
+      "save": "Guardar",
+      "delete": "Eliminar esta marca",
+      "deleteConfirm": "¿Eliminar esta marca?",
+      "missing": "Esta marca ya no está en el mapa.",
+      "unnamed": "Escribe primero un nombre. Para quitar la marca, pulsa Eliminar."
     }
   },
   "shopWalkRecord": {

@@ -1,7 +1,9 @@
 @use '../shop-map' as shop;
 @use '../walks';
 
-// A walk's history (velista 0122, the `History` board of `mocks/shop-map/`).
+// One walk (velista 0129): its name, the shoppers switch, the actions, its
+// history and Delete. Before 0129 the name, the switch and Delete were a page of
+// their own (the `History` and `WalkOptions` boards of `mocks/shop-map/`).
 
 :host {
   display: block;
@@ -34,18 +36,78 @@
   @include shop.title;
 }
 
-.subtitle {
-  @include shop.subtitle;
+.name {
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-4);
 }
 
-.icon-button {
-  @include walks.icon-button;
+.label {
+  display: block;
+  margin-block-end: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  font-weight: 700;
+  color: var(--app-text-secondary);
+}
+
+// Never under 16px, or iOS zooms the page when the field is focused.
+.field {
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: var(--app-button-height);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-field-radius);
+  background: var(--app-surface-sunken);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-field-font-size);
+
+  &:focus {
+    border-color: var(--app-action-bg);
+  }
+
+  @include walks.focus-ring;
+}
+
+.switch-row {
+  @include walks.switch-row;
+
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.switch-body {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.switch-title {
+  @include walks.switch-title;
+}
+
+.switch-hint {
+  @include walks.switch-hint;
+}
+
+.switch {
+  @include walks.switch;
+}
+
+// Always there, so the page does not jump when it speaks.
+.notice {
+  min-block-size: var(--app-space-6);
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
 }
 
 .actions {
   display: grid;
   gap: var(--app-space-3);
-  padding: var(--app-space-5) var(--app-space-5) var(--app-space-2);
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+}
+
+.group {
+  @include walks.group-heading;
 }
 
 .pair {
@@ -69,8 +131,27 @@
   color: var(--app-text-muted);
 }
 
+// Under "History", so it is quieter than the group heading above it.
 .day-name {
-  @include walks.group-heading;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5);
+  font-size: var(--app-text-sm);
+  font-weight: 650;
+  color: var(--app-text-secondary);
+}
+
+// After the last entry, and at the foot of the screen when the history is short.
+.foot {
+  margin-block-start: auto;
+  padding: var(--app-space-7) var(--app-space-5) 0;
+}
+
+// Outlined in the danger colour, and never the colour alone: it says what it does.
+.delete {
+  @include walks.secondary;
+
+  border-color: var(--app-status-danger-fg);
+  color: var(--app-status-danger-fg);
 }
 
 .entries {

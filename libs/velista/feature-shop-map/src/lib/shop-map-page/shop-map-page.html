@@ -53,7 +53,8 @@
     @case ('map') {
       @if (map(); as map) {
         <lib-shop-map-view
-          (sectionTapped)="openSection($event)"
+          (areaTapped)="openArea($event)"
+          (noteTapped)="openNote($event)"
           [badges]="badges()"
           [document]="map.document"
           [label]="'shopMap.label' | rokuT"
@@ -61,21 +62,21 @@
           look="shopper-drawn"
         />
 
-        <p class="legend">
-          @if (show() === 'mine') {
-            <span aria-hidden="true" class="badge">2</span>
-            <span>{{ 'shopMap.legendLeft' | rokuT }}</span>
-            <span aria-hidden="true" class="badge is-done">
-              <lib-check-icon class="badge-tick" />1
-            </span>
-            <span>{{ 'shopMap.legendDone' | rokuT }}</span>
-          }
-          <span aria-hidden="true" class="walkway"></span>
-          <span>{{ 'shopMap.legendWalkway' | rokuT }}</span>
-          @if (fromDevice()) {
-            <span class="saved">{{ 'shopMap.saved' | rokuT }}</span>
-          }
-        </p>
+        @if (show() === 'mine' || fromDevice()) {
+          <p class="legend">
+            @if (show() === 'mine') {
+              <span aria-hidden="true" class="badge">2</span>
+              <span>{{ 'shopMap.legendLeft' | rokuT }}</span>
+              <span aria-hidden="true" class="badge is-done">
+                <lib-check-icon class="badge-tick" />1
+              </span>
+              <span>{{ 'shopMap.legendDone' | rokuT }}</span>
+            }
+            @if (fromDevice()) {
+              <span class="saved">{{ 'shopMap.saved' | rokuT }}</span>
+            }
+          </p>
+        }
         <p class="hint">
           {{ (show() === 'mine' ? 'shopMap.hint' : 'shopMap.hintAll') | rokuT }}
         </p>

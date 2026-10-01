@@ -26,7 +26,6 @@ import {
   WalkHistoryPage,
 } from './walk-history-page';
 import { WalkRewindPage } from './walk-rewind-page';
-import { WalkSettingsPage } from './walk-settings-page';
 
 const SHOP = 'loc-tejares';
 const BASE = `/en/shops/${SHOP}/walks`;
@@ -82,18 +81,26 @@ describe('ShopWalksPage', () => {
     ]);
   });
 
-  it('opens a walk’s history, its settings, and the settings for every walk', async () => {
+  it('opens a walk from its row, and the settings for every walk from the bar', async () => {
     const { fixture, navigate } = await render(ShopWalksPage);
 
     click(fixture, '.walk-main');
-    click(fixture, '.walk .icon-button');
     click(fixture, '.bar .icon-button');
 
     expect(navigate.mock.calls.map(([url]) => url)).toEqual([
       `${BASE}/${MEMORY_SHOWN_WALK_ID}`,
-      `${BASE}/${MEMORY_SHOWN_WALK_ID}/settings`,
       `${BASE}/settings`,
     ]);
+  });
+
+  // Velista 0129, targets 7 and 8.
+  it('draws no sentence above the list, no note under the button and no button on a row', async () => {
+    const { fixture } = await render(ShopWalksPage);
+
+    expect(all(fixture, '.intro')).toEqual([]);
+    expect(all(fixture, '.foot-note')).toEqual([]);
+    expect(all(fixture, '.walk button')).toEqual([]);
+    expect(all(fixture, '.foot button')).toEqual(['shopWalks.list.start']);
   });
 
   it('asks for a new walk’s name in a sheet over the list', async () => {
@@ -236,8 +243,98 @@ describe('historyRowView', () => {
   });
 });
 
-/** Velista `0122`, target 3: a walk's history. */
+/** Velista `0122`, target 3, and `0129`, target 8: one page per walk. */
 describe('WalkHistoryPage', () => {
+  it('holds everything about the walk, in the order somebody needs it', async () => {
+    const { fixture } = await render(WalkHistoryPage);
+    const order = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '.field, .switch, .actions, .entries, .delete'
+      )
+    ).map((node) => node.className.split(' ')[0]);
+
+    expect(order[0]).toBe('field');
+    expect(order[1]).toBe('switch');
+    expect(order[2]).toBe('actions');
+    expect(order[3]).toBe('entries');
+    expect(order[order.length - 1]).toBe('delete');
+    expect(all(fixture, '.switch-hint')).toEqual([
+      'shopWalks.settings.showHint',
+    ]);
+    // No button for a settings page: there is none any more.
+    expect(all(fixture, '.bar .icon-button')).toEqual([]);
+  });
+
+  it('renames the walk when the field is left, and says so', async () => {
+    const { fixture, walks } = await render(WalkHistoryPage);
+    const field = (fixture.nativeElement as HTMLElement).querySelector(
+      '.field'
+    ) as HTMLInputElement;
+    expect(field.value).toBe('Autumn layout');
+
+    field.value = 'Winter';
+    field.dispatchEvent(new Event('input'));
+    await (fixture.componentInstance as WalkHistoryPage).saveName();
+    fixture.detectChanges();
+
+    const read = await walks.walk(MEMORY_SHOWN_WALK_ID);
+    expect(read.kind === 'walk' && read.detail.walk.name).toBe('Winter');
+    expect(all(fixture, '.notice')).toEqual([
+      'shopWalks.settings.notice.renamed',
+    ]);
+    expect(all(fixture, '.title')).toEqual(['Winter']);
+  });
+
+  it('saves a changed name when the page goes away with no blur', async () => {
+    const { fixture, walks } = await render(WalkHistoryPage);
+    const field = (fixture.nativeElement as HTMLElement).querySelector(
+      '.field'
+    ) as HTMLInputElement;
+
+    field.value = 'Left by the chevron';
+    field.dispatchEvent(new Event('input'));
+    fixture.destroy();
+    await settle(() => undefined);
+
+    const read = await walks.walk(MEMORY_SHOWN_WALK_ID);
+    expect(read.kind === 'walk' && read.detail.walk.name).toBe(
+      'Left by the chevron'
+    );
+  });
+
+  it('shows another walk to shoppers from its switch, and says so', async () => {
+    const { fixture, walks } = await render(WalkHistoryPage, {
+      params: { locationId: SHOP, walkId: MEMORY_OTHER_WALK_ID },
+    });
+    const box = (fixture.nativeElement as HTMLElement).querySelector(
+      '.switch'
+    ) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+
+    box.checked = true;
+    await (fixture.componentInstance as WalkHistoryPage).setShown({
+      target: box,
+    } as unknown as Event);
+    fixture.detectChanges();
+
+    const list = await walks.list(SHOP);
+    expect(
+      list.kind === 'walks' &&
+        list.walks.filter((walk) => walk.shown).map((walk) => walk.id)
+    ).toEqual([MEMORY_OTHER_WALK_ID]);
+    expect(all(fixture, '.notice')).toEqual([
+      'shopWalks.settings.notice.shown',
+    ]);
+  });
+
+  it('asks before deleting, in a sheet over the walk', async () => {
+    const { fixture, navigateTo } = await render(WalkHistoryPage);
+
+    click(fixture, '.delete');
+
+    expect(navigateTo.mock.calls[0][0]).toEqual(['sheet', 'delete']);
+  });
+
   it('names the walk and draws its sessions, not its saves', async () => {
     const { fixture } = await render(WalkHistoryPage);
 
@@ -262,12 +359,10 @@ describe('WalkHistoryPage', () => {
     ]);
     click(fixture, '.actions .secondary');
     click(fixture, '.actions .edit-map');
-    click(fixture, '.bar .icon-button');
 
     expect(navigate.mock.calls.map(([url]) => url)).toEqual([
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/rewind`,
       `${BASE}/${MEMORY_SHOWN_WALK_ID}/edit`,
-      `${BASE}/${MEMORY_SHOWN_WALK_ID}/settings`,
     ]);
   });
 
@@ -333,6 +428,24 @@ describe('WalkRewindPage', () => {
     expect(primary?.getAttribute('aria-disabled')).toBe('true');
   });
 
+  // Velista 0129, target 9: the end of the log is now, and going there is no change.
+  it('appends nothing when asked to continue from the end of the log', async () => {
+    const { fixture, walks } = await render(WalkRewindPage);
+    const range = (fixture.nativeElement as HTMLElement).querySelector(
+      '.range'
+    ) as HTMLInputElement;
+
+    // The slider's top is a whole step at or past the end.
+    range.value = range.max;
+    range.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    click(fixture, '.primary');
+    await (fixture.componentInstance as WalkRewindPage).continueHere();
+
+    expect(all(fixture, '.primary')).toEqual(['shopWalks.rewind.pick']);
+    expect(walks.appended).toEqual([]);
+  });
+
   it('draws a tick for every entry and a button for every history row', async () => {
     const { fixture } = await render(WalkRewindPage);
 
@@ -385,71 +498,18 @@ describe('WalkRewindPage', () => {
   });
 });
 
-/** Velista `0122`, target 5: a walk's settings. */
-describe('WalkSettingsPage', () => {
-  it('renames the walk when the field is left', async () => {
-    const { fixture, walks } = await render(WalkSettingsPage);
-    const field = (fixture.nativeElement as HTMLElement).querySelector(
-      '.field'
-    ) as HTMLInputElement;
-    expect(field.value).toBe('Autumn layout');
+describe('DeleteWalkSheet', () => {
+  // Velista 0129: the sheet sits over the walk's page, not over its settings.
+  it('falls back to the walk’s page when it is dismissed on a cold load', async () => {
+    const { fixture, sheets } = await render(DeleteWalkSheet);
 
-    field.value = 'Winter';
-    field.dispatchEvent(new Event('input'));
-    await (fixture.componentInstance as WalkSettingsPage).saveName();
+    await (fixture.componentInstance as DeleteWalkSheet).dismiss();
 
-    const read = await walks.walk(MEMORY_SHOWN_WALK_ID);
-    expect(read.kind === 'walk' && read.detail.walk.name).toBe('Winter');
-  });
-
-  it('saves a changed name when the page goes away with no blur', async () => {
-    const { fixture, walks } = await render(WalkSettingsPage);
-    const field = (fixture.nativeElement as HTMLElement).querySelector(
-      '.field'
-    ) as HTMLInputElement;
-
-    field.value = 'Left by the chevron';
-    field.dispatchEvent(new Event('input'));
-    fixture.destroy();
-    await settle(() => undefined);
-
-    const read = await walks.walk(MEMORY_SHOWN_WALK_ID);
-    expect(read.kind === 'walk' && read.detail.walk.name).toBe(
-      'Left by the chevron'
+    expect(sheets.dismiss).toHaveBeenCalledWith(
+      `${BASE}/${MEMORY_SHOWN_WALK_ID}`
     );
   });
 
-  it('shows another walk to shoppers from its switch', async () => {
-    const { fixture, walks } = await render(WalkSettingsPage, {
-      params: { locationId: SHOP, walkId: MEMORY_OTHER_WALK_ID },
-    });
-    const box = (fixture.nativeElement as HTMLElement).querySelector(
-      '.switch'
-    ) as HTMLInputElement;
-    expect(box.checked).toBe(false);
-
-    box.checked = true;
-    await (fixture.componentInstance as WalkSettingsPage).setShown({
-      target: box,
-    } as unknown as Event);
-
-    const list = await walks.list(SHOP);
-    expect(
-      list.kind === 'walks' &&
-        list.walks.filter((walk) => walk.shown).map((walk) => walk.id)
-    ).toEqual([MEMORY_OTHER_WALK_ID]);
-  });
-
-  it('asks before deleting, in a sheet', async () => {
-    const { fixture, navigateTo } = await render(WalkSettingsPage);
-
-    click(fixture, '.delete');
-
-    expect(navigateTo.mock.calls[0][0]).toEqual(['sheet', 'delete']);
-  });
-});
-
-describe('DeleteWalkSheet', () => {
   it('deletes the walk and leaves for the list', async () => {
     const { fixture, sheets, walks } = await render(DeleteWalkSheet, {
       params: { locationId: SHOP, walkId: MEMORY_OTHER_WALK_ID },

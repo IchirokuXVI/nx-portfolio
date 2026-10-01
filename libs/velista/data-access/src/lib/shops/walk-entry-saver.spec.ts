@@ -263,4 +263,59 @@ describe('WalkEntrySaver', () => {
       'continued',
     ]);
   });
+
+  // Velista 0129, target 9: time that passed with nothing made is not an entry.
+  describe('a visit with no change', () => {
+    it('opens nothing for no events, whatever the log time given', async () => {
+      const { memory, saver, logTo } = await harness();
+
+      saver.add([], logTo + 5000);
+      saver.add([]);
+
+      expect(saver.unsent()).toBe(false);
+      expect(saver.status()).toBe('idle');
+      expect(saver.logEnd()).toBe(logTo);
+      expect(await saver.save()).toBe('nothing');
+      expect(memory.appended).toEqual([]);
+    });
+
+    it('moves the end of an entry that is open, and only forward', async () => {
+      const { memory, saver, logTo } = await harness();
+
+      saver.add([put('c-1')], logTo + 1000);
+      saver.add([], logTo + 3000);
+      saver.add([], logTo + 2000);
+      await saver.save();
+
+      expect(
+        memory.appended.map((entry) => [entry.logFrom, entry.logTo])
+      ).toEqual([[logTo, logTo + 3000]]);
+      expect(memory.appended[0].events).toEqual([put('c-1')]);
+    });
+
+    it('says whether the entry openNext named was opened, and forgets it when told', async () => {
+      const { memory, saver, lastSeq, logTo } = await harness();
+      saver.begin({
+        walkId: WALK,
+        baseSeq: lastSeq,
+        logTo,
+        kind: 'resumed',
+        thenKind: 'continued',
+      });
+      expect(saver.nextWaits()).toBe(false);
+
+      saver.openNext('resumed');
+      expect(saver.nextWaits()).toBe(true);
+      // A session that added nothing: its kind is dropped, and nothing is unsent.
+      saver.dropNext();
+      expect(saver.nextWaits()).toBe(false);
+      expect(saver.unsent()).toBe(false);
+
+      saver.openNext('resumed');
+      saver.add([put('c-1')]);
+      expect(saver.nextWaits()).toBe(false);
+      await saver.save();
+      expect(memory.appended.map((entry) => entry.kind)).toEqual(['resumed']);
+    });
+  });
 });

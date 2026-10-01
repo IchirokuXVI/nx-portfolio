@@ -66,7 +66,9 @@ const handle = mountShopMap($<HTMLElement>('#map'), {
       `Long press at ${at.x}, ${at.y}${area ? ` on ${area.section ?? area.kind}` : ''}`
     ),
   onSuggestion: (id) => say(`Suggestion ${id}`),
-  onSection: (section) => say(`Section ${section}`),
+  onMark: (mark) => say(`Mark ${mark.text || mark.kind}`),
+  onArea: (area) => say(`Area ${area.section ?? area.label ?? area.kind}`),
+  onNote: (note) => say(`Note ${note.text}`),
 });
 
 // Badges from the walk order: the first sections still to get, two done.
@@ -89,7 +91,8 @@ function setCompare(on: boolean) {
     second = mountShopMap($<HTMLElement>('#map2'), {
       document: baseDocument,
       look: 'shopper-drawn',
-      onSection: (section) => say(`Section ${section} (drawn)`),
+      onArea: (area) =>
+        say(`Area ${area.section ?? area.label ?? area.kind} (drawn)`),
     });
     second.setBadges(badges);
     setLook('shopper');

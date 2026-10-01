@@ -1,0 +1,63 @@
+<lib-sheet-shell (dismiss)="dismiss()" #shell labelledBy="mark-edit-title">
+  @if (mark(); as mark) {
+    <h2 class="title" id="mark-edit-title">{{ kindKey() | rokuT }}</h2>
+
+    <form (submit)="save($event)" class="rename-form">
+      <label class="field-label" for="mark-edit-text">{{
+        labelKey() | rokuT
+      }}</label>
+      <input
+        (input)="typed($event)"
+        [attr.aria-describedby]="unnamed() ? 'mark-edit-unnamed' : null"
+        [attr.aria-invalid]="unnamed()"
+        [attr.maxlength]="maxLength"
+        [value]="text()"
+        autocomplete="off"
+        class="field"
+        enterkeyhint="done"
+        id="mark-edit-text"
+        type="text"
+      />
+      @if (unnamed()) {
+        <p class="field-error" id="mark-edit-unnamed" role="alert">
+          {{ 'shopMapEdit.mark.unnamed' | rokuT }}
+        </p>
+      }
+      <div class="form-actions">
+        <button (click)="shell.requestDismiss()" class="quiet" type="button">
+          {{ 'shopMapEdit.cancel' | rokuT }}
+        </button>
+        <button class="save" type="submit">
+          {{ 'shopMapEdit.mark.save' | rokuT }}
+        </button>
+      </div>
+    </form>
+
+    @if (!confirming()) {
+      <button (click)="askDelete()" class="delete" type="button">
+        {{ 'shopMapEdit.mark.delete' | rokuT }}
+      </button>
+    } @else {
+      <div class="confirm" role="alert">
+        <p class="confirm-text">
+          {{ 'shopMapEdit.mark.deleteConfirm' | rokuT }}
+        </p>
+        <div class="form-actions">
+          <button (click)="keep()" class="quiet" type="button">
+            {{ 'shopMapEdit.area.keep' | rokuT }}
+          </button>
+          <button (click)="remove()" class="danger" type="button">
+            {{ 'shopMapEdit.area.deleteYes' | rokuT }}
+          </button>
+        </div>
+      </div>
+    }
+  } @else {
+    <h2 class="title" id="mark-edit-title">
+      {{ 'shopMapEdit.mark.missing' | rokuT }}
+    </h2>
+    <button (click)="shell.requestDismiss()" class="quiet" type="button">
+      {{ 'shopMapEdit.close' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

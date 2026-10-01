@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
@@ -16,6 +17,7 @@ import type { WalkEntry } from '@portfolio/luna-shopper/shop-map/model';
 import { ShopWalksStore } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  SHOP_WALK_NAME_MAX_LENGTH,
   shopWalkHistory,
   type ShopWalkHistoryRow,
 } from '@portfolio/velista/models';
@@ -29,7 +31,7 @@ import {
   WALK_SENSORS,
   walkIdOf,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon, EllipsisIcon } from '@portfolio/velista/ui';
+import { ChevronLeftIcon } from '@portfolio/velista/ui';
 import {
   clockText,
   dayKey,
@@ -37,6 +39,15 @@ import {
   minutesOf,
   type DayName,
 } from './walk-text';
+
+/** What the page last said about a write, for its live region. */
+export type WalkNotice =
+  | 'renamed'
+  | 'renameFailed'
+  | 'shown'
+  | 'hidden'
+  | 'showFailed'
+  | null;
 
 /** A phrase: a key and what it interpolates. */
 export interface WalkPhrase {
@@ -165,10 +176,18 @@ export function historyDays(
 }
 
 /**
- * A walk's history (velista `0122`, target 3; the `History` board): the walk's
- * name with "History" under it, Rewind, and every entry newest first, grouped by
- * day, with the newest marked "Latest". A walking session is one row, however
- * many 20 s saves it made (see `shopWalkHistory`).
+ * One walk (velista `0129`, target 8; before it, the `History` and
+ * `WalkOptions` boards of velista `0122` were two pages). In this order: the
+ * name in a field, "Show this walk to shoppers" with the sentence that says what
+ * it does, Rewind, Edit map and Resume walking, every entry of the history
+ * newest first, grouped by day, with the newest marked "Latest", and "Delete
+ * this walk" at the foot, which asks in a sheet. A walking session is one row,
+ * however many 20 s saves it made (see `shopWalkHistory`).
+ *
+ * The name is saved when the field is left or Go is pressed, and only when it
+ * changed: there is no Save button to forget. It is saved when the page goes
+ * away too, because on iOS Safari the back chevron does not take the focus out
+ * of the field, so no blur ever comes.
  *
  * Edit map opens the edit page of velista `0123` (`walks/:walkId/edit`). Resume
  * walking opens the recording page of velista `0126` (`walks/:walkId/record`),
@@ -179,7 +198,7 @@ export function historyDays(
  */
 @Component({
   selector: 'lib-walk-history-page',
-  imports: [ChevronLeftIcon, EllipsisIcon, RokuTranslatorPipe, RouterOutlet],
+  imports: [ChevronLeftIcon, RokuTranslatorPipe, RouterOutlet],
   templateUrl: './walk-history-page.html',
   styleUrl: './walk-history-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -200,12 +219,22 @@ export class WalkHistoryPage {
   /** Whether this browser can record: null until it answered. */
   protected readonly canRecord = signal<boolean | null>(null);
 
-  protected readonly name = computed(() => {
-    const read = this.read();
-    return read.kind === 'walk'
-      ? read.detail.walk.name
-      : (this._walks.summary(this.walkId())?.name ?? null);
-  });
+  /** The walk as whatever has been read holds it: its name, and whether it is shown. */
+  protected readonly walk = computed(() => this._walks.summary(this.walkId()));
+
+  protected readonly name = computed(() => this.walk()?.name ?? null);
+
+  protected readonly maxLength = SHOP_WALK_NAME_MAX_LENGTH;
+
+  /** What is in the field. Null until somebody types, so it follows the walk until then. */
+  private readonly _typed = signal<string | null>(null);
+  protected readonly typed = computed(
+    () => this._typed() ?? this.walk()?.name ?? ''
+  );
+
+  /** True while the shoppers switch is being saved. */
+  protected readonly busy = signal(false);
+  protected readonly notice = signal<WalkNotice>(null);
 
   /** The log's events by entry id, once read, for the counts of the rows. */
   private readonly _events = computed<ReadonlyMap<string, WalkEntry> | null>(
@@ -242,6 +271,65 @@ export class WalkHistoryPage {
         void this._walks.loadLog(walkId);
       });
     });
+
+    inject(DestroyRef).onDestroy(() => void this.saveName());
+  }
+
+  protected onTyped(event: Event): void {
+    this._typed.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onSubmit(event: Event): void {
+    event.preventDefault();
+    (event.target as HTMLFormElement)
+      .querySelector<HTMLInputElement>('input')
+      ?.blur();
+  }
+
+  /** The field was left: save the name when it changed and is a name. */
+  async saveName(): Promise<void> {
+    const walk = this.walk();
+    const name = this.typed().trim();
+    if (walk === null || name === '' || name === walk.name) {
+      this._typed.set(null);
+      return;
+    }
+    const outcome = await this._walks.rename(walk.id, name);
+    if (outcome.state === 'failed') {
+      this.notice.set('renameFailed');
+      return;
+    }
+    this._typed.set(null);
+    this.notice.set('renamed');
+  }
+
+  async setShown(event: Event): Promise<void> {
+    const box = event.target as HTMLInputElement;
+    const walk = this.walk();
+    if (walk === null || this.busy()) {
+      box.checked = walk?.shown ?? false;
+      return;
+    }
+    const shown = box.checked;
+    this.busy.set(true);
+    try {
+      const outcome = await this._walks.setShown(walk.id, shown);
+      if (outcome.state === 'failed') {
+        // A controlled checkbox does not move back by itself.
+        box.checked = walk.shown;
+        this.notice.set('showFailed');
+        return;
+      }
+      this.notice.set(shown ? 'shown' : 'hidden');
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected askDelete(): void {
+    void this._router.navigate(sheetSegments(SHOP_PATHS.deleteWalk), {
+      relativeTo: this._route,
+    });
   }
 
   protected rewind(): void {
@@ -268,10 +356,6 @@ export class WalkHistoryPage {
     void this._router.navigateByUrl(this._path('record'));
   }
 
-  protected openSettings(): void {
-    void this._router.navigateByUrl(this._path('settings'));
-  }
-
   protected retry(): void {
     void this._walks.loadWalk(this.walkId());
     void this._walks.loadLog(this.walkId());
@@ -283,7 +367,7 @@ export class WalkHistoryPage {
     );
   }
 
-  private _path(page: 'rewind' | 'settings' | 'edit' | 'record'): string {
+  private _path(page: 'rewind' | 'edit' | 'record'): string {
     return shopWalkPath(
       this._locale(),
       this._basePath,

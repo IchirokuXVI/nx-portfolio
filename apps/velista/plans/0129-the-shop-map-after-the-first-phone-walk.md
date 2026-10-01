@@ -1,3 +1,5 @@
+> **PR:** [#585](https://github.com/IchirokuXVI/nx-portfolio/pull/585)
+
 # 0129: the shop map after the first phone walk
 
 > Asked for on 2026-10-01, after the owner used the shop map series (velista `0121` to
