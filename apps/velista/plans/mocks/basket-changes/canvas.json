@@ -1,6 +1,6 @@
 {
   "title": "Velista: what changed while you were not looking",
-  "lede": "The design for plan <code>0093</code>: a basket follows its lists now, so a line can appear, ask for a different amount, take another name or leave while somebody is halfway down an aisle. A mark on the row, a disabled row where a line left, a banner that counts what is new, and a sheet that tells each change in words. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for plan <code>0093</code>: a basket follows its lists now, so a line can appear, ask for a different amount, take another name or leave while somebody is halfway down an aisle. A mark on the row, a disabled row where a line left, a banner that counts what is new, and a sheet that tells each change in words. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     {
       "file": "Marks.dc.html",

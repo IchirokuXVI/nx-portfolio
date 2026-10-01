@@ -1,13 +1,14 @@
-<main class="page">
-  <button
-    (click)="back()"
-    [attr.aria-label]="'install.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
+<!--
+  The one header (velista `0130`), outside the scroller so it never scrolls away. Its
+  title is what each branch below used to say in an `h1` of its own.
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'install.back' | rokuT"
+  [title]="title() | rokuT"
+/>
 
+<main class="page">
   @if (mounted) {
     <!--
       D5. Under the portfolio's shell the document, the manifest and the service worker
@@ -17,7 +18,6 @@
     -->
     <lib-brand-mark class="mark" />
 
-    <h1 class="title">{{ 'install.elsewhere.title' | rokuT }}</h1>
     <p class="lede">
       {{ 'install.elsewhere.body' | rokuT: { origin: originLabel() } }}
     </p>
@@ -32,9 +32,6 @@
 
     <lib-brand-mark class="mark" />
 
-    <h1 class="title">
-      {{ (installed ? 'install.installed.title' : 'install.title') | rokuT }}
-    </h1>
     <p class="lede">
       {{ (installed ? 'install.installed.body' : 'install.body') | rokuT }}
     </p>

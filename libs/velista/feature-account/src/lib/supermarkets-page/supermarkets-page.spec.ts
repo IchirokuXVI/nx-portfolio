@@ -500,10 +500,42 @@ describe('SupermarketsPage', () => {
   it('goes back to the profiles page, which is the fallback a deep link needs', async () => {
     const { fixture, pages } = await render();
 
-    query<HTMLButtonElement>(fixture, '.back')?.click();
+    const control = query<HTMLButtonElement>(fixture, 'lib-page-header .lead');
+    expect(control?.getAttribute('aria-label')).toBe('account.back');
+
+    control?.click();
     await settle(fixture);
 
     expect(pages.back).toHaveBeenCalledWith('/en/account/profiles');
+  });
+
+  /**
+   * The one header (velista `0130`). The brand bar is home's, so this page draws a
+   * back control and its title and nothing else, and the title is the page's only `h1`.
+   */
+  it('draws its title in the header, outside the scroller, with no brand bar', async () => {
+    const { fixture } = await render();
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+      'shops.title'
+    );
+    expect(root.querySelectorAll('h1')).toHaveLength(1);
+    expect(query(fixture, 'lib-app-bar')).toBeNull();
+    expect(query(fixture, 'lib-page-header .actions button')).toBeNull();
+    expect(query(fixture, 'main lib-page-header')).toBeNull();
+    expect(query(fixture, 'main')?.previousElementSibling?.tagName).toBe(
+      'LIB-PAGE-HEADER'
+    );
+  });
+
+  it('draws the header for a profile it cannot find, which is a state with no data', async () => {
+    const { fixture } = await render({ profileId: 'sp-gone' });
+
+    expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+      'shops.title'
+    );
+    expect(query(fixture, 'lib-page-header .lead')).not.toBeNull();
   });
 
   it('says a profile it cannot find is not there, rather than drawing an empty screen', async () => {

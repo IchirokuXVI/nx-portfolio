@@ -14,6 +14,7 @@ import {
   fakeCategoryStore,
   MEMORY_CATEGORIES,
   provideFakeCategoryStore,
+  type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import {
   PageNavigation,
@@ -29,7 +30,11 @@ async function settle(fixture: ComponentFixture<unknown>): Promise<void> {
   fixture.detectChanges();
 }
 
-async function render(parentSlug: string, current: string | null = null) {
+async function render(
+  parentSlug: string,
+  current: string | null = null,
+  tree: FakeCategoryStore = fakeCategoryStore(MEMORY_CATEGORIES)
+) {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
   const params = convertToParamMap({ parentSlug });
@@ -42,7 +47,7 @@ async function render(parentSlug: string, current: string | null = null) {
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideRouter([]),
-      provideFakeCategoryStore(fakeCategoryStore(MEMORY_CATEGORIES)),
+      provideFakeCategoryStore(tree),
       {
         provide: ActivatedRoute,
         useValue: {
@@ -75,9 +80,11 @@ describe('CategoryChildrenPage (velista 0119)', () => {
     const { fixture } = await render('dairy-and-eggs');
     const host = fixture.nativeElement as HTMLElement;
 
-    expect(host.querySelector('.head h1')?.textContent).toContain(
+    expect(host.querySelector('lib-page-header h1')?.textContent).toContain(
       'Dairy and eggs'
     );
+    expect(host.querySelectorAll('h1')).toHaveLength(1);
+    expect(host.querySelector('lib-page-header .actions button')).toBeNull();
     const [everything, children] = cards(fixture);
 
     expect(everything?.map((link) => link.textContent?.trim())).toEqual([
@@ -92,6 +99,21 @@ describe('CategoryChildrenPage (velista 0119)', () => {
       '/velista/en/catalog?category=yogurts-and-desserts',
       '/velista/en/catalog?category=eggs',
     ]);
+  });
+
+  it('titles the header Categories while the tree is on its way, never an empty title', async () => {
+    const { fixture } = await render(
+      'dairy-and-eggs',
+      null,
+      fakeCategoryStore()
+    );
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('lib-page-header h1')?.textContent?.trim()).toBe(
+      'catalog.categories.title'
+    );
+    expect(host.querySelector('lib-page-header button.lead')).not.toBeNull();
+    expect(host.querySelectorAll('.bone').length).toBeGreaterThan(0);
   });
 
   it('marks the leaf the tab is narrowed to, when the chip reopened it', async () => {
@@ -111,7 +133,7 @@ describe('CategoryChildrenPage (velista 0119)', () => {
   it('goes back one step, with the catalog tab as the fallback', async () => {
     const { fixture, pages } = await render('pantry');
     const back = (fixture.nativeElement as HTMLElement).querySelector(
-      'button.back'
+      'lib-page-header button.lead'
     );
 
     expect(back?.getAttribute('aria-label')).toBe(

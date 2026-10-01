@@ -15,6 +15,7 @@
       "pending": "PENDING"
     },
     "detail": {
+      "title": "Group",
       "back": "Back",
       "loading": "Loading this group",
       "lists": "Lists",
@@ -22,6 +23,7 @@
       "newList": "New list",
       "settings": "Group settings",
       "stale": "Not updating live right now",
+      "waiting": "{{count}} waiting to join",
       "empty": {
         "title": "No lists yet",
         "body": "Start one and everyone here can shop from it"
@@ -122,6 +124,7 @@
     }
   },
   "line": {
+    "title": "Product",
     "indicator": {
       "bought": "Bought",
       "notAvailable": "Not in the shop last time",
@@ -511,6 +514,7 @@
   },
   "list": {
     "header": {
+      "title": "List",
       "inGroup": "in {{name}}",
       "pending": "{{pending}} of {{total}} pending",
       "done": "Nothing left",
@@ -1203,6 +1207,13 @@
     "failed": "This list would not load",
     "retry": "Try again",
     "openHistory": "History",
+    "more": {
+      "open": "More",
+      "title": "More",
+      "people": "People",
+      "create": "Create your shopping list",
+      "finish": "Finish"
+    },
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",
@@ -1470,7 +1481,6 @@
       "cancel": "Keep it"
     },
     "finish": {
-      "open": "Finish shopping",
       "prompt": "All done. Finish shopping?",
       "action": "Finish shopping",
       "title": "Finish shopping?",
@@ -1990,6 +2000,7 @@
     }
   },
   "shopPage": {
+    "loadingTitle": "Shop",
     "back": "Back",
     "loading": "Loading the shop",
     "failed": "This shop would not load",

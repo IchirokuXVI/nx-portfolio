@@ -24,9 +24,9 @@ import {
 import {
   AppVersion,
   BrandMark,
-  ChevronLeftIcon,
   InstallBenefits,
   InstallPanel,
+  PageHeader,
 } from '@portfolio/velista/ui';
 
 /**
@@ -66,9 +66,9 @@ import {
     RokuTranslatorPipe,
     AppVersion,
     BrandMark,
-    ChevronLeftIcon,
     InstallBenefits,
     InstallPanel,
+    PageHeader,
   ],
   templateUrl: './install-page.html',
   styleUrl: './install-page.scss',
@@ -106,6 +106,21 @@ export class InstallPage {
    * announcing a button that was simply there.
    */
   readonly announced = signal<string | null>(null);
+
+  /**
+   * The header's title, as a key: what each branch of the page says it is.
+   *
+   * Mounted beats the store's state, as it does in the template, because under the
+   * portfolio's shell nothing the store reports is about this document (D5).
+   */
+  readonly title = computed(() => {
+    if (this.mounted) {
+      return 'install.elsewhere.title';
+    }
+    return this._install.state() === 'installed'
+      ? 'install.installed.title'
+      : 'install.title';
+  });
 
   /** The address without its scheme, which is how a person says it out loud. */
   readonly originLabel = computed(() =>

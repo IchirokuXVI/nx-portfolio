@@ -172,9 +172,31 @@ describe('BasketCurrentPage', () => {
         fakeBasketListStore([], { state: 'loading' })
       );
 
-      (query(fixture, '.bar .history') as HTMLButtonElement).click();
+      const history = query(
+        fixture,
+        'lib-page-header button.history'
+      ) as HTMLButtonElement;
+      expect(history.getAttribute('aria-label')).toBe('basket.openHistory');
+
+      history.click();
 
       expect(go).toHaveBeenCalledWith('/en/shopping-lists');
+    });
+
+    it('draws the one header, with the tab’s icon and no way back', async () => {
+      // Velista 0130: the header never waits for the listing (H6), and a tab has
+      // nothing to go back to, so its left end holds the icon (H4).
+      const fixture = await render(
+        fakeBasketListStore([], { state: 'loading' })
+      );
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'nav.basket'
+      );
+      expect(query(fixture, 'lib-page-header button.lead')).toBeNull();
+      expect(
+        query(fixture, 'lib-page-header lib-basket-icon[pageHeaderIcon]')
+      ).not.toBeNull();
     });
   });
 

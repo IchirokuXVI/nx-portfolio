@@ -53,7 +53,7 @@ import {
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
-  ChevronLeftIcon,
+  PageHeader,
   SimilarProducts,
   SuggestionList,
 } from '@portfolio/velista/ui';
@@ -94,7 +94,7 @@ import { selectLinePage } from './select-line-page';
     NgTemplateOutlet,
     RouterOutlet,
     RokuTranslatorPipe,
-    ChevronLeftIcon,
+    PageHeader,
     SimilarProducts,
     SuggestionList,
   ],

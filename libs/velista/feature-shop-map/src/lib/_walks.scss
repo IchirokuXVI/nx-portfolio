@@ -1,5 +1,5 @@
 // The furniture the walks screens share (velista 0122, the "Walks and their
-// history" boards of `mocks/shop-map/`): the icon button in the bar, the small
+// history" boards of `mocks/shop-map/`): the round icon button, the small
 // heading above a group, a row with a switch, the two button weights, and what a
 // sheet puts inside `SheetShell`. Mixins and not components, for the reason
 // `_shop-map.scss` gives; the sheet half repeats `feature-account`'s
@@ -12,7 +12,8 @@
   }
 }
 
-// A round glyph button in the bar: the settings and the menu of a walk.
+// A round glyph button: the close in a sheet's head. A page's own are header
+// actions since velista 0130.
 @mixin icon-button {
   display: flex;
   flex: none;

@@ -15,6 +15,7 @@ import type {
   AssistantListLink,
 } from '@portfolio/velista/models';
 import {
+  PageNavigation,
   SPEECH_CAPTURE,
   provideVelistaTesting,
   type SpeechCaptureI,
@@ -105,6 +106,61 @@ const CHOICES: readonly AssistantChoice[] = [
 ];
 
 describe('AssistantPage', () => {
+  /**
+   * The one header (velista `0130`). The brand bar is home's, so this page draws a
+   * back control and its title and nothing else, and the title is the page's only `h1`.
+   */
+  describe('the header', () => {
+    it('draws the title, and no brand bar', async () => {
+      const fixture = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('lib-page-header h1')?.textContent).toContain(
+        'assistant.title'
+      );
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('lib-app-bar')).toBeNull();
+      expect(root.querySelector('lib-page-header .actions button')).toBeNull();
+    });
+
+    it('sits outside the scroller, so it never scrolls away', async () => {
+      const fixture = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('main lib-page-header')).toBeNull();
+      expect(root.querySelector('main')?.previousElementSibling?.tagName).toBe(
+        'LIB-PAGE-HEADER'
+      );
+    });
+
+    it('goes back with a fallback, so a cold arrival stays in the app', async () => {
+      const fixture = await render();
+      const back = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+
+      const control = (
+        fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLButtonElement>('lib-page-header .lead');
+      expect(control?.getAttribute('aria-label')).toBe('assistant.back');
+
+      control?.click();
+      await fixture.whenStable();
+
+      expect(back).toHaveBeenCalledWith('/velista/en/home');
+    });
+
+    it('leaves the column as the one scroller, under the header', async () => {
+      const fixture = await render();
+      const column = host(fixture).querySelector('main');
+
+      expect(column?.classList.contains('column')).toBe(true);
+      expect(
+        host(fixture).querySelector('header')?.parentElement?.tagName
+      ).toBe('LIB-PAGE-HEADER');
+    });
+  });
+
   describe('the empty state', () => {
     it('says what the bot can do, in three lines, before anybody types', async () => {
       // A text box with a cursor in it tells nobody what to type, and the three lines

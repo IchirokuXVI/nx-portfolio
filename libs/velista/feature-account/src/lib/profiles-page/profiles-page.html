@@ -1,27 +1,13 @@
 <!--
-  `(account)` is unbound: this page is reached from the account screen, and the button
-  would send somebody back to where they came from by a route that reads as somewhere
-  else. It stays drawn so the header does not change shape between screens.
+  The one header (velista `0130`), outside the scroller so it never scrolls away.
 -->
-<lib-app-bar
-  (openAssistant)="openAssistant()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'account.back' | rokuT"
+  [title]="'profiles.title' | rokuT"
 />
 
 <main class="page">
-  <button
-    (click)="back()"
-    [attr.aria-label]="'account.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
-  <h1 class="title">{{ 'profiles.title' | rokuT }}</h1>
-
   @switch (state()) {
     @case ('loading') {
       <!--

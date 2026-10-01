@@ -28,6 +28,7 @@ import {
   nudge,
   openFilterSheet,
   openSettleSheet,
+  pressBasketMenuRow,
   reel,
   row,
   rows,
@@ -341,10 +342,9 @@ test.describe('one trip, by the owner', () => {
       await searchBasket(page, 'nail');
       await expect(rows(page)).toHaveCount(1);
 
-      await page
-        .getByRole('button', { name: 'Finish shopping' })
-        .first()
-        .click();
+      // A row of the basket's menu since velista 0130, and no longer a button in
+      // its header.
+      await pressBasketMenuRow(page, 'Finish');
       await expect(page).toHaveURL(/\/sheet\/finish(\?.*)?$/);
       const finish = sheet(page, 'Finish shopping?');
       await finish.getByRole('button', { name: 'Finish shopping' }).click();

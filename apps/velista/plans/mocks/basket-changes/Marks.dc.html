@@ -7,9 +7,18 @@
 <body>
 <x-dc>
 <helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
   <style>
     body { margin: 0; }
     * { box-sizing: border-box; }
+    /* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+    .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+    .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+    .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+    .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
   </style>
 </helmet>
 
@@ -20,18 +29,23 @@
     <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THREE CHANGES &middot; the banner, two marked rows, and a line that left</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-      <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <header class="ph">
+        <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+        <h1 class="ph-title">Shopping list</h1>
+        <div class="ph-actions">
+          <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+          <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+          <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
         </div>
-        <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Your basket</div>
-        <div style="display: flex; align-items: center; padding: 0 6px;">
+      </header>
+
+      <div style="flex: 0 0 auto; padding: 12px 20px 4px; display: flex; align-items: center; gap: 10px;">
+        <p style="flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
+        <div style="flex: none; display: flex; align-items: center;">
           <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
           <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
         </div>
       </div>
-
-      <p style="flex: 0 0 auto; margin: 0; padding: 0 20px 8px; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
 
       <!-- The sticky tools bar. Exactly the height it has with no banner. -->
       <div style="flex: 0 0 auto; padding: 0 8px 0 20px; display: flex; align-items: center;">
@@ -109,18 +123,23 @@
     <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ONCE THE SERVER SAYS SO &middot; the banner has gone and the bar is the height it always was</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-      <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-        <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <header class="ph">
+        <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+        <h1 class="ph-title">Shopping list</h1>
+        <div class="ph-actions">
+          <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+          <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+          <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
         </div>
-        <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Your basket</div>
-        <div style="display: flex; align-items: center; padding: 0 6px;">
+      </header>
+
+      <div style="flex: 0 0 auto; padding: 12px 20px 4px; display: flex; align-items: center; gap: 10px;">
+        <p style="flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
+        <div style="flex: none; display: flex; align-items: center;">
           <span style="width: 26px; height: 26px; border-radius: 999px; background: #7c3aed; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center;">A</span>
           <span style="width: 26px; height: 26px; border-radius: 999px; background: #2563eb; border: 2px solid #0a0c14; color: #f7f8fc; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-left: -8px;">D</span>
         </div>
       </div>
-
-      <p style="flex: 0 0 auto; margin: 0; padding: 0 20px 8px; font-size: 13px; color: #98a0bb;">Every list you can add to, in one place</p>
 
       <div style="flex: 0 0 auto; padding: 0 8px 0 20px; display: flex; align-items: center;">
         <span style="flex: 1 1 auto; font-size: 13px; color: #98a0bb; font-variant-numeric: tabular-nums;">8 left of 12</span>

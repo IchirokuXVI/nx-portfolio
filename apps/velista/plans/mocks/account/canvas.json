@@ -1,6 +1,6 @@
 {
   "title": "Velista Account Page",
-  "lede": "The design for plan <code>0015</code>: your name, your email, and the two ways out. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The design for plan <code>0015</code>: your name, your email, and the two ways out. Phone only, 390 by 844, Night theme. Headers redrawn for plan <code>0130</code>. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
   "artboards": [
     {
       "file": "Account.dc.html",

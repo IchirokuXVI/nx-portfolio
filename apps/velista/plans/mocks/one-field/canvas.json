@@ -1,6 +1,6 @@
 {
   "title": "Velista: one field finds and adds",
-  "lede": "The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Zone list, idle" },
     { "file": "Typing.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "Zone list, typing" },

@@ -12,6 +12,7 @@ import { BrowserFacade } from '@portfolio/velista/platform';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
   compassAt,
+  headerOf,
   shopMapTesting,
   uprightPose,
   type ShopMapHarnessOptions,
@@ -61,6 +62,7 @@ async function renderPage(
     fresh?: boolean;
     walkId?: string;
     baseline?: number;
+    cold?: boolean;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -88,8 +90,10 @@ async function renderPage(
   }
   const fixture = TestBed.createComponent(RecordWalkPage);
   fixture.detectChanges();
-  await flush(fixture);
-  await flush(fixture);
+  if (!options.cold) {
+    await flush(fixture);
+    await flush(fixture);
+  }
   const view = () =>
     fixture.debugElement.query(By.directive(ShopMapView))?.componentInstance as
       | ShopMapView
@@ -121,6 +125,65 @@ describe('RecordWalkPage (velista 0126)', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     jest.useRealTimers();
+  });
+
+  // Velista 0130: one header for every step of a recording.
+  it('titles the header Walk until the walk arrives, then with its name, and offers no Stop before the walk starts', async () => {
+    const harness = await renderPage({ fresh: true, cold: true });
+    const { fixture } = harness;
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'shopWalks.history.loadingTitle',
+      actions: [],
+    });
+
+    await flush(fixture);
+    await flush(fixture);
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'Spring',
+      actions: [],
+    });
+    expect(all(fixture, 'lib-page-header .pill')).toEqual([]);
+  });
+
+  it('draws the pill and then Stop, as a word, in the header while walking', async () => {
+    const harness = await renderPage({ fresh: true });
+    const { fixture } = harness;
+    click(fixture, '.controls .primary');
+    await flush(fixture);
+    walkFor(harness, 0, 3_000);
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'Spring',
+      actions: ['shopWalkRecord.stop'],
+    });
+    const actions = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-page-header .pill, lib-page-header [libPageHeaderAction]'
+      )
+    );
+    expect(actions.map((one) => one.tagName)).toEqual(['SPAN', 'BUTTON']);
+    expect(actions[0].getAttribute('role')).toBe('status');
+    expect(actions[0].getAttribute('aria-live')).toBe('polite');
+    expect(all(fixture, 'lib-page-header lib-stop-icon')).toEqual([]);
+  });
+
+  it('draws a close, the step’s own title and no action while choosing where to start', async () => {
+    const { fixture } = await renderPage({ walkId: MEMORY_OTHER_WALK_ID });
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'close',
+      leadLabel: 'shopWalkRecord.where.close',
+      title: 'shopWalkRecord.where.title',
+      actions: [],
+    });
   });
 
   it('starts a new walk on a tap, with the camera, and saves it as started', async () => {
@@ -201,7 +264,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     await flush(fixture);
     walkFor(harness, 0, 3_000);
 
-    click(fixture, '.bar .stop');
+    click(fixture, '[libPageHeaderAction]');
     await flush(fixture);
     await flush(fixture);
 
@@ -283,7 +346,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     const harness = await renderPage({ walkId: MEMORY_OTHER_WALK_ID });
     const { fixture, sensors, walks } = harness;
 
-    expect(all(fixture, '.bar .title')).toEqual(['shopWalkRecord.where.title']);
+    expect(headerOf(fixture).title).toBe('shopWalkRecord.where.title');
     const chips = all(fixture, '.controls .chip');
     expect(chips).toEqual(['Huevos']);
     click(fixture, '.controls .chip');
@@ -424,7 +487,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     await flush(fixture);
     expect(all(fixture, '.pill')).toEqual(['shopWalkRecord.status.good']);
 
-    click(fixture, '.bar .stop');
+    click(fixture, '[libPageHeaderAction]');
     await flush(fixture);
 
     expect(walks.appended).toEqual([]);
@@ -441,7 +504,7 @@ describe('RecordWalkPage (velista 0126)', () => {
     if (mark === undefined) {
       throw new Error('no mark');
     }
-    expect(all(fixture, '.bar .title')).toEqual(['shopWalkRecord.where.title']);
+    expect(headerOf(fixture).title).toBe('shopWalkRecord.where.title');
 
     harness.view()?.markTapped.emit(mark);
     fixture.detectChanges();
@@ -493,7 +556,7 @@ describe('RecordWalkPage (velista 0126)', () => {
       await Promise.resolve();
     }
 
-    click(fixture, '.bar .back');
+    click(fixture, 'lib-page-header .lead');
     await flush(fixture);
     for (let t = 1_000; t < 6_000; t += 100) {
       sensors.pose(uprightPose(t, 0, 0, 0));

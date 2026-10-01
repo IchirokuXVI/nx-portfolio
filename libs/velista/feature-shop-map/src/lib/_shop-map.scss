@@ -1,68 +1,46 @@
-// The furniture a shop's page and its map share (velista 0121): a bar flush with
-// the top of the screen holding the back chevron, a title in the display face and a
-// line under it. Mixins and not a component, for the reason `feature-account`'s
+// The furniture a shop's page and its map share (velista 0121). The bar that was
+// here, with its back chevron and its title, is `PageHeader` since velista 0130,
+// so what is left is the line that sat under the title and the two helpers.
+// Mixins and not a component, for the reason `feature-account`'s
 // `_account-page.scss` gives.
 
-@mixin bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  padding: var(--app-space-3) var(--app-space-4) var(--app-space-3)
-    var(--app-space-2);
-  padding-block-start: calc(var(--app-space-3) + var(--app-safe-top));
-  border-block-end: 1px solid var(--app-border-subtle);
-  background: var(--app-surface-raised);
-}
-
-@mixin back {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  padding: 0;
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-@mixin heading {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-inline-size: 0;
-}
-
-// One line, ellipsised: the bar is furniture, and a long name must not push the
-// map down the screen.
-@mixin title {
-  margin: 0;
-  overflow: hidden;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+// The line that sat under the title in the old bar: the chain, the shop, what a
+// save is doing. A header holds only a title (velista 0130), so it is the first
+// line of the content now, and the page that draws it says where it sits.
 @mixin subtitle {
+  flex: none;
   margin: 0;
   overflow: hidden;
   font-size: var(--app-text-xs);
   color: var(--app-text-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+// The same line on a page whose content is a map from edge to edge: a slim strip
+// directly under the header, ruled off from the map.
+@mixin subtitle-strip {
+  @include subtitle;
+
+  padding: var(--app-space-3) var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+// A page that had no scroller of its own scrolled in the app's slot, and its bar
+// went with it. The page is now exactly as tall as the slot, with the header
+// first and this under it as the one element that scrolls (velista 0130).
+@mixin page {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+@mixin scroller {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
 @mixin visually-hidden {

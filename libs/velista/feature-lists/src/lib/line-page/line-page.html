@@ -1,19 +1,18 @@
+<!--
+  The one header (velista 0130), drawn before the line arrives and outside the
+  scroller. The page used to draw nothing at all while it loaded; now the way back is
+  there from the first frame, under the word for the kind of page, and the line's text
+  takes that word's place in the same box (rule H6).
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'list.header.back' | rokuT"
+  [title]="page()?.content ?? ('line.title' | rokuT)"
+/>
+
 @if (page(); as line) {
   <main class="page">
-    <div class="head">
-      <button
-        (click)="back()"
-        [attr.aria-label]="'list.header.back' | rokuT"
-        class="back"
-        type="button"
-      >
-        <lib-chevron-left-icon class="back-glyph" />
-      </button>
-
-      <h1 class="title">{{ line.content }}</h1>
-    </div>
-
-    <div class="scroll">
+    <div class="content">
       <!--
         Where this line lives, said once. The page can be linked to and reached from a
         search later, so it cannot assume anybody arrived from the list.
@@ -130,8 +129,8 @@
             <div class="chips">
               @for (product of cluster.products; track product.itemId) {
                 <ng-container
-                  [ngTemplateOutletContext]="{ $implicit: product }"
                   [ngTemplateOutlet]="chip"
+                  [ngTemplateOutletContext]="{ $implicit: product }"
                 />
               }
             </div>
@@ -140,8 +139,8 @@
           <div class="chips">
             @for (product of line.products; track product.itemId) {
               <ng-container
-                [ngTemplateOutletContext]="{ $implicit: product }"
                 [ngTemplateOutlet]="chip"
+                [ngTemplateOutletContext]="{ $implicit: product }"
               />
             }
           </div>
@@ -227,8 +226,8 @@
             [headingKey]="group.headingKey"
             [loading]="group.loading"
             [members]="group.members"
-            [verbLabel]="line.canEdit ? 'catalog.similar.changeLabel' : null"
             [verb]="line.canEdit ? 'catalog.similar.change' : null"
+            [verbLabel]="line.canEdit ? 'catalog.similar.changeLabel' : null"
           />
         </section>
       }
@@ -327,7 +326,8 @@
                         | rokuT
                           : {
                               count: row.quantity,
-                              who: row.listName ?? ('list.page.someone' | rokuT),
+                              who:
+                                row.listName ?? ('list.page.someone' | rokuT),
                             }
                     }}
                   </span>

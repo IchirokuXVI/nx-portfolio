@@ -15,6 +15,7 @@
       "pending": "PENDIENTE"
     },
     "detail": {
+      "title": "Grupo",
       "back": "Atrás",
       "loading": "Cargando el grupo",
       "lists": "Listas",
@@ -22,6 +23,7 @@
       "newList": "Nueva lista",
       "settings": "Ajustes del grupo",
       "stale": "Ahora mismo no se actualiza en directo",
+      "waiting": "{{count}} esperando entrar",
       "empty": {
         "title": "Todavía no hay listas",
         "body": "Empieza una y todos los del grupo podrán comprar con ella"
@@ -122,6 +124,7 @@
     }
   },
   "line": {
+    "title": "Producto",
     "indicator": {
       "bought": "Comprado",
       "notAvailable": "No había la última vez",
@@ -511,6 +514,7 @@
   },
   "list": {
     "header": {
+      "title": "Lista",
       "inGroup": "en {{name}}",
       "pending": "{{pending}} de {{total}} pendientes",
       "done": "Nada pendiente",
@@ -1203,6 +1207,13 @@
     "failed": "Esta lista no se ha podido cargar",
     "retry": "Inténtalo de nuevo",
     "openHistory": "Historial",
+    "more": {
+      "open": "Más",
+      "title": "Más",
+      "people": "Personas",
+      "create": "Crea tu lista de la compra",
+      "finish": "Terminar"
+    },
     "live": {
       "title": "Todo por comprar",
       "titleOf": "{{name}}: todo por comprar",
@@ -1470,7 +1481,6 @@
       "cancel": "Conservarlo"
     },
     "finish": {
-      "open": "Terminar la compra",
       "prompt": "Todo listo. ¿Terminar la compra?",
       "action": "Terminar la compra",
       "title": "¿Terminar la compra?",
@@ -1990,6 +2000,7 @@
     }
   },
   "shopPage": {
+    "loadingTitle": "Tienda",
     "back": "Atrás",
     "loading": "Cargando la tienda",
     "failed": "Esta tienda no se ha podido cargar",

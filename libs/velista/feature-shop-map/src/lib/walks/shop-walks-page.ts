@@ -25,7 +25,7 @@ import {
   shopMapPath,
   shopWalkPath,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon, SlidersIcon } from '@portfolio/velista/ui';
+import { GearIcon, PageHeader, PageHeaderAction } from '@portfolio/velista/ui';
 import { clockText, dateText, dayName, shopLine } from './walk-text';
 
 /** How a row says when its walk last changed. */
@@ -38,7 +38,7 @@ export type WalkChanged =
  * A shop's walks (velista `0122`, target 2; the `Walks` board): one row per walk
  * with its name, "Shown to shoppers" on the one shoppers see, when it last
  * changed, and how many entries and marks it has. A row opens the walk, whose
- * page holds its name, the shoppers switch and Delete (velista `0129`). The bar
+ * page holds its name, the shoppers switch and Delete (velista `0129`). The header
  * carries the settings for every walk, and "Start a new walk" sits at the foot,
  * asking for a name in a sheet.
  *
@@ -46,7 +46,13 @@ export type WalkChanged =
  */
 @Component({
   selector: 'lib-shop-walks-page',
-  imports: [ChevronLeftIcon, RokuTranslatorPipe, RouterOutlet, SlidersIcon],
+  imports: [
+    GearIcon,
+    PageHeader,
+    PageHeaderAction,
+    RokuTranslatorPipe,
+    RouterOutlet,
+  ],
   templateUrl: './shop-walks-page.html',
   styleUrl: './shop-walks-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

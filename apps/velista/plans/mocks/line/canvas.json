@@ -1,6 +1,6 @@
 {
   "title": "Velista: the line is a quantity",
-  "lede": "The design for plan <code>0043</code>: the quantity reel, the three derived indicators, the detail sheet, the line page and the composer's suggestions. Server half: backend <code>0047</code> (settlements) and <code>0048</code> (search). Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for plan <code>0043</code>: the quantity reel, the three derived indicators, the detail sheet, the line page and the composer's suggestions. Server half: backend <code>0047</code> (settlements) and <code>0048</code> (search). Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Line.dc.html", "x": 0, "y": 0, "w": 900, "h": 1010, "title": "The list, remeasured" },
     { "file": "Reel.dc.html", "x": 960, "y": 0, "w": 900, "h": 1010, "title": "The reel, with motion" },

@@ -9,45 +9,33 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { TourAnchor } from '@portfolio/velista/platform';
 import { BrandWordmark } from '../brand/brand-wordmark';
-import { ChevronDownIcon, CommentIcon, OfflineIcon } from '../icons/icons';
+import { ChevronDownIcon } from '../icons/icons';
 
 /**
- * The app's header.
+ * The front door's bar: the lockup, and the locale switch.
  *
- * Two variants, chosen by `signedIn` rather than by the caller picking a component:
- * anonymous shows the locale switch, because someone who has not signed in may well
- * be on the wrong language and has nothing else to do up here; signed in shows the
- * assistant and the account button.
+ * It shows the locale switch because someone who has not signed in may well be on the
+ * wrong language and has nothing else to do up here.
  *
- * ## The second slot was search, and search never existed
+ * ## It was the app's header, and had a signed in half
  *
- * It called `_notYetRouted('search')` from the day it was drawn (plan 0003) and there
- * was never a search page, a search service or a search route behind it. So spending
- * the slot on the assistant removes no feature (plan 0032, section 1): same 44 by 44
- * target, same position, and `SearchIcon` stays exported so putting search back later
- * is one line here.
+ * `signedIn` used to choose between this and a second variant with the assistant, the
+ * account button and the offline mark, which every signed in page drew above its own
+ * back row. Velista `0130` gave those pages one `PageHeader` and moved the three
+ * actions into home's, so that half is gone and with it every input and output only it
+ * read. The landing page is signed out and outside that plan, and it is the one caller
+ * left; `one-page-header.spec.ts` fails when another page draws this.
  *
- * Rule D1: no service, no data. The initial and the locale label arrive as inputs and
- * every action leaves as an output. The **menu**, though, is this component's own:
- * open and closed is presentation state and nothing else, so owning it here costs no
- * injection and saves every caller from re-implementing dismissal (plan 0007,
- * section 6.2).
+ * Rule D1: no service, no data. The locale label arrives as an input and the pick
+ * leaves as an output. The **menu**, though, is this component's own: open and closed
+ * is presentation state and nothing else, so owning it here costs no injection and
+ * saves every caller from re-implementing dismissal (plan 0007, section 6.2).
  */
 @Component({
   selector: 'lib-app-bar',
-  imports: [
-    RokuTranslatorPipe,
-    RouterLink,
-    TourAnchor,
-    BrandWordmark,
-    CommentIcon,
-    ChevronDownIcon,
-    OfflineIcon,
-  ],
+  imports: [RokuTranslatorPipe, BrandWordmark, ChevronDownIcon],
   templateUrl: './app-bar.html',
   styleUrl: './app-bar.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -65,39 +53,6 @@ export class AppBar {
   private readonly _trigger =
     viewChild<ElementRef<HTMLButtonElement>>('localeTrigger');
 
-  readonly signedIn = input(false);
-
-  /**
-   * Where the lockup leads, or null to leave it as plain text.
-   *
-   * Rule D1 again: this component may not build the URL, because the locale and the
-   * mount are both things it would have to reach for, and the mount is `/velista`
-   * today and `''` after extraction. So the page passes an absolute URL built with
-   * `appPath`, the same one its own back controls already use.
-   *
-   * Null on the front door and on the dashboard, the two screens where the lockup
-   * would point at the page being looked at.
-   */
-  readonly homeUrl = input<string | null>(null);
-
-  /**
-   * The letter in the account button.
-   *
-   * The container derives it from `SessionStore.username`, which is the caller's global
-   * name: it rides on the token pair since backend plan 0018, and `ProfileStore`
-   * overrides it after a rename (rule A2, plan 0015). So there is no request behind
-   * this and no loading state for it either.
-   *
-   * This comment used to say the API exposed no profile and the only readable name was
-   * per zone. That was true when it was written and has not been since; a stale comment
-   * is read as a constraint, which is why `0010` rule G2 asks for it to be corrected
-   * rather than left (plan 0015, section 4.4).
-   *
-   * Null still falls back to a neutral glyph rather than inventing an initial, which is
-   * the right rendering for a name that is genuinely empty.
-   */
-  readonly accountInitial = input<string | null>(null);
-
   /** The active locale, upper cased for display, for example `EN`. */
   readonly locale = input('EN');
 
@@ -110,32 +65,6 @@ export class AppBar {
    * menu exists to fix.
    */
   readonly locales = input<readonly string[]>([]);
-
-  /** Whether the header sits on a divider. False on the anonymous screen, which is airy. */
-  readonly bordered = input(true);
-
-  /**
-   * Whether the live connection is up. False draws the offline mark (plan 0035,
-   * section 5.3).
-   *
-   * Before it, a dead socket had exactly one symptom in the whole app: one grey line on
-   * a list page. Every other screen, the dashboard and a group page included, looked
-   * identical live and stale. The mark is not a button, deliberately: a control here
-   * would have to lead somewhere and there is nowhere to go.
-   *
-   * **Not the blocking screen's business.** `ConnectionState.offline` covers the page
-   * with `ConnectionLost` and this header is behind it. This is for the case where HTTP
-   * works and the socket does not, which is precisely the one with no symptom today.
-   *
-   * Rule D1: an input, like `signedIn` and `accountInitial`. This component knows
-   * nothing about `RealtimeClient` and the pages that draw it pass this in.
-   *
-   * True by default, so a screen that has no socket to speak of draws nothing.
-   */
-  readonly connected = input(true);
-
-  readonly openAssistant = output<void>();
-  readonly account = output<void>();
 
   /**
    * The locale that was picked, as a code.

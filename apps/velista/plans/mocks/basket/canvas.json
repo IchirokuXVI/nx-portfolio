@@ -1,6 +1,6 @@
 {
   "title": "Velista: the shared basket",
-  "lede": "The design for plan <code>0044</code>: the join screen, the basket for owner, registered reader and guest, settling, the allocation sheet, presence and sharing. Server half: backend <code>0051</code>. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for plan <code>0044</code>: the join screen, the basket for owner, registered reader and guest, settling, the allocation sheet, presence and sharing. Server half: backend <code>0051</code>. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Join.dc.html", "x": 0, "y": 0, "w": 900, "h": 1010, "title": "Joining" },
     { "file": "Basket.dc.html", "x": 960, "y": 0, "w": 1330, "h": 1010, "title": "The basket, three readers" },

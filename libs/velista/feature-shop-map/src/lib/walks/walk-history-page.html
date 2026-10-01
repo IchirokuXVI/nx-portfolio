@@ -1,174 +1,168 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="back()"
-      [attr.aria-label]="'shopWalks.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      <h1 class="title">
-        {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
-      </h1>
-    </div>
-  </header>
+  <lib-page-header
+    (back)="back()"
+    [backLabel]="'shopWalks.back' | rokuT"
+    [title]="name() ?? ('shopWalks.history.loadingTitle' | rokuT)"
+  />
 
-  @let state = read();
-  @if (state.kind === 'walk') {
-    <form (submit)="onSubmit($event)" class="name">
-      <label class="label" for="walk-name">{{
-        'shopWalks.name' | rokuT
-      }}</label>
-      <input
-        (blur)="saveName()"
-        (input)="onTyped($event)"
-        [attr.maxlength]="maxLength"
-        [value]="typed()"
-        autocomplete="off"
-        class="field"
-        enterkeyhint="done"
-        id="walk-name"
-        type="text"
-      />
-    </form>
+  <div class="content">
+    @let state = read();
+    @if (state.kind === 'walk') {
+      <form (submit)="onSubmit($event)" class="name">
+        <label class="label" for="walk-name">{{
+          'shopWalks.name' | rokuT
+        }}</label>
+        <input
+          (blur)="saveName()"
+          (input)="onTyped($event)"
+          [attr.maxlength]="maxLength"
+          [value]="typed()"
+          autocomplete="off"
+          class="field"
+          enterkeyhint="done"
+          id="walk-name"
+          type="text"
+        />
+      </form>
 
-    <!--
-      A real checkbox with the switch role, inside its label, so the words are its
-      accessible name and the whole row is the target.
-    -->
-    <label class="switch-row">
-      <span class="switch-body">
-        <span class="switch-title">{{
-          'shopWalks.settings.show' | rokuT
-        }}</span>
-        <span class="switch-hint">{{
-          'shopWalks.settings.showHint' | rokuT
-        }}</span>
-      </span>
-      <input
-        (change)="setShown($event)"
-        [attr.aria-busy]="busy()"
-        [checked]="state.detail.walk.shown"
-        class="switch"
-        role="switch"
-        type="checkbox"
-      />
-    </label>
+      <!--
+        A real checkbox with the switch role, inside its label, so the words are its
+        accessible name and the whole row is the target.
+      -->
+      <label class="switch-row">
+        <span class="switch-body">
+          <span class="switch-title">{{
+            'shopWalks.settings.show' | rokuT
+          }}</span>
+          <span class="switch-hint">{{
+            'shopWalks.settings.showHint' | rokuT
+          }}</span>
+        </span>
+        <input
+          (change)="setShown($event)"
+          [attr.aria-busy]="busy()"
+          [checked]="state.detail.walk.shown"
+          class="switch"
+          role="switch"
+          type="checkbox"
+        />
+      </label>
 
-    <p aria-live="polite" class="notice" role="status">
-      @if (notice(); as notice) {
-        {{ 'shopWalks.settings.notice.' + notice | rokuT }}
-      }
-    </p>
+      <p aria-live="polite" class="notice" role="status">
+        @if (notice(); as notice) {
+          {{ 'shopWalks.settings.notice.' + notice | rokuT }}
+        }
+      </p>
 
-    <div class="actions">
-      <div class="pair">
-        <button
-          (click)="rewind()"
-          [disabled]="state.detail.timeline.length === 0"
-          class="secondary"
-          type="button"
-        >
-          {{ 'shopWalks.history.rewind' | rokuT }}
-        </button>
-        <button (click)="editMap()" class="secondary edit-map" type="button">
-          {{ 'shopWalks.history.editMap' | rokuT }}
-        </button>
+      <div class="actions">
+        <div class="pair">
+          <button
+            (click)="rewind()"
+            [disabled]="state.detail.timeline.length === 0"
+            class="secondary"
+            type="button"
+          >
+            {{ 'shopWalks.history.rewind' | rokuT }}
+          </button>
+          <button (click)="editMap()" class="secondary edit-map" type="button">
+            {{ 'shopWalks.history.editMap' | rokuT }}
+          </button>
+        </div>
+        @if (canRecord() === true) {
+          <button (click)="resume()" class="primary resume" type="button">
+            {{ 'shopWalks.history.resume' | rokuT }}
+          </button>
+        } @else if (canRecord() === false) {
+          <p class="no-camera">{{ 'shopWalks.history.noCamera' | rokuT }}</p>
+        }
       </div>
-      @if (canRecord() === true) {
-        <button (click)="resume()" class="primary resume" type="button">
-          {{ 'shopWalks.history.resume' | rokuT }}
-        </button>
-      } @else if (canRecord() === false) {
-        <p class="no-camera">{{ 'shopWalks.history.noCamera' | rokuT }}</p>
+
+      <h2 class="group">{{ 'shopWalks.history.subtitle' | rokuT }}</h2>
+      @if (days().length === 0) {
+        <p class="empty">{{ 'shopWalks.history.empty' | rokuT }}</p>
       }
-    </div>
 
-    <h2 class="group">{{ 'shopWalks.history.subtitle' | rokuT }}</h2>
-    @if (days().length === 0) {
-      <p class="empty">{{ 'shopWalks.history.empty' | rokuT }}</p>
-    }
-
-    @for (day of days(); track day.key) {
-      <section [attr.aria-labelledby]="'day-' + day.key" class="day">
-        <h2 [id]="'day-' + day.key" class="day-name">
-          @switch (day.name.kind) {
-            @case ('today') {
-              {{ 'shopWalks.history.today' | rokuT }}
-            }
-            @case ('yesterday') {
-              {{ 'shopWalks.history.yesterday' | rokuT }}
-            }
-            @default {
-              @if (day.name.kind === 'date') {
-                {{ day.name.text }}
+      @for (day of days(); track day.key) {
+        <section [attr.aria-labelledby]="'day-' + day.key" class="day">
+          <h2 [id]="'day-' + day.key" class="day-name">
+            @switch (day.name.kind) {
+              @case ('today') {
+                {{ 'shopWalks.history.today' | rokuT }}
+              }
+              @case ('yesterday') {
+                {{ 'shopWalks.history.yesterday' | rokuT }}
+              }
+              @default {
+                @if (day.name.kind === 'date') {
+                  {{ day.name.text }}
+                }
               }
             }
-          }
-        </h2>
-        <ol class="entries">
-          @for (row of day.rows; track row.id) {
-            <li class="entry">
-              <span class="entry-time">{{ row.time }}</span>
-              <span class="entry-body">
-                <span class="entry-head">
-                  <span class="entry-title">{{
-                    row.title.key | rokuT: row.title.values
-                  }}</span>
-                  @if (row.latest) {
-                    <span class="latest">{{
-                      'shopWalks.history.latest' | rokuT
+          </h2>
+          <ol class="entries">
+            @for (row of day.rows; track row.id) {
+              <li class="entry">
+                <span class="entry-time">{{ row.time }}</span>
+                <span class="entry-body">
+                  <span class="entry-head">
+                    <span class="entry-title">{{
+                      row.title.key | rokuT: row.title.values
                     }}</span>
-                  }
-                </span>
-                @if (row.details.length > 0) {
-                  <span class="entry-detail">
-                    @for (
-                      part of row.details;
-                      track part.key;
-                      let first = $first
-                    ) {
-                      @if (!first) {
-                        <span aria-hidden="true"> · </span>
-                      }
-                      <span>{{ part.key | rokuT: part.values }}</span>
+                    @if (row.latest) {
+                      <span class="latest">{{
+                        'shopWalks.history.latest' | rokuT
+                      }}</span>
                     }
                   </span>
-                }
-              </span>
-            </li>
-          }
-        </ol>
-      </section>
-    }
+                  @if (row.details.length > 0) {
+                    <span class="entry-detail">
+                      @for (
+                        part of row.details;
+                        track part.key;
+                        let first = $first
+                      ) {
+                        @if (!first) {
+                          <span aria-hidden="true"> · </span>
+                        }
+                        <span>{{ part.key | rokuT: part.values }}</span>
+                      }
+                    </span>
+                  }
+                </span>
+              </li>
+            }
+          </ol>
+        </section>
+      }
 
-    <div class="foot">
-      <button (click)="askDelete()" class="delete" type="button">
-        {{ 'shopWalks.settings.delete' | rokuT }}
-      </button>
-    </div>
-  } @else if (state.kind === 'missing') {
-    <p class="empty" role="alert">{{ 'shopWalks.history.missing' | rokuT }}</p>
-  } @else if (state.kind === 'failed') {
-    <div class="state" role="alert">
-      <p class="state-text">{{ 'shopWalks.history.failed' | rokuT }}</p>
-      <button (click)="retry()" class="retry" type="button">
-        {{ 'shopWalks.retry' | rokuT }}
-      </button>
-    </div>
-  } @else {
-    <div
-      [attr.aria-label]="'shopWalks.history.loading' | rokuT"
-      class="bones"
-      role="status"
-    >
-      <div class="bone"></div>
-      <div class="bone"></div>
-      <div class="bone"></div>
-    </div>
-  }
+      <div class="foot">
+        <button (click)="askDelete()" class="delete" type="button">
+          {{ 'shopWalks.settings.delete' | rokuT }}
+        </button>
+      </div>
+    } @else if (state.kind === 'missing') {
+      <p class="empty" role="alert">
+        {{ 'shopWalks.history.missing' | rokuT }}
+      </p>
+    } @else if (state.kind === 'failed') {
+      <div class="state" role="alert">
+        <p class="state-text">{{ 'shopWalks.history.failed' | rokuT }}</p>
+        <button (click)="retry()" class="retry" type="button">
+          {{ 'shopWalks.retry' | rokuT }}
+        </button>
+      </div>
+    } @else {
+      <div
+        [attr.aria-label]="'shopWalks.history.loading' | rokuT"
+        class="bones"
+        role="status"
+      >
+        <div class="bone"></div>
+        <div class="bone"></div>
+        <div class="bone"></div>
+      </div>
+    }
+  </div>
 </main>
 
 <router-outlet />

@@ -1,7 +1,7 @@
 @use '../shop-map' as shop;
 @use '../walks';
 
-// Rewind (velista 0122, the `Rewind` board of `mocks/shop-map/`): the map filling
+// Rewind (velista 0122, the `Rewind` board of `mocks/shop-map/`): the header, the shop on a slim line under it, the map filling
 // what the panel leaves, and the panel at the foot with the moment, the slider,
 // the jumps and "Continue from here".
 
@@ -11,33 +11,11 @@
 }
 
 .page {
-  display: flex;
-  flex-direction: column;
-  block-size: 100%;
-}
-
-.bar {
-  @include shop.bar;
-}
-
-.back {
-  @include shop.back;
-}
-
-.back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.heading {
-  @include shop.heading;
-}
-
-.title {
-  @include shop.title;
+  @include shop.page;
 }
 
 .subtitle {
-  @include shop.subtitle;
+  @include shop.subtitle-strip;
 }
 
 .map {

@@ -15,6 +15,7 @@ import {
 } from '@portfolio/velista/data-access';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
+  headerOf,
   settle,
   shopMapTesting,
   type ShopMapHarnessOptions,
@@ -232,7 +233,9 @@ describe('the map edits', () => {
   });
 });
 
-async function renderPage(options: ShopMapHarnessOptions = {}) {
+async function renderPage(
+  options: ShopMapHarnessOptions & { cold?: boolean } = {}
+) {
   TestBed.resetTestingModule();
   const harness = shopMapTesting({
     params: { locationId: SHOP, walkId: WALK },
@@ -247,8 +250,10 @@ async function renderPage(options: ShopMapHarnessOptions = {}) {
     .mockResolvedValue(true);
   const fixture = TestBed.createComponent(EditMapPage);
   fixture.detectChanges();
-  await settle(() => fixture.detectChanges());
-  await settle(() => fixture.detectChanges());
+  if (!options.cold) {
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+  }
   const view = () =>
     fixture.debugElement.query(By.directive(ShopMapView))
       .componentInstance as ShopMapView;
@@ -294,6 +299,56 @@ describe('EditMapPage', () => {
     expect(all(fixture, '.walking')).toEqual(['shopMapEdit.notWalking']);
   });
 
+  // Velista 0130: one header, with the pill and Done as its actions.
+  it('titles the header Walk until the walk arrives, with the pill and Done in every state', async () => {
+    const { fixture } = await renderPage({ cold: true });
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'shopWalks.history.loadingTitle',
+      actions: ['shopMapEdit.done'],
+    });
+
+    await settle(() => fixture.detectChanges());
+    await settle(() => fixture.detectChanges());
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopWalks.back',
+      title: 'Autumn layout',
+      actions: ['shopMapEdit.done'],
+    });
+    // The pill is not a button: it sits in the actions, before Done.
+    expect(all(fixture, 'lib-page-header span.walking')).toEqual([
+      'shopMapEdit.notWalking',
+    ]);
+    expect(all(fixture, 'lib-page-header button.walking')).toEqual([]);
+  });
+
+  it('says what a save is doing on a polite line under the header', async () => {
+    const { fixture, view } = await renderPage();
+    const strip = () =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-page-header + .subtitle'
+      );
+
+    // There before the first edit, and empty: a strip that arrived with its words
+    // took its height from the map under the finger, and a live region created
+    // together with its text is often not announced.
+    const before = strip();
+    expect(before?.getAttribute('aria-live')).toBe('polite');
+    expect(before?.textContent?.trim()).toBe('');
+
+    view().changed.emit([{ type: 'area-put', area: counter }]);
+    fixture.detectChanges();
+
+    expect(all(fixture, 'lib-page-header .subtitle')).toEqual([]);
+    // The same element, now holding the words.
+    expect(strip()).toBe(before);
+    expect(strip()?.textContent?.trim()).toMatch(/^shopMapEdit\.status\./);
+  });
+
   it('saves a drawn area as one edited entry on Done, at the log’s end', async () => {
     const { fixture, view, walks, pages } = await renderPage();
     const { lastSeq, logTo } = await lastSeqOf(walks);
@@ -306,7 +361,7 @@ describe('EditMapPage', () => {
     expect(all(fixture, 'lib-resize-controls .hint')).toEqual([
       'shopMapEdit.resize.hintAlone',
     ]);
-    click(fixture, '.bar .done');
+    click(fixture, '[libPageHeaderAction]');
     await settle(() => fixture.detectChanges());
 
     // Saved first, so the guard behind the pop has nothing to ask.
@@ -337,9 +392,9 @@ describe('EditMapPage', () => {
     expect(page.apply([{ type: 'area-put', area: { ...eggs } }])).toBe(true);
     fixture.detectChanges();
 
-    expect(all(fixture, '.subtitle')).toEqual([]);
+    expect(all(fixture, '.subtitle')).toEqual(['']);
     expect(await fixture.componentInstance.canLeave()).toBe(true);
-    click(fixture, '.bar .done');
+    click(fixture, '[libPageHeaderAction]');
     await settle(() => fixture.detectChanges());
     expect(walks.appended).toEqual([]);
   });
@@ -464,13 +519,13 @@ describe('EditMapPage', () => {
       );
 
     view().changed.emit([{ type: 'area-put', area: counter }]);
-    click(fixture, '.bar .done');
+    click(fixture, '[libPageHeaderAction]');
     await settle(() => fixture.detectChanges());
     click(fixture, 'lib-unsaved-dialog .ok');
     await settle(() => fixture.detectChanges());
 
     expect(pages.back).not.toHaveBeenCalled();
-    click(fixture, '.bar .back');
+    click(fixture, 'lib-page-header .lead');
     await settle(() => fixture.detectChanges());
     click(fixture, 'lib-unsaved-dialog .leave');
     await settle(() => fixture.detectChanges());

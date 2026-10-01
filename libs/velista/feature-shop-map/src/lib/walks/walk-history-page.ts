@@ -31,7 +31,7 @@ import {
   WALK_SENSORS,
   walkIdOf,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader } from '@portfolio/velista/ui';
 import {
   clockText,
   dayKey,
@@ -198,7 +198,7 @@ export function historyDays(
  */
 @Component({
   selector: 'lib-walk-history-page',
-  imports: [ChevronLeftIcon, RokuTranslatorPipe, RouterOutlet],
+  imports: [PageHeader, RokuTranslatorPipe, RouterOutlet],
   templateUrl: './walk-history-page.html',
   styleUrl: './walk-history-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

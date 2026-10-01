@@ -11,6 +11,7 @@ import {
   newVisitor,
   nudge,
   openSettleSheet,
+  pressBasketMenuRow,
   readShareLinkFromSheet,
   reel,
   row,
@@ -78,9 +79,7 @@ test.describe('the owner and a guest', () => {
       await expectBasketUrl(guest, basketId);
       await expect(row(guest, 'Milk')).toBeVisible();
 
-      await guest
-        .getByRole('button', { name: 'See who is on this list' })
-        .click();
+      await pressBasketMenuRow(guest, 'People');
       const people = sheet(guest, 'On this list');
       const me = people.locator('li.person', {
         has: guest.locator('.you-tag'),
@@ -140,9 +139,7 @@ test.describe('the owner and a guest', () => {
     });
 
     await test.step('6. Alice opens the people sheet and sees Guest 1', async () => {
-      await page
-        .getByRole('button', { name: 'See who is on this list' })
-        .click();
+      await pressBasketMenuRow(page, 'People');
       const people = sheet(page, 'On this list');
       const guestRow = people.locator('li.person', { hasText: 'Guest 1' });
       await expect(guestRow).toBeVisible();

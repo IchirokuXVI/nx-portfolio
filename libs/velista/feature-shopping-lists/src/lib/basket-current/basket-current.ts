@@ -13,7 +13,13 @@ import {
 import { BasketListStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, type BasketAddress } from '@portfolio/velista/models';
 import { appPath } from '@portfolio/velista/platform';
-import { ClockIcon, RowSkeleton } from '@portfolio/velista/ui';
+import {
+  BasketIcon,
+  ClockIcon,
+  PageHeader,
+  PageHeaderAction,
+  RowSkeleton,
+} from '@portfolio/velista/ui';
 import { BASKET_PATHS, basketPath } from '../basket-paths';
 
 /**
@@ -46,7 +52,15 @@ import { BASKET_PATHS, basketPath } from '../basket-paths';
  */
 @Component({
   selector: 'lib-basket-current',
-  imports: [RokuTranslatorPipe, RouterOutlet, ClockIcon, RowSkeleton],
+  imports: [
+    BasketIcon,
+    ClockIcon,
+    PageHeader,
+    PageHeaderAction,
+    RokuTranslatorPipe,
+    RouterOutlet,
+    RowSkeleton,
+  ],
   templateUrl: './basket-current.html',
   styleUrl: './basket-current.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -135,6 +135,39 @@ describe('AppShellRoutes', () => {
       ).toEqual(['sheet/get']);
     });
 
+    /**
+     * The basket's menu offers Create your shopping list (velista `0130`, section
+     * 6.1), so the same sheet covers both basket routes as well. A copy over one and
+     * not the other would be a menu row that works on a trip and leads nowhere on the
+     * basket that is always there.
+     */
+    it('draws it over both baskets too, which is where the menu offers it', () => {
+      for (const basket of [
+        'shopping-lists/live',
+        'shopping-lists/:basketId',
+      ]) {
+        expect(sheetsOf(basket).map((route) => route.path)).toContain(
+          'sheet/get'
+        );
+      }
+    });
+
+    it('tells the copy over a basket to return to the page under it', () => {
+      // Not a path, because one of the two routes has a parameter: the pattern
+      // `shopping-lists/:basketId` is not an address anybody can be sent to. The
+      // sheet reads the page's own address off its parent route instead.
+      for (const basket of [
+        'shopping-lists/live',
+        'shopping-lists/:basketId',
+      ]) {
+        expect(
+          sheetsOf(basket).find((route) => route.path === 'sheet/get')?.data?.[
+            'returnTo'
+          ]
+        ).toBe('parent');
+      }
+    });
+
     it('tells each sheet which page it is covering', () => {
       // Which is how Cancel knows where to go back to, without doing string surgery
       // on a URL, and correctly for a deep link with no history behind it.
@@ -798,7 +831,7 @@ describe('AppShellRoutes', () => {
       expect(joinPath.startsWith('shopping-lists')).toBe(false);
     });
 
-    it('offers the ten sheets over the basket, and no units sheet', () => {
+    it('offers the eleven sheets over the basket, and no units sheet', () => {
       // Velista `0073`, test 11, `0075`, test 10, and `0078`, test 13. There were
       // six, then four: `lines/:lineId/list` went with the send sheet it drew
       // (`0068`), which folded every list into the units sheet; `lines/:lineId/units`
@@ -820,6 +853,10 @@ describe('AppShellRoutes', () => {
           'sheet/changes',
           'sheet/people',
           'sheet/share',
+          // The menu (velista `0130`, section 6.1), and the sheet its Create your
+          // shopping list row opens.
+          'sheet/more',
+          'sheet/get',
           'sheet/finish',
           'sheet/filter/shop',
           'sheet/filter',
@@ -904,6 +941,17 @@ describe('AppShellRoutes', () => {
         }
       });
 
+      it('has the menu and the sheet its create row opens (velista `0130`)', () => {
+        // Named rather than left to the set comparison above: the menu is where the
+        // people, the history and a new list are reached from on this basket too.
+        const live = (routeAt(livePath)?.children ?? []).map(
+          (route) => route.path
+        );
+
+        expect(live).toContain(`${SHEET_SEGMENT}/more`);
+        expect(live).toContain(`${SHEET_SEGMENT}/get`);
+      });
+
       it('has the share and people sheets by name (velista `0094`)', () => {
         // Named rather than left to the set comparison above, because velista
         // `0094` turns on these two in particular: the basket that is always
@@ -935,16 +983,39 @@ describe('AppShellRoutes', () => {
       expect(paths.some((path) => path.endsWith('/units'))).toBe(false);
     });
 
-    it('guards none of the sheets, because what a reader may do is not a route', () => {
+    it('guards none of the sheets but one, because what a reader may do is not a route', () => {
       // Which of them a caller may **use** is decided by the page from the
       // caller's own facts, and the server refuses the rest regardless of what is
       // drawn. The share sheet is the owner's alone and is not drawn for anybody
       // else, which is a property of the page rather than of the route.
       const sheets = routeAt(basketPath)?.children ?? [];
 
-      expect(sheets).toHaveLength(9);
-      for (const entry of sheets) {
+      expect(sheets).toHaveLength(11);
+      for (const entry of sheets.filter((one) => one.path !== 'sheet/get')) {
         expect(entry.canActivate).toBeUndefined();
+      }
+    });
+
+    it('demands an account of Create your shopping list, over both baskets', () => {
+      // The one sheet here that composes for an account, over a page a guest
+      // reaches without one. The menu draws no row to it for a guest, and a typed
+      // URL must not construct it either. The guard's redirect keeps what is above
+      // the route it sits on, which for a sheet is the basket (`auth-guards.spec`).
+      for (const basket of [basketPath, 'shopping-lists/live']) {
+        const get = routeAt(basket)?.children?.find(
+          (route) => route.path === 'sheet/get'
+        );
+
+        expect(get?.canActivate).toEqual([authenticatedGuard]);
+        // And it still falls like every other sheet.
+        expect(get?.canDeactivate).toEqual([sheetFallGuard]);
+      }
+    });
+
+    it('adds no guard to the copies whose page already demands an account', () => {
+      for (const page of ['shopping-lists', 'shopping-lists/current']) {
+        expect(routeAt(page)?.canActivate).toEqual(SIGNED_IN);
+        expect(sheetsOf(page)[0]?.canActivate).toBeUndefined();
       }
     });
 
@@ -1113,7 +1184,10 @@ describe('the sheets and their exit animation', () => {
     // `0129` added four: a mark's sheet over the edit page and over the recording
     // page, and the place sheet over the map, for an area and for a note. The
     // sheet that deletes a walk moved from its settings to the walk's page.
-    expect(sheets).toHaveLength(53);
+    //
+    // `0130` added four: the basket's menu over both baskets, and Get shopping
+    // list over both, because the menu offers it.
+    expect(sheets).toHaveLength(57);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

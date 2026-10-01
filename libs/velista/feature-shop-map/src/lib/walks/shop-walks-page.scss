@@ -9,40 +9,22 @@
 }
 
 .page {
-  display: flex;
-  flex-direction: column;
-  min-block-size: 100%;
+  @include shop.page;
 }
 
-.bar {
-  @include shop.bar;
+// Everything under the header, and the one element on the page that scrolls.
+.content {
+  @include shop.scroller;
 }
 
-.back {
-  @include shop.back;
-}
-
-.back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.heading {
-  @include shop.heading;
-}
-
-.title {
-  @include shop.title;
-}
-
+// The shop, as the first line of the content.
 .subtitle {
   @include shop.subtitle;
+
+  padding: var(--app-space-4) var(--app-space-5) 0;
 }
 
-.icon-button {
-  @include walks.icon-button;
-}
-
-// The list starts a little under the bar, where the sentence above it was.
+// The list starts a little under that line, where the sentence above it was.
 .walks {
   @include walks.rows;
 
@@ -137,6 +119,7 @@
 
 // At the foot of the screen however short the list is.
 .foot {
+  flex: none;
   margin-block-start: auto;
   padding: var(--app-space-4) var(--app-space-5)
     calc(var(--app-space-4) + var(--app-safe-bottom));

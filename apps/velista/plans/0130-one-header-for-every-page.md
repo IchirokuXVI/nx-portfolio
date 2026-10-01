@@ -1,8 +1,11 @@
+> **PR:** [#586](https://github.com/IchirokuXVI/nx-portfolio/pull/586)
+
 # 0130: one header for every page
 
-> Mock: none yet. **The mock is the first step of this plan, and no code starts before it is
-> reviewed** (section 9). A new folder `mocks/header/` draws the header on every page, and the
-> existing folders that draw an old header are redrawn.
+> Mock: `mocks/header/`, published at https://claude.ai/artifact/B7dtX8AowX73ABuQPBfPzZ, and
+> every existing folder that drew an old header is redrawn. **Reviewed on 2026-10-01.** The
+> review's two answers: the title is **20px** (section 2), and the group's member count goes
+> **in the Members row** (section 5.1, the first placement).
 >
 > Prerequisite reading: `0002` section 6 (where the display face is allowed), `0037` and `0051`
 > section 3 (the two title steps this plan replaces with one), `0097` and `0106` (the bar at
@@ -155,14 +158,16 @@ Tokens, in `_semantic.scss`:
 
 - `--app-header-height`: the home bar's height today, which is the touch target plus its
   block padding (44px, 12px and 8px, so 64px). Measure the home bar in a browser before you
-  fix the value, and write the measured number.
+  fix the value, and write the measured number. **Measured on 2026-10-01: 64px**, with the
+  bottom border inside it, on every page in section 4 that a browser could reach, on velista's
+  own origin and through the shell.
 - `--app-header-title-size`: **one size for every title, and it can be smaller than home's
   today.** Home sets its word at `--app-text-2xl`, which is about 27px on a 390px phone. A
   title beside a back button and two actions has about 210px, which is some fourteen letters
   at that size and some nineteen at `--app-text-xl` (20px). The mock draws both sizes on the
   longest real titles (a list's name beside two actions, "Your shopping lists", "Shopping
-  profiles"). The recommendation is the value of `--app-text-xl`. Whatever the review picks,
-  the home word takes it too, so home's title gets smaller with the rest. The brand mark
+  profiles"). **Decided on 2026-10-01: the value of `--app-text-xl`, 20px on a phone.**
+  The home word takes it too, so home's title gets smaller with the rest. The brand mark
   beside it keeps the proportion it has to the word today.
 - The header's inline padding is `--app-space-5` at both ends, as on home. The back button
   keeps the negative start margin its mixin has today, so the chevron's glyph lines up with
@@ -224,7 +229,7 @@ bar shows.
 | `shops/:locationId/map` | back | Where things are | Walks |
 | `shops/:locationId/walks` | back | Walks | mapping settings |
 | `.../walks/settings`, `.../:walkId/settings` | back | as today | none |
-| `.../walks/:walkId` | back | the walk's name. **Walk** while it loads | the ellipsis |
+| `.../walks/:walkId` | back | the walk's name. **Walk** while it loads | none (the page has no ellipsis: Delete is a button in the content) |
 | `.../walks/:walkId/rewind` | close | as today | none |
 | `.../walks/:walkId/edit` | back | the walk's name | the status pill, Done |
 | `.../walks/:walkId/record` | close, or back, as today | as today | the status pill, Stop |
@@ -258,8 +263,8 @@ for a product line, a shop and a walk. Reuse a key when one already says the wor
 
 - The group's name is the header's title, beside the back chevron.
 - The initial tile is removed. Nothing replaces it.
-- The role and the members count need a new place, and the mock decides between these two.
-  The first is the recommendation:
+- The role and the members count need a new place, and the mock drew these two. **Decided
+  on 2026-10-01: the first.**
   1. **In the Members row.** The Members row in the actions card is where a person goes to
      see members, so it shows the count as its value ("Members", then "5", then the
      chevron). The role chip sits at the start of the presence line, which becomes the

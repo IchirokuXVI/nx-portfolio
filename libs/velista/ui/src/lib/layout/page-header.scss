@@ -1,0 +1,98 @@
+// `flex: none`, so a page that is a flex column can put this before its scroller and
+// the header keeps its size whatever the content does.
+:host {
+  display: block;
+  flex: none;
+}
+
+// H1 and H3. The block size is the token plus the top safe area, which is added as
+// padding so the row itself is the same on a phone with a notch and on one without.
+// `border-box`, so the border is inside the token's size and not on top of it.
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  box-sizing: border-box;
+  block-size: calc(var(--app-header-height) + var(--app-safe-top));
+  padding-block-start: var(--app-safe-top);
+  padding-inline: var(--app-space-5);
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-ground);
+}
+
+// The negative start margin puts the chevron's glyph on the header's padding edge,
+// where a page with no way back draws its icon. The button is a touch target wide and
+// the glyph is not, so without it the chevron sits indented from every icon.
+.lead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-inline-start: calc(var(--app-space-4) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.lead-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// An icon is 1em square, so the slot sizes whatever the page projects. The end margin
+// starts the title where it starts beside a back control.
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  margin-inline-end: var(--app-space-3);
+  color: var(--app-text-primary);
+  font-size: var(--app-header-icon-size);
+
+  // A page with a back control projects nothing, and an empty slot must not hold the
+  // title away from the edge.
+  &:empty {
+    display: none;
+  }
+}
+
+// H2. One face, one size, one weight and one tracking, on every page. It takes the
+// room that is left and gives it back as an ellipsis rather than as a second line.
+.title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text-primary);
+  font-family: var(--app-font-display);
+  font-size: var(--app-header-title-size);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// H5. The negative end margin is the mirror of the back control's: the last action is
+// a touch target wide and its glyph is not, so this puts the glyph near the padding
+// edge without shrinking the target.
+.actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-inline-end: calc(var(--app-space-3) * -1);
+
+  &:empty {
+    display: none;
+  }
+}

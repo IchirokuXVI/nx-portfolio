@@ -74,6 +74,24 @@ export function basketPath(
 }
 
 /**
+ * The URL of a sheet over a basket, named by what the sheet is about.
+ *
+ * For a sheet that leaves for a sibling: the menu's rows replace the menu with the
+ * people sheet, the finish sheet or the form that composes a new list (velista
+ * `0130`, section 6.1). The `sheet` marker is stamped by {@link sheetSegments}.
+ */
+export function basketSheetPath(
+  locale: string,
+  basePath: string,
+  address: BasketAddress | null,
+  ...about: readonly string[]
+): string {
+  return `${basketPath(locale, basePath, address)}/${sheetSegments(
+    ...about
+  ).join('/')}`;
+}
+
+/**
  * The settle sheet's own URL, addressed by the **row key** (velista `0090`).
  *
  * Every caller that opens the sheet goes through it, and so does the sheet itself

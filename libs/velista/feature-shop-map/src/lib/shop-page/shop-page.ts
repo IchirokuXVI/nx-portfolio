@@ -25,16 +25,16 @@ import {
   shopMapPath,
 } from '@portfolio/velista/platform';
 import {
-  ChevronLeftIcon,
   FloorAreaIcon,
   MapIcon,
+  PageHeader,
   PinIcon,
 } from '@portfolio/velista/ui';
 
-/** What the page head and the address row say, worked out once. */
+/** What the header, the chain line and the address row say, worked out once. */
 export interface ShopPageText {
   readonly title: string;
-  /** The chain under the title, or null when the title already is the chain. */
+  /** The chain, the first line under the header, or null when the title already is the chain. */
   readonly chain: string | null;
   /** The street, else the town, else null for a shop with no address at all. */
   readonly street: string | null;
@@ -78,13 +78,7 @@ function nonEmpty(value: string | null): string | null {
  */
 @Component({
   selector: 'lib-shop-page',
-  imports: [
-    ChevronLeftIcon,
-    FloorAreaIcon,
-    MapIcon,
-    PinIcon,
-    RokuTranslatorPipe,
-  ],
+  imports: [FloorAreaIcon, MapIcon, PageHeader, PinIcon, RokuTranslatorPipe],
   templateUrl: './shop-page.html',
   styleUrl: './shop-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

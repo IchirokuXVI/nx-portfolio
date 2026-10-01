@@ -58,12 +58,18 @@ button{font:inherit;color:inherit;cursor:pointer}
 .switch button[aria-pressed="true"]{background:var(--raised);color:var(--text);box-shadow:var(--elev);font-weight:600}
 .phone{background:var(--surface-ground);border:1px solid var(--border);border-radius:28px;box-shadow:var(--phone-shadow);overflow:hidden;display:flex;flex-direction:column;max-height:820px}
 .scroll{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
-.bar{display:flex;align-items:center;gap:8px}
-.round{width:44px;height:44px;border-radius:999px;border:1px solid var(--border);background:var(--raised);display:grid;place-items:center;flex:none}
-.round svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.bar .title{flex:1;min-width:0}
-.bar h2{margin:0;font-size:20px;line-height:1.2}
-.bar small{color:var(--muted);font-size:12px}
+/* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface-ground); }
+.ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); cursor: pointer; }
+.ph-icon { flex: none; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; color: var(--text); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+.ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); cursor: pointer; }
+.ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+/* the list's first block of content: the group, then what is left of the tools (the search), then the progress */
+.lead{display:flex;align-items:center;gap:8px;min-height:44px;margin-block:-8px -12px}
+.lead .in{flex:1;min-width:0;font-size:14px;color:var(--muted)}
+.lead button{flex:none;width:44px;height:44px;margin-right:-10px;display:grid;place-items:center;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text-2)}
 .progress{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--text-2)}
 .track{height:6px;border-radius:999px;background:var(--sunken);border:1px solid var(--border);overflow:hidden}
 .track i{display:block;height:100%;width:70%;background:var(--ok);border-radius:999px}
@@ -133,12 +139,18 @@ button{font:inherit;color:inherit;cursor:pointer}
       </div>
 
       <div class="phone">
+        <header class="ph">
+          <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+          <h1 class="ph-title">Weekly food</h1>
+          <div class="ph-actions">
+            <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+            <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+          </div>
+        </header>
         <div class="scroll">
-          <div class="bar">
-            <button class="round" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-            <div class="title"><h2>Weekly food</h2><small>in Home</small></div>
-            <button class="round" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
-            <button class="round" aria-label="Filter"><svg viewBox="0 0 24 24"><path d="M4 7h16M7 12h10M10 17h4"/></svg></button>
+          <div class="lead">
+            <span class="in">in Home</span>
+            <button type="button" aria-label="Search"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5"></path></svg></button>
           </div>
           <div class="progress"><span id="sentence">9 of 25 pending</span><div class="track"><i></i></div></div>
 

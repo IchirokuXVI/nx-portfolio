@@ -1,6 +1,6 @@
 {
   "title": "Velista Assistant Panel",
-  "lede": "The design for plan <code>0032</code>, the panel behind the app bar's second button, and the client half of backend plan <code>0039</code>. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The design for plan <code>0032</code>, the panel behind the app bar's second button, and the client half of backend plan <code>0039</code>. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     {
       "file": "AppBar.dc.html",

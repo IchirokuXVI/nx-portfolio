@@ -1,22 +1,14 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="close()"
-      [attr.aria-label]="'shopWalks.rewind.close' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-close-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      <h1 class="title">
-        {{ 'shopWalks.rewind.title' | rokuT: { name: name() ?? '' } }}
-      </h1>
-      @if (subtitle(); as subtitle) {
-        <p class="subtitle">{{ subtitle }}</p>
-      }
-    </div>
-  </header>
+  <lib-page-header
+    (back)="close()"
+    [backLabel]="'shopWalks.rewind.close' | rokuT"
+    [title]="'shopWalks.rewind.title' | rokuT: { name: name() ?? '' }"
+    leading="close"
+  />
+
+  @if (subtitle(); as subtitle) {
+    <p class="subtitle">{{ subtitle }}</p>
+  }
 
   @let state = read();
   @if (state.kind === 'log') {

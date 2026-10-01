@@ -1,6 +1,6 @@
 {
   "title": "Velista Home Artboards",
-  "lede": "The approved design for plan <code>0003</code>, the home page, and its split into a front door and a dashboard in <code>0007</code>. Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The approved design for plan <code>0003</code>, the home page, and its split into a front door and a dashboard in <code>0007</code>. Phone only, 390 by 844. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     {
       "file": "Main.dc.html",

@@ -20,6 +20,7 @@ import {
   provideFakeProfileStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
+  REALTIME_CLIENT,
   VERIFY_RESEND_AVAILABLE,
   ZoneStore,
   type FakeBasketListStore,
@@ -28,12 +29,14 @@ import {
   type FakePresenceOptions,
   type FakeProfileStore,
   type FakeZoneStore,
+  type RealtimeMemory,
   type ZoneEntry,
 } from '@portfolio/velista/data-access';
 import type { BasketSummary, MyZone } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  TourAnchors,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
 import { ShoppingListCard, ZoneCard } from '@portfolio/velista/ui';
@@ -197,12 +200,118 @@ describe('HomePage', () => {
   // `auth-guards.spec.ts` in `feature-shell` is where that is asserted.
   describe('the header', () => {
     it('shows the account button rather than the locale switch', async () => {
-      // The dashboard's half of the header is search and account. Where a signed in
-      // user changes language is a settings screen question (plan 0007, O4).
+      // The dashboard's half of the header is the assistant and the account. Where a
+      // signed in user changes language is a settings screen question (plan 0007, O4).
       const fixture = await render();
 
-      expect(query(fixture, 'lib-app-bar .avatar')).not.toBeNull();
-      expect(query(fixture, 'lib-app-bar .locale')).toBeNull();
+      expect(query(fixture, 'lib-page-header .avatar')).not.toBeNull();
+      expect(query(fixture, 'lib-page-header .locale')).toBeNull();
+    });
+
+    /**
+     * Velista `0130`, section 3. Home draws the one page header like every other page,
+     * and it is the only page whose header carries the brand.
+     */
+    it('is the one page header, titled with the product and led by its mark', async () => {
+      const fixture = await render();
+
+      expect(query(fixture, 'lib-app-bar')).toBeNull();
+      // The translator answers the key, and the key is the product's name (rule N1).
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'app-title'
+      );
+      // No way back from home, so the left end is the mark and not a chevron (H4).
+      expect(query(fixture, 'lib-page-header .lead')).toBeNull();
+      expect(
+        query(fixture, 'lib-page-header lib-brand-mark[pageHeaderIcon]')
+      ).not.toBeNull();
+    });
+
+    it('stays outside the scroller, in every state', async () => {
+      for (const options of [{}, { fails: true }, { zones: [] }]) {
+        const fixture = await render(options);
+
+        expect(query(fixture, '.page > lib-page-header')).not.toBeNull();
+        expect(query(fixture, '.content lib-page-header')).toBeNull();
+      }
+    });
+
+    it('holds the assistant and then the account, each with its name', async () => {
+      const fixture = await render();
+
+      const actions = queryAll(
+        fixture,
+        'lib-page-header button[libPageHeaderAction]'
+      );
+
+      expect(
+        actions.map((action) => action.getAttribute('aria-label'))
+      ).toEqual(['home.action.assistant', 'home.action.account']);
+      // The one action in a header that takes the accent.
+      expect(actions[0].classList.contains('is-accent')).toBe(true);
+      expect(actions[1].classList.contains('is-accent')).toBe(false);
+    });
+
+    it('opens the assistant and the account from those two', async () => {
+      const fixture = await render();
+      const navigate = jest
+        .spyOn(TestBed.inject(Router), 'navigate')
+        .mockResolvedValue(true);
+
+      (query(fixture, '.assistant') as HTMLButtonElement).click();
+      (query(fixture, '.account') as HTMLButtonElement).click();
+
+      expect(navigate.mock.calls.map((call) => call[0])).toEqual([
+        ['..', 'assistant'],
+        ['..', 'account'],
+      ]);
+    });
+
+    it('declares the assistant as the tour anchor, on the button itself', async () => {
+      // The anchor used to sit in the brand bar, which six pages drew. This is now
+      // the only element that declares it, so the tour's `assistant` stop, which
+      // plays on home, has exactly one thing to light (velista `0099`).
+      const fixture = await render();
+
+      expect(TestBed.inject(TourAnchors).elements().get('assistant')).toBe(
+        query(fixture, '.assistant')
+      );
+    });
+
+    describe('the offline mark', () => {
+      it('is absent while the connection is up', async () => {
+        const fixture = await render();
+
+        expect(query(fixture, '.offline-mark')).toBeNull();
+      });
+
+      it('is drawn first, and named, when the connection is down', async () => {
+        // Plan 0035, section 5.3. Home is the one page that says so in its header
+        // since velista `0130`; the list and the group keep their own stale notices.
+        const fixture = await render();
+
+        (TestBed.inject(REALTIME_CLIENT) as RealtimeMemory).setConnected(false);
+        fixture.detectChanges();
+
+        const mark = query(fixture, '.offline-mark');
+        expect(mark?.getAttribute('aria-label')).toBe('connection.notLive');
+        expect(mark?.getAttribute('role')).toBe('img');
+        expect(mark?.nextElementSibling).toBe(query(fixture, '.assistant'));
+      });
+
+      it('is not a control', async () => {
+        // It reports a state and there is nowhere for it to lead.
+        const fixture = await render();
+
+        (TestBed.inject(REALTIME_CLIENT) as RealtimeMemory).setConnected(false);
+        fixture.detectChanges();
+
+        expect(query(fixture, '.offline-mark')?.tagName).toBe('SPAN');
+        expect(query(fixture, '.offline-mark button')).toBeNull();
+        expect(
+          queryAll(fixture, 'lib-page-header button[libPageHeaderAction]')
+        ).toHaveLength(2);
+      });
     });
   });
 

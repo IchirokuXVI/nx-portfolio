@@ -57,7 +57,8 @@ import {
 import { LineComposer } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
+import { basketDoors } from '../basket-menu';
 import { BasketRow as BasketRowComponent } from '../basket-row/basket-row';
 import { BasketPage } from './basket-page';
 
@@ -524,7 +525,9 @@ async function render(options: Options = {}): Promise<{
       {
         provide: ActivatedRoute,
         useValue: {
-          paramMap: of(paramMap),
+          // A subject, so a test can move the id under the page the way the router
+          // does when one basket's address is replaced by another's.
+          paramMap: new BehaviorSubject(paramMap),
           queryParamMap: url.queryParamMap,
           snapshot: {
             paramMap,
@@ -534,6 +537,15 @@ async function render(options: Options = {}): Promise<{
             // What the route says about which basket to open (velista `0091`):
             // `live` for the caller's own, absent for a basket named by its id.
             data: options.kind === 'LIVE' ? { basket: 'live' } : {},
+          },
+          // The sheets the route declares, which is how the page knows whether there
+          // is a finish sheet to offer (velista `0130`): `shopping-lists/live` has
+          // none, because a `LIVE` basket is never finished.
+          routeConfig: {
+            children:
+              options.kind === 'LIVE'
+                ? [{ path: 'sheet/more' }]
+                : [{ path: 'sheet/more' }, { path: 'sheet/finish' }],
           },
           parent: null,
         },
@@ -768,12 +780,23 @@ async function submit(fixture: ComponentFixture<BasketPage>): Promise<void> {
   fixture.detectChanges();
 }
 
+/** The header's menu button (velista `0130`, section 6.1). */
+const MENU = 'lib-page-header button.more';
+
 describe('the basket header, live', () => {
+  /**
+   * The faces sit at the leading edge of the tools row since velista `0130`: a
+   * header holds only a title. The tools row is drawn over lines, so every basket
+   * here has one.
+   */
   describe('the face row', () => {
+    const lines = [line('Milk')];
+
     it('is who is connected, not who has ever joined', async () => {
       // Everybody has gone home: four people can open this basket and none of them
       // is holding it. The participant list would draw four faces here.
       const { fixture } = await render({
+        lines,
         present: [],
         participants: [
           participant(owner()),
@@ -785,12 +808,14 @@ describe('the basket header, live', () => {
 
       expect(faces(fixture)).toHaveLength(0);
       // The sheet is still reachable, because "everybody who can open this" is a
-      // question worth answering and is a different one.
-      expect(query(fixture, '.people')).not.toBeNull();
+      // question worth answering and is a different one. Its door is a row of the
+      // menu now, so the menu is there.
+      expect(query(fixture, MENU)).not.toBeNull();
     });
 
     it('draws one face per person holding the basket open', async () => {
       const { fixture } = await render({
+        lines,
         present: [owner(), guest('p-1', 1), guest('p-2', 2)],
         participants: [participant(owner()), participant(guest('p-1', 1))],
       });
@@ -798,8 +823,42 @@ describe('the basket header, live', () => {
       expect(faces(fixture)).toHaveLength(3);
     });
 
+    it('draws them at the leading edge of the tools row, not in the header', async () => {
+      const { fixture } = await render({
+        lines,
+        present: [owner(), guest('p-1', 1)],
+        participants: [participant(owner())],
+      });
+
+      const button = query(fixture, 'lib-list-tools .faces');
+      expect(button).not.toBeNull();
+      expect(query(fixture, 'lib-page-header .faces')).toBeNull();
+      // Before the count, so it is the first thing in the row.
+      expect(button?.nextElementSibling?.classList.contains('progress')).toBe(
+        true
+      );
+    });
+
+    it('opens the people sheet, under the name it had in the header', async () => {
+      const { fixture, store } = await render({
+        lines,
+        present: [owner()],
+        participants: [participant(owner())],
+      });
+      const button = query(fixture, 'lib-list-tools .faces');
+
+      expect(button?.getAttribute('aria-label')).toBe('basket.people.open');
+      button?.click();
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'people'],
+        expect.anything()
+      );
+    });
+
     it('empties when the socket drops rather than freezing', async () => {
       const { fixture, store } = await render({
+        lines,
         present: [owner(), guest('p-1', 1)],
         participants: [participant(owner()), participant(guest('p-1', 1))],
       });
@@ -818,6 +877,7 @@ describe('the basket header, live', () => {
       // The header used to slice two characters off the label, so an owner and
       // three guests all rendered the same bubble.
       const { fixture } = await render({
+        lines,
         present: [guest('p-1', 1), guest('p-2', 2)],
       });
 
@@ -836,6 +896,7 @@ describe('the basket header, live', () => {
         userId: 'u-2',
       });
       const { fixture } = await render({
+        lines,
         me: reader,
         present: [owner()],
         participants: [{ ...participant(owner()), username: 'zoe' }, reader],
@@ -848,6 +909,7 @@ describe('the basket header, live', () => {
 
     it('marks a guest as a guest, and the owner not', async () => {
       const { fixture } = await render({
+        lines,
         present: [owner(), guest('p-1', 1)],
       });
 
@@ -860,14 +922,16 @@ describe('the basket header, live', () => {
     it('never says “anonymous”', async () => {
       // Section 5.1: the distinction is drawn, the judgement is not.
       const { fixture } = await render({
+        lines,
         present: [owner(), guest('p-1', 1), guest('p-2', 2)],
       });
 
       expect(text(fixture).toLowerCase()).not.toContain('anonymous');
     });
 
-    it('collapses a crowd rather than growing the header', async () => {
+    it('collapses a crowd rather than growing the row', async () => {
       const { fixture } = await render({
+        lines,
         present: [
           owner(),
           guest('p-1', 1),
@@ -883,10 +947,11 @@ describe('the basket header, live', () => {
   });
 
   /**
-   * No basket page has a back chevron (velista `0111`). The history button takes its
-   * place for every reader with an account, on the live basket and on a generated one.
+   * The one header every page draws (velista `0130`). No basket page has a back
+   * chevron (velista `0111`), so the left end holds the tab's icon, and the right
+   * end holds three quick actions: share, the map and the menu.
    */
-  describe('the history in the header', () => {
+  describe('the header', () => {
     const registered = (): BasketParticipant =>
       participant({
         ...guest('p-me', 1),
@@ -895,11 +960,37 @@ describe('the basket header, live', () => {
         userId: 'u-2',
       });
 
-    it('draws no chevron on a generated basket', async () => {
+    it('is outside the scroller, so it never scrolls away', async () => {
       const { fixture } = await render({ me: participant(owner()) });
 
-      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'lib-page-header')).not.toBeNull();
+      expect(query(fixture, 'main lib-page-header')).toBeNull();
+      // The scroller is still the column the page scrolls.
+      expect(
+        query(fixture, 'lib-page-header')?.nextElementSibling?.tagName
+      ).toBe('MAIN');
+    });
+
+    it('holds the basket’s name as the page’s one title', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent?.trim()).toBe(
+        'Saturday shop'
+      );
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('h1')
+      ).toHaveLength(1);
+      expect(query(fixture, 'main header')).toBeNull();
+    });
+
+    it('draws no chevron on a generated basket, and the tab’s icon instead', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+
+      expect(query(fixture, 'lib-page-header button.lead')).toBeNull();
       expect(query(fixture, 'button.back')).toBeNull();
+      expect(
+        query(fixture, 'lib-page-header lib-basket-icon[pageHeaderIcon]')
+      ).not.toBeNull();
     });
 
     it('draws no chevron on the live basket', async () => {
@@ -908,16 +999,29 @@ describe('the basket header, live', () => {
         kind: 'LIVE',
       });
 
-      expect(query(fixture, '.bar lib-chevron-left-icon')).toBeNull();
+      expect(query(fixture, 'lib-page-header button.lead')).toBeNull();
       expect(query(fixture, 'button.back')).toBeNull();
     });
 
-    it('offers the owner the history, named for a screen reader', async () => {
-      const { fixture } = await render({ me: participant(owner()) });
-      const history = query(fixture, '.bar button.history');
+    it('holds no history, people or finish button of its own', async () => {
+      // They are rows of the menu. With all of them here the title was cut to
+      // nothing at 390 wide.
+      const { fixture } = await render({
+        me: participant(owner()),
+        participants: [participant(owner())],
+      });
 
-      expect(history).not.toBeNull();
-      expect(history?.getAttribute('aria-label')).toBe('basket.openHistory');
+      for (const gone of ['.history', '.people', '.finish', '.faces']) {
+        expect(query(fixture, `lib-page-header ${gone}`)).toBeNull();
+      }
+    });
+
+    it('offers the owner the menu, named for a screen reader', async () => {
+      const { fixture } = await render({ me: participant(owner()) });
+      const menu = query(fixture, MENU);
+
+      expect(menu).not.toBeNull();
+      expect(menu?.getAttribute('aria-label')).toBe('basket.more.open');
     });
 
     it('offers it on the live basket too', async () => {
@@ -926,31 +1030,54 @@ describe('the basket header, live', () => {
         kind: 'LIVE',
       });
 
-      expect(query(fixture, '.bar button.history')).not.toBeNull();
+      expect(query(fixture, MENU)).not.toBeNull();
     });
 
-    it('offers a registered participant the history', async () => {
+    it('offers a registered participant the menu', async () => {
       const { fixture } = await render({ me: registered() });
 
-      expect(query(fixture, '.bar button.history')).not.toBeNull();
+      expect(query(fixture, MENU)).not.toBeNull();
     });
 
-    it('offers a guest no history, because it needs an account', async () => {
+    it('draws no menu for a guest it would hold nothing for', async () => {
+      // No history and no new list, because both need an account; no finish,
+      // because that is the owner's; and nobody on the basket to read about. A
+      // button that opens onto nothing is not drawn.
       const { fixture } = await render({ me: participant(guest('p-9', 1)) });
 
-      expect(query(fixture, '.bar button.history')).toBeNull();
+      expect(query(fixture, MENU)).toBeNull();
     });
 
-    it('pushes the history', async () => {
-      const { fixture } = await render({ me: participant(owner()) });
-      const go = TestBed.inject(Router).navigateByUrl as jest.Mock;
-      go.mockClear();
+    it('draws it for a guest once there is somebody to read about', async () => {
+      const me = participant(guest('p-9', 1));
+      const { fixture } = await render({ me, participants: [me] });
 
-      query(fixture, '.bar button.history')?.click();
+      expect(query(fixture, MENU)).not.toBeNull();
+    });
 
-      expect(go).toHaveBeenCalledWith('/en/shopping-lists');
-      // A push: back from the history comes back to this basket.
-      expect(go.mock.calls[0]?.[1]).toBeUndefined();
+    it('opens the menu as a sheet over the page', async () => {
+      const { fixture, store } = await render({ me: participant(owner()) });
+
+      query(fixture, MENU)?.click();
+
+      expect(store.navigate).toHaveBeenCalledWith(
+        ['sheet', 'more'],
+        expect.anything()
+      );
+    });
+
+    it('puts share first and the menu last', async () => {
+      const { fixture } = await render({
+        me: participant(owner()),
+        lines: [line('Milk')],
+      });
+      const actions = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          'lib-page-header .actions button'
+        )
+      ).map((button) => button.className.split(' ')[0]);
+
+      expect(actions).toEqual(['share', 'more']);
     });
   });
 
@@ -987,8 +1114,9 @@ describe('the basket header, live', () => {
       // Still the basket, still its header and its title: what is on the screen
       // stays readable and the sentence is added to it.
       expect(query(fixture, '.stale')).not.toBeNull();
-      expect(query(fixture, 'header.bar')).not.toBeNull();
-      expect(text(fixture)).toContain('Saturday shop');
+      expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+        'Saturday shop'
+      );
     });
 
     it('says it once, not twice', async () => {
@@ -1242,8 +1370,14 @@ describe('the number on a row', () => {
  * what appears when every line is settled, and what a finished basket stops drawing.
  */
 describe('finishing the shopping', () => {
-  const finish = (fixture: ComponentFixture<BasketPage>) =>
-    query(fixture, '.finish');
+  /**
+   * Whether this reader is offered the end of the trip. The control is a row of the
+   * menu since velista `0130`, and the menu sheet's own spec draws the row. The
+   * page holds no copy of the answer: it is asked of the store the page was
+   * rendered with, through the one function the page and the menu both read.
+   */
+  const canFinish = (_fixture: ComponentFixture<BasketPage>): boolean =>
+    basketDoors(TestBed.inject(BasketStore)).canFinish();
 
   const rows = (fixture: ComponentFixture<BasketPage>) =>
     fixture.debugElement
@@ -1263,14 +1397,16 @@ describe('finishing the shopping', () => {
   }
 
   describe('who is offered the control', () => {
-    it('draws it for the owner, in the header beside share', async () => {
+    it('offers it to the owner, through the menu', async () => {
       const { fixture } = await render();
 
-      expect(finish(fixture)).not.toBeNull();
-      // In the **header** and not the footer, which is section 3's whole argument:
-      // the footer belongs to the line you are working on, and a button that ends
-      // the trip must not sit a thumb's width from the one that settles a line.
-      expect(query(fixture, '.bar .finish')).not.toBeNull();
+      expect(canFinish(fixture)).toBe(true);
+      // Away from the footer, which is section 3's whole argument: the footer
+      // belongs to the line you are working on, and a button that ends the trip
+      // must not sit a thumb's width from the one that settles a line. It is a row
+      // of the menu, so the header holds the way to it and no button of its own.
+      expect(query(fixture, MENU)).not.toBeNull();
+      expect(query(fixture, '.finish')).toBeNull();
     });
 
     it('is absent for a registered participant, never disabled', async () => {
@@ -1287,7 +1423,7 @@ describe('finishing the shopping', () => {
       // Absent, per `0030`: a control you may not use is not drawn. A disabled one
       // would tell somebody who passes the all or nothing rule everywhere else that
       // this is a thing they might one day be allowed to press.
-      expect(finish(fixture)).toBeNull();
+      expect(canFinish(fixture)).toBe(false);
     });
 
     it('is absent for a guest', async () => {
@@ -1295,23 +1431,7 @@ describe('finishing the shopping', () => {
         me: participant(guest('p-9', 1)),
       });
 
-      expect(finish(fixture)).toBeNull();
-    });
-
-    it('asks the sheet rather than finishing where it stands', async () => {
-      // The question is worth a screen because what it is about cannot be seen from
-      // this one: three people may still be walking around a shop, and the lines
-      // nobody settled stay on their households' lists as they are.
-      const { fixture, store } = await render();
-
-      finish(fixture)?.click();
-      await settleWrite(fixture);
-
-      expect(store.setStatus).not.toHaveBeenCalled();
-      expect(store.navigate).toHaveBeenCalledWith(
-        ['sheet', 'finish'],
-        expect.anything()
-      );
+      expect(canFinish(fixture)).toBe(false);
     });
   });
 
@@ -1344,7 +1464,10 @@ describe('finishing the shopping', () => {
       ).toBe(false);
     });
 
-    it('opens the same sheet the header control does', async () => {
+    it('asks the sheet the menu’s row opens, rather than finishing where it stands', async () => {
+      // The question is worth a screen because what it is about cannot be seen from
+      // this one: three people may still be walking around a shop, and the lines
+      // nobody settled stay on their households' lists as they are.
       const { fixture, store } = await render({
         lines: settledLines,
         unsettled: 0,
@@ -1352,6 +1475,8 @@ describe('finishing the shopping', () => {
 
       query(fixture, '.prompt-action')?.click();
       await settleWrite(fixture);
+
+      expect(store.setStatus).not.toHaveBeenCalled();
 
       expect(store.navigate).toHaveBeenCalledWith(
         ['sheet', 'finish'],
@@ -1482,7 +1607,7 @@ describe('finishing the shopping', () => {
     it('draws no finish control, because there is nothing left to finish', async () => {
       const { fixture } = await render({ finished: true, lines: someLines });
 
-      expect(finish(fixture)).toBeNull();
+      expect(canFinish(fixture)).toBe(false);
     });
 
     it('keeps the share control, and the link with it', async () => {
@@ -2502,6 +2627,142 @@ describe('a visit that ends', () => {
  * comes off `selectBasketSurface`, so these tests are about the page reading that
  * model rather than about the model itself.
  */
+/**
+ * Create your shopping list is offered over a basket (velista `0130`, section 6.1),
+ * and what it makes is a basket: the sheet at `shopping-lists/<a>/sheet/get` leaves
+ * for `shopping-lists/<b>`. Those are one route, so the router keeps this page and
+ * changes the id under it.
+ */
+describe('another basket at the same route', () => {
+  const moveTo = (basketId: string): void => {
+    (
+      TestBed.inject(ActivatedRoute).paramMap as unknown as BehaviorSubject<
+        ReturnType<typeof convertToParamMap>
+      >
+    ).next(convertToParamMap({ basketId }));
+  };
+
+  it('lets the old basket go and opens the new one', async () => {
+    const { store } = await render();
+    expect(store.opened).toEqual(['basket-saturday']);
+
+    moveTo('basket-sunday');
+
+    expect(store.leave).toHaveBeenCalledTimes(1);
+    expect(store.opened).toEqual(['basket-saturday', 'basket-sunday']);
+  });
+
+  it('does nothing when the id did not change', async () => {
+    const { store } = await render();
+
+    moveTo('basket-saturday');
+
+    expect(store.leave).not.toHaveBeenCalled();
+    expect(store.opened).toEqual(['basket-saturday']);
+  });
+
+  it('is not about the basket that is always there, which has no id', async () => {
+    const { store } = await render({ kind: 'LIVE' });
+
+    moveTo('basket-sunday');
+
+    expect(store.opened).toEqual(['live']);
+  });
+
+  /**
+   * The page is kept, so what it remembers by itself has to be let go by hand: the
+   * stores are emptied by `leave`, and nothing else is.
+   */
+  describe('what the page itself remembered about the old one', () => {
+    const served = [
+      {
+        listId: 'l-weekly',
+        name: 'Weekly shop',
+        zoneId: 'z1',
+        zoneName: 'Flat',
+      },
+    ];
+
+    it('says nothing more about it, and leaves no refusal under a row', async () => {
+      // The live region stays in the DOM, so the last sentence about the old
+      // basket would sit in it for as long as the new one is open.
+      const { fixture, store } = await render({
+        lines: [line('Milk', { left: 5 })],
+      });
+      const row = () =>
+        fixture.debugElement.query(By.directive(BasketRowComponent))
+          .componentInstance as BasketRowComponent;
+      store.setLeft.mockResolvedValue(null);
+
+      row().left.emit({ from: 5, to: 3 });
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(query(fixture, '.said')?.textContent?.trim()).not.toBe('');
+      expect(row().notice()).not.toBeNull();
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.said')?.textContent?.trim()).toBe('');
+      expect(row().notice()).toBeNull();
+    });
+
+    it('does not carry a reopen that failed onto the next banner', async () => {
+      const { fixture } = await render({
+        finished: true,
+        lines: [line('Milk')],
+        statusWriteLands: false,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+      expect(query(fixture, '.finished-failed')).not.toBeNull();
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(query(fixture, '.finished-failed')).toBeNull();
+    });
+
+    it('drops a reopen answered after the page moved on', async () => {
+      const { fixture, store } = await render({
+        finished: true,
+        lines: [line('Milk')],
+        statusWriteLands: false,
+      });
+
+      query(fixture, '.finished-action')?.click();
+      moveTo('basket-sunday');
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(query(fixture, '.finished-failed')).toBeNull();
+      expect(store.refresh).not.toHaveBeenCalled();
+    });
+
+    it('empties the field, and the search of the old rows with it', async () => {
+      const { fixture } = await render({
+        lines: [line('Milk'), line('Eggs')],
+        served,
+      });
+
+      typeInto(fixture, 'milk');
+      expect(TestBed.inject(BasketViewStore).query()).toBe('milk');
+
+      moveTo('basket-sunday');
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      expect(TestBed.inject(BasketViewStore).query()).toBe('');
+      expect(fixture.componentInstance['suggestions']()).toEqual([]);
+    });
+  });
+});
+
 describe('the basket that is always there', () => {
   const someLines = [line('Milk', { left: 2 }), line('Eggs')];
 
@@ -2518,6 +2779,7 @@ describe('the basket that is always there', () => {
       me: participant(owner()),
     });
 
+    expect(basketDoors(TestBed.inject(BasketStore)).canFinish()).toBe(false);
     expect(query(fixture, '.finish')).toBeNull();
   });
 
@@ -2560,7 +2822,7 @@ describe('the basket that is always there', () => {
     // Velista `0094` section 7. The faces are a claim about who is here right
     // now and a `LIVE` basket has no presence room to make it from, but it can
     // be shared and can have named people on it, so the sheet has something to
-    // say and the header keeps the door to it. This used to be gated on
+    // say and the menu keeps the door to it. This used to be gated on
     // presence, which left the basket that is always there with no way in at
     // all.
     const { fixture } = await render({
@@ -2569,7 +2831,8 @@ describe('the basket that is always there', () => {
       participants: [participant(owner())],
     });
 
-    expect(query(fixture, '.people')).not.toBeNull();
+    expect(basketDoors(TestBed.inject(BasketStore)).hasPeople()).toBe(true);
+    expect(query(fixture, MENU)).not.toBeNull();
   });
 
   it('still offers the owner the share sheet: both kinds are shareable', async () => {
@@ -3684,9 +3947,9 @@ describe('BasketPage: the map of the shop you are in', () => {
     expect(shopDetails.ensured()).toContain('loc-jamon');
   });
 
-  it('offers the map in the head when that shop has one', async () => {
+  it('offers the map in the header when that shop has one', async () => {
     const { fixture } = await atElJamon({ hasMap: true });
-    const button = query(fixture, '.bar button.map');
+    const button = query(fixture, 'lib-page-header button.map');
 
     // A glyph and no word, so the title keeps its width; the label names it.
     expect(button?.textContent?.trim()).toBe('');
@@ -3702,7 +3965,7 @@ describe('BasketPage: the map of the shop you are in', () => {
     ]);
     const { fixture } = await atElJamon({ hasMap: 'failed', storage });
 
-    expect(query(fixture, '.bar button.map')).not.toBeNull();
+    expect(query(fixture, 'lib-page-header button.map')).not.toBeNull();
   });
 
   it('offers no kept map once its time is up, or one of another shop', async () => {
@@ -3712,7 +3975,7 @@ describe('BasketPage: the map of the shop you are in', () => {
     expect(
       query(
         (await atElJamon({ hasMap: 'failed', storage: late })).fixture,
-        '.bar button.map'
+        'lib-page-header button.map'
       )
     ).toBeNull();
 
@@ -3725,7 +3988,7 @@ describe('BasketPage: the map of the shop you are in', () => {
     expect(
       query(
         (await atElJamon({ hasMap: 'failed', storage: other })).fixture,
-        '.bar button.map'
+        'lib-page-header button.map'
       )
     ).toBeNull();
   });
@@ -3733,7 +3996,7 @@ describe('BasketPage: the map of the shop you are in', () => {
   it('offers nothing when the shop has no map', async () => {
     const { fixture } = await atElJamon({ hasMap: false });
 
-    expect(query(fixture, '.bar button.map')).toBeNull();
+    expect(query(fixture, 'lib-page-header button.map')).toBeNull();
   });
 
   it('offers a guest nothing, because the shop read needs an account', async () => {
@@ -3742,7 +4005,19 @@ describe('BasketPage: the map of the shop you are in', () => {
       me: participant(guest('p-9', 1)),
     });
 
-    expect(query(fixture, '.bar button.map')).toBeNull();
+    expect(query(fixture, 'lib-page-header button.map')).toBeNull();
+  });
+
+  it('draws it between share and the menu', async () => {
+    // The order the plan fixes (velista `0130`, section 6.1).
+    const { fixture } = await atElJamon({ hasMap: true });
+    const actions = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-page-header .actions button'
+      )
+    ).map((button) => button.className.split(' ')[0]);
+
+    expect(actions).toEqual(['share', 'map', 'more']);
   });
 
   it('pushes the map, counting from this basket', async () => {
@@ -3750,7 +4025,7 @@ describe('BasketPage: the map of the shop you are in', () => {
     const go = TestBed.inject(Router).navigateByUrl as jest.Mock;
     go.mockClear();
 
-    query(fixture, '.bar button.map')?.click();
+    query(fixture, 'lib-page-header button.map')?.click();
 
     expect(go).toHaveBeenCalledWith(
       '/en/shops/loc-jamon/map?basket=basket-saturday'

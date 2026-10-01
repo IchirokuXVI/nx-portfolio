@@ -54,6 +54,9 @@ Set as a mark it does three things wrong at once:
 
 ## 3. What it takes instead
 
+> **Replaced by `0130`, rule H2.** A title that is the reader's own text takes the same style
+> as every other page title, wordmark tracking included. The ellipsis rule below stays.
+
 **The step the list page gives the same string**: `--app-font-display` at
 `--app-text-xl`, weight 400, no wordmark tracking, one line with an ellipsis.
 

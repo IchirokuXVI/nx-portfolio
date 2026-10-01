@@ -1,12 +1,11 @@
 // The page furniture this library shares.
 //
-// A copy of `feature-zones/_zone-page.scss`'s column and back button rather than an
-// import of it, and that is not an oversight: Sass resolves `@use` against the
-// filesystem rather than against this workspace's TypeScript path aliases, so a mixin
-// cannot cross a library boundary. The header of that file says the same thing about
-// `AuthScreen`. A caret that looks identical on three surfaces is written three times
-// on purpose, because the alternative is a layout framework in `ui` that takes a page's
-// entire shape as inputs.
+// A copy of `feature-zones/_zone-page.scss`'s column rather than an import of it, and
+// that is not an oversight: Sass resolves `@use` against the filesystem rather than
+// against this workspace's TypeScript path aliases, so a mixin cannot cross a library
+// boundary. The header of that file says the same thing about `AuthScreen`. The back
+// button that was copied here too is gone: `PageHeader` in `ui` draws the one every
+// page uses (velista 0130).
 
 @mixin focus-ring {
   &:focus-visible {
@@ -27,27 +26,6 @@
   padding: var(--app-space-5);
   padding-block-end: var(--app-space-5);
   overflow-y: auto;
-}
-
-@mixin back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  align-self: flex-start;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  margin-inline-start: calc(var(--app-space-2) * -1);
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  @include focus-ring;
-}
-
-@mixin back-glyph {
-  font-size: var(--app-icon-md);
 }
 
 @mixin primary-action {

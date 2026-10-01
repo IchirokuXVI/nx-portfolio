@@ -3,11 +3,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  type ElementRef,
   inject,
   Injector,
   signal,
   viewChild,
+  type ElementRef,
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import {
@@ -15,8 +15,8 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  ContactStore,
   BasketListStore,
+  ContactStore,
   LIST_SERVICE,
   SHOPPING_PROFILE_SERVICE,
   ShoppingProfileStore,
@@ -27,9 +27,9 @@ import {
 import { BASKET_PATHS } from '@portfolio/velista/feature-shopping-lists';
 import {
   APP_BASE_PATH,
+  BASKET_NAME_MAX_LENGTH,
   formatDistance,
   formatGeneratedDate,
-  BASKET_NAME_MAX_LENGTH,
   groupContacts,
   inLocale,
   type BasketSource,
@@ -51,6 +51,19 @@ import {
   type PeoplePickerToggle,
 } from '@portfolio/velista/ui';
 import { GetListShopPane, type NearShopPick } from './get-list-shop-pane';
+
+/**
+ * Where a copy of this sheet returns to, as its route states it: a fixed page's
+ * path, or `parent` for the page under the sheet (velista `0130`, section 6.1).
+ */
+type GetListReturnTo = 'shopping-lists' | 'shopping-lists/current' | 'parent';
+
+/** Route data is untyped, so anything this sheet does not know is the history. */
+function statedReturnTo(stated: unknown): GetListReturnTo {
+  return stated === 'shopping-lists/current' || stated === 'parent'
+    ? stated
+    : 'shopping-lists';
+}
 
 /**
  * What a group contributes to the run.
@@ -242,7 +255,8 @@ export class GetListSheet {
   });
 
   /** The "Buying at" row, which focus returns to when the picker closes. */
-  private readonly _shopRow = viewChild<ElementRef<HTMLButtonElement>>('shopRow');
+  private readonly _shopRow =
+    viewChild<ElementRef<HTMLButtonElement>>('shopRow');
 
   /**
    * The page this sheet is drawn over, named by the route rather than worked out from
@@ -260,11 +274,17 @@ export class GetListSheet {
    * value is a **path**, which is what lets `dismiss` hand it straight to `appPath`,
    * and the default is the history, so a sheet route added without the data lands on a
    * real page rather than throwing.
+   *
+   * **`parent` is the third value, and the one that is not a path** (velista `0130`,
+   * section 6.1). The basket's menu offers this sheet, so it also covers the two
+   * basket routes, and one of those is `shopping-lists/:basketId`: a pattern with a
+   * parameter in it, which names no page. `parent` means "the page under me", and
+   * {@link _pageBelow} reads that page's address from this sheet's own parent route,
+   * the one thing here that knows the id.
    */
-  private readonly _returnTo: 'shopping-lists' | 'shopping-lists/current' =
-    this._route.snapshot.data['returnTo'] === 'shopping-lists/current'
-      ? 'shopping-lists/current'
-      : 'shopping-lists';
+  private readonly _returnTo = statedReturnTo(
+    this._route.snapshot.data['returnTo']
+  );
 
   /**
    * Whether to offer the way to the history.
@@ -277,6 +297,10 @@ export class GetListSheet {
    *
    * Over the third tab it stays, because that screen is not the history: it has its own
    * clock in the header, and two ways to one screen is not the fault a missing way is.
+   *
+   * Over a basket it stays too, for the same reason: a basket is not the history.
+   * The menu this sheet was opened from has a History row of its own, and a second
+   * way there costs one quiet word in a header.
    */
   readonly showHistory = this._returnTo !== 'shopping-lists';
 
@@ -722,9 +746,37 @@ export class GetListSheet {
       this.closeShopPicker();
       return;
     }
-    await this._sheet.dismiss(
-      appPath(this._locale(), this._basePath, this._returnTo)
+    await this._sheet.dismiss(this._pageBelow());
+  }
+
+  /**
+   * The URL of the page this sheet covers.
+   *
+   * For the two copies whose page is a fixed path, that path. For the copy over a
+   * basket, the address of the parent route as the router matched it: every segment
+   * from the root down to the page, so the mount, the locale and the basket's id are
+   * the ones in the address bar and none of them is rebuilt here. A basket page has
+   * no `sheet` segment of its own, so nothing has to be cut off.
+   *
+   * A route with no parent cannot be a sheet over anything, and lands on the history
+   * like an unstated `returnTo` does.
+   */
+  private _pageBelow(): string {
+    const page = this._route.snapshot.parent ?? null;
+
+    if (this._returnTo !== 'parent' || page === null) {
+      return appPath(
+        this._locale(),
+        this._basePath,
+        this._returnTo === 'parent' ? BASKET_PATHS.list : this._returnTo
+      );
+    }
+
+    const segments = page.pathFromRoot.flatMap((route) =>
+      route.url.map((segment) => encodeURIComponent(segment.path))
     );
+
+    return `/${segments.join('/')}`;
   }
 
   /**

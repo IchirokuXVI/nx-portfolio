@@ -1,6 +1,6 @@
 {
   "title": "Velista: finding a line in the basket",
-  "lede": "The design for searching, filtering, grouping and ordering the basket page (plans to follow, once this is approved). A search field and a filter sheet, reached from a tools row under the title; grouping by category or by list; prices from one shop, chosen in a sheet of its own; the owner's list filter; and what the screen says when a search matches nothing. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for searching, filtering, grouping and ordering the basket page (plans to follow, once this is approved). A search field and a filter sheet, reached from a tools row under the title; grouping by category or by list; prices from one shop, chosen in a sheet of its own; the owner's list filter; and what the screen says when a search matches nothing. Phone only, 390 by 844, Night only: every colour role here is already proven on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Tools.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The tools row: at rest, searching, filtered" },
     { "file": "FilterSheet.dc.html", "x": 0, "y": 1160, "w": 1330, "h": 1010, "title": "The filter sheet, and the shop picker" },
@@ -20,7 +20,7 @@
       "x": 460,
       "y": -430,
       "w": 420,
-      "text": "THE TOOLS ROW, NOT THE HEADER. The header already holds back, the title, the faces, share and finish: two more icons there would shrink the title to nothing. Search and filter sit in the row under it, beside the count the page already draws, and that row becomes the search field when search opens.\nSEARCH IS IN MEMORY, over the line's text and its product's name, case and accent folded. The result count is said. Cancel restores the row.\nTHE FILTER ICON COUNTS what the sheet turned on. The chip row names each one with an x, on ONE line: chips that would not fit collapse into a single \"+ N\" chip, which opens the sheet. The shop chip is the chain name alone."
+      "text": "THE TOOLS ROW, NOT THE HEADER. Since plan 0130 the header holds the basket icon, the title, share, map and the menu: two more icons there would shrink the title to nothing. Search and filter sit in the row under it, beside the count the page already draws, and that row becomes the search field when search opens.\nSEARCH IS IN MEMORY, over the line's text and its product's name, case and accent folded. The result count is said. Cancel restores the row.\nTHE FILTER ICON COUNTS what the sheet turned on. The chip row names each one with an x, on ONE line: chips that would not fit collapse into a single \"+ N\" chip, which opens the sheet. The shop chip is the chain name alone."
     },
     {
       "id": "sheet",

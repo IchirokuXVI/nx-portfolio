@@ -1,15 +1,11 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { provideVelistaTesting, TEST_BRAND } from '@portfolio/velista/platform';
 import { AppBar } from './app-bar';
 
 interface Options {
-  readonly signedIn?: boolean;
   readonly locale?: string;
   readonly locales?: readonly string[];
-  readonly connected?: boolean;
-  readonly homeUrl?: string | null;
 }
 
 async function render(
@@ -17,17 +13,12 @@ async function render(
 ): Promise<ComponentFixture<AppBar>> {
   await TestBed.configureTestingModule({
     imports: [AppBar, RokuTranslatorTestingModule.forTesting()],
-    // The lockup is a `routerLink` when it has somewhere to go, so the specs need a
-    // router even though nothing here navigates.
-    providers: [provideVelistaTesting(), provideRouter([])],
+    providers: [provideVelistaTesting()],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(AppBar);
-  fixture.componentRef.setInput('signedIn', options.signedIn ?? false);
   fixture.componentRef.setInput('locale', options.locale ?? 'EN');
   fixture.componentRef.setInput('locales', options.locales ?? ['en', 'es']);
-  fixture.componentRef.setInput('connected', options.connected ?? true);
-  fixture.componentRef.setInput('homeUrl', options.homeUrl ?? null);
   fixture.detectChanges();
 
   return fixture;
@@ -66,102 +57,71 @@ describe('AppBar', () => {
       expect(host(fixture).querySelectorAll('lib-brand-mark')).toHaveLength(1);
     });
 
-    it('leads home when the page names a home URL', async () => {
-      const fixture = await render({ signedIn: true, homeUrl: '/en/home' });
-
-      const link = host(fixture).querySelector<HTMLAnchorElement>('.lockup');
-
-      expect(link?.tagName).toBe('A');
-      expect(link?.getAttribute('href')).toBe('/en/home');
-    });
-
     it('takes its accessible name from the wordmark', async () => {
-      // Not an `aria-label` of its own. The visible word is the brand, so a name that
-      // did not contain it would leave a link nobody can ask for by what they see.
-      const fixture = await render({ signedIn: true, homeUrl: '/en/home' });
+      // Not an `aria-label` of its own. The visible word is the brand, so a second
+      // name on the lockup would be one nobody can ask for by what they see.
+      const fixture = await render();
 
-      const link = host(fixture).querySelector('.lockup');
+      const lockup = host(fixture).querySelector('.lockup');
 
-      expect(link?.getAttribute('aria-label')).toBeNull();
+      expect(lockup?.getAttribute('aria-label')).toBeNull();
       expect(
-        link?.querySelector('lib-brand-wordmark')?.getAttribute('aria-label')
+        lockup?.querySelector('lib-brand-wordmark')?.getAttribute('aria-label')
       ).toBe(TEST_BRAND.name);
     });
 
-    it('is not a control on a page that names none', async () => {
-      // The dashboard and the front door, where the destination is the page already
-      // being looked at.
-      const fixture = await render({ signedIn: true });
+    it('is not a control', async () => {
+      // The front door, where the destination would be the page already being
+      // looked at.
+      const fixture = await render();
 
       const lockup = host(fixture).querySelector('.lockup');
 
       expect(lockup?.tagName).toBe('DIV');
-      expect(host(fixture).querySelector('a.lockup')).toBeNull();
+      expect(host(fixture).querySelector('a')).toBeNull();
     });
   });
 
-  describe('the second button', () => {
-    it('opens the assistant, and no longer offers search', async () => {
-      // Plan 0032, section 1. `openSearch` called `_notYetRouted('search')` on every
-      // page that bound it and there was never a search page behind it, so the slot is
-      // spent rather than a feature removed. The assertion is on the **output**, not
-      // on the glyph: the icon may be reconsidered and the contract may not.
-      const fixture = await render({ signedIn: true });
-      const opened: number[] = [];
-      fixture.componentInstance.openAssistant.subscribe(() =>
-        opened.push(opened.length)
-      );
-
-      const button =
-        host(fixture).querySelector<HTMLButtonElement>('.assistant');
-      button?.click();
-
-      expect(button).not.toBeNull();
-      expect(opened).toHaveLength(1);
-      expect('openSearch' in fixture.componentInstance).toBe(false);
-    });
-
-    it('keeps both header buttons at the minimum touch target', async () => {
-      // The slot did not change shape, which is half of why spending it is cheap.
-      const fixture = await render({ signedIn: true });
-
-      expect(host(fixture).querySelectorAll('.icon-button')).toHaveLength(2);
-    });
-  });
-
-  describe('the offline mark', () => {
-    it('is absent while the connection is up', async () => {
-      const fixture = await render({ signedIn: true, connected: true });
-
-      expect(host(fixture).querySelector('.offline-mark')).toBeNull();
-    });
-
-    it('is drawn, and named, when the connection is down', async () => {
-      // Plan 0035, section 5.3. Until this, a dead socket had one symptom in the whole
-      // app and it was on one screen, so somebody on the dashboard had no way to know
-      // that nothing in front of them would ever change again.
-      const fixture = await render({ signedIn: true, connected: false });
-
-      const mark = host(fixture).querySelector('.offline-mark');
-      expect(mark).not.toBeNull();
-      expect(mark?.getAttribute('aria-label')).toBe('connection.notLive');
-    });
-
-    it('is not a control', async () => {
-      // It reports a state and there is nowhere for it to lead, and a button that
-      // leads nowhere is worse than no button.
-      const fixture = await render({ signedIn: true, connected: false });
-
-      expect(host(fixture).querySelector('.offline-mark button')).toBeNull();
-      expect(host(fixture).querySelectorAll('.icon-button')).toHaveLength(2);
-    });
-
-    it('stays off the anonymous header', async () => {
-      // R1 opens no socket at all while anonymous, so a mark there would be
+  /**
+   * Velista `0130`, section 3. The assistant, the account button and the offline mark
+   * were this bar's signed in half. They are home's page header now, and this bar is
+   * the front door's alone.
+   */
+  describe('what moved to the home page header', () => {
+    it('draws no assistant, no account button and no offline mark', async () => {
+      // R1 opens no socket at all while anonymous, so a mark here would be
       // permanently on and would mean nothing.
-      const fixture = await render({ signedIn: false, connected: false });
+      const fixture = await render();
 
+      expect(host(fixture).querySelector('.assistant')).toBeNull();
+      expect(host(fixture).querySelector('.avatar')).toBeNull();
       expect(host(fixture).querySelector('.offline-mark')).toBeNull();
+      // The locale control is the one button until its menu opens.
+      expect(host(fixture).querySelectorAll('button')).toHaveLength(1);
+    });
+
+    it('declares no tour anchor', async () => {
+      // The `assistant` anchor is home's (velista `0099`). A second element declaring
+      // it is refused by the registry, loudly, and lights nothing.
+      const fixture = await render();
+
+      expect(host(fixture).querySelector('[libTourAnchor]')).toBeNull();
+    });
+
+    it('keeps none of the inputs and outputs only that half read', async () => {
+      const bar = (await render()).componentInstance;
+
+      for (const gone of [
+        'signedIn',
+        'homeUrl',
+        'accountInitial',
+        'connected',
+        'bordered',
+        'openAssistant',
+        'account',
+      ]) {
+        expect(gone in bar).toBe(false);
+      }
     });
   });
 
@@ -246,13 +206,6 @@ describe('AppBar', () => {
       expect(host(fixture).querySelector('.menu')).toBeNull();
       expect(host(fixture).querySelector('.chevron')).toBeNull();
       expect(trigger(fixture).getAttribute('aria-haspopup')).toBeNull();
-    });
-
-    it('is not in the signed-in header at all', async () => {
-      const fixture = await render({ signedIn: true });
-
-      expect(host(fixture).querySelector('.locale')).toBeNull();
-      expect(host(fixture).querySelector('.avatar')).not.toBeNull();
     });
   });
 });

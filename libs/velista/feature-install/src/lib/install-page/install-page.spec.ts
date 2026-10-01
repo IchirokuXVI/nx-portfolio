@@ -8,6 +8,7 @@ import {
 import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import {
   InstallStore,
+  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   type InstallGuide,
@@ -73,10 +74,6 @@ function query(fixture: ComponentFixture<InstallPage>, selector: string) {
   return (fixture.nativeElement as HTMLElement).querySelector(selector);
 }
 
-function text(fixture: ComponentFixture<InstallPage>): string {
-  return (fixture.nativeElement as HTMLElement).textContent ?? '';
-}
-
 describe('InstallPage', () => {
   /**
    * D3 and D4, which are the two decisions the whole screen is built on: the steps are
@@ -135,12 +132,84 @@ describe('InstallPage', () => {
     });
   });
 
+  /**
+   * The one header (velista `0130`). The brand bar is home's, so this page draws a
+   * back control and its title and nothing else, and the title is the page's only `h1`.
+   */
+  describe('the header', () => {
+    it('draws the title, and no brand bar', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('lib-page-header h1')?.textContent).toContain(
+        'install.title'
+      );
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('lib-app-bar')).toBeNull();
+      expect(root.querySelector('lib-page-header .actions button')).toBeNull();
+    });
+
+    it('sits outside the scroller, so it never scrolls away', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('main lib-page-header')).toBeNull();
+      expect(root.querySelector('main')?.previousElementSibling?.tagName).toBe(
+        'LIB-PAGE-HEADER'
+      );
+    });
+
+    it('goes back with a fallback, so a cold arrival stays in the app', async () => {
+      const { fixture } = await render();
+      const back = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+
+      const control = (
+        fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLButtonElement>('lib-page-header .lead');
+      expect(control?.getAttribute('aria-label')).toBe('install.back');
+
+      control?.click();
+      await fixture.whenStable();
+
+      expect(back).toHaveBeenCalledWith('/en');
+    });
+
+    it('keeps the mark, as the first thing in the content', async () => {
+      // A header holds only a title, so the mark that sat between the back row and
+      // the title is content now, in both modes.
+      for (const basePath of ['', '/velista']) {
+        const { fixture } = await render({ basePath });
+
+        expect(query(fixture, 'lib-page-header lib-brand-mark')).toBeNull();
+        expect(query(fixture, 'main')?.firstElementChild?.tagName).toBe(
+          'LIB-BRAND-MARK'
+        );
+      }
+    });
+
+    it('follows the state, so the title is right when the app gets installed', async () => {
+      const { fixture, state } = await render();
+
+      state.set('installed');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+        'install.installed.title'
+      );
+    });
+  });
+
   /** Rule I4: no state of this page is a dead end. */
   describe('when it is already installed', () => {
     it('confirms, and still offers the steps', async () => {
       const { fixture } = await render({ install: 'installed' });
 
-      expect(text(fixture)).toContain('install.installed.title');
+      expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+        'install.installed.title'
+      );
       expect(query(fixture, '.reveal')?.textContent).toContain(
         'install.installed.reveal'
       );
@@ -166,7 +235,9 @@ describe('InstallPage', () => {
     it('points at the app’s own origin and offers no install at all', async () => {
       const { fixture, prompt } = await render({ basePath: '/velista' });
 
-      expect(text(fixture)).toContain('install.elsewhere.title');
+      expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+        'install.elsewhere.title'
+      );
       expect(query(fixture, 'lib-install-panel')).toBeNull();
       expect(query(fixture, 'lib-install-steps')).toBeNull();
       expect(prompt).not.toHaveBeenCalled();

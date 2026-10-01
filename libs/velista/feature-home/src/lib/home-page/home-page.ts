@@ -48,13 +48,17 @@ import {
   TourAnchor,
 } from '@portfolio/velista/platform';
 import {
-  AppBar,
   AskedNotice,
+  BrandMark,
+  CommentIcon,
   ConfirmEmailNudge,
   EmptyState,
   ErrorState,
   GuestUpgradeBanner,
   InviteCard,
+  OfflineIcon,
+  PageHeader,
+  PageHeaderAction,
   ShoppingListCard,
   SuccessNote,
   ZoneCard,
@@ -87,13 +91,17 @@ import { selectHomeState } from './select-home-state';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
-    AppBar,
     AskedNotice,
+    BrandMark,
+    CommentIcon,
     ConfirmEmailNudge,
     EmptyState,
     ErrorState,
     GuestUpgradeBanner,
     InviteCard,
+    OfflineIcon,
+    PageHeader,
+    PageHeaderAction,
     ShoppingListCard,
     SuccessNote,
     TourAnchor,
@@ -250,16 +258,16 @@ export class HomePage {
   });
 
   /**
-   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
+   * Whether the live connection is up, for the header's offline mark (plan 0035,
    * section 5.3).
    *
    * Straight off the client rather than through a store: it is a fact about the
-   * transport, and every screen that draws the bar reports the same one.
+   * transport. Home is the one page that draws the mark since velista `0130`.
    */
   readonly connected = this._realtime.connected;
 
   /**
-   * The letter in the app bar's account button.
+   * The letter in the header's account button.
    *
    * From the global username the token pair now carries (backend plan 0018), so it
    * costs no request. Null falls back to a neutral glyph, which is right for a guest

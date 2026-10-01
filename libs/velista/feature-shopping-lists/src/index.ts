@@ -21,6 +21,7 @@ export * from './lib/changes-sheet/changes-sheet';
 export * from './lib/filter-sheet/filter-sheet';
 export * from './lib/finish-sheet/finish-sheet';
 export * from './lib/join-page/join-page';
+export * from './lib/more-sheet/more-sheet';
 export * from './lib/people-sheet/people-sheet';
 export * from './lib/row-entries/row-entries';
 export * from './lib/settle-sheet/settle-sheet';

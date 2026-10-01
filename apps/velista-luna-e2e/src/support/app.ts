@@ -124,6 +124,27 @@ export function sheet(page: Page, title: string | RegExp): Locator {
   });
 }
 
+/**
+ * Press one row of the basket's menu (velista `0130`, section 6.1).
+ *
+ * The people, the history, a new shopping list and finishing were buttons in the
+ * basket's header. They are rows of a menu now, behind the header's More button, so
+ * reaching one is two presses: the button, then the row.
+ *
+ * The row is matched from the start of its name and not exactly, because the People
+ * row carries how many people are on the basket after its word.
+ */
+export async function pressBasketMenuRow(
+  page: Page,
+  word: 'People' | 'History' | 'Create your shopping list' | 'Finish'
+): Promise<void> {
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  await expect(page).toHaveURL(/\/sheet\/more(\?.*)?$/);
+  await sheet(page, 'More')
+    .getByRole('button', { name: new RegExp(`^${word}`) })
+    .click();
+}
+
 /** Open a basket row's settle sheet by pressing the row itself. */
 export async function openSettleSheet(
   page: Page,

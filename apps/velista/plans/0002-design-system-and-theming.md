@@ -388,6 +388,9 @@ guessing now.
 
 ## 6. Type
 
+> **Replaced for page titles by `0130`.** Every page title is set as the home title is: the
+> display face, in the one `PageHeader`. The rule below still holds for everything else.
+
 **System font stack, no webfont.** On a phone on supermarket signal, a webfont is a render
 blocking download for a screen the user wants immediately. The system stack is already on
 the device and looks native.
