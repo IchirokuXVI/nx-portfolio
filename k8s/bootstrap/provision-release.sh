@@ -495,12 +495,43 @@ HARVESTER_DB_PASSWORD="$(keep_or_generate "$HARVESTER_DB_SECRET" POSTGRES_PASSWO
 # run wrote is attributed to this uuid, and a fresh one would orphan them.
 HARVESTER_ACTOR_ID="$(keep_or_generate "$APP_SECRET" HARVESTER_ACTOR_ID generate_actor_id)"
 
+# ---------------------------------------------------------------------------
+# A public key that went missing is derived, never regenerated.
+#
+# The private key decides the pair: the public half is computed from it, so a
+# Secret that still holds the private key has lost nothing. Staging reached that
+# state, with AUTH_JWT_PUBLIC_KEY gone and the private key intact, and this
+# script offered two answers to it. Without --rotate it kept the private key and
+# wrote the public one back EMPTY, since the block below only generates when the
+# private key is absent. With --rotate it replaced a perfectly good keypair and
+# logged out every user to repair a value that could have been recomputed.
+#
+# A private key openssl cannot read stops the script instead. Writing an empty
+# public key beside it would be the outage this function exists to prevent.
+# ---------------------------------------------------------------------------
+derive_public_key() {
+  local name="$1" private_key="$2" public_key
+  echo "  $name is missing; deriving it from the private key beside it" >&2
+  if ! public_key="$(printf '%s\n' "$private_key" | openssl pkey -pubout 2>/dev/null)" \
+    || [ -z "$public_key" ]; then
+    echo "  Could not derive $name: openssl cannot read the private key in" >&2
+    echo "  $APP_SECRET. Nothing was written. Restore the private key from the" >&2
+    echo "  operator's copy, or pass --rotate to replace the pair, which logs" >&2
+    echo "  out everybody holding a token it signed." >&2
+    return 1
+  fi
+  printf '%s' "$public_key"
+}
+
 # The JWT keypair. Losing it does not lose data, but every issued access and
 # refresh token becomes unverifiable at once, which logs out every user
 # simultaneously (plan 0005, section 5). It is written to the operator's copy
 # below for exactly that reason.
 JWT_PRIVATE_KEY="$(existing "$APP_SECRET" AUTH_JWT_PRIVATE_KEY)"
 JWT_PUBLIC_KEY="$(existing "$APP_SECRET" AUTH_JWT_PUBLIC_KEY)"
+if [ -n "$JWT_PRIVATE_KEY" ] && [ -z "$JWT_PUBLIC_KEY" ] && [ "$ROTATE" = false ]; then
+  JWT_PUBLIC_KEY="$(derive_public_key AUTH_JWT_PUBLIC_KEY "$JWT_PRIVATE_KEY")"
+fi
 if [ -z "$JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
   echo "  generating a new RSA keypair for JWT signing"
   tmp_key="$(mktemp)"
@@ -527,6 +558,9 @@ fi
 # all the same.
 ADMIN_JWT_PRIVATE_KEY="$(existing "$APP_SECRET" ADMIN_JWT_PRIVATE_KEY)"
 ADMIN_JWT_PUBLIC_KEY="$(existing "$APP_SECRET" ADMIN_JWT_PUBLIC_KEY)"
+if [ -n "$ADMIN_JWT_PRIVATE_KEY" ] && [ -z "$ADMIN_JWT_PUBLIC_KEY" ] && [ "$ROTATE" = false ]; then
+  ADMIN_JWT_PUBLIC_KEY="$(derive_public_key ADMIN_JWT_PUBLIC_KEY "$ADMIN_JWT_PRIVATE_KEY")"
+fi
 if [ -z "$ADMIN_JWT_PRIVATE_KEY" ] || [ "$ROTATE" = true ]; then
   echo "  generating a new RSA keypair for admin token signing"
   tmp_key="$(mktemp)"
