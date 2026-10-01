@@ -1,6 +1,6 @@
 {
   "title": "Velista: your shopping list",
-  "lede": "The design for plan <code>0045</code>: the shopping list card that replaces the resume card, the enabled Get shopping list button, the generation sheet, and the history page. Server half: backend <code>0050</code> and <code>0051</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for plan <code>0045</code>: the shopping list card that replaces the resume card, the enabled Get shopping list button, the generation sheet, and the history page. Server half: backend <code>0050</code> and <code>0051</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Home.dc.html", "x": 0, "y": 0, "w": 470, "h": 1010, "title": "The dashboard, with the card" },
     { "file": "HomeNoList.dc.html", "x": 530, "y": 0, "w": 470, "h": 1010, "title": "No active list" },

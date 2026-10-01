@@ -84,9 +84,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Catalog .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-Catalog .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-Catalog .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-Catalog .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Catalog .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Catalog .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Catalog .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Catalog .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Catalog .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Catalog .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Catalog .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Catalog .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-Catalog .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-Catalog .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -94,9 +98,7 @@
 #ab-Catalog .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-Catalog .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-Catalog .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-Catalog .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-Catalog .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-Catalog .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-Catalog .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Catalog .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-Catalog .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-Catalog .search .typed { color: var(--app-text-primary); }
@@ -134,14 +136,9 @@
 #ab-Catalog .l-dia { background: #c7352b; }
 #ab-Catalog .l-carrefour { background: #274690; }
 #ab-Catalog .l-deza { background: #d9722b; }
-#ab-Catalog .phead { flex: none; padding: 0 16px; }
-#ab-Catalog .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-Catalog .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-Catalog .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-Catalog .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-Catalog .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-Catalog .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-Catalog .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-Catalog .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-Catalog .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-Catalog .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-Catalog .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -201,9 +198,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-CatalogChain .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-CatalogChain .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-CatalogChain .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-CatalogChain .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-CatalogChain .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-CatalogChain .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-CatalogChain .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-CatalogChain .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogChain .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-CatalogChain .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-CatalogChain .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-CatalogChain .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-CatalogChain .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-CatalogChain .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -211,9 +212,7 @@
 #ab-CatalogChain .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-CatalogChain .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-CatalogChain .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-CatalogChain .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-CatalogChain .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-CatalogChain .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-CatalogChain .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-CatalogChain .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-CatalogChain .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-CatalogChain .search .typed { color: var(--app-text-primary); }
@@ -251,14 +250,9 @@
 #ab-CatalogChain .l-dia { background: #c7352b; }
 #ab-CatalogChain .l-carrefour { background: #274690; }
 #ab-CatalogChain .l-deza { background: #d9722b; }
-#ab-CatalogChain .phead { flex: none; padding: 0 16px; }
-#ab-CatalogChain .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-CatalogChain .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-CatalogChain .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-CatalogChain .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-CatalogChain .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-CatalogChain .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-CatalogChain .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-CatalogChain .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-CatalogChain .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-CatalogChain .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-CatalogChain .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -318,9 +312,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-CatalogShop .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-CatalogShop .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-CatalogShop .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-CatalogShop .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-CatalogShop .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-CatalogShop .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-CatalogShop .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-CatalogShop .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-CatalogShop .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-CatalogShop .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-CatalogShop .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-CatalogShop .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-CatalogShop .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-CatalogShop .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -328,9 +326,7 @@
 #ab-CatalogShop .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-CatalogShop .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-CatalogShop .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-CatalogShop .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-CatalogShop .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-CatalogShop .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-CatalogShop .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-CatalogShop .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-CatalogShop .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-CatalogShop .search .typed { color: var(--app-text-primary); }
@@ -368,14 +364,9 @@
 #ab-CatalogShop .l-dia { background: #c7352b; }
 #ab-CatalogShop .l-carrefour { background: #274690; }
 #ab-CatalogShop .l-deza { background: #d9722b; }
-#ab-CatalogShop .phead { flex: none; padding: 0 16px; }
-#ab-CatalogShop .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-CatalogShop .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-CatalogShop .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-CatalogShop .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-CatalogShop .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-CatalogShop .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-CatalogShop .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-CatalogShop .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-CatalogShop .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-CatalogShop .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-CatalogShop .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -435,9 +426,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Picker .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-Picker .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-Picker .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-Picker .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Picker .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Picker .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Picker .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Picker .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Picker .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Picker .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Picker .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Picker .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-Picker .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-Picker .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -445,9 +440,7 @@
 #ab-Picker .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-Picker .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-Picker .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-Picker .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-Picker .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-Picker .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-Picker .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Picker .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-Picker .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-Picker .search .typed { color: var(--app-text-primary); }
@@ -485,14 +478,9 @@
 #ab-Picker .l-dia { background: #c7352b; }
 #ab-Picker .l-carrefour { background: #274690; }
 #ab-Picker .l-deza { background: #d9722b; }
-#ab-Picker .phead { flex: none; padding: 0 16px; }
-#ab-Picker .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-Picker .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-Picker .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-Picker .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-Picker .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-Picker .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-Picker .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-Picker .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-Picker .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-Picker .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-Picker .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -552,9 +540,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-PickerChain .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-PickerChain .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-PickerChain .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-PickerChain .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-PickerChain .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-PickerChain .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerChain .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-PickerChain .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-PickerChain .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-PickerChain .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerChain .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-PickerChain .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-PickerChain .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-PickerChain .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -562,9 +554,7 @@
 #ab-PickerChain .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-PickerChain .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-PickerChain .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-PickerChain .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-PickerChain .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-PickerChain .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-PickerChain .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-PickerChain .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-PickerChain .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-PickerChain .search .typed { color: var(--app-text-primary); }
@@ -602,14 +592,9 @@
 #ab-PickerChain .l-dia { background: #c7352b; }
 #ab-PickerChain .l-carrefour { background: #274690; }
 #ab-PickerChain .l-deza { background: #d9722b; }
-#ab-PickerChain .phead { flex: none; padding: 0 16px; }
-#ab-PickerChain .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-PickerChain .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-PickerChain .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-PickerChain .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-PickerChain .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-PickerChain .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-PickerChain .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-PickerChain .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-PickerChain .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-PickerChain .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-PickerChain .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -669,9 +654,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-PickerSearch .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-PickerSearch .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-PickerSearch .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-PickerSearch .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-PickerSearch .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-PickerSearch .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerSearch .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-PickerSearch .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-PickerSearch .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-PickerSearch .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerSearch .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-PickerSearch .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-PickerSearch .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-PickerSearch .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -679,9 +668,7 @@
 #ab-PickerSearch .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-PickerSearch .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-PickerSearch .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-PickerSearch .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-PickerSearch .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-PickerSearch .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-PickerSearch .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-PickerSearch .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-PickerSearch .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-PickerSearch .search .typed { color: var(--app-text-primary); }
@@ -719,14 +706,9 @@
 #ab-PickerSearch .l-dia { background: #c7352b; }
 #ab-PickerSearch .l-carrefour { background: #274690; }
 #ab-PickerSearch .l-deza { background: #d9722b; }
-#ab-PickerSearch .phead { flex: none; padding: 0 16px; }
-#ab-PickerSearch .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-PickerSearch .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-PickerSearch .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-PickerSearch .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-PickerSearch .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-PickerSearch .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-PickerSearch .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-PickerSearch .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-PickerSearch .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-PickerSearch .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-PickerSearch .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -786,9 +768,13 @@
   --app-elevation-2: 0 2px 4px rgba(17, 20, 31, 0.05), 0 12px 28px rgba(17, 20, 31, 0.12);
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-PickerNear .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
-#ab-PickerNear .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-PickerNear .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; }
-#ab-PickerNear .avatar { width: 30px; height: 30px; border-radius: 999px; border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-PickerNear .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-PickerNear .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerNear .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-PickerNear .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-PickerNear .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-PickerNear .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-PickerNear .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-PickerNear .ibtn { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: 999px; color: var(--app-text-secondary); }
 #ab-PickerNear .ibtn.amber { color: var(--app-action-quiet-fg); }
 #ab-PickerNear .scroll { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -796,9 +782,7 @@
 #ab-PickerNear .nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-PickerNear .tab { position: relative; flex: 1; height: 60px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
 #ab-PickerNear .tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
-#ab-PickerNear .chead { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 16px 0; }
-#ab-PickerNear .chead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; }
-#ab-PickerNear .chead .near { font-size: 12.5px; color: var(--app-text-muted); }
+#ab-PickerNear .orders .near { margin-left: auto; font-size: 12.5px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-PickerNear .ctools { padding: 12px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 #ab-PickerNear .search { height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 0 13px; border-radius: 14px; background: var(--app-surface-sunken); border: 1px solid var(--app-border-subtle); font-size: 15.5px; color: var(--app-text-muted); }
 #ab-PickerNear .search .typed { color: var(--app-text-primary); }
@@ -836,14 +820,9 @@
 #ab-PickerNear .l-dia { background: #c7352b; }
 #ab-PickerNear .l-carrefour { background: #274690; }
 #ab-PickerNear .l-deza { background: #d9722b; }
-#ab-PickerNear .phead { flex: none; padding: 0 16px; }
-#ab-PickerNear .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-PickerNear .ptitle { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-#ab-PickerNear .ptitle h1 { flex: 1; margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
 #ab-PickerNear .nearme { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--app-action-quiet-border); background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: 14px; font-weight: 650; }
 #ab-PickerNear .psub { margin: 2px 0 0; font-size: 14px; color: var(--app-text-muted); }
-#ab-PickerNear .chainhead { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
-#ab-PickerNear .chainhead h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 30px; }
+#ab-PickerNear .chainline { display: flex; align-items: center; gap: 10px; margin: 0 0 12px 2px; font-size: 14px; color: var(--app-text-secondary); }
 #ab-PickerNear .body { padding: 14px 16px 24px; display: flex; flex-direction: column; }
 #ab-PickerNear .sect { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-text-muted); }
 #ab-PickerNear .sect .h { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; }
@@ -1245,7 +1224,7 @@
 
 <header>
   <h1>Velista: one shop picker</h1>
-  <p class="lede">The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. Reviewed and approved. Plan <code>0124</code>, with backend <code>0170</code> behind it. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+  <p class="lede">The catalog's chain chips become one Supermarket button, which opens the shop picker as its own page. The picker is the one the basket already has, redrawn once for both: big chain buttons with the chain's logo, and shop rows that show the shop's own name, its address and its sections, with a +X that shows the rest. In the catalog a chain alone is enough and a shop is optional. Reviewed and approved. Plan <code>0124</code>, with backend <code>0170</code> behind it. Drawn on Day, on the chrome the app has on slot 0. Headers redrawn for plan <code>0130</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
 </header>
 
 <div class="controls">
@@ -1261,16 +1240,15 @@
         <figcaption>Catalog, every supermarket</figcaption>
         <div class="frame" id="ab-Catalog" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
           <div class="scroll">
-          <div class="chead"><h1>Catalog</h1><span class="near">near 14001</span></div>
           <div class="ctools">
           <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg><span>Search every supermarket</span></div>
           <div class="shopbtn"><span class="logo sm all" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg></span><span class="col"><span class="k">Supermarket</span><span class="v">All supermarkets</span></span><span class="chev"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></span></div>
-          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span></div>
+          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span><span class="near">near 14001</span></div>
 
           </div>
-          <div class="prods"><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Aceite de oliva virgen extra</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>8.45 &euro;</b><span>Mercadona</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Arroz redondo</span><span class="m">SOS &middot; 1 kg</span></span><span class="p"><b>1.29 &euro;</b><span>Deza</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">At&uacute;n claro en aceite</span><span class="m">Calvo &middot; 3 x 80 g</span></span><span class="p"><b>2.65 &euro;</b><span>Carrefour</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Az&uacute;car blanco</span><span class="m">Azucarera &middot; 1 kg</span></span><span class="p"><b>1.05 &euro;</b><span>Mercadona</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Caf&eacute; molido mezcla</span><span class="m">Marcilla &middot; 250 g</span></span><span class="p"><b>2.19 &euro;</b><span>Lidl</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Galletas Mar&iacute;a</span><span class="m">Fontaneda &middot; 800 g</span></span><span class="p"><b>2.35 &euro;</b><span>Dia</span></span></div></div>
+          <div class="prods"><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Aceite de oliva virgen extra</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>8.45 &euro;</b><span>Mercadona</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Arroz redondo</span><span class="m">SOS &middot; 1 kg</span></span><span class="p"><b>1.29 &euro;</b><span>Deza</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">At&uacute;n claro en aceite</span><span class="m">Calvo &middot; 3 x 80 g</span></span><span class="p"><b>2.65 &euro;</b><span>Carrefour</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Az&uacute;car blanco</span><span class="m">Azucarera &middot; 1 kg</span></span><span class="p"><b>1.05 &euro;</b><span>Mercadona</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Caf&eacute; molido mezcla</span><span class="m">Marcilla &middot; 250 g</span></span><span class="p"><b>2.19 &euro;</b><span>Lidl</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Galletas Mar&iacute;a</span><span class="m">Fontaneda &middot; 800 g</span></span><span class="p"><b>2.35 &euro;</b><span>Dia</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Leche entera</span><span class="m">Hacendado &middot; 6 x 1 L</span></span><span class="p"><b>5.34 &euro;</b><span>Mercadona</span></span></div></div>
           <div class="fade"></div>
           </div>
           <nav class="nav" aria-label="Main">
@@ -1285,13 +1263,12 @@
         <figcaption>Catalog, one chain</figcaption>
         <div class="frame" id="ab-CatalogChain" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
           <div class="scroll">
-          <div class="chead"><h1>Catalog</h1><span class="near">near 14001</span></div>
           <div class="ctools">
           <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg><span>Search Mercadona</span></div>
           <div class="shopbtn set"><span class="logo sm l-mercadona" aria-hidden="true">M</span><span class="col"><span class="k">Supermarket</span><span class="v">Mercadona <small>&middot; any shop</small></span></span><span class="x" aria-label="Show every supermarket"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span></div>
-          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span></div>
+          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span><span class="near">near 14001</span></div>
           <p class="cnote">10 Mercadona shops in your areas</p>
           </div>
           <div class="prods"><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Aceite de oliva virgen extra</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>8.45 &euro;</b><span>8.45 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Az&uacute;car blanco</span><span class="m">Azucarera &middot; 1 kg</span></span><span class="p"><b>1.05 &euro;</b><span>1.05 &euro;/kg</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Bebida de avena</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>1.10 &euro;</b><span>1.10 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Detergente l&iacute;quido</span><span class="m">Bosque Verde &middot; 3 L</span></span><span class="p"><b>5.50 &euro;</b><span>1.83 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Garbanzos cocidos</span><span class="m">Hacendado &middot; 570 g</span></span><span class="p"><b>0.95 &euro;</b><span>1.67 &euro;/kg</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Leche entera</span><span class="m">Hacendado &middot; 6 x 1 L</span></span><span class="p"><b>5.34 &euro;</b><span>0.89 &euro;/L</span></span></div></div>
@@ -1309,13 +1286,12 @@
         <figcaption>Catalog, one shop</figcaption>
         <div class="frame" id="ab-CatalogShop" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
           <div class="scroll">
-          <div class="chead"><h1>Catalog</h1><span class="near">near 14001</span></div>
           <div class="ctools">
           <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg><span>Search Mercadona</span></div>
           <div class="shopbtn set"><span class="logo sm l-mercadona" aria-hidden="true">M</span><span class="col"><span class="k">Supermarket</span><span class="v">Mercadona <small>&middot; Calle Mayor 3</small></span></span><span class="x" aria-label="Show every supermarket"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg></span></div>
-          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span></div>
+          <div class="orders"><span>Order</span><span class="pill on">A to Z</span><span class="pill">Newest</span><span class="near">near 14001</span></div>
           <p class="cnote">Prices at Calle Mayor 3, C&oacute;rdoba</p>
           </div>
           <div class="prods"><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Aceite de oliva virgen extra</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>8.45 &euro;</b><span>8.45 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Az&uacute;car blanco</span><span class="m">Azucarera &middot; 1 kg</span></span><span class="p"><b>1.05 &euro;</b><span>1.05 &euro;/kg</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Bebida de avena</span><span class="m">Hacendado &middot; 1 L</span></span><span class="p"><b>1.10 &euro;</b><span>1.10 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Detergente l&iacute;quido</span><span class="m">Bosque Verde &middot; 3 L</span></span><span class="p"><b>5.50 &euro;</b><span>1.83 &euro;/L</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Garbanzos cocidos</span><span class="m">Hacendado &middot; 570 g</span></span><span class="p"><b class="miss">No price</b><span>not priced here</span></span></div><div class="prod"><span class="thumb"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span><span class="t"><span class="n">Leche entera</span><span class="m">Hacendado &middot; 6 x 1 L</span></span><span class="p"><b>5.34 &euro;</b><span>0.89 &euro;/L</span></span></div></div>
@@ -1333,9 +1309,8 @@
         <figcaption>The picker page</figcaption>
         <div class="frame" id="ab-Picker" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Supermarket</h1><div class="ph-actions"><button class="ph-text" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"></circle><circle cx="12" cy="12" r="1.9" fill="currentColor"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"></path></svg>Near me</button></div></header>
           <div class="scroll">
-          <div class="phead"><div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button></div><div class="ptitle"><h1>Supermarket</h1><span class="nearme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Near me</span></div></div>
           <div class="body">
           <div class="card"><div class="any"><span class="logo  all" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5 5.5 4h13L20 9.5"/><path d="M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0"/><path d="M5.5 12.5V20h13v-7.5"/><path d="M10 20v-4.5h4V20"/></svg></span><div><b>All supermarkets</b><span class="s">Every product, from every chain</span></div><span class="radio on" aria-hidden="true"></span></div></div>
           <div class="sect"><span>Recent</span><span class="h">where you bought, newest first</span></div>
@@ -1391,10 +1366,10 @@
         <figcaption>A chain's shops, one row opened</figcaption>
         <div class="frame" id="ab-PickerChain" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Mercadona</h1></header>
           <div class="scroll">
-          <div class="phead"><div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button></div><div class="chainhead"><span class="logo xl l-mercadona" aria-hidden="true">M</span><div><h1>Mercadona</h1><p class="psub">10 shops in your areas</p></div></div></div>
           <div class="body">
+          <div class="chainline"><span class="logo sm l-mercadona" aria-hidden="true">M</span><span>10 shops in your areas</span></div>
           <div class="card"><div class="any"><span class="logo  l-mercadona" aria-hidden="true">M</span><div><b>Any Mercadona shop</b><span class="s">Every Mercadona product</span></div><span class="radio on" aria-hidden="true"></span></div></div>
 
           <div class="sect"><span>Home</span><span class="h">14001</span></div>
@@ -1461,9 +1436,8 @@
         <figcaption>Searching every chain</figcaption>
         <div class="frame" id="ab-PickerSearch" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Supermarket</h1><div class="ph-actions"><button class="ph-text" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"></circle><circle cx="12" cy="12" r="1.9" fill="currentColor"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"></path></svg>Near me</button></div></header>
           <div class="scroll">
-          <div class="phead"><div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button></div><div class="ptitle"><h1>Supermarket</h1><span class="nearme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Near me</span></div></div>
           <div class="body">
           <div class="search" style="margin-bottom: 10px; border-color: #2f6fed; box-shadow: 0 0 0 2px rgba(47,111,237,0.3);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg><span class="typed">tejares<span class="caret"></span></span></div>
           <p class="count">3 shops</p>
@@ -1505,9 +1479,8 @@
         <figcaption>Near me answered</figcaption>
         <div class="frame" id="ab-PickerNear" style="width: 390px; height: 844px;">
           <div class="vel phone">
-          <div class="appbar"><span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"/><path d="M11 4c4 3 6 7 6 12H11"/><path d="M4 19h16l-2 2H6z"/></svg>Velista</span><button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"/></svg></button><span class="avatar">P</span></div>
+          <header class="ph"><button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Supermarket</h1><div class="ph-actions"><button class="ph-text" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"></circle><circle cx="12" cy="12" r="1.9" fill="currentColor"></circle><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"></path></svg>Near me</button></div></header>
           <div class="scroll">
-          <div class="phead"><div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button></div><div class="ptitle"><h1>Supermarket</h1><span class="nearme"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>Near me</span></div></div>
           <div class="body">
           <div class="sect"><span>Near you</span><span class="h">within 750 m</span></div>
           <p style="margin: 0 0 8px 2px; font-size: 13.5px; line-height: 1.4; color: var(--app-text-secondary);">Two shops are close together, so choose the one you are in.</p>

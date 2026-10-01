@@ -1,6 +1,6 @@
 {
   "title": "Velista: the product typeahead",
-  "lede": "The bigger product suggestion card, for the two places the typeahead is used today: the composer on a zone list page and the composer on the basket page. It stays <code>lib-suggestion-list</code> in <code>libs/velista/ui/src/lib/list/</code> and is never promoted to <code>@portfolio/shared/ui</code>. Phone only, 390 by 844, with one Day artboard. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The interactive version, where the chain row expands and the popover opens, is the published canvas linked from <code>../README.md</code>.",
+  "lede": "The bigger product suggestion card, for the two places the typeahead is used today: the composer on a zone list page and the composer on the basket page. It stays <code>lib-suggestion-list</code> in <code>libs/velista/ui/src/lib/list/</code> and is never promoted to <code>@portfolio/shared/ui</code>. Phone only, 390 by 844, with one Day artboard. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The interactive version, where the chain row expands and the popover opens, is the published canvas linked from <code>../README.md</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     {
       "file": "Main.dc.html",

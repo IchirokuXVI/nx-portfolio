@@ -30,20 +30,21 @@ body { margin: 0; }
 }
 .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-/* the app bar the standalone app draws */
-.appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-.wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-.avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+/* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+.ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 .ibtn.amber { color: var(--app-action-quiet-fg); }
-/* the page head */
-.head { flex: none; padding: 0 16px; }
-.head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-.head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-.head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-.head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+/* the list's first block of content: the group, the progress line, the bar */
+.head { flex: none; padding: 12px 16px 8px; }
+.head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-.head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+.head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -102,7 +103,7 @@ mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3p
 .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-.field .ph { color: var(--app-text-muted); }
+.field .hint { color: var(--app-text-muted); }
 .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -120,12 +121,16 @@ mark { background: var(--app-action-quiet-bg); color: inherit; border-radius: 3p
 </style>
 </helmet>
 <div class="vel phone">
-  <div class="appbar" style="padding: 0 16px 0 12px;">
-    <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
-    <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
-    <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
-    <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
-  </div>
+  <!-- plan 0130: no back on a basket page. History, people and finish are rows of the menu sheet -->
+  <header class="ph">
+    <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+    <h1 class="ph-title">Shopping list</h1>
+    <div class="ph-actions">
+      <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+      <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+      <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
+    </div>
+  </header>
   <!-- the tools row is hidden while results show; the basket rows are the rows, with the list each came from -->
   <div class="results" aria-live="polite">
     <div class="sect">On your lists <span class="n">&middot; 3</span></div>

@@ -1,6 +1,6 @@
 {
   "title": "Velista: the catalog",
-  "lede": "The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Headers redrawn for plan <code>0130</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Browse.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "Browsing, narrowing, searching" },
     { "file": "States.dc.html", "x": 1390, "y": 0, "w": 900, "h": 1010, "title": "No prices, nothing found, one product" }

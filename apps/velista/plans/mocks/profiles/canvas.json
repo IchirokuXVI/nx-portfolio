@@ -1,6 +1,6 @@
 {
   "title": "Velista: shopping profiles",
-  "lede": "The design for plan <code>0046</code>: the profiles page behind the account screen, with the selector, add and delete, and the single-line name rule. Server half: backend <code>0049</code>. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "The design for plan <code>0046</code>: the profiles page behind the account screen, with the selector, add and delete, and the single-line name rule. Server half: backend <code>0049</code>. Phone only, 390 by 844, Night only. Headers redrawn for plan <code>0130</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
   "artboards": [
     { "file": "Account.dc.html", "x": 0, "y": 0, "w": 470, "h": 1010, "title": "The account row" },
     { "file": "Profile.dc.html", "x": 530, "y": 0, "w": 900, "h": 1010, "title": "The page, and rule R1" },

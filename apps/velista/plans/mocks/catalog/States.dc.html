@@ -12,6 +12,14 @@
     * { box-sizing: border-box; }
     a { color: #ffb454; text-decoration: none; }
     a:hover { color: #ffc271; }
+    /* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+    .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+    .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+    .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+    .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
   </style>
 </helmet>
 
@@ -22,8 +30,9 @@
     <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO POSTAL CODE &middot; every product, and not one price</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-      <div style="padding: 14px 16px 0;">
-        <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+      <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
+
+      <div style="padding: 0 16px 0;">
 
         <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>

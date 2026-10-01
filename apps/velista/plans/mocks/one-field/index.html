@@ -87,18 +87,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Main .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-Main .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-Main .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-Main .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-Main .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Main .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Main .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Main .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Main .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-Main .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-Main .head { flex: none; padding: 0 16px; }
-#ab-Main .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-Main .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-Main .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-Main .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Main .head { flex: none; padding: 12px 16px 8px; }
+#ab-Main .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Main .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-Main .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Main .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Main .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-Main .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-Main .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -151,7 +152,7 @@
 #ab-Main .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-Main .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-Main .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-Main .field .ph { color: var(--app-text-muted); }
+#ab-Main .field .hint { color: var(--app-text-muted); }
 #ab-Main .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-Main .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-Main .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -180,18 +181,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Typing .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-Typing .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-Typing .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-Typing .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-Typing .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Typing .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Typing .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Typing .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Typing .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Typing .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Typing .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Typing .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Typing .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-Typing .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-Typing .head { flex: none; padding: 0 16px; }
-#ab-Typing .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-Typing .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-Typing .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-Typing .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Typing .head { flex: none; padding: 12px 16px 8px; }
+#ab-Typing .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Typing .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-Typing .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Typing .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Typing .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-Typing .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-Typing .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -244,7 +246,7 @@
 #ab-Typing .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-Typing .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-Typing .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-Typing .field .ph { color: var(--app-text-muted); }
+#ab-Typing .field .hint { color: var(--app-text-muted); }
 #ab-Typing .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-Typing .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-Typing .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -273,18 +275,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-NoLine .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-NoLine .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-NoLine .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-NoLine .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-NoLine .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-NoLine .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-NoLine .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoLine .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-NoLine .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-NoLine .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-NoLine .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-NoLine .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-NoLine .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-NoLine .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-NoLine .head { flex: none; padding: 0 16px; }
-#ab-NoLine .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-NoLine .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-NoLine .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-NoLine .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-NoLine .head { flex: none; padding: 12px 16px 8px; }
+#ab-NoLine .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-NoLine .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-NoLine .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-NoLine .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-NoLine .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-NoLine .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-NoLine .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -337,7 +340,7 @@
 #ab-NoLine .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-NoLine .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-NoLine .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-NoLine .field .ph { color: var(--app-text-muted); }
+#ab-NoLine .field .hint { color: var(--app-text-muted); }
 #ab-NoLine .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-NoLine .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-NoLine .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -366,18 +369,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Basket .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-Basket .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-Basket .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-Basket .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-Basket .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-Basket .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Basket .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Basket .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Basket .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Basket .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Basket .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Basket .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Basket .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-Basket .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-Basket .head { flex: none; padding: 0 16px; }
-#ab-Basket .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-Basket .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-Basket .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-Basket .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Basket .head { flex: none; padding: 12px 16px 8px; }
+#ab-Basket .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Basket .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-Basket .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-Basket .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-Basket .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-Basket .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-Basket .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -430,7 +434,7 @@
 #ab-Basket .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-Basket .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-Basket .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-Basket .field .ph { color: var(--app-text-muted); }
+#ab-Basket .field .hint { color: var(--app-text-muted); }
 #ab-Basket .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-Basket .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-Basket .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -459,18 +463,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-BasketTyping .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-BasketTyping .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-BasketTyping .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-BasketTyping .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-BasketTyping .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-BasketTyping .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketTyping .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketTyping .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-BasketTyping .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-BasketTyping .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-BasketTyping .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketTyping .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-BasketTyping .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-BasketTyping .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-BasketTyping .head { flex: none; padding: 0 16px; }
-#ab-BasketTyping .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-BasketTyping .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-BasketTyping .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-BasketTyping .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketTyping .head { flex: none; padding: 12px 16px 8px; }
+#ab-BasketTyping .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-BasketTyping .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-BasketTyping .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketTyping .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-BasketTyping .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-BasketTyping .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-BasketTyping .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -523,7 +528,7 @@
 #ab-BasketTyping .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-BasketTyping .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-BasketTyping .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-BasketTyping .field .ph { color: var(--app-text-muted); }
+#ab-BasketTyping .field .hint { color: var(--app-text-muted); }
 #ab-BasketTyping .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-BasketTyping .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-BasketTyping .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -552,18 +557,19 @@
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-BasketPick .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
 #ab-BasketPick .keyboard { flex: none; height: 336px; display: flex; align-items: center; justify-content: center; background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); color: var(--app-text-muted); font-size: var(--app-text-xs); }
-#ab-BasketPick .appbar { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 22px 0 20px; border-bottom: 1px solid var(--app-border-subtle); }
-#ab-BasketPick .wordmark { flex: 1; display: flex; align-items: center; gap: 12px; font-family: Marcellus, serif; font-size: 30px; letter-spacing: 0.05em; color: var(--app-text-primary); }
-#ab-BasketPick .avatar { width: 30px; height: 30px; border-radius: var(--app-radius-full); border: 1.5px solid var(--app-border-strong); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+#ab-BasketPick .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketPick .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketPick .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-BasketPick .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-BasketPick .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-BasketPick .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketPick .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-BasketPick .ibtn { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; background: transparent; border-radius: var(--app-radius-full); color: var(--app-text-secondary); cursor: pointer; }
 #ab-BasketPick .ibtn.amber { color: var(--app-action-quiet-fg); }
-#ab-BasketPick .head { flex: none; padding: 0 16px; }
-#ab-BasketPick .head .crumb { height: 48px; display: flex; align-items: center; margin-left: -12px; }
-#ab-BasketPick .head .title { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-#ab-BasketPick .head h1 { margin: 0; font-size: 26px; font-weight: 500; line-height: 32px; }
-#ab-BasketPick .head .in { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketPick .head { flex: none; padding: 12px 16px 8px; }
+#ab-BasketPick .head .in { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-BasketPick .link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; text-decoration: none; white-space: nowrap; }
-#ab-BasketPick .head .prog { margin-top: 14px; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+#ab-BasketPick .head .prog { margin: 2px 0 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
 #ab-BasketPick .head .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: var(--app-surface-sunken); }
 #ab-BasketPick .tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 8px 0 16px; }
 #ab-BasketPick .tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
@@ -616,7 +622,7 @@
 #ab-BasketPick .composer { flex: none; display: flex; align-items: center; gap: var(--app-space-3); height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
 #ab-BasketPick .field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); border: 1.5px solid transparent; font-size: 17px; }
 #ab-BasketPick .field.focus { border-color: var(--app-focus); box-shadow: 0 0 0 2px rgba(47, 111, 237, 0.3); }
-#ab-BasketPick .field .ph { color: var(--app-text-muted); }
+#ab-BasketPick .field .hint { color: var(--app-text-muted); }
 #ab-BasketPick .caret { width: 2px; height: 22px; margin-left: 1px; background: var(--app-text-primary); }
 #ab-BasketPick .send { width: var(--app-touch-target); height: var(--app-touch-target); flex: none; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: var(--app-radius-full); background: var(--app-action-bg); color: var(--app-action-fg); cursor: pointer; }
 #ab-BasketPick .send.pressed { box-shadow: 0 0 0 3px var(--app-action-quiet-border); }
@@ -633,7 +639,7 @@
 
 <header>
   <h1>Velista: one field finds and adds</h1>
-  <p class="lede">The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+  <p class="lede">The composer's field is the only search on a zone list and on the basket. Typing draws the lines that match first, then the catalog cards, in the list container, and the suggestion panel is gone. The nav hides while the field has focus. On the basket the plus, and a card's add button, ask which list every time, so the field is never locked. Plans <code>0116</code> and <code>0117</code>. Drawn on Day, on the chrome the app has on slot 0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.</p>
 </header>
 
 <div class="controls">
@@ -649,21 +655,19 @@
         <figcaption>Zone list, idle</figcaption>
         <div class="frame" id="ab-Main" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <div class="appbar">
-              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
-              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
-              <span class="avatar">P</span>
-            </div>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+              </div>
+            </header>
+            <!-- the filter is in the header (plan 0130), so nothing is left for a tools row and none is drawn. The field below is the search -->
             <div class="head">
-              <div class="crumb"><button class="ibtn" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button></div>
-              <div class="title"><div><h1>Compra semanal</h1><p class="in">in Casa</p></div><a class="link" href="#settings">List settings</a></div>
+              <p class="in">in Casa</p>
               <p class="prog">10 of 10 pending</p>
               <div class="bar"></div>
-            </div>
-            <!-- the tools row keeps the filter; the search glyph is gone, the field below is the search -->
-            <div class="tools">
-              <span class="count"></span>
-              <button class="ibtn" type="button" aria-label="Filter and sort"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
             </div>
             <div class="sech"><b>To buy</b><a class="link" href="#order">Put them in order</a></div>
             <div class="lines">
@@ -675,9 +679,11 @@
               <div class="card"><span class="name">Queso en lonchas</span><span class="qtychip">1</span></div>
               <div class="card"><span class="name">Queso rallado</span><span class="qtychip">1</span></div>
               <div class="card"><span class="name">Huevos L</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Arroz redondo</span><span class="qtychip">1</span></div>
+              <div class="card"><span class="name">Pollo entero</span><span class="qtychip">1</span></div>
             </div>
             <div class="composer">
-              <label class="field" for="add"><span class="ph">Add or find something</span></label>
+              <label class="field" for="add"><span class="hint">Add or find something</span></label>
               <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
                 <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
                 <span aria-hidden="true" class="value">1</span>
@@ -697,12 +703,15 @@
         <figcaption>Zone list, typing</figcaption>
         <div class="frame" id="ab-Typing" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <div class="appbar">
-              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
-              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
-              <span class="avatar">P</span>
-            </div>
-            <!-- the page has scrolled to the results: the head is above the fold, the tools row is hidden while results show -->
+            <!-- the header never scrolls (plan 0130). The filter shows when the tools row would, so not while results show -->
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+              </div>
+            </header>
+            <!-- the page has scrolled to the results: the list's first block is above the fold -->
             <div class="results" aria-live="polite">
               <div class="sect">On your list <span class="n">&middot; 2</span></div>
               <div class="found">
@@ -765,11 +774,14 @@
         <figcaption>Zone list, nothing on it</figcaption>
         <div class="frame" id="ab-NoLine" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <div class="appbar">
-              <span class="wordmark"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg>Velista</span>
-              <button class="ibtn amber" type="button" aria-label="Assistant"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a8 7 0 0 0-8 7c0 2 .8 3.7 2.2 5L5 20l4.5-1.4A9 9 0 0 0 12 19a8 7 0 0 0 0-15Z"></path></svg></button>
-              <span class="avatar">P</span>
-            </div>
+            <!-- the header never scrolls (plan 0130). The filter shows when the tools row would, so not while results show -->
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+              </div>
+            </header>
             <div class="results" aria-live="polite">
               <div class="sect">On your list</div>
               <!-- said, not skipped: an empty section reads as a search that never happened -->
@@ -831,13 +843,16 @@
         <figcaption>Basket, idle</figcaption>
         <div class="frame" id="ab-Basket" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <!-- the basket's own head, one row; the hint sentence under it is gone -->
-            <div class="appbar" style="padding: 0 16px 0 12px;">
-              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
-              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
-              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
-              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
-            </div>
+            <!-- plan 0130: no back on a basket page. History, people and finish are rows of the menu sheet -->
+            <header class="ph">
+              <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+              <h1 class="ph-title">Shopping list</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
+              </div>
+            </header>
             <div class="tools">
               <span class="count">12 to buy</span>
               <button class="ibtn" type="button" aria-label="Filter"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
@@ -856,7 +871,7 @@
             </div>
             <!-- no target chip, no lock: the field is always open, the plus asks which list -->
             <div class="composer">
-              <label class="field" for="add"><span class="ph">Add or find something</span></label>
+              <label class="field" for="add"><span class="hint">Add or find something</span></label>
               <span class="stepper" role="spinbutton" aria-label="How many" aria-valuenow="1" aria-valuemin="0" aria-valuemax="100000">
                 <button class="step" type="button" aria-label="One fewer"><span aria-hidden="true">&minus;</span></button>
                 <span aria-hidden="true" class="value">1</span>
@@ -876,12 +891,16 @@
         <figcaption>Basket, typing</figcaption>
         <div class="frame" id="ab-BasketTyping" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <div class="appbar" style="padding: 0 16px 0 12px;">
-              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
-              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
-              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
-              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
-            </div>
+            <!-- plan 0130: no back on a basket page. History, people and finish are rows of the menu sheet -->
+            <header class="ph">
+              <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+              <h1 class="ph-title">Shopping list</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
+              </div>
+            </header>
             <!-- the tools row is hidden while results show; the basket rows are the rows, with the list each came from -->
             <div class="results" aria-live="polite">
               <div class="sect">On your lists <span class="n">&middot; 3</span></div>
@@ -934,12 +953,16 @@
         <figcaption>Basket, which list</figcaption>
         <div class="frame" id="ab-BasketPick" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <div class="appbar" style="padding: 0 16px 0 12px;">
-              <button class="ibtn" type="button" aria-label="History"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg></button>
-              <span class="wordmark" style="font-size: 26px; letter-spacing: 0;">Everything to buy</span>
-              <button class="ibtn" type="button" aria-label="People"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"></circle><path d="M5 20a7 7 0 0 1 14 0"></path></svg></button>
-              <button class="ibtn" type="button" aria-label="Share"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="m8.2 10.8 7.6-4.6M8.2 13.2l7.6 4.6"></path></svg></button>
-            </div>
+            <!-- plan 0130: no back on a basket page. History, people and finish are rows of the menu sheet -->
+            <header class="ph">
+              <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+              <h1 class="ph-title">Shopping list</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
+              </div>
+            </header>
             <div class="results" aria-live="polite">
               <div class="sect">On your lists <span class="n">&middot; 1</span></div>
               <div class="rows" style="flex: none;">

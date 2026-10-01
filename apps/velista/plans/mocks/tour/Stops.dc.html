@@ -12,6 +12,14 @@
     * { box-sizing: border-box; }
     a { color: #ffb454; text-decoration: none; }
     a:hover { color: #ffc271; }
+    /* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+    .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+    .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+    .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+    .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
   </style>
 </helmet>
 
@@ -23,10 +31,14 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
 
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-          <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-          <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
-        </div>
+        <header class="ph">
+          <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg></span>
+          <h1 class="ph-title">Velista</h1>
+          <div class="ph-actions">
+            <button class="ph-act" type="button" aria-label="Assistant" style="color: #ffb454;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z"></path></svg></button>
+            <button class="ph-act" type="button" aria-label="Your account"><span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span></button>
+          </div>
+        </header>
         <div style="flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
           <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
           <div style="height: 120px; border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.09);"></div>
@@ -73,10 +85,14 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
 
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-          <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-          <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
-        </div>
+        <header class="ph">
+          <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg></span>
+          <h1 class="ph-title">Velista</h1>
+          <div class="ph-actions">
+            <button class="ph-act" type="button" aria-label="Assistant" style="color: #ffb454;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z"></path></svg></button>
+            <button class="ph-act" type="button" aria-label="Your account"><span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span></button>
+          </div>
+        </header>
         <div style="flex: 1; padding: 18px 20px;"></div>
         <div style="height: 92px;"></div>
       </div>
@@ -117,9 +133,10 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
 
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-          <div style="flex: 1; font-size: 19px; font-weight: 600; color: #f7f8fc;">Shopping list</div>
-        </div>
+        <header class="ph">
+          <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+          <h1 class="ph-title">Shopping list</h1>
+        </header>
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 28px;">
           <span style="width: 62px; height: 62px; border-radius: 999px; background: #161a28; border: 1px solid rgba(255,255,255,0.09); display: flex; align-items: center; justify-content: center;">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg>

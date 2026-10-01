@@ -1,6 +1,6 @@
 {
   "title": "Velista: mapping a shop, and the map shoppers see",
-  "lede": "Somebody with the mapping permission walks a shop with the camera, marks sections, counters and notes, taps suggested shelves to fill them and edits any area by hand. A shop has several walks with a history each, and one walk is the map every shopper sees, from the basket or from the shop&#39;s own page. Plans velista <code>0121</code> to <code>0123</code> and <code>0126</code>, and <code>0128</code> last for the drawn assets, backend <code>0168</code>, <code>0175</code> and <code>0176</code>, and the shop map libraries. Day and Night. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "Somebody with the mapping permission walks a shop with the camera, marks sections, counters and notes, taps suggested shelves to fill them and edits any area by hand. A shop has several walks with a history each, and one walk is the map every shopper sees, from the basket or from the shop&#39;s own page. Plans velista <code>0121</code> to <code>0123</code> and <code>0126</code>, and <code>0128</code> last for the drawn assets, backend <code>0168</code>, <code>0175</code> and <code>0176</code>, and the shop map libraries. Day and Night. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     {
       "file": "Main.dc.html",
