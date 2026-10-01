@@ -64,6 +64,13 @@ export interface RecordingOutput {
   openNext(kind: ShopWalkEntryKind): void;
   /** Where the log ends now. `WalkEntrySaver.logEnd`. */
   logEnd(): number;
+  /**
+   * Whether the entry `openNext` named was opened: something was added since.
+   * The opposite of `WalkEntrySaver.nextWaits`.
+   */
+  sessionOpened(): boolean;
+  /** Forget the kind `openNext` named. `WalkEntrySaver.dropNext`. */
+  forgetNext(): void;
   /** Send what is held now: a stop, or the start of a loss. */
   save(): void;
   tone(kind: 'stopped' | 'resumed'): void;
@@ -90,6 +97,13 @@ export const PROBE_COMPASS_MS = 1_000;
 
 /** The page flushes path points to the log once this many have been kept (about 2 s of walking). */
 export const PATH_BATCH_POINTS = 8;
+
+/**
+ * A session has walked once it is this far from where it started: one step of
+ * the kept path. Until then its points say where somebody stands, which a point
+ * is kept for every second, and they are held back.
+ */
+export const SESSION_MOVED_METRES = 0.25;
 
 /** Where the phone points, next to where the person walks. */
 export type RecordingPointing = 'left' | 'right' | 'ahead' | 'behind';
@@ -119,6 +133,12 @@ export interface RecordingPerson {
  * Only the kept path points (`keepPathPoint`), the live map's events and the
  * marks. Nothing of the purple path until the person says yes. A loss saves what
  * came before it straight away, so "Everything up to this moment is saved".
+ *
+ * A session that adds nothing sends nothing (velista `0129`, target 9). A
+ * session's points are held back until it has moved a step, a mark was made or
+ * the map was edited, so a resume that is stopped at once opens no `resumed`
+ * entry. Its `stopped` entry goes out only when the entry that opened the
+ * session did, so such a visit leaves the history as it was.
  *
  * An automatic resume confirmed keeps the purple points in the session they
  * belong to, appends `confirmed`, and opens the next entry as `resumed`. One
@@ -153,6 +173,12 @@ export class WalkRecording {
   /** The last few kept points, for the direction the person walks. */
   private _recent: PathPoint[] = [];
   private _pending: [number, number, number][] = [];
+  /** The session's first kept point, which `_moved` is measured from. */
+  private _first: PathPoint | null = null;
+  /** True once the session is a step from where it started. */
+  private _moved = false;
+  /** True once this session added something to the log. */
+  private _wrote = false;
   private _purple: [number, number, number][] = [];
   /** The log time tracking was lost at, while a loss or its resume waits. */
   private _lossLog: number | null = null;
@@ -332,6 +358,15 @@ export class WalkRecording {
       return;
     }
     this._lastKept = point;
+    if (this._first === null) {
+      this._first = point;
+    } else if (
+      !this._moved &&
+      Math.hypot(point.x - this._first.x, point.y - this._first.y) >=
+        SESSION_MOVED_METRES
+    ) {
+      this._moved = true;
+    }
     this._recent = [...this._recent, point].filter(
       (one) => Math.hypot(point.x - one.x, point.y - one.y) <= 3
     );
@@ -369,10 +404,17 @@ export class WalkRecording {
     // Path points go out a few at a time, so an entry holds a handful of path
     // events rather than one per point; anything else, and every stop, takes
     // them along at once.
+    //
+    // Until the session has moved a step its points are held: they say where
+    // somebody stands, not where they walked. A mark, an event of the live map
+    // or an edit on the page opens the session's entry, and they go with it.
+    const held =
+      !this._moved && snapshot.events.length === 0 && !this._sessionOpened();
     const due =
-      force ||
-      snapshot.events.length > 0 ||
-      this._pending.length >= PATH_BATCH_POINTS;
+      !held &&
+      (force ||
+        snapshot.events.length > 0 ||
+        this._pending.length >= PATH_BATCH_POINTS);
     if (due && this._pending.length > 0) {
       events.push({ type: 'path', points: this._pending });
       this._pending = [];
@@ -386,6 +428,7 @@ export class WalkRecording {
           ? this._lastLog
           : this._lossLog;
       this._output.add(events, logTo);
+      this._wrote = true;
     }
     return snapshot;
   }
@@ -461,8 +504,10 @@ export class WalkRecording {
     this._purple = [];
     this.flush();
     const at = this._lossLog ?? this._lastLog;
-    this._output.push({ kind: 'stopped', reason: 'tracking-lost', logTo: at });
-    this._output.push({ kind: 'discarded', logTo: at });
+    this._end([
+      { kind: 'stopped', reason: 'tracking-lost', logTo: at },
+      { kind: 'discarded', logTo: at },
+    ]);
     this._stopped('discarded');
   }
 
@@ -483,11 +528,7 @@ export class WalkRecording {
       case 'lost': {
         this.flush();
         const at = this._lossLog ?? this._lastLog;
-        this._output.push({
-          kind: 'stopped',
-          reason: 'tracking-lost',
-          logTo: at,
-        });
+        this._end([{ kind: 'stopped', reason: 'tracking-lost', logTo: at }]);
         this._stopped('tracking-lost');
         break;
       }
@@ -506,8 +547,26 @@ export class WalkRecording {
     this.flush();
     const at =
       waiting && this._lossLog !== null ? this._lossLog : this._lastLog;
-    this._output.push({ kind: 'stopped', reason, logTo: at });
+    this._end([{ kind: 'stopped', reason, logTo: at }]);
     this._stopped(reason);
+  }
+
+  /** Whether the entry that opens this session went out or is queued. */
+  private _sessionOpened(): boolean {
+    return this._wrote || this._output.sessionOpened();
+  }
+
+  /**
+   * The entries that end a session. They go out only when the entry that opened
+   * the session did: a session that added nothing leaves no entry at all.
+   */
+  private _end(drafts: readonly WalkEntryDraft[]): void {
+    if (!this._sessionOpened()) {
+      return;
+    }
+    for (const draft of drafts) {
+      this._output.push(draft);
+    }
   }
 
   private _begin(
@@ -524,6 +583,9 @@ export class WalkRecording {
     this._recent = [];
     this._lastAligned = null;
     this._pending = [];
+    this._first = null;
+    this._moved = false;
+    this._wrote = false;
     this._purple = [];
     this._lossLog = null;
     this._stop = null;
@@ -569,11 +631,7 @@ export class WalkRecording {
             (event.reason === 'tracking-lost' || event.unconfirmedDropped)
               ? this._lossLog
               : this._log(event.t);
-          this._output.push({
-            kind: 'stopped',
-            reason: event.reason,
-            logTo: at,
-          });
+          this._end([{ kind: 'stopped', reason: event.reason, logTo: at }]);
           if (!played) {
             this._output.tone('stopped');
           }
@@ -601,6 +659,8 @@ export class WalkRecording {
     this._live.setTracking('lost');
     this._stop = reason;
     this._phase = 'stopped';
+    // No session waits to open any more: an edit made now is not a resume.
+    this._output.forgetNext();
     this._output.save();
   }
 }

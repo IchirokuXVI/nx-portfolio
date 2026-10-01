@@ -53,13 +53,12 @@ import {
 } from '@portfolio/velista/platform';
 import {
   CheckIcon,
-  ChevronLeftIcon,
-  CloseIcon,
   CommentIcon,
   FlagIcon,
   InfoIcon,
   LocateIcon,
-  StopIcon,
+  PageHeader,
+  PageHeaderAction,
   StoreIcon,
   WarningIcon,
 } from '@portfolio/velista/ui';
@@ -67,6 +66,7 @@ import { AREA_SHEET_RENAME_PARAM } from '../edit/area-sheet';
 import { HoldMenu, type HoldChoice } from '../edit/hold-menu';
 import {
   applyEdits,
+  changingEdits,
   editsAllowed,
   holdEvents,
   MAP_EDIT_SESSION,
@@ -139,6 +139,9 @@ export type RecordNotice =
  * times a second the canvas is told what to draw. Marks, suggestions, sections
  * and the editing of `0123` happen on the same map while the walk goes on.
  *
+ * A session that adds nothing saves nothing (velista `0129`, target 9): a
+ * resume that is stopped at once leaves the history as it was.
+ *
  * Saving is `WalkEntrySaver`'s: the first entry of a session is `started` or
  * `resumed`, every 20 s save after it is a new `continued` entry, a stop is a
  * `stopped` entry with its reason, and a failed save shows "Not saved yet" and
@@ -151,19 +154,18 @@ export type RecordNotice =
   selector: 'lib-record-walk-page',
   imports: [
     CheckIcon,
-    ChevronLeftIcon,
-    CloseIcon,
     CommentIcon,
     FlagIcon,
     HoldMenu,
     InfoIcon,
     LocateIcon,
     MarkSheet,
+    PageHeader,
+    PageHeaderAction,
     ResizeControls,
     RokuTranslatorPipe,
     RouterOutlet,
     ShopMapView,
-    StopIcon,
     StoreIcon,
     SuggestionSheet,
     UnsavedDialog,
@@ -429,15 +431,12 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
       }
     };
     const onPageHide = () => this._leavePage(true);
-    const onClick = (event: MouseEvent) => this._mapClicked(event);
-    this._host.nativeElement.addEventListener('click', onClick);
     view?.addEventListener('beforeunload', beforeUnload);
     view?.addEventListener('pagehide', onPageHide);
     this._document.addEventListener('visibilitychange', onHidden);
 
     inject(DestroyRef).onDestroy(() => {
       clearInterval(clock);
-      this._host.nativeElement.removeEventListener('click', onClick);
       view?.removeEventListener('beforeunload', beforeUnload);
       view?.removeEventListener('pagehide', onPageHide);
       this._document.removeEventListener('visibilitychange', onHidden);
@@ -453,11 +452,15 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
     if (document === null || events.length === 0) {
       return false;
     }
-    if (!editsAllowed(document, events, this._saver.logEnd())) {
+    const edits = changingEdits(document, events);
+    if (edits.length === 0) {
+      return true;
+    }
+    if (!editsAllowed(document, edits, this._saver.logEnd())) {
       this.notice.set('blocked');
       return false;
     }
-    this._edit(events);
+    this._edit(edits);
     return true;
   }
 
@@ -507,23 +510,18 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
   }
 
   /**
-   * A tap on the map while choosing where you are. Listened for on the host, not
-   * in the template: the map is not a control, and the chips below it are the
-   * way to choose a mark without touching the map.
+   * A mark's pin was tapped (velista `0129`). While choosing where you are, it
+   * is the mark you stand next to; the chips below the map choose one without
+   * touching the map. At any other moment it opens the mark's sheet.
    */
-  private _mapClicked(event: MouseEvent): void {
-    const target = event.target as Element | null;
-    if (this._mode() !== 'where' || !target?.closest('.map')) {
+  protected markTapped(mark: MapMark): void {
+    if (this._mode() === 'where') {
+      this.pick(mark);
       return;
     }
-    const index = this._view()?.markAt({ x: event.clientX, y: event.clientY });
-    const mark =
-      index === null || index === undefined
-        ? null
-        : (this._doc()?.marks[index] ?? null);
-    if (mark !== null) {
-      this.pick(mark);
-    }
+    void this._router.navigate(sheetSegments(SHOP_PATHS.marks, mark.id), {
+      relativeTo: this._route,
+    });
   }
 
   protected pick(mark: MapMark): void {
@@ -700,7 +698,8 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
         this._justDrawn = event.area.id;
       }
     }
-    this._edit(events);
+    // An area dragged back to where it was changes nothing.
+    this._edit(document === null ? [] : changingEdits(document, events));
   }
 
   protected areaSelected(area: MapArea | null): void {
@@ -984,7 +983,7 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
 
   private _edit(events: readonly WalkEvent[]): void {
     const document = this._doc();
-    if (document === null) {
+    if (document === null || events.length === 0) {
       return;
     }
     for (const event of events) {
@@ -1076,6 +1075,8 @@ export class RecordWalkPage implements MapEditSession, LeavesWithUnsavedWork {
         push: (draft) => this._saver.push(draft),
         openNext: (kind) => this._saver.openNext(kind),
         logEnd: () => this._saver.logEnd(),
+        sessionOpened: () => !this._saver.nextWaits(),
+        forgetNext: () => this._saver.dropNext(),
         save: () =>
           void this._saver.save(this._keepalive ? { keepalive: true } : {}),
         tone: (kind) =>

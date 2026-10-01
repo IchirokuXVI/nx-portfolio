@@ -15,6 +15,7 @@
       "pending": "PENDING"
     },
     "detail": {
+      "title": "Group",
       "back": "Back",
       "loading": "Loading this group",
       "lists": "Lists",
@@ -22,6 +23,7 @@
       "newList": "New list",
       "settings": "Group settings",
       "stale": "Not updating live right now",
+      "waiting": "{{count}} waiting to join",
       "empty": {
         "title": "No lists yet",
         "body": "Start one and everyone here can shop from it"
@@ -122,6 +124,7 @@
     }
   },
   "line": {
+    "title": "Product",
     "indicator": {
       "bought": "Bought",
       "notAvailable": "Not in the shop last time",
@@ -511,6 +514,7 @@
   },
   "list": {
     "header": {
+      "title": "List",
       "inGroup": "in {{name}}",
       "pending": "{{pending}} of {{total}} pending",
       "done": "Nothing left",
@@ -1203,6 +1207,13 @@
     "failed": "This list would not load",
     "retry": "Try again",
     "openHistory": "History",
+    "more": {
+      "open": "More",
+      "title": "More",
+      "people": "People",
+      "create": "Create your shopping list",
+      "finish": "Finish"
+    },
     "live": {
       "title": "Everything to buy",
       "titleOf": "{{name}}: everything to buy",
@@ -1470,7 +1481,6 @@
       "cancel": "Keep it"
     },
     "finish": {
-      "open": "Finish shopping",
       "prompt": "All done. Finish shopping?",
       "action": "Finish shopping",
       "title": "Finish shopping?",
@@ -1990,6 +2000,7 @@
     }
   },
   "shopPage": {
+    "loadingTitle": "Shop",
     "back": "Back",
     "loading": "Loading the shop",
     "failed": "This shop would not load",
@@ -2016,7 +2027,6 @@
     "all": "All sections",
     "legendLeft": "Still to get",
     "legendDone": "All got",
-    "legendWalkway": "Walkway",
     "hint": "Tap a section to see what you need there.",
     "hintAll": "Tap a section to see its name and any note.",
     "section": {
@@ -2030,6 +2040,16 @@
       "toGet": "Still to get",
       "note": "Note on the map",
       "unknown": "This section is not on the map any more"
+    },
+    "place": {
+      "note": "Note on the map",
+      "missing": "This place is not on the map any more",
+      "kind": {
+        "shelf": "Shelf",
+        "counter": "Counter",
+        "checkout": "Checkout",
+        "entrance": "Entrance"
+      }
     }
   },
   "shopWalks": {
@@ -2040,7 +2060,6 @@
     "name": "Name",
     "list": {
       "title": "Walks",
-      "intro": "Shoppers see the map of one walk. Open a walk to see its history.",
       "empty": "No walks yet. Start one to map this shop.",
       "missing": "This shop could not be found.",
       "failed": "The walks would not load",
@@ -2053,9 +2072,7 @@
       "entries_other": "{{count}} entries",
       "marks_one": "{{count}} mark",
       "marks_other": "{{count}} marks",
-      "settingsFor": "Settings for {{name}}",
-      "start": "Start a new walk",
-      "startNote": "A new walk starts with an empty map."
+      "start": "Start a new walk"
     },
     "mapping": {
       "title": "Mapping settings",
@@ -2107,8 +2124,6 @@
       "noCamera": "Resuming needs camera tracking, which this browser does not have."
     },
     "settings": {
-      "title": "Walk settings",
-      "shoppers": "Shoppers",
       "show": "Show this walk to shoppers",
       "showHint": "A shop shows the map of one walk. Turning this on hides the others. Shoppers see changes after each save.",
       "delete": "Delete this walk",
@@ -2236,6 +2251,13 @@
       "waiting": "Waiting to save.",
       "ok": "OK",
       "leave": "Leave without saving"
+    },
+    "mark": {
+      "save": "Save",
+      "delete": "Delete this mark",
+      "deleteConfirm": "Delete this mark?",
+      "missing": "This mark is not on the map any more.",
+      "unnamed": "Type a name first. To take the mark away, press Delete."
     }
   },
   "shopWalkRecord": {

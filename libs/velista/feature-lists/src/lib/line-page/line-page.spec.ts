@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
@@ -35,17 +35,17 @@ import {
   provideFakeZoneStore,
 } from '@portfolio/velista/data-access';
 import {
-  LINE_ITEM_SET_MAX,
-  SUGGEST_DEBOUNCE_MS,
   type AlsoOnVm,
   type CatalogItem,
   type CatalogSuggestion,
   type Line,
+  LINE_ITEM_SET_MAX,
   type LineSettlement,
   type ListPermission,
   type MyZone,
   type ProductGroup,
   type ShoppingListSummary,
+  SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { of } from 'rxjs';
@@ -200,8 +200,12 @@ interface Options {
   readonly groupNames?: FakeGroupNames;
   readonly groupMembers?: FakeGroupMembers;
   readonly settlements?: Readonly<Record<string, readonly LineSettlement[]>>;
-  readonly itemSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
-  readonly moreSettlements?: Readonly<Record<string, readonly LineSettlement[]>>;
+  readonly itemSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
+  readonly moreSettlements?: Readonly<
+    Record<string, readonly LineSettlement[]>
+  >;
   readonly moreItemSettlements?: Readonly<
     Record<string, readonly LineSettlement[]>
   >;
@@ -322,6 +326,83 @@ function buttonWith(
 }
 
 describe('LinePage', () => {
+  /**
+   * Velista `0130`. The whole page used to wait for the line, so a cold arrival drew
+   * nothing at all, not even a way back. The header is drawn first now, outside the
+   * scroller, under the word for the kind of page.
+   */
+  describe('the one page header (velista 0130)', () => {
+    function title(fixture: ComponentFixture<LinePage>): HTMLElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-page-header h1'
+      );
+    }
+
+    function backControl(
+      fixture: ComponentFixture<LinePage>
+    ): HTMLElement | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-page-header [aria-label="list.header.back"]'
+      );
+    }
+
+    it('is drawn before the line arrives, titled Product, with a way back', async () => {
+      const { fixture } = await render({ lines: [] });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(fixture.componentInstance.page()).toBeNull();
+      expect(title(fixture)?.textContent?.trim()).toBe('line.title');
+      expect(backControl(fixture)).not.toBeNull();
+      // The content is what waits, and only the content.
+      expect(host.querySelector('main')).toBeNull();
+    });
+
+    it('takes the line’s text once it arrives, in the same h1', async () => {
+      const { fixture, lines } = await render({ lines: [] });
+      const before = title(fixture);
+
+      lines.set([line()]);
+      await drain(fixture);
+      fixture.detectChanges();
+
+      expect(title(fixture)).toBe(before);
+      expect(before?.textContent?.trim()).toBe('Milk');
+    });
+
+    it('is the only h1 and the only header element, before the scroller', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelectorAll('header')).toHaveLength(1);
+      expect(host.querySelector('main lib-page-header')).toBeNull();
+      expect(
+        host
+          .querySelector('lib-page-header')
+          ?.nextElementSibling?.matches('main.page')
+      ).toBe(true);
+      // No quick action on this page.
+      expect(
+        host.querySelector('lib-page-header button[libPageHeaderAction]')
+      ).toBeNull();
+    });
+
+    it('goes back to the list, through the page', async () => {
+      const { fixture } = await render();
+      const router = TestBed.inject(Router) as unknown as {
+        navigateByUrl: jest.Mock;
+      };
+
+      backControl(fixture)?.click();
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith(
+        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}`,
+        { replaceUrl: true }
+      );
+    });
+  });
+
   describe('the product names', () => {
     it('come from the service, as one request for the set', async () => {
       const { fixture } = await render();
@@ -580,9 +661,10 @@ describe('LinePage', () => {
       // One cluster left, and it is the person's: nothing is the catalog's any more.
       expect(clusters).toHaveLength(1);
       expect(clusters?.[0].headingKey).toBe('list.page.addedByYou');
-      expect(
-        clusters?.[0].products.map((product) => product.itemId)
-      ).toEqual(['item-milk-a', 'item-oat']);
+      expect(clusters?.[0].products.map((product) => product.itemId)).toEqual([
+        'item-milk-a',
+        'item-oat',
+      ]);
     });
 
     it('offers it on the catalog’s chip only, and never to a reader', async () => {
@@ -685,7 +767,9 @@ describe('LinePage', () => {
         kind: 'moreItemSettlements',
         lineId: LINE_ID,
       });
-      expect(fixture.componentInstance.page()?.everywhere?.rows).toHaveLength(2);
+      expect(fixture.componentInstance.page()?.everywhere?.rows).toHaveLength(
+        2
+      );
     });
   });
 
@@ -841,7 +925,14 @@ describe('LinePage similar products', () => {
   const GROUPED: CatalogItem = {
     ...MILK,
     productGroupId: MILK_GROUP.id,
-    categories: [{ id: 'cat-milk', parentId: 'cat-dairy-and-eggs', slug: 'milk', name: { en: 'Milk', es: 'Leche' } }],
+    categories: [
+      {
+        id: 'cat-milk',
+        parentId: 'cat-dairy-and-eggs',
+        slug: 'milk',
+        name: { en: 'Milk', es: 'Leche' },
+      },
+    ],
     offer: null,
     chainPrices: [],
     imageUrl: null,
@@ -867,7 +958,7 @@ describe('LinePage similar products', () => {
     ];
   }
 
-  it('lists the other products of the line product\'s group, and reads the group once', async () => {
+  it("lists the other products of the line product's group, and reads the group once", async () => {
     const groupMembers = members();
     const { fixture } = await render({
       itemNames: fakeItemNames({ items: [GROUPED] }),

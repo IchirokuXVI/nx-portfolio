@@ -10,23 +10,6 @@
   @include page.page;
 }
 
-.back {
-  @include page.back;
-}
-
-.back-glyph {
-  @include page.back-glyph;
-}
-
-.title {
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-2xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-}
-
 // Visually hidden, and never `display: none`: a region that is not rendered is not
 // announced. This is how a rename made behind a sheet is reported to somebody who
 // cannot see the name change.

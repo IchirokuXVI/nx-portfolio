@@ -35,13 +35,15 @@ import {
 import {
   catalogShopRow,
   ChainLogo,
-  ChevronLeftIcon,
   groupByPostalCode,
+  LocateIcon,
   nearbyShopRow,
-  NearMeButton,
   offeredChains,
+  PageHeader,
+  PageHeaderAction,
   recentShopRow,
   ShopPicker,
+  SpinnerIcon,
   type ChainLogoView,
   type ShopGroup,
   type ShopPickerAny,
@@ -95,10 +97,12 @@ export const SUPERMARKET_PARAM = 'supermarketId';
   selector: 'lib-catalog-supermarket-page',
   imports: [
     ChainLogo,
-    ChevronLeftIcon,
-    NearMeButton,
+    LocateIcon,
+    PageHeader,
+    PageHeaderAction,
     RokuTranslatorPipe,
     ShopPicker,
+    SpinnerIcon,
   ],
   providers: [ShopStore, ShopFinder],
   templateUrl: './supermarket-page.html',
@@ -220,7 +224,10 @@ export class CatalogSupermarketPage {
     this._shops.searchPending(this.query())
   );
 
-  /** The open chain's head: the logo at 56px, the name and the count. */
+  /**
+   * The open chain: its name for the header, and the logo and the count for the
+   * first line of the content. Null at the root and until the chains arrive.
+   */
   protected readonly head = computed<{
     readonly name: string;
     readonly logo: ChainLogoView;
@@ -237,6 +244,13 @@ export class CatalogSupermarketPage {
       count: chain.locations,
     };
   });
+
+  /**
+   * The chain's name, or null at the root and while it loads. The header never
+   * loads (velista `0130`, rule H6), so the template draws the page's own word then.
+   * A chain the catalog gives no name is the same case, never an empty title.
+   */
+  protected readonly title = computed(() => this.head()?.name || null);
 
   /** All supermarkets at the root, Any Mercadona shop on a chain's screen. */
   protected readonly anyRow = computed<ShopPickerAny | null>(() => {

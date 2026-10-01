@@ -10,14 +10,6 @@
   @include page.page;
 }
 
-.back {
-  @include page.back;
-}
-
-.back-glyph {
-  @include page.back-glyph;
-}
-
 // The mark, in a tile of its own, which is what makes this read as a page about the
 // app rather than as another screen inside it.
 .mark {
@@ -33,15 +25,6 @@
   background: var(--app-status-attention-bg);
   color: var(--app-action-quiet-fg);
   font-size: var(--app-icon-lg);
-}
-
-.title {
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-2xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
 }
 
 .lede {

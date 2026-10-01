@@ -2,9 +2,11 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import type { MapArea } from '@portfolio/luna-shopper/shop-map/model';
 import type { Basket, BasketRow } from '@portfolio/velista/models';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import {
+  headerOf,
   settle,
   shopMapTesting,
   type ShopMapHarnessOptions,
@@ -61,6 +63,21 @@ function text(
   ).map((node) => node.textContent?.trim() ?? '');
 }
 
+/** An area of the map as the canvas reports a tap on it. */
+function tapped(overrides: Partial<MapArea>): MapArea {
+  return {
+    id: 'a-tapped',
+    kind: 'shelf',
+    x: 0,
+    y: 0,
+    w: 1,
+    h: 1,
+    colour: { mode: 'default' },
+    origin: 'drawn',
+    ...overrides,
+  };
+}
+
 function view(fixture: ComponentFixture<ShopMapPage>): ShopMapView {
   return fixture.debugElement.query(By.directive(ShopMapView))
     .componentInstance as ShopMapView;
@@ -75,6 +92,28 @@ describe('ShopMapPage', () => {
     expect(text(fixture, '.subtitle')).toEqual([
       'Mercadona · Ronda de los Tejares 32',
     ]);
+    // Velista 0130: the shop is a line of the content, not of the header.
+    expect(text(fixture, 'lib-page-header .subtitle')).toEqual([]);
+  });
+
+  // Velista 0130: one header, the same in every state.
+  it.each([
+    ['with a map', 'loc-tejares', false],
+    ['with no map', 'loc-centro', false],
+    ['when the map would not load', 'loc-tejares', true],
+  ])('draws the header %s', async (_what, locationId, failing) => {
+    const { fixture } = await render({
+      params: { locationId },
+      permissions: [],
+      failing,
+    });
+
+    expect(headerOf(fixture)).toEqual({
+      lead: 'back',
+      leadLabel: 'shopMap.back',
+      title: 'shopMap.title',
+      actions: [],
+    });
   });
 
   it('draws the map in the drawn look (velista 0128)', async () => {
@@ -137,7 +176,7 @@ describe('ShopMapPage', () => {
     const go = jest.spyOn(TestBed.inject(Router), 'navigate');
     go.mockResolvedValue(true);
 
-    view(fixture).sectionTapped.emit('huevos ');
+    view(fixture).areaTapped.emit(tapped({ section: 'huevos ' }));
 
     expect(go).toHaveBeenCalledWith(
       ['sheet', 'sections', 'sec-mercadona-eggs'],
@@ -145,13 +184,59 @@ describe('ShopMapPage', () => {
     );
   });
 
-  it('opens nothing for a section the map did not resolve', async () => {
+  // Velista 0129, target 6: everything on the map opens.
+  it.each([
+    ['a section the shop does not list', tapped({ section: 'Pescadería' })],
+    ['a checkout', tapped({ kind: 'checkout' })],
+    ['the entrance', tapped({ kind: 'entrance', label: 'Way in' })],
+    ['a counter with no section', tapped({ kind: 'counter' })],
+  ])('opens the place sheet for %s', async (_what, area) => {
+    const { fixture } = await render({
+      params: { locationId: 'loc-tejares' },
+      query: { basket: 'live' },
+      basket: BASKET,
+    });
+    const go = jest.spyOn(TestBed.inject(Router), 'navigate');
+    go.mockResolvedValue(true);
+
+    view(fixture).areaTapped.emit(area);
+
+    expect(go).toHaveBeenCalledWith(
+      ['sheet', 'areas', 'a-tapped'],
+      expect.objectContaining({ queryParamsHandling: 'preserve' })
+    );
+  });
+
+  it('opens the place sheet for a tapped note', async () => {
     const { fixture } = await render({ params: { locationId: 'loc-tejares' } });
     const go = jest.spyOn(TestBed.inject(Router), 'navigate');
+    go.mockResolvedValue(true);
 
-    view(fixture).sectionTapped.emit('Pescadería');
+    view(fixture).noteTapped.emit({ id: 'n-1', x: 1, y: 1, text: 'Bread' });
 
-    expect(go).not.toHaveBeenCalled();
+    expect(go).toHaveBeenCalledWith(
+      ['sheet', 'notes', 'n-1'],
+      expect.objectContaining({ queryParamsHandling: 'preserve' })
+    );
+  });
+
+  // Velista 0129, target 4.
+  it('draws no Walkway legend, and no legend at all when it has nothing to say', async () => {
+    const withList = await render({
+      params: { locationId: 'loc-tejares' },
+      query: { basket: 'live' },
+      basket: BASKET,
+    });
+    expect(text(withList.fixture, '.legend > span:not(.badge)')).toEqual([
+      'shopMap.legendLeft',
+      'shopMap.legendDone',
+    ]);
+    expect(
+      (withList.fixture.nativeElement as HTMLElement).querySelector('.walkway')
+    ).toBeNull();
+
+    const alone = await render({ params: { locationId: 'loc-tejares' } });
+    expect(text(alone.fixture, '.legend')).toEqual([]);
   });
 
   it('says a shop has no map yet', async () => {
@@ -184,7 +269,7 @@ describe('ShopMapPage', () => {
     });
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.back')
+      .querySelector<HTMLButtonElement>('lib-page-header .lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/en/shopping-lists/b-1');
@@ -196,7 +281,7 @@ describe('ShopMapPage', () => {
     });
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('.back')
+      .querySelector<HTMLButtonElement>('lib-page-header .lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/en/shops/loc-tejares');
@@ -224,9 +309,13 @@ describe('ShopMapPage', () => {
         .spyOn(TestBed.inject(Router), 'navigateByUrl')
         .mockResolvedValue(true);
 
-      expect(text(fixture, '.walks > span')).toEqual(['shopWalks.open']);
+      // The word beside the glyph: Walks is a text action in the header.
+      expect(headerOf(fixture).actions).toHaveLength(1);
+      expect(text(fixture, '[libPageHeaderAction].is-text > span')).toEqual([
+        'shopWalks.open',
+      ]);
       (fixture.nativeElement as HTMLElement)
-        .querySelector<HTMLButtonElement>('.walks')
+        .querySelector<HTMLButtonElement>('[libPageHeaderAction]')
         ?.click();
 
       expect(navigate).toHaveBeenCalledWith('/en/shops/loc-tejares/walks');
@@ -239,7 +328,7 @@ describe('ShopMapPage', () => {
           permissions,
         });
 
-        expect(text(fixture, '.walks')).toEqual([]);
+        expect(headerOf(fixture).actions).toEqual([]);
       }
     });
   });

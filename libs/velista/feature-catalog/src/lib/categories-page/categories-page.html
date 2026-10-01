@@ -1,16 +1,10 @@
-<main class="page">
-  <header class="head">
-    <button
-      (click)="back()"
-      [attr.aria-label]="'catalog.categories.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <h1 class="title">{{ 'catalog.categories.title' | rokuT }}</h1>
-  </header>
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'catalog.categories.back' | rokuT"
+  [title]="'catalog.categories.title' | rokuT"
+/>
 
+<main class="page">
   @switch (state()) {
     @case ('loaded') {
       @if (rows().length > 0) {

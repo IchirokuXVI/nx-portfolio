@@ -12,6 +12,14 @@
     * { box-sizing: border-box; }
     a { color: #ffb454; text-decoration: none; }
     a:hover { color: #ffc271; }
+    /* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+    .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+    .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+    .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+    .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+    .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
   </style>
 </helmet>
 
@@ -22,20 +30,17 @@
     <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A LIST &middot; its composer, and the nav under it</span>
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-      <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-        <span style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-        </span>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 18px; font-weight: 600; color: #f7f8fc;">Weekly shop</div>
-          <div style="margin-top: 2px; font-size: 12.5px; color: #6f7899;">Home &middot; 5 things needed</div>
+      <header class="ph">
+        <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+        <h1 class="ph-title">Weekly shop</h1>
+        <div class="ph-actions">
+          <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+          <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
         </div>
-        <span style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
-        </span>
-      </div>
+      </header>
 
       <div style="flex: 1; overflow: hidden; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 9px;">
+        <div style="padding: 0 2px 3px; font-size: 13px; color: #98a0bb;">in Home &middot; 5 things needed</div>
         <div style="display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 16px; background: #161a28; border: 1px solid rgba(255,255,255,0.08);">
           <span style="flex: 1; font-size: 15.5px; color: #f7f8fc;">Milk, whole</span>
           <span style="font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums;">6</span>
@@ -85,10 +90,14 @@
     <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; position: relative;">
 
       <div style="display: flex; flex-direction: column; height: 100%;">
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);">
-          <span style="font-family: 'Marcellus', Georgia, serif; font-size: 22px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-          <span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span>
-        </div>
+        <header class="ph">
+          <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M11 3v13"></path><path d="M11 4c4 3 6 7 6 12H11"></path><path d="M4 19h16l-2 2H6z"></path></svg></span>
+          <h1 class="ph-title">Velista</h1>
+          <div class="ph-actions">
+            <button class="ph-act" type="button" aria-label="Assistant" style="color: #ffb454;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 15a2 2 0 01-2 2H8l-4 3V6a2 2 0 012-2h12a2 2 0 012 2z"></path></svg></button>
+            <button class="ph-act" type="button" aria-label="Your account"><span style="width: 30px; height: 30px; border-radius: 999px; background: #262b40; border: 1px solid rgba(255,255,255,0.12); color: #f7f8fc; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">D</span></button>
+          </div>
+        </header>
         <div style="flex: 1; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;">
           <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: #6f7899;">YOUR GROUPS</span>
           <div style="height: 86px; border-radius: 18px; background: #161a28; border: 1px solid rgba(255,255,255,0.09);"></div>

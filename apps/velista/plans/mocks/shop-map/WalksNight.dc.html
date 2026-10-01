@@ -165,15 +165,28 @@ button{font:inherit}
 .hscroll .chip{flex:none}
 .savebar{position:absolute;left:0;right:0;z-index:7;box-sizing:border-box;padding:10px 16px;background:var(--raised);border-top:1px solid var(--line);display:flex;flex-direction:column}
 
+/* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+.ph{flex:none;height:64px;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.ph-lead{flex:none;width:44px;height:44px;margin-left:-12px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text2);cursor:pointer}
+.ph-title{flex:1 1 auto;min-width:0;margin:0;font-family:Marcellus,Georgia,serif;font-size:20px;line-height:28px;font-weight:400;letter-spacing:0.05em;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-actions{flex:none;display:flex;align-items:center;margin-right:-10px}
+.ph-act{position:relative;flex:none;width:44px;height:44px;display:flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:999px;background:transparent;color:var(--text2);cursor:pointer}
+.ph-text{flex:none;height:44px;padding:0 10px;display:flex;align-items:center;gap:6px;border:0;border-radius:999px;background:transparent;color:var(--quiet);font:inherit;font-size:14px;font-weight:600;white-space:nowrap;cursor:pointer}
+/* what was a subtitle in the bar: the first line of the content under the header */
+.ph-sub{flex:none;box-sizing:border-box;font-size:12px;line-height:16px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-sub.strip{padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
 </style>
 </helmet>
 <div class="phone night">
-  <div class="bar">
-    <button class="ibtn" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
-    <div class="ttl2"><span class="ttl">Walks</span><span class="ttl2-sub">El Jamón · [shop address]</span></div>
-    <button class="ibtn" aria-label="Mapping settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"></path><circle cx="16" cy="6" r="2"></circle><circle cx="10" cy="12" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg></button>
-  </div>
-  <p class="p" style="padding: 16px 16px 8px; font-size: 14px">Shoppers see the map of one walk. Open a walk to resume it or to see its history.</p>
+  <header class="ph">
+    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+    <h1 class="ph-title">Walks</h1>
+    <div class="ph-actions">
+      <button class="ph-act" type="button" aria-label="Mapping settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+    </div>
+  </header>
+  <div class="ph-sub" style="padding: 12px 16px 0">El Jamón · [shop address]</div>
+  <p class="p" style="padding: 6px 16px 8px; font-size: 14px">Shoppers see the map of one walk. Open a walk to resume it or to see its history.</p>
   <div style="border-top: 1px solid var(--line)">
     <div class="wrow">
       <div style="flex: 1; min-width: 0">

@@ -1,0 +1,152 @@
+{
+  "title": "Velista: one header for every page",
+  "lede": "Every page inside the app's chrome draws one header: one height, one title style, a bottom border, a back button or an icon at the left and quick actions at the right. The brand bar is home's. The group page and the list page keep everything they showed, in new places, and the basket page gets a menu. Plan <code>0130</code>. Drawn on Day. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "All.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 2408,
+      "title": "Every page, one header"
+    },
+    {
+      "file": "Sizes.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 884,
+      "title": "The title at both sizes"
+    },
+    {
+      "file": "Group.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Group: count in the Members row (recommended)"
+    },
+    {
+      "file": "GroupLine.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Group: one quiet line"
+    },
+    {
+      "file": "GroupLoading.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Group, loading"
+    },
+    {
+      "file": "List.dc.html",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "List: filter and gear"
+    },
+    {
+      "file": "ListLoading.dc.html",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "List, loading"
+    },
+    {
+      "file": "Account.dc.html",
+      "x": 1880,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Account"
+    },
+    {
+      "file": "Picker.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Supermarket picker, Near me"
+    },
+    {
+      "file": "Basket.dc.html",
+      "x": 2350,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Basket: share, map, menu"
+    },
+    {
+      "file": "BasketMenu.dc.html",
+      "x": 2820,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Basket: the menu sheet"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "rules",
+      "x": 0,
+      "y": -520,
+      "w": 420,
+      "text": "THE RULES, H1 TO H6.\nH1. One header, one size: 64px on every page, the top safe area added as padding.\nH2. One title: one line with an ellipsis, the display face, weight 400, the wordmark tracking, one size. It is the page's h1.\nH3. Always a bottom border.\nH4. The left end holds a back button or an icon, never neither and never both.\nH5. The right end holds quick actions of 44px. An action that is not ready is absent.\nH6. The header never loads: the title is the word for the kind of page (Group, List) until the name arrives."
+    },
+    {
+      "id": "q1",
+      "x": 470,
+      "y": -520,
+      "w": 420,
+      "text": "REVIEW QUESTION 1: THE TITLE'S SIZE.\nBoth sizes sit in the same 64px box. At 20px a list's name beside two actions shows about nineteen letters, at 27px about fourteen: \"Compra semanal de la casa\" is cut at both, sooner at 27px, and \"Keep Velista on your phone\" is cut only at 27px.\nThe recommendation is 20px. Whatever is picked, home takes it too, and every other mock folder was redrawn at 20px."
+    },
+    {
+      "id": "q2",
+      "x": 940,
+      "y": -520,
+      "w": 420,
+      "text": "REVIEW QUESTION 2: THE GROUP'S ROLE AND COUNT.\nThe name is the title and the initial tile is gone. Two places for what is left.\nRecommended: the count is the value of the Members row, where a person goes to see members, and the role chip starts the presence line.\nThe other: one quiet line with the chip and the count, and the presence row under it. It costs one more line and says the count twice as loudly as it needs."
+    },
+    {
+      "id": "leaves",
+      "x": 1410,
+      "y": -520,
+      "w": 420,
+      "text": "A HEADER HOLDS ONLY A TITLE.\nOn the list page \"in Casa\", the progress line and the bar are the first block of the content. List settings is the gear, beside the filter button with its count badge, and the tools row is gone because nothing is left in it.\nWhile it loads the title is List and no action shows. The box and the title do not change size when the list arrives, which is the defect this plan started from."
+    },
+    {
+      "id": "home",
+      "x": 1880,
+      "y": -520,
+      "w": 420,
+      "text": "THE BRAND BAR IS HOME'S.\nThe word Velista, the assistant and the account show on home only, as ordinary content of the same header. The group, members, list, account, profiles and supermarkets pages lose that bar and get one row shorter.\nThe offline mark stays on home. The list and the group keep their own stale notice in the content."
+    },
+    {
+      "id": "picker",
+      "x": 2350,
+      "y": -520,
+      "w": 420,
+      "text": "TEXT ACTIONS STAY TEXT.\nNear me, Walks, Done and Stop sit in the actions slot at the touch target's height. On the picker the title and Near me move up beside the chevron.\nOn a chain's page the logo and the shop count become the first line of the content. On the catalog tab \"near 28013\" is not an action, so it joins the tools row."
+    },
+    {
+      "id": "menu",
+      "x": 2820,
+      "y": -520,
+      "w": 420,
+      "text": "THE BASKET'S MENU (section 6.1).\nNo back button, so the left end is the basket icon. Share, map, then the menu. The menu is a sheet, a child route named more: People, History, Create your shopping list (new), Finish.\nAn entry that is not allowed is absent, and with no entry the button is absent. The filter button stays in the tools row on this page."
+    },
+    {
+      "id": "gear",
+      "x": 2820,
+      "y": -260,
+      "w": 420,
+      "text": "THE GEAR IS NEW.\nSliders beside the filter glyph read as two filters, so settings gets a gear: on the list page, and on the walks page for mapping settings, so that one glyph means settings in the whole app.\nSTILL OPEN ON INSTALL: the brand mark between the back row and the title. The install folder shows what was chosen there."
+    }
+  ]
+}

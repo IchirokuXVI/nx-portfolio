@@ -1,21 +1,12 @@
 <!--
-  No `lib-app-bar` here, and that is deliberate: the bar's second button is what opens
-  this panel, so drawing it would put a control on screen that leads to the screen it
-  is on. A destination's own header instead, the shape `0009` gave the credential
-  screens and `0015` gave the account page.
+  The one header (velista `0130`), which every page draws and which sits outside the
+  column that scrolls.
 -->
-<header class="bar">
-  <button
-    (click)="back()"
-    [attr.aria-label]="'assistant.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
-  <h1 class="title">{{ 'assistant.title' | rokuT }}</h1>
-</header>
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'assistant.back' | rokuT"
+  [title]="'assistant.title' | rokuT"
+/>
 
 <main #column class="column">
   @if (messages().length === 0) {

@@ -1,46 +1,44 @@
 @let view = screen();
 <main class="page">
-  <header class="bar">
-    @if (view === 'where') {
-      <button
-        (click)="closeWhere()"
-        [attr.aria-label]="'shopWalkRecord.where.close' | rokuT"
-        class="back"
-        type="button"
-      >
-        <lib-close-icon class="back-glyph" />
-      </button>
-      <div class="heading">
-        <h1 class="title">{{ 'shopWalkRecord.where.title' | rokuT }}</h1>
-      </div>
-    } @else {
-      <button
-        (click)="leave()"
-        [attr.aria-label]="'shopWalks.back' | rokuT"
-        class="back"
-        type="button"
-      >
-        <lib-chevron-left-icon class="back-glyph" />
-      </button>
-      <div class="heading">
-        <h1 class="title">
-          {{ name() ?? ('shopWalks.history.loadingTitle' | rokuT) }}
-        </h1>
-      </div>
-      @if (statusPill(view); as pill) {
-        <span [class]="'pill ' + pill.tone" aria-live="polite" role="status">
-          <span aria-hidden="true" class="pill-dot"></span>
-          {{ pill.key | rokuT }}
-        </span>
+  <!--
+    One header for both steps (velista 0130). Picking where to start is left with
+    the X; everything after it goes back, through the walk's own leave.
+  -->
+  <lib-page-header
+    (back)="view === 'where' ? closeWhere() : leave()"
+    [backLabel]="
+      (view === 'where' ? 'shopWalkRecord.where.close' : 'shopWalks.back')
+        | rokuT
+    "
+    [leading]="view === 'where' ? 'close' : 'back'"
+    [title]="
+      view === 'where'
+        ? ('shopWalkRecord.where.title' | rokuT)
+        : (name() ?? ('shopWalks.history.loadingTitle' | rokuT))
+    "
+  >
+    <ng-container pageHeaderActions>
+      @if (view !== 'where') {
+        @if (statusPill(view); as pill) {
+          <span [class]="'pill ' + pill.tone" aria-live="polite" role="status">
+            <span aria-hidden="true" class="pill-dot"></span>
+            {{ pill.key | rokuT }}
+          </span>
+        }
+        <!-- The word alone: with its glyph the title had no room at 390px. -->
+        @if (view === 'walking') {
+          <button
+            (click)="stop()"
+            kind="text"
+            libPageHeaderAction
+            type="button"
+          >
+            {{ 'shopWalkRecord.stop' | rokuT }}
+          </button>
+        }
       }
-      @if (view === 'walking') {
-        <button (click)="stop()" class="stop" type="button">
-          <lib-stop-icon class="stop-glyph" />
-          {{ 'shopWalkRecord.stop' | rokuT }}
-        </button>
-      }
-    }
-  </header>
+    </ng-container>
+  </lib-page-header>
 
   @if (read().kind === 'ready' && view !== 'unsupported') {
     <div class="map">
@@ -49,6 +47,7 @@
           (areaSelected)="areaSelected($event)"
           (changed)="changed($event)"
           (longPressed)="longPressed($event)"
+          (markTapped)="markTapped($event)"
           (suggestionTapped)="suggestionTapped($event)"
           [document]="document"
           [label]="'shopWalkRecord.label' | rokuT"

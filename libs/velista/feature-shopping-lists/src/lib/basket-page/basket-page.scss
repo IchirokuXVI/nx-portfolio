@@ -16,12 +16,10 @@
 
   gap: var(--app-space-3);
   padding-inline: 0;
-  // The bar is flush with the top of the screen, as it is on the history and on
-  // the assistant. The mixin's block padding is for a page whose content starts
-  // at the top; here it left a strip of ground above the bar, so the rule under
-  // the bar floated a little way down the screen instead of closing a header.
-  // The notch inset stays on the bar itself, which is what has to clear it.
-  padding-block-start: 0;
+  // The header is `PageHeader`, the item before this column and outside its scroll
+  // (velista 0130). So what starts this column is content, and it takes the gap that
+  // used to sit between the bar and the first thing under it.
+  padding-block-start: var(--app-space-3);
   // This column is the scroll and the composer sits **below** it, so the field is
   // not something to scroll to. `min-block-size` goes back to zero because the
   // mixin's `100%` would make the column as tall as the host on its own and push
@@ -64,135 +62,33 @@ lib-line-composer {
   display: block;
 }
 
-// The destination bar, laid out the way the history's is: the same padding, the
-// same rule underneath, so the two do not read as different furniture.
-.bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
-    var(--app-space-3);
-  padding-block-start: calc(var(--app-space-4) + var(--app-safe-top));
-  border-block-end: 1px solid var(--app-border-subtle);
-}
-
-.history,
-.share,
-.people,
-.finish {
-  @include shared.tap-target;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-// Every control in the bar is an action and reacts to a pointer. The history took
-// the back chevron's place (velista 0111), and the chevron was the one control here
-// that did not light up, by plan 0052 section 9's rule for a way out.
-.history,
-.share,
-.people,
-.finish {
-  &:hover {
-    background: var(--app-surface-raised);
-    color: var(--app-text-primary);
-  }
-}
-
-// The map of the shop the basket is read at (velista 0121): a round glyph in the
-// quiet action treatment, so it reads as an offer and not as the trip's main act,
-// and leaves the title its width.
-.map {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  padding: 0;
-  border: 1px solid var(--app-action-quiet-border);
-  border-radius: var(--app-radius-full);
-  background: var(--app-action-quiet-bg);
-  color: var(--app-action-quiet-fg);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-.map-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.history-glyph,
-.share-glyph,
-.people-glyph,
-.finish-glyph {
-  font-size: var(--app-icon-md);
-}
-
-// The display face, set the way the **list page** sets a list's name and not the
-// way the history sets its own (plan 0051).
-//
-// The wordmark treatment next door, `2xl` with `--app-tracking-wordmark`, belongs
-// to a title that is a word of the product's: "Assistant", "Shopping lists",
-// "Install". This one is somebody's own text, a basket's name or the date it was
-// generated, and content set as a mark reads as a mistake rather than as a mark:
-// at `clamp(24px, 7vw, 32px)` with letter spacing, "Compra semanal del piso"
-// takes three lines of a phone before the basket has said anything at all.
-//
-// So it takes the step the list page's header takes for exactly the same string,
-// on the one other screen in this app that is a shopping list somebody is
-// carrying around a shop.
-.title {
-  flex: 1;
-  min-inline-size: 0;
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-  // One line, ellipsised, as on the list page. A name long enough to wrap would
-  // push the face row and the whole screen down, and the bar is furniture rather
-  // than content: what the basket holds is below it.
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 // A row of faces and no sentence. The overflow collapses into a stacked chip,
 // which is the same "+X" pattern the price display uses.
+//
+// At the leading edge of the tools row, before the count (velista 0130): the header
+// holds only a title. The end margin is what separates the last face from the words.
 .faces {
   @include shared.tap-target;
 
   display: flex;
   align-items: center;
   flex: none;
+  margin-inline-end: var(--app-space-2);
   padding: 0 var(--app-space-1);
   border: none;
+  border-radius: var(--app-radius-full);
   background: transparent;
   cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 // The bubble needs an edge, and it had none (plan 0052, section 3).
 //
-// It was filled `--app-surface-sunken` on a bar whose background is
+// It was filled `--app-surface-sunken` on a row whose background is
 // `--app-surface-ground`, and those two are **one step apart on the ramp** in both
 // themes: `--app-ink-900` on `--app-ink-950` in dark, `--app-neutral-100` on
 // `--app-neutral-50` in light. At `--app-avatar-sm` that is a circle you have to
@@ -216,7 +112,7 @@ lib-line-composer {
   background: var(--app-surface-raised);
   // A ring in the page's own background, so overlapping faces stay separable. It
   // sits outside the border rather than replacing it, so the two do not fight: one
-  // separates a face from the bar, the other separates it from the face beside it.
+  // separates a face from the row, the other separates it from the face beside it.
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-surface-ground);
   font-size: var(--app-text-2xs);
   text-transform: uppercase;

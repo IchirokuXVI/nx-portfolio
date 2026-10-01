@@ -1,54 +1,27 @@
-// A full page rather than a sheet, so it owns the column and the scroll. The list page
-// beside it is laid out the same way and for the same reason.
+// A full page rather than a sheet, so it owns the column and the scroll. Exactly as
+// tall as the app's page slot, which has a definite height in both run modes (velista
+// 0106), so the header keeps its place at the top and only the column under it scrolls.
+// The list page beside it is laid out the same way and for the same reason.
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// The one scroll container on this screen. The page header is the item of the host
+// before it (velista 0130), so it never scrolls away. `min-block-size: 0` is what lets
+// this be shorter than the histories in it.
 .page {
   display: flex;
   flex-direction: column;
-  min-block-size: 100%;
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  padding: var(--app-space-4) var(--app-space-3) 0;
-}
-
-.back {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  border: none;
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-.back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.title {
   flex: 1;
-  min-inline-size: 0;
-  margin: 0;
-  font-size: var(--app-text-xl);
-  font-weight: 650;
-  color: var(--app-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
-.scroll {
+.content {
   flex: 1;
-  padding: var(--app-space-2) var(--app-space-6) var(--app-space-6);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-6);
 }
 
 .where {
@@ -383,7 +356,7 @@
 }
 
 .foot {
-  padding: var(--app-space-4) var(--app-space-6) var(--app-space-7);
+  padding: var(--app-space-4) var(--app-space-5) var(--app-space-7);
 }
 
 // The only thing on either screen that discards the history, which is why it is the

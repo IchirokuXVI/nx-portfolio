@@ -1,36 +1,30 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="back()"
-      [attr.aria-label]="'shopWalks.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      <h1 class="title">{{ 'shopWalks.mapping.title' | rokuT }}</h1>
-    </div>
-  </header>
+  <lib-page-header
+    (back)="back()"
+    [backLabel]="'shopWalks.back' | rokuT"
+    [title]="'shopWalks.mapping.title' | rokuT"
+  />
 
-  <p class="intro">{{ 'shopWalks.mapping.intro' | rokuT }}</p>
+  <div class="content">
+    <p class="intro">{{ 'shopWalks.mapping.intro' | rokuT }}</p>
 
-  <h2 class="group">{{ 'shopWalks.mapping.whileWalking' | rokuT }}</h2>
-  <label class="switch-row">
-    <span class="switch-body">
-      <span class="switch-title">{{
-        'shopWalks.mapping.walkingAcross' | rokuT
-      }}</span>
-      <span class="switch-hint">{{
-        'shopWalks.mapping.walkingAcrossHint' | rokuT
-      }}</span>
-    </span>
-    <input
-      (change)="setWalkingAcross($event)"
-      [checked]="settings().walkingAcrossMakesPath"
-      class="switch"
-      role="switch"
-      type="checkbox"
-    />
-  </label>
+    <h2 class="group">{{ 'shopWalks.mapping.whileWalking' | rokuT }}</h2>
+    <label class="switch-row">
+      <span class="switch-body">
+        <span class="switch-title">{{
+          'shopWalks.mapping.walkingAcross' | rokuT
+        }}</span>
+        <span class="switch-hint">{{
+          'shopWalks.mapping.walkingAcrossHint' | rokuT
+        }}</span>
+      </span>
+      <input
+        (change)="setWalkingAcross($event)"
+        [checked]="settings().walkingAcrossMakesPath"
+        class="switch"
+        role="switch"
+        type="checkbox"
+      />
+    </label>
+  </div>
 </main>

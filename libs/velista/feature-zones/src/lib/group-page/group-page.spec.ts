@@ -26,7 +26,7 @@ import {
   provideVelistaTesting,
   type BrowserFacade,
 } from '@portfolio/velista/platform';
-import { GroupHeader, ListRow } from '@portfolio/velista/ui';
+import { GroupSummary, ListRow } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { GroupPage } from './group-page';
 
@@ -69,6 +69,8 @@ function list(id: string, name: string): ShoppingListSummary {
 
 interface Options {
   readonly zone?: MyZone;
+  /** A cold deep link, where nothing put this group in the cache first. */
+  readonly noZoneCached?: boolean;
   readonly lists?: readonly ShoppingListSummary[];
   /** Defaults to `loaded`, which is a group already opened once this session. */
   readonly listsState?: 'idle' | 'loading' | 'loaded' | 'failed';
@@ -97,7 +99,9 @@ async function render(options: Options = {}): Promise<{
   TestBed.resetTestingModule();
 
   const seeded = options.zone ?? zone();
-  const zones = fakeZoneStore({ zones: [seeded] });
+  const zones = fakeZoneStore({
+    zones: options.noZoneCached === true ? [] : [seeded],
+  });
   const lists = fakeListStore({
     lists: options.lists ?? [],
     state: options.listsState ?? 'loaded',
@@ -183,7 +187,7 @@ describe('GroupPage', () => {
   describe('who is here now', () => {
     const online = (fixture: ComponentFixture<GroupPage>) =>
       fixture.debugElement
-        .query(By.directive(GroupHeader))
+        .query(By.directive(GroupSummary))
         ?.componentInstance.group().online;
 
     const viewersOn = (fixture: ComponentFixture<GroupPage>, index: number) =>
@@ -576,16 +580,115 @@ describe('GroupPage', () => {
 
       expect(fixture.componentInstance.codeIsNew()).toBe(false);
     });
+  });
+
+  /**
+   * Velista `0130`. The page draws the one header every page draws, in every state,
+   * and what the old header held beside the name is content under it.
+   */
+  describe('the page header', () => {
+    const title = (fixture: ComponentFixture<GroupPage>) =>
+      query(fixture, 'lib-page-header h1')?.textContent?.trim();
 
     it('shows the back control as a caret, not as the word Back', async () => {
       const { fixture } = await render();
-      const back = (fixture.nativeElement as HTMLElement).querySelector(
-        '.back'
-      );
+      const back = query(fixture, 'lib-page-header .lead');
 
       expect(back?.getAttribute('aria-label')).toBe('zone.detail.back');
       expect(back?.querySelector('lib-chevron-left-icon')).not.toBeNull();
       expect(back?.textContent?.trim()).toBe('');
+    });
+
+    it('goes back to the dashboard when there is nothing behind it', async () => {
+      const { fixture, router } = await render();
+
+      (query(fixture, 'lib-page-header .lead') as HTMLButtonElement).click();
+      await fixture.whenStable();
+
+      expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home', {
+        replaceUrl: true,
+      });
+    });
+
+    it('says the kind of page while there is no name, then the name', async () => {
+      // A cold deep link. The header is there with its final height and a real title
+      // before anything has loaded (H6), where the page used to draw no header at all.
+      const { fixture, zones } = await render({ noZoneCached: true });
+
+      expect(title(fixture)).toBe('zone.detail.title');
+      expect(query(fixture, 'lib-row-skeleton')).not.toBeNull();
+      expect(query(fixture, 'lib-group-summary')).toBeNull();
+
+      zones.set([zone()]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(title(fixture)).toBe('Flat 3B');
+    });
+
+    it('is titled with the name in every state that knows it', async () => {
+      const states: readonly Options[] = [
+        // Loading, with the group cached and its lists on their way.
+        { listsState: 'loading' },
+        // An error, which carries no summary and is still a group with a name.
+        { listsState: 'failed' },
+        { zone: zone({ myStatus: 'PENDING' }) },
+        { zone: zone({ status: 'MARKED_FOR_DELETION' }) },
+        // Empty.
+        { lists: [] },
+        { lists: [list('list-1', 'Weekly shop')] },
+      ];
+
+      for (const options of states) {
+        const { fixture } = await render(options);
+
+        expect(title(fixture)).toBe('Flat 3B');
+        expect(query(fixture, 'lib-page-header .lead')).not.toBeNull();
+      }
+    });
+
+    it('holds no actions', async () => {
+      const { fixture } = await render();
+
+      expect(
+        query(fixture, 'lib-page-header button[libPageHeaderAction]')
+      ).toBe(null);
+    });
+
+    it('sits outside the scrolling column, with no brand bar above it', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, 'main lib-page-header')).toBeNull();
+      expect(query(fixture, 'lib-app-bar')).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).firstElementChild?.tagName
+      ).toBe('LIB-PAGE-HEADER');
+    });
+
+    it('is the only heading of its level, and the only header element', async () => {
+      const { fixture } = await render({
+        lists: [list('list-1', 'Weekly shop')],
+      });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelectorAll('header')).toHaveLength(1);
+      expect(query(fixture, 'main h1')).toBeNull();
+    });
+
+    it('moves the member count into the Members row and the role under it', async () => {
+      const { fixture } = await render({
+        zone: zone({ myRole: 'ADMIN' }),
+        lists: [list('list-1', 'Weekly shop')],
+      });
+
+      expect(
+        query(fixture, 'lib-group-summary .action-value')?.textContent?.trim()
+      ).toBe('3');
+      expect(
+        query(fixture, 'lib-group-summary lib-role-chip')?.textContent
+      ).toContain('zone.role.admin');
     });
   });
 

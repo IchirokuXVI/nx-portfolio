@@ -1,57 +1,23 @@
-// The furniture both picker pages share (velista 0119): a column, a one row head of
-// chevron and title, and the loading and failed states. Mixins and not a component,
-// for the reason `feature-account`'s `_account-page.scss` gives.
+// The furniture the picker pages share (velista 0119): the scrolling column under the
+// page header, and the loading and failed states. Mixins and not a component, for the
+// reason `feature-account`'s `_account-page.scss` gives. The head is `PageHeader`'s
+// (velista 0130), so no mixin here draws a chevron or a title.
 
+// The page's scroller: the host is a column of `lib-page-header` and then this, so
+// the header stays and this takes what is left. `min-block-size: 0` is what lets it
+// be shorter than the rows in it.
+//
+// Not a flex column, whose children would shrink to fit rather than overflow: the
+// rhythm between the cards is a margin.
 @mixin page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-5);
-  padding: var(--app-space-3) var(--app-space-5) var(--app-space-7);
-}
+  flex: 1;
+  min-block-size: 0;
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-7);
+  overflow-y: auto;
 
-// One row: the back chevron, then the title beside it, so the head costs one line
-// and the parents page keeps its twelfth row on a phone.
-@mixin head {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  min-inline-size: 0;
-}
-
-// The negative start margin keeps the caret aligned with the card edge below it.
-@mixin back {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--app-touch-target);
-  block-size: var(--app-touch-target);
-  margin-inline-start: calc(-1 * var(--app-space-4));
-  border: none;
-  border-radius: var(--app-radius-full);
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
+  > * + * {
+    margin-block-start: var(--app-space-5);
   }
-}
-
-@mixin back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-@mixin title {
-  min-inline-size: 0;
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-2xl);
-  line-height: var(--app-leading-heading);
-  color: var(--app-text-primary);
-  overflow-wrap: anywhere;
 }
 
 // Bones in the card's shape, one per row, while the tree is on its way.

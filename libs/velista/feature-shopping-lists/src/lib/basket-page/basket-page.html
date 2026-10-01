@@ -1,101 +1,21 @@
-<main #column class="page">
-  <!--
-    The destination header every screen without an app bar draws, written the same
-    way the history's is down to the glyph's class name: the two are the same bar,
-    and a reader moving between them must not see the furniture change. It used to
-    be a hand drawn one, with a `&larr;` entity where the chevron goes.
+<!--
+  The one header every page draws (velista 0130), first and outside the scroller, so
+  it never scrolls away. It is drawn in every state, with a real title in each: the
+  page's own word until the basket answers, then the basket's name.
 
-    The **title** is the one thing that is not the history's, and `0051` is why:
-    the history is titled by a word of the product's and takes the wordmark
-    treatment for it, while this is somebody's own basket name and takes the step
-    the list page gives the same string.
-  -->
-  <header class="bar">
-    <!--
-      The history, where every basket's back chevron used to be (velista 0111). No
-      basket page goes back: the bottom bar is the way out, and the history is the way
-      to another basket. A guest gets neither, because the history needs an account:
-      they arrived on a link and this screen is the whole app to them (section 4.1).
-    -->
-    @if (canOpenHistory()) {
-      <button
-        (click)="openHistory()"
-        [attr.aria-label]="'basket.openHistory' | rokuT"
-        [attr.title]="'basket.openHistory' | rokuT"
-        class="history"
-        type="button"
-      >
-        <lib-clock-icon class="history-glyph" />
-      </button>
-    }
+  **No back**, so the left end holds the tab's icon (H4). No basket page goes back
+  (velista 0111): the bottom bar is the way out, and the history is the way to
+  another basket.
 
-    <h1 class="title">{{ title() }}</h1>
+  **Three actions and no more** (section 6.1). Share, the map, and the menu. The
+  history, the people, composing a new list and ending the trip are rows of the menu:
+  with all of them in this row the title was cut to nothing on a 390 wide phone, and
+  the title is the one thing in a header a person reads.
+-->
+<lib-page-header [title]="title()">
+  <lib-basket-icon pageHeaderIcon />
 
-    <!--
-      The map of the shop the basket is read at (velista 0121, target 5), when
-      that shop has one. A glyph in a round button, named by its label: with the
-      history, the faces and the share control in the same bar, the word "Map"
-      left the basket's title ellipsised at a phone's width.
-    -->
-    @if (mapShop(); as shop) {
-      <button
-        (click)="openMap()"
-        [attr.aria-label]="'basket.map.openLabel' | rokuT: { shop: shop.name }"
-        class="map"
-        type="button"
-      >
-        <lib-map-icon class="map-glyph" />
-      </button>
-    }
-
-    <!--
-      Who is holding this basket open **right now**, guests marked by a dashed ring.
-      No sentence: a row of faces does the job, and the word "anonymous" appears
-      nowhere in this product (section 5.1).
-
-      Nothing at all for nobody, which is `ListViewers`' rule and matters more here:
-      presence empties the moment the socket drops, and a zero drawn where a crowd
-      was would be a claim about the shop rather than about the connection. The
-      people sheet is still reachable from the header when there is somebody, and
-      it answers the other question — everybody who *can* open this basket.
-    -->
-    @if (faces().length > 0) {
-      <button
-        (click)="openPeople()"
-        [attr.aria-label]="'basket.people.open' | rokuT"
-        class="faces"
-        type="button"
-      >
-        @for (face of faces(); track face.id) {
-          <span [class.is-guest]="face.isGuest" class="face">
-            {{ face.initials }}
-          </span>
-        }
-        @if (overflow() > 0) {
-          <span class="face is-overflow">
-            {{ 'basket.people.more' | rokuT: { count: overflow() } }}
-          </span>
-        }
-      </button>
-    } @else if (hasPeople()) {
-      <!--
-        Nobody is connected, the socket is not up, or this is the basket that is
-        always there, which has no presence room at all (velista 0094, section
-        7). The sheet still has an answer worth reading — everybody who *can*
-        open this basket — so the way into it stays, drawn as a plain control
-        that claims nothing about who is here. The faces above are the claim;
-        this is the door.
-      -->
-      <button
-        (click)="openPeople()"
-        [attr.aria-label]="'basket.people.open' | rokuT"
-        class="people"
-        type="button"
-      >
-        <lib-person-icon class="people-glyph" />
-      </button>
-    }
-
+  <ng-container pageHeaderActions>
     <!--
       The one thing that stays the owner's, even for a registered participant who
       passes the all or nothing rule everywhere else (section 4.1).
@@ -105,37 +25,49 @@
         (click)="openShare()"
         [attr.aria-label]="'basket.share.open' | rokuT"
         class="share"
+        libPageHeaderAction
         type="button"
       >
-        <lib-share-icon class="share-glyph" />
+        <lib-share-icon />
       </button>
     }
 
     <!--
-      The end of the trip, and it is **in the header** rather than in the footer
-      (plan 0057, section 3). The footer belongs to the line you are working on, and a
-      button that ends the whole trip must not sit a thumb's width from the control
-      that settles one line: the two are one tap apart in the muscle memory, and a
-      mis-tap on the wrong one is a screen full of controls disappearing.
-
-      A flag rather than a tick, for the same distance in the artwork: a tick is what
-      a settled line wears on this very screen.
-
-      The owner's alone, and absent rather than disabled for everybody else, which is
-      the treatment the share control beside it already gets.
+      The map of the shop the basket is read at (velista 0121, target 5), when
+      that shop has one. A glyph named by its label, and no word.
     -->
-    @if (canFinish()) {
+    @if (mapShop(); as shop) {
       <button
-        (click)="openFinish()"
-        [attr.aria-label]="'basket.finish.open' | rokuT"
-        class="finish"
+        (click)="openMap()"
+        [attr.aria-label]="'basket.map.openLabel' | rokuT: { shop: shop.name }"
+        class="map"
+        libPageHeaderAction
         type="button"
       >
-        <lib-flag-icon class="finish-glyph" />
+        <lib-map-icon />
       </button>
     }
-  </header>
 
+    <!--
+      The menu. Absent when it would hold no row: a guest on a basket that names
+      nobody has nothing in it, and a control that opens onto nothing is worse than
+      no control.
+    -->
+    @if (hasMenu()) {
+      <button
+        (click)="openMore()"
+        [attr.aria-label]="'basket.more.open' | rokuT"
+        class="more"
+        libPageHeaderAction
+        type="button"
+      >
+        <lib-ellipsis-icon />
+      </button>
+    }
+  </ng-container>
+</lib-page-header>
+
+<main #column class="page">
   <!--
     Which of the two screens this is. A live basket and a refetching one look
     identical while nobody else is shopping and completely different the moment
@@ -380,11 +312,11 @@
           and the filter button (`0075`) at the trailing one. The search it held
           is the composer's field since velista 0117.
 
-          Not in the header, which already holds back, the title, the faces, share
-          and finish. A sixth and seventh control there shrink the title to nothing
-          on a 390 wide phone, and the title is the one thing on that bar a person
-          reads. This row was empty at the trailing edge, and the count it holds is
-          about the lines, which is what the controls are about too.
+          Not in the header, which holds the title, share, the map and the menu.
+          One more control there shrinks the title on a 390 wide phone, and the
+          title is the one thing in a header a person reads. This row was empty at
+          the trailing edge, and the count it holds is about the lines, which is
+          what the controls are about too.
 
           Drawn for every reader, guests included. Nothing in it names a household.
 
@@ -397,6 +329,41 @@
           (openFilter)="openFilter()"
           [activeCount]="activeCount()"
         >
+          <!--
+            Who is holding this basket open **right now**, guests marked by a dashed
+            ring. No sentence: a row of faces does the job, and the word "anonymous"
+            appears nowhere in this product (section 5.1).
+
+            At the leading edge of this row since velista 0130. It sat in the header,
+            and a header holds only a title: faces are not one. Pressing them still
+            opens the people sheet, under the same name.
+
+            Nothing at all for nobody, which is `ListViewers`' rule and matters more
+            here: presence empties the moment the socket drops, and a zero drawn
+            where a crowd was would be a claim about the shop rather than about the
+            connection. The people sheet is still reachable then, from the menu, and
+            it answers the other question: everybody who *can* open this basket.
+          -->
+          @if (faces().length > 0) {
+            <button
+              (click)="openPeople()"
+              [attr.aria-label]="'basket.people.open' | rokuT"
+              class="faces"
+              type="button"
+            >
+              @for (face of faces(); track face.id) {
+                <span [class.is-guest]="face.isGuest" class="face">
+                  {{ face.initials }}
+                </span>
+              }
+              @if (overflow() > 0) {
+                <span class="face is-overflow">
+                  {{ 'basket.people.more' | rokuT: { count: overflow() } }}
+                </span>
+              }
+            </button>
+          }
+
           <!--
             "got" means bought. A line closed because the shop had none is counted
             separately rather than folded in, because folding it in would claim a

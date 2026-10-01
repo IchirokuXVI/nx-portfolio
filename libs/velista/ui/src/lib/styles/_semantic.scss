@@ -182,6 +182,22 @@ $app-content-max: 480px;
   // The mark on an empty or error panel, which is illustration rather than icon.
   --app-icon-display: 56px;
 
+  // The one page header (velista `0130`, rules H1 and H2). Every page inside
+  // `AppLayout` draws `PageHeader`, and these are the only knobs it has.
+  //
+  // The height is the home bar's: one touch target plus its block padding (44, 12
+  // and 8). The bottom border is inside it, and the top safe area is added to it as
+  // padding, so the row is this tall on every phone.
+  --app-header-height: 64px;
+  // One size for every title, home's word included. A title beside a back control and
+  // two actions has about 210px on a 390px phone, which is some nineteen letters at
+  // this size and some fourteen at `--app-text-2xl`.
+  --app-header-title-size: var(--app-text-xl);
+  // The icon a page with no way back draws where the chevron would be. Between
+  // `--app-icon-md` and `--app-icon-lg`: it names the page, so it is drawn a step
+  // larger than a control's glyph.
+  --app-header-icon-size: 24px;
+
   // Round things that hold an initial: a member avatar, and the stacked avatars on
   // the resume card. Two sizes, because a group's tile is a square and is bigger.
   --app-avatar-sm: 22px;

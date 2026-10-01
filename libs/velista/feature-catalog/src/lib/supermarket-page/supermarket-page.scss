@@ -1,63 +1,34 @@
 @use '../picker-page' as picker;
 
+// A column of the page header and then the scroller (velista 0130), exactly as tall
+// as the frame's page slot, so the header stays while the picker scrolls under it.
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
 }
 
 .page {
   @include picker.page;
 }
 
-// The head is two rows, as the mock draws it: the chevron alone, then the title
-// with Near me beside it, or a chain's logo, name and count.
-.head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-2);
-  min-inline-size: 0;
-}
-
-.crumb {
-  display: flex;
-}
-
-.back {
-  @include picker.back;
-}
-
-.back-glyph {
-  @include picker.back-glyph;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  min-inline-size: 0;
-}
-
-.title {
-  @include picker.title;
-
-  flex: 1 1 auto;
-}
-
-.chain-head {
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  min-inline-size: 0;
-}
-
-.chain-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-hair);
-  min-inline-size: 0;
-}
-
-.chain-count {
-  margin: 0;
-  font-size: var(--app-text-sm);
+// Near me while it works: the words say so, and the amber steps back so it no longer
+// reads as something to press. The same two values `lib-near-me-button` uses.
+.near.is-busy {
   color: var(--app-text-muted);
+  cursor: progress;
+}
+
+.near-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+// A chain's screen opens on its logo and its count, one quiet line.
+.chain-line {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
 }

@@ -6,33 +6,13 @@
   padding: var(--app-space-4) var(--app-space-5) var(--app-space-3);
 }
 
-// The signed-in header sits on a divider; the anonymous one is deliberately airy,
-// because that screen is mostly whitespace and a rule across the top closes it in.
-.bordered {
-  border-bottom: 1px solid var(--app-border-subtle);
-}
-
+// No divider under it, deliberately: the front door is mostly whitespace and a rule
+// across the top closes it in.
 .lockup {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
   min-width: 0;
-}
-
-// The lockup as a link. It keeps the wordmark's own colour rather than taking the
-// link colour, because it is the identity first and a control second, and an amber
-// sailboat in the corner of every screen would read as the page's primary action.
-// The only thing it gains visually is the focus ring and a pointer.
-.lockup-link {
-  text-decoration: none;
-  color: inherit;
-  border-radius: var(--app-radius-md);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
 }
 
 // The wordmark **is** the lockup: it draws the mark and the name itself. The header
@@ -47,24 +27,22 @@
   font-size: var(--app-text-xl);
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-}
-
-.icon-button,
 .locale {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--app-space-2);
+  padding: 0 var(--app-space-4);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
   background: transparent;
-  border: none;
   color: var(--app-text-secondary);
   font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
   cursor: pointer;
 
-  // Plan 0003 section 7: every control is at least 44 by 44, the icon buttons in
-  // the app bar included.
+  // Plan 0003 section 7: every control is at least 44 by 44.
   min-width: var(--app-touch-target);
   min-height: var(--app-touch-target);
 
@@ -73,61 +51,6 @@
     outline-offset: var(--app-focus-ring-offset);
     border-radius: var(--app-radius-md);
   }
-}
-
-.glyph {
-  font-size: var(--app-icon-md);
-}
-
-// The one control in the header that is coloured rather than grey, because it is the
-// only one that leads somewhere new. The account button beside it is a face somebody
-// already knows to look for.
-.assistant {
-  color: var(--app-action-quiet-fg);
-}
-
-// The disconnected mark. `attention` rather than a warning colour, because this design
-// system has no yellow role and `0002` section 4.4 is a page of argument about why:
-// amber is the brand action colour and an amber warning beside an amber action is the
-// ambiguity that decision exists to prevent. Being disconnected is a state waiting on
-// something, which is the sentence `attention` was defined for.
-//
-// Sized like the buttons beside it so the row keeps one baseline, but with no touch
-// target of its own: it is not a control.
-.offline-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--app-touch-target);
-  padding: 0 var(--app-space-2);
-  color: var(--app-status-attention-fg);
-}
-
-.offline-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--app-avatar-lg);
-  height: var(--app-avatar-lg);
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-overlay);
-  color: var(--app-text-primary);
-  font-size: var(--app-text-xs);
-  font-weight: 600;
-}
-
-.locale {
-  gap: var(--app-space-2);
-  padding: 0 var(--app-space-4);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-full);
-  font-size: var(--app-text-sm);
-  font-weight: 500;
 }
 
 .chevron {

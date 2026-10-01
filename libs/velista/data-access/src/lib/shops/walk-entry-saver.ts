@@ -194,9 +194,22 @@ export class WalkEntrySaver {
   /**
    * Add events to the open entry, opening one when none is. `logTo` moves the
    * entry's end forward, which a recording does and an edit never does.
+   *
+   * No events open nothing (velista `0129`, target 9): time that passed with
+   * nothing made is not an entry. A `logTo` alone only moves the end of an entry
+   * that is already open, and only when it passes that entry's own.
    */
   add(events: readonly WalkEvent[], logTo?: number): void {
-    if (this._walkId === null || (events.length === 0 && logTo === undefined)) {
+    if (this._walkId === null) {
+      return;
+    }
+    if (events.length === 0) {
+      const held = this._open;
+      if (held !== null && logTo !== undefined && logTo > held.logTo) {
+        held.logTo = logTo;
+        this._logEnd = logTo;
+        this._afterChange();
+      }
       return;
     }
     const open = this._ensureOpen();
@@ -247,6 +260,23 @@ export class WalkEntrySaver {
     if (sealing) {
       this._afterChange();
     }
+  }
+
+  /**
+   * Whether the entry `openNext` named is still to be opened: nothing was added
+   * since. A recording asks before it sends `stopped`, which goes out only when
+   * the entry that opened its session did (velista `0129`, target 9).
+   */
+  nextWaits(): boolean {
+    return this._nextKind !== null;
+  }
+
+  /**
+   * Forget the kind `openNext` named. A recording calls it when its session
+   * ends, so an edit made after the stop is not taken for the start of a walk.
+   */
+  dropNext(): void {
+    this._nextKind = null;
   }
 
   /** Where the log ends: the `logTo` of the last entry held or answered. */

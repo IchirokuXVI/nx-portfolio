@@ -13,6 +13,7 @@ export {
 export {
   HANDLE_HIT_PX,
   LONG_PRESS_MS,
+  PIN_HIT_PX,
   SLOP_PX,
   mountShopMap,
 } from './lib/mount';

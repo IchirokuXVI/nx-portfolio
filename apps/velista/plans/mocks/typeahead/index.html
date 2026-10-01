@@ -101,7 +101,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -111,9 +111,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -177,15 +178,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Main .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Main .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Main .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Main .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Main .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Main .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Main .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Main .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Main .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Main .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Main .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -761,7 +769,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -771,9 +779,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -837,15 +846,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-BasketPage .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-BasketPage .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-BasketPage .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-BasketPage .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-BasketPage .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketPage .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-BasketPage .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-BasketPage .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-BasketPage .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-BasketPage .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-BasketPage .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-BasketPage .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -1421,7 +1437,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -1431,9 +1447,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -1497,15 +1514,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Group .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Group .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Group .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Group .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Group .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Group .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Group .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Group .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Group .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Group .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Group .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Group .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -2081,7 +2105,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -2091,9 +2115,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -2157,15 +2182,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-GroupInfo .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-GroupInfo .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-GroupInfo .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-GroupInfo .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-GroupInfo .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-GroupInfo .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-GroupInfo .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-GroupInfo .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-GroupInfo .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-GroupInfo .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-GroupInfo .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-GroupInfo .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -2741,7 +2773,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -2751,9 +2783,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -2817,15 +2850,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Assistant .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Assistant .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Assistant .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Assistant .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Assistant .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Assistant .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Assistant .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Assistant .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Assistant .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Assistant .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Assistant .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Assistant .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -3434,7 +3474,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -3444,9 +3484,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -3510,15 +3551,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Day .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Day .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Day .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Day .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Day .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Day .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Day .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Day .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Day .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Day .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Day .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Day .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -4094,7 +4142,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -4104,9 +4152,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -4170,15 +4219,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Expanded .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Expanded .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Expanded .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Expanded .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Expanded .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Expanded .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Expanded .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Expanded .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Expanded .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Expanded .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Expanded .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Expanded .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -4754,7 +4810,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -4764,9 +4820,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -4830,15 +4887,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Sizes .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Sizes .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Sizes .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Sizes .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Sizes .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Sizes .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Sizes .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Sizes .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Sizes .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Sizes .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Sizes .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Sizes .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -5433,7 +5497,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -5443,9 +5507,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -5509,15 +5574,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Budget .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Budget .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Budget .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Budget .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Budget .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Budget .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Budget .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Budget .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Budget .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Budget .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Budget .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Budget .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -6154,7 +6226,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -6164,9 +6236,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -6230,15 +6303,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Edge .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Edge .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Edge .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Edge .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Edge .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Edge .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Edge .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Edge .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Edge .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Edge .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Edge .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Edge .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -6853,7 +6933,7 @@
      stripe. */
   --app-suggestion-body: 59px;
   /* The two bands the panel is measured against. */
-  --app-header-height: 52px;
+  --app-header-height: 64px;
   --app-composer-height: 60px;
   /* What is left once the keyboard, the header, the composer and two rows of
      the list have taken theirs, and never more than three cards.
@@ -6863,9 +6943,10 @@
      `window.visualViewport` and this falls back to `100dvh` before it is.
 
      min(3 * 73 + 8, ...) is 229px, and on a 390 by 844 phone with the keyboard
-     up the right hand side is 237px, so three cards is what fits there. On a
-     375 by 667 phone it resolves to 163px and two cards, which is the floor
-     this arithmetic protects. */
+     up the right hand side was 237px, so three cards is what fit there. Plan
+     0130 made the header 64px where this sheet had 52px, so it is 225px now,
+     4px short of the third card, and the panel scrolls. On a 375 by 667 phone
+     it resolves to 151px. */
   --app-viewport: 100dvh;
   --app-suggestions-max-height: min(
     calc(3 * var(--app-suggestion-card) + 8px),
@@ -6929,15 +7010,22 @@
   overflow: hidden;
   background: var(--app-surface-ground);
   color: var(--app-text-primary); }
-#ab-Placements .top { display: flex;
-  align-items: center;
-  gap: var(--app-space-4);
-  padding-inline: var(--app-space-5);
-  height: var(--app-header-height);
-  box-sizing: border-box;
-  flex: none; }
-#ab-Placements .top h1 { margin: 0; font-size: var(--app-text-base); font-weight: 600; }
-#ab-Placements .top p { margin: 2px 0 0; font-size: var(--app-text-2xs); color: var(--app-text-muted); }
+#ab-Placements .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Placements .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Placements .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Placements .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Placements .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Placements .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Placements .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+#ab-Placements .page-lede { flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
+  font-size: var(--app-text-xs);
+  line-height: 16px;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; }
 #ab-Placements .icon-btn { width: var(--app-touch-target);
   height: var(--app-touch-target);
   margin: -10px;
@@ -7526,7 +7614,7 @@
 
 <header>
   <h1>Velista: the product typeahead</h1>
-  <p class="lede">The bigger product suggestion card, for the two places the typeahead is used today: the composer on a zone list page and the composer on the basket page. It stays <code>lib-suggestion-list</code> in <code>libs/velista/ui/src/lib/list/</code> and is never promoted to <code>@portfolio/shared/ui</code>. Phone only, 390 by 844, with one Day artboard. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The interactive version, where the chain row expands and the popover opens, is the published canvas linked from <code>../README.md</code>.</p>
+  <p class="lede">The bigger product suggestion card, for the two places the typeahead is used today: the composer on a zone list page and the composer on the basket page. It stays <code>lib-suggestion-list</code> in <code>libs/velista/ui/src/lib/list/</code> and is never promoted to <code>@portfolio/shared/ui</code>. Phone only, 390 by 844, with one Day artboard. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. The interactive version, where the chain row expands and the popover opens, is the published canvas linked from <code>../README.md</code>. Headers redrawn for plan <code>0130</code>.</p>
 </header>
 
 <div class="controls">
@@ -7545,18 +7633,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     
@@ -7824,18 +7909,16 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra de hoy</h1>
-                <p>Mercadona &middot; 3 lists</p>
+            <header class="ph">
+              <span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span>
+              <h1 class="ph-title">Shopping list</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="Map"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button>
+                <button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">Compra de hoy &middot; Mercadona &middot; 3 lists</p>
 
             <div class="lines">
     
@@ -8130,18 +8213,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     
@@ -8328,18 +8408,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     
@@ -8521,18 +8598,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     
@@ -8793,18 +8867,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     
@@ -9072,18 +9143,15 @@
 
             <div class="inset"></div>
 
-            <div class="top">
-              <button class="icon-btn" type="button" aria-label="Back">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>
-              </button>
-              <div style="flex-grow: 1; min-width: 0;">
-                <h1>Compra semanal</h1>
-                <p>Casa &middot; 14 lines</p>
+            <header class="ph">
+              <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+              <h1 class="ph-title">Compra semanal</h1>
+              <div class="ph-actions">
+                <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
               </div>
-              <button class="icon-btn" type="button" aria-label="List options">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
-              </button>
-            </div>
+            </header>
+            <p class="page-lede">in Casa &middot; 14 lines</p>
 
             <div class="lines">
     

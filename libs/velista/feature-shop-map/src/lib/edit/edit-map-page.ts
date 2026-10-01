@@ -19,6 +19,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import type {
   MapArea,
+  MapMark,
   ShopMapDocumentV2,
   WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -37,12 +38,13 @@ import {
   walkIdOf,
   type LeavesWithUnsavedWork,
 } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader, PageHeaderAction } from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { AREA_SHEET_RENAME_PARAM } from './area-sheet';
 import { HoldMenu, type HoldChoice } from './hold-menu';
 import {
   applyEdits,
+  changingEdits,
   editsAllowed,
   holdEvents,
   MAP_EDIT_SESSION,
@@ -67,10 +69,13 @@ type Read =
  * Editing a walk's map by hand (velista `0123`, target 1; the `EditArea` and
  * `EditCells` boards): the editor in the mapper look on the walk's real
  * document, with no person and no live state. There are no edit buttons: a drag
- * on the floor draws, a tap on an area opens its sheet, a drawn area shows its
- * resize controls, and a long press opens the menu.
+ * on the floor draws, a tap on an area opens its sheet, a tap on a mark opens
+ * the mark's (velista `0129`), a drawn area shows its resize controls, and a
+ * long press opens the menu.
  *
- * Every edit is one appended `edited` entry, collected by `WalkEntrySaver` and
+ * An edit that leaves the map as it was is dropped before it is saved, so a
+ * visit that changes nothing writes no entry (velista `0129`, target 9).
+ * Every other edit is one appended `edited` entry, collected by `WalkEntrySaver` and
  * sent on Done, on leaving, when the page is hidden and every 20 s. Another
  * phone's save refuses it (`walk_changed`): the page reads the walk again and
  * says so. Leaving with an unsent entry asks first (`UnsavedDialog`, through the
@@ -81,8 +86,9 @@ type Read =
 @Component({
   selector: 'lib-edit-map-page',
   imports: [
-    ChevronLeftIcon,
     HoldMenu,
+    PageHeader,
+    PageHeaderAction,
     ResizeControls,
     RokuTranslatorPipe,
     RouterOutlet,
@@ -189,11 +195,15 @@ export class EditMapPage implements MapEditSession, LeavesWithUnsavedWork {
     if (document === null || events.length === 0) {
       return false;
     }
-    if (!editsAllowed(document, events, this._logMs)) {
+    const edits = changingEdits(document, events);
+    if (edits.length === 0) {
+      return true;
+    }
+    if (!editsAllowed(document, edits, this._logMs)) {
       this.notice.set('blocked');
       return false;
     }
-    this._record(events);
+    this._record(edits);
     return true;
   }
 
@@ -228,7 +238,15 @@ export class EditMapPage implements MapEditSession, LeavesWithUnsavedWork {
         this._justDrawn = event.area.id;
       }
     }
-    this._record(events);
+    // An area dragged back to where it was changes nothing.
+    this._record(document === null ? [] : changingEdits(document, events));
+  }
+
+  /** A mark's pin was tapped: its sheet, over this page. */
+  protected markTapped(mark: MapMark): void {
+    void this._router.navigate(sheetSegments(SHOP_PATHS.marks, mark.id), {
+      relativeTo: this._route,
+    });
   }
 
   protected areaSelected(area: MapArea | null): void {
@@ -376,7 +394,7 @@ export class EditMapPage implements MapEditSession, LeavesWithUnsavedWork {
 
   private _record(events: readonly WalkEvent[]): void {
     const document = this._document();
-    if (document === null) {
+    if (document === null || events.length === 0) {
       return;
     }
     for (const event of events) {

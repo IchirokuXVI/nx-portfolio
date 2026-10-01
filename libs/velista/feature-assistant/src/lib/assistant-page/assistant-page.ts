@@ -28,7 +28,7 @@ import {
   AssistantComposer,
   AssistantIntro,
   AssistantMessage,
-  ChevronLeftIcon,
+  PageHeader,
   type AssistantLinkVm,
   type AssistantMessageVm,
 } from '@portfolio/velista/ui';
@@ -88,7 +88,7 @@ import { AssistantStore } from '../assistant-store';
     AssistantComposer,
     AssistantIntro,
     AssistantMessage,
-    ChevronLeftIcon,
+    PageHeader,
   ],
   templateUrl: './assistant-page.html',
   styleUrl: './assistant-page.scss',

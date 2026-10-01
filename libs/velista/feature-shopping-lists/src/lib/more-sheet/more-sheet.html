@@ -1,0 +1,67 @@
+<lib-sheet-shell (dismiss)="close()" labelledBy="more-title">
+  <h2 class="title" id="more-title">{{ 'basket.more.title' | rokuT }}</h2>
+
+  <!--
+    One row per thing this reader may do, in the order the plan fixes: people, the
+    history, a new shopping list, finish. A row that is not allowed is absent, so the
+    list holds only rows that work.
+
+    Each is a real button with its word as its name. The glyph is decoration beside
+    the word, which is why the icon needs no label of its own.
+  -->
+  <ul class="rows">
+    @for (entry of entries(); track entry) {
+      <li class="item">
+        @switch (entry) {
+          @case ('people') {
+            <button
+              (click)="openPeople()"
+              class="row"
+              type="button"
+              data-entry="people"
+            >
+              <lib-person-icon class="glyph" />
+              <span class="word">{{ 'basket.more.people' | rokuT }}</span>
+              @if (peopleCount() > 0) {
+                <span class="count">{{ peopleCount() }}</span>
+              }
+            </button>
+          }
+          @case ('history') {
+            <button
+              (click)="openHistory()"
+              class="row"
+              type="button"
+              data-entry="history"
+            >
+              <lib-clock-icon class="glyph" />
+              <span class="word">{{ 'basket.openHistory' | rokuT }}</span>
+            </button>
+          }
+          @case ('create') {
+            <button
+              (click)="openCreate()"
+              class="row is-new"
+              type="button"
+              data-entry="create"
+            >
+              <lib-plus-icon class="glyph" />
+              <span class="word">{{ 'basket.more.create' | rokuT }}</span>
+            </button>
+          }
+          @case ('finish') {
+            <button
+              (click)="openFinish()"
+              class="row"
+              type="button"
+              data-entry="finish"
+            >
+              <lib-flag-icon class="glyph" />
+              <span class="word">{{ 'basket.more.finish' | rokuT }}</span>
+            </button>
+          }
+        }
+      </li>
+    }
+  </ul>
+</lib-sheet-shell>

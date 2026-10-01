@@ -1,7 +1,9 @@
 import type {
   AreaKind,
   MapArea,
+  MapMark,
   ShopMapDocumentV2,
+  ShopperNote,
   ShopperView,
   WalkEntry,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -23,6 +25,7 @@ import {
   drawPerson,
   drawSizeTag,
   drawTaggedLabel,
+  pinScale,
   placeRect,
   screenBox,
   walkwayPath,
@@ -44,6 +47,7 @@ import {
   unionBox,
   walkedCellsOfPath,
 } from './geometry';
+import { pinchStart, pinchStep, type Pinch } from './pinch';
 import { px, svg } from './svg';
 import { shopMapCss } from './theme';
 import type {
@@ -73,6 +77,13 @@ const DOUBLE_TAP_PX = 24;
 export const HANDLE_HIT_PX = 36;
 /** The resize handle's drawn square, in css pixels. */
 export const HANDLE_GLYPH_PX = 16;
+/**
+ * How far from its centre a mark's pin or a note takes a tap, in css pixels at
+ * the scale the pin is drawn. The pin itself reaches 13 from its centre.
+ */
+export const PIN_HIT_PX = 22;
+/** How long after a tap the click the browser sends for it is swallowed. */
+const TAP_CLICK_MS = 700;
 /** How long a refused draw, move or resize stays in the refusal colour. */
 const REFUSED_MS = 900;
 
@@ -102,7 +113,10 @@ type Target =
   | { type: 'selected'; area: MapArea }
   | { type: 'area'; area: MapArea }
   | { type: 'suggestion'; id: string }
-  | { type: 'floor' };
+  | { type: 'floor' }
+  /** A mark's pin, with what lies under it: a drag or a long press goes there. */
+  | { type: 'mark'; mark: MapMark; under: Target }
+  | { type: 'note'; note: ShopperNote };
 
 interface Pointer {
   x: number;
@@ -126,7 +140,7 @@ type Gesture =
       ids: [number, number];
       view: View;
       centre: Pointer;
-      distance: number;
+      pinch: Pinch;
     }
   | { kind: 'done' };
 
@@ -338,12 +352,51 @@ export function mountShopMap(
       ? null
       : (map.areas.find((a) => a.id === selectedId) ?? null);
 
+  /**
+   * The pin or note closest to a css point, within its reach. The reach
+   * shrinks with the pin, which is drawn smaller when the map is zoomed out.
+   */
+  function pinAt<T extends { x: number; y: number }>(
+    pins: readonly T[],
+    p: Pointer
+  ): T | null {
+    let best: T | null = null;
+    let bestDistance = PIN_HIT_PX * pinScale(view);
+    for (const pin of pins) {
+      const [sx, sy] = toScreen(view, pin.x, pin.y);
+      const d = Math.hypot(sx - p.x, sy - p.y);
+      if (d <= bestDistance) {
+        best = pin;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+
   function hitTest(p: Pointer): Target {
-    const [wx, wy] = toWorld(view, p.x, p.y);
     if (look !== 'mapper') {
-      const a = areaAt(map.areas, wx, wy, (x) => x.kind === 'path');
+      // A note is a pin above the areas, so it is asked first.
+      const note = pinAt(shopperOf().notes, p);
+      if (note) return { type: 'note', note };
+      const [wx, wy] = toWorld(view, p.x, p.y);
+      // The walkway and what blocks it are not places anybody goes to.
+      const a = areaAt(
+        map.areas,
+        wx,
+        wy,
+        (x) => x.kind === 'path' || x.kind === 'blocked'
+      );
       return a ? { type: 'area', area: a } : { type: 'floor' };
     }
+    // The pins are drawn above everything, so they are asked before the
+    // handles and the areas. A drag from one still acts on what is under it.
+    const mark = pinAt(map.marks, p);
+    const under = hitTestUnderPins(p);
+    return mark ? { type: 'mark', mark, under } : under;
+  }
+
+  function hitTestUnderPins(p: Pointer): Target {
+    const [wx, wy] = toWorld(view, p.x, p.y);
     const sel = selectedArea();
     if (sel) {
       // A handle is hit by where the press lands, not by the area's size.
@@ -820,8 +873,45 @@ export function mountShopMap(
       ids: [a[0], b[0]],
       view,
       centre: { x: (a[1].x + b[1].x) / 2, y: (a[1].y + b[1].y) / 2 },
-      distance: Math.max(Math.hypot(a[1].x - b[1].x, a[1].y - b[1].y), 1),
+      pinch: pinchStart(Math.hypot(a[1].x - b[1].x, a[1].y - b[1].y)),
     };
+  }
+
+  /**
+   * The click a browser sends after a tap must not reach what the tap opened.
+   *
+   * A tap is reported on `pointerup`, and the host opens a sheet for it. After
+   * a quick touch the browser then sends a `click` at the same point, and by
+   * then the sheet's scrim is under the finger: the click lands on it and
+   * closes the sheet the tap opened. After a long touch no click is sent,
+   * which is why only a long touch seemed to work (velista plan 0129, target
+   * 5). So the one click that follows a tap, at the tap's point, is consumed
+   * here before any element hears it. Nothing waits for it: the tap was
+   * already reported.
+   */
+  let clickGuard: (() => void) | null = null;
+
+  function swallowClick(at: { clientX: number; clientY: number }): void {
+    clickGuard?.();
+    if (!win) return;
+    const page = win;
+    const onClick = (e: MouseEvent) => {
+      stop();
+      const far =
+        Math.hypot(e.clientX - at.clientX, e.clientY - at.clientY) >
+        DOUBLE_TAP_PX;
+      if (far) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    const timer = setTimeout(() => stop(), TAP_CLICK_MS);
+    const stop = () => {
+      clearTimeout(timer);
+      page.removeEventListener('click', onClick, true);
+      if (clickGuard === stop) clickGuard = null;
+    };
+    page.addEventListener('click', onClick, true);
+    clickGuard = stop;
   }
 
   function onDown(e: PointerEvent): void {
@@ -834,6 +924,7 @@ export function mountShopMap(
       return;
     const p = local(e);
     pointers.set(e.pointerId, p);
+    clickGuard?.();
     canvas.setPointerCapture?.(e.pointerId);
     // A refused draft still on screen goes at once, and a refused move or
     // resize draws its area back where it was: the full rebuild does both.
@@ -860,6 +951,8 @@ export function mountShopMap(
       return;
     }
     const target = hitTest(p);
+    // A long press and a drag act on what is under a pin, not on the pin.
+    const below = target.type === 'mark' ? target.under : target;
     const g: Gesture = {
       kind: 'pending',
       id: e.pointerId,
@@ -874,10 +967,10 @@ export function mountShopMap(
         const [wx, wy] = toWorld(view, p.x, p.y);
         // A handle belongs to the selected area, so a press on it is on that area.
         const area =
-          target.type === 'area' ||
-          target.type === 'selected' ||
-          target.type === 'handle'
-            ? target.area
+          below.type === 'area' ||
+          below.type === 'selected' ||
+          below.type === 'handle'
+            ? below.area
             : null;
         held = { at: [wx, wy], areaId: area?.id ?? null };
         rebuild();
@@ -901,9 +994,12 @@ export function mountShopMap(
       const b = pointers.get(g.ids[1]);
       if (!a || !b) return;
       const centre = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const distance = Math.max(Math.hypot(a.x - b.x, a.y - b.y), 1);
+      // A move until the fingers spread or close past the dead zone, and a
+      // zoom from then on. Either way the map follows the point between them.
+      const step = pinchStep(g.pinch, Math.hypot(a.x - b.x, a.y - b.y));
+      g.pinch = step.pinch;
       const [lo, hi] = range();
-      const s = Math.min(hi, Math.max(lo, (g.view.s * distance) / g.distance));
+      const s = Math.min(hi, Math.max(lo, g.view.s * step.factor));
       const [wx, wy] = toWorld(g.view, g.centre.x, g.centre.y);
       setView({ s, tx: centre.x - wx * s, ty: centre.y - wy * s }, true);
       return;
@@ -913,13 +1009,14 @@ export function mountShopMap(
       if (Math.hypot(p.x - g.start.x, p.y - g.start.y) <= SLOP_PX) return;
       endPending();
       const from = toWorld(view, g.start.x, g.start.y);
+      const target = g.target.type === 'mark' ? g.target.under : g.target;
       if (look !== 'mapper') gesture = { kind: 'pan', id: g.id, last: g.start };
-      else if (g.target.type === 'handle') {
-        const fixed = corners(g.target.area)[(g.target.corner + 2) % 4];
-        gesture = { kind: 'resize', id: g.id, area: g.target.area, fixed };
-      } else if (g.target.type === 'selected') {
-        gesture = { kind: 'move', id: g.id, area: g.target.area, from };
-      } else if (g.target.type === 'floor') {
+      else if (target.type === 'handle') {
+        const fixed = corners(target.area)[(target.corner + 2) % 4];
+        gesture = { kind: 'resize', id: g.id, area: target.area, fixed };
+      } else if (target.type === 'selected') {
+        gesture = { kind: 'move', id: g.id, area: target.area, from };
+      } else if (target.type === 'floor') {
         gesture = { kind: 'draw', id: g.id, from };
       } else gesture = { kind: 'done' };
     }
@@ -976,13 +1073,15 @@ export function mountShopMap(
     }
     lastTap = { at: now, p: g.start };
     const target = g.target;
+    swallowClick(e);
     if (look !== 'mapper') {
-      if (target.type === 'area' && target.area.section !== undefined) {
-        options.onSection?.(target.area.section);
-      }
+      if (target.type === 'note') options.onNote?.(target.note);
+      else if (target.type === 'area') options.onArea?.(target.area);
       return;
     }
-    if (target.type === 'area') {
+    if (target.type === 'mark') {
+      options.onMark?.(target.mark);
+    } else if (target.type === 'area') {
       selectedId = target.area.id;
       rebuild();
       options.onSelect?.(target.area);
@@ -1124,6 +1223,7 @@ export function mountShopMap(
       if (destroyed) return;
       destroyed = true;
       endPending();
+      clickGuard?.();
       if (refusedTimer) clearTimeout(refusedTimer);
       if (frame && win?.cancelAnimationFrame) win.cancelAnimationFrame(frame);
       resize?.disconnect();

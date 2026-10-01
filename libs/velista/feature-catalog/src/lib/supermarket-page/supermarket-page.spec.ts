@@ -47,10 +47,16 @@ async function render(
   options: {
     readonly chain?: string;
     readonly query?: Record<string, string>;
+    /** The device never answers, so a search for it stays out. */
+    readonly locatingForever?: boolean;
   } = {}
 ): Promise<Harness> {
   TestBed.resetTestingModule();
   const pages = { back: jest.fn().mockResolvedValue(undefined) };
+  const geolocation = fakeGeolocationReader({ outcome: { state: 'denied' } });
+  if (options.locatingForever === true) {
+    geolocation.reader.read = () => new Promise(() => undefined);
+  }
 
   await TestBed.configureTestingModule({
     imports: [CatalogSupermarketPage, RokuTranslatorTestingModule.forTesting()],
@@ -58,9 +64,7 @@ async function render(
       provideVelistaTesting({ basePath: '/velista' }),
       provideRouter([]),
       provideFakeBrowserFacade(new Map()),
-      provideFakeGeolocationReader(
-        fakeGeolocationReader({ outcome: { state: 'denied' } })
-      ),
+      provideFakeGeolocationReader(geolocation),
       { provide: SHOP_SERVICE, useValue: new ShopMemory() },
       { provide: SHOP_FINDER_SERVICE, useValue: new ShopFinderMemory() },
       {
@@ -103,6 +107,22 @@ function host(fixture: ComponentFixture<CatalogSupermarketPage>): HTMLElement {
   return fixture.nativeElement as HTMLElement;
 }
 
+/** The page header's title, its back control and its Near me action. */
+function header(fixture: ComponentFixture<CatalogSupermarketPage>): {
+  readonly title: string;
+  readonly back: HTMLButtonElement | null;
+  readonly near: HTMLButtonElement | null;
+  readonly actions: number;
+} {
+  const element = host(fixture).querySelector('lib-page-header');
+  return {
+    title: element?.querySelector('h1')?.textContent?.trim() ?? '',
+    back: element?.querySelector<HTMLButtonElement>('button.lead') ?? null,
+    near: element?.querySelector<HTMLButtonElement>('button.near') ?? null,
+    actions: element?.querySelectorAll('.actions button').length ?? 0,
+  };
+}
+
 /** Where the router was last sent, and whether it replaced the entry. */
 function last(navigate: jest.SpyInstance): {
   readonly url: string;
@@ -136,10 +156,42 @@ describe('CatalogSupermarketPage', () => {
       expect(
         host(fixture).querySelectorAll('lib-franchise-buttons .chip').length
       ).toBeGreaterThan(1);
-      expect(host(fixture).querySelector('lib-near-me-button')).not.toBeNull();
-      expect(host(fixture).querySelector('h1')?.textContent).toContain(
-        'catalog.supermarket.title'
+    });
+
+    it('heads the page with the title and Near me, its one quick action, as text', async () => {
+      const { fixture } = await render();
+      const { title, back, near, actions } = header(fixture);
+
+      expect(title).toBe('catalog.supermarket.title');
+      expect(back?.getAttribute('aria-label')).toBe('catalog.supermarket.back');
+      expect(actions).toBe(1);
+      expect(near?.classList.contains('is-text')).toBe(true);
+      expect(near?.getAttribute('aria-label')).toBe(
+        'basket.view.shop.near.buttonLabel'
       );
+      expect(near?.getAttribute('aria-busy')).toBe('false');
+      expect(near?.textContent).toContain('basket.view.shop.near.button');
+      expect(near?.querySelector('lib-locate-icon')).not.toBeNull();
+      // A header holds only a title: no chain line at the root, and one h1.
+      expect(host(fixture).querySelector('.chain-line')).toBeNull();
+      expect(host(fixture).querySelectorAll('h1')).toHaveLength(1);
+    });
+
+    it('says Finding you while Near me works, and is never disabled', async () => {
+      const { fixture } = await render({ locatingForever: true });
+
+      header(fixture).near?.click();
+      await settle(fixture);
+
+      const { near } = header(fixture);
+      expect(near?.getAttribute('aria-busy')).toBe('true');
+      expect(near?.getAttribute('aria-label')).toBe(
+        'basket.view.shop.near.finding'
+      );
+      expect(near?.textContent).toContain('basket.view.shop.near.finding');
+      expect(near?.querySelector('lib-spinner-icon')).not.toBeNull();
+      expect(near?.classList.contains('is-busy')).toBe(true);
+      expect(near?.disabled).toBe(false);
     });
 
     it('says nothing about the matches until the search for the typed text has answered', async () => {
@@ -217,7 +269,7 @@ describe('CatalogSupermarketPage', () => {
     it('goes back to the catalog with its choice, by popping', async () => {
       const { fixture, pages } = await render({ query: { chain: 'sm-dia' } });
 
-      host(fixture).querySelector<HTMLButtonElement>('.back')?.click();
+      header(fixture).back?.click();
 
       expect(pages.back).toHaveBeenCalledWith(
         '/velista/en/catalog?chain=sm-dia'
@@ -226,18 +278,41 @@ describe('CatalogSupermarketPage', () => {
   });
 
   describe('a chain’s screen', () => {
-    it('draws the chain’s head, Any Mercadona shop, then its shops and no search', async () => {
+    it('titles the header with the chain, with no Near me and no other action', async () => {
+      const { fixture } = await render({ chain: 'sm-mercadona' });
+      const { title, back, near, actions } = header(fixture);
+
+      expect(title).toBe('Mercadona');
+      expect(back?.getAttribute('aria-label')).toBe(
+        'catalog.supermarket.backToChains'
+      );
+      expect(near).toBeNull();
+      expect(actions).toBe(0);
+      expect(host(fixture).querySelectorAll('h1')).toHaveLength(1);
+    });
+
+    it('titles the header Supermarket until the chains arrive, and for a chain it does not know', async () => {
+      const { fixture } = await render({ chain: 'sm-no-such-chain' });
+
+      expect(header(fixture).title).toBe('catalog.supermarket.title');
+      expect(header(fixture).back).not.toBeNull();
+      expect(host(fixture).querySelector('.chain-line')).toBeNull();
+    });
+
+    it('draws the chain’s logo and count as the first line of the content, then Any Mercadona shop, its shops and no search', async () => {
       const { fixture } = await render({ chain: 'sm-mercadona' });
 
-      const head = host(fixture).querySelector('.chain-head') as HTMLElement;
-      expect(head.querySelector('lib-chain-logo')).not.toBeNull();
-      expect(head.textContent).toContain('Mercadona');
-      expect(head.textContent).toContain('shops.chain.inAreas');
+      const line = host(fixture).querySelector('.chain-line') as HTMLElement;
+      expect(line.querySelector('lib-chain-logo')).not.toBeNull();
+      expect(line.textContent).toContain('shops.chain.inAreas');
+      // In the content, above the picker, and not in the header.
+      expect(line.closest('lib-page-header')).toBeNull();
+      expect(line.parentElement?.firstElementChild).toBe(line);
+      expect(line.nextElementSibling?.tagName).toBe('LIB-SHOP-PICKER');
       expect(host(fixture).querySelector('.any')?.textContent).toContain(
         'catalog.supermarket.any'
       );
       expect(host(fixture).querySelector('.search-input')).toBeNull();
-      expect(host(fixture).querySelector('lib-near-me-button')).toBeNull();
       expect(
         host(fixture).querySelectorAll('lib-shop-list label.row').length
       ).toBeGreaterThan(0);
@@ -277,7 +352,7 @@ describe('CatalogSupermarketPage', () => {
         query: { chain: 'sm-dia' },
       });
 
-      host(fixture).querySelector<HTMLButtonElement>('.back')?.click();
+      header(fixture).back?.click();
       await settle(fixture);
 
       expect(pages.back).not.toHaveBeenCalled();

@@ -74,14 +74,28 @@
 #ab-Browse * { box-sizing: border-box; }
 #ab-Browse a { color: #ffb454; text-decoration: none; }
 #ab-Browse a:hover { color: #ffc271; }
+#ab-Browse .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-Browse .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Browse .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-Browse .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Browse .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Browse .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Browse .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-States * { box-sizing: border-box; }
 #ab-States a { color: #ffb454; text-decoration: none; }
 #ab-States a:hover { color: #ffc271; }
+#ab-States .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-States .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-States .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-States .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-States .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-States .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-States .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 </style>
 
 <header>
   <h1>Velista: the catalog</h1>
-  <p class="lede">The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+  <p class="lede">The second tab: every product from every supermarket, narrowed to one chain, searched, and ordered, with the search and the order on the screen rather than behind a sheet. Drawn before any plan is written, against <code>GET /v1/catalog/items</code>, which velista does not call today. Phone only, 390 by 844, Night only. Headers redrawn for plan <code>0130</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
 </header>
 
 <div class="controls">
@@ -103,11 +117,9 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AT REST &middot; every chain, and the tools are on the screen</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="padding: 14px 16px 0;">
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
-                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
-                  </div>
+                <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
+
+                <div style="padding: 0 16px 0;">
 
                   <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
@@ -125,6 +137,7 @@
                     <span style="font-size: 12px; color: #6f7899;">Order</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">A to Z</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                    <span style="margin-left: auto; font-size: 12.5px; color: #6f7899; white-space: nowrap;">near 14013</span>
                   </div>
                 </div>
 
@@ -225,11 +238,9 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ONE CHAIN &middot; what it sells, and what it charges</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="padding: 14px 16px 0;">
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
-                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
-                  </div>
+                <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
+
+                <div style="padding: 0 16px 0;">
 
                   <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
@@ -249,6 +260,7 @@
                     <span style="font-size: 12px; color: #6f7899;">Order</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">A to Z</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                    <span style="margin-left: auto; font-size: 12.5px; color: #6f7899; white-space: nowrap;">near 14013</span>
                   </div>
 
                   <div style="margin-top: 12px; font-size: 12.5px; color: #6f7899;">7 shops near you. Prices are what Mercadona charges here.</div>
@@ -323,11 +335,9 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SEARCHING &middot; best match arrives, keyboard over the nav</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="padding: 14px 16px 0;">
-                  <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
-                    <span style="font-size: 12.5px; color: #6f7899;">near 14013</span>
-                  </div>
+                <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
+
+                <div style="padding: 0 16px 0;">
 
                   <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid #ffb454; display: flex; align-items: center; gap: 10px; padding: 0 13px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>
@@ -342,6 +352,7 @@
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; background: rgba(255,180,84,0.12); border: 1px solid rgba(255,180,84,0.4); color: #ffc271; font-size: 13px; font-weight: 650; display: flex; align-items: center;">Best match</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">A to Z</span>
                     <span style="height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); color: #98a0bb; font-size: 13px; font-weight: 600; display: flex; align-items: center;">Newest</span>
+                    <span style="margin-left: auto; font-size: 12.5px; color: #6f7899; white-space: nowrap;">near 14013</span>
                   </div>
 
                   <div style="margin-top: 12px; font-size: 12.5px; color: #6f7899;">31 products</div>
@@ -411,8 +422,9 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NO POSTAL CODE &middot; every product, and not one price</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="padding: 14px 16px 0;">
-                  <h1 style="margin: 0; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 27px; color: #f7f8fc;">Catalog</h1>
+                <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
+
+                <div style="padding: 0 16px 0;">
 
                   <div style="margin-top: 12px; height: 48px; border-radius: 14px; background: #161a28; border: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 10px; padding: 0 13px;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f7899" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"/><path d="m16 16 4 4"/></svg>

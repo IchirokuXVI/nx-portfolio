@@ -663,19 +663,348 @@ describe('mountShopMap, the mapper gestures', () => {
   });
 });
 
-describe('mountShopMap, the shopper look', () => {
-  it('calls onSection for a tapped area with a section', () => {
-    const onSection = jest.fn();
-    handle = mountShopMap(host, { document: doc, look: 'shopper', onSection });
-    const v = (host.querySelector('g[transform]') as SVGGElement).getAttribute(
-      'transform'
-    ) as string;
-    const [s, , , , tx, ty] =
-      /matrix\(([^)]+)\)/.exec(v)?.[1].split(' ').map(Number) ?? [];
-    const p: [number, number] = [6.5 * s + tx, 3 * s + ty];
+/** The view the canvas shows now, read from the transform of its metre layer. */
+function shownView(): View {
+  const v = (host.querySelector('g[transform]') as SVGGElement).getAttribute(
+    'transform'
+  ) as string;
+  const [s, , , , tx, ty] =
+    /matrix\(([^)]+)\)/.exec(v)?.[1].split(' ').map(Number) ?? [];
+  return { s, tx, ty };
+}
+
+/** A metre point in css pixels, under the view the canvas shows now. */
+const shown = (x: number, y: number) => toScreen(shownView(), x, y);
+
+function tapAt(p: [number, number]) {
+  pointer('pointerdown', p);
+  pointer('pointerup', p);
+}
+
+/** Velista plan 0129, target 3: a mark opens on a tap. */
+describe('mountShopMap, the marks of the mapper look', () => {
+  it('reports a tap on a pin, and on a note, as the mark', () => {
+    const onMark = jest.fn();
+    const onSelect = jest.fn();
+    handle = mountShopMap(host, {
+      document: doc,
+      look: 'mapper',
+      onMark,
+      onSelect,
+    });
+    tapAt(at(3, 3));
+    expect(onMark).toHaveBeenLastCalledWith(doc.marks[0]);
+    tapAt(at(4, 7));
+    expect(onMark).toHaveBeenLastCalledWith(doc.marks[1]);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('reaches about 22 css pixels from the pin, and no further', () => {
+    const onMark = jest.fn();
+    handle = mountShopMap(host, { document: doc, look: 'mapper', onMark });
+    const [x, y] = at(3, 3);
+    tapAt([x + 20, y]);
+    expect(onMark).toHaveBeenCalledTimes(1);
+    tapAt([x, y + 26]);
+    expect(onMark).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the pins before the areas and the handles', () => {
+    const onMark = jest.fn();
+    const onSelect = jest.fn();
+    // A mark on the shelf a1, at the corner the selection draws a handle on.
+    const onShelf = { ...doc.marks[0], id: 'm3', x: 1, y: 2 };
+    handle = mountShopMap(host, {
+      document: { ...doc, marks: [...doc.marks, onShelf] },
+      look: 'mapper',
+      onMark,
+      onSelect,
+    });
+    handle.setSelected('a1');
+    tapAt(at(1, 2));
+    expect(onMark).toHaveBeenCalledWith(onShelf);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('draws from a drag that starts on a pin, as on the floor under it', () => {
+    const onMark = jest.fn();
+    const onChange = jest.fn<void, [WalkEvent[]]>();
+    handle = mountShopMap(host, {
+      document: doc,
+      look: 'mapper',
+      onMark,
+      onChange,
+      createId: () => 'new1',
+    });
+    handle.setSnap(true);
+    drag(at(3, 3), at(4, 4));
+    expect(onMark).not.toHaveBeenCalled();
+    expect(onChange.mock.calls[0][0][0]).toEqual(
+      expect.objectContaining({
+        type: 'area-put',
+        area: expect.objectContaining({ id: 'new1', x: 3, y: 3, w: 1, h: 1 }),
+      })
+    );
+  });
+
+  it('reports the area under a pin for a long press on it', () => {
+    jest.useFakeTimers();
+    const onLongPress = jest.fn();
+    const onMark = jest.fn();
+    const onShelf = { ...doc.marks[0], id: 'm3', x: 6.5, y: 3 };
+    handle = mountShopMap(host, {
+      document: { ...doc, marks: [onShelf] },
+      look: 'mapper',
+      onLongPress,
+      onMark,
+    });
+    const p = at(6.5, 3);
     pointer('pointerdown', p);
+    jest.advanceTimersByTime(LONG_PRESS_MS + 10);
     pointer('pointerup', p);
-    expect(onSection).toHaveBeenCalledWith('Congelados');
+    expect(onLongPress).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'a2' }),
+      expect.anything()
+    );
+    expect(onMark).not.toHaveBeenCalled();
+  });
+});
+
+/** Velista plan 0129, target 2: two fingers move, and zoom only on a pinch. */
+describe('mountShopMap, two fingers', () => {
+  function twoFingers(look: 'mapper' | 'shopper') {
+    // Small, so there is room to zoom in: the fitted view is far from the top.
+    handle = mountShopMap(host, { document: doc, look });
+    const before = shownView();
+    const a: [number, number] = [150, 200];
+    const b: [number, number] = [250, 200];
+    pointer('pointerdown', a, 1);
+    pointer('pointerdown', b, 2);
+    return { before, a, b };
+  }
+
+  it.each(['mapper', 'shopper'] as const)(
+    'moves the %s map without zooming it when the fingers drag together',
+    async (look) => {
+      const { before, a, b } = twoFingers(look);
+      // Both go 40 right and 30 down, and the distance wobbles by a few pixels.
+      pointer('pointermove', [a[0] + 18, a[1] + 16], 1);
+      pointer('pointermove', [b[0] + 25, b[1] + 12], 2);
+      pointer('pointermove', [a[0] + 40, a[1] + 30], 1);
+      pointer('pointermove', [b[0] + 40, b[1] + 30], 2);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const after = shownView();
+      expect(after.s).toBe(before.s);
+      expect(after.tx - before.tx).toBeCloseTo(40);
+      expect(after.ty - before.ty).toBeCloseTo(30);
+      pointer('pointerup', a, 1);
+      pointer('pointerup', b, 2);
+    }
+  );
+
+  it('zooms once the fingers spread past the dead zone, from where they left it', async () => {
+    // Zoomed out first, so there is room to zoom in.
+    const far: ShopMapDocumentV2 = {
+      ...doc,
+      areas: [
+        ...doc.areas,
+        area('far', { kind: 'blocked', x: 38, y: 38, w: 1, h: 1 }),
+      ],
+    };
+    handle = mountShopMap(host, { document: far, look: 'mapper' });
+    const before = shownView();
+    pointer('pointerdown', [150, 200], 1);
+    pointer('pointerdown', [250, 200], 2);
+    // 100 apart at the start, so the dead zone is 24: 130 leaves it.
+    pointer('pointermove', [135, 200], 1);
+    pointer('pointermove', [265, 200], 2);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(shownView().s).toBe(before.s);
+    // 260 apart is twice the 130 the zoom started from.
+    pointer('pointermove', [70, 200], 1);
+    pointer('pointermove', [330, 200], 2);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(shownView().s).toBeCloseTo(before.s * 2);
+    pointer('pointerup', [70, 200], 1);
+    pointer('pointerup', [330, 200], 2);
+  });
+});
+
+/** Velista plan 0129, targets 5 and 6. */
+describe('mountShopMap, the shopper look', () => {
+  const callbacks = () => ({ onArea: jest.fn(), onNote: jest.fn() });
+
+  it('reports a tapped area with a section', () => {
+    const { onArea, onNote } = callbacks();
+    handle = mountShopMap(host, {
+      document: doc,
+      look: 'shopper',
+      onArea,
+      onNote,
+    });
+    tapAt(shown(6.5, 3));
+    expect(onArea).toHaveBeenCalledWith(doc.areas[1]);
+    expect(onNote).not.toHaveBeenCalled();
+  });
+
+  it('reports every kind of area but the walkway and what blocks it', () => {
+    const { onArea } = callbacks();
+    const till = area('a6', { kind: 'checkout', x: 6, y: 8, w: 1, h: 1 });
+    const bare = area('a7', { kind: 'counter', x: 3, y: 8, w: 1, h: 1 });
+    const wall = area('a8', { kind: 'blocked', x: 4.5, y: 0, w: 1, h: 1 });
+    handle = mountShopMap(host, {
+      document: { ...doc, areas: [...doc.areas, till, bare, wall] },
+      look: 'shopper',
+      onArea,
+    });
+    tapAt(shown(6.5, 8.5));
+    expect(onArea).toHaveBeenLastCalledWith(till);
+    tapAt(shown(3.5, 8.5));
+    expect(onArea).toHaveBeenLastCalledWith(bare);
+    tapAt(shown(9, 9.5));
+    expect(onArea).toHaveBeenLastCalledWith(doc.areas[3]);
+    expect(onArea).toHaveBeenCalledTimes(3);
+    // The blocked square, and the walkway beside it.
+    tapAt(shown(5, 0.5));
+    tapAt(shown(4.5, 5));
+    expect(onArea).toHaveBeenCalledTimes(3);
+  });
+
+  it('reports a note, and asks the notes before the areas', () => {
+    const { onArea, onNote } = callbacks();
+    // A note on the shelf a2.
+    const onShelf = {
+      ...doc.marks[1],
+      id: 'm3',
+      x: 6.5,
+      y: 4,
+      text: 'Top row',
+    };
+    handle = mountShopMap(host, {
+      document: { ...doc, marks: [...doc.marks, onShelf] },
+      look: 'shopper',
+      onArea,
+      onNote,
+    });
+    tapAt(shown(4, 7));
+    expect(onNote).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'm2', text: 'Bread' })
+    );
+    tapAt(shown(6.5, 4));
+    expect(onNote).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'm3', text: 'Top row' })
+    );
+    expect(onArea).not.toHaveBeenCalled();
+  });
+
+  it('reports one tap for a press released within the slop, however long it was held', () => {
+    jest.useFakeTimers();
+    const { onArea } = callbacks();
+    handle = mountShopMap(host, { document: doc, look: 'shopper', onArea });
+    const p = shown(6.5, 3);
+    pointer('pointerdown', p);
+    pointer('pointermove', [p[0] + 3, p[1] - 2]);
+    jest.advanceTimersByTime(3000);
+    pointer('pointerup', [p[0] + 3, p[1] - 2]);
+    expect(onArea).toHaveBeenCalledTimes(1);
+    // And a quick one, on another area so it is no double tap.
+    tapAt(shown(1.5, 3));
+    expect(onArea).toHaveBeenCalledTimes(2);
+    expect(onArea).toHaveBeenLastCalledWith(doc.areas[0]);
+  });
+
+  it('reports nothing for a drag past the slop: it moves the map', async () => {
+    const { onArea } = callbacks();
+    handle = mountShopMap(host, { document: doc, look: 'shopper', onArea });
+    const before = shownView();
+    const p = shown(6.5, 3);
+    pointer('pointerdown', p);
+    pointer('pointermove', [p[0] + 20, p[1]]);
+    pointer('pointermove', [p[0] + 30, p[1]]);
+    pointer('pointerup', [p[0] + 30, p[1]]);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(onArea).not.toHaveBeenCalled();
+    expect(shownView().tx).toBeGreaterThan(before.tx);
+  });
+
+  it('reports nothing for a two finger gesture', () => {
+    const { onArea } = callbacks();
+    handle = mountShopMap(host, { document: doc, look: 'shopper', onArea });
+    const a = shown(6.5, 3);
+    const b = shown(1.5, 3);
+    pointer('pointerdown', a, 1);
+    pointer('pointerdown', b, 2);
+    pointer('pointerup', a, 1);
+    pointer('pointerup', b, 2);
+    expect(onArea).not.toHaveBeenCalled();
+  });
+
+  it('cancels a press when a second finger lands during it', () => {
+    const { onArea } = callbacks();
+    handle = mountShopMap(host, { document: doc, look: 'shopper', onArea });
+    const a = shown(6.5, 3);
+    pointer('pointerdown', a, 1);
+    pointer('pointerdown', shown(1.5, 3), 2);
+    pointer('pointerup', shown(1.5, 3), 2);
+    // The first finger lifts where it landed, and still reports nothing.
+    pointer('pointerup', a, 1);
+    expect(onArea).not.toHaveBeenCalled();
+  });
+
+  describe('the click a browser sends after a tap', () => {
+    function clickAt([x, y]: [number, number]) {
+      const heard = jest.fn();
+      const scrim = document.createElement('button');
+      scrim.addEventListener('click', heard);
+      document.body.appendChild(scrim);
+      const e = new MouseEvent('click', {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        cancelable: true,
+      });
+      scrim.dispatchEvent(e);
+      scrim.remove();
+      return heard.mock.calls.length;
+    }
+
+    it('never reaches what the tap opened', () => {
+      const { onArea } = callbacks();
+      handle = mountShopMap(host, { document: doc, look: 'shopper', onArea });
+      const p = shown(6.5, 3);
+      tapAt(p);
+      expect(onArea).toHaveBeenCalledTimes(1);
+      // The sheet's scrim is under the finger by now: the click must not land.
+      expect(clickAt(p)).toBe(0);
+      // Only that one click: the next is somebody pressing the scrim.
+      expect(clickAt(p)).toBe(1);
+    });
+
+    it('lets a click somewhere else through', () => {
+      handle = mountShopMap(host, { document: doc, look: 'shopper' });
+      const p = shown(6.5, 3);
+      tapAt(p);
+      expect(clickAt([p[0] + 120, p[1]])).toBe(1);
+    });
+
+    it('lets a click through once the moment has passed', () => {
+      jest.useFakeTimers();
+      handle = mountShopMap(host, { document: doc, look: 'shopper' });
+      const p = shown(6.5, 3);
+      tapAt(p);
+      jest.advanceTimersByTime(1000);
+      expect(clickAt(p)).toBe(1);
+    });
+
+    it('lets clicks through after the canvas is gone', () => {
+      handle = mountShopMap(host, { document: doc, look: 'shopper' });
+      const p = shown(6.5, 3);
+      tapAt(p);
+      handle.destroy();
+      handle = null;
+      expect(clickAt(p)).toBe(1);
+    });
   });
 });
 
@@ -690,12 +1019,12 @@ describe('mountShopMap, the drawn shopper look', () => {
     ],
   };
 
-  const mountDrawn = (onSection?: (s: string) => void) =>
+  const mountDrawn = (onArea?: (a: MapArea) => void) =>
     (handle = mountShopMap(host, {
       document: drawnDoc,
       look: 'shopper-drawn',
       labelOf: (a) => (a.kind === 'entrance' ? 'Entrance' : (a.section ?? '')),
-      onSection,
+      onArea,
     }));
 
   it('draws shelves with products, a counter with glass, a crate, a till and the door', () => {
@@ -802,20 +1131,20 @@ describe('mountShopMap, the drawn shopper look', () => {
     );
   });
 
-  it('draws badges and taps sections as the shopper look does', () => {
-    const onSection = jest.fn();
-    mountDrawn(onSection);
+  it('draws badges and taps areas as the shopper look does', () => {
+    const onArea = jest.fn();
+    mountDrawn(onArea);
     handle?.setBadges({ Lácteos: { count: 2, done: false } });
     expect(host.querySelectorAll('rect.sm-badge')).toHaveLength(1);
-    const v = (host.querySelector('g[transform]') as SVGGElement).getAttribute(
-      'transform'
-    ) as string;
-    const [s, , , , tx, ty] =
-      /matrix\(([^)]+)\)/.exec(v)?.[1].split(' ').map(Number) ?? [];
-    const p: [number, number] = [6.5 * s + tx, 3 * s + ty];
-    pointer('pointerdown', p);
-    pointer('pointerup', p);
-    expect(onSection).toHaveBeenCalledWith('Congelados');
+    tapAt(shown(6.5, 3));
+    expect(onArea).toHaveBeenLastCalledWith(
+      expect.objectContaining({ section: 'Congelados' })
+    );
+    // The till, which names no section.
+    tapAt(shown(6.5, 8.5));
+    expect(onArea).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'a6', kind: 'checkout' })
+    );
   });
 
   it('switches between the plain and the drawn look', () => {

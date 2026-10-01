@@ -1,0 +1,76 @@
+@use '../basket-shared' as shared;
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-family: var(--app-font-display);
+  font-weight: 400;
+  font-size: var(--app-text-xl);
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// A rule between two rows and none around the list: the sheet's own edge is the
+// frame, and a box inside it would put two borders where one says it.
+.item + .item {
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+// The whole row is the control, a touch target tall and then some, because it is
+// pressed one handed in a shop like everything else on this screen.
+.row {
+  @include shared.tap-target;
+
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  padding: var(--app-space-4) var(--app-space-2);
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--app-text-base);
+  text-align: start;
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--app-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
+
+// Every icon is 1em, so the glyph is sized by its font size.
+.glyph {
+  flex: none;
+  font-size: var(--app-icon-md);
+  color: var(--app-text-secondary);
+}
+
+// The one row that makes something new takes the quiet action colour on its glyph,
+// as the mock draws it. The word says the same thing, so nothing rests on colour.
+.is-new .glyph {
+  color: var(--app-action-quiet-fg);
+}
+
+.word {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.count {
+  flex: none;
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
+}

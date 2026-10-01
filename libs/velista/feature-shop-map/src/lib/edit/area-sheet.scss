@@ -73,6 +73,14 @@
   @include walks.focus-ring;
 }
 
+// The mark sheet's refusal of an empty text (velista 0129).
+.field-error {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;

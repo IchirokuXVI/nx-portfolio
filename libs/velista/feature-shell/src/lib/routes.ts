@@ -201,14 +201,31 @@ function entrySheetRoutes(returnTo: 'landing' | 'home'): Route[] {
  * that page opens this any more, and the screen that offers Make my shopping list is
  * the tab. `returnTo` is still the only thing that differs, and it is still a path
  * rather than a name, so Cancel lands on the page the sheet was opened over.
+ *
+ * **Over a basket it is `parent`** (velista `0130`, section 6.1). The basket's menu
+ * offers Create your shopping list, so the sheet covers both basket routes too, and
+ * one of them has a parameter: `shopping-lists/:basketId` is a pattern and not a
+ * path, so there is no string to hand over. `parent` says "the page under me", and
+ * the sheet reads that page's address from its own parent route, which is the one
+ * thing here that knows the id.
+ *
+ * **And over a basket it carries `authenticatedGuard` itself**, which is the one
+ * exception to "no guard beyond the page's own". The history and the third tab
+ * demand an account, so their copy inherits one. `shopping-lists/:basketId` demands
+ * none, because a guest holding a share link is a participant there, and this sheet
+ * composes a list for an account: the menu draws no row to it for a guest, but a
+ * typed URL would still have constructed it. On a child route the guard's redirect
+ * keeps everything above the sheet, so the guest lands on the basket they were
+ * reading and not on the front door.
  */
 function getListSheetRoutes(
-  returnTo: 'shopping-lists' | 'shopping-lists/current'
+  returnTo: 'shopping-lists' | 'shopping-lists/current' | 'parent'
 ): Route[] {
   return [
     sheet({
       path: 'get',
       data: { returnTo },
+      ...(returnTo === 'parent' ? { canActivate: [authenticatedGuard] } : {}),
       loadComponent: () =>
         import('@portfolio/velista/feature-home').then((m) => m.GetListSheet),
     }),
@@ -227,8 +244,8 @@ function getListSheetRoutes(
 function basketSheetRoutes(options: { finish: boolean }): Route[] {
   return [
     // Rule E1: each sheet covers the page without losing it, and Android's
-    // back button dismisses it. None is guarded, because which of them a
-    // caller may **use** is decided from the caller's own facts by the
+    // back button dismisses it. None is guarded but `get`, because which of
+    // them a caller may **use** is decided from the caller's own facts by the
     // page, and the server refuses the rest regardless of what is drawn.
     // Addressed by the **row key** since velista `0090`: a basket stores
     // no lines, so there is nothing here to address one by. The key is an
@@ -284,6 +301,23 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.ShareSheet
         ),
     }),
+    // The basket's menu (velista `0130`, section 6.1): the people, the history,
+    // a new shopping list and finish, as rows. A sheet and a child route like
+    // the ones its rows lead to, so Android's back button closes it. Which rows
+    // it draws is decided from the reader's own facts, like every control here.
+    sheet({
+      path: 'more',
+      loadComponent: () =>
+        import('@portfolio/velista/feature-shopping-lists').then(
+          (m) => m.MoreSheet
+        ),
+    }),
+    // Create your shopping list, which the menu offers. The same sheet the
+    // history and the third tab carry, covering the basket it was opened over:
+    // `parent` is how Cancel finds that basket on a route with an id in it.
+    // The one guarded sheet here: it composes for an account, and a guest
+    // reaches this page without one. See `getListSheetRoutes`.
+    ...getListSheetRoutes('parent'),
     // Ending the trip, confirmed (velista `0057`). Unguarded like its
     // siblings: the control that reaches it is the owner's alone, drawn
     // from the page's own facts, and the account authenticated route
@@ -1110,8 +1144,8 @@ export const AppShellRoutes: Route[] = [
           {
             /**
              * Editing a walk's map by hand (velista `0123`), with the sheet of one
-             * area over it. Leaving with an edit the server has not answered asks
-             * first.
+             * area over it, and the sheet of one mark beside it (velista `0129`).
+             * Leaving with an edit the server has not answered asks first.
              *
              * No bar, as the mock draws it: the map needs the height, and Done is
              * the way out. `WORKS_WITHOUT_BACKEND` because the connection screen
@@ -1137,12 +1171,21 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.AreaSheet
                   ),
               }),
+              sheet({
+                path: 'marks/:markId',
+                data: editMapData,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.MarkEditSheet
+                  ),
+              }),
             ],
           },
           {
             /**
              * Recording a walk with the camera (velista `0126`), with the sheet of
-             * one area over it for editing while walking. Leaving stops the walk,
+             * one area over it for editing while walking, and the sheet of one mark
+             * beside it (velista `0129`). Leaving stops the walk,
              * and leaving with a save the server has not answered asks first.
              * No bar and `WORKS_WITHOUT_BACKEND`, for the edit page's reasons: the
              * map needs the height, and a shop is where the signal is worst.
@@ -1165,28 +1208,38 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.AreaSheet
                   ),
               }),
-            ],
-          },
-          {
-            path: 'shops/:locationId/walks/:walkId/settings',
-            canMatch: [walkIdGuard],
-            canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
-            loadComponent: () =>
-              import('@portfolio/velista/feature-shop-map').then(
-                (m) => m.WalkSettingsPage
-              ),
-            children: [
               sheet({
-                path: 'delete',
+                path: 'marks/:markId',
+                data: editMapData,
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shop-map').then(
-                    (m) => m.DeleteWalkSheet
+                    (m) => m.MarkEditSheet
                   ),
               }),
             ],
           },
           {
-            /** A walk's history, with the warning before resuming the shown walk over it. */
+            /**
+             * A walk had a settings page of its own until velista `0129` put its
+             * name, the shoppers switch and Delete on the walk's page. The old URL
+             * leads there, and so does the old URL of its delete sheet: a redirect
+             * that matches a prefix keeps what follows it.
+             *
+             * No `walkIdGuard` here: Angular refuses a route that carries both
+             * `redirectTo` and `canMatch` (NG04014), because a redirect happens
+             * before any guard runs. The walk's own route, where this leads,
+             * still reads a walk id only where a uuid stands.
+             */
+            path: 'shops/:locationId/walks/:walkId/settings',
+            redirectTo: 'shops/:locationId/walks/:walkId',
+          },
+          {
+            /**
+             * One page per walk (velista `0129`): its name, whether shoppers see
+             * it, Rewind, Edit map and Resume walking, its history, and Delete.
+             * The warning before resuming the shown walk and the question before
+             * deleting are sheets over it.
+             */
             path: 'shops/:locationId/walks/:walkId',
             canMatch: [walkIdGuard],
             canActivate: [authenticatedGuard, setupGuard, shopMapRecordGuard],
@@ -1200,6 +1253,13 @@ export const AppShellRoutes: Route[] = [
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shop-map').then(
                     (m) => m.ResumeWarningSheet
+                  ),
+              }),
+              sheet({
+                path: 'delete',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.DeleteWalkSheet
                   ),
               }),
             ],
@@ -1225,7 +1285,8 @@ export const AppShellRoutes: Route[] = [
           {
             /**
              * The map every shopper sees (velista `0121`, target 3), with the
-             * section sheet over it as a child (rule E1).
+             * section sheet over it as a child (rule E1), and the place sheet of an
+             * area with no known section and of a note (velista `0129`).
              *
              * **No guard.** The map read takes no account, and a guest on a shared
              * basket opens the map from that basket like its owner does.
@@ -1247,6 +1308,20 @@ export const AppShellRoutes: Route[] = [
                 loadComponent: () =>
                   import('@portfolio/velista/feature-shop-map').then(
                     (m) => m.SectionSheet
+                  ),
+              }),
+              sheet({
+                path: 'areas/:areaId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.PlaceSheet
+                  ),
+              }),
+              sheet({
+                path: 'notes/:noteId',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-shop-map').then(
+                    (m) => m.PlaceSheet
                   ),
               }),
             ],

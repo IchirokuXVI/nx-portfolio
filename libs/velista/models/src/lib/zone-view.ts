@@ -26,8 +26,6 @@ import type { ListRowVm } from './home-view';
 export interface GroupHeaderVm {
   readonly id: string;
   readonly name: string;
-  /** The letter in the tile. Derived, so no component slices a string itself. */
-  readonly initial: string;
   readonly role: ZoneRole;
   readonly memberCount: number;
   /**

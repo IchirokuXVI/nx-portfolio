@@ -2,7 +2,9 @@ import type {
   AreaKind,
   LiveSnapshot,
   MapArea,
+  MapMark,
   ShopMapDocumentV2,
+  ShopperNote,
   WalkEntry,
   WalkEvent,
 } from '@portfolio/luna-shopper/shop-map/model';
@@ -12,6 +14,9 @@ import type {
  * velista plan 0128: the shopper look with shelves, counters, crates, tills
  * and the door drawn, and every label on a tag. It taps, badges and labels
  * as the shopper look does.
+ *
+ * In every look two fingers move the map and zoom it only on a pinch
+ * (velista plan 0129, `pinch.ts`).
  */
 export type ShopMapLook = 'mapper' | 'shopper' | 'shopper-drawn';
 
@@ -88,8 +93,19 @@ export interface MountOptions {
   ) => void;
   /** Mapper look: a suggestion was tapped. The host asks, then calls the live map. */
   onSuggestion?: (id: string) => void;
-  /** Shopper look: a section's area was tapped. */
-  onSection?: (section: string) => void;
+  /**
+   * Mapper look: a mark's pin was tapped. The pins are asked before the
+   * handles and the areas. A drag or a long press that starts on a pin acts on
+   * what is under it.
+   */
+  onMark?: (mark: MapMark) => void;
+  /**
+   * Shopper looks: an area was tapped, of any kind but `path` and `blocked`.
+   * The host decides what opens: a shelf's section, a checkout, the entrance.
+   */
+  onArea?: (area: MapArea) => void;
+  /** Shopper looks: a note was tapped. Notes are asked before the areas. */
+  onNote?: (note: ShopperNote) => void;
   /**
    * The id of an area drawn by hand. The library never invents one unless
    * this is left out, and then it uses `crypto.randomUUID()`.

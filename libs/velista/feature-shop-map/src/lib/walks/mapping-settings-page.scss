@@ -1,0 +1,51 @@
+@use '../shop-map' as shop;
+@use '../walks';
+
+// The settings for every walk (velista 0122, the `MapSettings` board of
+// `mocks/shop-map/`). A walk's own settings shared this sheet until velista 0129
+// put them on the walk's page.
+
+:host {
+  display: block;
+  block-size: 100%;
+}
+
+.page {
+  @include shop.page;
+}
+
+// Everything under the header, and the one element on the page that scrolls.
+.content {
+  @include shop.scroller;
+}
+
+.intro {
+  @include walks.intro;
+}
+
+.group {
+  @include walks.group-heading;
+
+  border-block-end: 1px solid var(--app-border-subtle);
+}
+
+.switch-row {
+  @include walks.switch-row;
+}
+
+.switch-body {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.switch-title {
+  @include walks.switch-title;
+}
+
+.switch-hint {
+  @include walks.switch-hint;
+}
+
+.switch {
+  @include walks.switch;
+}

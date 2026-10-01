@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Basket: the menu sheet open</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+body { margin: 0; }
+/* Tokens copied from libs/velista/ui/src/lib/styles, Day values. */
+.vel {
+  --app-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --app-text-2xs: 11px; --app-text-xs: 12px; --app-text-sm: 14px; --app-text-base: 16px; --app-text-lg: 18px;
+  --app-radius-sm: 8px; --app-radius-md: 12px; --app-radius-lg: 16px; --app-radius-full: 999px;
+  --app-touch-target: 44px;
+  --app-surface-ground: #f7f8fc; --app-surface-raised: #ffffff; --app-surface-sunken: #eef0f7;
+  --app-text-primary: #111420; --app-text-secondary: #525a78; --app-text-muted: #616a8a;
+  --app-border-subtle: #dde1ed; --app-border-strong: #6f7899;
+  --app-action-bg: #ffb454; --app-action-fg: #0a0c14; --app-action-quiet-fg: #8a5a12;
+  --app-action-quiet-bg: rgba(255, 180, 84, 0.14); --app-action-quiet-border: rgba(255, 180, 84, 0.45);
+  --app-status-attention-fg: #a14a1a;
+  --app-elevation-3: 0 -8px 32px rgba(17, 20, 31, 0.16);
+  font-family: var(--app-font-sans); color: var(--app-text-primary);
+}
+.phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+.phone.tall { height: auto; }
+/* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+.ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+/* what sits in the actions slot on some pages */
+.ph-act.amber { color: var(--app-action-quiet-fg); }
+.ph-badge { position: absolute; top: 4px; right: 2px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.ph-off { flex: none; height: 44px; padding: 0 4px; display: flex; align-items: center; color: var(--app-status-attention-fg); }
+.ph-pill { flex: none; height: 24px; padding: 0 9px; margin-right: 2px; display: flex; align-items: center; border: 1px solid var(--app-border-subtle); border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--app-text-secondary); white-space: nowrap; }
+.avatar { width: 30px; height: 30px; box-sizing: border-box; border-radius: 999px; border: 1px solid var(--app-border-strong); background: var(--app-surface-raised); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--app-text-primary); }
+/* the larger candidate for the title, drawn only on the Sizes artboard */
+.big .ph-title { font-size: 27px; line-height: 34px; }
+.big .ph-icon { width: 32px; height: 32px; }
+.big .ph-icon svg { width: 32px; height: 32px; }
+/* the comparison artboards */
+.lab { flex: none; height: 22px; box-sizing: border-box; padding: 6px 16px 0; font: 600 10px/16px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; color: var(--app-text-muted); background: var(--app-surface-sunken); }
+.band { flex: none; padding: 14px 16px 8px; font-size: var(--app-text-sm); font-weight: 700; color: var(--app-text-primary); background: var(--app-surface-sunken); border-top: 1px solid var(--app-border-subtle); }
+.band small { display: block; margin-top: 2px; font-size: var(--app-text-xs); font-weight: 400; color: var(--app-text-muted); }
+/* page content */
+.scroll { flex: 1; min-height: 0; overflow: hidden; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.quiet { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chip { flex: none; height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border: 1px solid var(--app-action-quiet-border); border-radius: 999px; background: var(--app-action-quiet-bg); color: var(--app-action-quiet-fg); font-size: var(--app-text-2xs); font-weight: 700; }
+.dot { width: 8px; height: 8px; border-radius: 999px; background: #2f9e62; flex: none; }
+.card { flex: none; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); overflow: hidden; }
+.arow { display: flex; align-items: center; gap: 12px; min-height: 52px; box-sizing: border-box; padding: 0 12px 0 16px; border-top: 1px solid var(--app-border-subtle); font-size: var(--app-text-base); color: var(--app-text-primary); }
+.arow:first-child { border-top: 0; }
+.arow .l { flex: 1; min-width: 0; }
+.arow .l small { display: block; margin-top: 1px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.arow .v { flex: none; font-size: var(--app-text-sm); color: var(--app-text-muted); font-variant-numeric: tabular-nums; }
+.arow .g { flex: none; color: var(--app-text-secondary); display: flex; }
+.arow .go { flex: none; color: var(--app-text-muted); display: flex; }
+.arow.danger { color: #b3261e; }
+.sech { flex: none; display: flex; align-items: center; justify-content: space-between; height: 32px; margin-top: 4px; }
+.sech b { font-size: var(--app-text-base); font-weight: 600; }
+.link { color: var(--app-action-quiet-fg); font-size: var(--app-text-sm); font-weight: 600; }
+.lcard { flex: none; height: 64px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+.lcard b { font-size: var(--app-text-base); font-weight: 600; }
+.lcard span { font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.skel { flex: none; height: 64px; border-radius: var(--app-radius-lg); background: var(--app-surface-sunken); }
+.skel.s { height: 52px; }
+.skel.line { height: 14px; width: 46%; border-radius: 7px; }
+.prog { margin: 0; font-size: var(--app-text-sm); color: var(--app-text-muted); }
+.bar { flex: none; height: 6px; border-radius: 3px; background: var(--app-surface-sunken); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 30%; background: var(--app-action-bg); }
+.line { flex: none; height: 52px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+.line .name { flex: 1; min-width: 0; font-size: var(--app-text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qty { flex: none; width: 52px; height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-md); font-size: var(--app-text-base); font-weight: 600; }
+.composer { flex: none; display: flex; align-items: center; gap: 8px; height: 64px; box-sizing: border-box; padding: 8px 16px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.field { flex: 1; min-width: 0; height: 46px; box-sizing: border-box; display: flex; align-items: center; padding: 0 16px; border-radius: 14px; background: var(--app-surface-sunken); font-size: 17px; color: var(--app-text-muted); }
+.send { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--app-action-bg); color: var(--app-action-fg); }
+.tools { flex: none; display: flex; align-items: center; height: 48px; padding: 0 6px 0 16px; }
+.tools .count { flex: 1; font-size: 15px; color: var(--app-text-muted); }
+.rows { flex: 1; min-height: 0; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 14px; height: 60px; box-sizing: border-box; padding: 0 12px 0 16px; border-bottom: 1px solid var(--app-border-subtle); }
+.settle { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); margin: 0 4px; }
+.row .text { flex: 1; min-width: 0; }
+.row .text b { display: block; font-size: var(--app-text-base); font-weight: 400; }
+.row .text span { display: block; margin-top: 2px; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.row .price { flex: none; font-size: var(--app-text-sm); font-variant-numeric: tabular-nums; color: var(--app-text-secondary); }
+.logo { flex: none; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; color: #ffffff; background: #1f8a4c; }
+.logo.b { background: #1c4fa0; } .logo.r { background: #c8102e; } .logo.o { background: #d9601a; } .logo.all { background: var(--app-surface-sunken); color: var(--app-text-secondary); }
+.radio { flex: none; width: 22px; height: 22px; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--app-border-strong); }
+.radio.on { border: 7px solid var(--app-action-quiet-fg); }
+.searchf { flex: none; height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: 14px; background: var(--app-surface-sunken); color: var(--app-text-muted); font-size: var(--app-text-base); }
+.grid { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.chain { height: 84px; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid var(--app-border-subtle); border-radius: var(--app-radius-lg); background: var(--app-surface-raised); }
+.chain .top { display: flex; justify-content: space-between; align-items: flex-start; color: var(--app-text-muted); }
+.chain b { font-size: var(--app-text-sm); } .chain span.ct { font-size: var(--app-text-xs); color: var(--app-text-muted); margin-left: 6px; }
+/* the nav (0097) */
+.nav { flex: none; display: flex; gap: 4px; padding: 8px 10px 20px; border-top: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.tab { position: relative; flex: 1; height: 60px; border-radius: var(--app-radius-lg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--app-text-secondary); font-size: 12.5px; font-weight: 600; }
+.tab.on { background: rgba(255, 180, 84, 0.18); color: var(--app-action-quiet-fg); }
+.badge { position: absolute; top: 4px; left: calc(50% + 2px); min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--app-action-quiet-fg); color: #ffffff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+/* the menu sheet (section 6.1) */
+.scrim { position: absolute; inset: 0; background: rgba(17, 20, 31, 0.42); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 8px 28px; border-radius: 20px 20px 0 0; background: var(--app-surface-raised); box-shadow: var(--app-elevation-3); }
+.sheet .grab { width: 36px; height: 4px; margin: 0 auto 8px; border-radius: 2px; background: var(--app-border-subtle); }
+.sheet h2 { margin: 0; padding: 6px 12px 8px; font-size: var(--app-text-lg); font-weight: 600; }
+.mrow { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 12px; border-radius: var(--app-radius-md); font-size: var(--app-text-base); color: var(--app-text-primary); }
+.mrow .g { flex: none; width: 24px; display: flex; justify-content: center; color: var(--app-text-secondary); }
+.mrow.new .g { color: var(--app-action-quiet-fg); }
+.mrow small { margin-left: auto; font-size: var(--app-text-xs); color: var(--app-text-muted); }
+.mrow + .mrow { border-top: 1px solid var(--app-border-subtle); border-radius: 0; }
+</style>
+</helmet>
+<div class="vel phone">
+<header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg></span><h1 class="ph-title">Shopping list</h1><div class="ph-actions"><button class="ph-act" type="button" aria-label="Share"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="17.5" cy="6" r="2.8"></circle><circle cx="6.5" cy="12" r="2.8"></circle><circle cx="17.5" cy="18" r="2.8"></circle><path d="M9 10.7l6-3.4M9 13.3l6 3.4"></path></svg></button><button class="ph-act" type="button" aria-label="Map of the shop"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.2 9 4l6 2.2L21 4v13.8L15 20l-6-2.2L3 20z"></path><path d="M9 4v13.8M15 6.2V20"></path></svg></button><button class="ph-act" type="button" aria-label="More"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5.4" cy="12" r="1.75"></circle><circle cx="12" cy="12" r="1.75"></circle><circle cx="18.6" cy="12" r="1.75"></circle></svg></button></div></header>
+<div class="tools"><span class="count">12 to get</span><button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button></div>
+<div class="rows">
+<div class="row"><span class="settle"></span><div class="text"><b>Plátanos</b><span>Compra semanal · 1</span></div><span class="price">1,45 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Pan de molde integral</b><span>Compra semanal · 1</span></div><span class="price">1,20 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Aceite de oliva virgen extra</b><span>Compra semanal · 1</span></div><span class="price">8,95 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Velas</b><span>Cumpleaños de Luis · 2</span></div><span class="price">2,10 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Yogur natural</b><span>Compra semanal · 6</span></div><span class="price">1,35 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Tomate frito</b><span>Compra semanal · 2</span></div><span class="price">0,95 €</span></div>
+<div class="row"><span class="settle"></span><div class="text"><b>Ibuprofeno</b><span>Farmacia · 1</span></div><span class="price"></span></div>
+</div>
+<div class="composer"><span class="field">Add or find something</span><span class="send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg></span></div>
+<nav class="nav" aria-label="Main sections"><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11.2 12 4l8.5 7.2"></path><path d="M5.8 10v9.2h12.4V10"></path></svg>Home</span><span class="tab"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>Catalog</span><span class="tab on"><span class="badge">12</span><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.84 11 9.36 4"></path><path d="M18.16 11 14.64 4"></path><path d="M3.2 11h17.6"></path><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"></path></svg>Shopping list</span></nav>
+<div class="scrim"></div>
+<div class="sheet" role="dialog" aria-label="More">
+<div class="grab"></div>
+<h2>More</h2>
+<div class="mrow"><span class="g"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 20v-1.9a4 4 0 0 0-4-4h-7a4 4 0 0 0-4 4V20"></path><circle cx="12" cy="7.6" r="3.9"></circle></svg></span>People<small>3</small></div>
+<div class="mrow"><span class="g"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.6"></circle><path d="M12 7.4V12l3 1.8"></path></svg></span>History</div>
+<div class="mrow new"><span class="g"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span>Create your shopping list</div>
+<div class="mrow"><span class="g"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.4 12.4l3.2 3.2 6.2-6.4"></path></svg></span>Finish</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

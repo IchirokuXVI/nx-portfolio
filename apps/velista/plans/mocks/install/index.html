@@ -74,12 +74,21 @@
 #ab-Install * { box-sizing: border-box; }
 #ab-Install a { color: #ffb454; text-decoration: none; }
 #ab-Install a:hover { color: #ffc271; }
+#ab-Install .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-Install .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Install .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-InstallGuides * { box-sizing: border-box; }
 #ab-InstallGuides a { color: #ffb454; text-decoration: none; }
 #ab-InstallGuides a:hover { color: #ffc271; }
+#ab-InstallGuides .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-InstallGuides .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-InstallGuides .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Account * { box-sizing: border-box; }
 #ab-Account a { color: #ffb454; text-decoration: none; }
 #ab-Account a:hover { color: #ffc271; }
+#ab-Account .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-Account .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Account .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Invite * { box-sizing: border-box; }
 #ab-Invite a { color: #ffb454; text-decoration: none; }
 #ab-Invite a:hover { color: #ffc271; }
@@ -87,7 +96,7 @@
 
 <header>
   <h1>Velista Install</h1>
-  <p class="lede">The design for plan <code>0033</code>: the page that installs the app, the account row that says whether it is installed, and the invite that does both at once. Phone only, 390 by 844, Night theme. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+  <p class="lede">The design for plan <code>0033</code>: the page that installs the app, the account row that says whether it is installed, and the invite that does both at once. Phone only, 390 by 844, Night theme. Headers redrawn for plan <code>0130</code>. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
 </header>
 
 <div class="controls">
@@ -109,15 +118,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">READY &middot; Chrome, Edge, Android</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Keep Velista on your phone</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
+                <div style="flex: 1; padding: 24px 24px 24px; display: flex; flex-direction: column;">
 
                   <!-- The mark -->
                   <span aria-hidden="true" style="width: 68px; height: 68px; border-radius: 18px; background: linear-gradient(160deg, #1a1e2e, #11141f); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 22px;">
@@ -127,8 +133,6 @@
                       <path d="M4 25 h24 a6 6 0 0 1 -6 4 H10 a6 6 0 0 1 -6 -4 Z" fill="#c2c8db"/>
                     </svg>
                   </span>
-
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Keep Velista on your phone</h1>
                   <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.55; color: #98a0bb;">It sits on your home screen like any other app, opens on its own, and your lists are there when the signal is not.</p>
 
                   <!-- THE PRIMARY SLOT -->
@@ -200,15 +204,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">MANUAL &middot; iPhone, Safari &middot; the default state</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Keep Velista on your phone</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
+                <div style="flex: 1; padding: 24px 24px 24px; display: flex; flex-direction: column;">
 
                   <span aria-hidden="true" style="width: 68px; height: 68px; border-radius: 18px; background: linear-gradient(160deg, #1a1e2e, #11141f); border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; margin-bottom: 22px;">
                     <svg width="34" height="34" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -217,8 +218,6 @@
                       <path d="M4 25 h24 a6 6 0 0 1 -6 4 H10 a6 6 0 0 1 -6 -4 Z" fill="#c2c8db"/>
                     </svg>
                   </span>
-
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Keep Velista on your phone</h1>
                   <p style="margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: #98a0bb;">It sits on your home screen like any other app, opens on its own, and your lists are there when the signal is not.</p>
 
                   <!-- THE PRIMARY SLOT, holding the steps instead of a button -->
@@ -288,23 +287,18 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">INSTALLED &middot; and never a dead end</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M14.5 5.5L8 12l6.5 6.5"/>
-                    </svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Velista is installed</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
+                <div style="flex: 1; padding: 24px 24px 24px; display: flex; flex-direction: column;">
 
                   <span aria-hidden="true" style="width: 68px; height: 68px; border-radius: 18px; background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.28); display: flex; align-items: center; justify-content: center; margin-bottom: 22px;">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M5 12.5l4.5 4.5L19 7.5"/>
                     </svg>
                   </span>
-
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Velista is installed</h1>
                   <p style="margin: 0 0 22px; font-size: 15px; line-height: 1.55; color: #98a0bb;">You are reading this inside the app. It is on your home screen, and it opens without the browser.</p>
 
                   <!-- THE PRIMARY SLOT, holding the confirmation -->
@@ -377,14 +371,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">android-menu &middot; Firefox, Samsung, and the fallback</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Keep Velista on your phone</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.18; color: #f7f8fc;">Keep Velista on your phone</h1>
+                <div style="flex: 1; padding: 22px 24px 24px; display: flex; flex-direction: column;">
                   <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">It sits on your home screen like any other app, opens on its own, and your lists are there when the signal is not.</p>
 
                   <div style="border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 18px 18px 16px;">
@@ -420,14 +412,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">desktop-chromium &middot; only when no prompt arrived</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Keep Velista on this computer</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.18; color: #f7f8fc;">Keep Velista on this computer</h1>
+                <div style="flex: 1; padding: 22px 24px 24px; display: flex; flex-direction: column;">
                   <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">It opens in its own window, with no tabs and no address bar.</p>
 
                   <div style="border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 18px 18px 16px;">
@@ -463,14 +453,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">desktop-safari &middot; macOS</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Keep Velista in your Dock</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.18; color: #f7f8fc;">Keep Velista in your Dock</h1>
+                <div style="flex: 1; padding: 22px 24px 24px; display: flex; flex-direction: column;">
                   <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">It opens in its own window, with no tabs and no address bar.</p>
 
                   <div style="border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 18px 18px 16px;">
@@ -507,14 +495,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">desktop-firefox &middot; the only no in the design</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; padding: 12px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Firefox cannot keep this as an app</h1>
+                </header>
 
-                <div style="flex: 1; padding: 10px 24px 24px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 10px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 28px; line-height: 1.18; color: #f7f8fc;">Firefox cannot keep this as an app</h1>
+                <div style="flex: 1; padding: 22px 24px 24px; display: flex; flex-direction: column;">
                   <p style="margin: 0 0 22px; font-size: 14.5px; line-height: 1.55; color: #98a0bb;">Not on the desktop. Velista works perfectly in this tab, and there is nothing you are missing except the window.</p>
 
                   <div style="border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; background: #11141f; padding: 18px;">
@@ -549,19 +535,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">ready &middot; the row installs, it does not navigate</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0;">
-                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 19px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-                  <span style="width: 34px; height: 34px; border-radius: 999px; background: rgba(255,180,84,0.16); color: #ffb454; font-size: 14.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;">M</span>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Your account</h1>
+                </header>
 
-                <div style="display: flex; align-items: center; padding: 6px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+                <div style="flex: 1; padding: 0 24px 20px; display: flex; flex-direction: column;">
 
                   <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
                   <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
@@ -610,19 +589,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">installed &middot; a statement, not a disabled button</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0;">
-                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 19px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-                  <span style="width: 34px; height: 34px; border-radius: 999px; background: rgba(255,180,84,0.16); color: #ffb454; font-size: 14.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;">M</span>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Your account</h1>
+                </header>
 
-                <div style="display: flex; align-items: center; padding: 6px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+                <div style="flex: 1; padding: 0 24px 20px; display: flex; flex-direction: column;">
 
                   <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
                   <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">
@@ -671,19 +643,12 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">mounted at /velista &middot; points at the origin, never installs</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0;">
-                  <span style="font-family: 'Marcellus', Georgia, serif; font-size: 19px; letter-spacing: 0.05em; color: #f7f8fc;">Velista</span>
-                  <span style="width: 34px; height: 34px; border-radius: 999px; background: rgba(255,180,84,0.16); color: #ffb454; font-size: 14.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;">M</span>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Your account</h1>
+                </header>
 
-                <div style="display: flex; align-items: center; padding: 6px 12px 0;">
-                  <button type="button" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;" aria-label="Back">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>
-                  </button>
-                </div>
-
-                <div style="flex: 1; padding: 6px 24px 20px; display: flex; flex-direction: column;">
-                  <h1 style="margin: 0 0 4px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18; color: #f7f8fc;">Your account</h1>
+                <div style="flex: 1; padding: 0 24px 20px; display: flex; flex-direction: column;">
 
                   <div style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6f7899; margin: 26px 0 2px;">You</div>
                   <button type="button" style="width: 100%; text-align: left; border: 0; background: transparent; padding: 15px 0; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: inherit;">

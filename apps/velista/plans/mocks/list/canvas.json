@@ -1,6 +1,6 @@
 {
   "title": "Velista List Page",
-  "lede": "The design for plan <code>0012</code>: the shopping list, its lines, and editing them. Phone only, 390 by 844, Night with one Day artboard. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.",
+  "lede": "The design for plan <code>0012</code>: the shopping list, its lines, and editing them. Phone only, 390 by 844, Night with one Day artboard. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "List.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The list, three ways" },
     { "file": "LineStates.dc.html", "x": 1400, "y": 0, "w": 960, "h": 1230, "title": "The row, specified" },

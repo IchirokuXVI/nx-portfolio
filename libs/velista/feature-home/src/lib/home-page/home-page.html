@@ -1,15 +1,58 @@
 @let page = state();
 
 <div class="page">
-  <!-- Always the signed-in header here, and `bordered` is left at its default true
-       for the same reason: authenticatedGuard is what says so. -->
-  <lib-app-bar
-    (account)="account()"
-    (openAssistant)="openAssistant()"
-    [accountInitial]="accountInitial()"
-    [connected]="connected()"
-    [signedIn]="true"
-  />
+  <!--
+    The one page header (velista `0130`), with the brand in it: the mark, the word and
+    these three actions show on this page and on no other. Home has no way back, so
+    the left end holds the mark rather than a chevron (H4). Outside `.content`, so it
+    never scrolls away.
+  -->
+  <lib-page-header [title]="'app-title' | rokuT">
+    <lib-brand-mark class="brand-mark" pageHeaderIcon />
+
+    <ng-container pageHeaderActions>
+      <!--
+        The socket is down (plan 0035, section 5.3). A `span` and not a `button`: it
+        reports a state and leads nowhere, and a control that leads nowhere is worse
+        than no control. Its accessible name sits on the element rather than on the
+        glyph, which is hidden like every other icon here.
+      -->
+      @if (!connected()) {
+        <span
+          [attr.aria-label]="'connection.notLive' | rokuT"
+          class="offline-mark"
+          role="img"
+        >
+          <lib-offline-icon aria-hidden="true" />
+        </span>
+      }
+
+      <!-- The only place the tour's `assistant` anchor exists (velista `0099`). -->
+      <button
+        (click)="openAssistant()"
+        [accent]="true"
+        [attr.aria-label]="'home.action.assistant' | rokuT"
+        class="assistant"
+        libPageHeaderAction
+        libTourAnchor="assistant"
+        type="button"
+      >
+        <lib-comment-icon />
+      </button>
+
+      <button
+        (click)="account()"
+        [attr.aria-label]="'home.action.account' | rokuT"
+        class="account"
+        libPageHeaderAction
+        type="button"
+      >
+        <span aria-hidden="true" class="avatar">{{
+          accountInitial() ?? '·'
+        }}</span>
+      </button>
+    </ng-container>
+  </lib-page-header>
 
   @switch (page.kind) {
     @case ('loading') {

@@ -1,5 +1,5 @@
 <title>Velista List Page</title>
-
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -74,6 +74,13 @@
 #ab-List * { box-sizing: border-box; }
 #ab-List a { color: #ffb454; text-decoration: none; }
 #ab-List a:hover { color: #ffc271; }
+#ab-List .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-List .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-List .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-List .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-List .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-List .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-List .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-LineStates * { box-sizing: border-box; }
 #ab-LineStates a { color: #ffb454; text-decoration: none; }
 #ab-LineStates a:hover { color: #ffc271; }
@@ -86,33 +93,82 @@
 #ab-AddAndEdit .key.wide { flex: 1.6 1 0; }
 #ab-AddAndEdit .key.space { flex: 5 1 0; }
 #ab-AddAndEdit .kbhint { text-align: center; font-size: 11px; color: #525a78; letter-spacing: 0.06em; }
+#ab-AddAndEdit .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-AddAndEdit .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-AddAndEdit .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-AddAndEdit .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-AddAndEdit .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-AddAndEdit .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-AddAndEdit .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Comments * { box-sizing: border-box; }
 #ab-Comments a { color: #ffb454; text-decoration: none; }
 #ab-Comments a:hover { color: #ffc271; }
+#ab-Comments .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-Comments .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Comments .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-Comments .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Comments .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Comments .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-Comments .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-ReorderAndSwipe * { box-sizing: border-box; }
 #ab-ReorderAndSwipe a { color: #ffb454; text-decoration: none; }
 #ab-ReorderAndSwipe a:hover { color: #ffc271; }
+#ab-ReorderAndSwipe .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-ReorderAndSwipe .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ReorderAndSwipe .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-ReorderAndSwipe .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ReorderAndSwipe .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-ReorderAndSwipe .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ReorderAndSwipe .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-ListStates * { box-sizing: border-box; }
 #ab-ListStates a { color: #ffb454; text-decoration: none; }
 #ab-ListStates a:hover { color: #ffc271; }
 #ab-ListStates .sk { border-radius: 6px; background: rgba(255,255,255,0.07); }
+#ab-ListStates .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-ListStates .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListStates .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-ListStates .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ListStates .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-ListStates .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListStates .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-ListProblems * { box-sizing: border-box; }
 #ab-ListProblems a { color: #ffb454; text-decoration: none; }
 #ab-ListProblems a:hover { color: #ffc271; }
+#ab-ListProblems .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-ListProblems .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListProblems .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-ListProblems .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ListProblems .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-ListProblems .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListProblems .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-ListSettings * { box-sizing: border-box; }
 #ab-ListSettings a { color: #ffb454; text-decoration: none; }
 #ab-ListSettings a:hover { color: #ffc271; }
 #ab-ListSettings .seg { flex: 1 1 0; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 12.5px; color: #98a0bb; }
 #ab-ListSettings .seg.on { background: #ffb454; color: #0a0c14; font-weight: 650; border-radius: 8px; }
 #ab-ListSettings .segwrap { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: #0a0c14; border: 1px solid rgba(255,255,255,0.08); }
+#ab-ListSettings .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: #0a0c14; }
+#ab-ListSettings .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListSettings .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #f7f8fc; }
+#ab-ListSettings .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #f7f8fc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-ListSettings .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-ListSettings .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #c2c8db; cursor: pointer; }
+#ab-ListSettings .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #ffb454; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-DayTheme * { box-sizing: border-box; }
 #ab-DayTheme a { color: #8a5a12; text-decoration: none; }
 #ab-DayTheme a:hover { color: #e89a35; }
+#ab-DayTheme .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #dde1ed; background: #f7f8fc; }
+#ab-DayTheme .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #525a78; cursor: pointer; }
+#ab-DayTheme .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: #111420; }
+#ab-DayTheme .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: #111420; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-DayTheme .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-DayTheme .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #525a78; cursor: pointer; }
+#ab-DayTheme .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: #8a5a12; font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 </style>
 
 <header>
   <h1>Velista List Page</h1>
-  <p class="lede">The design for plan <code>0012</code>: the shopping list, its lines, and editing them. Phone only, 390 by 844, Night with one Day artboard. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file.</p>
+  <p class="lede">The design for plan <code>0012</code>: the shopping list, its lines, and editing them. Phone only, 390 by 844, Night with one Day artboard. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>, so what is published and what is in the repository are the same file. Headers redrawn for plan <code>0130</code>.</p>
 </header>
 
 <div class="controls">
@@ -135,20 +191,17 @@
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
 
                 <!-- app bar -->
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
                 <!-- the group, the count, the bar -->
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
                     <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                     <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
@@ -307,15 +360,15 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A READER &middot; everything, and nothing to press</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Party</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Party</div>
-                  <div style="width: 44px; height: 44px;"></div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
                     <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                     <span style="font-size: 13px; color: #98a0bb; font-variant-numeric: tabular-nums;">1 of 5 ready</span>
@@ -390,19 +443,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">AN OWNER OR ADMIN &middot; the two decisions</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; min-width: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
                     <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                     <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
@@ -733,19 +783,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">TYPING &middot; the send is amber the moment there is text</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 1 1 auto; background: #161a28; margin-top: 10px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+                <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
                   <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                     <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                     <span style="font-size: 16px;">Sourdough loaf</span>
@@ -799,19 +846,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">A RUN OF FIVE &middot; focus is kept, the keyboard never drops</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 1 1 auto; background: #161a28; margin-top: 10px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;">
+                <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;">
                   <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                     <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                     <span style="font-size: 16px;">Chorizo</span>
@@ -869,13 +913,24 @@
 
                 <!-- the page underneath -->
                 <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <header class="ph">
+                    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                    <h1 class="ph-title">Weekly shop</h1>
+                    <div class="ph-actions">
+                      <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                      <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
-                    <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
+                  </header>
+                  <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                      <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                    </div>
+                    <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
                   </div>
-                  <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px;">
+                  <div style="flex: 1 1 auto; background: #161a28;">
                     <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                       <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                       <span style="font-size: 16px;">Sourdough loaf</span>
@@ -947,13 +1002,24 @@
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
 
                 <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <header class="ph">
+                    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                    <h1 class="ph-title">Weekly shop</h1>
+                    <div class="ph-actions">
+                      <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                      <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
-                    <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
+                  </header>
+                  <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                      <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                    </div>
+                    <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
                   </div>
-                  <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px;">
+                  <div style="flex: 1 1 auto; background: #161a28;">
                     <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                       <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                       <span style="font-size: 16px;">Sourdough loaf</span>
@@ -1026,13 +1092,24 @@
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
 
                 <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <header class="ph">
+                    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                    <h1 class="ph-title">Weekly shop</h1>
+                    <div class="ph-actions">
+                      <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                      <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
-                    <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
+                  </header>
+                  <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                      <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                    </div>
+                    <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
                   </div>
-                  <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px;">
+                  <div style="flex: 1 1 auto; background: #161a28;">
                     <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                       <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                       <span style="font-size: 16px;">Sourdough loaf</span>
@@ -1135,7 +1212,14 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">REORDER MODE &middot; a drag in flight</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 16px 0; display: flex; align-items: center; gap: 12px;">
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                  </div>
+                </header>
+                <div style="flex: 0 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px;">
                   <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Put them in order</div>
                   <span style="height: 36px; padding: 0 16px; border-radius: 10px; background: #ffb454; color: #0a0c14; font-size: 14px; font-weight: 650; display: flex; align-items: center;">Done</span>
                 </div>
@@ -1208,7 +1292,14 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">THE SAME, WITHOUT A POINTER</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 16px 0; display: flex; align-items: center; gap: 12px;">
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                  </div>
+                </header>
+                <div style="flex: 0 0 auto; padding: 12px 16px 0; display: flex; align-items: center; gap: 12px;">
                   <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Put them in order</div>
                   <span style="height: 36px; padding: 0 16px; border-radius: 10px; background: #ffb454; color: #0a0c14; font-size: 14px; font-weight: 650; display: flex; align-items: center;">Done</span>
                 </div>
@@ -1273,19 +1364,25 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">SWIPE &middot; a shortcut, never the only way</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
+                </header>
+
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                  <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                    <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                    <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                  </div>
+                  <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                    <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
                   </div>
                 </div>
-
-                <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
+                <div style="flex: 1 1 auto; background: #161a28; box-shadow: inset 0 1px 0 0 rgba(255,255,255,0.04); overflow: hidden;">
 
                   <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                     <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
@@ -1338,13 +1435,24 @@
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
 
                 <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <header class="ph">
+                    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                    <h1 class="ph-title">Weekly shop</h1>
+                    <div class="ph-actions">
+                      <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                      <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
-                    <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
+                  </header>
+                  <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                      <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                    </div>
+                    <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
                   </div>
-                  <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px;">
+                  <div style="flex: 1 1 auto; background: #161a28;">
                     <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                       <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                       <span style="font-size: 16px;">Sourdough loaf</span>
@@ -1403,19 +1511,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">LOADING, FROM THE GROUP PAGE &middot; the common path</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <div style="display: flex; align-items: baseline; justify-content: space-between;">
                     <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                     <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
@@ -1448,19 +1553,15 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">LOADING COLD &middot; the lines do not wait for the name</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">List</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; display: flex; align-items: center;"><span class="sk" style="width: 158px; height: 17px;"></span></div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 6px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <span class="sk" style="display: block; width: 96px; height: 11px;"></span>
                   <div style="margin-top: 12px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08);"></div>
                 </div>
@@ -1506,19 +1607,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">EMPTY &middot; the field is already focused</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Saturday</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Saturday</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                 </div>
 
@@ -1565,19 +1663,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">NOT LIVE &middot; correct, and not updating</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 14px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 14px;">
                   <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                     <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
                     <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; background: rgb(255 255 255 / 8%); border: 1px solid rgba(255,255,255,0.14);">
@@ -1626,12 +1721,10 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FAILED &middot; 0003's panel, reused unchanged</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                </header>
 
                 <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 0 32px;">
                   <span style="width: 68px; height: 68px; border-radius: 999px; background: rgba(251,113,133,0.10); border: 1px solid rgba(251,113,133,0.26); display: flex; align-items: center; justify-content: center;">
@@ -1670,17 +1763,10 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">GONE &middot; it goes back, and it says why</span>
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column;">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Flat 3B</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #c2c8db;"></span>
-                  </div>
-                </div>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Flat 3B</h1>
+                </header>
 
                 <!-- the notice, on the group page it landed back on -->
                 <div style="flex: 0 0 auto; margin: 10px 16px 16px; padding: 12px 14px; border-radius: 12px; background: rgb(255 255 255 / 8%); border: 1px solid rgba(255,255,255,0.14); display: flex; align-items: center; gap: 10px;">
@@ -1731,13 +1817,24 @@
               <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative;">
 
                 <div style="position: absolute; inset: 0; display: flex; flex-direction: column;">
-                  <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center;">
-                    <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#c2c8db" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <header class="ph">
+                    <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                    <h1 class="ph-title">Weekly shop</h1>
+                    <div class="ph-actions">
+                      <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                      <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                     </div>
-                    <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650;">Weekly shop</div>
+                  </header>
+                  <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
+                    <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+                      <span style="font-size: 13.5px; color: #98a0bb;">in Flat 3B</span>
+                      <span style="font-size: 13px; color: #34d399; font-variant-numeric: tabular-nums;">4 of 12 ready</span>
+                    </div>
+                    <div style="margin-top: 10px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                      <div style="width: 33%; height: 100%; border-radius: 999px; background: #34d399;"></div>
+                    </div>
                   </div>
-                  <div style="flex: 1 1 auto; background: #161a28; margin-top: 46px;">
+                  <div style="flex: 1 1 auto; background: #161a28;">
                     <div style="height: 56px; padding: 0 16px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08);">
                       <span style="width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #98a0bb;"></span>
                       <span style="font-size: 16px;">Sourdough loaf</span>
@@ -1940,19 +2037,16 @@
               <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #525a78;">DAY &middot; a bright supermarket, which is what this theme is for</span>
               <div style="width: 390px; height: 844px; background: #f7f8fc; color: #11141f; overflow: hidden; border-radius: 4px; display: flex; flex-direction: column; box-shadow: 0 2px 4px rgba(17,20,31,0.05), 0 12px 28px rgba(17,20,31,0.10);">
 
-                <div style="flex: 0 0 auto; padding: 14px 8px 0 8px; display: flex; align-items: center; gap: 4px;">
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="#525a78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <header class="ph">
+                  <button class="ph-lead" type="button" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
+                  <h1 class="ph-title">Weekly shop</h1>
+                  <div class="ph-actions">
+                    <button class="ph-act" type="button" aria-label="Filter and order"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"></path><circle cx="14.5" cy="7" r="2.3"></circle><circle cx="9.5" cy="17" r="2.3"></circle></svg></button>
+                    <button class="ph-act" type="button" aria-label="List settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
                   </div>
-                  <div style="flex: 1 1 auto; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;">Weekly shop</div>
-                  <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 3px;">
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #525a78;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #525a78;"></span>
-                    <span style="width: 3.5px; height: 3.5px; border-radius: 50%; background: #525a78;"></span>
-                  </div>
-                </div>
+                </header>
 
-                <div style="flex: 0 0 auto; padding: 2px 20px 16px;">
+                <div style="flex: 0 0 auto; padding: 12px 16px 16px;">
                   <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
                     <span style="font-size: 13.5px; color: #616a8a;">in Flat 3B</span>
                     <span style="font-size: 13px; color: #047857; font-variant-numeric: tabular-nums;">4 of 12 ready</span>

@@ -36,6 +36,37 @@ function host(fixture: ComponentFixture<ListHeader>): HTMLElement {
 }
 
 describe('ListHeader', () => {
+  // Velista `0130`: a header holds only a title, and the page's `PageHeader` holds it.
+  // What is left here is the first block of the content.
+  describe('content under the page header', () => {
+    it('draws no heading, no header element and no button of its own', async () => {
+      const fixture = await render();
+
+      expect(host(fixture).querySelector('h1, header, button')).toBeNull();
+      // The name is the page header's title, so it is not said a second time here.
+      expect(host(fixture).textContent).not.toContain('Weekly shop');
+    });
+
+    it('says which group the list is in, as its first line', async () => {
+      const fixture = await render();
+
+      expect(host(fixture).firstElementChild?.matches('p.in-group')).toBe(true);
+      expect(host(fixture).firstElementChild?.textContent?.trim()).toBe(
+        'list.header.inGroup'
+      );
+    });
+
+    it('starts on the progress line while the group is not known', async () => {
+      const fixture = await render(header({ listName: null, zoneName: null }));
+
+      expect(host(fixture).querySelector('.in-group')).toBeNull();
+      expect(host(fixture).querySelector('.name-skeleton')).toBeNull();
+      expect(host(fixture).firstElementChild?.matches('p.progress-line')).toBe(
+        true
+      );
+    });
+  });
+
   describe('the not-live notice', () => {
     it('says nothing while the list is live', async () => {
       const fixture = await render();

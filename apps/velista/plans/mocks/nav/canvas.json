@@ -1,6 +1,6 @@
 {
   "title": "Velista: the bottom nav",
-  "lede": "Three tabs at the bottom of the app: Home, Catalog and Shopping list. The bar is on every screen, including the ones you go into, such as a group, a list and your account. A sheet is the one thing that covers it. Home is the screen it is today, with its groups, its lists and the basket status above the bar. The Catalog tab has a canvas of its own. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "lede": "Three tabs at the bottom of the app: Home, Catalog and Shopping list. The bar is on every screen, including the ones you go into, such as a group, a list and your account. A sheet is the one thing that covers it. Home is the screen it is today, with its groups, its lists and the basket status above the bar. The Catalog tab has a canvas of its own. Drawn before any plan is written. Phone only, 390 by 844, Night only. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>. Headers redrawn for plan <code>0130</code>.",
   "artboards": [
     { "file": "Tabs.dc.html", "x": 0, "y": 0, "w": 1330, "h": 1010, "title": "The three tabs" },
     { "file": "Rules.dc.html", "x": 1390, "y": 0, "w": 1330, "h": 1420, "title": "Everywhere, and the one place it is not" }

@@ -23,14 +23,20 @@ body { margin: 0; }
   font-family: var(--app-font-sans); color: var(--app-text-primary);
 }
 .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+/* plan 0130: the one page header. 64px, one title style, always a bottom border. */
+.ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+.ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+.ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+.ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+.ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .ico { flex: none; display: block; }
 /* the catalog tab, as CatalogPage draws it */
-.cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-.cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-.near { font-size: 12px; color: var(--app-text-muted); }
+.near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-.field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -65,9 +71,7 @@ body { margin: 0; }
 .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
 /* the two picker pages: the page head, then one card of rows */
-.page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-.back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-.ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+.page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 .group li { border-top: 1px solid var(--app-border-subtle); }
 .group li:first-child { border-top: 0; }
@@ -95,11 +99,11 @@ body { margin: 0; }
 </style>
 </helmet>
 <div class="vel phone">
-  <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+  <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
   <div class="tools">
-    <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search in Ice cream at Mercadona</span></label>
+    <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="hint">Search in Ice cream at Mercadona</span></label>
     <div class="chiprow"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip" type="button" aria-pressed="false">All shops</button><button class="chip on" type="button" aria-pressed="true">Mercadona<svg class="ico " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
-    <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+    <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label><span class="near">near 14013</span></fieldset>
     <p class="tnote">7 shops near you. Prices are what Mercadona charges here.</p>
   </div>
   <ul class="list">

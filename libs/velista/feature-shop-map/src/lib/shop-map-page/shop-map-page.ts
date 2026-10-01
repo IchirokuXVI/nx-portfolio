@@ -13,7 +13,10 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { SHOP_MAP_PROPERTIES } from '@portfolio/luna-shopper/shop-map/editor';
+import type {
+  MapArea,
+  ShopperNote,
+} from '@portfolio/luna-shopper/shop-map/model';
 import {
   ProfileStore,
   SessionStore,
@@ -34,9 +37,13 @@ import {
   SHOP_PATHS,
   shopPagePath,
   shopWalksPath,
-  ThemeStore,
 } from '@portfolio/velista/platform';
-import { CheckIcon, ChevronLeftIcon, WalkIcon } from '@portfolio/velista/ui';
+import {
+  CheckIcon,
+  PageHeader,
+  PageHeaderAction,
+  WalkIcon,
+} from '@portfolio/velista/ui';
 import { ShopMapView } from '../shop-map-view/shop-map-view';
 import { shopPageText } from '../shop-page/shop-page';
 
@@ -51,14 +58,18 @@ export type ShopMapShow = 'mine' | 'all';
  * `shops/:locationId/map`, with `?basket=<id or live>` when the basket's Map
  * button opened it. With a basket, every section holding a line carries a badge
  * and the others are dimmed; from the shop page there is no basket, so "My list"
- * is absent and every section shows alike. A tap on a section opens the section
- * sheet over this page.
+ * is absent and every section shows alike.
+ *
+ * Everything on the map opens on a tap (velista `0129`, target 6): a section
+ * the shop knows opens the section sheet, and a checkout, the entrance, a
+ * counter with no section and a note open the place sheet.
  */
 @Component({
   selector: 'lib-shop-map-page',
   imports: [
     CheckIcon,
-    ChevronLeftIcon,
+    PageHeader,
+    PageHeaderAction,
     RokuTranslatorPipe,
     RouterOutlet,
     ShopMapView,
@@ -67,10 +78,6 @@ export type ShopMapShow = 'mine' | 'all';
   templateUrl: './shop-map-page.html',
   styleUrl: './shop-map-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '[style.--shop-map-walkway]': 'walkway()[0]',
-    '[style.--shop-map-walkway-dot]': 'walkway()[1]',
-  },
 })
 export class ShopMapPage {
   private readonly _maps = inject(ShopMapStore);
@@ -82,7 +89,6 @@ export class ShopMapPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _locale = inject(RokuLocaleStore).locale;
-  private readonly _theme = inject(ThemeStore).theme;
 
   protected readonly locationId = locationIdOf(this._route);
 
@@ -145,19 +151,6 @@ export class ShopMapPage {
     return [chain, street].filter((part) => part !== null).join(' · ');
   });
 
-  /**
-   * The walkway's two colours in the theme on screen, set on this page so the
-   * legend's swatch and the canvas draw the same walkway. They are the canvas's
-   * own values: velista has no token for a walkway.
-   */
-  protected readonly walkway = computed(() => {
-    const at = this._theme() === 'day' ? 0 : 1;
-    return [
-      SHOP_MAP_PROPERTIES.walkway[at],
-      SHOP_MAP_PROPERTIES['walkway-dot'][at],
-    ] as const;
-  });
-
   constructor() {
     effect(() => {
       const locationId = this.locationId();
@@ -191,14 +184,31 @@ export class ShopMapPage {
     void this._maps.retry();
   }
 
-  /** A section's area was tapped: its sheet, over this page. */
-  protected openSection(name: string): void {
+  /**
+   * An area was tapped. One whose section the shop knows opens the section
+   * sheet. Any other (a checkout, the entrance, a counter or a shelf with no
+   * known section) opens the place sheet, which says what the area is.
+   */
+  protected openArea(area: MapArea): void {
     const map = this.map();
-    const section = map === null ? null : shopMapSectionNamed(map, name);
-    if (section === null) {
-      return;
-    }
-    void this._router.navigate(sheetSegments('sections', section.sectionId), {
+    const section =
+      map === null || area.section === undefined
+        ? null
+        : shopMapSectionNamed(map, area.section);
+    this._openSheet(
+      section !== null
+        ? sheetSegments(SHOP_PATHS.sections, section.sectionId)
+        : sheetSegments(SHOP_PATHS.areas, area.id)
+    );
+  }
+
+  /** A note was tapped: the place sheet, with the note's text. */
+  protected openNote(note: ShopperNote): void {
+    this._openSheet(sheetSegments(SHOP_PATHS.notes, note.id));
+  }
+
+  private _openSheet(segments: string[]): void {
+    void this._router.navigate(segments, {
       relativeTo: this._route,
       queryParamsHandling: 'preserve',
     });

@@ -4,71 +4,16 @@
   block-size: 100%;
 }
 
-// The bar and the footer are fixed in the column and only the middle scrolls, so the
-// title stays put and the action stays under the thumb while a long history moves.
+// The header and the footer are fixed in the column and only the middle scrolls, so
+// the title stays put and the action stays under the thumb while a long history moves.
+// The header is `PageHeader`, the item before this one in the host's column (velista
+// 0130), so this takes the room that is left rather than the whole of it.
 .page {
   display: flex;
   flex-direction: column;
-  block-size: 100%;
+  flex: 1;
   min-block-size: 0;
   background: var(--app-surface-base);
-}
-
-// The destination header, set exactly as the assistant's is. This screen draws no app
-// bar, so its bar is the one the wordmark would otherwise be in, and a bar that is the
-// same bar has to be the same size, spacing and rule.
-.bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  padding: var(--app-space-4) var(--app-space-4) var(--app-space-4)
-    var(--app-space-3);
-  border-block-end: 1px solid var(--app-border-subtle);
-}
-
-.back {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: var(--app-touch-target);
-  min-block-size: var(--app-touch-target);
-  border: none;
-  background: transparent;
-  color: var(--app-text-secondary);
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-    border-radius: var(--app-radius-md);
-  }
-}
-
-.back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.glyph {
-  font-size: var(--app-icon-md);
-}
-
-// The display face at the page title step (plan 0002, section 6). `xl` is what this
-// screen used to set, and it is the same mistake the assistant page records: the words
-// in the top left shrank on the way in from the dashboard, in the same face and the
-// same colour, for no visible reason.
-.title {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-family: var(--app-font-display);
-  font-weight: 400;
-  font-size: var(--app-text-2xl);
-  line-height: var(--app-leading-heading);
-  // The mark's tracking comes with the mark's size, exactly as on the assistant.
-  letter-spacing: var(--app-tracking-wordmark);
-  color: var(--app-text-primary);
 }
 
 // A tab's panel takes the room under the tabs, laid out as the page itself is, so its
@@ -89,6 +34,10 @@
   flex: 1;
   min-block-size: 0;
   padding: var(--app-space-4) var(--app-space-5) 0;
+  // Every state scrolls inside this box, and not only the list of rows (velista 0130,
+  // H1). The empty state is taller than the room a short screen leaves it, and without
+  // this it spilled into the layout's own scroller, which carried the header away.
+  overflow-y: auto;
 }
 
 .scroller {

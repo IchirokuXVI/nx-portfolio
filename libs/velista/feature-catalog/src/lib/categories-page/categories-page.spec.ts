@@ -100,16 +100,30 @@ describe('CategoriesPage (velista 0119)', () => {
     expect(first?.hasAttribute('aria-current')).toBe(false);
   });
 
-  it('heads the page with the title beside a back chevron', async () => {
+  it('heads the page with the one page header: a back chevron, the title and no action', async () => {
     const { fixture } = await render(fakeCategoryStore(MEMORY_CATEGORIES));
-    const head = (fixture.nativeElement as HTMLElement).querySelector('.head');
+    const host = fixture.nativeElement as HTMLElement;
+    const header = host.querySelector('lib-page-header');
 
-    expect(head?.querySelector('h1')?.textContent).toContain(
+    expect(header?.querySelector('h1')?.textContent).toContain(
       'catalog.categories.title'
     );
-    expect(head?.querySelector('button.back')?.getAttribute('aria-label')).toBe(
-      'catalog.categories.back'
-    );
+    expect(
+      header?.querySelector('button.lead')?.getAttribute('aria-label')
+    ).toBe('catalog.categories.back');
+    expect(header?.querySelector('.actions button')).toBeNull();
+    // One h1 on the page, and the header is outside the box that scrolls.
+    expect(host.querySelectorAll('h1')).toHaveLength(1);
+    expect(host.querySelector('main lib-page-header')).toBeNull();
+  });
+
+  it('draws the header while the tree is on its way', async () => {
+    const { fixture } = await render(fakeCategoryStore());
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('lib-page-header h1')
+        ?.textContent
+    ).toContain('catalog.categories.title');
   });
 
   it('goes back one step, with the catalog tab as the fallback', async () => {
@@ -118,7 +132,7 @@ describe('CategoriesPage (velista 0119)', () => {
     );
 
     (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>('button.back')
+      .querySelector<HTMLButtonElement>('lib-page-header button.lead')
       ?.click();
 
     expect(pages.back).toHaveBeenCalledWith('/velista/en/catalog');

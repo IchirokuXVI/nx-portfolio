@@ -1,26 +1,27 @@
 <main class="page">
-  <header class="bar">
-    <button
-      (click)="back()"
-      [attr.aria-label]="'shopMap.back' | rokuT"
-      class="back"
-      type="button"
-    >
-      <lib-chevron-left-icon class="back-glyph" />
-    </button>
-    <div class="heading">
-      <h1 class="title">{{ 'shopMap.title' | rokuT }}</h1>
-      @if (subtitle(); as subtitle) {
-        <p class="subtitle">{{ subtitle }}</p>
+  <lib-page-header
+    (back)="back()"
+    [backLabel]="'shopMap.back' | rokuT"
+    [title]="'shopMap.title' | rokuT"
+  >
+    <ng-container pageHeaderActions>
+      @if (canMap()) {
+        <button
+          (click)="openWalks()"
+          kind="text"
+          libPageHeaderAction
+          type="button"
+        >
+          <lib-walk-icon class="walks-glyph" />
+          <span>{{ 'shopWalks.open' | rokuT }}</span>
+        </button>
       }
-    </div>
-    @if (canMap()) {
-      <button (click)="openWalks()" class="walks" type="button">
-        <lib-walk-icon class="walks-glyph" />
-        <span>{{ 'shopWalks.open' | rokuT }}</span>
-      </button>
-    }
-  </header>
+    </ng-container>
+  </lib-page-header>
+
+  @if (subtitle(); as subtitle) {
+    <p class="subtitle">{{ subtitle }}</p>
+  }
 
   @if (hasList()) {
     <!--
@@ -53,7 +54,8 @@
     @case ('map') {
       @if (map(); as map) {
         <lib-shop-map-view
-          (sectionTapped)="openSection($event)"
+          (areaTapped)="openArea($event)"
+          (noteTapped)="openNote($event)"
           [badges]="badges()"
           [document]="map.document"
           [label]="'shopMap.label' | rokuT"
@@ -61,21 +63,21 @@
           look="shopper-drawn"
         />
 
-        <p class="legend">
-          @if (show() === 'mine') {
-            <span aria-hidden="true" class="badge">2</span>
-            <span>{{ 'shopMap.legendLeft' | rokuT }}</span>
-            <span aria-hidden="true" class="badge is-done">
-              <lib-check-icon class="badge-tick" />1
-            </span>
-            <span>{{ 'shopMap.legendDone' | rokuT }}</span>
-          }
-          <span aria-hidden="true" class="walkway"></span>
-          <span>{{ 'shopMap.legendWalkway' | rokuT }}</span>
-          @if (fromDevice()) {
-            <span class="saved">{{ 'shopMap.saved' | rokuT }}</span>
-          }
-        </p>
+        @if (show() === 'mine' || fromDevice()) {
+          <p class="legend">
+            @if (show() === 'mine') {
+              <span aria-hidden="true" class="badge">2</span>
+              <span>{{ 'shopMap.legendLeft' | rokuT }}</span>
+              <span aria-hidden="true" class="badge is-done">
+                <lib-check-icon class="badge-tick" />1
+              </span>
+              <span>{{ 'shopMap.legendDone' | rokuT }}</span>
+            }
+            @if (fromDevice()) {
+              <span class="saved">{{ 'shopMap.saved' | rokuT }}</span>
+            }
+          </p>
+        }
         <p class="hint">
           {{ (show() === 'mine' ? 'shopMap.hint' : 'shopMap.hintAll') | rokuT }}
         </p>

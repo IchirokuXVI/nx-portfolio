@@ -346,4 +346,42 @@ describe('an anonymous deep link settles', () => {
 
     expect(router.url).toBe('/velista/en');
   });
+
+  /**
+   * The one place the guard sits on a **sheet** and not on the page: Create your
+   * shopping list over a basket, which a guest reaches with no account. Everything
+   * above the guarded route is kept, and above a sheet that is the page it covers.
+   */
+  it('lands on the basket from a guarded sheet over a page that demands no account', async () => {
+    consulted = 0;
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          {
+            path: 'velista',
+            children: [
+              {
+                path: ':locale',
+                children: [
+                  {
+                    path: 'shopping-lists/:basketId',
+                    component: Blank,
+                    children: [page('sheet/get')],
+                  },
+                  { path: '', component: Blank },
+                ],
+              },
+            ],
+          },
+        ]),
+        provideFakeSessionStore('anonymous'),
+      ],
+    });
+
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl(`/velista/en/shopping-lists/${id}/sheet/get`);
+
+    expect(router.url).toBe(`/velista/en/shopping-lists/${id}`);
+  });
 });

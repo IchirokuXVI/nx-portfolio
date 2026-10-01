@@ -80,13 +80,18 @@
   --app-focus-ring: #2f6fed;
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Tab .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Tab .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Tab .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Tab .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Tab .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Tab .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Tab .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Tab .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Tab .ico { flex: none; display: block; }
-#ab-Tab .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-#ab-Tab .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-#ab-Tab .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Tab .near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Tab .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 #ab-Tab .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-#ab-Tab .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Tab .field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Tab .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 #ab-Tab .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 #ab-Tab .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -118,9 +123,7 @@
 #ab-Tab .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
 #ab-Tab .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 #ab-Tab .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-#ab-Tab .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-#ab-Tab .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Tab .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Tab .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 #ab-Tab .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Tab .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Tab .group li:first-child { border-top: 0; }
@@ -152,13 +155,18 @@
   --app-focus-ring: #2f6fed;
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Parents .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Parents .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Parents .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Parents .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Parents .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Parents .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Parents .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Parents .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Parents .ico { flex: none; display: block; }
-#ab-Parents .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-#ab-Parents .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-#ab-Parents .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Parents .near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Parents .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 #ab-Parents .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-#ab-Parents .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Parents .field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Parents .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 #ab-Parents .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 #ab-Parents .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -190,10 +198,7 @@
 #ab-Parents .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
 #ab-Parents .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 #ab-Parents .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-#ab-Parents .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-#ab-Parents .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Parents .phead { flex: none; display: flex; align-items: center; gap: 4px; }
-#ab-Parents .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Parents .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 #ab-Parents .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Parents .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Parents .group li:first-child { border-top: 0; }
@@ -225,13 +230,18 @@
   --app-focus-ring: #2f6fed;
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Children .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Children .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Children .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Children .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Children .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Children .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Children .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Children .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Children .ico { flex: none; display: block; }
-#ab-Children .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-#ab-Children .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-#ab-Children .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Children .near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Children .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 #ab-Children .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-#ab-Children .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Children .field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Children .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 #ab-Children .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 #ab-Children .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -263,10 +273,7 @@
 #ab-Children .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
 #ab-Children .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 #ab-Children .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-#ab-Children .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-#ab-Children .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Children .phead { flex: none; display: flex; align-items: center; gap: 4px; }
-#ab-Children .ptitle { margin: 0; min-width: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Children .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 #ab-Children .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Children .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Children .group li:first-child { border-top: 0; }
@@ -298,13 +305,18 @@
   --app-focus-ring: #2f6fed;
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-Chosen .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-Chosen .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-Chosen .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Chosen .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-Chosen .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Chosen .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-Chosen .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-Chosen .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-Chosen .ico { flex: none; display: block; }
-#ab-Chosen .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-#ab-Chosen .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-#ab-Chosen .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-Chosen .near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-Chosen .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 #ab-Chosen .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-#ab-Chosen .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Chosen .field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-Chosen .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 #ab-Chosen .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 #ab-Chosen .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -336,9 +348,7 @@
 #ab-Chosen .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
 #ab-Chosen .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 #ab-Chosen .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-#ab-Chosen .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-#ab-Chosen .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-Chosen .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-Chosen .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 #ab-Chosen .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-Chosen .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-Chosen .group li:first-child { border-top: 0; }
@@ -370,13 +380,18 @@
   --app-focus-ring: #2f6fed;
   font-family: var(--app-font-sans); color: var(--app-text-primary); }
 #ab-EmptyLeaf .phone { position: relative; width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface-ground); }
+#ab-EmptyLeaf .ph { flex: none; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--app-border-subtle); background: var(--app-surface-ground); }
+#ab-EmptyLeaf .ph-lead { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-EmptyLeaf .ph-icon { flex: none; width: 24px; height: 24px; margin-right: 8px; display: flex; align-items: center; justify-content: center; color: var(--app-text-primary); }
+#ab-EmptyLeaf .ph-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: Marcellus, Georgia, serif; font-size: 20px; line-height: 28px; font-weight: 400; letter-spacing: 0.05em; color: var(--app-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-EmptyLeaf .ph-actions { flex: none; display: flex; align-items: center; margin-right: -10px; }
+#ab-EmptyLeaf .ph-act { position: relative; flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
+#ab-EmptyLeaf .ph-text { flex: none; height: 44px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; background: transparent; color: var(--app-action-quiet-fg); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 #ab-EmptyLeaf .ico { flex: none; display: block; }
-#ab-EmptyLeaf .cathead { flex: none; display: flex; align-items: baseline; justify-content: space-between; padding: 12px 16px 0; }
-#ab-EmptyLeaf .cathead h1 { margin: 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; letter-spacing: 0.05em; }
-#ab-EmptyLeaf .near { font-size: 12px; color: var(--app-text-muted); }
+#ab-EmptyLeaf .near { margin-left: auto; font-size: 12px; color: var(--app-text-muted); white-space: nowrap; }
 #ab-EmptyLeaf .tools { flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 8px; background: var(--app-surface-ground); }
 #ab-EmptyLeaf .field { box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: var(--app-surface-raised); color: var(--app-text-muted); }
-#ab-EmptyLeaf .field .ph { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-EmptyLeaf .field .hint { flex: 1; min-width: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ab-EmptyLeaf .chiprow { display: flex; align-items: center; gap: 8px; margin: 0 -16px; padding: 0 16px; overflow: hidden; }
 #ab-EmptyLeaf .chip { flex: none; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--app-border-strong); border-radius: 999px; background: var(--app-surface-raised); color: var(--app-text-secondary); font-size: 14px; font-weight: 600; white-space: nowrap; text-decoration: none; }
 #ab-EmptyLeaf .chip.on { border-color: var(--app-action-bg); background: var(--app-action-bg); color: var(--app-text-on-action); font-weight: 650; }
@@ -408,9 +423,7 @@
 #ab-EmptyLeaf .empty .et { margin: 0; font-size: 16px; font-weight: 650; }
 #ab-EmptyLeaf .empty .eb { margin: 0; max-width: 34ch; font-size: 14px; line-height: 1.45; color: var(--app-text-secondary); }
 #ab-EmptyLeaf .secondary { box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; height: 52px; margin-top: 8px; padding: 0 16px; border: 1px solid var(--app-border-strong); border-radius: 12px; background: transparent; color: var(--app-text-primary); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
-#ab-EmptyLeaf .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 8px 16px 0; }
-#ab-EmptyLeaf .back { flex: none; width: 44px; height: 44px; margin-left: -12px; display: flex; align-items: center; justify-content: center; border: 0; padding: 0; border-radius: 999px; background: transparent; color: var(--app-text-secondary); cursor: pointer; }
-#ab-EmptyLeaf .ptitle { margin: 4px 0 0; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 27px; line-height: 1.2; }
+#ab-EmptyLeaf .page { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 0 16px 0; }
 #ab-EmptyLeaf .group { flex: none; margin: 16px 0 0; padding: 0; list-style: none; border: 1px solid var(--app-border-subtle); border-radius: 16px; background: var(--app-surface-raised); overflow: hidden; }
 #ab-EmptyLeaf .group li { border-top: 1px solid var(--app-border-subtle); }
 #ab-EmptyLeaf .group li:first-child { border-top: 0; }
@@ -509,7 +522,7 @@
 
 <header>
   <h1>Velista: the category picker</h1>
-  <p class="lede">Plan <code>0119</code>, with <code>0118</code> and backend <code>0166</code> behind it. The catalog tab gains a Categories link at the head of its chip row. It opens a page of the seventeen roots, a root opens a page of its children, and a child brings you back to the tab narrowed to it, beside the field, the chain chips and the order. The choice is <code>?category=&lt;slug&gt;</code> in the URL. Drawn on Day, on the tab as PR <code>#472</code> built it, in English with Spanish product names. Category names are appendix A of backend <code>0166</code>; every count and price is made up. Phone only, 390 by 844. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+  <p class="lede">Plan <code>0119</code>, with <code>0118</code> and backend <code>0166</code> behind it. The catalog tab gains a Categories link at the head of its chip row. It opens a page of the seventeen roots, a root opens a page of its children, and a child brings you back to the tab narrowed to it, beside the field, the chain chips and the order. The choice is <code>?category=&lt;slug&gt;</code> in the URL. Drawn on Day, on the tab as PR <code>#472</code> built it, in English with Spanish product names. Category names are appendix A of backend <code>0166</code>; every count and price is made up. Phone only, 390 by 844. Headers redrawn for plan <code>0130</code>. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
 </header>
 
 <div class="controls">
@@ -525,11 +538,11 @@
         <figcaption>Catalog tab, nothing chosen</figcaption>
         <div class="frame" id="ab-Tab" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
             <div class="tools">
-              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search every supermarket</span></label>
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="hint">Search every supermarket</span></label>
               <div class="chiprow"><a class="chip cats" href="Parents.dc.html"><svg class="ico lead" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h11M8 12h11M8 18h11M4 6h.01M4 12h.01M4 18h.01"></path></svg>Categories<svg class="ico chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip on" type="button" aria-pressed="true">All shops</button><button class="chip" type="button" aria-pressed="false">Mercadona</button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
-              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label><span class="near">near 14013</span></fieldset>
     
             </div>
             <ul class="list">
@@ -576,11 +589,8 @@
         <figcaption>The page of parents</figcaption>
         <div class="frame" id="ab-Parents" style="width: 390px; height: 844px;">
           <div class="vel phone">
+            <header class="ph"><button class="ph-lead" type="button" aria-label="Back to the catalog"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Categories</h1></header>
             <main class="page">
-              <header class="phead">
-                <button class="back" type="button" aria-label="Back to the catalog"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
-                <h1 class="ptitle">Categories</h1>
-              </header>
               <ul class="group">
                 <li><a class="crow" href="#" aria-label="Fruit and vegetables, 486 products"><span class="cname">Fruit and vegetables</span><span class="count">486 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
                 <li><a class="crow" href="#" aria-label="Meat, 392 products"><span class="cname">Meat</span><span class="count">392 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
@@ -613,11 +623,8 @@
         <figcaption>The page of children: Frozen</figcaption>
         <div class="frame" id="ab-Children" style="width: 390px; height: 844px;">
           <div class="vel phone">
+            <header class="ph"><button class="ph-lead" type="button" aria-label="Back to categories"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button><h1 class="ph-title">Frozen</h1></header>
             <main class="page">
-              <header class="phead">
-                <button class="back" type="button" aria-label="Back to categories"><svg class="ico " width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"></path></svg></button>
-                <h1 class="ptitle">Frozen</h1>
-              </header>
               <ul class="group">
                 <li><a class="crow all" href="Chosen.dc.html" aria-label="Everything in Frozen, 412 products"><span class="cname">Everything in Frozen</span><span class="count">412 products</span><svg class="ico chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></a></li>
               </ul>
@@ -641,11 +648,11 @@
         <figcaption>Catalog tab, Ice cream chosen</figcaption>
         <div class="frame" id="ab-Chosen" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
             <div class="tools">
-              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search in Ice cream</span></label>
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="hint">Search in Ice cream</span></label>
               <div class="chiprow"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip on" type="button" aria-pressed="true">All shops</button><button class="chip" type="button" aria-pressed="false">Mercadona</button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
-              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label><span class="near">near 14013</span></fieldset>
     
             </div>
             <ul class="list">
@@ -692,11 +699,11 @@
         <figcaption>Ice cream at Mercadona: nothing yet</figcaption>
         <div class="frame" id="ab-EmptyLeaf" style="width: 390px; height: 844px;">
           <div class="vel phone">
-            <header class="cathead"><h1>Catalog</h1><span class="near">near 14013</span></header>
+            <header class="ph"><span class="ph-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="7" width="12" height="13" rx="2"></rect><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg></span><h1 class="ph-title">Catalog</h1></header>
             <div class="tools">
-              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="ph">Search in Ice cream at Mercadona</span></label>
+              <label class="field"><svg class="ico " width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.6"></circle><path d="m16 16 4 4"></path></svg><span class="hint">Search in Ice cream at Mercadona</span></label>
               <div class="chiprow"><span class="catchip"><a class="body" href="Children.dc.html" aria-label="Frozen, Ice cream. Change the category"><span class="root">Frozen</span><span class="mid" aria-hidden="true">&middot;</span><span class="leaf">Ice cream</span></a><button class="x" type="button" aria-label="Clear the category"><svg class="ico " width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button></span><span class="sep" aria-hidden="true"></span><span role="group" aria-label="Shops" style="display: contents;"><button class="chip" type="button" aria-pressed="false">All shops</button><button class="chip on" type="button" aria-pressed="true">Mercadona<svg class="ico " width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"></path></svg></button><button class="chip" type="button" aria-pressed="false">Deza</button><button class="chip" type="button" aria-pressed="false">Carrefour</button><button class="chip" type="button" aria-pressed="false">Lidl</button></span></div>
-              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label></fieldset>
+              <fieldset class="pills"><legend class="legend" style="float: left;">Order</legend><label class="pill on">A to Z</label><label class="pill">Newest</label><span class="near">near 14013</span></fieldset>
               <p class="tnote">7 shops near you. Prices are what Mercadona charges here.</p>
             </div>
             <ul class="list">

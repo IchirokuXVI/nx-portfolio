@@ -1,7 +1,7 @@
 @use '../shop-map' as shop;
 
 // The map every shopper sees (velista 0121, the `ShopMap` board of
-// `mocks/shop-map/`): the bar, the chips, the canvas filling what is left of the
+// `mocks/shop-map/`): the header, the shop under it, the chips, the canvas filling what is left of the
 // screen, the legend and the hint.
 
 :host {
@@ -12,59 +12,20 @@
 // Exactly as tall as the page slot, which is `100svh` less the bar at the foot,
 // so the canvas takes what the words around it leave.
 .page {
-  display: flex;
-  flex-direction: column;
-  block-size: 100%;
+  @include shop.page;
+
   padding-block-end: calc(var(--app-space-4) + var(--app-safe-bottom));
 }
 
-.bar {
-  @include shop.bar;
-}
-
-.back {
-  @include shop.back;
-}
-
-.back-glyph {
-  font-size: var(--app-icon-md);
-}
-
-.heading {
-  @include shop.heading;
-}
-
-.title {
-  @include shop.title;
-}
-
+// The shop, as a slim line directly under the header: the map takes the rest.
 .subtitle {
   @include shop.subtitle;
+
+  padding: var(--app-space-3) var(--app-space-5) 0;
 }
 
-// A shop's walks (velista 0122), for an account that maps: outlined, so the map
-// stays the page's one strong thing.
-.walks {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--app-space-2);
-  min-block-size: var(--app-touch-target);
-  padding: 0 var(--app-space-4);
-  border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-radius-full);
-  background: var(--app-surface-raised);
-  color: var(--app-text-primary);
-  font: inherit;
-  font-size: var(--app-text-sm);
-  font-weight: 650;
-  cursor: pointer;
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
+// The glyph beside the word in the header's Walks action (velista 0122), for an
+// account that maps.
 
 .walks-glyph {
   font-size: var(--app-icon-sm);
@@ -149,20 +110,6 @@
 
 .badge-tick {
   font-size: var(--app-text-2xs);
-}
-
-.walkway {
-  inline-size: var(--app-icon-sm);
-  block-size: var(--app-icon-sm);
-  margin-inline-start: var(--app-space-3);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-sm);
-  background-color: var(--shop-map-walkway);
-  background-image: radial-gradient(
-    var(--shop-map-walkway-dot) 1px,
-    transparent 1px
-  );
-  background-size: var(--app-space-3) var(--app-space-3);
 }
 
 .saved {

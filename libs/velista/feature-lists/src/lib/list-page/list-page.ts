@@ -78,17 +78,18 @@ import {
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
-  AppBar,
-  ChevronLeftIcon,
   CloseIcon,
   DueLineRow,
   ErrorState,
+  FilterIcon,
+  GearIcon,
   LineComposer,
   LineList,
   type LineRowAction,
   ListHeader,
   ListNotice,
-  ListTools,
+  PageHeader,
+  PageHeaderAction,
   RowSkeleton,
   SpinnerIcon,
   type SuggestionChoice,
@@ -153,16 +154,17 @@ import { voiceFailureCopy } from '../voice-error-copy';
   imports: [
     RokuTranslatorPipe,
     RouterOutlet,
-    AppBar,
-    ChevronLeftIcon,
     CloseIcon,
     DueLineRow,
     ErrorState,
+    FilterIcon,
+    GearIcon,
     LineComposer,
     LineList,
     ListHeader,
     ListNotice,
-    ListTools,
+    PageHeader,
+    PageHeaderAction,
     RowSkeleton,
     SpinnerIcon,
     SuggestionList,
@@ -743,7 +745,7 @@ export class ListPage {
 
   /**
    * The bar gives the page its room while the field has focus or holds words (rule
-   * F3), so the results reach from the app bar to the composer.
+   * F3), so the results reach from the header to the composer.
    */
   private readonly _hideChrome = effect(() => {
     const composing = this._fieldFocused() || this.typing();
@@ -759,8 +761,8 @@ export class ListPage {
 
   /**
    * When the results first appear, the column scrolls so their heading sits under
-   * the app bar. The page head goes above the fold while typing and comes back with
-   * the list.
+   * the header. The list's progress block goes above the fold while typing and comes
+   * back with the list.
    */
   private readonly _scrollToResults = afterRenderEffect(() => {
     const heading = this._resultsHeading()?.nativeElement;
@@ -1149,74 +1151,6 @@ export class ListPage {
       appPath(this._locale(), this._basePath, 'zones', this.zoneId())
     );
   }
-
-  /**
-   * The app bar's account button, which was inert on this screen until plan 0015
-   * (section 4.4).
-   *
-   * The bar keeps emitting an output rather than taking a `routerLink`, so rule D1 holds
-   * and the `ui` library still knows nothing about the route table.
-   */
-  async openAccount(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'account')
-    );
-  }
-
-  /**
-   * The assistant (plan 0032), which is what the app bar's second button now does.
-   *
-   * It was `(openSearch)`, unbound here and on two other pages, because there was
-   * never a search page behind it. `appPath` and not a relative navigation for the
-   * reason `openAccount` uses it: this page sits four segments below the mount, and a
-   * sibling of the mount is not a relative distance worth writing down.
-   */
-  async openAssistant(): Promise<void> {
-    await this._router.navigateByUrl(
-      appPath(this._locale(), this._basePath, 'assistant')
-    );
-  }
-
-  /**
-   * Whether the live connection is up, for the app bar's offline mark (plan 0035,
-   * section 5.3).
-   *
-   * The header's own `live` is **not** this: that one is about this list, and it is
-   * false when the zone room was refused while the socket is perfectly fine. The mark
-   * is about the connection and the notice is about the screen, so both are drawn and
-   * neither is a duplicate of the other.
-   */
-  readonly connected = this._realtime.connected;
-
-  /**
-   * Where the header's lockup leads. Home, from every screen that is not home.
-   *
-   * Built with `appPath` like every other link this page makes, so the locale and the
-   * mount are the ones actually in force rather than a string written down twice.
-   */
-  readonly homeUrl = computed(() =>
-    appPath(this._locale(), this._basePath, 'home')
-  );
-
-  /**
-   * The letter in the app bar's account button.
-   *
-   * Unbound on this screen until plan 0015, so the button drew its neutral glyph on the
-   * one page somebody spends the longest on.
-   */
-  readonly accountInitial = computed(() => {
-    const username = this._session.username();
-    if (username === null) {
-      return null;
-    }
-
-    // Code points rather than a slice, because slicing cuts a surrogate pair in half
-    // and a name that starts with an emoji would render the replacement character.
-    const trimmed = username.trim();
-    return trimmed === ''
-      ? null
-      : (Array.from(trimmed)[0] ?? '').toLocaleUpperCase();
-  });
 
   /**
    * A row was tapped, which opens what the app knows about the line.

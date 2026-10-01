@@ -25,6 +25,7 @@ import type { MyZone, ProfileLoad, ZoneRole } from '@portfolio/velista/models';
 import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import {
   InstallStore,
+  PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   TEST_BRAND,
@@ -588,13 +589,58 @@ describe('AccountPage', () => {
     });
   });
 
-  describe('the app bar', () => {
-    it('draws the initial from the name, with no request', async () => {
-      const { fixture } = await render({ username: 'Ines' });
+  /**
+   * The one header (velista `0130`). The brand bar is home's, so this page draws a
+   * back control and its title and nothing else, and the title is the page's only `h1`.
+   */
+  describe('the header', () => {
+    it('draws the title, and no brand bar', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('lib-page-header h1')?.textContent).toContain(
+        'account.title'
+      );
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('lib-app-bar')).toBeNull();
+      expect(root.querySelector('lib-page-header .actions button')).toBeNull();
+    });
+
+    it('sits outside the scroller, so it never scrolls away', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('main lib-page-header')).toBeNull();
+      expect(root.querySelector('main')?.previousElementSibling?.tagName).toBe(
+        'LIB-PAGE-HEADER'
+      );
+    });
+
+    it('goes back with a fallback, so a cold arrival stays in the app', async () => {
+      const { fixture } = await render();
+      const back = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+
+      const control = (
+        fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLButtonElement>('lib-page-header .lead');
+      expect(control?.getAttribute('aria-label')).toBe('account.back');
+
+      control?.click();
+      await fixture.whenStable();
+
+      expect(back).toHaveBeenCalledWith('/velista/en/home');
+    });
+
+    it('is the same for a guest', async () => {
+      const { fixture } = await render({ guest: true });
 
       expect(
-        fixture.nativeElement.querySelector('lib-app-bar .avatar')?.textContent
-      ).toContain('I');
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-page-header h1'
+        )?.textContent
+      ).toContain('account.title');
     });
   });
 

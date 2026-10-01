@@ -17,7 +17,7 @@ import {
 import { CategoryStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH, categoryName } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
-import { ChevronLeftIcon } from '@portfolio/velista/ui';
+import { PageHeader } from '@portfolio/velista/ui';
 import {
   CATEGORY_PARAM,
   formatCount,
@@ -59,7 +59,7 @@ const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
  */
 @Component({
   selector: 'lib-category-children-page',
-  imports: [CategoryRows, ChevronLeftIcon, RokuTranslatorPipe],
+  imports: [CategoryRows, PageHeader, RokuTranslatorPipe],
   templateUrl: './category-children-page.html',
   styleUrl: './category-children-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -97,9 +97,13 @@ export class CategoryChildrenPage {
     );
   });
 
+  /**
+   * The root's name, or null until the tree holds it. The header never loads (velista
+   * `0130`, rule H6), so the template draws the word for the kind of page meanwhile.
+   */
   protected readonly title = computed(() => {
     const branch = this.branch();
-    return branch === null ? '' : categoryName(branch.root, this._locale());
+    return branch === null ? null : categoryName(branch.root, this._locale());
   });
 
   /** The first card: the root itself. */

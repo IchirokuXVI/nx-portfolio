@@ -14,7 +14,10 @@ import {
   type FakeShoppingProfileStore,
 } from '@portfolio/velista/data-access';
 import type { ProfileLoad, Supermarket } from '@portfolio/velista/models';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  PageNavigation,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
 import { of } from 'rxjs';
 import { ProfilesPage, SCOPE_REQUIRED_PARAM } from './profiles-page';
 
@@ -112,6 +115,63 @@ describe('ProfilesPage', () => {
     const { store } = await render();
 
     expect(store.calls.some((call) => call.method === 'load')).toBe(true);
+  });
+
+  /**
+   * The one header (velista `0130`). The brand bar is home's, so this page draws a
+   * back control and its title and nothing else, and the title is the page's only `h1`.
+   */
+  describe('the header', () => {
+    it('draws the title, and no brand bar', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('lib-page-header h1')?.textContent).toContain(
+        'profiles.title'
+      );
+      expect(root.querySelectorAll('h1')).toHaveLength(1);
+      expect(root.querySelector('lib-app-bar')).toBeNull();
+      expect(root.querySelector('lib-page-header .actions button')).toBeNull();
+    });
+
+    it('sits outside the scroller, so it never scrolls away', async () => {
+      const { fixture } = await render();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('main lib-page-header')).toBeNull();
+      expect(root.querySelector('main')?.previousElementSibling?.tagName).toBe(
+        'LIB-PAGE-HEADER'
+      );
+    });
+
+    it('goes back with a fallback, so a cold arrival stays in the app', async () => {
+      const { fixture } = await render();
+      const back = jest
+        .spyOn(TestBed.inject(PageNavigation), 'back')
+        .mockResolvedValue(undefined);
+
+      const control = (
+        fixture.nativeElement as HTMLElement
+      ).querySelector<HTMLButtonElement>('lib-page-header .lead');
+      expect(control?.getAttribute('aria-label')).toBe('account.back');
+
+      control?.click();
+      await fixture.whenStable();
+
+      expect(back).toHaveBeenCalledWith('/en/account');
+    });
+
+    it.each(['loading', 'failed'] as const)(
+      'is drawn while the profiles are %s',
+      async (state) => {
+        const { fixture } = await render({ state });
+
+        expect(query(fixture, 'lib-page-header h1')?.textContent).toContain(
+          'profiles.title'
+        );
+        expect(query(fixture, 'lib-page-header .lead')).not.toBeNull();
+      }
+    );
   });
 
   describe('the first visit', () => {

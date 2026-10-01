@@ -1,41 +1,65 @@
 <!--
-  `(account)` was unbound here until plan 0015, and so was `accountInitial`, so the
-  button drew a neutral glyph on the one screen somebody spends the longest on. The
-  second button was `(openSearch)` and stayed unbound because search was never built;
-  plan 0032 spends that slot on the assistant, so both are bound now and the bar has no
-  dead controls left on any screen.
+  One union, read once. Each state is its own `@if` on `current.kind` rather than an
+  `@else if` chain, because a chain does not narrow a discriminated union far enough
+  for the compiler to accept the branches that carry extra fields.
 -->
-<lib-app-bar
-  (account)="openAccount()"
-  (openAssistant)="openAssistant()"
-  [accountInitial]="accountInitial()"
-  [connected]="connected()"
-  [homeUrl]="homeUrl()"
-  [signedIn]="true"
-/>
+@let current = state();
+
+<!--
+  The one header (velista 0130), before the scroller and in every state, so it never
+  scrolls away and never waits for the list. On a cold arrival the name is not here
+  yet and the title is the word for the kind of page; the name then takes its place in
+  the same box, at the same size (rule H6).
+
+  In reorder mode back ends the mode rather than leaving the page, which is what makes
+  the mode safe to enter (rule L4).
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'list.header.back' | rokuT"
+  [title]="header()?.listName ?? ('list.header.title' | rokuT)"
+>
+  <ng-container pageHeaderActions>
+    <!--
+      The filter (velista 0082, section 2). The badge is how many settings are on, and
+      the **name carries it too**, because a count that only exists as a dot over a
+      glyph is a count a screen reader never hears. Absent while the composer's field
+      holds words, on an empty list, and in reorder mode, where the order is the thing
+      being edited.
+    -->
+    @if (
+      current.kind === 'loaded' && !typing() && !current.empty && !reordering()
+    ) {
+      <button
+        (click)="openFilter()"
+        [attr.aria-label]="
+          activeCount() === 0
+            ? ('basket.view.open' | rokuT)
+            : ('basket.view.openCount' | rokuT: { count: activeCount() })
+        "
+        [badge]="activeCount()"
+        libPageHeaderAction
+        type="button"
+      >
+        <lib-filter-icon />
+      </button>
+    }
+
+    <!-- The settings sheet, offered from `canManage` alone. -->
+    @if ((loaded()?.abilities?.canManage ?? false) && !reordering()) {
+      <button
+        (click)="openSettings()"
+        [attr.aria-label]="'list.settings.title' | rokuT"
+        libPageHeaderAction
+        type="button"
+      >
+        <lib-gear-icon />
+      </button>
+    }
+  </ng-container>
+</lib-page-header>
 
 <main #column class="page">
-  <!--
-    The string moves to the accessible name, so nothing is lost for a screen reader
-    when the label becomes a glyph. In reorder mode this ends the mode rather than
-    leaving the page, which is what makes the mode safe to enter (rule L4).
-  -->
-  <button
-    (click)="back()"
-    [attr.aria-label]="'list.header.back' | rokuT"
-    class="back"
-    type="button"
-  >
-    <lib-chevron-left-icon class="back-glyph" />
-  </button>
-
-  <!--
-    One union, read once. Each state is its own `@if` on `current.kind` rather than an
-    `@else if` chain, because a chain does not narrow a discriminated union far enough
-    for the compiler to accept the branches that carry extra fields.
-  -->
-  @let current = state();
-
   @if (current.kind === 'gone') {
     <div class="state">
       <p class="state-body">
@@ -63,17 +87,14 @@
 
   @if (current.kind !== 'error' && current.kind !== 'gone') {
     <!--
-      The header draws from the cache when the caller arrived from the group page, so
-      the common path shows a named list on the first frame and skeletons only the
-      lines. On a cold arrival the title skeletons too and the lines still load, which
-      is rule L2 and is the whole reason these are two requests.
+      The first block of the content: which group, how far the shop has got and who
+      else is here. It draws from the cache when the caller arrived from the group
+      page, so the common path shows the progress on the first frame and skeletons only
+      the lines. On a cold arrival the lines still load without it, which is rule L2
+      and is the whole reason these are two requests.
     -->
     @if (header(); as list) {
-      <lib-list-header
-        (openSettings)="openSettings()"
-        [hasMenu]="(loaded()?.abilities?.canManage ?? false) && !reordering()"
-        [header]="list"
-      />
+      <lib-list-header [header]="list" />
     }
   }
 
@@ -105,7 +126,7 @@
     @if (typing()) {
       <!--
         What the composer's field found (velista 0117, rule F1), in place of the
-        list and its tools row: the lines that match first, drawn by the same rows
+        list: the lines that match first, drawn by the same rows
         the list uses, then from the third character the catalog's cards.
 
         Every control in here cancels mousedown, once, on the region, so nothing
@@ -177,20 +198,6 @@
         <p class="state-body">{{ 'list.empty.body' | rokuT }}</p>
       </div>
     } @else {
-      <!--
-        The count and the filter (velista 0082, section 2), the basket's row with no
-        chip row: the filter button's badge says that something is on. Sticky at the
-        top of the scroll, and absent in reorder mode, where the order is the thing
-        being edited. No search of its own: the composer's field is the search
-        (velista 0117).
-      -->
-      @if (!reordering()) {
-        <lib-list-tools
-          (openFilter)="openFilter()"
-          [activeCount]="activeCount()"
-        />
-      }
-
       @let shown = groups();
       @if (nothingShown()) {
         <!--

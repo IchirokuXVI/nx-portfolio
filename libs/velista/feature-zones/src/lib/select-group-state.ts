@@ -126,7 +126,6 @@ function toHeader(
   return {
     id: zone.id,
     name: zone.name,
-    initial: initialOf(zone.name),
     role: zone.myRole,
     memberCount: zone.counts.memberCount,
     // Under the member count, which is the natural pairing: the two answer the same
@@ -159,21 +158,4 @@ function toListRow(
     wantedCount: list.wantedCount,
     viewers,
   };
-}
-
-/**
- * The letter in the tile.
- *
- * Iterated as code points rather than sliced, because slicing cuts a surrogate pair in
- * half and a group named with an emoji would render the replacement character. The same
- * function `selectHomeState` uses, duplicated rather than shared: it is four lines, and
- * the alternative is a utility library that exists to hold one of them.
- */
-function initialOf(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed === '') {
-    return '';
-  }
-
-  return (Array.from(trimmed)[0] ?? '').toLocaleUpperCase();
 }

@@ -47,7 +47,9 @@ const map = mountShopMap(hostElement, {
   onChange: (events) => {}, // WalkEvent[] for the log
   onLongPress: (at, area, client) => {},
   onSuggestion: (id) => {},
-  onSection: (section) => {},
+  onMark: (mark) => {}, // mapper look: a mark's pin was tapped
+  onArea: (area) => {}, // shopper looks: an area was tapped
+  onNote: (note) => {}, // shopper looks: a note was tapped
 });
 map.setDocument(next);
 map.destroy();
@@ -56,8 +58,34 @@ map.destroy();
 The host element needs a size. The map fills it, fits the content on mount and on
 `fitToContent()`, and keeps fitting until somebody zooms or pans, so a map that grows
 while somebody walks stays in view. Zoom runs from everything to half a metre in 28 css
-pixels, by pinch, wheel, double tap and drag (two fingers in the mapper look, where one
-finger draws).
+pixels, by pinch, wheel and double tap. One finger moves the map in the shopper looks and
+draws in the mapper look.
+
+Two fingers move the map in every look (velista `plans/0129`). The map follows the point
+between the fingers and the scale does not change. The gesture becomes a zoom only after
+the distance between the fingers changes by more than a dead zone from where it started:
+the larger of 12 percent and 24 css pixels. From that moment the scale follows the
+fingers, measured from the distance at which they left the dead zone, so the map does not
+jump. A zoom stays a zoom until both fingers lift. `pinch.ts` holds the rule.
+
+## Taps
+
+A tap is a press released within 8 css pixels of where it landed, however long it was
+held. A drag past that reports no tap, and neither does a two finger gesture. A second
+finger that lands during a press cancels it.
+
+- **Mapper look.** A mark's pin is asked first, within 22 css pixels of its centre at the
+  scale the pin is drawn, and reports `onMark(mark)`. Then the handles, the suggestions
+  and the areas, as before. A drag or a long press that starts on a pin acts on what is
+  under the pin.
+- **Shopper looks.** A note is asked first, like a pin, and reports `onNote(note)`. Then
+  any area that is not `path` or `blocked` reports `onArea(area)`. The host decides what
+  opens: the canvas does not know which areas name a section the shop has.
+
+A tap is reported on `pointerup`. After a quick touch the browser then sends a `click` at
+the same point. If the host opened a sheet for the tap, that click lands on the sheet's
+scrim and closes it. So the canvas consumes the one click that follows a tap, at the
+tap's point, before any element hears it.
 
 Every gesture of the mapper look reports a finished change as `area-put` events through
 `onChange` and applies it at once. The host appends the events to the log and then calls
