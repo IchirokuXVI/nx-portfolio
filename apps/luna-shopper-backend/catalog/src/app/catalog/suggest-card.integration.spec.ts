@@ -144,7 +144,7 @@ describeIntegration(
           await items.create({
             userId: OWNER,
             name: { en: name, es: name },
-            categoryIds: [categoryId('other-dairy')],
+            categoryIds: [categoryId('milk')],
             defaultUnit: UnitOfMeasure.LITER,
             productGroupId,
           })

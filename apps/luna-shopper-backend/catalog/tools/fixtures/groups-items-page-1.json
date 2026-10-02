@@ -13,10 +13,10 @@
       "unitSize": 1,
       "categories": [
         {
-          "id": "0eabbe7e-1f72-53eb-85ed-78686d098ba4",
-          "parentId": "6124c1d7-829f-5a9e-91ff-9a9732a838e6",
-          "slug": "other-dairy",
-          "name": { "en": "Other dairy", "es": "Otros lácteos" }
+          "id": "f24b9e5b-8d91-5450-87e7-9f6669138e36",
+          "parentId": "1e2d7d3d-3f84-5948-a425-1b6e6f9095c6",
+          "slug": "milk",
+          "name": { "en": "Milk", "es": "Leche" }
         }
       ],
       "defaultUnit": "LITER",
@@ -32,10 +32,10 @@
       "unitSize": 1,
       "categories": [
         {
-          "id": "41f8ae84-9986-5f85-825c-b867f5a39852",
-          "parentId": "308e49de-eaa7-59bd-aebd-938fabbcf84c",
-          "slug": "other-pantry",
-          "name": { "en": "Other pantry", "es": "Otra despensa" }
+          "id": "447cd522-fa44-5edf-8737-4425140cd441",
+          "parentId": "5152b830-6ecc-5936-bd44-ea0f69a22458",
+          "slug": "rice",
+          "name": { "en": "Rice", "es": "Arroz" }
         }
       ],
       "defaultUnit": "KILOGRAM",
@@ -54,10 +54,13 @@
       "unitSize": 1,
       "categories": [
         {
-          "id": "a6a5ca6c-b244-5092-89aa-d5fea61b98b8",
-          "parentId": "cf4515fb-1c59-55a5-980c-78d73d13916a",
-          "slug": "other-drinks",
-          "name": { "en": "Other drinks", "es": "Otras bebidas" }
+          "id": "20a9cb46-f247-5728-8c21-1631c4f8f907",
+          "parentId": "1e2d7d3d-3f84-5948-a425-1b6e6f9095c6",
+          "slug": "plant-based-drinks-and-horchata",
+          "name": {
+            "en": "Plant-based drinks and horchata",
+            "es": "Bebidas vegetales y horchatas"
+          }
         }
       ],
       "defaultUnit": "LITER",

@@ -61,7 +61,7 @@ const item = (id: string) =>
     sku: null,
     ean: null,
     unitSize: '1.5',
-    categoryIds: ['other-dairy'],
+    categoryIds: ['milk'],
     defaultUnit: UnitOfMeasure.LITER,
     productGroupId: null,
     createdAt: new Date(),

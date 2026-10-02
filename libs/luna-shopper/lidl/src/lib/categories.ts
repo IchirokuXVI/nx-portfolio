@@ -2,9 +2,9 @@ import { LIDL_GROCERY_CATEGORIES } from './types';
 
 /**
  * LIDL's need world path mapped onto the leaves of the category taxonomy (plan
- * 0089, section 5, retargeted by plan 0166, section 7). The answer is a leaf
- * slug from appendix A of plan 0166, or null; the harvester turns the slug
- * into a row and null into `uncategorised`.
+ * 0089, section 5, retargeted by plan 0166, section 7, and again by plan 0173,
+ * section 6). The answer is a leaf slug from appendix A of plan 0173, or null;
+ * the harvester turns the slug into a row and null into `uncategorised`.
  *
  * Two different questions live here and they are not the same one:
  *
@@ -29,13 +29,18 @@ function fold(name: string): string {
     .trim();
 }
 
+/** What a node answers when no leaf of the taxonomy is it. */
+const NO_LEAF = 'uncategorised';
+
 /**
  * The need world nodes that decide an aisle, measured against the whole
  * in-store assortment on 2026-09-06.
  *
  * The level three nodes under `Comida y cerca de la comida` are listed, plus
- * the one level two node that is food and is not under it, and each answers
- * its root's `other-*` leaf or the one leaf it is. **A level four node is
+ * the one level two node that is food and is not under it. Each answers the
+ * leaf that holds most of it, or `uncategorised` when it is as wide as a whole
+ * root or wider: the taxonomy has no catch all under a root, and a guessed leaf
+ * would misfile everything below the node. **A level four node is
  * listed only where a fixture or the research sample printed it**, and only
  * when it is narrower than its parent: resolution climbs towards the root, so
  * a level four node nobody listed still lands on its parent's answer.
@@ -47,49 +52,52 @@ function fold(name: string): string {
  * {@link isGroceryCategory} drops before anything is resolved.
  */
 const CATEGORY_NODES: ReadonlyArray<readonly [string, string]> = [
-  ['Frutas y hortalizas', 'other-produce'],
-  ['Fruta', 'fruit'],
-  ['Carne y aves', 'other-meat'],
-  ['Embutidos y fiambres', 'cured-ham-and-sausages'],
-  ['Pescado y marisco', 'other-seafood'],
-  ['Panadería', 'other-bakery'],
-  ['Pasteles', 'pastries-and-cakes'],
-  ['Quesos, productos lácteos y huevos', 'other-dairy'],
-  ['Queso', 'cheese'],
+  ['Frutas y hortalizas', NO_LEAF],
+  ['Fruta', 'other-fruits'],
+  ['Carne y aves', NO_LEAF],
+  ['Embutidos y fiambres', 'fuet-and-salchichon'],
+  ['Pescado y marisco', NO_LEAF],
+  ['Panadería', NO_LEAF],
+  ['Pasteles', 'pastries-cakes-and-sugar-cakes'],
+  ['Quesos, productos lácteos y huevos', NO_LEAF],
+  ['Queso', 'semi-cured'],
   ['Leche y nata', 'milk'],
-  ['Alimentos congelados', 'other-frozen'],
-  ['Helado', 'ice-cream'],
-  ['Pescado y marisco congelados', 'frozen-fish-and-seafood'],
-  ['Bebidas', 'other-drinks'],
-  ['Refrescos', 'soft-drinks'],
+  ['Alimentos congelados', NO_LEAF],
+  ['Helado', 'ice-creams-and-ice'],
+  [
+    'Pescado y marisco congelados',
+    'frozen-foods-and-ice-cream-fish-and-seafood',
+  ],
+  ['Bebidas', NO_LEAF],
+  ['Refrescos', 'cola'],
   // The level two node that is food: beer, wine and spirits are filed beside
   // `Comida y cerca de la comida` rather than under it.
-  ['Vino, cerveza y licores', 'other-drinks'],
-  ['Cerveza y sidra', 'beer'],
-  ['Dulces y aperitivos', 'other-snacks'],
-  ['Aperitivos salados', 'salty-snacks'],
-  ['Galletas y pasteles', 'biscuits'],
-  ['Productos de chocolate', 'chocolate-and-sweets'],
-  ['Café, té y cacao', 'coffee-tea-and-cocoa'],
-  ['Muesli y untables', 'other-breakfast'],
-  ['Reservas de alimentos', 'other-pantry'],
-  ['Ingredientes para repostería', 'flour-sugar-and-baking'],
-  ['Aceites, especias y salsas', 'other-pantry'],
-  ['Aceites y grasas', 'oil-and-vinegar'],
+  ['Vino, cerveza y licores', NO_LEAF],
+  ['Cerveza y sidra', 'beers'],
+  ['Dulces y aperitivos', NO_LEAF],
+  ['Aperitivos salados', 'savory-snacks'],
+  ['Galletas y pasteles', 'classic-and-digestive-biscuits'],
+  ['Productos de chocolate', 'chocolates-and-bonbons'],
+  ['Café, té y cacao', 'ground-coffee'],
+  ['Muesli y untables', 'whole-grain-cereals-and-muesli'],
+  ['Reservas de alimentos', NO_LEAF],
+  ['Ingredientes para repostería', 'flours-and-yeasts'],
+  ['Aceites, especias y salsas', NO_LEAF],
+  ['Aceites y grasas', 'oils'],
   // `Presupuesto` is LIDL's own word for the cheap household aisle, and it
   // holds toilet paper, detergent and cleaning products rather than food.
-  ['Presupuesto', 'other-household'],
-  ['Papel higiénico', 'paper-and-wipes'],
-  ['Detergentes y cuidado de la ropa', 'laundry'],
-  ['Productos de droguería y cuidado personal', 'other-personal-care'],
-  ['Cuidado del cabello', 'hair'],
-  ['Vitaminas y nutrición deportiva', 'pharmacy'],
-  ['Bebés y niños', 'other-baby'],
-  ['Alimentos para bebés y leche en polvo', 'baby-food'],
-  ['Platos precocinados', 'other-ready-meals'],
-  ['Platos preparados refrigerados', 'prepared-dishes'],
-  ['Artículos para mascotas', 'other-pets'],
-  ['Comida para gatos', 'cats'],
+  ['Presupuesto', NO_LEAF],
+  ['Papel higiénico', 'toilet-paper-kitchen-paper-and-napkins'],
+  ['Detergentes y cuidado de la ropa', 'detergents'],
+  ['Productos de droguería y cuidado personal', NO_LEAF],
+  ['Cuidado del cabello', 'shampoo'],
+  ['Vitaminas y nutrición deportiva', 'nutritional-supplements'],
+  ['Bebés y niños', NO_LEAF],
+  ['Alimentos para bebés y leche en polvo', 'milk-and-baby-food'],
+  ['Platos precocinados', NO_LEAF],
+  ['Platos preparados refrigerados', 'ready-to-eat-dishes'],
+  ['Artículos para mascotas', NO_LEAF],
+  ['Comida para gatos', 'dry-cat-food'],
 ];
 
 const BY_NAME = new Map<string, string>(

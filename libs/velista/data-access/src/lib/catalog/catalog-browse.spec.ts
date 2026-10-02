@@ -24,7 +24,7 @@ const ITEM_VIEW = {
   categories: [
     {
       id: 'cat-milk',
-      parentId: 'cat-dairy-and-eggs',
+      parentId: 'cat-eggs-milk-and-butter',
       slug: 'milk',
       name: { en: 'Milk', es: 'Leche' },
     },
@@ -107,7 +107,7 @@ describe('CatalogBrowseApi', () => {
             categories: [
               {
                 id: 'cat-milk',
-                parentId: 'cat-dairy-and-eggs',
+                parentId: 'cat-eggs-milk-and-butter',
                 slug: 'milk',
                 name: { en: 'Milk', es: 'Leche' },
               },
@@ -201,13 +201,18 @@ describe('CatalogBrowseApi', () => {
 
     it('sends a chosen category as categoryId, as it is, root or leaf (velista 0119)', async () => {
       const result = api.browse(
-        query({ categoryId: 'cat-frozen', soldBy: 'chain-m' })
+        query({
+          categoryId: 'cat-frozen-foods-and-ice-cream',
+          soldBy: 'chain-m',
+        })
       );
 
       const req = httpMock.expectOne(
         (r) => r.url === `${GATEWAY}/v1/catalog/items`
       );
-      expect(req.request.params.getAll('categoryId')).toEqual(['cat-frozen']);
+      expect(req.request.params.getAll('categoryId')).toEqual([
+        'cat-frozen-foods-and-ice-cream',
+      ]);
       expect(req.request.params.getAll('soldBy')).toEqual(['chain-m']);
       req.flush({ items: [], nextCursor: null });
       await result;
@@ -439,17 +444,16 @@ describe('CatalogBrowseMemory', () => {
       });
 
     const milk = await read('cat-milk');
-    const dairy = await read('cat-dairy-and-eggs');
+    const dairy = await read('cat-eggs-milk-and-butter');
 
     expect(milk?.items.map((row) => row.id).sort()).toEqual([
       'item-milk',
-      'item-milk-lactose',
       'item-milk-six',
     ]);
     expect(dairy?.items.map((row) => row.id)).toEqual(
-      expect.arrayContaining(['item-milk', 'item-eggs', 'item-yogurt'])
+      expect.arrayContaining(['item-milk', 'item-eggs', 'item-milk-lactose'])
     );
-    expect(dairy?.items).toHaveLength(5);
+    expect(dairy?.items).toHaveLength(4);
   });
 
   it('keeps every product and drops every price when nothing can be priced', async () => {

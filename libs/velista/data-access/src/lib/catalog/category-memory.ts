@@ -3,33 +3,40 @@ import type { CategoryNode, ProductCategory } from '@portfolio/velista/models';
 /**
  * A slice of the catalog's tree, in memory (velista `0118`, section 4).
  *
- * Four roots of backend `0166` appendix A and eleven of their leaves, with the real
+ * Nine roots of backend `0173` appendix A and thirteen of their leaves, with the real
  * slugs, names and positions, so a backend-less run and every memory store name their
  * products from the same rows the seed writes. The ids are `cat-<slug>`, readable in
  * a failing spec where the seed derives a uuid from the same slug.
  *
  * The counts are the products {@link CatalogBrowseMemory} holds under each row, and a
- * root counts the products under its children. `plant-drinks` holds none there, which
- * is the empty leaf a picker hides.
+ * root counts the products under its children. `plant-based-drinks-and-horchata` and
+ * `freshly-baked-bread` hold none there, which is the empty leaf a picker hides.
  */
-// One row per line, as the taxonomy table in backend 0166 reads.
+// One row per line, as the taxonomy table in backend 0173 reads.
 // prettier-ignore
 export const MEMORY_CATEGORIES: readonly CategoryNode[] = [
-  root('dairy-and-eggs', 'Dairy and eggs', 'Lácteos y huevos', 4, 5),
-  leaf('milk', 'dairy-and-eggs', 'Milk', 'Leche', 0, 3),
-  leaf('plant-drinks', 'dairy-and-eggs', 'Plant based drinks', 'Bebidas vegetales', 1, 0),
-  leaf('yogurts-and-desserts', 'dairy-and-eggs', 'Yogurts and desserts', 'Yogures y postres', 2, 1),
-  leaf('eggs', 'dairy-and-eggs', 'Eggs', 'Huevos', 4, 1),
-  root('bakery', 'Bakery', 'Panadería y bollería', 5, 1),
-  leaf('bread', 'bakery', 'Bread', 'Pan', 0, 1),
-  root('breakfast-and-sweets', 'Breakfast and sweets', 'Desayuno y dulces', 6, 1),
-  leaf('coffee-tea-and-cocoa', 'breakfast-and-sweets', 'Coffee, tea and cocoa', 'Café, té y cacao', 4, 1),
-  root('pantry', 'Pantry', 'Despensa', 7, 5),
-  leaf('pasta-rice-and-legumes', 'pantry', 'Pasta, rice and legumes', 'Pasta, arroz y legumbres', 0, 1),
-  leaf('canned-food', 'pantry', 'Canned food', 'Conservas', 1, 1),
-  leaf('oil-and-vinegar', 'pantry', 'Oil and vinegar', 'Aceite y vinagre', 2, 1),
-  leaf('flour-sugar-and-baking', 'pantry', 'Flour, sugar and baking', 'Harina, azúcar y repostería', 4, 1),
-  leaf('soups-and-stock', 'pantry', 'Soups and stock', 'Sopas y caldos', 6, 1),
+  root('eggs-milk-and-butter', 'Eggs, milk, and butter', 'Huevos, leche y mantequilla', 6, 4),
+  leaf('eggs', 'eggs-milk-and-butter', 'Eggs', 'Huevos', 0, 1),
+  leaf('milk', 'eggs-milk-and-butter', 'Milk', 'Leche', 1, 2),
+  leaf('lactose-free-and-fortified-milk', 'eggs-milk-and-butter', 'Lactose-free and fortified milk', 'Leche sin lactosa y enriquecidas', 2, 1),
+  leaf('plant-based-drinks-and-horchata', 'eggs-milk-and-butter', 'Plant-based drinks and horchata', 'Bebidas vegetales y horchatas', 3, 0),
+  root('bakery', 'Bakery', 'Panadería', 7, 1),
+  leaf('freshly-baked-bread', 'bakery', 'Freshly baked bread', 'Pan recién horneado', 0, 0),
+  leaf('sliced-and-specialty-breads', 'bakery', 'Sliced and specialty breads', 'Pan de molde y especiales', 1, 1),
+  root('yoghurts-and-desserts', 'Yoghurts and desserts', 'Yogures y postres', 8, 1),
+  leaf('natural-and-skimmed-yogurts', 'yoghurts-and-desserts', 'Natural and skimmed yogurts', 'Yogures naturales y desnatados', 0, 1),
+  root('rice-pasta-and-pulses', 'Rice, pasta and pulses', 'Arroz, pastas y legumbres', 10, 1),
+  leaf('rice', 'rice-pasta-and-pulses', 'Rice', 'Arroz', 0, 1),
+  root('oils-sauces-and-spices', 'Oils, sauces and spices', 'Aceites, salsas y especias', 11, 1),
+  leaf('oils', 'oils-sauces-and-spices', 'Oils', 'Aceites', 0, 1),
+  root('canned-food-broths-and-creams', 'Canned food, broths and creams', 'Conservas, caldos y cremas', 12, 1),
+  leaf('tuna-and-bonito', 'canned-food-broths-and-creams', 'Tuna and bonito', 'Atún y bonito', 0, 1),
+  root('coffee-cocoa-and-infusions', 'Coffee, cocoa and infusions', 'Café, cacao e infusiones', 13, 1),
+  leaf('ground-coffee', 'coffee-cocoa-and-infusions', 'Ground coffee', 'Café molido', 3, 1),
+  root('pastries-cakes-and-sugar', 'Pastries, cakes, and sugar', 'Bollería, repostería y azúcar', 14, 1),
+  leaf('sugar-honey-and-sweeteners', 'pastries-cakes-and-sugar', 'Sugar, honey, and sweeteners', 'Azúcar, miel y edulcorantes', 6, 1),
+  root('prepared-meals-and-pizzas', 'Prepared meals and pizzas', 'Platos preparados y pizzas', 17, 1),
+  leaf('gazpachos-and-salmorejos', 'prepared-meals-and-pizzas', 'Gazpachos and salmorejos', 'Gazpachos y salmorejos', 9, 1),
 ];
 
 /**

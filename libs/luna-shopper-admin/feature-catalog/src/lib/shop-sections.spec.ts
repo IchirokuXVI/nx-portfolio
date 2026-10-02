@@ -332,7 +332,11 @@ describe('the Sections tab of a chain', () => {
     ]);
     const chilled = panel.sections()[1];
     expect(panel.covered(chilled)).toEqual([
-      { id: 'cat_dairy-and-eggs', name: 'Dairy and eggs', root: true },
+      {
+        id: 'cat_eggs-milk-and-butter',
+        name: 'Eggs, milk, and butter',
+        root: true,
+      },
     ]);
     expect(text(fixture)).toContain('catalog.chainSections.coversAll');
     expect(text(fixture)).toContain('catalog.chainSections.coversNothing');

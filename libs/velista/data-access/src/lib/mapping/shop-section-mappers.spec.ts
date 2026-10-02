@@ -8,7 +8,7 @@ describe('toShopSections', () => {
     slug: 'fruit',
     name: { en: 'Fruit and vegetables', es: 'Fruta y verdura' },
     position: 3,
-    categoryIds: ['cat-fruit', 'cat-vegetables'],
+    categoryIds: ['cat-fruits', 'cat-vegetables'],
   };
   const BAKERY = {
     id: 'sec-bakery',
@@ -33,7 +33,7 @@ describe('toShopSections', () => {
           slug: 'fruit',
           name: { en: 'Fruit and vegetables', es: 'Fruta y verdura' },
           position: 3,
-          categoryIds: ['cat-fruit', 'cat-vegetables'],
+          categoryIds: ['cat-fruits', 'cat-vegetables'],
         },
         {
           id: 'sec-bakery',

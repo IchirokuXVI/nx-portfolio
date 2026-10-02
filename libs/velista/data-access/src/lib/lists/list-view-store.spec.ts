@@ -44,24 +44,24 @@ function product(id: string, en: string, ...slugs: string[]): CatalogItem {
 }
 
 const LINES = [
-  line('l1', 'Zanahorias', ['carrot']),
+  line('l1', 'Atún', ['tuna']),
   line('l2', 'Leche', ['milk', 'oat']),
   line('l3', 'Bolsas'),
 ];
 
 const CATALOG = [
-  product('carrot', 'Carrots', 'canned-food'),
+  product('tuna', 'Light tuna', 'tuna-and-bonito'),
   product('milk', 'Whole milk', 'milk'),
-  product('oat', 'Oat drink', 'plant-drinks', 'milk'),
+  product('oat', 'Oat drink', 'plant-based-drinks-and-horchata', 'milk'),
 ];
 
 /** Three rows of the tree, in an order that is not the order the list meets them. */
 const TREE: readonly CategoryNode[] = [
-  root('dairy-and-eggs', 0),
-  leaf('plant-drinks', 'dairy-and-eggs', 0),
-  leaf('milk', 'dairy-and-eggs', 1),
-  root('pantry', 1),
-  leaf('canned-food', 'pantry', 0),
+  root('canned-food-broths-and-creams', 12),
+  leaf('tuna-and-bonito', 'canned-food-broths-and-creams', 0),
+  root('eggs-milk-and-butter', 6),
+  leaf('plant-based-drinks-and-horchata', 'eggs-milk-and-butter', 3),
+  leaf('milk', 'eggs-milk-and-butter', 1),
 ];
 
 function root(slug: string, position: number): CategoryNode {
@@ -114,9 +114,13 @@ describe('ListViewStore', () => {
 
     // First appearance order, because the tree has not landed.
     expect(view.categoryCounts()).toEqual([
-      { category: 'cat-canned-food', lines: 1, name: 'Canned food' },
+      { category: 'cat-tuna-and-bonito', lines: 1, name: 'Tuna and bonito' },
       { category: 'cat-milk', lines: 1, name: 'Milk' },
-      { category: 'cat-plant-drinks', lines: 1, name: 'Plant based drinks' },
+      {
+        category: 'cat-plant-based-drinks-and-horchata',
+        lines: 1,
+        name: 'Plant-based drinks and horchata',
+      },
       { category: 'NONE', lines: 1, name: null },
     ]);
   });
@@ -125,9 +129,9 @@ describe('ListViewStore', () => {
     const view = harness(new Map(), fakeCategoryStore(), 'es');
 
     expect(view.categoryCounts().map((row) => row.name)).toEqual([
-      'Conservas',
+      'Atún y bonito',
       'Leche',
-      'Bebidas vegetales',
+      'Bebidas vegetales y horchatas',
       null,
     ]);
     expect(view.categoryName('cat-milk')).toBe('Leche');
@@ -142,9 +146,9 @@ describe('ListViewStore', () => {
     tree.land(TREE);
 
     expect(view.categoryCounts().map((row) => row.category)).toEqual([
-      'cat-plant-drinks',
       'cat-milk',
-      'cat-canned-food',
+      'cat-plant-based-drinks-and-horchata',
+      'cat-tuna-and-bonito',
       'NONE',
     ]);
   });
@@ -155,7 +159,7 @@ describe('ListViewStore', () => {
     view.search('oat drink');
     expect(ids(view.compose(LINES).lines)).toEqual(['l2']);
 
-    view.search('canned');
+    view.search('bonito');
     expect(ids(view.compose(LINES).lines)).toEqual(['l1']);
   });
 

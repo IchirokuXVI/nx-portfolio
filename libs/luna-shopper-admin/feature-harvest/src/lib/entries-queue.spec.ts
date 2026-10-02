@@ -9,8 +9,8 @@ import {
   DeploymentStore,
   HARVEST_SERVICE,
   HarvestMemory,
-  type HarvestServiceI,
   ServerReachability,
+  type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import { EntriesQueuePage } from './entries-queue-page';
@@ -529,7 +529,7 @@ describe('the one queue, deciding a row', () => {
     const { page, calls } = await opened(MERCADONA);
 
     page.nameEs.set('Leche entera de vaca');
-    page.categoryIds.set(['cat_milk', 'cat_other-dairy']);
+    page.categoryIds.set(['cat_milk', 'cat_lactose-free-and-fortified-milk']);
     page.createItem();
     await drain();
 
@@ -537,7 +537,7 @@ describe('the one queue, deciding a row', () => {
     // picked (backend plan 0166, section 3).
     expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({
       name: { es: 'Leche entera de vaca' },
-      categorySlugs: ['milk', 'other-dairy'],
+      categorySlugs: ['milk', 'lactose-free-and-fortified-milk'],
     });
   });
 

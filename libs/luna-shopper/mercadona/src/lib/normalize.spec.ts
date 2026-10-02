@@ -21,7 +21,7 @@ describe('normalizeProduct', () => {
   it('maps the ordinary product whole, its category read from the deepest node', () => {
     // The deepest node ("Aceite, vinagre y sal") is a child the table lists
     // under its section, so the product lands on that leaf rather than on the
-    // section's catch all (plan 0166, section 7).
+    // section's own answer (plan 0166, section 7).
     expect(normalizeProduct(oliveOil, { observedAt: OBSERVED_AT })).toEqual({
       externalId: '4241',
       ean: '8480000135636',
@@ -30,7 +30,7 @@ describe('normalizeProduct', () => {
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
-      categorySlug: 'oil-and-vinegar',
+      categorySlug: 'oils',
       categoryPath: ['Aceite, especias y salsas', 'Aceite, vinagre y sal'],
       price: 8.75,
       unitPrice: 8.75,

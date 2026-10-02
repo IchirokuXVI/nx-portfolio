@@ -170,7 +170,7 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       userId: actorId,
       name: { en: 'Semi Skimmed 1L', es: 'Semidesnatada 1L' },
       brand: 'Pascual',
-      categoryIds: [categoryId('other-dairy')],
+      categoryIds: [categoryId('milk')],
       defaultUnit: UnitOfMeasure.LITER,
     });
   }

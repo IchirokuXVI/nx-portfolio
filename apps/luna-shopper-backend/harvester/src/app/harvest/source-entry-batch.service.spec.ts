@@ -437,7 +437,7 @@ describe('SourceEntryBatchService', () => {
             ref: 'cola',
             item: {
               name: { es: 'Refresco' },
-              categorySlugs: ['soft-drinks', 'juices'],
+              categorySlugs: ['cola', 'orange'],
             },
             expect: expectFresh,
           },
@@ -451,7 +451,7 @@ describe('SourceEntryBatchService', () => {
         expect.objectContaining({ categoryIds: ['cat-milk'] }),
         // The override, in the order the file wrote it.
         expect.objectContaining({
-          categoryIds: ['cat-soft-drinks', 'cat-juices'],
+          categoryIds: ['cat-cola', 'cat-orange'],
         }),
       ]);
     });

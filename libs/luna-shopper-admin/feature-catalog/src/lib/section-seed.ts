@@ -10,7 +10,7 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
  *
  * - **Offers** covers no category at all. It is the aisle by the entrance that
  *   holds whatever is on offer, so a product is only ever in it by a pin.
- * - **Chilled** covers the root `dairy-and-eggs`, which means every category
+ * - **Chilled** covers the root `eggs-milk-and-butter`, which means every category
  *   inside it: the milk is there by its leaf `milk`, with nothing configured.
  * - **The olive oil is pinned to Offers** in Mercadona, so at any Mercadona
  *   shop it is in Offers and nowhere else.
@@ -46,7 +46,7 @@ export const SECTION_SEED: readonly Wire.CatalogSupermarketSectionView[] = [
     slug: 'chilled',
     name: { en: 'Chilled', es: 'Refrigerados' },
     position: 1,
-    categoryIds: [seededCategoryId('dairy-and-eggs')],
+    categoryIds: [seededCategoryId('eggs-milk-and-butter')],
     locationCount: 3,
   },
 ];

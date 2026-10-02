@@ -214,7 +214,7 @@ An entry whose only candidate is the same product in another size:
     "brand": "Carbonell",
     "unitSize": 750,
     "defaultUnit": "MILLILITER",
-    "categorySlugs": ["oil-and-vinegar"],
+    "categorySlugs": ["oils"],
     "ean": "8410010001234"
   },
   "confidence": 0.94,

@@ -23,6 +23,7 @@ import { CategoryTree1758100000000 } from './1758100000000-CategoryTree';
 import { ShopSections1758200000000 } from './1758200000000-ShopSections';
 import { LocationFootprint1758300000000 } from './1758300000000-LocationFootprint';
 import { ShopWalks1758400000000 } from './1758400000000-ShopWalks';
+import { DiaCategoryTree1758500000000 } from './1758500000000-DiaCategoryTree';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -59,4 +60,5 @@ export const CATALOG_MIGRATIONS = [
   ShopSections1758200000000,
   LocationFootprint1758300000000,
   ShopWalks1758400000000,
+  DiaCategoryTree1758500000000,
 ];

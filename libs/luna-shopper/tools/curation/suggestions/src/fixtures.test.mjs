@@ -157,7 +157,7 @@ test('a leaflet row carrying its brand and size in the name is a REVIEW', async 
         brand: 'Hacendado',
         unitSize: 1,
         defaultUnit: 'LITER',
-        categorySlugs: ['oil-and-vinegar'],
+        categorySlugs: ['oils'],
       },
     },
     gateways: world.gateways,

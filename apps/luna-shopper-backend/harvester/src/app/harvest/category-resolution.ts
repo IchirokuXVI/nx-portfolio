@@ -4,8 +4,8 @@ import { resolveCategory } from '@portfolio/luna-shopper/mercadona';
 /**
  * The leaf a product lands on when its source path resolves to nothing (plan
  * 0166, section 7). A row of the tree like any other, so an operator can move
- * the product out of it later; the chain libraries answer null and never name
- * it themselves.
+ * the product out of it later. Since plan 0173 the chain libraries answer it
+ * too, for a section no leaf fits, and null for a path they cannot read.
  */
 export const UNCATEGORISED_SLUG = 'uncategorised';
 

@@ -7,10 +7,11 @@ import { signIn } from './support/app';
  * catalog tab, the page of parents, one parent's children, the tab narrowed to a
  * child, and the chip cleared.
  *
- * The demo world files Milk under the `milk` leaf of Dairy and eggs and Bread under
- * `bread` of Bakery (backend plan 0166), and the catalog seed writes the tree those
- * slugs name, so both roots have a product under them and are drawn. Every name
- * asserted here is the English one the seed gives the row.
+ * The demo world files Milk under the `milk` leaf of Eggs, milk, and butter and
+ * Bread under `freshly-baked-bread` of Bakery (backend plan 0173), and the catalog
+ * seed writes the tree those slugs name, so both roots have a product under them
+ * and are drawn. Every name asserted here is the English one the seed gives the
+ * row.
  */
 test.describe('the category picker', () => {
   test('narrows the catalog by a category and clears it again', async ({
@@ -40,21 +41,23 @@ test.describe('the category picker', () => {
         page.getByRole('link', { name: /^Bakery, \d[\d,]* products?$/ })
       ).toBeVisible();
       await page
-        .getByRole('link', { name: /^Dairy and eggs, \d[\d,]* products?$/ })
+        .getByRole('link', {
+          name: /^Eggs, milk, and butter, \d[\d,]* products?$/,
+        })
         .click();
     });
 
     await test.step('3. one parent: Everything in it, then its children', async () => {
       await expect(page).toHaveURL(
-        /\/en\/catalog\/categories\/dairy-and-eggs$/
+        /\/en\/catalog\/categories\/eggs-milk-and-butter$/
       );
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Dairy and eggs' })
+        page.getByRole('heading', { level: 1, name: 'Eggs, milk, and butter' })
       ).toBeVisible();
       await expectCatalogLit(page);
       await expect(
         page.getByRole('link', {
-          name: /^Everything in Dairy and eggs, \d[\d,]* products?$/,
+          name: /^Everything in Eggs, milk, and butter, \d[\d,]* products?$/,
         })
       ).toBeVisible();
 
@@ -67,7 +70,7 @@ test.describe('the category picker', () => {
       await expect(page).toHaveURL(/\/en\/catalog\?category=milk$/);
       await expect(
         page.getByRole('link', {
-          name: 'Dairy and eggs, Milk. Change the category',
+          name: 'Eggs, milk, and butter, Milk. Change the category',
         })
       ).toBeVisible();
       await expect(page.getByRole('searchbox')).toHaveAttribute(

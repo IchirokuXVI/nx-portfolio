@@ -4,14 +4,15 @@ import { referenceCategoryRows } from './categories';
 import { categoryId } from './ids';
 
 /**
- * The category tree of appendix A (plan 0166, section 5), upserted by the id
- * each slug derives, names and positions included, and never deleted from.
+ * The category tree of plan 0173's appendix A, upserted by the id each slug
+ * derives, names and positions included, and never deleted from (plan 0166,
+ * section 5).
  *
  * Roots first, because a child's parent has to exist before it does. A row
  * the back office added survives, and a rename in the taxonomy file wins on
- * the next boot. The migration
- * already inserted the roots and the twelve landing leaves under these same
- * ids, so on a migrated database this updates those and inserts the rest.
+ * the next boot. The migration `DiaCategoryTree1758500000000` already wrote
+ * the whole tree under these same ids, so on a migrated database this inserts
+ * nothing and only puts back a name or a position that was edited.
  *
  * Exported for the demo world seeder, whose products name leaves too.
  */

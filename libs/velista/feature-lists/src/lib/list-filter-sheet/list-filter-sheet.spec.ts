@@ -50,8 +50,8 @@ function product(id: string, slug: string): CatalogItem {
 }
 
 /**
- * One pantry line, two milk lines, one with no products. The pantry line comes first,
- * so the tree's order (milk before pantry) is not the order the list meets them in.
+ * One rice line, two milk lines, one with no products. The rice line comes first,
+ * so the tree's order (milk before rice) is not the order the list meets them in.
  */
 const LINES = [
   line('rice', ['p-rice']),
@@ -63,7 +63,7 @@ const LINES = [
 const ITEMS = [
   product('p-milk', 'milk'),
   product('p-milk-six', 'milk'),
-  product('p-rice', 'pasta-rice-and-legumes'),
+  product('p-rice', 'rice'),
 ];
 
 function render(
@@ -155,7 +155,7 @@ describe('ListFilterSheet', () => {
 
     expect(
       radios(fixture, 'list-category').map((input) => input.value)
-    ).toEqual(['cat-milk', 'cat-pasta-rice-and-legumes', 'NONE']);
+    ).toEqual(['cat-milk', 'cat-rice', 'NONE']);
     const counts = fixture.debugElement
       .queryAll(By.css('.categories .choice-count'))
       .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
@@ -170,11 +170,7 @@ describe('ListFilterSheet', () => {
     const names = fixture.debugElement
       .queryAll(By.css('.categories .choice-title'))
       .map((node) => (node.nativeElement as HTMLElement).textContent?.trim());
-    expect(names).toEqual([
-      'Milk',
-      'Pasta, rice and legumes',
-      'list.view.noCategory',
-    ]);
+    expect(names).toEqual(['Milk', 'Rice', 'list.view.noCategory']);
   });
 
   it('draws the categories in first appearance order before the tree lands, and re-sorts when it does', () => {
@@ -184,14 +180,14 @@ describe('ListFilterSheet', () => {
     choose(fixture, radios(fixture, 'list-view')[1]);
     expect(
       radios(fixture, 'list-category').map((input) => input.value)
-    ).toEqual(['cat-pasta-rice-and-legumes', 'cat-milk', 'NONE']);
+    ).toEqual(['cat-rice', 'cat-milk', 'NONE']);
 
     tree.land(MEMORY_CATEGORIES);
     fixture.detectChanges();
 
     expect(
       radios(fixture, 'list-category').map((input) => input.value)
-    ).toEqual(['cat-milk', 'cat-pasta-rice-and-legumes', 'NONE']);
+    ).toEqual(['cat-milk', 'cat-rice', 'NONE']);
   });
 
   it('draws the categories as a radiogroup with a visible legend', () => {
@@ -236,7 +232,7 @@ describe('ListFilterSheet', () => {
 
     fixture.destroy();
 
-    expect(view.picked()).toBe('cat-pasta-rice-and-legumes');
+    expect(view.picked()).toBe('cat-rice');
   });
 
   it('puts both sections back on Reset', () => {

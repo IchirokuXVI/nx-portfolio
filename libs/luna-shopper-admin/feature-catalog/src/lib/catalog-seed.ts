@@ -278,7 +278,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000220011',
     unitSize: 1,
     packCount: null,
-    categories: categoriesOf('oil-and-vinegar'),
+    categories: categoriesOf('oils'),
     defaultUnit: 'LITER',
     productGroupId: 'pg_olive_oil',
   },
@@ -291,7 +291,7 @@ export const ITEM_SEED: readonly Wire.CatalogItemView[] = [
     ean: '8480000310071',
     unitSize: 750,
     packCount: null,
-    categories: categoriesOf('dishwashing'),
+    categories: categoriesOf('dishwasher'),
     defaultUnit: 'MILLILITER',
     // Curation has not reached it. Nothing is wrong with this row.
     productGroupId: null,
