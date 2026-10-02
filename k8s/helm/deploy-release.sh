@@ -76,7 +76,7 @@ RELEASE_STATUS="${RELEASE_STATUS:-none}"
 EVER_DEPLOYED=false
 if [ "$RELEASE_STATUS" != none ] \
   && helm history "$RELEASE_NAME" --namespace "$NAMESPACE" --output json 2>/dev/null \
-    | grep -q '"status":"\(deployed\|superseded\)"'; then
+    | grep '"status":"\(deployed\|superseded\)"' > /dev/null; then
   EVER_DEPLOYED=true
 fi
 
