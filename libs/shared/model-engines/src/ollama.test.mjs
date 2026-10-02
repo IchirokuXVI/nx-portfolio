@@ -796,9 +796,15 @@ test('a width above what was measured runs, and says so once', async () => {
 test('a width at what was measured says nothing, and neither does a single ask', async () => {
   const stderr = sink();
   const fake = pooledServer();
-  await engineOn(fake, { env: { OLLAMA_BATCH: '8' }, stderr }).askMany(
-    prompts(2)
-  );
+  // A stopped clock, because this test is about the width and the first round
+  // is timed on the real one otherwise. The fake answers at once, so on a busy
+  // runner two answers a millisecond apart read as a serialized server, and the
+  // other notice landed in a sink that must stay empty.
+  await engineOn(fake, {
+    env: { OLLAMA_BATCH: '8' },
+    stderr,
+    now: () => 0,
+  }).askMany(prompts(2));
   assert.deepEqual(stderr.written, []);
 
   // An engine that only ever answers `ask` has nothing to be warned about.
