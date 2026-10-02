@@ -18,7 +18,6 @@ import {
   type ShopMapLook,
 } from '@portfolio/luna-shopper/shop-map/editor';
 import type {
-  AreaKind,
   MapArea,
   MapMark,
   ShopMapDocumentV2,
@@ -93,13 +92,10 @@ export class ShopMapView {
   readonly markTapped = output<MapMark>();
 
   /**
-   * Mapper look (velista `0123`): whether a drawn or resized corner snaps to the
+   * Mapper look (velista `0123`): whether a moved or resized corner snaps to the
    * half metre squares. Off unless the page turns it on.
    */
   readonly snap = input(false);
-
-  /** Mapper look: the kind a drag on the floor draws. */
-  readonly drawKind = input<AreaKind>('shelf');
 
   /** Mapper look: the size shown beside a selected area, in the app's words. */
   readonly sizeLabel = input<((w: number, h: number) => string) | null>(null);
@@ -117,10 +113,10 @@ export class ShopMapView {
   /** Mapper look: a shelf suggestion was tapped, by its id. */
   readonly suggestionTapped = output<string>();
 
-  /** Mapper look: a finished draw, move or resize, as walk events. */
+  /** Mapper look: a finished move or resize, as walk events. */
   readonly changed = output<WalkEvent[]>();
 
-  /** Mapper look: an area was tapped or drawn, or the selection was cleared. */
+  /** Mapper look: an area was tapped, or the selection was cleared. */
   readonly areaSelected = output<MapArea | null>();
 
   /** Mapper look: a long press, with the point in metres and what is under it. */
@@ -158,7 +154,6 @@ export class ShopMapView {
           `${Math.round(w * 100) / 100} m × ${Math.round(h * 100) / 100} m`,
       });
       this._handle.setSnap(untracked(this.snap));
-      this._handle.setDrawKind(untracked(this.drawKind));
       this._handle.setBadges({ ...untracked(this.badges) });
       const faded = untracked(this.fadedAfter);
       if (faded !== null) {
@@ -195,11 +190,6 @@ export class ShopMapView {
     effect(() => {
       const snap = this.snap();
       untracked(() => this._handle?.setSnap(snap));
-    });
-
-    effect(() => {
-      const kind = this.drawKind();
-      untracked(() => this._handle?.setDrawKind(kind));
     });
 
     effect(() => {

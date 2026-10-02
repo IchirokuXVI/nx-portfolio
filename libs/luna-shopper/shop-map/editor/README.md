@@ -58,10 +58,12 @@ map.destroy();
 The host element needs a size. The map fills it, fits the content on mount and on
 `fitToContent()`, and keeps fitting until somebody zooms or pans, so a map that grows
 while somebody walks stays in view. Zoom runs from everything to half a metre in 28 css
-pixels, by pinch, wheel and double tap. One finger moves the map in the shopper looks and
-draws in the mapper look.
+pixels, by pinch, wheel and double tap. One finger moves the map in every look. In the
+mapper look a drag that starts on the selected area moves it, and one that starts on a
+corner handle resizes it. The canvas draws no new area: the host adds one from the menu a
+long press opens, and the person then resizes it.
 
-Two fingers move the map in every look (velista `plans/0129`). The map follows the point
+Two fingers move the map in every look too (velista `plans/0129`). The map follows the point
 between the fingers and the scale does not change. The gesture becomes a zoom only after
 the distance between the fingers changes by more than a dead zone from where it started:
 the larger of 12 percent and 24 css pixels. From that moment the scale follows the
@@ -89,7 +91,7 @@ tap's point, before any element hears it.
 
 Every gesture of the mapper look reports a finished change as `area-put` events through
 `onChange` and applies it at once. The host appends the events to the log and then calls
-`setDocument` with the fold. A draw, move or resize that `validateShopMapV2` refuses is
+`setDocument` with the fold. A move or resize that `validateShopMapV2` refuses is
 drawn in the refusal colour and not committed. It stays for under a second, and the next
 touch clears it at once.
 
@@ -105,9 +107,9 @@ area, only the drawn 16 px square does, and the rest moves the area. When two ta
 overlap, the nearest corner wins. An area under 16 px on a side moves from any press
 inside it. Zoom in to resize it.
 
-Three optional options exist for what the plan leaves to the host: `createId` (the id of
-an area drawn by hand, `crypto.randomUUID()` by default), `suggestionLabel` (the words on
-a suggestion, `Shelf?` by default) and `sizeLabel` (the size shown on a selected area).
+Two optional options exist for what the plan leaves to the host: `suggestionLabel` (the
+words on a suggestion, `Shelf?` by default) and `sizeLabel` (the size shown on a selected
+area).
 
 `setFadedAfter(logMs, log)` fades what comes after a point of the log. Marks carry their
 own log time. Areas and the walked floor do not, so the log is passed as well, and what
