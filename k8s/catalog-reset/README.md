@@ -102,3 +102,37 @@ migrations with the seed off, then the cleanup.
 | Gateway      | `/health/ready` answered 200 before and after.                                                           |
 | Second run   | `pre.sh` left both databases alone, and the cleanup changed 0 rows.                                      |
 | Dump restore | The restored catalog, harvester and core counts were equal to the counts before.                          |
+
+## Removing only the products
+
+Release task `0002-remove-catalog-products` keeps both databases and removes
+only the products. `remove-catalog-products.sh` deletes every row of catalog's
+`items`, and the foreign keys remove the prices and availability of those
+products. It then sends each harvester row that was bound to a product back to
+the queue. The task runs `cleanup-core-catalog-refs.sh` last, for core.
+
+Chains, shops, price scopes, price policies, brands, product groups, harvest
+runs, sources, discovered places, postal code requests and the source rows with
+their prices all stay.
+
+Run the script without arguments for a dry run. It prints the counts and rolls
+back.
+
+```sh
+k8s/catalog-reset/remove-catalog-products.sh
+k8s/catalog-reset/remove-catalog-products.sh --apply
+k8s/catalog-reset/cleanup-core-catalog-refs.sh --apply
+```
+
+### How it was tested
+
+On 2026-10-02, the scripts ran against Postgres containers on a copy of the
+volumes of slot 3. Slot 3 was only read.
+
+| Step       | Result                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------- |
+| Before     | catalog 2,290 products, 6,661 offers, 2,409 prices. Harvester 2,169 bound rows and 11 proposals.              |
+| After      | catalog 0 products, offers and prices. 6 chains, 13 shops, 17 price scopes, 65 brands and 161 groups stayed.  |
+| Harvester  | 2,180 rows went back to the queue. 16 runs, 4,323 source prices and 92 discovered places stayed.              |
+| Core       | 16 line products deleted, 16 lines rehashed, 11 purchases lost their product id and kept the price paid.      |
+| Second run | The catalog step left the table alone, and the other two steps changed 0 rows.                                |
