@@ -2009,7 +2009,7 @@
     "address": "Address",
     "size": "About {{size}} m²",
     "sizeSource": "Building size from OpenStreetMap",
-    "seeMap": "See the map",
+    "seeMap": "See the shop layout",
     "sections": "Sections",
     "sectionsHint": "in the order you walk them"
   },

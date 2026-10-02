@@ -194,7 +194,7 @@ export class ShopWalksStore {
     if (outcome.state === 'done') {
       const walk = this.summary(walkId);
       if (walk !== null) {
-        // The shop page's "See the map" follows whether a walk is shown.
+        // The shop page's "See the shop layout" follows whether a walk is shown.
         this._shops.forget(walk.locationId);
       }
     }

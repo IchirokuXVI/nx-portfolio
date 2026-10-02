@@ -71,7 +71,7 @@ describe('ShopPage', () => {
     ]);
   });
 
-  it('draws the address, the size and See the map', async () => {
+  it('draws the address, the size and See the shop layout', async () => {
     const { fixture } = await render('loc-tejares');
 
     expect(text(fixture, '.fact-sub')).toEqual([
