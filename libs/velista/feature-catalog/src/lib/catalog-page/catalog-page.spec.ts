@@ -487,31 +487,31 @@ describe('CatalogPage', () => {
       const { fixture, browse } = await render('priced', { category: 'milk' });
 
       expect(lastQuery(browse)).toMatchObject({ categoryId: 'cat-milk' });
-      expect(rows(fixture)).toBe(3);
+      expect(rows(fixture)).toBe(2);
       expect(categoriesLink(fixture)).toBeNull();
 
       const chipBody = categoryChip(fixture);
-      expect(chipBody?.textContent).toContain('Dairy and eggs');
+      expect(chipBody?.textContent).toContain('Eggs, milk, and butter');
       expect(chipBody?.textContent).toContain('Milk');
       expect(chipBody?.getAttribute('aria-label')).toBe(
         'catalog.categories.chip'
       );
       // Its body reopens the root's children page, carrying the choice to mark.
       expect(chipBody?.getAttribute('href')).toBe(
-        '/velista/en/catalog/categories/dairy-and-eggs?category=milk'
+        '/velista/en/catalog/categories/eggs-milk-and-butter?category=milk'
       );
       expect(field(fixture).placeholder).toBe('catalog.categories.search');
     });
 
     it('draws a chosen root by its name alone', async () => {
       const { fixture, browse } = await render('priced', {
-        category: 'dairy-and-eggs',
+        category: 'eggs-milk-and-butter',
       });
 
       expect(lastQuery(browse)).toMatchObject({
-        categoryId: 'cat-dairy-and-eggs',
+        categoryId: 'cat-eggs-milk-and-butter',
       });
-      expect(rows(fixture)).toBe(5);
+      expect(rows(fixture)).toBe(4);
       expect(host(fixture).querySelector('.category-chip-root')).toBeNull();
       expect(categoryChip(fixture)?.getAttribute('aria-label')).toBe(
         'catalog.categories.chipRoot'

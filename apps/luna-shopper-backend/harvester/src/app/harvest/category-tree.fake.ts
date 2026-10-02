@@ -5,7 +5,8 @@ import type {
 
 /**
  * A small category tree, as catalog's `category.tree` answers it, for the
- * harvester's tests (plan 0166, section 7).
+ * harvester's tests (plan 0166, section 7). It is a slice of the tree of plan
+ * 0173, appendix A: real roots, each with real leaves of its own.
  *
  * The ids are readable on purpose (`cat-milk` for `milk`), so an assertion on
  * what reached catalog says which leaf it meant. It holds the leaves the specs
@@ -35,14 +36,14 @@ export function fakeCategoryTree(): CategoryTreeView {
   });
   return {
     categories: [
-      root('dairy-and-eggs', 0),
-      root('drinks', 1),
-      root('other', 2),
-      root('cold-cuts-and-cheese', 3),
-      leaf('milk', 'dairy-and-eggs', 0),
-      leaf('cheese', 'cold-cuts-and-cheese', 0),
-      leaf('soft-drinks', 'drinks', 0),
-      leaf('juices', 'drinks', 1),
+      root('eggs-milk-and-butter', 6),
+      root('water-and-soft-drinks', 19),
+      root('juices-and-smoothies', 20),
+      root('other', 28),
+      leaf('eggs', 'eggs-milk-and-butter', 0),
+      leaf('milk', 'eggs-milk-and-butter', 1),
+      leaf('cola', 'water-and-soft-drinks', 1),
+      leaf('orange', 'juices-and-smoothies', 1),
       leaf('uncategorised', 'other', 0),
     ],
   };

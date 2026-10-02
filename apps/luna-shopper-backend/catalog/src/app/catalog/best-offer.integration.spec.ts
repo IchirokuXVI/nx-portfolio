@@ -138,7 +138,7 @@ describeIntegration(
           userId: OWNER,
           name: { en: 'Cerveza', es: 'Cerveza' },
           brand,
-          categoryIds: [categoryId('other-drinks')],
+          categoryIds: [categoryId('beers')],
           defaultUnit: UnitOfMeasure.LITER,
           productGroupId: beer.id,
         });

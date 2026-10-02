@@ -472,7 +472,7 @@ describe('SourceEntryService', () => {
         entryId: 'e-1',
         name: { es: 'Leche entera', en: 'Whole milk' },
         brand: null,
-        categorySlugs: ['soft-drinks', 'juices'],
+        categorySlugs: ['cola', 'orange'],
         defaultUnit: UnitOfMeasure.LITER,
       });
 
@@ -480,7 +480,7 @@ describe('SourceEntryService', () => {
         expect.objectContaining({
           name: { es: 'Leche entera', en: 'Whole milk' },
           brand: null,
-          categoryIds: ['cat-soft-drinks', 'cat-juices'],
+          categoryIds: ['cat-cola', 'cat-orange'],
           defaultUnit: UnitOfMeasure.LITER,
         })
       );

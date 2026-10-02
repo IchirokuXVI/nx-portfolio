@@ -29,9 +29,9 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
     categories: [
       {
         id: 'category-oil',
-        parentId: 'category-pantry',
-        slug: 'oil-and-vinegar',
-        name: { en: 'Oil and vinegar', es: 'Aceite y vinagre' },
+        parentId: 'category-oils-sauces-and-spices',
+        slug: 'oils',
+        name: { en: 'Oils', es: 'Aceites' },
       },
     ],
     defaultUnit: UnitOfMeasure.LITER,

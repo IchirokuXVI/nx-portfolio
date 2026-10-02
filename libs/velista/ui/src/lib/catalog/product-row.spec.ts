@@ -29,10 +29,10 @@ const OIL: CatalogProduct = {
   unit: 'LITER',
   categories: [
     {
-      id: 'cat-other-pantry',
-      parentId: 'cat-pantry',
-      slug: 'other-pantry',
-      name: { en: 'Other pantry', es: 'Otra despensa' },
+      id: 'cat-oils',
+      parentId: 'cat-oils-sauces-and-spices',
+      slug: 'oils',
+      name: { en: 'Oils', es: 'Aceites' },
     },
   ],
   offer: OFFER,

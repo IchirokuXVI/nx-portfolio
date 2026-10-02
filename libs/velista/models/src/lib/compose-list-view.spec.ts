@@ -19,11 +19,13 @@ import type { ProductCategory } from './product-category';
  * (uuids on the wire); readable ones here so a failure names the aisle.
  */
 const NAMES: Record<string, string> = {
-  fruit: 'Fruta',
+  'apples-and-pears': 'Manzanas y peras',
+  'potatoes-and-carrots': 'Patatas y zanahorias',
   milk: 'Leche',
   pork: 'Cerdo',
-  'canned-food': 'Conservas',
-  cleaning: 'Limpieza del hogar',
+  pates: 'Patés',
+  cereals: 'Cereales',
+  'film-aluminum-and-preservation': 'Film, aluminio y conservación',
 };
 
 function category(id: string, parentId = 'root'): ProductCategory {
@@ -77,31 +79,31 @@ describe('lineCategories', () => {
 
   const catalog = [
     product('milk-1l', 'milk'),
-    product('apple', 'fruit'),
+    product('apple', 'apples-and-pears'),
     // One product in two aisles, which backend `0166` allows.
-    product('pork-in-a-can', 'canned-food', 'pork'),
+    product('pork-in-a-can', 'pates', 'pork'),
     // A product whose categories none could be read.
     product('unreadable'),
   ];
   const itemOf = (id: string) => catalog.find((row) => row.id === id) ?? null;
   const tree: Record<string, number> = {
-    fruit: 0,
+    'apples-and-pears': 0,
     pork: 1,
     milk: 2,
-    'canned-food': 3,
+    pates: 3,
   };
   const rank = (id: string) => tree[id] ?? null;
 
   it('is the set of its products’ categories, in first appearance order while nothing is ranked', () => {
     expect(
       lineCategories(['milk-1l', 'apple', 'milk-1l', 'pork-in-a-can'], itemOf)
-    ).toEqual(['milk', 'fruit', 'canned-food', 'pork']);
+    ).toEqual(['milk', 'apples-and-pears', 'pates', 'pork']);
   });
 
   it('is in tree order once the tree ranks them', () => {
     expect(
       lineCategories(['milk-1l', 'apple', 'pork-in-a-can'], itemOf, rank)
-    ).toEqual(['fruit', 'pork', 'milk', 'canned-food']);
+    ).toEqual(['apples-and-pears', 'pork', 'milk', 'pates']);
   });
 
   it('puts a category the tree does not hold after the ranked ones', () => {
@@ -109,12 +111,12 @@ describe('lineCategories', () => {
       lineCategories(['apple', 'milk-1l'], itemOf, (id) =>
         id === 'milk' ? 0 : null
       )
-    ).toEqual(['milk', 'fruit']);
+    ).toEqual(['milk', 'apples-and-pears']);
   });
 
   it('holds every category of a product with several', () => {
     expect(lineCategories(['pork-in-a-can'], itemOf)).toEqual([
-      'canned-food',
+      'pates',
       'pork',
     ]);
   });
@@ -155,20 +157,20 @@ describe('composeListView', () => {
 
   describe('one category', () => {
     const table = {
-      l1: { categories: ['fruit'] as ListCategoryPick[] },
-      l2: { categories: ['pork', 'canned-food', 'milk'] as ListCategoryPick[] },
-      l3: { categories: ['canned-food'] as ListCategoryPick[] },
+      l1: { categories: ['potatoes-and-carrots'] as ListCategoryPick[] },
+      l2: { categories: ['pork', 'cereals', 'milk'] as ListCategoryPick[] },
+      l3: { categories: ['cereals'] as ListCategoryPick[] },
     };
 
     it('keeps only the lines holding the picked category, under its heading', () => {
       const view = composeListView(
         lines,
-        state({ view: 'category', category: 'canned-food' }),
+        state({ view: 'category', category: 'cereals' }),
         context(table)
       );
 
       expect(ids(view.lines)).toEqual(['l2', 'l3']);
-      expect(view.category).toBe('canned-food');
+      expect(view.category).toBe('cereals');
     });
 
     it('keeps the lines with no products under No category', () => {
@@ -195,7 +197,7 @@ describe('composeListView', () => {
     it('orders inside the view', () => {
       const view = composeListView(
         lines,
-        state({ order: 'alpha', view: 'category', category: 'canned-food' }),
+        state({ order: 'alpha', view: 'category', category: 'cereals' }),
         context(table)
       );
 
@@ -203,7 +205,7 @@ describe('composeListView', () => {
     });
 
     it('never draws a line twice, whichever of its categories is picked', () => {
-      for (const category of ['pork', 'canned-food', 'milk']) {
+      for (const category of ['pork', 'cereals', 'milk']) {
         const view = composeListView(
           [...lines, lines[1]],
           state({ view: 'category', category }),
@@ -216,15 +218,15 @@ describe('composeListView', () => {
 
   describe('the search', () => {
     const table = {
-      l1: { categories: ['fruit'] as ListCategoryPick[] },
+      l1: { categories: ['potatoes-and-carrots'] as ListCategoryPick[] },
       l3: {
         productGroupId: null,
-        categories: ['canned-food'] as ListCategoryPick[],
+        categories: ['cereals'] as ListCategoryPick[],
         products: ['Copos de avena Hacendado'],
       },
       l4: {
         productGroupId: null,
-        categories: ['cleaning'] as ListCategoryPick[],
+        categories: ['film-aluminum-and-preservation'] as ListCategoryPick[],
         products: ['Bolsas autocierre'],
       },
     };
@@ -240,19 +242,19 @@ describe('composeListView', () => {
     });
 
     it('matches a category name in the reader’s language, folded', () => {
-      const view = composeListView(lines, state(), context(table, 'LIMPIEZA'));
+      const view = composeListView(lines, state(), context(table, 'ALUMINIO'));
       expect(ids(view.lines)).toEqual(['l4']);
     });
 
     it('finds nothing by a category id', () => {
-      const view = composeListView(lines, state(), context(table, 'cleaning'));
+      const view = composeListView(lines, state(), context(table, 'aluminum'));
       expect(ids(view.lines)).toEqual([]);
     });
 
     it('applies on top of the category and the order', () => {
       const view = composeListView(
         lines,
-        state({ order: 'alpha', view: 'category', category: 'canned-food' }),
+        state({ order: 'alpha', view: 'category', category: 'cereals' }),
         context(table, 'avena')
       );
       expect(ids(view.lines)).toEqual(['l3']);
@@ -264,12 +266,12 @@ describe('listCategoryCounts', () => {
   const lines = [line('a', 'a'), line('b', 'b'), line('c', 'c')];
   const categories: Record<string, ListCategoryPick[]> = {
     a: [NO_CATEGORY],
-    b: ['canned-food', 'milk'],
+    b: ['cereals', 'milk'],
     c: ['milk'],
   };
 
   it('names only the categories present, in tree order, with No category last', () => {
-    const tree: Record<string, number> = { milk: 4, 'canned-food': 9 };
+    const tree: Record<string, number> = { milk: 4, cereals: 9 };
 
     expect(
       listCategoryCounts(
@@ -279,14 +281,14 @@ describe('listCategoryCounts', () => {
       )
     ).toEqual([
       { category: 'milk', lines: 2 },
-      { category: 'canned-food', lines: 1 },
+      { category: 'cereals', lines: 1 },
       { category: NO_CATEGORY, lines: 1 },
     ]);
   });
 
   it('keeps first appearance order while the tree has not arrived', () => {
     expect(listCategoryCounts(lines, (id) => categories[id])).toEqual([
-      { category: 'canned-food', lines: 1 },
+      { category: 'cereals', lines: 1 },
       { category: 'milk', lines: 2 },
       { category: NO_CATEGORY, lines: 1 },
     ]);

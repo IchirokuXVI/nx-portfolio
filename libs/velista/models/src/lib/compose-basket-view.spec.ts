@@ -95,8 +95,16 @@ const UNCATEGORISED = leaf(
   'Sin categoría'
 );
 const MILK_LEAF = leaf('milk', 'Milk', 'Leche');
-const BREAD_LEAF = leaf('bread', 'Bread', 'Pan');
-const ICE_CREAM_LEAF = leaf('ice-cream', 'Ice cream', 'Helados');
+const BREAD_LEAF = leaf(
+  'freshly-baked-bread',
+  'Freshly baked bread',
+  'Pan recién horneado'
+);
+const ICE_CREAM_LEAF = leaf(
+  'ice-creams-and-ice',
+  'Ice creams and ice',
+  'Helados y hielo'
+);
 
 function product(
   id: string,
@@ -463,7 +471,7 @@ describe('composeBasketView, grouped by category', () => {
       ])
     ).toEqual([
       [{ kind: 'text', text: 'Milk' }, ['a', 'c']],
-      [{ kind: 'text', text: 'Bread' }, ['b']],
+      [{ kind: 'text', text: 'Freshly baked bread' }, ['b']],
     ]);
   });
 
@@ -478,7 +486,7 @@ describe('composeBasketView, grouped by category', () => {
   });
 
   it('names a section in the other language when the reader’s is missing', () => {
-    const spanishOnly = leaf('pates-and-spreads', '', 'Patés y untables');
+    const spanishOnly = leaf('pate-and-sobrasada', '', 'Paté y sobrasada');
     const sections = composeBasketView(
       [row('a', 'Paté', { optionIds: ['p-pate'] })],
       state({ grouping: 'category' }),
@@ -492,7 +500,7 @@ describe('composeBasketView, grouped by category', () => {
 
     expect(sections[0].heading).toEqual({
       kind: 'text',
-      text: 'Patés y untables',
+      text: 'Paté y sobrasada',
     });
   });
 
@@ -510,7 +518,7 @@ describe('composeBasketView, grouped by category', () => {
 
     expect(sections.map((part) => part.key)).toEqual([
       'category:cat-uncategorised',
-      'category:cat-bread',
+      'category:cat-freshly-baked-bread',
       'category:cat-milk',
     ]);
   });
@@ -531,7 +539,7 @@ describe('composeBasketView, grouped by category', () => {
 
     expect(sections.map((part) => part.key)).toEqual([
       'category:cat-milk',
-      'category:cat-ice-cream',
+      'category:cat-ice-creams-and-ice',
     ]);
     expect(basketViewRows(sections)).toHaveLength(1);
   });
@@ -617,7 +625,7 @@ describe('composeBasketView, grouped by category', () => {
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0].key).toBe('category:cat-bread');
+    expect(sections[0].key).toBe('category:cat-freshly-baked-bread');
   });
 });
 
@@ -1575,10 +1583,13 @@ describe('the usual chip', () => {
  * aisle holds, and a line with no product.
  */
 describe('composeBasketView, grouped by aisle', () => {
-  const PASTA_LEAF = leaf('pasta', 'Pasta, rice and legumes');
-  const OIL_LEAF = leaf('oil', 'Oil and vinegar');
+  const PASTA_LEAF = leaf(
+    'macaroni-spaghetti-and-dried-pasta',
+    'Macaroni, spaghetti, and dried pasta'
+  );
+  const OIL_LEAF = leaf('oils', 'Oils');
   const FROZEN_LEAF = leaf('frozen-pizzas', 'Frozen pizzas');
-  const FRUIT_LEAF = leaf('fruit', 'Fruit');
+  const FRUIT_LEAF = leaf('apples-and-pears', 'Apples and pears');
 
   function aisle(id: string, en: string, es = en): ShopSection {
     return {
@@ -1622,7 +1633,10 @@ describe('composeBasketView, grouped by aisle', () => {
       'p-pasta',
       inAisles(product('p-pasta', 'Macaroni', null, [PASTA_LEAF]), []),
     ],
-    ['p-rice', inAisles(product('p-rice', 'Rice', null, [PASTA_LEAF]), [])],
+    [
+      'p-spaghetti',
+      inAisles(product('p-spaghetti', 'Spaghetti', null, [PASTA_LEAF]), []),
+    ],
     ['p-oil', inAisles(product('p-oil', 'Olive oil', null, [OIL_LEAF]), [])],
     [
       'p-icecream',
@@ -1640,7 +1654,7 @@ describe('composeBasketView, grouped by aisle', () => {
     row('cat', 'Something for the cat'),
     row('icecream', 'Ice cream', { optionIds: ['p-icecream'] }),
     row('apple', 'Apple', { optionIds: ['p-apple'] }),
-    row('rice', 'Rice', { optionIds: ['p-rice'] }),
+    row('spaghetti', 'Spaghetti', { optionIds: ['p-spaghetti'] }),
   ];
 
   function context(over: Partial<BasketViewContext> = {}): BasketViewContext {
@@ -1688,11 +1702,11 @@ describe('composeBasketView, grouped by aisle', () => {
         // The incoming order stays inside an aisle: the pizza came first.
         ['aisle:sec-frozen', 'Frozen', ['pizza', 'icecream'], false],
         // First row's place among what is left: the oil came before the pasta.
-        ['category:cat-oil', 'Oil and vinegar', ['oil'], true],
+        ['category:cat-oils', 'Oils', ['oil'], true],
         [
-          'category:cat-pasta',
-          'Pasta, rice and legumes',
-          ['pasta', 'rice'],
+          'category:cat-macaroni-spaghetti-and-dried-pasta',
+          'Macaroni, spaghetti, and dried pasta',
+          ['pasta', 'spaghetti'],
           false,
         ],
         ['no-category', 'basket.group.noCategory', ['cat'], false],
@@ -1712,8 +1726,13 @@ describe('composeBasketView, grouped by aisle', () => {
       name: 'no band when no aisle holds anything on this basket',
       rows: [ROWS[0], ROWS[2], ROWS[3]],
       expected: [
-        ['category:cat-oil', 'Oil and vinegar', ['oil'], false],
-        ['category:cat-pasta', 'Pasta, rice and legumes', ['pasta'], false],
+        ['category:cat-oils', 'Oils', ['oil'], false],
+        [
+          'category:cat-macaroni-spaghetti-and-dried-pasta',
+          'Macaroni, spaghetti, and dried pasta',
+          ['pasta'],
+          false,
+        ],
         ['no-category', 'basket.group.noCategory', ['cat'], false],
       ],
     },
@@ -1741,16 +1760,21 @@ describe('composeBasketView, grouped by aisle', () => {
     const byCategory = outline(drawn(ROWS, over));
 
     expect(byCategory).toEqual([
-      ['category:cat-oil', 'Oil and vinegar', ['oil'], false],
+      ['category:cat-oils', 'Oils', ['oil'], false],
       ['category:cat-frozen-pizzas', 'Frozen pizzas', ['pizza'], false],
       [
-        'category:cat-pasta',
-        'Pasta, rice and legumes',
-        ['pasta', 'rice'],
+        'category:cat-macaroni-spaghetti-and-dried-pasta',
+        'Macaroni, spaghetti, and dried pasta',
+        ['pasta', 'spaghetti'],
         false,
       ],
-      ['category:cat-ice-cream', 'Ice cream', ['icecream'], false],
-      ['category:cat-fruit', 'Fruit', ['apple'], false],
+      [
+        'category:cat-ice-creams-and-ice',
+        'Ice creams and ice',
+        ['icecream'],
+        false,
+      ],
+      ['category:cat-apples-and-pears', 'Apples and pears', ['apple'], false],
       ['no-category', 'basket.group.noCategory', ['cat'], false],
     ]);
   });
@@ -1800,7 +1824,7 @@ describe('composeBasketView, grouped by aisle', () => {
 
     expect(outline(drawn([ROWS[4], ROWS[5]], { products: stale }))).toEqual([
       ['aisle:sec-frozen', 'Frozen', ['icecream'], false],
-      ['category:cat-fruit', 'Fruit', ['apple'], true],
+      ['category:cat-apples-and-pears', 'Apples and pears', ['apple'], true],
     ]);
   });
 

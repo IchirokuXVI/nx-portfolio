@@ -131,8 +131,12 @@ async function picked(
 describe('Set categories on the product list', () => {
   it('reviews every ticked product, now and after, and sends nothing yet', async () => {
     const { fixture, batch } = await boot('/items');
-    // Whole milk 1 L (on milk) and the dish soap (on dishwashing).
-    await picked(fixture, [0, 3], ['cat_ice-cream', 'cat_other-frozen']);
+    // Whole milk 1 L (on milk) and the dish soap (on dishwasher).
+    await picked(
+      fixture,
+      [0, 3],
+      ['cat_ice-creams-and-ice', 'cat_cakes-and-churros']
+    );
     expect(batch).not.toHaveBeenCalled();
 
     await click(fixture, '[data-set-categories-review]');
@@ -143,25 +147,27 @@ describe('Set categories on the product list', () => {
       'it_dish_soap',
     ]);
     expect(lines[0].textContent).toContain('Milk');
-    expect(lines[0].textContent).toContain('Ice cream, Other frozen');
-    expect(lines[1].textContent).toContain('Dishwashing');
+    expect(lines[0].textContent).toContain(
+      'Ice creams and ice, Cakes and churros'
+    );
+    expect(lines[1].textContent).toContain('Dishwasher');
     expect(batch).not.toHaveBeenCalled();
   });
 
   it('replaces each product’s set in one request, and says what each has now', async () => {
     const { fixture, batch } = await boot('/items');
-    await picked(fixture, [0, 3], ['cat_ice-cream']);
+    await picked(fixture, [0, 3], ['cat_ice-creams-and-ice']);
     await click(fixture, '[data-set-categories-review]');
 
     await click(fixture, '[data-categories-send]');
 
     expect(batch).toHaveBeenCalledTimes(1);
     expect(batch).toHaveBeenCalledWith([
-      { itemId: 'it_milk_1l', categoryIds: ['cat_ice-cream'] },
-      { itemId: 'it_dish_soap', categoryIds: ['cat_ice-cream'] },
+      { itemId: 'it_milk_1l', categoryIds: ['cat_ice-creams-and-ice'] },
+      { itemId: 'it_dish_soap', categoryIds: ['cat_ice-creams-and-ice'] },
     ]);
-    expect(await slugsOf('it_milk_1l')).toEqual(['ice-cream']);
-    expect(await slugsOf('it_dish_soap')).toEqual(['ice-cream']);
+    expect(await slugsOf('it_milk_1l')).toEqual(['ice-creams-and-ice']);
+    expect(await slugsOf('it_dish_soap')).toEqual(['ice-creams-and-ice']);
     expect(
       all(fixture, '[data-review-item]').map((line) =>
         line.getAttribute('data-outcome')
@@ -194,12 +200,12 @@ describe('Set categories on the product list', () => {
    */
   it('refuses the whole request, says why, and changes nothing', async () => {
     const { fixture } = await boot('/items');
-    await picked(fixture, [0, 3], ['cat_ice-cream']);
+    await picked(fixture, [0, 3], ['cat_ice-creams-and-ice']);
     await click(fixture, '[data-set-categories-review]');
 
     await TestBed.inject(RESOURCE_GATEWAYS)
       .for<Wire.CatalogCategoryView>(categorySource())
-      .remove('cat_ice-cream');
+      .remove('cat_ice-creams-and-ice');
 
     await click(fixture, '[data-categories-send]');
 
@@ -214,7 +220,7 @@ describe('Set categories on the product list', () => {
       )
     ).toEqual(['refused', 'refused']);
     expect(await slugsOf('it_milk_1l')).toEqual(['milk']);
-    expect(await slugsOf('it_dish_soap')).toEqual(['dishwashing']);
+    expect(await slugsOf('it_dish_soap')).toEqual(['dishwasher']);
 
     // Back is still there: the operator can pick again.
     await click(fixture, '[data-categories-back]');
@@ -226,7 +232,10 @@ describe('Set categories on the product list', () => {
 
     await expect(
       TestBed.inject(ProductCategoriesBatch).set([
-        { itemId: 'it_milk_1l', categoryIds: ['cat_frozen'] },
+        {
+          itemId: 'it_milk_1l',
+          categoryIds: ['cat_frozen-foods-and-ice-cream'],
+        },
       ])
     ).rejects.toMatchObject({ code: 'category_not_a_leaf' });
     expect(await slugsOf('it_milk_1l')).toEqual(['milk']);
@@ -238,7 +247,7 @@ describe('the category tree', () => {
     const { fixture } = await boot('/categories');
 
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('Dairy and eggs');
+    expect(text).toContain('Eggs, milk, and butter');
     expect(text).toContain('uncategorised');
     expect(all(fixture, 'tbody tr').length).toBeGreaterThan(10);
   });
@@ -251,7 +260,7 @@ describe('the category tree', () => {
 
     page.store.set('name', { en: 'Tubs', es: 'Tarrinas' });
     page.store.set('slug', 'tubs');
-    page.store.set('parentId', 'cat_ice-cream');
+    page.store.set('parentId', 'cat_ice-creams-and-ice');
     await page.store.submit();
     await settle(fixture);
 
@@ -296,7 +305,7 @@ describe('the category tree', () => {
     await boot('/items');
     const page = await TestBed.inject(RESOURCE_GATEWAYS)
       .for<Wire.CatalogItemView>(itemSource())
-      .list({ filters: { categoryId: 'cat_dairy-and-eggs' } });
+      .list({ filters: { categoryId: 'cat_eggs-milk-and-butter' } });
 
     expect(page.items.map((item) => item.id)).toEqual([
       'it_milk_1l',

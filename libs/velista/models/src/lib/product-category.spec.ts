@@ -30,12 +30,12 @@ function node(
 describe('buildCategoryTree', () => {
   // Deliberately out of order, as nothing promises the wire is sorted.
   const rows = [
-    node('ice-cream', 'frozen', 3),
-    node('frozen', null, 8),
-    node('milk', 'dairy-and-eggs', 0),
-    node('dairy-and-eggs', null, 4),
-    node('eggs', 'dairy-and-eggs', 4),
-    node('frozen-vegetables', 'frozen', 0),
+    node('ice-creams-and-ice', 'frozen-foods-and-ice-cream', 5),
+    node('frozen-foods-and-ice-cream', null, 9),
+    node('milk', 'eggs-milk-and-butter', 1),
+    node('eggs-milk-and-butter', null, 6),
+    node('eggs', 'eggs-milk-and-butter', 0),
+    node('vegetables-and-potatoes', 'frozen-foods-and-ice-cream', 3),
   ];
 
   it('puts the roots, and each root’s children, in position order', () => {
@@ -47,8 +47,11 @@ describe('buildCategoryTree', () => {
         branch.children.map((child) => child.slug),
       ])
     ).toEqual([
-      ['dairy-and-eggs', ['milk', 'eggs']],
-      ['frozen', ['frozen-vegetables', 'ice-cream']],
+      ['eggs-milk-and-butter', ['eggs', 'milk']],
+      [
+        'frozen-foods-and-ice-cream',
+        ['vegetables-and-potatoes', 'ice-creams-and-ice'],
+      ],
     ]);
   });
 
@@ -58,12 +61,12 @@ describe('buildCategoryTree', () => {
     expect(
       [...tree.ranks.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id)
     ).toEqual([
-      'cat-dairy-and-eggs',
-      'cat-milk',
+      'cat-eggs-milk-and-butter',
       'cat-eggs',
-      'cat-frozen',
-      'cat-frozen-vegetables',
-      'cat-ice-cream',
+      'cat-milk',
+      'cat-frozen-foods-and-ice-cream',
+      'cat-vegetables-and-potatoes',
+      'cat-ice-creams-and-ice',
     ]);
   });
 
@@ -71,34 +74,36 @@ describe('buildCategoryTree', () => {
     const tree = buildCategoryTree(rows);
 
     expect(tree.byId.get('cat-milk')?.slug).toBe('milk');
-    expect(tree.bySlug.get('ice-cream')?.id).toBe('cat-ice-cream');
+    expect(tree.bySlug.get('ice-creams-and-ice')?.id).toBe(
+      'cat-ice-creams-and-ice'
+    );
     expect(tree.bySlug.get('nothing')).toBeUndefined();
   });
 
   it('breaks a position tie on the slug, so every read walks the same way', () => {
     const tree = buildCategoryTree([
       node('pets', null, 0),
-      node('cats', 'pets', 0),
-      node('baby', null, 0),
-      node('dogs', 'pets', 0),
+      node('dry-cat-food', 'pets', 0),
+      node('children', null, 0),
+      node('dry-dog-food', 'pets', 0),
     ]);
 
     expect(tree.roots.map((branch) => branch.root.slug)).toEqual([
-      'baby',
+      'children',
       'pets',
     ]);
     expect(tree.roots[1].children.map((child) => child.slug)).toEqual([
-      'cats',
-      'dogs',
+      'dry-cat-food',
+      'dry-dog-food',
     ]);
   });
 
   it('leaves out a row that breaks the two levels, rather than guessing its place', () => {
     const tree = buildCategoryTree([
-      node('frozen', null, 0),
-      node('ice-cream', 'frozen', 0),
+      node('frozen-foods-and-ice-cream', null, 0),
+      node('ice-creams-and-ice', 'frozen-foods-and-ice-cream', 0),
       // A grandchild, and an orphan whose parent was never sent.
-      node('vanilla', 'ice-cream', 0),
+      node('vanilla', 'ice-creams-and-ice', 0),
       node('lost', 'nowhere', 0),
     ]);
 
@@ -109,8 +114,8 @@ describe('buildCategoryTree', () => {
 
   it('keeps the first of two rows with one id', () => {
     const tree = buildCategoryTree([
-      node('frozen', null, 0),
-      node('frozen', null, 1),
+      node('frozen-foods-and-ice-cream', null, 0),
+      node('frozen-foods-and-ice-cream', null, 1),
     ]);
 
     expect(tree.roots).toHaveLength(1);
@@ -123,7 +128,7 @@ describe('buildCategoryTree', () => {
 
 describe('categoryName', () => {
   it('names a category in the reader’s language', () => {
-    const milk = node('milk', 'dairy-and-eggs', 0, 'Milk', 'Leche');
+    const milk = node('milk', 'eggs-milk-and-butter', 0, 'Milk', 'Leche');
 
     expect(categoryName(milk, 'es')).toBe('Leche');
     expect(categoryName(milk, 'en')).toBe('Milk');

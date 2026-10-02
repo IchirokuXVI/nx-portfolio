@@ -1,8 +1,9 @@
 /**
  * Mercadona's tree mapped onto the leaves of the category taxonomy (plan 0038,
- * section 5.6, retargeted by plan 0166, section 7).
+ * section 5.6, retargeted by plan 0166, section 7, and again by plan 0173,
+ * section 6).
  *
- * The answer is a **leaf slug** from appendix A of plan 0166, or null. The
+ * The answer is a **leaf slug** from appendix A of plan 0173, or null. The
  * library knows no ids: the harvester turns the slug into a row, and turns null
  * into `uncategorised`.
  *
@@ -14,14 +15,18 @@
  *   `Verdura` and `Pizzas`, and each one means the frozen aisle, not the fresh
  *   one a flat name map would send it to.
  * - **Every section has an answer of its own**: the one leaf the whole section
- *   is (`Zumos` is `juices`), or else its root's `other-*` leaf. A child nobody listed, or a new one Mercadona adds, climbs to that and
- *   still lands under the right root. Only a path that names no section at all
- *   reaches null.
+ *   is (`Fitoterapia y parafarmacia` is `parapharmacy`), or else
+ *   `uncategorised`. The taxonomy has no catch all under a root, and a section
+ *   spans several leaves, so a guessed one would misfile every child nobody
+ *   listed. A new child Mercadona adds climbs to that answer and waits there
+ *   for a person. A path that names no section at all reaches null, which the
+ *   harvester files in the same place.
  *
  * The section names and the children the fixtures hold are proved by the
  * fixtures. The other children are the names the public tree printed; a name
  * that drifts upstream costs one climb to its section's answer, never a wrong
- * leaf. The table is here rather than in the database, so remapping costs a
+ * leaf. Where one child spans several leaves, the entry names the leaf that
+ * holds most of it. The table is here rather than in the database, so remapping costs a
  * re-import rather than a migration.
  */
 
@@ -39,245 +44,315 @@ export interface MercadonaSectionMapping {
   children: ReadonlyArray<readonly [string, string]>;
 }
 
+/** What a section or a child answers when no leaf of the taxonomy is it. */
+const NO_LEAF = 'uncategorised';
+
 const SECTIONS: readonly MercadonaSectionMapping[] = [
   {
     name: 'Aceite, especias y salsas',
-    slug: 'other-pantry',
+    slug: NO_LEAF,
     children: [
-      ['Aceite, vinagre y sal', 'oil-and-vinegar'],
-      ['Especias', 'spices-and-salt'],
-      ['Mayonesa, ketchup y mostaza', 'sauces-and-condiments'],
-      ['Otras salsas', 'sauces-and-condiments'],
+      // Oil is most of it. Vinegar and salt have leaves of their own, and
+      // telling them apart needs the level below.
+      ['Aceite, vinagre y sal', 'oils'],
+      ['Especias', 'spices-and-herbs'],
+      ['Mayonesa, ketchup y mostaza', 'ketchup-mayonnaise-and-mustard'],
+      // Tomate frito is not here: Mercadona files it under `Conservas`.
+      ['Otras salsas', 'special-and-spicy-sauces'],
     ],
   },
   {
     name: 'Agua y refrescos',
-    slug: 'other-drinks',
+    slug: NO_LEAF,
     children: [
       ['Agua', 'water'],
-      ['Isotónico y energético', 'soft-drinks'],
-      ['Refresco de cola', 'soft-drinks'],
-      ['Refresco de naranja y de limón', 'soft-drinks'],
-      ['Refresco de té y sin gas', 'soft-drinks'],
-      ['Tónica y bitter', 'soft-drinks'],
+      ['Isotónico y energético', 'isotonic-and-sports-drinks'],
+      ['Refresco de cola', 'cola'],
+      ['Refresco de naranja y de limón', 'orange-lemon-and-lemon-lime'],
+      // Iced tea has a leaf of its own, and it is a still drink too.
+      ['Refresco de té y sin gas', 'non-carbonated-soft-drinks'],
+      ['Tónica y bitter', 'tonic-sparkling-water-and-bitter'],
     ],
   },
   {
     name: 'Aperitivos',
-    slug: 'other-snacks',
+    slug: NO_LEAF,
     children: [
-      ['Aceitunas y encurtidos', 'olives-and-pickles'],
-      ['Frutos secos y fruta desecada', 'nuts-and-dried-fruit'],
-      ['Patatas fritas y snacks', 'crisps'],
+      ['Aceitunas y encurtidos', 'olives'],
+      ['Frutos secos y fruta desecada', 'nuts'],
+      ['Patatas fritas y snacks', 'savory-snacks'],
     ],
   },
   {
     name: 'Arroz, legumbres y pasta',
-    slug: 'pasta-rice-and-legumes',
-    children: [],
+    slug: NO_LEAF,
+    children: [
+      ['Arroz', 'rice'],
+      ['Legumbres', 'chickpeas-and-beans'],
+      ['Pasta y fideos', 'macaroni-spaghetti-and-dried-pasta'],
+    ],
   },
   {
     name: 'Azúcar, caramelos y chocolate',
-    slug: 'other-breakfast',
+    slug: NO_LEAF,
     children: [
-      ['Azúcar y edulcorantes', 'flour-sugar-and-baking'],
-      ['Chicles y caramelos', 'chocolate-and-sweets'],
-      ['Chocolate', 'chocolate-and-sweets'],
-      ['Golosinas', 'chocolate-and-sweets'],
-      ['Mermelada y miel', 'jam-honey-and-spreads'],
+      ['Azúcar y edulcorantes', 'sugar-honey-and-sweeteners'],
+      ['Chicles y caramelos', 'chewing-gum-and-candies'],
+      ['Chocolate', 'milk-chocolate'],
+      ['Golosinas', 'sweets'],
+      ['Mermelada y miel', 'jams'],
     ],
   },
   {
     name: 'Bebé',
-    slug: 'other-baby',
+    slug: NO_LEAF,
     children: [
-      ['Alimentación infantil', 'baby-food'],
-      ['Leche y papillas', 'baby-food'],
-      ['Toallitas y pañales', 'nappies-and-wipes'],
+      ['Alimentación infantil', 'baby-foods-and-jars'],
+      ['Leche y papillas', 'milk-and-baby-food'],
+      ['Toallitas y pañales', 'diapers-and-wipes'],
     ],
   },
   {
     name: 'Bodega',
-    slug: 'other-drinks',
+    slug: NO_LEAF,
     children: [
-      ['Cerveza', 'beer'],
-      ['Cerveza sin alcohol', 'beer'],
-      ['Licores', 'spirits'],
-      ['Sidra y cava', 'wine-and-cava'],
-      ['Tinto de verano y sangría', 'wine-and-cava'],
-      ['Vino blanco', 'wine-and-cava'],
-      ['Vino lambrusco y espumoso', 'wine-and-cava'],
-      ['Vino rosado', 'wine-and-cava'],
-      ['Vino tinto', 'wine-and-cava'],
+      ['Cerveza', 'beers'],
+      ['Cerveza sin alcohol', 'non-alcoholic-beers'],
+      ['Licores', 'creams-liqueurs-and-brandy'],
+      ['Sidra y cava', 'cavas-and-cider'],
+      ['Tinto de verano y sangría', 'summer-red-wine-and-sangria'],
+      ['Vino blanco', 'white-wine'],
+      // The taxonomy has one sparkling leaf, and it is this one.
+      ['Vino lambrusco y espumoso', 'cavas-and-cider'],
+      ['Vino rosado', 'rose-wine'],
+      ['Vino tinto', 'red-wine'],
     ],
   },
   {
     name: 'Cacao, café e infusiones',
-    slug: 'coffee-tea-and-cocoa',
-    children: [],
+    slug: NO_LEAF,
+    children: [
+      ['Cacao soluble y chocolate a la taza', 'cocoa-and-hot-chocolate'],
+      // The taxonomy splits capsules by machine, which needs the product.
+      ['Café cápsula y monodosis', 'compatible-nespresso-capsules'],
+      ['Café molido y en grano', 'ground-coffee'],
+      ['Café soluble y otras bebidas', 'instant-coffee'],
+      ['Té e infusiones', 'infusions'],
+    ],
   },
   {
     name: 'Carne',
-    slug: 'other-meat',
+    slug: NO_LEAF,
     children: [
-      ['Aves y pollo', 'poultry'],
+      ['Aves y pollo', 'chicken'],
       ['Cerdo', 'pork'],
-      ['Conejo y cordero', 'beef-and-lamb'],
-      ['Hamburguesas y picadas', 'minced-and-burgers'],
-      ['Vacuno', 'beef-and-lamb'],
+      // The taxonomy has no lamb leaf, so lamb is filed with the rabbit.
+      ['Conejo y cordero', 'rabbit'],
+      ['Hamburguesas y picadas', 'hamburgers-ground-beef-and-meatballs'],
+      ['Vacuno', 'beef'],
     ],
   },
   {
     name: 'Cereales y galletas',
-    slug: 'other-breakfast',
+    slug: NO_LEAF,
     children: [
       ['Cereales', 'cereals'],
-      ['Galletas', 'biscuits'],
-      ['Tortitas', 'toasts-and-crispbread'],
+      ['Galletas', 'classic-and-digestive-biscuits'],
+      ['Tortitas', 'biscuits-cereals-and-jams-cakes'],
     ],
   },
   {
     // Cheese is also caught by id, below, because this section exists to be
     // split and the ids are steadier than the names.
     name: 'Charcutería y quesos',
-    slug: 'other-cold-cuts',
+    slug: NO_LEAF,
     children: [
-      ['Aves y jamón cocido', 'sliced-cold-cuts'],
-      ['Chopped y mortadela', 'sliced-cold-cuts'],
-      ['Embutido curado', 'cured-ham-and-sausages'],
-      ['Jamón serrano', 'cured-ham-and-sausages'],
-      ['Paté y sobrasada', 'pates-and-spreads'],
-      ['Queso curado, semicurado y tierno', 'cheese'],
-      ['Queso lonchas, rallado y en porciones', 'cheese'],
-      ['Queso untable y fresco', 'cheese'],
+      ['Aves y jamón cocido', 'cooked-ham'],
+      ['Chopped y mortadela', 'chopped-and-mortadella'],
+      ['Embutido curado', 'fuet-and-salchichon'],
+      ['Jamón serrano', 'serrano-ham'],
+      ['Paté y sobrasada', 'pate-and-sobrasada'],
+      ['Queso curado, semicurado y tierno', 'semi-cured'],
+      ['Queso lonchas, rallado y en porciones', 'sliced'],
+      ['Queso untable y fresco', 'cheeses-fresh'],
     ],
   },
   {
     name: 'Congelados',
-    slug: 'other-frozen',
+    slug: NO_LEAF,
     children: [
-      ['Arroz y pasta', 'frozen-meals-and-pizzas'],
-      ['Helados', 'ice-cream'],
-      ['Marisco', 'frozen-fish-and-seafood'],
-      ['Pescado', 'frozen-fish-and-seafood'],
-      ['Pizzas', 'frozen-meals-and-pizzas'],
-      ['Verdura', 'frozen-vegetables'],
+      ['Arroz y pasta', 'rice-and-pasta'],
+      ['Helados', 'ice-creams-and-ice'],
+      ['Marisco', 'frozen-foods-and-ice-cream-fish-and-seafood'],
+      ['Pescado', 'frozen-foods-and-ice-cream-fish-and-seafood'],
+      ['Pizzas', 'pizzas-and-doughs'],
+      ['Verdura', 'vegetables-and-potatoes'],
     ],
   },
   {
     name: 'Conservas, caldos y cremas',
-    slug: 'other-pantry',
+    slug: NO_LEAF,
     children: [
-      ['Atún y otras conservas de pescado', 'canned-food'],
-      ['Berberechos y mejillones', 'canned-food'],
-      ['Conservas de verdura y frutas', 'canned-food'],
-      ['Gazpacho y cremas', 'soups-and-stock'],
-      ['Sopa y caldo', 'soups-and-stock'],
-      ['Tomate', 'canned-food'],
+      ['Atún y otras conservas de pescado', 'tuna-and-bonito'],
+      ['Berberechos y mejillones', 'mussels-cockles-and-fish'],
+      [
+        'Conservas de verdura y frutas',
+        'canned-food-broths-and-creams-canned-vegetables',
+      ],
+      ['Gazpacho y cremas', 'creams-and-purees'],
+      ['Sopa y caldo', 'broths-and-soups'],
+      // Tomate frito is most of it, and that is a tomato sauce.
+      ['Tomate', 'tomato-and-pasta-sauces'],
     ],
   },
-  { name: 'Cuidado del cabello', slug: 'hair', children: [] },
+  {
+    name: 'Cuidado del cabello',
+    slug: NO_LEAF,
+    children: [
+      ['Acondicionador y mascarilla', 'conditioners-and-masks'],
+      ['Champú', 'shampoo'],
+      ['Coloración cabello', 'dyes'],
+      ['Fijación cabello', 'foams-and-fixers'],
+    ],
+  },
   {
     name: 'Cuidado facial y corporal',
-    slug: 'other-personal-care',
+    slug: NO_LEAF,
     children: [
-      ['Afeitado y cuidado para hombre', 'shaving-and-deodorant'],
-      ['Cuidado corporal', 'skin-and-body'],
-      ['Cuidado e higiene facial', 'skin-and-body'],
-      ['Depilación', 'shaving-and-deodorant'],
-      ['Desodorante', 'shaving-and-deodorant'],
-      ['Gel y jabón de manos', 'skin-and-body'],
-      ['Higiene bucal', 'oral-care'],
-      ['Higiene íntima', 'feminine-care'],
-      ['Protector solar y aftersun', 'skin-and-body'],
+      ['Afeitado y cuidado para hombre', 'shaving'],
+      ['Cuidado corporal', 'body-and-hand-hydration'],
+      ['Cuidado e higiene facial', 'facial-care'],
+      ['Depilación', 'hair-removal'],
+      ['Desodorante', 'deodorants'],
+      ['Gel y jabón de manos', 'shower-gel-and-sponges'],
+      ['Higiene bucal', 'oral-hygiene'],
+      ['Higiene íntima', 'sanitary-pads-and-feminine-hygiene'],
+      ['Protector solar y aftersun', 'sunscreen'],
     ],
   },
-  { name: 'Fitoterapia y parafarmacia', slug: 'pharmacy', children: [] },
+  {
+    name: 'Fitoterapia y parafarmacia',
+    slug: 'parapharmacy',
+    children: [
+      ['Fitoterapia', 'nutritional-supplements'],
+      ['Parafarmacia', 'parapharmacy'],
+    ],
+  },
   {
     name: 'Fruta y verdura',
-    slug: 'other-produce',
+    slug: NO_LEAF,
     children: [
-      ['Fruta', 'fruit'],
-      ['Lechuga y ensalada preparada', 'salads-and-herbs'],
-      ['Verdura', 'vegetables'],
+      ['Fruta', 'other-fruits'],
+      ['Lechuga y ensalada preparada', 'lettuce-and-leafy-greens'],
+      // `vegetables` is a root now, and no leaf under it is vegetables in
+      // general. Splitting it needs the level below, which no fixture holds.
+      ['Verdura', NO_LEAF],
     ],
   },
   {
     name: 'Huevos, leche y mantequilla',
-    slug: 'other-dairy',
+    slug: NO_LEAF,
     children: [
       ['Huevos', 'eggs'],
       // Milk and plant drinks share one Mercadona aisle. Milk is most of it,
       // and splitting the rest needs the level below, which no fixture holds.
       ['Leche y bebidas vegetales', 'milk'],
-      ['Mantequilla y margarina', 'butter-and-cream'],
-      ['Nata', 'butter-and-cream'],
+      ['Mantequilla y margarina', 'butter-and-margarine'],
+      ['Nata', 'cream'],
     ],
   },
   {
     name: 'Limpieza y hogar',
-    slug: 'other-household',
+    slug: NO_LEAF,
     children: [
-      ['Bolsas', 'bags-foil-and-wrap'],
-      ['Detergente y suavizante ropa', 'laundry'],
-      ['Estropajo, bayeta y guantes', 'cleaning'],
-      ['Lejía y líquidos fuertes', 'cleaning'],
-      ['Limpiahogar y friegasuelos', 'cleaning'],
-      ['Limpieza baño y WC', 'cleaning'],
-      ['Limpieza cocina', 'cleaning'],
-      ['Limpieza vajilla', 'dishwashing'],
-      ['Menaje y conservación de alimentos', 'bags-foil-and-wrap'],
+      ['Bolsas', 'batteries-kitchenware-and-bags'],
+      ['Detergente y suavizante ropa', 'detergents'],
+      ['Estropajo, bayeta y guantes', 'scouring-pads-cloths-and-gloves'],
+      ['Lejía y líquidos fuertes', 'bleach-and-disinfectants'],
+      ['Limpiahogar y friegasuelos', 'cleaning-floors-windows-and-furniture'],
+      ['Limpieza baño y WC', 'bathroom-and-toilet-cleaning'],
+      ['Limpieza cocina', 'kitchen-cleaning-and-degreasing'],
+      ['Limpieza vajilla', 'dishwasher'],
+      ['Menaje y conservación de alimentos', 'film-aluminum-and-preservation'],
       // Foil and cling film, the two `size_format: 'm'` products.
-      ['Papel de cocina y film', 'bags-foil-and-wrap'],
-      ['Papel higiénico y celulosa', 'paper-and-wipes'],
-      ['Pilas y bolsas de basura', 'bags-foil-and-wrap'],
-      ['Utensilios de limpieza y calzado', 'cleaning'],
+      ['Papel de cocina y film', 'film-aluminum-and-preservation'],
+      ['Papel higiénico y celulosa', 'toilet-paper-kitchen-paper-and-napkins'],
+      ['Pilas y bolsas de basura', 'garbage-bags-brooms-and-mops'],
+      ['Utensilios de limpieza y calzado', 'garbage-bags-brooms-and-mops'],
     ],
   },
-  { name: 'Maquillaje', slug: 'other-personal-care', children: [] },
+  // The taxonomy has no make up leaf.
+  { name: 'Maquillaje', slug: NO_LEAF, children: [] },
   {
     name: 'Marisco y pescado',
-    slug: 'other-seafood',
+    slug: NO_LEAF,
     children: [
-      ['Marisco', 'shellfish'],
-      ['Pescado fresco', 'fresh-fish'],
-      ['Salazones y ahumados', 'smoked-and-salted-fish'],
+      ['Marisco', 'seafood-shrimp-and-squid'],
+      ['Pescado fresco', 'fish-and-seafood-fresh'],
+      ['Salazones y ahumados', 'smoked-and-salted'],
     ],
   },
   {
+    // Cats and dogs only: the taxonomy has no leaf for any other animal.
     name: 'Mascotas',
-    slug: 'other-pets',
+    slug: NO_LEAF,
     children: [
-      ['Gato', 'cats'],
-      ['Perro', 'dogs'],
+      ['Gato', 'dry-cat-food'],
+      ['Perro', 'dry-dog-food'],
     ],
   },
   {
     name: 'Panadería y pastelería',
-    slug: 'other-bakery',
+    slug: NO_LEAF,
     children: [
-      ['Bollería de horno', 'pastries-and-cakes'],
-      ['Bollería envasada', 'pastries-and-cakes'],
-      ['Harina y preparado repostería', 'flour-sugar-and-baking'],
-      ['Pan de horno', 'bread'],
-      ['Pan de molde y otras especialidades', 'bread'],
-      ['Pan tostado y rallado', 'toasts-and-crispbread'],
-      ['Picos, rosquilletas y picatostes', 'toasts-and-crispbread'],
-      ['Tartas y pasteles', 'pastries-and-cakes'],
+      ['Bollería de horno', 'sweet-baked-goods'],
+      ['Bollería envasada', 'muffins-and-classic-pastries'],
+      ['Harina y preparado repostería', 'flours-and-yeasts'],
+      ['Pan de horno', 'freshly-baked-bread'],
+      ['Pan de molde y otras especialidades', 'sliced-and-specialty-breads'],
+      ['Pan tostado y rallado', 'breadcrumbs-toasted-bread-and-breadsticks'],
+      [
+        'Picos, rosquilletas y picatostes',
+        'breadcrumbs-toasted-bread-and-breadsticks',
+      ],
+      ['Tartas y pasteles', 'pastries-cakes-and-sugar-cakes'],
     ],
   },
   {
     name: 'Pizzas y platos preparados',
-    slug: 'other-ready-meals',
+    slug: NO_LEAF,
     children: [
-      ['Listo para Comer', 'prepared-dishes'],
-      ['Pizzas', 'pizzas'],
-      ['Platos preparados calientes', 'prepared-dishes'],
-      ['Platos preparados fríos', 'prepared-dishes'],
+      ['Listo para Comer', 'ready-to-eat-dishes'],
+      ['Pizzas', 'refrigerated-pizzas'],
+      ['Platos preparados calientes', 'traditional-food'],
+      ['Platos preparados fríos', 'salads-and-bowls'],
     ],
   },
-  { name: 'Postres y yogures', slug: 'yogurts-and-desserts', children: [] },
-  { name: 'Zumos', slug: 'juices', children: [] },
+  {
+    name: 'Postres y yogures',
+    slug: NO_LEAF,
+    children: [
+      ['Bífidus', 'bifidus-yoghurts-and-cholesterol'],
+      ['Flan y natillas', 'custard-flan-and-rice-pudding'],
+      ['Gelatina y otros postres', 'gelatins-and-curds'],
+      ['Postres de soja', 'kefir-and-plant-based-desserts'],
+      ['Yogures desnatados', 'natural-and-skimmed-yogurts'],
+      ['Yogures griegos', 'greek-yogurts'],
+      ['Yogures líquidos', 'liquid-yogurts'],
+      ['Yogures naturales y sabores', 'flavoured-and-fruit-yoghurts'],
+      ['Yogures y postres infantiles', 'yogurts-and-children-s-desserts'],
+    ],
+  },
+  {
+    name: 'Zumos',
+    slug: NO_LEAF,
+    children: [
+      ['Fruta variada', 'multifruit-and-other-flavors'],
+      ['Melocotón y piña', 'peach-and-pineapple'],
+      ['Naranja', 'orange'],
+      ['Tomate y otros sabores', 'multifruit-and-other-flavors'],
+    ],
+  },
 ];
 
 interface FoldedSection {
@@ -316,8 +391,13 @@ const CHEESE_NAMES: ReadonlySet<string> = new Set(
   ['Queso', 'Quesos', 'Queso untable y en lonchas', 'Queso curado'].map(fold)
 );
 
-/** What the cheese override answers. */
-const CHEESE = 'cheese';
+/**
+ * What the cheese override answers. One slug for all three ids, so it is the
+ * leaf the widest of them lands on by name (`Queso curado, semicurado y
+ * tierno`). The harvester resolves bare names, which reach each child's own
+ * leaf through the table above.
+ */
+const CHEESE = 'semi-cured';
 
 export interface CategoryPathNode {
   id?: number;

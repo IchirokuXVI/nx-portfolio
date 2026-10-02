@@ -99,6 +99,7 @@
         "./libs/luna-shopper/carrefour/src/index.ts"
       ],
       "@portfolio/luna-shopper/deza": ["./libs/luna-shopper/deza/src/index.ts"],
+      "@portfolio/luna-shopper/dia": ["./libs/luna-shopper/dia/src/index.ts"],
       "@portfolio/luna-shopper/eljamon": [
         "./libs/luna-shopper/eljamon/src/index.ts"
       ],

@@ -5,6 +5,7 @@ import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DiaCatalogRunner } from './dia-catalog.runner';
 import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -36,7 +37,8 @@ export class CatalogDiscoveryRunner {
     private readonly carrefour: CarrefourCatalogRunner,
     private readonly carrefourDetail: CarrefourDetailRunner,
     private readonly lidl: LidlCatalogRunner,
-    private readonly elJamon: ElJamonCatalogRunner
+    private readonly elJamon: ElJamonCatalogRunner,
+    private readonly dia: DiaCatalogRunner
   ) {}
 
   // `async` so a refusal is a rejected promise rather than a synchronous throw
@@ -94,6 +96,11 @@ export class CatalogDiscoveryRunner {
         // goes to the default scope the spawn gave the run, which is why the
         // spawn refuses a run with none.
         return this.elJamon;
+      case 'dia-api':
+        // A price per online fulfilment store (plan 0174, section 3): the run
+        // is given the stores it walks as scopes, as Mercadona is given
+        // warehouses, and its default scope is the chain's NATIONAL one.
+        return this.dia;
       default:
         throw new Error(
           `The adapter "${adapterKey}" has no catalog discovery. Set this ` +

@@ -301,7 +301,7 @@ const goodCreate = {
     brand: 'Hacendado',
     unitSize: 800,
     defaultUnit: 'GRAM',
-    categorySlugs: ['biscuits'],
+    categorySlugs: ['classic-and-digestive-biscuits'],
     ean: '8480000111111',
   },
   confidence: 0.95,
@@ -370,13 +370,17 @@ test('NAME_CARRIES_SIZE fires on a name holding its size', () => {
 });
 
 test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the two vocabularies', () => {
-  // `SNACKS` is the retired enum value and `snacks` a root, which holds no
+  // `SNACKS` is the retired enum value and `snacks-and-nuts` a root, which holds no
   // product: neither is a leaf slug the tree answered.
   const decision = {
     ...goodCreate,
     item: {
       ...goodCreate.item,
-      categorySlugs: ['biscuits', 'SNACKS', 'snacks'],
+      categorySlugs: [
+        'classic-and-digestive-biscuits',
+        'SNACKS',
+        'snacks-and-nuts',
+      ],
       defaultUnit: 'BOX',
     },
   };
@@ -394,24 +398,33 @@ test('the schema check wants one or more category slugs on a CREATE', () => {
       confidence: 1,
       item: { nameEs: 'Galletas', categorySlugs, defaultUnit: 'GRAM' },
     });
-  for (const categorySlugs of [undefined, 'biscuits', [], ['  ']]) {
+  for (const categorySlugs of [
+    undefined,
+    'classic-and-digestive-biscuits',
+    [],
+    ['  '],
+  ]) {
     assert.match(
       create(categorySlugs).error,
       /needs "item.categorySlugs", one or more category slugs/
     );
   }
   assert.deepEqual(
-    create([' biscuits ', 'biscuits', 'cereals']).decision.item.categorySlugs,
-    ['biscuits', 'cereals']
+    create([
+      ' classic-and-digestive-biscuits ',
+      'classic-and-digestive-biscuits',
+      'cereals',
+    ]).decision.item.categorySlugs,
+    ['classic-and-digestive-biscuits', 'cereals']
   );
 });
 
 test('the categories are the leaf slugs of the tree, grouped under their root', () => {
   assert.deepEqual(categoryGroups[0], {
-    name: 'Dairy and eggs',
-    slugs: ['milk', 'eggs', 'other-dairy'],
+    name: 'Eggs, milk, and butter',
+    slugs: ['eggs', 'milk', 'butter-and-margarine'],
   });
-  assert.equal(categories.includes('dairy-and-eggs'), false);
+  assert.equal(categories.includes('eggs-milk-and-butter'), false);
   assert.throws(
     () =>
       categoryVocabulary(
@@ -496,7 +509,11 @@ test('the system prompt carries the six rules and both vocabularies', () => {
   for (const value of [...categories, ...units]) {
     assert.ok(system.includes(`\`${value}\``), `${value} is missing`);
   }
-  assert.ok(system.includes('- Dairy and eggs: `milk`, `eggs`, `other-dairy`'));
+  assert.ok(
+    system.includes(
+      '- Eggs, milk, and butter: `eggs`, `milk`, `butter-and-margarine`'
+    )
+  );
   assert.ok(system.includes('Hacendado'));
 });
 
@@ -506,7 +523,7 @@ test('the create body names the fields CreateItemFromEntryDto names', () => {
     brand: 'Hacendado',
     ean: '8480000111111',
     unitSize: 800,
-    categorySlugs: ['biscuits'],
+    categorySlugs: ['classic-and-digestive-biscuits'],
     defaultUnit: 'GRAM',
   });
   assert.deepEqual(
@@ -696,7 +713,7 @@ test('--apply writes through accept and the item route, and never rejects', asyn
     brand: 'Hacendado',
     ean: '8480000111111',
     unitSize: 800,
-    categorySlugs: ['biscuits'],
+    categorySlugs: ['classic-and-digestive-biscuits'],
     defaultUnit: 'GRAM',
   });
 

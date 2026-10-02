@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
 import type { SupermarketSource } from '../entities';
+import type { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import type { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
@@ -352,11 +353,13 @@ describe('StoreDiscoveryRunner', () => {
   const lidl = { run: jest.fn(async () => undefined) };
   const mercadona = { run: jest.fn(async () => undefined) };
   const elJamon = { run: jest.fn(async () => undefined) };
+  const dia = { run: jest.fn(async () => undefined) };
   const dispatcher = new StoreDiscoveryRunner(
     osm as unknown as OsmStoreDiscoveryRunner,
     lidl as unknown as LidlStoreDiscoveryRunner,
     mercadona as unknown as MercadonaStoreDiscoveryRunner,
-    elJamon as unknown as ElJamonStoreDiscoveryRunner
+    elJamon as unknown as ElJamonStoreDiscoveryRunner,
+    dia as unknown as DiaStoreDiscoveryRunner
   );
   const input = { postalCode: '14013', country: 'es', radiusMetres: 3000 };
 
@@ -365,6 +368,18 @@ describe('StoreDiscoveryRunner', () => {
     lidl.run.mockClear();
     mercadona.run.mockClear();
     elJamon.run.mockClear();
+    dia.run.mockClear();
+  });
+
+  it('reads DIA from its own shop file (plan 0174)', async () => {
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('dia-api')
+    );
+    expect(dia.run).toHaveBeenCalledTimes(1);
+    expect(osm.run).not.toHaveBeenCalled();
   });
 
   it('reads El Jamón from its own store locator (plan 0169)', async () => {

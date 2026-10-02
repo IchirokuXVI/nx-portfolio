@@ -9,8 +9,8 @@ import {
 } from './decision.mjs';
 import { indexBrands } from './rules.mjs';
 
-/** Leaf slugs of the category tree (backend plan 0166, appendix A). */
-const CATEGORIES = ['milk', 'oil-and-vinegar', 'uncategorised'];
+/** Leaf slugs of the category tree (backend plan 0173, appendix A). */
+const CATEGORIES = ['milk', 'oils', 'uncategorised'];
 const UNITS = ['UNIT', 'LITER', 'GRAM'];
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
@@ -188,7 +188,7 @@ test('the schema check normalizes what it accepts', () => {
       nameEs: '  Leche entera  ',
       nameEn: '',
       brand: '  Hacendado ',
-      categorySlugs: [' milk ', 'plant-drinks', 'milk', ''],
+      categorySlugs: [' milk ', 'plant-based-drinks-and-horchata', 'milk', ''],
       defaultUnit: ' LITER ',
     },
     issues: ['a bare string note', { code: 'X', detail: 'y' }, 42],
@@ -199,7 +199,7 @@ test('the schema check normalizes what it accepts', () => {
   // Trimmed, blanks dropped, and a repeat named once, in the order meant.
   assert.deepEqual(checked.decision.item.categorySlugs, [
     'milk',
-    'plant-drinks',
+    'plant-based-drinks-and-horchata',
   ]);
   assert.equal(checked.decision.item.nameEn, null);
   assert.equal(checked.decision.item.brand, 'Hacendado');
@@ -433,10 +433,10 @@ test('SIZELESS_CREATE is a judgment the model stands by, so it is not retryable'
 test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the two vocabularies', () => {
   const issues = validateDecision({
     decision: createDecision(
-      // `DAIRY` is the retired enum value and `dairy-and-eggs` a root, which
+      // `DAIRY` is the retired enum value and `eggs-milk-and-butter` a root, which
       // holds no product: neither is a leaf slug the tree answered.
       goodItem({
-        categorySlugs: ['milk', 'DAIRY', 'dairy-and-eggs'],
+        categorySlugs: ['milk', 'DAIRY', 'eggs-milk-and-butter'],
         defaultUnit: 'BOTTLE',
       })
     ),
@@ -454,7 +454,7 @@ test('UNKNOWN_CATEGORY and UNKNOWN_UNIT fire outside the two vocabularies', () =
       .map((entry) => entry.detail),
     [
       '"DAIRY" is not a leaf slug of the category tree this run read.',
-      '"dairy-and-eggs" is not a leaf slug of the category tree this run read.',
+      '"eggs-milk-and-butter" is not a leaf slug of the category tree this run read.',
     ]
   );
   assert.ok(codes(issues).includes('UNKNOWN_UNIT'));

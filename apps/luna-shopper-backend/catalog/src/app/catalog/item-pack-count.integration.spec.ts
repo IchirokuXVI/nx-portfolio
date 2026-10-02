@@ -110,7 +110,7 @@ describeIntegration('the pack count (real Postgres)', () => {
     return items.create({
       userId: HARVESTER,
       name: { es: 'Leche entera' },
-      categoryIds: [categoryId('other-dairy')],
+      categoryIds: [categoryId('milk')],
       defaultUnit: UnitOfMeasure.LITER,
       unitSize: 6,
       ...(packCount === undefined ? {} : { packCount }),

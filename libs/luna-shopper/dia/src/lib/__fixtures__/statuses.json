@@ -1,0 +1,23 @@
+{
+  "header-anonymous.json": 200,
+  "menu.json": 200,
+  "listing-page-1.json": 200,
+  "listing-page-2.json": 200,
+  "listing-last-page.json": 200,
+  "listing-past-end.json": 200,
+  "listing-weight.json": 200,
+  "listing-club.json": 200,
+  "listing-multibuy.json": 200,
+  "listing-promotion.json": 200,
+  "check-service-200.json": 200,
+  "check-service-206.txt": 206,
+  "save-shipping-address-204.txt": 204,
+  "header-after-put.json": 200,
+  "save-shipping-address-206.json": 206,
+  "header-after-refusal.json": 200,
+  "store-finder.html": 200,
+  "stores.json.gz": 200,
+  "store-detail-normal.json": 200,
+  "store-detail-hub.json": 200,
+  "store-detail-leaflet.json": 200
+}

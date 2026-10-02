@@ -191,7 +191,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       // The only carton with a barcode, so "finds the one carrying it" is a
       // claim about the code and not about there being a single milk.
       ean: PASCUAL_EAN,
-      categoryIds: [categoryId('other-dairy')],
+      categoryIds: [categoryId('milk')],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
     });
@@ -201,7 +201,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Whole 1L', es: 'Entera 1L' },
       brand: 'Hacendado',
-      categoryIds: [categoryId('other-dairy')],
+      categoryIds: [categoryId('milk')],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: milkGroup.id,
     });
@@ -211,7 +211,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       userId: OWNER,
       name: { en: 'Sliced Bread', es: 'Pan de molde' },
       brand: 'Bimbo',
-      categoryIds: [categoryId('other-bakery')],
+      categoryIds: [categoryId('sliced-and-specialty-breads')],
       defaultUnit: UnitOfMeasure.UNIT,
       productGroupId: breadGroup.id,
     });
@@ -929,7 +929,7 @@ describeIntegration('catalog search (real Postgres)', () => {
         items.create({
           userId: OWNER,
           name: { en: 'Chicken sausages', es: 'Salchichas de pollo' },
-          categoryIds: [categoryId('other-meat')],
+          categoryIds: [categoryId('sausages')],
           defaultUnit: UnitOfMeasure.UNIT,
         }),
         items.create({

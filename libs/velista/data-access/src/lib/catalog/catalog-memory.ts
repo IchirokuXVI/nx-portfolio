@@ -31,18 +31,18 @@ const MILK: readonly CatalogItem[] = [
   item('item-milk-hacendado-half', 'Leche entera Hacendado', 'Whole milk', 'Hacendado', 0.5, 'LITER', 'group-milk', 'milk'),
   item('item-milk-pascual', 'Leche entera Pascual', 'Whole milk', 'Pascual', 1, 'LITER', 'group-milk', 'milk'),
   item('item-milk-semi', 'Leche semidesnatada Hacendado, 6 x 1 L', 'Semi-skimmed milk, 6 x 1 L', 'Hacendado', 6, 'LITER', 'group-milk', 'milk'),
-  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'plant-drinks'),
+  item('item-milk-oat', 'Bebida de avena Oatly', 'Oat drink', 'Oatly', 1, 'LITER', 'group-milk', 'plant-based-drinks-and-horchata'),
 ];
 
 const BREAD: readonly CatalogItem[] = [
-  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread', 'bread'),
+  item('item-bread-sourdough', 'Pan de masa madre', 'Sourdough loaf', null, 0.5, 'KILOGRAM', 'group-bread', 'freshly-baked-bread'),
   // No size at all, which is an ordinary state for a harvested product and the one
   // case the row has to draw nothing for rather than guessing a packet.
-  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread', 'bread'),
+  item('item-bread-sliced', 'Pan de molde integral Bimbo', 'Wholemeal sliced bread', 'Bimbo', null, 'UNIT', 'group-bread', 'sliced-and-specialty-breads'),
 ];
 
 const OIL: readonly CatalogItem[] = [
-  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil', 'oil-and-vinegar'),
+  item('item-oil-hacendado', 'Aceite de oliva virgen extra', 'Extra virgin olive oil', 'Hacendado', 1, 'LITER', 'group-oil', 'oils'),
 ];
 
 const EGGS: readonly CatalogItem[] = [

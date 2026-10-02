@@ -5,24 +5,24 @@ describe('toCategoryNodes', () => {
   const FROZEN = {
     id: 'c-frozen',
     parentId: null,
-    slug: 'frozen',
-    name: { en: 'Frozen', es: 'Congelados' },
-    position: 8,
+    slug: 'frozen-foods-and-ice-cream',
+    name: { en: 'Frozen foods and ice cream', es: 'Congelados y helados' },
+    position: 9,
     itemCount: 12,
   };
   const ICE_CREAM = {
     id: 'c-ice-cream',
     parentId: 'c-frozen',
-    slug: 'ice-cream',
-    name: { es: 'Helados' },
-    position: 3,
+    slug: 'ice-creams-and-ice',
+    name: { es: 'Helados y hielo' },
+    position: 5,
     itemCount: 4,
   };
 
   it('reads roots and children with their position and count', () => {
     expect(toCategoryNodes({ categories: [FROZEN, ICE_CREAM] })).toEqual([
       FROZEN,
-      { ...ICE_CREAM, name: { en: '', es: 'Helados' } },
+      { ...ICE_CREAM, name: { en: '', es: 'Helados y hielo' } },
     ]);
   });
 
@@ -59,7 +59,7 @@ describe('toCategoryNodes', () => {
 
 describe('toProductCategories', () => {
   it('reads nothing that is not a list', () => {
-    expect(toProductCategories('frozen')).toEqual([]);
+    expect(toProductCategories('milk')).toEqual([]);
     expect(toProductCategories(undefined)).toEqual([]);
   });
 });

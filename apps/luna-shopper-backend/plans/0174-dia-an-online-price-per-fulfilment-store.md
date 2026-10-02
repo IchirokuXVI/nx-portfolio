@@ -1,3 +1,5 @@
+> **PR:** [#598](https://github.com/IchirokuXVI/nx-portfolio/pull/598)
+
 # 0174: DIA, an online price per fulfilment store
 
 > Prerequisite reading: `0089` (a chain that declares its own scopes from its data), `0106` (a

@@ -54,7 +54,7 @@ Exactly one JSON object of this shape:
     "brand": "the brand, or null",
     "unitSize": 1,
     "defaultUnit": "L",
-    "categorySlugs": ["oil-and-vinegar"],
+    "categorySlugs": ["oils"],
     "ean": "the barcode, or null"
   },
   "confidence": 0.97,

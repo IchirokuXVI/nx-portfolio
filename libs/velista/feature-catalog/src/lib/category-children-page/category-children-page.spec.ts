@@ -77,11 +77,11 @@ function cards(fixture: ComponentFixture<CategoryChildrenPage>) {
 
 describe('CategoryChildrenPage (velista 0119)', () => {
   it('heads the page with the root, then Everything in it, then each child with a product', async () => {
-    const { fixture } = await render('dairy-and-eggs');
+    const { fixture } = await render('eggs-milk-and-butter');
     const host = fixture.nativeElement as HTMLElement;
 
     expect(host.querySelector('lib-page-header h1')?.textContent).toContain(
-      'Dairy and eggs'
+      'Eggs, milk, and butter'
     );
     expect(host.querySelectorAll('h1')).toHaveLength(1);
     expect(host.querySelector('lib-page-header .actions button')).toBeNull();
@@ -91,19 +91,19 @@ describe('CategoryChildrenPage (velista 0119)', () => {
       expect.stringContaining('catalog.categories.everything'),
     ]);
     expect(everything?.[0]?.getAttribute('href')).toBe(
-      '/velista/en/catalog?category=dairy-and-eggs'
+      '/velista/en/catalog?category=eggs-milk-and-butter'
     );
-    // Plant based drinks holds nothing, so it is not drawn.
+    // Plant-based drinks and horchata holds nothing, so it is not drawn.
     expect(children?.map((link) => link.getAttribute('href'))).toEqual([
-      '/velista/en/catalog?category=milk',
-      '/velista/en/catalog?category=yogurts-and-desserts',
       '/velista/en/catalog?category=eggs',
+      '/velista/en/catalog?category=milk',
+      '/velista/en/catalog?category=lactose-free-and-fortified-milk',
     ]);
   });
 
   it('titles the header Categories while the tree is on its way, never an empty title', async () => {
     const { fixture } = await render(
-      'dairy-and-eggs',
+      'eggs-milk-and-butter',
       null,
       fakeCategoryStore()
     );
@@ -117,21 +117,21 @@ describe('CategoryChildrenPage (velista 0119)', () => {
   });
 
   it('marks the leaf the tab is narrowed to, when the chip reopened it', async () => {
-    const { fixture } = await render('dairy-and-eggs', 'milk');
+    const { fixture } = await render('eggs-milk-and-butter', 'milk');
     const [everything, children] = cards(fixture);
-    const milk = children?.[0];
+    const milk = children?.[1];
 
     expect(milk?.getAttribute('aria-current')).toBe('true');
     expect(milk?.getAttribute('aria-label')).toBe(
       'catalog.categories.rowChosen'
     );
     expect(milk?.querySelector('lib-check-icon')).not.toBeNull();
-    expect(children?.[1]?.hasAttribute('aria-current')).toBe(false);
+    expect(children?.[0]?.hasAttribute('aria-current')).toBe(false);
     expect(everything?.[0]?.hasAttribute('aria-current')).toBe(false);
   });
 
   it('goes back one step, with the catalog tab as the fallback', async () => {
-    const { fixture, pages } = await render('pantry');
+    const { fixture, pages } = await render('oils-sauces-and-spices');
     const back = (fixture.nativeElement as HTMLElement).querySelector(
       'lib-page-header button.lead'
     );

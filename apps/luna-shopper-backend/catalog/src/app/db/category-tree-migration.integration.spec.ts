@@ -7,6 +7,7 @@ import { CATALOG_MIGRATIONS } from './migrations';
 import {
   CategoryTree1758100000000,
   LANDING_LEAVES,
+  ROOTS,
 } from './migrations/1758100000000-CategoryTree';
 import { categoryId } from './reference/ids';
 
@@ -18,6 +19,11 @@ import { categoryId } from './reference/ids';
  * this migration, products seeded with the old enum column, then this
  * migration. That is the state a developer's slot with a harvest passes
  * through, and it is what proves no product is left without a category.
+ *
+ * The prefix also keeps this file history: plan 0173 replaced this tree with
+ * DIA's in a later migration, which never runs here. What this migration's
+ * exported `ROOTS` and `LANDING_LEAVES` say and what it inserts are compared
+ * below, now that the reference taxonomy no longer holds those rows.
  *
  * It works in a scratch schema of its own and drops it afterwards.
  *
@@ -139,6 +145,55 @@ describeIntegration('the category tree migration (real Postgres)', () => {
     expect(rows.filter((r) => r.parentId !== null)).toHaveLength(12);
     for (const row of rows) {
       expect(row.id).toBe(categoryId(row.slug));
+    }
+  });
+
+  it('inserts what its exported roots and landing leaves say, row for row', async () => {
+    const rows: {
+      slug: string;
+      parentId: string | null;
+      name: { en: string; es: string };
+      position: number;
+    }[] = await dataSource.query(
+      `SELECT "slug", "parentId", "name", "position" FROM "categories"`
+    );
+    const bySlug = new Map(rows.map((row) => [row.slug, row]));
+    for (const [position, root] of ROOTS.entries()) {
+      expect(bySlug.get(root.slug)).toEqual({
+        slug: root.slug,
+        parentId: null,
+        name: root.name,
+        position,
+      });
+    }
+    for (const leaf of LANDING_LEAVES) {
+      expect(bySlug.get(leaf.slug)).toEqual({
+        slug: leaf.slug,
+        parentId: categoryId(leaf.root),
+        name: leaf.name,
+        position: leaf.position,
+      });
+    }
+    // One landing leaf per old value, each under a root this migration inserts.
+    expect([...OLD_VALUES].sort()).toEqual(
+      [
+        'BAKERY',
+        'BEVERAGES',
+        'DAIRY',
+        'FROZEN',
+        'HOUSEHOLD',
+        'MEAT',
+        'OTHER',
+        'PANTRY',
+        'PERSONAL_CARE',
+        'PRODUCE',
+        'SEAFOOD',
+        'SNACKS',
+      ].sort()
+    );
+    const roots = new Set(ROOTS.map((root) => root.slug));
+    for (const leaf of LANDING_LEAVES) {
+      expect(roots.has(leaf.root)).toBe(true);
     }
   });
 

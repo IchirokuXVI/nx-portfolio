@@ -260,6 +260,10 @@ export const ADAPTER_KEYS = [
   // every shop of the chain (plan 0169). Its store locator names every shop in
   // one request.
   'eljamon-web',
+  // JSON APIs behind Akamai, priced per online fulfilment store, with no EAN
+  // (plan 0174). It names its own shops, and each shop names the fulfilment
+  // store that prices its area.
+  'dia-api',
   'osm-places',
   'manual',
 ] as const;
@@ -424,6 +428,27 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: null,
+  },
+  'dia-api': {
+    writesPrices: true,
+    // A walk is given the fulfilment stores it walks, and the store code is
+    // the scope's own externalKey (plan 0174, section 3.1).
+    scopesItsOwn: true,
+    // The shop file lists every shop (plan 0174, section 5).
+    listsItsOwnStores: true,
+    // The detail carries no EAN, so a backfill has nothing to read.
+    hasProductPages: false,
+    // The listing carries everything a price run needs, so there is no
+    // detail phase to skip (plan 0174, section 1).
+    skipsKnownDetails: false,
+    printedLocale: 'es',
+    // The LOCAL_AREA band alone, as mercadona-api: a fulfilment store is what
+    // this chain prices by. The chain's NATIONAL scope is the run's default
+    // scope and never one of the scopes it walks (plan 0174, section 3.2).
+    walkablePriorities: {
+      min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
+      max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
+    },
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
   // shop name is a proper noun in any case, so there is nothing to claim here.

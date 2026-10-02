@@ -122,7 +122,7 @@ describe('ItemService', () => {
       service.create({
         userId: 'intruder',
         name: { en: 'Milk', es: 'Leche' },
-        categoryIds: ['other-dairy'],
+        categoryIds: ['milk'],
         defaultUnit: UnitOfMeasure.LITER,
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
@@ -132,7 +132,7 @@ describe('ItemService', () => {
       service.create({
         userId: ADMIN,
         name: { en: 'Milk', es: 'Leche' },
-        categoryIds: ['other-dairy'],
+        categoryIds: ['milk'],
         defaultUnit: UnitOfMeasure.LITER,
       })
     ).resolves.toMatchObject({ name: { en: 'Milk', es: 'Leche' } });
@@ -148,7 +148,7 @@ describe('ItemService', () => {
     await service.create({
       userId: ADMIN,
       name: { en: 'Milk', es: 'Leche' },
-      categoryIds: ['other-dairy'],
+      categoryIds: ['milk'],
       defaultUnit: UnitOfMeasure.LITER,
       productGroupId: 'g1',
     });
@@ -347,7 +347,7 @@ describe('ItemService', () => {
     function milk(overrides: Partial<CreateItemInput> = {}): CreateItemInput {
       return {
         name: { es: 'Leche' },
-        categoryIds: ['other-dairy'],
+        categoryIds: ['milk'],
         defaultUnit: UnitOfMeasure.LITER,
         ...overrides,
       };
@@ -478,7 +478,7 @@ describe('ItemService', () => {
       const created = await service.create({
         userId: ADMIN,
         name: { es: 'Leche' },
-        categoryIds: ['other-dairy'],
+        categoryIds: ['milk'],
         defaultUnit: UnitOfMeasure.LITER,
       });
       expect(created.packCount).toBeNull();
@@ -492,7 +492,7 @@ describe('ItemService', () => {
       const created = await service.create({
         userId: ADMIN,
         name: { es: 'Leche' },
-        categoryIds: ['other-dairy'],
+        categoryIds: ['milk'],
         defaultUnit: UnitOfMeasure.LITER,
         packCount: 6,
       });
@@ -502,7 +502,7 @@ describe('ItemService', () => {
         items: [
           {
             name: { es: 'Atún' },
-            categoryIds: ['other-pantry'],
+            categoryIds: ['tuna-and-bonito'],
             defaultUnit: UnitOfMeasure.GRAM,
             packCount: 8,
           },
@@ -631,7 +631,7 @@ describe('ItemService', () => {
         service.create({
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
-          categoryIds: ['other-dairy'],
+          categoryIds: ['milk'],
           defaultUnit: UnitOfMeasure.LITER,
           ean: '8480000123456',
         })
@@ -659,7 +659,7 @@ describe('ItemService', () => {
           items: [
             {
               name: { es: 'Leche' },
-              categoryIds: ['other-dairy'],
+              categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
               ean: '8480000123456',
             },
@@ -679,7 +679,7 @@ describe('ItemService', () => {
           items: [
             {
               name: { es: 'Leche' },
-              categoryIds: ['other-dairy'],
+              categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
               ean: '8480000123456',
             },
@@ -701,7 +701,7 @@ describe('ItemService', () => {
         service.create({
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
-          categoryIds: ['other-dairy'],
+          categoryIds: ['milk'],
           defaultUnit: UnitOfMeasure.LITER,
         })
       ).rejects.toThrow('the database went away');
@@ -878,15 +878,18 @@ describe('ItemService', () => {
 
       const created = await service.create({
         ...draft,
-        categoryIds: ['milk', 'plant-drinks', 'milk'],
+        categoryIds: ['milk', 'plant-based-drinks-and-horchata', 'milk'],
       });
 
       expect(categories.written).toEqual([
-        { itemId: 'i1', categoryIds: ['milk', 'plant-drinks'] },
+        {
+          itemId: 'i1',
+          categoryIds: ['milk', 'plant-based-drinks-and-horchata'],
+        },
       ]);
       expect(created.categories.map((c) => c.id)).toEqual([
         'milk',
-        'plant-drinks',
+        'plant-based-drinks-and-horchata',
       ]);
     });
 
@@ -894,14 +897,17 @@ describe('ItemService', () => {
       const items = saving();
       const { service, categories } = build({
         items,
-        categories: { roots: ['dairy'], unknown: ['gone'] },
+        categories: { roots: ['eggs-milk-and-butter'], unknown: ['gone'] },
       });
 
       await expect(
         service.create({ ...draft, categoryIds: [] })
       ).rejects.toBeInstanceOf(ItemNeedsACategoryException);
       await expect(
-        service.create({ ...draft, categoryIds: ['milk', 'dairy'] })
+        service.create({
+          ...draft,
+          categoryIds: ['milk', 'eggs-milk-and-butter'],
+        })
       ).rejects.toBeInstanceOf(CategoryNotALeafException);
       await expect(
         service.create({ ...draft, categoryIds: ['gone'] })
@@ -942,10 +948,10 @@ describe('ItemService', () => {
       await service.update({
         userId: ADMIN,
         itemId: 'i1',
-        categoryIds: ['plant-drinks'],
+        categoryIds: ['plant-based-drinks-and-horchata'],
       });
       expect(categories.written).toEqual([
-        { itemId: 'i1', categoryIds: ['plant-drinks'] },
+        { itemId: 'i1', categoryIds: ['plant-based-drinks-and-horchata'] },
       ]);
 
       await expect(
@@ -985,15 +991,15 @@ describe('ItemService', () => {
         const items = saving();
         const { service, categories } = build({
           items,
-          categories: { roots: ['drinks'] },
+          categories: { roots: ['water-and-soft-drinks'] },
         });
 
         await expect(
           service.updateMany({
             userId: ADMIN,
             items: [
-              { itemId: 'i1', categoryIds: ['juices'] },
-              { itemId: 'i2', categoryIds: ['drinks'] },
+              { itemId: 'i1', categoryIds: ['cola'] },
+              { itemId: 'i2', categoryIds: ['water-and-soft-drinks'] },
             ],
           })
         ).rejects.toBeInstanceOf(CategoryNotALeafException);

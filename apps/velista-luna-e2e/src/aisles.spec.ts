@@ -63,7 +63,7 @@ test.describe('the aisles of the shop you are in', () => {
     await createSection(admin, SUPERMARKET_MERCADONA_ID, {
       slug: `${SLUG_PREFIX}bakery`,
       name: { en: 'Fresh bakery', es: 'Horno' },
-      categoryIds: [await categoryIdBySlug(alice, 'bread')],
+      categoryIds: [await categoryIdBySlug(alice, 'freshly-baked-bread')],
       position: 0,
     });
     await createSection(admin, SUPERMARKET_MERCADONA_ID, {

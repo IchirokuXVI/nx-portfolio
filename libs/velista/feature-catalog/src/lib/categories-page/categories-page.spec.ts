@@ -57,19 +57,19 @@ function links(fixture: ComponentFixture<CategoriesPage>): HTMLAnchorElement[] {
 /** A root whose only child holds nothing, so neither is drawn. */
 const EMPTY_ROOT: readonly CategoryNode[] = [
   {
-    id: 'cat-baby',
+    id: 'cat-children',
     parentId: null,
-    slug: 'baby',
-    name: { en: 'Baby', es: 'Bebé' },
-    position: 12,
+    slug: 'children',
+    name: { en: 'Children', es: 'Infantil' },
+    position: 26,
     itemCount: 0,
   },
   {
-    id: 'cat-nappies',
-    parentId: 'cat-baby',
-    slug: 'nappies',
-    name: { en: 'Nappies', es: 'Pañales' },
-    position: 0,
+    id: 'cat-diapers-and-wipes',
+    parentId: 'cat-children',
+    slug: 'diapers-and-wipes',
+    name: { en: 'Diapers and wipes', es: 'Pañales y toallitas' },
+    position: 4,
     itemCount: 0,
   },
 ];
@@ -80,12 +80,17 @@ describe('CategoriesPage (velista 0119)', () => {
     const { fixture } = await render(tree);
 
     expect(links(fixture).map((link) => link.getAttribute('href'))).toEqual([
-      '/velista/en/catalog/categories/dairy-and-eggs',
+      '/velista/en/catalog/categories/eggs-milk-and-butter',
       '/velista/en/catalog/categories/bakery',
-      '/velista/en/catalog/categories/breakfast-and-sweets',
-      '/velista/en/catalog/categories/pantry',
+      '/velista/en/catalog/categories/yoghurts-and-desserts',
+      '/velista/en/catalog/categories/rice-pasta-and-pulses',
+      '/velista/en/catalog/categories/oils-sauces-and-spices',
+      '/velista/en/catalog/categories/canned-food-broths-and-creams',
+      '/velista/en/catalog/categories/coffee-cocoa-and-infusions',
+      '/velista/en/catalog/categories/pastries-cakes-and-sugar',
+      '/velista/en/catalog/categories/prepared-meals-and-pizzas',
     ]);
-    expect(links(fixture)[0]?.textContent).toContain('Dairy and eggs');
+    expect(links(fixture)[0]?.textContent).toContain('Eggs, milk, and butter');
     expect(tree.ensured()).toBe(1);
   });
 
