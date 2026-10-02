@@ -61,9 +61,12 @@
   background: var(--app-surface-raised);
 }
 
-// A row whose whole width is the label of a switch.
+// A row whose whole width is the label of a switch. It never shrinks: it sits in
+// a column that scrolls, and its own minimum height replaces the automatic one,
+// so a long page squeezed it under its words and they spilled onto its neighbours.
 @mixin switch-row {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--app-space-5);
   min-block-size: var(--app-touch-target);

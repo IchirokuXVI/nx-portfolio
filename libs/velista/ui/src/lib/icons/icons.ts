@@ -1043,8 +1043,8 @@ export class StoreIcon {
 }
 
 /**
- * A folded map (velista `0121`): "See the map" on a shop's page and the basket's
- * Map button. The words always travel with it.
+ * A folded map (velista `0121`): "See the shop layout" on a shop's page and the
+ * basket's Map button. The words always travel with it.
  */
 @Component({
   selector: 'lib-map-icon',

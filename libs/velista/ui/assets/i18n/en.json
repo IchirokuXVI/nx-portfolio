@@ -2009,7 +2009,7 @@
     "address": "Address",
     "size": "About {{size}} m²",
     "sizeSource": "Building size from OpenStreetMap",
-    "seeMap": "See the map",
+    "seeMap": "See the shop layout",
     "sections": "Sections",
     "sectionsHint": "in the order you walk them"
   },
@@ -2125,7 +2125,7 @@
     },
     "settings": {
       "show": "Show this walk to shoppers",
-      "showHint": "A shop shows the map of one walk. Turning this on hides the others. Shoppers see changes after each save.",
+      "showHint": "A shop shows the map of one walk. Turning this on hides the others.",
       "delete": "Delete this walk",
       "notice": {
         "renamed": "Name saved.",
@@ -2176,7 +2176,7 @@
     "ok": "OK",
     "cancel": "Cancel",
     "close": "Close",
-    "hint": "Drag across the floor to draw a shelf. Tap an area to change it. Hold a square for more.",
+    "hint": "Drag to move the map. Tap an area to change it. Hold a square for more.",
     "size": "{{w}} m × {{h}} m",
     "status": {
       "unsent": "Not saved yet",
@@ -2280,7 +2280,7 @@
       "unsent": "Not saved yet"
     },
     "scale": "1 square = 50 cm",
-    "hint": "Tap the map to draw or select. Hold a square for more.",
+    "hint": "Drag to move the map. Tap an area to select it. Hold a square for more.",
     "inSection": "In section",
     "sectionLeft": "Section left",
     "marks": {

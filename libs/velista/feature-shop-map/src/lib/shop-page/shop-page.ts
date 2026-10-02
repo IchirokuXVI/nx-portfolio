@@ -70,8 +70,8 @@ function nonEmpty(value: string | null): string | null {
 /**
  * A shop's own page (velista `0121`, target 2), reached from the round button on
  * every row of the shop picker: its name and chain, its address, its size when
- * OpenStreetMap knows it, "See the map" when it has one, and its sections in the
- * order the shop is walked.
+ * OpenStreetMap knows it, "See the shop layout" when it has one, and its sections
+ * in the order the shop is walked.
  *
  * `shops/:locationId`. Everything it draws comes from one read, held for the
  * session by `ShopDetailStore`, so going on to the map and back draws it at once.
