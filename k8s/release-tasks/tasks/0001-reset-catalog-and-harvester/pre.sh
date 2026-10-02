@@ -40,7 +40,7 @@ reset() {
   if kubectl -n "$NAMESPACE" get "deployment/$deploy" > /dev/null 2>&1; then
     echo "  $db: stopping $deploy"
     kubectl -n "$NAMESPACE" scale "deployment/$deploy" --replicas=0 > /dev/null
-    if kubectl -n "$NAMESPACE" get pods -l "app=$deploy" -o name | grep -q .; then
+    if kubectl -n "$NAMESPACE" get pods -l "app=$deploy" -o name | grep . > /dev/null; then
       kubectl -n "$NAMESPACE" wait --for=delete pod -l "app=$deploy" --timeout=3m > /dev/null
     fi
   fi

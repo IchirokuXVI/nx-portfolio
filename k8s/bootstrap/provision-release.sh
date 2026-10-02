@@ -151,9 +151,15 @@ cluster_has_key() {
   # Present-but-empty has to be distinguishable from absent, and
   # `jsonpath={.data.KEY}` prints nothing for either, so ask for the key NAMES and
   # look for this one among them.
+  #
+  # grep must read everything kubectl prints, so it is not `grep -q`. That form
+  # exits at the first match, kubectl then dies of SIGPIPE on its next line, and
+  # `pipefail` turns a key that was found into a failed pipeline. Staging lost
+  # two deploys to a key reported MISSING that was there all along. The same
+  # holds for every pipe into grep in this script.
   kubectl -n "$NAMESPACE" get "$1" "$2" \
     -o go-template='{{if .data}}{{range $k, $_ := .data}}{{println $k}}{{end}}{{end}}' \
-    2>/dev/null | grep -qxF "$3"
+    2>/dev/null | grep -xF "$3" > /dev/null
 }
 
 decoded_secret_value() {
@@ -318,8 +324,8 @@ run_check() {
 
     # 1. The chart's own object. It does not exist before the first deploy, so
     #    the render is the only thing that can answer for it.
-    if printf '%s\n' "$chart_objects" | grep -qxF "$kind $name"; then
-      if printf '%s\n' "$chart_keys" | grep -qxF "$kind $name $key"; then
+    if printf '%s\n' "$chart_objects" | grep -xF "$kind $name" > /dev/null; then
+      if printf '%s\n' "$chart_keys" | grep -xF "$kind $name $key" > /dev/null; then
         echo "  ok      $kind/$name $key (chart)"
       else
         echo "  MISSING key '$key' in $kind/$name, which the chart renders (chart)"
@@ -340,7 +346,7 @@ run_check() {
       failures=$((failures + 1))
       continue
     fi
-    if kubectl -n "$NAMESPACE" get "$kind" "$name" -o "jsonpath={.data.$key}" 2>/dev/null | grep -q .; then
+    if kubectl -n "$NAMESPACE" get "$kind" "$name" -o "jsonpath={.data.$key}" 2>/dev/null | grep . > /dev/null; then
       case "$kind/$key" in
         secret/*_DB_URL)
           # Present is not enough for a connection string: see the note above
@@ -376,7 +382,7 @@ run_check() {
   # could arrive as a literal `value:` on a container, from a Secret, or from a
   # ConfigMap key nobody thought to check, and all three are the same mistake.
   if printf '%s
-' "$rendered" | grep -q 'ADMIN_DEV_AUTOLOGIN'; then
+' "$rendered" | grep 'ADMIN_DEV_AUTOLOGIN' > /dev/null; then
     echo
     echo "  REFUSED ADMIN_DEV_AUTOLOGIN appears in the rendered chart." >&2
     echo "          That switch signs an operator in with no password. It belongs" >&2
