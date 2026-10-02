@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AdapterKey } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
+import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaStoreDiscoveryRunner } from './mercadona-store-discovery.runner';
@@ -43,12 +44,14 @@ export class StoreDiscoveryRunner {
     private readonly osm: OsmStoreDiscoveryRunner,
     lidl: LidlStoreDiscoveryRunner,
     mercadona: MercadonaStoreDiscoveryRunner,
-    elJamon: ElJamonStoreDiscoveryRunner
+    elJamon: ElJamonStoreDiscoveryRunner,
+    dia: DiaStoreDiscoveryRunner
   ) {
     this.cases = {
       'lidl-api': lidl,
       'mercadona-api': mercadona,
       'eljamon-web': elJamon,
+      'dia-api': dia,
     };
   }
 

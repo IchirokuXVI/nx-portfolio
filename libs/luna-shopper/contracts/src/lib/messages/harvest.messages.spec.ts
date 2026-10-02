@@ -79,6 +79,22 @@ describe('adapterCapabilities', () => {
     expect(ADAPTER_CAPABILITIES['manual'].printedLocale).toBeNull();
   });
 
+  it('lets a DIA walk write LOCAL_AREA scopes and nothing else', () => {
+    // A fulfilment store is what DIA prices by, as a warehouse is for
+    // Mercadona (plan 0174, section 3.1). The chain's NATIONAL scope is the
+    // run's default scope, and never one of the scopes a walk is given.
+    expect(ADAPTER_CAPABILITIES['dia-api'].walkablePriorities).toEqual(
+      ADAPTER_CAPABILITIES['mercadona-api'].walkablePriorities
+    );
+    expect(ADAPTER_CAPABILITIES['dia-api']).toMatchObject({
+      writesPrices: true,
+      scopesItsOwn: true,
+      listsItsOwnStores: true,
+      hasProductPages: false,
+      skipsKnownDetails: false,
+    });
+  });
+
   it('lets a Mercadona walk write LOCAL_AREA scopes and nothing else', () => {
     // The switch an operator asked for, and it lives on the adapter rather than
     // in the runner (plan 0108, D5). A NATIONAL row for this chain is an
@@ -119,6 +135,7 @@ describe('adapterCapabilities', () => {
       'carrefour-web',
       'lidl-api',
       'eljamon-web',
+      'dia-api',
     ] as const) {
       expect(ADAPTER_CAPABILITIES[key].printedLocale).toBe('es');
     }
