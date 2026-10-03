@@ -14,7 +14,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
-import { categoryId } from '../db/reference/ids';
+import { categoryId } from '../db/taxonomy/ids';
 import {
   Brand,
   CATALOG_ENTITIES,

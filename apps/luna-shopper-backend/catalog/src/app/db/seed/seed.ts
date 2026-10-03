@@ -17,7 +17,7 @@ import {
   SupermarketLocationItem,
   SupermarketLocationPriceScope,
 } from '../../entities';
-import { seedTaxonomy, writeItemCategories } from '../reference/taxonomy-seed';
+import { seedTaxonomy, writeItemCategories } from '../taxonomy/taxonomy-seed';
 
 /**
  * The catalog half of the demo world seeder (plan 0013, section 2).

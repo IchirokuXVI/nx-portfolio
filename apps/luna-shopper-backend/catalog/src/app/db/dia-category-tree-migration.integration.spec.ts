@@ -12,7 +12,7 @@ import {
   LEAF_REMAP,
   ROOT_REMAP,
 } from './migrations/1758500000000-DiaCategoryTree';
-import { categoryId } from './reference/ids';
+import { categoryId } from './taxonomy/ids';
 
 /**
  * The migration that swaps the first category tree for DIA's, against real

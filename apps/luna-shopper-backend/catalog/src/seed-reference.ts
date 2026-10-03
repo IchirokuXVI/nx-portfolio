@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import { seedReferenceCatalog } from './app/db/reference';
+import { seedReferenceCatalog } from './app/db/taxonomy';
 import { CATALOG_ENTITIES } from './app/entities';
 
 /**
