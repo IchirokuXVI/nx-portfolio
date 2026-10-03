@@ -23,6 +23,7 @@ import {
   readShareLinkFromSheet,
   reel,
   row,
+  rows,
   sheet,
   signIn,
 } from './support/app';
@@ -206,11 +207,15 @@ test.describe('a registered participant', () => {
         quantity: 2,
       });
 
+      // Not `row()`: somebody else added this line, so on Dana's screen its name
+      // carries the "New" tag (velista `0093`) and is no longer the words alone.
+      const hers = rows(dana).filter({
+        has: dana.locator('.content', { hasText: elsewhereLine }),
+      });
+
       // On Dana's open basket as a line still to buy, with nothing reloaded.
       await expect(
-        row(dana, elsewhereLine).getByRole('button', {
-          name: `Mark ${elsewhereLine} as got`,
-        })
+        hers.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
       ).toBeVisible();
 
       await buyBasketRow(alice, live.id, added.rowKey, {
@@ -238,14 +243,13 @@ test.describe('a registered participant', () => {
 
       // And what Dana's screen draws, without a reload: a done row, the caption,
       // and no control that takes the purchase back.
-      const done = row(dana, elsewhereLine);
-      await expect(done.locator('.row.is-done')).toBeVisible();
-      await expect(done).toContainText('Bought on another basket');
+      await expect(hers.locator('.row.is-done')).toBeVisible();
+      await expect(hers).toContainText('Bought on another basket');
       await expect(
-        done.getByRole('button', { name: `${elsewhereLine} is got. Undo it` })
+        hers.getByRole('button', { name: `${elsewhereLine} is got. Undo it` })
       ).toHaveCount(0);
       await expect(
-        done.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
+        hers.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
       ).toHaveCount(0);
       await expectBasketUrl(dana, basketId);
     });
