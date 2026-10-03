@@ -3,7 +3,8 @@ import { WRITABLE_LIST } from '../baskets/basket.sql';
 import { OPEN_GENERATED_BASKET } from './open-basket.sql';
 
 /**
- * The five reads behind a basket (plan 0136, section 3; plan 0137, section 3).
+ * The six reads behind a basket (plan 0136, section 3; plan 0137, section 3;
+ * plan 0188).
  *
  * Raw SQL rather than a query builder, for the reason `basket.sql.ts`
  * gives at length: every camelCase column is quoted by hand, because TypeORM does
@@ -12,8 +13,8 @@ import { OPEN_GENERATED_BASKET } from './open-basket.sql';
  * repository could catch it.
  *
  * **None of them is per line.** A basket read is the session, the covered lines,
- * their product sets, the settlements in scope and the standing skips, whatever
- * the basket holds.
+ * their product sets, the settlements in scope, what other baskets bought
+ * lately and the standing skips, whatever the basket holds.
  */
 
 /**
@@ -87,11 +88,51 @@ export interface BasketSessionRow {
 }
 
 /**
+ * "A purchase somebody made lately, and not through this basket" (plan 0188),
+ * for a `line_settlements` row under `settlementAlias`.
+ *
+ * `basketParam` is the reading basket and `gapParam` is
+ * `PURCHASE_SESSION_GAP_MS`, or null to answer no for every purchase. The
+ * caller says which line: this fragment is the rest of the rule.
+ *
+ * One fragment, read by the covered lines and by {@link BASKET_ELSEWHERE_SQL},
+ * so the read cannot select a line for a purchase it then fails to load, or
+ * load one it did not select.
+ *
+ * - **`IS DISTINCT FROM`, not `<>`.** A buy made on the zone list page is a
+ *   loose buy with a null `basketId`, and `NULL <> $2` is null, which a `WHERE`
+ *   reads as false. A loose buy is "not of this basket" and has to count.
+ * - **`BOUGHT` alone.** Another basket's "the shop had none" says nothing about
+ *   this one's row: the line still has its quantity and is a row anyway.
+ * - **`now()` is the database's clock**, for the reason {@link
+ *   BASKET_SESSION_SQL} gives about its own window.
+ * - **A null gap answers false**, which is how a finished basket opts out: the
+ *   rule holds only while a basket is open.
+ *
+ * Beside a line id it is one range on `ix_settlements_line`, which is
+ * `("lineId", "settledAt" DESC)`: the line, then the newest purchases first,
+ * stopping at the window.
+ */
+export function boughtElsewhere(
+  settlementAlias: string,
+  basketParam: string,
+  gapParam: string
+): string {
+  const s = settlementAlias;
+  return `${s}."basketId" IS DISTINCT FROM ${basketParam}::uuid
+            AND ${s}."outcome" = 'BOUGHT'
+            AND ${s}."revertedAt" IS NULL
+            AND ${s}."settledAt"
+                >= now() - (${gapParam}::double precision * interval '1 millisecond')`;
+}
+
+/**
  * The lines a basket shows. `$1` is the covered list ids, `$2` the basket, `$3`
  * the session start or null for no lower bound, `$4` whether any purchase is in
- * scope at all.
+ * scope at all, `$5` the window of {@link boughtElsewhere} in milliseconds, or
+ * null for a basket that is not open.
  *
- * Three predicates carry rules, and the fourth is the one that is easy to miss:
+ * Four predicates carry rules, and the last is the one that is easy to miss:
  *
  * - **`deletedAt IS NULL`** (plan 0132). A line the household deleted is not on
  *   anybody's list, so it is not a row here either. Its purchases survive on the
@@ -103,6 +144,10 @@ export interface BasketSessionRow {
  * - **`quantity > 0` OR a purchase in scope.** The second half is what keeps a
  *   row on the screen after it is bought to zero, so the revert has something to
  *   be pressed on. Without it a settle would make its own row vanish.
+ * - **OR a purchase somebody else made lately** (plan 0188). Two people shop
+ *   one list from two baskets, and the half above kept the row for the buyer
+ *   alone: in every other basket it vanished under the thumb. A line bought
+ *   lately is a row even at zero, whoever bought it.
  * - **No `LIMIT`.** The cap is on rows and a row is several lines, so it cannot
  *   be applied here. It is applied to the grouping, in TypeScript.
  *
@@ -112,7 +157,7 @@ export interface BasketSessionRow {
 export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
   const extra =
     narrow === 'SET'
-      ? 'AND ll."itemSetHash" = $5'
+      ? 'AND ll."itemSetHash" = $6'
       : narrow === 'TEXT'
         ? 'AND ll."itemSetHash" IS NULL'
         : '';
@@ -142,6 +187,15 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
             AND ($3::timestamptz IS NULL OR s."settledAt" >= $3::timestamptz)
         )
       )
+      OR (
+        $5::double precision IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM "line_settlements" e
+          WHERE e."lineId" = ll.id
+            AND ${boughtElsewhere('e', '$2', '$5')}
+        )
+      )
     )
     ${extra}
   ORDER BY ll."createdAt", ll.id
@@ -161,7 +215,7 @@ export function coveredLinesSql(narrow: CoveredLineNarrowing): string {
  */
 export type CoveredLineNarrowing = 'ALL' | 'SET' | 'TEXT';
 
-/** Every covered line of the basket. `$1` to `$4` as above. */
+/** Every covered line of the basket. `$1` to `$5` as above. */
 export const COVERED_LINES_SQL = coveredLinesSql('ALL');
 
 /** One row of {@link COVERED_LINES_SQL}: one covered list line. */
@@ -246,6 +300,42 @@ export interface BasketSettlementRow {
   settledByParticipantId: string | null;
   /** Inside the skip window, by the database's clock. Read for `LIVE` alone. */
   fresh: boolean;
+}
+
+/**
+ * What other baskets bought of these lines lately, one row per line (plan
+ * 0188). `$1` is the reading basket, `$2` the line ids, `$3` the window in
+ * milliseconds.
+ *
+ * It answers a **count and a time and nothing else**, which is the redaction:
+ * the row a reader is served must not name who bought, so the participant, the
+ * account and the basket of the purchase are never selected. A column this
+ * statement does not load cannot leak through a mapper that forgot to drop it
+ * (plan 0130, section 6).
+ *
+ * Summed here rather than in TypeScript because nothing downstream wants the
+ * purchases apart: the row says how many and when the newest was.
+ *
+ * The predicate is {@link boughtElsewhere}, the same one that selected the
+ * line, so the two cannot disagree.
+ */
+export const BASKET_ELSEWHERE_SQL = `
+  SELECT s."lineId" AS "lineId",
+         SUM(s.quantity)::int AS "quantity",
+         MAX(s."settledAt") AS "settledAt"
+  FROM "line_settlements" s
+  WHERE s."lineId" = ANY($2::uuid[])
+    AND ${boughtElsewhere('s', '$1', '$3')}
+  GROUP BY s."lineId"
+`;
+
+/** One row of {@link BASKET_ELSEWHERE_SQL}: one line's purchases elsewhere. */
+export interface BasketElsewhereRow {
+  lineId: string;
+  /** Units bought through other baskets, or through none, inside the window. */
+  quantity: number;
+  /** The newest of those purchases. */
+  settledAt: Date;
 }
 
 /**
