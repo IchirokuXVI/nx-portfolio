@@ -332,6 +332,7 @@ export function toEntryView(
     lineId: entry.lineId,
     left: entry.quantity,
     bought,
+    boughtElsewhere: 0,
     // The same rule as the row's, asked of a group of one: an entry the shopper
     // skipped reads `SKIPPED` whether or not its neighbours did, which is what
     // lets a client draw the half of a row that was put off.
@@ -373,6 +374,7 @@ export function toRowView(
     bought,
     // Computed here and stored nowhere, which is the whole of plan 0136.
     asked: bought + left,
+    boughtElsewhere: 0,
     state,
     note: note?.note ?? null,
     noteAt: note ? note.noteAt.toISOString() : null,

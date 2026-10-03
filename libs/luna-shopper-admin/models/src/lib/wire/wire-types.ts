@@ -2098,6 +2098,7 @@ export type BasketBasketRowEntryView = {
   listId?: string;
   left: number;
   bought: number;
+  boughtElsewhere: number;
   state: EnumsBasketRowState;
   approvalStatus: EnumsLineApprovalStatus;
   demandEditable: boolean;
@@ -2131,6 +2132,7 @@ export type BasketBasketRowView = {
   left: number;
   bought: number;
   asked: number;
+  boughtElsewhere: number;
   state: EnumsBasketRowState;
   note: EnumsBasketRowNote | null;
   noteAt: string | null;
@@ -3374,7 +3376,7 @@ export type EnumsBasketRowMark = 'ADDED' | 'CHANGED' | 'REMOVED';
 /**
  * `enums.BasketRowNote` in the gateway's OpenAPI document.
  */
-export type EnumsBasketRowNote = 'SKIPPED_EARLIER';
+export type EnumsBasketRowNote = 'SKIPPED_EARLIER' | 'BOUGHT_ON_ANOTHER_BASKET';
 
 /**
  * `enums.BasketRowState` in the gateway's OpenAPI document.

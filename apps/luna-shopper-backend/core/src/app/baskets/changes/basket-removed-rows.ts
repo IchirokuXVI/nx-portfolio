@@ -71,6 +71,9 @@ export function removedRows(
       left: 0,
       bought,
       asked: bought,
+      // A line that left the coverage is not read for other baskets' purchases
+      // (plan 0188): the row is a fact about the past and counts toward nothing.
+      boughtElsewhere: 0,
       state: BasketRowState.REMOVED,
       note: null,
       noteAt: null,

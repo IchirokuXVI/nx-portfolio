@@ -225,6 +225,7 @@ function emptyRow(rowKey: string): BasketRowView {
     left: 0,
     bought: 0,
     asked: 0,
+    boughtElsewhere: 0,
     state: BasketRowState.WANTED,
     note: null,
     noteAt: null,
