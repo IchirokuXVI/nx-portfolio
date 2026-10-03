@@ -1,3 +1,5 @@
+> **PR:** [#607](https://github.com/IchirokuXVI/nx-portfolio/pull/607)
+
 # 0188: a line bought through another basket stays a row
 
 > Reported by the owner on 2026-10-04, as the first thing to build. Two or more people
