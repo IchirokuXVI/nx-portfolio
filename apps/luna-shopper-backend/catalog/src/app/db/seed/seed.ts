@@ -155,7 +155,7 @@ export async function seedCatalog(dataSource: DataSource): Promise<void> {
   }
   await dataSource.transaction(async (m: EntityManager) => {
     // The whole taxonomy, before any product names a leaf of it (plan 0166).
-    // An upsert that never deletes, so it is safe beside the reference seed.
+    // An upsert that never deletes, so a row the back office added survives.
     await seedTaxonomy(m);
     for (const step of [...CATALOG_INSERT_ORDER].reverse()) {
       const ids = step.rows.map((r) => r.id);

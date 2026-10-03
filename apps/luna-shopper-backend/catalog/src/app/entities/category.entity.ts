@@ -16,7 +16,7 @@ import { BaseEntity } from './base.entity';
  * a root, and a row with children may not be given a parent.
  *
  * The id of a seeded row is derived from its slug (`categoryId` in
- * `db/reference/ids.ts`), and so is the id of a row the back office creates, so
+ * `db/taxonomy/ids.ts`), and so is the id of a row the back office creates, so
  * a slug later added to the taxonomy file lands on the row that already holds
  * it rather than beside it.
  */

@@ -27,7 +27,7 @@ import {
 export interface ItemPriceWrite {
   scope: PriceScope;
   sourceKind: PriceSourceKind;
-  /** The run writing, or null for a person and for the reference seed. */
+  /** The run writing, or null when the writer is not a run, a person for one. */
   sourceRunId: string | null;
   /**
    * The scope every entry was read at, when the run is copying it to

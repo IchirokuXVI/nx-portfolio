@@ -1,26 +1,24 @@
 import { v5 as uuidv5 } from 'uuid';
 
 /**
- * Every id in the reference catalog is derived from a slug, not written down
- * (plan 0067, section 6).
+ * A category's id is derived from its slug, not written down (plan 0166,
+ * section 5).
  *
- * The demo world states its ids as constants, which is right for a graph of a
- * dozen rows that specs assert against by name. This set is 139 groups, 135
- * items, two chains and their scopes and locations, and hand written uuids at
- * that size are 400 lines of noise nobody can check and one transposed digit
- * away from a silent mis-link.
+ * `categoryId('fruits')` is the same uuid in every database, this week and
+ * next, so every writer of the tree can upsert by primary key without a lookup
+ * table. A v5 uuid is a hash, so the derivation is pure and reproducible
+ * anywhere, and the namespace below is what keeps these ids from colliding
+ * with anything else that hashes the word "fruits".
  *
- * Deriving them buys the property the seed actually needs, which is that running
- * it twice writes the same rows: `groupId('milk')` is the same uuid in every
- * database, this week and next, so the seed can upsert by primary key and stay
- * idempotent without a lookup table. A v5 uuid is a hash, so the derivation is
- * pure and reproducible anywhere, and the namespace below is what keeps these
- * ids from colliding with anything else that hashes the word "milk".
+ * The namespace is fixed forever, and so is the `category:` prefix. Two
+ * migrations inserted the tree under the ids this derives, and every category
+ * row in both clusters carries one. Changing either renames every row, which
+ * to a database is a deletion and an insertion for each, and every product
+ * pointing at one of the old ids would be left pointing at nothing.
+ * `taxonomy.spec.ts` pins a handful of ids so that a change fails there first.
  *
- * The namespace is fixed forever. Changing it renames every row in the reference
- * catalog, which to a database is 274 deletions and 274 insertions, and any
- * shopping line pointing at one of the old ids would be left pointing at
- * nothing.
+ * The name of the constant is history: this file was part of the reference
+ * seed, which plan 0180 removed. The value is what matters.
  */
 const REFERENCE_NAMESPACE = '6f9d2c41-3b7a-4e58-9c2d-8a1f5b0e7d34';
 
@@ -28,54 +26,9 @@ const derive = (kind: string, slug: string): string =>
   uuidv5(`${kind}:${slug}`, REFERENCE_NAMESPACE);
 
 /**
- * Mercadona's row id, which this module does **not** derive.
- *
- * `uq_supermarkets_external_brand_key` permits exactly one row carrying
- * `Q377705`, so there is one Mercadona in a catalog database and every writer
- * has to mean the same one. The demo world seeder states this id as a constant
- * and inserts it; the reference seed adopts whatever row already carries the
- * brand key and only creates one when nothing does. Deriving a second id here
- * would make the two disagree, and the disagreement surfaces as a unique
- * violation in whichever runs second rather than as two Mercadonas.
- *
- * It is written out rather than imported because the demo world lives in a test
- * fixtures library, and the seed that runs inside the production image should
- * not depend on one. `reference-catalog.spec.ts` asserts the two still match.
- */
-export const MERCADONA_SUPERMARKET_ID = '5efa0000-0000-4000-a000-000000000001';
-
-export const groupId = (slug: string): string => derive('group', slug);
-/**
  * A category's id (plan 0166, section 5). One namespace for roots and leaves,
  * because a slug is unique across the whole tree and not only among siblings.
  * The migration that created the table inserted its roots and landing leaves
- * under these same ids, so the seed that follows it upserts over them.
+ * under these same ids, so a taxonomy upsert that follows it writes over them.
  */
 export const categoryId = (slug: string): string => derive('category', slug);
-export const itemId = (store: string, slug: string): string =>
-  derive('item', `${store}/${slug}`);
-/**
- * The product id for an authored entry: its own, unless it names a `sameAs`
- * (see `AuthoredItem`).
- *
- * Every writer has to agree on this, so it lives here beside the derivation
- * rather than inside the seeder. An entry whose price row used one id and whose
- * product row used another would price a product that is not the one it wrote.
- */
-export const authoredItemId = (
-  store: string,
-  item: { slug: string; sameAs?: { store: string; slug: string } }
-): string =>
-  item.sameAs
-    ? itemId(item.sameAs.store, item.sameAs.slug)
-    : itemId(store, item.slug);
-
-export const supermarketId = (slug: string): string =>
-  derive('supermarket', slug);
-export const priceScopeId = (slug: string): string => derive('scope', slug);
-/** A reference chain's NATIONAL scope, its default (plan 0153). */
-export const nationalScopeId = (slug: string): string =>
-  derive('scope', `${slug}/national`);
-export const locationId = (slug: string): string => derive('location', slug);
-export const supermarketItemId = (store: string, slug: string): string =>
-  derive('supermarket-item', `${store}/${slug}`);

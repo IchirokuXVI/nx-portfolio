@@ -48,9 +48,8 @@ const BEFORE_FIRST_TREE = CATALOG_MIGRATIONS.slice(
 );
 
 /**
- * The first tree as the reference seed wrote it, root by root. It left
- * `db/reference/categories.ts` with this plan, so it is stated here, where it
- * is history. The keys are `ROOT_REMAP`'s and the leaves are `LEAF_REMAP`'s.
+ * The first tree as the reference seed wrote it, root by root. It left the
+ * taxonomy file with plan 0173, so it is stated here, where it is history. The keys are `ROOT_REMAP`'s and the leaves are `LEAF_REMAP`'s.
  */
 const FIRST_TREE: Record<string, string[]> = {
   'fruit-and-vegetables': [

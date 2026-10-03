@@ -279,8 +279,8 @@ export async function moreSpecificScopesOf(
  * opens its own transaction, because it runs **inside** the write that made it
  * necessary: a price row committed without its materialized row is a price a
  * shopper cannot see, and a materialized row committed without its price row
- * is one they should not. The reference seed, which has a manager and no Nest
- * injector, calls it the same way.
+ * is one they should not. A caller that has a manager and no Nest injector
+ * can call it the same way.
  *
  * Idempotent: running it twice writes nothing the second time, which is what
  * lets two sweep replicas meet on a row and waste work rather than disagree.

@@ -13,7 +13,8 @@ what that task does, and they are the way to run it by hand, on the VPS as
 
 - **Catalog and harvester start empty.** The next deploy runs the migrations,
   which recreate the schema, the postal code points and the six price policies.
-  The reference seed is off in both clusters, so nothing else comes back.
+  The reference seed no longer exists (backend plan 0180), so nothing else
+  comes back.
 - **Lost for good in catalog:** every chain, shop, price scope, product,
   product group, brand, price, alias and audit row.
 - **Lost for good in the harvester:** every harvest run, preset, uploaded
@@ -61,7 +62,8 @@ what that task does, and they are the way to run it by hand, on the VPS as
      psql -U luna_harvester -d postgres -c 'DROP DATABASE luna_harvester WITH (FORCE)' -c 'CREATE DATABASE luna_harvester OWNER luna_harvester'
    ```
 
-4. Deploy again, with a chart that has `referenceSeed.enabled: false`. A
+4. Deploy again. The chart has had no reference seed since backend plan 0180,
+   so there is no switch to check first. A
    service does not migrate its database at startup. The migration Jobs are Helm
    hooks, so an upgrade is what rebuilds the schema, and it also scales the two
    services back up.

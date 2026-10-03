@@ -136,15 +136,6 @@ lunaShopperBackend:
     enabled: true
     harvestEnabled: true
 
-  # The reference catalog, off (2026-09-25), matching production.
-  #
-  # Staging starts from an empty catalog, as production does after the reset in
-  # `k8s/catalog-reset/README.md`, so what is clicked through here is what
-  # production holds. The Job runs on `pre-upgrade`, so leaving it on would plant
-  # the 239 receipt products again on every deploy.
-  referenceSeed:
-    enabled: false
-
   # No nightly backups in staging: it is disposable by design. The CronJobs render
   # suspended, because a release task (`k8s/release-tasks`) dumps every database
   # it touches before it runs, and it starts that dump from them. That needs

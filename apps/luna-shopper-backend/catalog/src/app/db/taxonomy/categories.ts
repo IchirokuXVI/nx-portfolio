@@ -19,14 +19,15 @@ import type { ReferenceCategoryRoot } from './types';
  * The comment beside each row is DIA's id for that node. It is not data: the
  * table has no column for it and the id means nothing to the catalog.
  *
- * The seed upserts every row here by the id its slug derives on every boot,
- * names and positions included, and never deletes. So a rename in this file
- * wins, and a row added by hand in the back office survives.
+ * `seedTaxonomy` upserts every row here by the id its slug derives, names and
+ * positions included, and never deletes. Only the demo seed calls it, so in a
+ * cluster the tree is what the migration wrote and what the back office has
+ * made of it since.
  *
  * **A slug is an identity and never changes once shipped.** The id is derived
  * from it, the migration `DiaCategoryTree` wrote every row here under those
- * same ids, and the reference products, the demo world and the harvest
- * resolvers all name a category by slug. Rename the `name`, never the `slug`.
+ * same ids, and the demo world and the harvest resolvers all name a category
+ * by slug. Rename the `name`, never the `slug`.
  *
  * There are no catch all leaves. A product that fits no leaf goes on
  * `uncategorised`, which is also where the harvester files a product it cannot

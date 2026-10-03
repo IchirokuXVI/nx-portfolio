@@ -409,7 +409,7 @@ export_service_env() {
 
 # What stack.sh needs from an ephemeral slot, and nothing else.
 #
-# Its migrations, the dev admin command and the reference seed all resolve a
+# Its migrations and the dev admin command both resolve a
 # database from the environment through the same dotenv loader, so the four URLs
 # are enough and the seven PORTs would only be noise, one of them wrong for
 # whatever ran last. LUNA_SLOT_ENV is exported at parse time and points compose

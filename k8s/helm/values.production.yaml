@@ -193,20 +193,6 @@ lunaShopperBackend:
     # carries this, which is what asserts the key is actually in the cluster.
     harvestEnabled: true
 
-  # The reference catalog, off (2026-09-25), and off in staging too.
-  #
-  # The catalog and harvester databases are being reset to start clean, and the
-  # clean start is an empty catalog: no reference chains, shops, groups or the
-  # 239 receipt products. The Job runs on `pre-upgrade`, so leaving it on would
-  # plant them again on the next deploy. `k8s/catalog-reset/README.md` is the
-  # procedure, and its cleanup clears the references core holds to them.
-  #
-  # Turning it back on is safe: it upserts by derived id and never deletes. It
-  # overwrites what it states on the rows it writes, so a back office edit to
-  # one of those products does not survive a deploy while it is on.
-  referenceSeed:
-    enabled: false
-
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
   backups:
