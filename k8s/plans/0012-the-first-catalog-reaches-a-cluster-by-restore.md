@@ -39,13 +39,32 @@ and leaves the old databases beside the new ones for a week.
   (`supermarket_items`, the search documents), so nothing has to be computed again.
 - **Where the ids came from.** The local catalog started as a dump of staging
   (2026-10-03T00:16:54Z). Staging then held 139 brands, 5 supermarkets, 102 price scopes,
-  40 locations and no products, and the local work kept those ids. Production's ids are
-  its own.
-- **Tasks `0001` and `0002` already ran in both clusters** (the owner, 2026-10-03), so
-  neither runs again. Production still holds some rows in both databases, written after
-  the reset, and the owner wants all of them gone. This task does that by itself: it puts
-  whole databases in place of the old ones, and section 2 says how it is told that the
-  loss is intended.
+  40 locations and no products, and the local work kept those ids.
+- **Production holds the same ids as staging.** Read on 2026-10-03: the two catalogs agree
+  on every id of `supermarkets` (5), `price_scopes` (102), `supermarket_locations` (40)
+  and `brands` (139), by an MD5 over the sorted ids, and both hold 0 products and 10,977
+  audit rows. So the ids in the dumps are production's too. Core holds no reference to a
+  product, a shop or a settlement item in either cluster.
+- **Tasks `0001` and `0002` already ran in both clusters**, so neither runs again.
+- **What each cluster holds that the restore replaces**, read on 2026-10-03:
+
+  | | Staging | Production |
+  | --- | ---: | ---: |
+  | Catalog migrations | 26 | 25 (no `DiaCategoryTree1758500000000` yet, release `0.12.0`) |
+  | Categories | 275 | 29 |
+  | Harvester migrations | 17 | 17 |
+  | `source_catalog_entries` | 0 | 18,537 (18,530 `UNRESOLVED`, 7 `CANDIDATE`, none decided) |
+  | `source_entry_prices` | 0 | 9,595 |
+  | `harvest_runs` | 6 | 50 (harvests of 2026-09-25 to 2026-09-27) |
+  | `supermarket_sources` | 0 | 4, **all enabled** |
+  | `discovered_places` | 85, all `NEW` | 99: 40 `IMPORTED`, 1 `REJECTED`, 58 `NEW` |
+  | `postal_code_discovery_requests` | 6 | 13 |
+
+  The owner wants all of it gone. This task does that by itself: it puts whole databases
+  in place of the old ones, and section 2 says how it is told that the loss is intended.
+- **Both clusters can take the upload.** Each has `luna-shopper-backend-backup-secret`
+  and the four backup CronJobs. Staging's bucket is `velista-staging` and its CronJobs are
+  suspended, as designed. Production's bucket is `velista`.
 - **`restore-database.sh` already does the first half.** It downloads an object from the
   backup bucket inside the database pod, checks that `pg_restore --list` reads it, and
   restores it into `<database>_restore` beside the real one. It never writes to the real
@@ -168,13 +187,19 @@ that a person can read them. `--apply` does every step.
 4. **Nothing the target holds is lost.** For `supermarkets`, `price_scopes`,
    `supermarket_locations`, `brands` and `product_groups`, list every id that the live
    database holds and the scratch database does not. On staging it can name rows that the
-   local work removed (the brand "D.O." was deleted locally). On production it names
-   every row that was written after the reset, because production's ids are its own. The
-   script prints the list and refuses, unless each id is in
-   `expected-losses.<environment>.txt` beside the manifest, with a reason on the same line.
-   The file for production is written from a dry run and read by the owner before the
-   release, so that "erase everything production holds" is a list somebody saw and not a
-   switch.
+   local work removed (the brand "D.O." was deleted locally). Production holds the same
+   ids, so its list is the same short one. The script prints the list and refuses, unless
+   each id is in `expected-losses.txt` beside the manifest, with a reason on the same
+   line. The file is written from a dry run and read by the owner before the release.
+
+   The harvester has no such list. Its rows are replaced as a whole, against the ceiling
+   of step 1, and the table in "Context" is what production loses. One part of it is a
+   person's work: **40 imported and 1 rejected `discovered_places`.** The dumps hold
+   staging's 85 places, all `NEW`, under other ids. After the restore, store discovery
+   offers the 40 shops again although catalog already holds them, and the rejected place
+   comes back. The owner said to erase everything, so the default is to lose them. The
+   dry run prints the 41 rows, so that the loss is seen. Ask the owner before you build
+   anything that carries them over.
 5. **Prepare the scratch databases for a cluster.**
    - `UPDATE supermarket_sources SET enabled = false` (condition 2 of the document, plan
      `0083`). The dumps hold four rows that are on. A cluster starts with every chain off,
@@ -220,8 +245,8 @@ RUN_UNTIL_PRODUCTION="<the owner's date>"
 PRODUCTION_RELEASE="<the owner's version>"
 MAX_ITEMS_REPLACED_STAGING="0"
 MAX_SOURCE_ENTRIES_REPLACED_STAGING="0"
-MAX_ITEMS_REPLACED_PRODUCTION="<the owner's number>"
-MAX_SOURCE_ENTRIES_REPLACED_PRODUCTION="<the owner's number>"
+MAX_ITEMS_REPLACED_PRODUCTION="0"
+MAX_SOURCE_ENTRIES_REPLACED_PRODUCTION="18537"
 DATABASES="catalog harvester core"
 ```
 
@@ -257,7 +282,7 @@ catalog is a week old.
 
 1. Plan `0011` is merged. Tasks `0001` and `0002` have closed windows and ceilings of 0.
 2. The owner uploads both dumps to the staging bucket and gives the checksums.
-3. A dry run on each cluster, by hand on the VPS, writes the two `expected-losses` files
+3. A dry run on each cluster, by hand on the VPS, writes `expected-losses.txt`
    and gives the ceilings. The owner reads them.
 4. This plan merges to `dev`, then to `main`. The staging deploy runs task `0003`.
 5. The owner reads staging: the back office queue (3,974 rows wait for a person), a

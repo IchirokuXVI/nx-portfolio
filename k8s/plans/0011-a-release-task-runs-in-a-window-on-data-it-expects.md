@@ -224,20 +224,29 @@ the record of what ran.
 **Both tasks already ran in staging and in production** (the owner, 2026-10-03). So this
 plan closes them. It does not arm them.
 
-- Each window is the day the task ran in that cluster, which is a date in the past. Read
-  it from the ledger, which holds the state and a UTC time per task:
+- Each window is the day the task ran in that cluster, which is a date in the past, and
+  `PRODUCTION_RELEASE` is the release that ran it. Both ledgers and production's
+  `helm get values --revision` were read on 2026-10-03:
 
-  ```sh
-  kubectl -n nx-portfolio get configmap release-tasks -o yaml   # once per cluster
-  ```
+  | Task | Staging, `done` at | Production, `done` at | Production release |
+  | --- | --- | --- | --- |
+  | `0001-reset-catalog-and-harvester` | 2026-09-25T20:14:22Z | 2026-09-25T15:41:48Z | `0.11.0` (revision 15) |
+  | `0002-remove-catalog-products` | 2026-10-02T13:00:25Z | 2026-10-02T13:31:00Z | `0.12.0` (revision 17) |
 
-- `PRODUCTION_RELEASE` is the release that ran the task in production. Read it from
-  `helm history nx-portfolio -n nx-portfolio` at the ledger's time.
+  So `0001` gets `2026-09-25` twice and `0.11.0`, and `0002` gets `2026-10-02` twice and
+  `0.12.0`. Read the ledgers again before you write them
+  (`kubectl -n nx-portfolio get configmap release-tasks -o yaml`), and stop if a state is
+  not `done`.
 - The ledger already stops both tasks. The window now stops them when the ledger is lost
   or edited, which is the case the owner fears: a catalog that holds the curated products
   and a runner that believes task `0002` never ran.
 - Both ceilings are `0`. `check.sh` of each task refuses when `luna_catalog.items` holds a
-  row. It is the third guard, and the only one that looks at the data.
+  row. It is the third guard, and the only one that looks at the data. Both clusters hold
+  0 products today, so the check passes now and refuses from the day plan `0012` restores
+  the catalog.
+- The markers are in place today: both databases of both clusters carry the comment of
+  `0001`, and both `items` tables carry the comment of `0002`. Plan `0012` swaps the
+  databases, and the comments stay on the old ones.
 - The static check treats these two files as it treats any task: a window in the past is
   valid, and the 14 day cap is measured from a commit that is later than the window, so it
   passes.
