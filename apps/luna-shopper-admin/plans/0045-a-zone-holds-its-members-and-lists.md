@@ -53,7 +53,8 @@ Use the `nx-portfolio-angular-developer` skill.
      `/shoppers/people/:userId/shopping-lists/:basketId`: its rows, what was bought, and each
      settlement. The shop of a settlement links to the shop page of `0042`.
 4. **Zones tab**: the `ZONES` list. A row shows the name, the owner, the member and list
-   counts, and the state "Marked for deletion". The same split as People.
+   counts, the number of requests that wait as a waiting state, and the state "Marked for
+   deletion". A "Requests waiting" filter shows only zones with one. The same split as People.
 5. **A zone**, `/shoppers/zones/:zoneId`, redirects to `members`. The header shows the name,
    the owner as a link to that person, and the join code in the mono face. Actions: "Edit
    zone", and under "More actions": "New join code", "Mark for deletion" or "Restore", and
@@ -83,7 +84,9 @@ Use the `nx-portfolio-angular-developer` skill.
 ### Scope
 
 - In: `feature-people`, `apps/luna-shopper-admin/src/app/sections.ts`, `en.json`, specs.
-- Out: the gateway (section 2), what an action does, the Overview (`0046`).
+- In, backend: `pendingCount` and `hasPending` (section 2), in `libs/luna-shopper/contracts`,
+  the core service and the gateway, with `openapi.json` and the wire types regenerated.
+- Out: any other gateway change, what an action does, the Overview (`0046`).
 
 ### Constraints
 
@@ -99,12 +102,17 @@ Use the `nx-portfolio-angular-developer` skill.
 ### Action boundaries
 
 - Do not add a way to create a person, a zone, a list or a line.
-- Do not change a gateway route unless the owner agreed to a follow up of section 2.
+- Build the gateway change of section 2, and no other. After it, run
+  `luna-shopper-backend-gateway:openapi` and then `luna-shopper-admin/models:wire-types`, and
+  commit both outputs.
 
 ### Progress evidence
 
 - `npx nx lint` and `npx nx test` for `luna-shopper-admin/feature-people` and
   `luna-shopper-admin`. `npx nx build luna-shopper-admin`.
+- `npx nx test` for `luna-shopper-backend-core` and `luna-shopper-backend-gateway`, and an
+  integration spec on an ephemeral slot: two zones, one with a pending member, and
+  `hasPending=true` returns only that one with `pendingCount` 1.
 - A spec for each redirect of target 8, and one that proves each action is declared once.
 - A browser walk on a Luna slot with the demo seed, at 390 px and 1360 px: approve a request,
   change a role, open a person from a zone, open a list and reject a line, open a shopping
@@ -126,12 +134,16 @@ Use the `nx-portfolio-angular-developer` skill.
 
 | The mock shows | Today | In this plan |
 | --- | --- | --- |
-| "1 request" on a zone row, and a filter for zones with requests | The zone row has no such count, and the zones list has no such filter | Out. The row shows no request state. Follow up: `pendingCount` on the zone row and a `hasPending` filter. |
-| The date a member joined | `createdAt` is on the membership | In. |
+| "1 request" on a zone row, and a filter for zones with requests | The zone row has no such count, and the zones list has no such filter | **In.** Add `pendingCount` to `AdminZoneRowView` and a boolean `hasPending` filter to `GET /v1/admin/zones`, in the core service and the gateway. |
+| The date a member joined | `createdAt` is on the membership | In, with no gateway change. |
 
-## 3. Decisions for the owner
+The Zones tab gains a "Requests waiting" filter, and the "Join requests" tile of the Overview
+links to the tab with that filter on.
 
-- **The follow up in section 2.** Without it, the Overview says that three requests wait and
-  the operator must look for the zones. With it, one press finds them.
-- **Lists by who made them.** The filter `createdByUserId` has no home in this design. Say so
-  if you use it, and a person gets a fourth tab.
+## 3. Decisions made
+
+The owner settled these on 2026-10-03.
+
+- **The gateway change of section 2 is part of this plan.**
+- **Lists by who made them is dropped.** The filter `createdByUserId` has no screen in this
+  design.

@@ -47,8 +47,7 @@ and price scopes, and a shop holds its section order and its products. Use the
 3. **`/chains/:chainId`** redirects to `shops`. The header shows the chain name, a state that
    says whether a harvester source exists and may be fetched (a link to Setup after `0044`),
    the info button and "Edit chain". Tabs: Shops, Sections, Price scopes, Details. Sections and
-   Price scopes show their count. Shops shows a count only when the gateway gives one
-   (section 2).
+   Price scopes show their count. Shops shows the `locationCount` of the chain (section 2).
 4. **Shops tab**, `/chains/:chainId/shops`: search by address, city or postal code, filters for
    the postal code source and for a price scope, and "Add a shop". A row shows the address,
    the city and postal code, and at most three states: "Own section order", "Map", "Postal
@@ -87,8 +86,10 @@ and price scopes, and a shop holds its section order and its products. Use the
 - In: `feature-catalog` (new `chains/` pages, the five descriptors, routes), `feature-resource`
   (a descriptor mounted under a parent route), `models` (the descriptor field for a route
   parameter), `apps/luna-shopper-admin/src/app/sections.ts`, `en.json`, specs.
+- In, backend: the two additive fields of section 2, in `libs/luna-shopper/contracts`, the
+  catalog service and the gateway, with `openapi.json` and the wire types regenerated.
 - Out: products, product groups, categories, prices and price rules (`0043`). The harvester
-  (`0044`). The gateway, except what section 2 allows.
+  (`0044`). Any other gateway change.
 
 ### Constraints
 
@@ -106,15 +107,16 @@ and price scopes, and a shop holds its section order and its products. Use the
 ### Action boundaries
 
 - Do not delete a gateway route.
-- Section 2 names two small gateway changes. Build them only if the owner agreed in the pull
-  request that wrote this plan. Otherwise build the screens without them and say so.
-- If you change a gateway route or DTO, run `luna-shopper-backend-gateway:openapi` and then
+- Section 2 names two gateway changes. Build both, and no other.
+- After them, run `luna-shopper-backend-gateway:openapi` and then
   `luna-shopper-admin/models:wire-types`, and commit both outputs.
 
 ### Progress evidence
 
 - `npx nx lint` and `npx nx test` for `luna-shopper-admin/feature-catalog`,
   `luna-shopper-admin/feature-resource`, `luna-shopper-admin/models` and `luna-shopper-admin`.
+- `npx nx test` for `luna-shopper-backend-catalog` and `luna-shopper-backend-gateway`, and an
+  integration spec on an ephemeral slot for each new field.
 - `npx nx build luna-shopper-admin`.
 - A spec for each redirect of target 9.
 - A browser walk on a slot at 390 px and 1360 px: open a chain, find a shop by postal code,
@@ -131,17 +133,19 @@ and price scopes, and a shop holds its section order and its products. Use the
 
 | The mock shows | Today | In this plan |
 | --- | --- | --- |
-| The shop count of each chain | Only the total over every chain, on the dashboard | Leave the number out. Follow up: `locationCount` on the admin supermarket view. |
-| The product name in a shop's Products tab | `CatalogSupermarketLocationItemView` has `itemId` only | Resolve names with the `nameLookup` that reference columns use (plan `0023`). Follow up: `itemName` on the view, as the price list has. |
-| The shop count of each price scope | Not on `CatalogPriceScopeView` | Leave the number out. |
-| The total of the Shops tab | The list is cursor paged with no total | Show no count on the tab. |
+| The shop count of each chain | Only the total over every chain, on the dashboard | **In.** Add `locationCount` to the admin supermarket view, in the catalog service and the gateway. The chain list and the Shops tab show it. |
+| The product name in a shop's Products tab | `CatalogSupermarketLocationItemView` has `itemId` only | **In.** Add `itemName` and `itemBrand` to that view, joined in the catalog read, as the price list has `itemName`. |
+| The shop count of each price scope | Not on `CatalogPriceScopeView` | Out. Leave the number out. |
 
-## 3. Decisions for the owner
+Both changes are additive fields on a read. Each needs a spec in the catalog service against
+real Postgres, the contract schema, and the two generators.
 
-- **The two follow ups in section 2** (`locationCount` on a chain, `itemName` on a shop
-  product row). Small backend changes. The screens work without them.
-- **Whether a shop can also be reached without its chain.** This plan says no, apart from the
-  redirect of an old address.
+## 3. Decisions made
+
+The owner settled these on 2026-10-03.
+
+- **The two gateway changes of section 2 are part of this plan.**
+- **A shop is reached only through its chain**, apart from the redirect of an old address.
 
 ## 4. What this plan deletes
 

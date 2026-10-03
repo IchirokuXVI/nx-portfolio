@@ -41,14 +41,14 @@ their counts, and put presets and file import on the Runs page. Use the
 1. **Section "Harvest"** has three tabs: Review (`/harvest/review`), Runs (`/harvest/runs`),
    Setup (`/harvest/setup`). `/harvest` redirects to Review.
 2. **What waits is counted.** The Review tab and the Harvest entry of the rail show the sum of
-   the waiting products, shops and places. The count is read with the dashboard, again after
+   the waiting products, shops, places and brands. The count is read with the dashboard, again after
    each decision batch, and again when the tab gains focus.
 3. **A run in progress shows on every Harvest tab.** In the header on a wide screen and as one
    line under the tabs on a phone: the state, the chain and kind, a progress bar, "N of M".
    It links to the run. Nothing is drawn when no run is in progress.
 4. **Review**, `/harvest/review/:queue` with `products`, `shops`, `places` or `brands`.
-   - A switch of four entries picks the queue, each with its count. Brands has no count
-     (section 2).
+   - A switch of four entries picks the queue, each with its count (section 2 adds the count
+     of Brands).
    - A chain filter is shared by the four queues and kept in the `chain` query parameter. The
      Shops queue needs a chain. With none chosen it lists the chains that have shops waiting,
      with the count of each, and a press chooses the chain.
@@ -99,7 +99,9 @@ their counts, and put presets and file import on the Runs page. Use the
 
 - In: `feature-harvest`, `feature-brands`, `ui/src/lib/harvest/**`, `feature-dashboard` (the
   chart), `apps/luna-shopper-admin/src/app/sections.ts`, `en.json`, specs.
-- Out: what a decision does, the run form's fields, the gateway (see section 2).
+- In, backend: `queues.brands` on the dashboard read (section 2), with the contract,
+  `openapi.json` and the wire types.
+- Out: what a decision does, the run form's fields, any other gateway change.
 
 ### Constraints
 
@@ -118,12 +120,15 @@ their counts, and put presets and file import on the Runs page. Use the
 
 - Do not change a harvester route. This plan moves screens.
 - Do not delete `PlaceGroupsPage` logic. Move it into the Places queue.
-- If you add the brands count of section 2, run the two generators and commit their output.
+- After the brands count of section 2, run `luna-shopper-backend-gateway:openapi` and then
+  `luna-shopper-admin/models:wire-types`, and commit both outputs.
 
 ### Progress evidence
 
 - `npx nx lint` and `npx nx test` for `luna-shopper-admin/feature-harvest`,
   `luna-shopper-admin/feature-brands`, `luna-shopper-admin/ui` and `luna-shopper-admin`.
+- `npx nx test luna-shopper-backend-gateway`, with a case in `admin-dashboard.service.spec.ts`
+  for `queues.brands`.
 - `npx nx build luna-shopper-admin`.
 - A spec for each redirect of target 8, and one for the count on the rail.
 - A browser walk on a Luna slot with the demo seed, at 390 px and 1360 px: accept one source
@@ -140,14 +145,16 @@ their counts, and put presets and file import on the Runs page. Use the
 
 | The mock shows | Today | In this plan |
 | --- | --- | --- |
-| A count on the Brands queue | The dashboard counts entries, places and shops | Out. The entry shows no number, and the sum leaves brands out. Follow up: `queues.brands` on the dashboard. |
+| A count on the Brands queue | The dashboard counts entries, places and shops | **In.** Add `queues.brands` to the harvest block of `GET /v1/admin/dashboard`: the number of suggested brands, from the read that `GET /v1/admin/catalog/brand-suggestions` uses. |
 | "Wrote" and "Queued" in an earlier run row | The run view has `created`, `updated` and other counters | In. Show "Wrote" as created plus updated, and leave "Queued" out unless the report carries it. |
 
-## 3. Decisions for the owner
+## 3. Decisions made
 
-- **Review opens first.** The other candidate is Runs. Review is where a person has work.
-- **Registered brands under Setup.** They are reference data that the brand queue feeds. The
-  other candidate is a fifth tab of Products.
+The owner settled these on 2026-10-03.
+
+- **Review opens first**, because it is where a person has work.
+- **Registered brands sit under Setup.** They are reference data that the brand queue feeds.
+- **The brands count of section 2 is part of this plan.**
 
 ## 4. What this plan deletes
 

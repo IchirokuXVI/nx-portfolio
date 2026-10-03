@@ -49,7 +49,7 @@ Remove the Catalog section. Use the `nx-portfolio-angular-developer` skill.
    - **"Prices at"** is a picker of one price scope (chain, then scope, each with its
      `ScopeMark`). The choice is kept in `localStorage` for the operator. With a scope chosen
      the list gains a Price column and a Seen column, and a row of states: Any price, Out of
-     date, Not sold here. "No price" appears only when the gateway can answer it (section 2).
+     date, Not sold here. "No price" is added by backend plan `0187` (section 2).
    - A row shows the name and brand, size, barcode in the mono face, group, and with a scope
      the price or a state. On a phone a row is two lines: name and brand, then size and price.
    - Ticking rows shows a bar at the bottom with "Set group", "Set categories" and "Clear".
@@ -92,8 +92,9 @@ Remove the Catalog section. Use the `nx-portfolio-angular-developer` skill.
 
 - In: `feature-catalog` (new `products/` pages, the five descriptors, routes),
   `feature-dashboard` (the catalog block), `feature-harvest/run-page.ts` (links only),
-  `apps/luna-shopper-admin/src/app/sections.ts`, `en.json`, specs. The gateway change that
-  section 2 marks "in".
+  `apps/luna-shopper-admin/src/app/sections.ts`, `en.json`, specs. The two gateway changes
+  that section 2 marks "In" (`itemIds` and "No category"), with the contract, the catalog
+  service, `openapi.json` and the wire types.
 - Out: chains (`0042`), the harvester (`0044`), how a shown price is chosen.
 
 ### Constraints
@@ -136,18 +137,19 @@ Remove the Catalog section. Use the `nx-portfolio-angular-developer` skill.
 | --- | --- | --- |
 | The price of every listed product at one scope | `GET /v3/admin/catalog/supermarket-items` filters by one `itemId` | **In.** Add `itemIds` (at most 100) to that route and to the catalog read behind it. |
 | "Out of date" and "Not sold here" for a scope | The same route filters by `priceScopeId`, `stale` and `available`, and returns `itemName` | In, with no gateway change. With one of these states the list is read from that route. |
-| "No price" for a scope | No route lists the products that lack a price at a scope | Out. The state is not drawn. Follow up: a `withoutPriceAtScopeId` filter on the items list. |
-| "No category" in the tree | The `categoryId` filter does not take `none` | Out. The entry is not drawn. Follow up: `IsUuidOrNone` on that filter, as `productGroupId` has. |
+| "No price" for a scope | No route lists the products that lack a price at a scope | Out of this plan. Backend plan `0187` adds the filter and its count, and draws the state. Until it lands the state is not drawn. |
+| "No category" in the tree | The `categoryId` filter does not take `none` | **In.** Give that filter `IsUuidOrNone` and a `withoutCategory` flag in the catalog search, as `productGroupId` has `withoutProductGroup`. |
 | The counts on the Out of date and Not sold states | No count per scope | Out. The states carry no number. |
 
-## 3. Decisions for the owner
+## 3. Decisions made
+
+The owner settled these on 2026-10-03.
 
 - **No Prices screen.** A price is reached through its product or through the list at a scope.
-  The one question this drops is "every stale price over every scope at once". Say so if you
-  use it, and it becomes a fourth state with no scope chosen.
-- **Price rules under Products.** They decide which source wins a price, so they sit beside
-  the prices. The other candidate is Harvest, Setup.
-- **The two follow ups in section 2** ("No price" and "No category").
+  "Every out of date price over every scope" stays a tile on the Overview.
+- **Price rules sit under Products**, beside the prices they decide.
+- **"No category" is part of this plan. "No price" is backend plan `0187`**, built after this
+  one, because it is a new query on a large table and needs its own measurement.
 
 ## 4. What this plan deletes
 

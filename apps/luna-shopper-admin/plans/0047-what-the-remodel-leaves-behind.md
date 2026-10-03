@@ -85,7 +85,7 @@ when dead navigation, dead translation keys or dead public exports come back. Us
 - An e2e project for the back office. It is worth its own plan, and the remodel is the moment
   the addresses stop moving.
 
-## 2. Decision for the owner
+## 2. Decision made
 
-- **Redirects from old addresses.** This plan deletes them, because one operator uses the app
-  and a bookmark is easy to fix. Say so if you want them kept, and target 1 drops out.
+- **Redirects from old addresses are deleted** (the owner, 2026-10-03). One operator uses the
+  app, and a bookmark is easy to fix.

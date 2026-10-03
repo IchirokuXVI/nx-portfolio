@@ -108,9 +108,10 @@ with two tabs, and move the sign in page and the two covers onto one shared card
   one line of text. Keep its "not known" warning text.
 - The stale comments that name `harvesterDeployed` in `dashboard-page.ts` and `block-notice.ts`.
 
-## 2. Decisions for the owner
+## 2. Decisions made
 
-- **Admins as a section of its own.** It is two small tabs. The other candidate is to fold it
-  into the account menu. A section keeps failed sign ins one press away.
-- **A window control on the Overview** (7 days, 30 days). The gateway sends a window and
-  takes no parameter for it. Left out.
+The owner settled these on 2026-10-03.
+
+- **Admins is a section of its own**, so that failed sign ins stay one press away.
+- **No window control on the Overview.** The gateway sends a window and takes no parameter
+  for it.

@@ -206,12 +206,15 @@ so a red rail reads as "this is production" and not as an error on the page.
 | `brands.suggested.lead` | Info: "Brand names that sources use and that no registered brand holds. The most used come first." |
 | `catalog.chainSections.says`, `catalog.productGroups.addItems.lead`, `catalog.prices.byItem.lead`, `brands.registered.spellings.says`, `harvest.places.groups.lead` | Removed. The panel title says the same. |
 
-## 4. Decisions for the owner
+## 4. Decisions made
 
-- **The fifth entry of the bar on a phone.** The plan shows the first four sections and "More".
-  After `0042` to `0044` those are Overview, Chains, Products and Harvest, and Shoppers and
-  Admins sit under "More".
-- **Dark scheme.** Left out. Say so if you want it, and it becomes a plan of its own.
+The owner settled these on 2026-10-03.
+
+- **The bar on a phone shows the first four sections and "More".** After `0042` to `0044`
+  those are Overview, Chains, Products and Harvest. Shoppers and Admins sit under "More".
+- **No dark scheme.**
+- **The rail takes the color of the deployment** (section 2).
+- **This is not a new app** (section 6).
 
 ## 5. What this plan deletes
 
