@@ -1,161 +1,119 @@
 # 0131: a bought line stays in sight
 
 > Reported by the owner on 2026-10-04, as the first thing to build. Two or more people
-> have the same zone list open. One of them buys a line. The line disappears for everybody
-> else. The buyer still sees it. The owner expects the line to stay on the page, marked as
-> bought, for as long as the trip that bought it is live.
+> shop the same zone list, each from their own basket. One of them buys a line. The row
+> disappears from every other basket, and the buyer keeps it. The owner expects the row
+> to stay in the basket, marked as bought, for a fixed time.
 >
-> Prerequisite reading: velista `0088` (the zone list grouped by trip), sections 2, 3, 4
-> and 8, and velista `0095` section 5. Then
-> `libs/velista/models/src/lib/compose-list-groups.ts` (`composeListGroups`),
-> `libs/velista/data-access/src/lib/lists/list-view-store.ts` (`seedOpenTrip`,
-> `toggleTrip`, `closeTrip`), `libs/velista/data-access/src/lib/trips/trip-store.ts`
-> (`_apply`, `refetch`, `_rereadRows`), and the three effects that start at "The newest
-> live trip is open" in `libs/velista/feature-lists/src/lib/list-page/list-page.ts`.
+> **Needs backend plan `0188` first** (a line bought through another basket stays a
+> row). It serves the row, `boughtElsewhere` and the note `BOUGHT_ON_ANOTHER_BASKET`. If
+> its contract is not on your base branch, stop and say so.
+>
+> **The zone list page is correct and this plan does not touch it.** A bought line
+> leaves "To buy" there. The owner confirmed that on 2026-10-04. An earlier draft of this
+> plan blamed that page, and it was wrong.
+>
+> Prerequisite reading: backend `0188` (all of it), velista `0090` to `0092` (the basket
+> as rows of lists), `libs/velista/data-access/src/lib/mapping/basket-mappers.ts`,
+> `libs/velista/models/src/lib/basket-view.ts` (`BasketRow`), `enums.ts`,
+> `compose-basket-view.ts`, `libs/velista/data-access/src/lib/baskets/basket-memory.ts`,
+> and the row template of
+> `libs/velista/feature-shopping-lists/src/lib/basket-page/`.
 
 ## Brief for the agent
 
 ### Objective
 
-Keep a line that somebody else bought in sight on the zone list page: its live trip group
-opens by itself the first time it appears, and the line is never on neither side while the
-trips are read again.
+Draw a basket row that somebody bought through another basket: it stays where done rows
+are drawn, it says that it was bought on another basket, and it offers no revert.
 
-Use the `nx-portfolio-angular-developer` skill.
+Use the `nx-portfolio-angular-developer` skill, and read the velista UI rules in
+`CLAUDE.md` before you touch the template.
 
 ### Context
 
-What the code does today, read on 2026-10-04 on `dev` at `73fb7ce9`. **The cause below
-comes from reading the code. Nobody reproduced it in a browser yet.** Reproduce it first
-(step 1 of "Order of work"), and stop if what you see is a different defect.
-
-- **A bought line leaves To buy by design.** `line.settled` reaches `LineStore`, which
-  sets the line's `quantity` to zero with `boughtCount` above zero. `composeListGroups`
-  then keeps the line out of To buy when `tripsHold` is true, which means that one heads
-  read succeeded and named at least one trip. The line is drawn only as a row of a trip
-  group (`0088`, section 3: "A line at zero with purchases is in no live group. It lives
-  in its trips").
-- **The live trip group is the mark the owner remembers.** A basket trip is live while
-  its basket is open and inside the claim window (`core.generatedList.claimWindowMs`, 60
-  hours by default, backend `0122`). Its rows draw each line's outcome. That is the "fixed
-  amount of time".
-- **A trip group opens by itself once per visit, and only at the first load.**
-  `ListViewStore.seedOpenTrip` sets `_tripsSeeded` the first time the heads arrive and
-  opens the newest live trip, or nothing when there is none. Every later call returns at
-  once.
-- **So a trip that starts after the page opened arrives closed.** Member B opens the list.
-  No trip is live, so the seed opens nothing. Member A starts a basket and buys a line.
-  `TripStore` reads the heads again after `TRIPS_REFETCH_QUIET_MS` (400 ms) and now holds
-  a live trip, but nothing opens it. For B the line left To buy and sits inside a closed
-  group. That is "it disappears".
-- **The buyer does not see the defect.** A buys on the basket page, where the row stays
-  as bought. When A opens the list afterwards, the first heads read already names the
-  live trip, and the seed opens it.
-- **There is also a gap with no group at all.** Between the `line.settled` event and the
-  answer of the heads read, the line is at zero with purchases and no trip row names it.
-  When the list already has any older trip, `tripsHold` is true and the line is drawn
-  nowhere. `0088` section 3 says "no line is ever on neither side". The gap is at least
-  400 ms plus two reads, and it does not end when the refresh fails.
-- **Specs that exist:** `list-view-store.spec.ts`, `compose-list-groups.spec.ts`,
-  `trip-store.spec.ts`, `list-page.spec.ts`, and `member.spec.ts` in
-  `apps/velista-luna-e2e`.
+- **The cause is in the backend read**, and backend `0188` fixes it. Until then the row
+  is not in the answer, so nothing here can draw it.
+- **Velista re-reads the basket** on `basket.linesChanged` (`BasketStore`, the first
+  `case` of its socket subscription). No store change is needed for the row to arrive.
+- **Rule D4.** A backend DTO is never passed through. `basket-mappers.ts` maps the answer
+  from `unknown` into velista's own model and enums.
+- **An unknown note falls back to none today.** So before this plan, a client that
+  receives the new row draws a done row that says "0 of 0". That is the reason both
+  plans go out together.
 
 ### Target state
 
-1. **A live trip opens by itself the first time this visit sees it.** Replace the one
-   boolean with the set of live trip keys that were opened by the page. At the first load
-   the rule of `0088` section 2 stays: the newest live trip opens and every other one is
-   closed. After the first load, a live trip whose key was never seen in this visit opens
-   once, when its head arrives.
-2. **A trip somebody closed stays closed.** A key that was seen is never opened by the
-   page again, through any refetch. `toggleTrip` and `closeTrip` keep their behavior.
-3. **A past trip never opens by itself.** Only `trip.live` heads count as new.
-4. **A line that was just bought stays in To buy until a trip row names it.** The page
-   remembers the ids of the lines of this list that a `line.settled` event took to zero
-   in this visit. Such a line is drawn in To buy, after the lines at zero that were never
-   bought, exactly as a `boughtAtZero` line is drawn today. It leaves that memory when
-   the rows of a held trip name it, or when its quantity rises above zero. A failed
-   refresh leaves it in To buy, where somebody can raise it.
-5. **Leaving the list clears both memories**, in the place that clears `_openTrips`
-   today.
-6. **No new copy, no new component and no backend change.** The row in the trip group
-   already says who bought the line and with what outcome.
-
-### Order of work
-
-1. **Reproduce.** Use two browser sessions on one slot (see
-   `apps/velista-luna-e2e` and `tools/dev/README.md`). Check with `--list` first and point
-   at a backend that already listens. Member B opens a zone list with no live trip. Member
-   A opens a basket over that list and marks one line as bought. Write down what B sees
-   after one second and after five. Then repeat with a list that already has a past trip.
-2. **Rule out the two other causes** before you write code, with the network panel of B:
-   - `GET /v1/lists/:id/trips` for B names A's trip under `live`. If it does not, the
-     defect is a redaction on the backend, and this plan is wrong. Stop and report.
-   - The rows read of that trip names the bought line. If it does not, stop and report.
-3. Write the failing specs of "Tests", then the change.
-4. Repeat step 1 and record what B sees.
+1. **The model.** `BasketRow` and its entry gain `boughtElsewhere: number`. The velista
+   note enum gains its own value for `BOUGHT_ON_ANOTHER_BASKET`.
+2. **The mapper.** A missing or malformed `boughtElsewhere` is `0`. An unknown note stays
+   none, as today.
+3. **The row.** A row with state `DONE`, `bought` of zero and `boughtElsewhere` above
+   zero is drawn in the section that holds done rows, with the same look as a done row.
+   Its count reads from `boughtElsewhere`, not from `bought`.
+4. **The caption.** One line under the name: "Bought on another basket" and "Comprado en
+   otra cesta". It names nobody. The time is not drawn.
+5. **No revert.** The control that undoes a purchase is not drawn on such a row, and the
+   settle sheet offers no revert for it. Raising the quantity stays possible where
+   `demandEditable` allows it.
+6. **A row with something left** and `boughtElsewhere` above zero keeps the look of
+   today and gains the same caption.
+7. **The in-memory service** (`basket-memory.ts`) produces such a row, so the app in its
+   memory mode shows it.
 
 ### Scope
 
-- `libs/velista/data-access/src/lib/lists/list-view-store.ts` and its spec.
-- `libs/velista/models/src/lib/compose-list-groups.ts` and its spec: one new optional
-  input, the ids of target 4.
-- `libs/velista/feature-lists/src/lib/list-page/list-page.ts` and its spec: the seed
-  effect, and the memory of target 4.
-- `apps/velista-luna-e2e/src/member.spec.ts`: one new step.
+- `libs/velista/models`: `basket-view.ts`, `enums.ts`, `compose-basket-view.ts`, specs.
+- `libs/velista/data-access`: `mapping/basket-mappers.ts`, `baskets/basket-memory.ts`,
+  specs.
+- `libs/velista/feature-shopping-lists`: the basket page row and the settle sheet, specs.
+- `libs/velista/ui/assets/i18n/en.json` and `es.json`: one key.
+- `apps/velista-luna-e2e/src/member.spec.ts`: one step.
 
 ### Constraints
 
-- **Do not use `@angular/core/rxjs-interop`** in a store. `CLAUDE.md` says why.
-- The memory of target 4 is per visit and is never stored on the device.
-- `TripStore` already reads the rows of every live trip on a refresh. Do not add a
-  second read.
-- Reorder mode and a search keep their rules: reorder mode draws wanted lines only, and
-  a search is flat.
-- A due line keeps its place in the due section (`0089`). A line held by target 4 that is
-  also due is drawn once, in the due section.
-- Do not change the basket page, the settle sheet or `BasketStore`.
+- **Do not touch `libs/velista/feature-lists`.** The zone list page is correct.
+- **No number is computed on the client.** Every count on the row is one the server
+  sent.
+- **No clock on the client.** The row leaves when a read no longer holds it.
+- **The basket page's CSS budget is nearly full.** Reuse the done row's classes and the
+  existing caption style. Add no new block of styles.
+- Translation assets are in `libs/velista/ui/assets/`, not under `src/`.
+- Do not use `@angular/core/rxjs-interop` in a store.
 
 ### Action boundaries
 
 **Stop and ask before** any of these:
 
-- Drawing a bought line inside To buy for the whole life of the trip, in place of the trip
-  group. The owner said "marked as settled for a fixed amount of time, if I remember
-  correctly". This plan reads that as the live trip group of `0088`. If the owner means
-  the To buy section, that is a design change to `0088` and needs a mock.
-- Opening more than the new live trip, or changing which trip is open at the first load.
-- Any change under `apps/luna-shopper-backend` or `libs/luna-shopper/contracts`.
+- A new visual treatment (an icon, a color, a badge). This plan reuses the done row. A
+  new look needs a mock first.
+- Naming the person who bought.
+- Any change to the zone list page, to `BasketStore`'s refresh, or to the backend.
 
 ### Progress evidence
 
 - The specs below fail before the change and pass after it.
 - `npx nx affected -t lint test build` is green.
-- A note in the pull request with what member B saw before and after, in both cases of
-  step 1.
+- A browser walk with two accounts on one slot, through the shell: member B has the
+  basket open, member A buys a line from A's basket, and B's row moves to the done
+  section with the caption and without a reload. Put a screenshot in the pull request.
 
 ## Tests
 
-1. `list-view-store.spec.ts`: the first load with one live trip opens it. The first load
-   with no live trip opens nothing. A live trip that arrives later opens once. The same
-   trip closed by `toggleTrip` stays closed when its head arrives again. A second new live
-   trip opens while the first keeps its state. A past trip that arrives later stays
-   closed. `open(listId)` for another list forgets the seen keys.
-2. `compose-list-groups.spec.ts`: a line at zero with purchases whose id is held stays in
-   To buy while `tripsHold` is true and no row names it. It leaves To buy when a held
-   trip's rows name it. It is absent in reorder mode. A held line that is also due is
-   drawn in the due section only.
-3. `list-page.spec.ts`: a `line.settled` event for a line of this list, followed by a
-   heads answer that names a new live trip, draws the line inside an open group. A
-   `line.settled` event followed by a failed refresh leaves the line in To buy.
-4. `member.spec.ts`: a member has the list open, the owner buys a line through the
-   gateway, and the member sees the line in an open trip group without a reload. Run it
-   against a slot (`e2e` of `velista-luna-e2e`). This suite does not run on a pull
-   request, so say in the pull request that you ran it and what it printed.
+1. `basket-mappers.spec.ts`: the new field and the note map. A missing field is `0`. A
+   malformed one is `0`.
+2. `compose-basket-view.spec.ts`: the row lands in the done section and reads its count
+   from `boughtElsewhere`. A row with something left keeps its section.
+3. The basket page spec: the caption is drawn, the revert control is not, and the
+   quantity control is drawn only when `demandEditable` is true.
+4. The settle sheet spec: no revert is offered for such a row.
+5. `member.spec.ts`: the owner buys a line from the owner's basket over the gateway, and
+   the member's open basket shows the row as done with the caption, without a reload.
+   Run it against a slot, and say in the pull request what it printed. This suite does not
+   run on a pull request.
 
 ## What this plan does not do
 
-- It does not move a bought line back into To buy for the life of the trip.
-- It does not change how long a trip is live.
-- It does not fix the finished basket screen or the quantity that can overwrite a
-  purchase. Backend `0171` section 3.1 lists those.
+- It does not change the zone list page.
+- It does not decide how long the row stays. Backend `0188` does: six hours.
+- It does not show who bought the line.
