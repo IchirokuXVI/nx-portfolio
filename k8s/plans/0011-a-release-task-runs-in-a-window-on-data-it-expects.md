@@ -156,11 +156,11 @@ The expectation is a number the author writes down, not a query that always pass
 ```sh
 # task.env of 0002
 MAX_ITEMS_STAGING="0"
-MAX_ITEMS_PRODUCTION="300"
+MAX_ITEMS_PRODUCTION="0"
 ```
 
 `check.sh` of task `0002` counts `items` and refuses above that ceiling. The same deploy
-that meets 19,791 curated products stops with "0002 expects at most 300 products and
+that meets 19,791 curated products stops with "0002 expects at most 0 products and
 found 19791".
 
 Rules for a `check.sh`:
@@ -221,23 +221,29 @@ the record of what ran.
 
 ## 5. Tasks 0001 and 0002
 
-Both tasks get windows, a production release, ceilings and a `check.sh`. The values depend
-on what each cluster already ran, and only the ledgers say that:
+**Both tasks already ran in staging and in production** (the owner, 2026-10-03). So this
+plan closes them. It does not arm them.
 
-```sh
-kubectl -n nx-portfolio get configmap release-tasks -o yaml   # once per cluster
-```
+- Each window is the day the task ran in that cluster, which is a date in the past. Read
+  it from the ledger, which holds the state and a UTC time per task:
 
-- A task that is `done` in both ledgers gets windows in the past (the day it ran). The
-  ledger already stops it, and the window now stops it when the ledger is gone.
-- A task that still has to run in production gets a production window and the release
-  that carries it. The owner said on 2026-10-03 that production's catalog and harvester
-  must be emptied before the first restore (plan `0012`), so `0001` is expected to be in
-  this case.
-- `check.sh` of `0001` refuses when `luna_catalog.items` holds more rows than the ceiling
-  for that environment. `check.sh` of `0002` does the same.
+  ```sh
+  kubectl -n nx-portfolio get configmap release-tasks -o yaml   # once per cluster
+  ```
 
-Ask the owner for the two ledgers, then propose the values and wait for a yes.
+- `PRODUCTION_RELEASE` is the release that ran the task in production. Read it from
+  `helm history nx-portfolio -n nx-portfolio` at the ledger's time.
+- The ledger already stops both tasks. The window now stops them when the ledger is lost
+  or edited, which is the case the owner fears: a catalog that holds the curated products
+  and a runner that believes task `0002` never ran.
+- Both ceilings are `0`. `check.sh` of each task refuses when `luna_catalog.items` holds a
+  row. It is the third guard, and the only one that looks at the data.
+- The static check treats these two files as it treats any task: a window in the past is
+  valid, and the 14 day cap is measured from a commit that is later than the window, so it
+  passes.
+
+Ask the owner for the two ledgers if you cannot read them, propose the values, and wait
+for a yes.
 
 ## 6. The rule for new work
 

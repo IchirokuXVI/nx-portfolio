@@ -36,7 +36,9 @@ Decisions the owner made on 2026-10-03. Do not reopen them:
 2. Prices travel with the products.
 3. A row that changed on both sides **to the same result** passes. A row that changed on
    both sides to different results stops everything.
-4. A product is never deleted by a move. It is added or edited.
+4. A product is never deleted by a move. It is added, edited, or merged into another
+   product. A merge is allowed because it is marked as one: the merged row stays and names
+   its survivor (backlog plan `0020`, which this plan needs first).
 5. No duplicate of anything: EANs, shops, brands, chains, scopes, queue rows.
 6. The queue ("suggested products") must stay linked: a queue row that is new locally is
    added, and one that differs is edited.
@@ -175,8 +177,22 @@ is a conflict.
 three exceptions that hold no identity of their own: `item_categories`,
 `supermarket_item_sections` and `section_categories` follow their owner as a set (the set
 is replaced when the cluster's set still equals the base). A local row that is gone from
-any other table makes `changeset` refuse, and it names the row. That includes a product
-that was merged into another one locally. Section 7 says what that costs.
+any other table makes `changeset` refuse, and it names the row.
+
+**Merges.** A product that was merged locally is not gone. Its row is still there, with
+`mergedIntoId` set (backlog plan `0020`), so the comparison sees an edit and nothing flags
+it. The change set carries it as one change of its own kind, `merge`, and the apply does
+what the service does: it moves the cluster's prices of the merged product to the
+survivor, moves the EAN, sets `mergedIntoId`, and rewrites `source_catalog_entries.itemId`.
+Core needs no write, because a read by the old id answers the survivor. The rules of the
+table above hold for it:
+
+- The cluster merged the same product into the same survivor: pass.
+- The cluster merged it into another product, or edited it since the base: conflict.
+- The survivor is itself merged in the cluster: conflict.
+
+A product that the base held and that the local work removed with no mark is still a
+refusal. That is the case the mark exists to tell apart.
 
 **Prices.** `item_prices` and `item_price_details` rows that the cluster does not hold are
 inserted by id, with the `harvest_runs` rows they name. Nothing in the cluster is
@@ -240,6 +256,10 @@ hours in between.
 - [ ] A change set with one conflict among 1,000 changes leaves both databases byte
       identical to before (compare `pg_dump --data-only` output).
 - [ ] `changeset` refuses a local database in which a product of the base is gone.
+- [ ] A product that was merged locally (plan `0020`) applies as a merge: the cluster's
+      copy keeps its row, names the survivor, and the survivor holds the prices of both.
+- [ ] The same merge already made in the cluster passes, and a merge into another
+      survivor stops the move.
 - [ ] A dry run writes nothing: the same comparison passes.
 - [ ] A round trip on the first catalog: snapshot, change 50 products and decide 50 queue
       rows locally, apply to a copy of the base, and the copy equals the local databases
@@ -250,12 +270,11 @@ hours in between.
 
 Stop and ask the owner when the work reaches one of these. Do not decide them.
 
-1. **A merge of two products is a delete.** Curation merges duplicates, and the owner's
-   rule 4 forbids a delete. Until the owner decides, the tool refuses. The alternative is
-   a "merged into" record: the change set names the survivor, and the apply rewrites the
-   merged id in `source_catalog_entries`, in `item_prices` and in every core column that
-   `cleanup-core-catalog-refs.sh` lists, before it removes the row. That adds core to the
-   apply and to the dumps.
+1. **A local merge that was made before plan `0020` existed.** Such a product is gone
+   with no mark, and the tool refuses it. The owner can declare it in `resolutions.jsonl`
+   ("this id was merged into that id"), and `changeset` then writes it as a `merge`. The
+   six pairs of October need nothing: they were merged before the first catalog reached a
+   cluster.
 2. **What the service derives on a write.** A write in SQL skips the service. Before you
    write the first statement, read how the search documents of `items`
    (`NormalizedItemSearch`, `StricterCatalogSearch`) and `supermarket_location_items` are

@@ -40,8 +40,12 @@ and leaves the old databases beside the new ones for a week.
 - **Where the ids came from.** The local catalog started as a dump of staging
   (2026-10-03T00:16:54Z). Staging then held 139 brands, 5 supermarkets, 102 price scopes,
   40 locations and no products, and the local work kept those ids. Production's ids are
-  its own, and the owner decided to empty production's catalog and harvester first
-  (release task `0001`).
+  its own.
+- **Tasks `0001` and `0002` already ran in both clusters** (the owner, 2026-10-03), so
+  neither runs again. Production still holds some rows in both databases, written after
+  the reset, and the owner wants all of them gone. This task does that by itself: it puts
+  whole databases in place of the old ones, and section 2 says how it is told that the
+  loss is intended.
 - **`restore-database.sh` already does the first half.** It downloads an object from the
   backup bucket inside the database pod, checks that `pg_restore --list` reads it, and
   restores it into `<database>_restore` beside the real one. It never writes to the real
@@ -88,7 +92,8 @@ and leaves the old databases beside the new ones for a week.
   scratch containers (`docker run postgres:16-alpine` on a free port), never on slot 1's
   volumes and never on slot 0.
 - **Stop and ask before you set the windows and the production release in `task.env`.**
-  They are the owner's values, and they follow the release that carries task `0001`.
+  They are the owner's values. So are the two ceilings and the list of accepted losses of
+  section 2: read the cluster, propose them, and wait for a yes.
 - **Stop and ask for the two SHA-256 values and the upload.** The owner uploads the dumps
   to each bucket (section 1). You cannot and must not do it.
 - Never run the script, the runner or `kubectl` against staging or production.
@@ -142,9 +147,14 @@ the document was written from the same databases the dumps were taken from.
 A dry run does steps 1 to 4 and stops. It leaves the two scratch databases in place, so
 that a person can read them. `--apply` does every step.
 
-1. **The target is empty.** `luna_catalog.items` holds 0 rows and
-   `luna_harvester.source_catalog_entries` holds 0 rows. Anything else is a refusal that
-   names the count. This is what makes the move a copy and not a merge.
+1. **The target holds no more than the owner said it holds.** `luna_catalog.items` and
+   `luna_harvester.source_catalog_entries` each hold at most the ceiling that `task.env`
+   states for this environment (`MAX_ITEMS_REPLACED_STAGING`,
+   `MAX_SOURCE_ENTRIES_REPLACED_STAGING`, and the same two for production). The default is
+   0. A higher number is a statement by the owner: "production holds this many rows that I
+   want replaced". Anything above the ceiling is a refusal that names both numbers. This
+   is what makes the move a copy and not a merge, and what stops it from replacing a
+   catalog that somebody curated in the meantime.
 2. **Restore both dumps into scratch databases** (`luna_catalog_restore`,
    `luna_harvester_restore`) through `restore-database.sh`, which now takes the expected
    SHA-256 as a third argument and refuses a download that does not match.
@@ -157,10 +167,14 @@ that a person can read them. `--apply` does every step.
    - No `harvest_runs` row is in a running state.
 4. **Nothing the target holds is lost.** For `supermarkets`, `price_scopes`,
    `supermarket_locations`, `brands` and `product_groups`, list every id that the live
-   database holds and the scratch database does not. On an emptied production the list is
-   empty. On staging it can name rows that the local work removed (the brand "D.O." was
-   deleted locally). The script prints the list and refuses, unless each id is in
-   `expected-losses.txt` beside the manifest, with a reason on the same line.
+   database holds and the scratch database does not. On staging it can name rows that the
+   local work removed (the brand "D.O." was deleted locally). On production it names
+   every row that was written after the reset, because production's ids are its own. The
+   script prints the list and refuses, unless each id is in
+   `expected-losses.<environment>.txt` beside the manifest, with a reason on the same line.
+   The file for production is written from a dry run and read by the owner before the
+   release, so that "erase everything production holds" is a list somebody saw and not a
+   switch.
 5. **Prepare the scratch databases for a cluster.**
    - `UPDATE supermarket_sources SET enabled = false` (condition 2 of the document, plan
      `0083`). The dumps hold four rows that are on. A cluster starts with every chain off,
@@ -204,18 +218,24 @@ longer exists, and `getMany` leaves a missing id out of its answer.
 RUN_UNTIL_STAGING="<the owner's date>"
 RUN_UNTIL_PRODUCTION="<the owner's date>"
 PRODUCTION_RELEASE="<the owner's version>"
+MAX_ITEMS_REPLACED_STAGING="0"
+MAX_SOURCE_ENTRIES_REPLACED_STAGING="0"
+MAX_ITEMS_REPLACED_PRODUCTION="<the owner's number>"
+MAX_SOURCE_ENTRIES_REPLACED_PRODUCTION="<the owner's number>"
 DATABASES="catalog harvester core"
 ```
 
 - **`check.sh`** passes when the live catalog carries the marker (nothing to do), or when
-  `items` and `source_catalog_entries` are both empty. It refuses in every other case.
-  It also refuses when the backup Secret is missing, because the script cannot download
-  without it.
+  `items` and `source_catalog_entries` are both within their ceilings. It refuses in every
+  other case. It also refuses when the backup Secret is missing, because the script
+  cannot download without it.
 - **`post.sh`**, not `pre.sh`. The restore compares the dumps' migrations with the ones
   this release just ran, so it runs after `helm upgrade`.
-- **In the same release as task `0001`** this works in number order: `0001/pre.sh` drops
-  the databases, the upgrade migrates them empty, `0001/post.sh` clears core,
-  `0002/post.sh` finds no product, and `0003/post.sh` restores.
+- **Tasks `0001` and `0002` take no part.** Both are `done` in both ledgers, and plan
+  `0011` closes their windows. Their markers do not travel with the swap (the comment of
+  `0001` sits on the old database, the comment of `0002` on the old `items` table), which
+  is why their ceilings of 0 in plan `0011` matter: with a lost ledger, the ceiling is
+  the only thing between task `0002` and 19,791 products.
 - **The runner's dumps** of catalog, harvester and core are the second way back, for 14
   days.
 
@@ -235,14 +255,15 @@ catalog is a week old.
 
 ## 4. The order of the whole move
 
-1. Plan `0011` is merged. Tasks `0001` and `0002` have windows and ceilings.
+1. Plan `0011` is merged. Tasks `0001` and `0002` have closed windows and ceilings of 0.
 2. The owner uploads both dumps to the staging bucket and gives the checksums.
-3. This plan merges to `dev`, then to `main`. The staging deploy runs task `0003`.
-4. The owner reads staging: the back office queue (3,974 rows wait for a person), a
+3. A dry run on each cluster, by hand on the VPS, writes the two `expected-losses` files
+   and gives the ceilings. The owner reads them.
+4. This plan merges to `dev`, then to `main`. The staging deploy runs task `0003`.
+5. The owner reads staging: the back office queue (3,974 rows wait for a person), a
    search in velista, a basket with prices.
-5. The owner uploads the same two files to the production bucket.
-6. A release whose version is `PRODUCTION_RELEASE` runs `0001`, `0002` and `0003` in
-   production.
+6. The owner uploads the same two files to the production bucket.
+7. A release whose version is `PRODUCTION_RELEASE` runs `0003` in production.
 
 Staging is the rehearsal of exactly what production runs: the same files, the same
 checksums, the same script.
@@ -272,7 +293,8 @@ checksums, the same script.
 - [ ] The same with `--apply` leaves `luna_catalog` with 19,791 products, the old
       database under `_before_first_catalog`, and every `supermarket_sources` row off.
 - [ ] A second `--apply` prints "already restored" and changes nothing.
-- [ ] A target with one product is refused at step 1, before any download.
+- [ ] A target with one product and a ceiling of 0 is refused at step 1, before any
+      download. With a ceiling of 1 it passes step 1.
 - [ ] A manifest with one wrong count is refused at step 3. The live database is
       unchanged.
 - [ ] A wrong SHA-256 is refused by `restore-database.sh`. No scratch database is created.
