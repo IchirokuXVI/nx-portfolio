@@ -31,6 +31,7 @@ import {
   groupEntries,
   progressOf,
   toRowView,
+  type BasketElsewhereFact,
   type BasketEntry,
   type BasketGroup,
   type BasketSettlementFact,
@@ -39,6 +40,7 @@ import {
 import { usualLineIdsOf, withUsual } from './basket-usual';
 import { USUAL_WINDOWS_SQL, type UsualWindowRow } from './basket-usual.sql';
 import {
+  BASKET_ELSEWHERE_SQL,
   BASKET_LIST_REFS_SQL,
   BASKET_SESSION_LOOKBACK_MS,
   BASKET_SESSION_SQL,
@@ -46,6 +48,7 @@ import {
   COVERED_LINE_ITEMS_SQL,
   COVERED_LINES_SQL,
   STANDING_SKIPS_SQL,
+  type BasketElsewhereRow,
   type BasketLineSkipRow,
   type BasketListRefRow,
   type BasketSessionRow,
@@ -78,11 +81,13 @@ import { removedRows } from './changes/basket-removed-rows';
  *
  * ## What it costs
  *
- * Six queries for the rows, none of them per line: the session, the covered
- * lines, their product sets, the settlements in scope, the standing skips (plan
- * 0137) and the owner's walk history (plan 0141). The settlements read rides
- * `ix_settlements_basket_live` from plan 0134, the skips read rides
- * `ix_basket_line_skips_standing` and the history rides both. A read at a shop
+ * Seven queries for the rows, none of them per line: the session, the covered
+ * lines, their product sets, the settlements in scope, what other baskets bought
+ * lately (plan 0188), the standing skips (plan 0137) and the owner's walk
+ * history (plan 0141). The settlements read rides `ix_settlements_basket_live`
+ * from plan 0134, the purchases elsewhere ride `ix_settlements_line`, the skips
+ * read rides `ix_basket_line_skips_standing` and the history rides both. A read
+ * at a shop
  * adds one more, the windows of plan 0165, on `ix_settlements_line`. The
  * participants and the list names are two more, and the access reads run
  * **before any transaction** (plan 0130, section 13).
@@ -123,7 +128,7 @@ export class BasketReadService {
    * The covered lines of a basket, in the order a row's anchor is chosen in.
    *
    * Public since plan 0138, so the changes view can name a `rowKey` the basket
-   * read would draw. It is the same statement with the same four parameters, which
+   * read would draw. It is the same statement with the same five parameters, which
    * is the property that matters: an anchor computed from a different set of lines
    * would hand a client a key the write routes refuse.
    */
@@ -140,6 +145,7 @@ export class BasketReadService {
       basket.id,
       scope.startedAt,
       scope.enabled,
+      elsewhereGapOf(basket),
     ]);
   }
 
@@ -286,9 +292,16 @@ export class BasketReadService {
     }
 
     const scope = await this.scopeOf(basket);
+    const elsewhereGapMs = elsewhereGapOf(basket);
     const lines = await this.baskets.query<CoveredLineRow[]>(
       COVERED_LINES_SQL,
-      [[...coveredListIds], basket.id, scope.startedAt, scope.enabled]
+      [
+        [...coveredListIds],
+        basket.id,
+        scope.startedAt,
+        scope.enabled,
+        elsewhereGapMs,
+      ]
     );
 
     // Before the settlements, because a removed row shows what this basket bought
@@ -304,25 +317,36 @@ export class BasketReadService {
     }
 
     const lineIds = lines.map((line) => line.id);
-    const [items, settlements, skips, permissions] = await Promise.all([
-      this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
-        lineIds,
-      ]),
-      scope.enabled
-        ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
-            basket.id,
-            [...lineIds, ...removedLineIds],
-            scope.startedAt,
-            this.skipWindowMs,
-          ])
-        : Promise.resolve([]),
-      this.skipsOf(basket),
-      // The **owner's** permissions, never the actor's (plan 0131). A reader
-      // never learns them, which is why `demandEditable` is served at all.
-      this.listAccess.permissionsAmong(basket.ownerUserId, coveredListIds),
-    ]);
+    const [items, settlements, elsewhere, skips, permissions] =
+      await Promise.all([
+        this.baskets.query<CoveredLineItemRow[]>(COVERED_LINE_ITEMS_SQL, [
+          lineIds,
+        ]),
+        scope.enabled
+          ? this.baskets.query<BasketSettlementRow[]>(BASKET_SETTLEMENTS_SQL, [
+              basket.id,
+              [...lineIds, ...removedLineIds],
+              scope.startedAt,
+              this.skipWindowMs,
+            ])
+          : Promise.resolve([]),
+        // What somebody bought lately through another basket, or through none
+        // (plan 0188). For the covered lines only: a removed row is a fact about
+        // this basket's own past. A count and a time, never a person.
+        elsewhereGapMs === null || lineIds.length === 0
+          ? Promise.resolve([])
+          : this.baskets.query<BasketElsewhereRow[]>(BASKET_ELSEWHERE_SQL, [
+              basket.id,
+              lineIds,
+              elsewhereGapMs,
+            ]),
+        this.skipsOf(basket),
+        // The **owner's** permissions, never the actor's (plan 0131). A reader
+        // never learns them, which is why `demandEditable` is served at all.
+        this.listAccess.permissionsAmong(basket.ownerUserId, coveredListIds),
+      ]);
 
-    const entries = toEntries(lines, items, settlements);
+    const entries = toEntries(lines, items, settlements, elsewhere);
     const groups = groupEntries(entries);
 
     const context = {
@@ -512,6 +536,25 @@ export class BasketReadService {
 }
 
 /**
+ * The window in which another basket's purchase keeps a line a row (plan 0188),
+ * or null when this basket does not ask.
+ *
+ * `$5` of `COVERED_LINES_SQL`, and one definition for the read and for the row
+ * resolver, so a write can find every row the read drew.
+ *
+ * **`PURCHASE_SESSION_GAP_MS`, the window that already means "lately"**: it is
+ * what ends a `LIVE` basket's session and what numbers a list's loose sessions,
+ * so "bought lately by somebody else" and "bought in this session by me" run
+ * out on the same clock.
+ *
+ * **Null for a basket that is not open.** A finished trip is frozen (plan
+ * 0135), and a purchase somebody makes afterwards is not part of it.
+ */
+export function elsewhereGapOf(basket: Basket): number | null {
+  return isOpenBasket(basket.status) ? PURCHASE_SESSION_GAP_MS : null;
+}
+
+/**
  * A drawn row, with the three things the walk order decides its slot from.
  *
  * `BasketRowView` already carries all three, under `rowKey` rather than `key`.
@@ -536,7 +579,7 @@ function orderableOf(
 }
 
 /**
- * Stitch the three row reads into the shape the pure rules take.
+ * Stitch the four row reads into the shape the pure rules take.
  *
  * A free function rather than a method for the reason the rest of `basket-rows`
  * is: it is the join the database did not do, and a spec can state it.
@@ -544,7 +587,13 @@ function orderableOf(
 export function toEntries(
   lines: readonly CoveredLineRow[],
   items: readonly CoveredLineItemRow[],
-  settlements: readonly BasketSettlementRow[]
+  settlements: readonly BasketSettlementRow[],
+  /**
+   * What other baskets bought lately, one row per line (plan 0188). Empty for a
+   * caller that writes on a row rather than drawing it: the row resolver hands a
+   * write this basket's own purchases, and no write acts on anybody else's.
+   */
+  elsewhere: readonly BasketElsewhereRow[] = []
 ): BasketEntry[] {
   const itemsByLine = new Map<string, string[]>();
   for (const row of items) {
@@ -579,6 +628,18 @@ export function toEntries(
     }
   }
 
+  const elsewhereByLine = new Map<string, BasketElsewhereFact>();
+  for (const row of elsewhere) {
+    elsewhereByLine.set(row.lineId, {
+      // `SUM` over an integer column is a bigint to Postgres, and `pg` hands a
+      // bigint back as a string. The statement casts it, and this does not
+      // trust the cast to survive an edit.
+      quantity: Number(row.quantity),
+      settledAt:
+        row.settledAt instanceof Date ? row.settledAt : new Date(row.settledAt),
+    });
+  }
+
   return lines.map((line) => ({
     lineId: line.id,
     listId: line.listId,
@@ -592,5 +653,6 @@ export function toEntries(
         : new Date(line.createdAt),
     itemIds: itemsByLine.get(line.id) ?? [],
     settlements: settlementsByLine.get(line.id) ?? [],
+    elsewhere: elsewhereByLine.get(line.id) ?? null,
   }));
 }
