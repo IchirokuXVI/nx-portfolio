@@ -158,8 +158,30 @@ EXPECT_SOURCE_ENTRIES=25725
 EXPECT_SOURCE_ENTRIES_ACTIVE=21751
 ```
 
-A count that differs is a refusal, not a warning. The numbers come from the document, and
-the document was written from the same databases the dumps were taken from.
+A count that differs is a refusal, not a warning.
+
+**Every value above is provisional.** The checksums and counts are those of the dumps of
+2026-10-03 20:44. The owner went on editing slot 1 after that (2026-10-04), so those dumps
+are not the ones that ship. When the owner says that slot 1 is final:
+
+1. Take both dumps again, with the slot's services stopped so that nothing writes:
+
+   ```sh
+   docker exec luna-slot1-catalog-db-1 pg_dump -Fc -U luna_catalog -d luna_catalog -f /tmp/catalog.dump
+   docker cp luna-slot1-catalog-db-1:/tmp/catalog.dump ./catalog.dump
+   docker exec luna-slot1-harvester-db-1 pg_dump -Fc -U luna_harvester -d luna_harvester -f /tmp/harvester.dump
+   docker cp luna-slot1-harvester-db-1:/tmp/harvester.dump ./harvester.dump
+   sha256sum catalog.dump harvester.dump
+   ```
+
+2. Read every `EXPECT_` count and both `migrations` tables from slot 1 again, and write
+   them and the two checksums into the manifest.
+3. Upload those two files, and no earlier ones, to both buckets.
+4. Bring `initial-catalog-2026-10.md` to the same numbers, or say in it that the state
+   moved on after it was written.
+
+A manifest that still holds the values of 2026-10-03 refuses the new files at the
+checksum, which is the intended failure.
 
 ## 2. `restore-first-catalog.sh`
 
