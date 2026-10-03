@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Harvest: review, four queues in one place</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rail{width:76px;background:#14211d;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#b9c4bf;position:relative}
+.rail a.on{background:#24362f;color:#fff}
+.rail svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #3b4c45;background:none;color:#b9c4bf !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#f0b23a;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fdf3e0;color:#7a4f05}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:44px}
+.li.sel{background:#e3f1ec}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.seg{display:flex;background:#e9ebe6;border-radius:8px;padding:3px;gap:2px}
+.seg a{height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#3d4348 !important;white-space:nowrap;padding:0 10px}
+.seg a.on{background:#fcfcfa;color:#14171a !important;font-weight:600}
+.bar{height:6px;border-radius:3px;background:#e9ebe6;overflow:hidden}.bar b{display:block;height:100%;background:#0b6b53}
+.kv{display:flex;gap:10px;padding:5px 0;font-size:13.5px}
+.kv span:first-child{width:110px;color:#555c63;flex:none}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a class="on" href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<h1>Harvest</h1>
+<div class="grow"></div>
+<a href="Runs.dc.html" class="rowx" style="gap: 10px; color: #14171a"><span class="chip ok">Running</span><span>Mercadona, whole catalog</span><span class="bar" style="width: 140px"><b style="width: 49%"></b></span><span class="mut num">2,140 of 4,383</span></a>
+<button class="ibtn" aria-label="How this page works">i</button>
+</header>
+<nav class="tabs" aria-label="Harvest">
+<a class="tab on" href="Review.dc.html">Review <span class="cnt wait">148</span></a>
+<a class="tab" href="Runs.dc.html">Runs</a>
+<a class="tab" href="Setup.dc.html">Setup</a>
+</nav>
+
+<div class="rowx" style="padding: 12px 20px; gap: 10px">
+<nav class="seg" aria-label="Queue">
+<a class="on">Products <span class="cnt wait">96</span></a>
+<a>Shops <span class="cnt wait">31</span></a>
+<a>Places <span class="cnt wait">14</span></a>
+<a>Brands <span class="cnt wait">7</span></a>
+</nav>
+<button class="btn">Chain: all <svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+<button class="btn">Waiting for a decision <svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+<div class="grow"></div>
+<button class="btn">Apply a decisions file</button>
+<nav class="seg" aria-label="View">
+<a class="on">One at a time</a>
+<a>List</a>
+</nav>
+</div>
+
+<div class="grow" style="display: flex; min-height: 0; padding: 0 20px 16px; gap: 16px">
+
+<section class="panel col" style="width: 360px; flex: none; overflow: hidden">
+<div class="rowx" style="padding: 8px 14px; gap: 8px"><h3 class="grow">96 waiting</h3><span class="mut" style="font-size: 12.5px">Most seen first</span></div>
+<a class="li sel col" style="align-items: stretch; gap: 3px; color: #14171a"><span style="font-weight: 600">LECHE ENTERA HACENDADO BRICK 1 L</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Mercadona</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>YOGUR NATURAL HACENDADO PACK 6</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Mercadona</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>Queso tierno DIA Láctea 300 g</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>DIA</span><span class="chip">No proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>ACEITE DE OLIVA VIRGEN EXTRA 1 L</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Mercadona</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>Tomate triturado DIA 400 g</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>DIA</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>Milbona Leche fresca 1 L</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Lidl</span><span class="chip">No proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>PAN DE MOLDE INTEGRAL 460 G</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Mercadona</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>Garbanzo cocido Carrefour 570 g</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Carrefour</span><span class="chip">No proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>DETERGENTE LÍQUIDO BOSQUE VERDE 3 L</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Mercadona</span><span class="chip ok">Has a proposal</span></span></a>
+<a class="li col" style="align-items: stretch; gap: 3px; color: #14171a"><span>Atún claro en aceite DIA pack 3</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>DIA</span><span class="chip ok">Has a proposal</span></span></a>
+</section>
+
+<section class="panel grow col" style="min-height: 0; overflow: hidden">
+<div class="col" style="padding: 16px 18px 12px; gap: 8px">
+<div class="rowx" style="gap: 10px"><h2 class="grow" style="font-size: 18px">LECHE ENTERA HACENDADO BRICK 1 L</h2><span class="mut num">1 of 96</span></div>
+<div class="rowx" style="gap: 8px"><span class="chip">Mercadona</span><span class="chip">Named by the chain's site</span><span class="chip">Seen in 14 runs</span><a style="font-size: 13px">Open the last run</a></div>
+</div>
+
+<div class="rowx" style="padding: 0 18px; gap: 14px; align-items: stretch">
+<div class="grow" style="border: 1px solid #d9dcd6; border-radius: 8px; padding: 12px 14px">
+<h3 style="padding-bottom: 6px">The source says</h3>
+<div class="kv"><span>Name</span><span>LECHE ENTERA HACENDADO BRICK 1 L</span></div>
+<div class="kv"><span>Brand</span><span>Hacendado</span></div>
+<div class="kv"><span>Size</span><span>1 L</span></div>
+<div class="kv"><span>Barcode</span><span class="mono">8480000100115</span></div>
+<div class="kv"><span>Its category</span><span>Lácteos, Leche</span></div>
+<div class="kv"><span>Its id</span><span class="mono">10381</span></div>
+<a style="font-size: 13px">Open the product page at the chain</a>
+</div>
+<div class="grow" style="border: 1px solid #0b6b53; border-radius: 8px; padding: 12px 14px; background: #f1f8f5">
+<div class="rowx" style="gap: 8px; padding-bottom: 6px"><h3 class="grow" style="color: #085441">Proposed product</h3><span class="chip ok">Same barcode</span></div>
+<div class="kv"><span>Name</span><span style="font-weight: 600">Leche entera</span></div>
+<div class="kv"><span>Brand</span><span>Hacendado</span></div>
+<div class="kv"><span>Size</span><span>1 L</span></div>
+<div class="kv"><span>Barcode</span><span class="mono">8480000100115</span></div>
+<div class="kv"><span>Group</span><span>Leche entera</span></div>
+<div class="kv"><span>Categories</span><span>Lácteos y huevos, Leche</span></div>
+<a href="Product.dc.html" style="font-size: 13px">Open the product</a>
+</div>
+</div>
+
+<div class="col" style="padding: 14px 18px 0; gap: 6px">
+<div class="rowx" style="gap: 8px"><h3 class="grow">Prices it brings</h3><span class="mut" style="font-size: 13px">Accepting writes these prices.</span></div>
+<div class="rowx" style="gap: 10px; padding: 8px 12px; border: 1px solid #d9dcd6; border-radius: 8px"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span><span class="grow">Mercadona, Nationwide</span><span class="mut">Seen 1 Oct</span><span class="mut num">0,98 €/L</span><span class="num" style="font-weight: 600">0,98 €</span></div>
+</div>
+
+<div class="grow"></div>
+<div class="rowx" style="padding: 12px 18px; gap: 8px; border-top: 1px solid #d9dcd6; background: #f3f4f1">
+<button class="btn pri" style="height: 40px">Yes, it is this product</button>
+<button class="btn" style="height: 40px">Pick another product</button>
+<button class="btn" style="height: 40px">Create the product</button>
+<div class="grow"></div>
+<button class="btn" style="height: 40px">Skip</button>
+<button class="btn dan" style="height: 40px">Not a product we track</button>
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

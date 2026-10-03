@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: review</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:15px;line-height:1.4;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:17px;font-weight:600}
+.ab h2{font-size:16px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:13px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.phead{height:48px;padding:0 4px 0 16px;display:flex;align-items:center;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.pb{width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.pb .ic{width:20px;height:20px}
+.pb i{width:26px;height:26px;border-radius:13px;border:1px solid #c3c8c0;font-style:normal;font-size:13px;font-weight:600;color:#555c63;display:flex;align-items:center;justify-content:center}
+.tabs{display:flex;padding:0 6px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:44px;padding:0 10px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:44px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:15px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.seg{display:flex;background:#e9ebe6;border-radius:8px;padding:3px;gap:2px}
+.seg a{flex:1;height:38px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:5px;font-size:13px;color:#3d4348 !important;white-space:nowrap}
+.seg a.on{background:#fcfcfa;color:#14171a !important;font-weight:600}
+.kv{display:flex;gap:10px;padding:4px 0;font-size:14px}
+.kv span:first-child{width:76px;color:#555c63;flex:none}
+.bnav{height:58px;display:flex;background:#14211d;flex:none}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#b9c4bf;position:relative}
+.bnav a.on{color:#fff;box-shadow:inset 0 2px 0 #4fb393}
+.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.badge{position:absolute;top:5px;right:14px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#f0b23a;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="ab" style="width: 390px; height: 844px">
+
+<header class="phead">
+<h1 class="grow">Harvest</h1>
+<button class="pb" aria-label="Filter the queue"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
+<button class="pb" aria-label="How this page works"><i>i</i></button>
+</header>
+<nav class="tabs" aria-label="Harvest">
+<a class="tab on">Review <span class="cnt wait">148</span></a>
+<a class="tab" href="Phone-Runs.dc.html">Runs</a>
+<a class="tab">Setup</a>
+</nav>
+
+<div style="padding: 10px 12px 0">
+<nav class="seg" aria-label="Queue">
+<a class="on">Products <span class="cnt wait">96</span></a>
+<a>Shops <span class="cnt wait">31</span></a>
+<a>Places <span class="cnt wait">14</span></a>
+<a>Brands <span class="cnt wait">7</span></a>
+</nav>
+</div>
+
+<div class="grow col" style="min-height: 0; overflow: hidden; padding: 12px; gap: 10px">
+<div class="rowx" style="gap: 8px"><span class="chip">Mercadona</span><span class="chip">Seen in 14 runs</span><div class="grow"></div><span class="mut num" style="font-size: 13px">1 of 96</span></div>
+<h2>LECHE ENTERA HACENDADO BRICK 1 L</h2>
+
+<div style="border: 1px solid #d9dcd6; border-radius: 8px; padding: 10px 12px; background: #fcfcfa">
+<h3 style="padding-bottom: 4px">The source says</h3>
+<div class="kv"><span>Brand</span><span>Hacendado</span></div>
+<div class="kv"><span>Size</span><span>1 L</span></div>
+<div class="kv"><span>Barcode</span><span class="mono">8480000100115</span></div>
+<div class="kv"><span>Category</span><span>Lácteos, Leche</span></div>
+</div>
+
+<div style="border: 1px solid #0b6b53; border-radius: 8px; padding: 10px 12px; background: #f1f8f5">
+<div class="rowx" style="gap: 8px; padding-bottom: 4px"><h3 class="grow" style="color: #085441">Proposed product</h3><span class="chip ok">Same barcode</span></div>
+<div class="kv"><span>Name</span><span style="font-weight: 600">Leche entera</span></div>
+<div class="kv"><span>Brand</span><span>Hacendado</span></div>
+<div class="kv"><span>Size</span><span>1 L</span></div>
+<div class="kv"><span>Group</span><span>Leche entera</span></div>
+</div>
+
+<div class="rowx" style="gap: 10px; padding: 10px 12px; border: 1px solid #d9dcd6; border-radius: 8px; background: #fcfcfa"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span><span class="grow col"><span>Nationwide</span><span class="mut" style="font-size: 13px">Accepting writes this price</span></span><span class="num" style="font-weight: 600">0,98 €</span></div>
+
+<div class="rowx" style="gap: 18px; font-size: 14px; padding: 2px 2px"><a style="padding: 8px 0">Pick another product</a><a style="padding: 8px 0">Create the product</a></div>
+</div>
+
+<div class="rowx" style="padding: 8px 12px; gap: 8px; background: #fcfcfa; border-top: 1px solid #d9dcd6">
+<button class="btn dan" aria-label="Not a product we track">Reject</button>
+<button class="btn">Skip</button>
+<button class="btn pri grow">Yes, it is this</button>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Phone-Chain.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a class="on"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

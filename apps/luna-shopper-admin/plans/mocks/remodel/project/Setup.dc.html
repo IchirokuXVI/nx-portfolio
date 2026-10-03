@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Harvest: setup, chain sources</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.ab label{font-size:12px;font-weight:600;color:#555c63}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rail{width:76px;background:#14211d;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#b9c4bf;position:relative}
+.rail a.on{background:#24362f;color:#fff}
+.rail svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #3b4c45;background:none;color:#b9c4bf !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#f0b23a;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fdf3e0;color:#7a4f05}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.inp{height:36px;padding:0 10px;border-radius:6px;border:1px solid #c3c8c0;background:#fff;font:inherit;font-size:14px;color:#14171a;min-width:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:52px}
+.th{display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12px;font-weight:600;color:#555c63}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.seg{display:flex;background:#e9ebe6;border-radius:8px;padding:3px;gap:2px}
+.seg a{height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#3d4348 !important;white-space:nowrap;padding:0 10px}
+.seg a.on{background:#fcfcfa;color:#14171a !important;font-weight:600}
+.sw{width:36px;height:20px;border-radius:10px;background:#8d948c;position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:#0b6b53}.sw.on::after{left:18px}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a class="on" href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<h1>Harvest</h1>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How this page works">i</button>
+</header>
+<nav class="tabs" aria-label="Harvest">
+<a class="tab" href="Review.dc.html">Review <span class="cnt wait">148</span></a>
+<a class="tab" href="Runs.dc.html">Runs</a>
+<a class="tab on" href="Setup.dc.html">Setup</a>
+</nav>
+
+<div class="rowx" style="padding: 12px 20px; gap: 10px">
+<nav class="seg" aria-label="Setup">
+<a class="on">Chain sources <span class="cnt">4</span></a>
+<a>Brands <span class="cnt">1,204</span></a>
+<a>Postal codes <span class="cnt">318</span></a>
+</nav>
+<div class="grow"></div>
+<button class="btn">Add a chain source</button>
+</div>
+
+<div class="grow col" style="padding: 0 20px 16px; gap: 12px; min-height: 0">
+<div class="panel col" style="overflow: hidden">
+<div class="th"><span style="width: 150px">Chain</span><span style="width: 150px">Fetched as</span><span class="rowx" style="width: 130px; gap: 6px">May be fetched <button class="ibtn" style="width: 20px; height: 20px; font-size: 11px" aria-label="What this switch allows">i</button></span><span class="rowx" style="width: 110px; gap: 6px">Trusted <button class="ibtn" style="width: 20px; height: 20px; font-size: 11px" aria-label="What trusted means">i</button></span><span style="width: 80px; text-align: right">Workers</span><span style="width: 130px; text-align: right">Requests a second</span><span class="grow" style="padding-left: 16px">Last good run</span><span style="width: 150px">Failures in a row</span><span style="width: 76px"></span></div>
+
+<div class="li"><span style="width: 150px; font-weight: 600">Mercadona</span><span class="mono" style="width: 150px">mercadona-api</span><span style="width: 130px"><button class="sw" aria-label="Mercadona may be fetched: off"></button></span><span style="width: 110px"><button class="sw on" aria-label="Mercadona is trusted: on"></button></span><span class="num" style="width: 80px; text-align: right">2</span><span class="num" style="width: 130px; text-align: right">1.5</span><span class="grow mut" style="padding-left: 16px">1 Oct</span><span style="width: 150px">0</span><span style="width: 76px; text-align: right"><button class="btn sm">Change</button></span></div>
+
+<div class="col" style="border-top: 1px solid #e6e8e3; background: #f3f4f1">
+<div class="rowx" style="gap: 10px; padding: 8px 14px; min-height: 52px"><span style="width: 150px; font-weight: 600">DIA</span><span class="mono" style="width: 150px">dia-api</span><span style="width: 130px"><button class="sw" aria-label="DIA may be fetched: off"></button></span><span style="width: 110px"><button class="sw on" aria-label="DIA is trusted: on"></button></span><span class="num" style="width: 80px; text-align: right">1</span><span class="num" style="width: 130px; text-align: right">0.5</span><span class="grow mut" style="padding-left: 16px">Today 09:10</span><span style="width: 150px"><span class="chip wait">2</span></span><span style="width: 76px"></span></div>
+<div class="rowx" style="gap: 14px; padding: 4px 14px 14px; align-items: flex-end">
+<div class="col" style="gap: 4px; width: 200px"><label for="ad">How it is fetched</label><button id="ad" class="btn" style="justify-content: space-between"><span class="mono">dia-api</span><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="col" style="gap: 4px; width: 100px"><label for="wk">Workers</label><input id="wk" class="inp num" value="1"></div>
+<div class="col" style="gap: 4px; width: 150px"><label for="rq">Requests a second</label><input id="rq" class="inp num" value="0.5"></div>
+<div class="col grow" style="gap: 4px"><label for="cf">Adapter settings</label><input id="cf" class="inp mono" value='{ "warehouse": "[REAL DATA]" }'></div>
+<button class="btn pri">Save</button>
+<button class="btn">Cancel</button>
+<button class="btn dan">Delete this source</button>
+</div>
+<p class="rowx" style="gap: 8px; padding: 0 14px 12px; font-size: 13px; color: #7a4f05"><svg class="ic" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5h.01M10.3 3.9L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.</p>
+</div>
+
+<div class="li"><span style="width: 150px; font-weight: 600">DEZA</span><span class="mono" style="width: 150px">deza-web</span><span style="width: 130px"><button class="sw" aria-label="DEZA may be fetched: off"></button></span><span style="width: 110px"><button class="sw" aria-label="DEZA is trusted: off"></button></span><span class="num" style="width: 80px; text-align: right">1</span><span class="num" style="width: 130px; text-align: right">0.5</span><span class="grow mut" style="padding-left: 16px">27 Sep</span><span style="width: 150px">0</span><span style="width: 76px; text-align: right"><button class="btn sm">Change</button></span></div>
+
+<div class="li"><span style="width: 150px; font-weight: 600">Lidl</span><span class="mono" style="width: 150px">[REAL DATA]</span><span style="width: 130px"><button class="sw" aria-label="Lidl may be fetched: off"></button></span><span style="width: 110px"><button class="sw on" aria-label="Lidl is trusted: on"></button></span><span class="num" style="width: 80px; text-align: right">1</span><span class="num" style="width: 130px; text-align: right">1</span><span class="grow mut" style="padding-left: 16px">Never</span><span style="width: 150px"><span class="chip bad">5</span></span><span style="width: 76px; text-align: right"><button class="btn sm">Change</button></span></div>
+</div>
+
+<p class="mut" style="font-size: 13px">OpenStreetMap is always asked for every postal code. It has no row here.</p>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

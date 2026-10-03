@@ -1,0 +1,50 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-03T12:00:00Z" },
+  "title": "Luna Shopper admin remodel",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1360, "h": 860, "title": "Chains: a chain, its shops, one shop" },
+    "Products.dc.html": { "x": 1440, "y": 0, "w": 1360, "h": 860, "title": "Products: list with prices at a scope" },
+    "Product.dc.html": { "x": 2880, "y": 0, "w": 1360, "h": 860, "title": "Product: prices by chain and scope" },
+    "Tokens.dc.html": { "x": 4320, "y": 0, "w": 1000, "h": 860, "title": "Colors, type and parts" },
+    "Review.dc.html": { "x": 0, "y": 1200, "w": 1360, "h": 860, "title": "Harvest: review, four queues in one place" },
+    "Runs.dc.html": { "x": 1440, "y": 1200, "w": 1360, "h": 860, "title": "Harvest: runs, presets and file import" },
+    "Setup.dc.html": { "x": 2880, "y": 1200, "w": 1360, "h": 860, "title": "Harvest: setup, chain sources" },
+    "Phone-Chain.dc.html": { "x": 0, "y": 2400, "w": 390, "h": 844, "title": "Phone: a chain" },
+    "Phone-Shop.dc.html": { "x": 470, "y": 2400, "w": 390, "h": 844, "title": "Phone: a shop" },
+    "Phone-Product.dc.html": { "x": 940, "y": 2400, "w": 390, "h": 844, "title": "Phone: a product's prices" },
+    "Phone-Review.dc.html": { "x": 1410, "y": 2400, "w": 390, "h": 844, "title": "Phone: review" },
+    "Phone-Runs.dc.html": { "x": 1880, "y": 2400, "w": 390, "h": 844, "title": "Phone: runs" },
+    "Phone-Info.dc.html": { "x": 2350, "y": 2400, "w": 390, "h": 844, "title": "Phone: the info sheet" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Products.dc.html",
+    "Product.dc.html",
+    "Tokens.dc.html",
+    "Review.dc.html",
+    "Runs.dc.html",
+    "Setup.dc.html",
+    "Phone-Chain.dc.html",
+    "Phone-Shop.dc.html",
+    "Phone-Product.dc.html",
+    "Phone-Review.dc.html",
+    "Phone-Runs.dc.html",
+    "Phone-Info.dc.html"
+  ],
+  "notes": {
+    "t-catalog": { "x": 0, "y": -260, "text": "Catalog", "kind": "title1", "maxW": 4240 },
+    "t-harvest": { "x": 0, "y": 940, "text": "Harvester", "kind": "title1", "maxW": 4240 },
+    "t-phone": { "x": 0, "y": 2140, "text": "On a phone", "kind": "title1", "maxW": 2740 },
+    "n-sample": {
+      "x": 5400,
+      "y": 0,
+      "w": 320,
+      "text": "Every name, count and price on these boards is sample data. The real screens read the gateway.",
+      "fill": "orange"
+    }
+  },
+  "designSystems": []
+}

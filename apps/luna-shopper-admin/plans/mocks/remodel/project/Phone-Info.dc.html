@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: the info sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:15px;line-height:1.4;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p,.ab ul{margin:0}
+.ab h1{font-size:17px;font-weight:600}
+.ab h2{font-size:17px;font-weight:600}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.phead{height:48px;padding:0 4px 0 16px;display:flex;align-items:center;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.pb{width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.pb .ic{width:20px;height:20px}
+.pb i{width:26px;height:26px;border-radius:13px;border:1px solid #0b6b53;background:#e3f1ec;font-style:normal;font-size:13px;font-weight:600;color:#085441;display:flex;align-items:center;justify-content:center}
+.tabs{display:flex;padding:0 6px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:44px;padding:0 9px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.btn{height:44px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:15px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.li{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid #e6e8e3;min-height:64px;background:#fcfcfa}
+.sw{width:44px;height:26px;border-radius:13px;background:#8d948c;position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:10px;background:#fff}
+.sw.on{background:#0b6b53}.sw.on::after{left:21px}
+.bnav{height:58px;display:flex;background:#14211d;flex:none}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#b9c4bf;position:relative}
+.bnav a.on{color:#fff;box-shadow:inset 0 2px 0 #4fb393}
+.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.badge{position:absolute;top:5px;right:14px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#f0b23a;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="ab" style="width: 390px; height: 844px">
+
+<header class="phead">
+<h1 class="grow">Products</h1>
+<button class="pb" aria-label="How this page works" aria-expanded="true"><i>i</i></button>
+</header>
+<nav class="tabs" aria-label="Products">
+<a class="tab">Products</a>
+<a class="tab">Groups</a>
+<a class="tab">Categories</a>
+<a class="tab on">Price rules</a>
+</nav>
+
+<div class="grow col" style="min-height: 0; overflow: hidden">
+<div class="li" style="border-top: 0"><span class="mut num" style="width: 18px; font-weight: 600">1</span><span class="grow col"><span style="font-weight: 600">Typed in by an admin</span><span class="mut" style="font-size: 13px">Out of date after 7 days</span></span><button class="sw on" aria-label="Typed in by an admin: on"></button><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+<div class="li"><span class="mut num" style="width: 18px; font-weight: 600">2</span><span class="grow col"><span style="font-weight: 600">Chain's site</span><span class="mut" style="font-size: 13px">Out of date after 14 days</span></span><button class="sw on" aria-label="Chain's site: on"></button><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+<div class="li"><span class="mut num" style="width: 18px; font-weight: 600">3</span><span class="grow col"><span style="font-weight: 600">Chain's web page</span><span class="mut" style="font-size: 13px">Out of date after 14 days</span></span><button class="sw on" aria-label="Chain's web page: on"></button><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+<div class="li"><span class="mut num" style="width: 18px; font-weight: 600">4</span><span class="grow col"><span style="font-weight: 600">Leaflet</span><span class="mut" style="font-size: 13px">Out of date after 30 days</span></span><button class="sw" aria-label="Leaflet: off"></button><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></div>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+
+<div style="position: absolute; inset: 0; background: rgba(20, 33, 29, 0.5)"></div>
+<section role="dialog" aria-label="How price rules work" class="col" style="position: absolute; left: 0; right: 0; bottom: 0; background: #fcfcfa; border-radius: 14px 14px 0 0; padding: 10px 18px 18px; gap: 12px">
+<div style="width: 40px; height: 4px; border-radius: 2px; background: #c3c8c0; align-self: center"></div>
+<h2>Price rules</h2>
+<ul class="col" style="padding-left: 20px; gap: 8px">
+<li>One rule for each kind of source. When two sources price the same product, the higher rule wins.</li>
+<li>A price older than the limit of its rule is out of date. A newer price from a lower rule then replaces it.</li>
+<li>Turn a rule off to ignore every price from that kind of source.</li>
+</ul>
+<p class="rowx" style="gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 8px; background: #fdf3e0; color: #7a4f05; font-size: 14px"><svg class="ic" style="margin-top: 2px" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5h.01M10.3 3.9L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span>Saving a rule works out the shown price of every product again. Expect a short wait.</span></p>
+<button class="btn">Close</button>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
