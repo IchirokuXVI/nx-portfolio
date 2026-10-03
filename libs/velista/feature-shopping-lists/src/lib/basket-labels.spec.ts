@@ -6,6 +6,7 @@ import type {
   BasketRowEntry,
 } from '@portfolio/velista/models';
 import {
+  elsewhereCaption,
   listPickerRows,
   originsCaption,
   participantInitials,
@@ -660,5 +661,54 @@ describe('listPickerRows', () => {
     );
 
     expect(rows.map((one) => one.pending)).toEqual([2, 1]);
+  });
+});
+
+/**
+ * Velista `0131`: a row somebody bought through another basket.
+ *
+ * This basket's own pair on such a row is zero and zero, so before this the done
+ * row said "0 of 0".
+ */
+describe('a row bought on another basket (velista 0131)', () => {
+  it('reads the done row\u2019s count from boughtElsewhere, never from bought', () => {
+    expect(
+      quantityCaption(
+        { state: 'DONE', bought: 0, asked: 0, left: 0, boughtElsewhere: 2 },
+        translator,
+        'en'
+      )
+    ).toBe('basket.row.boughtOf:{"bought":2,"asked":2}');
+  });
+
+  it('leaves a row this basket bought itself saying its own numbers', () => {
+    expect(
+      quantityCaption(
+        { state: 'DONE', bought: 3, asked: 3, left: 0, boughtElsewhere: 1 },
+        translator,
+        'en'
+      )
+    ).toBe('basket.row.boughtOf:{"bought":3,"asked":3}');
+  });
+
+  it('leaves a row with something left saying what is left', () => {
+    expect(
+      quantityCaption(
+        { state: 'WANTED', bought: 0, asked: 3, left: 3, boughtElsewhere: 1 },
+        translator,
+        'en'
+      )
+    ).toBe('basket.line.wanted:{"count":3}');
+  });
+
+  /** It names nobody and says no time, so the sentence takes no value at all. */
+  it('says one sentence with nothing in it', () => {
+    expect(elsewhereCaption({ count: 2, closed: true }, translator, 'en')).toBe(
+      'basket.elsewhere.caption'
+    );
+    expect(
+      elsewhereCaption({ count: 1, closed: false }, translator, 'en')
+    ).toBe('basket.elsewhere.caption');
+    expect(elsewhereCaption(null, translator, 'en')).toBeNull();
   });
 });

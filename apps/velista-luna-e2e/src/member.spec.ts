@@ -1,11 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 import { LIST_HARDWARE_ID } from '@portfolio/luna-shopper/test-fixtures';
 import {
+  addBasketLine,
   ALICE_EMAIL,
+  buyBasketRow,
   DANA_EMAIL,
   listLines,
   login,
   readBasketRows,
+  readLiveBasket,
   resetAliceWorld,
   type Session,
 } from './support/api';
@@ -45,6 +48,11 @@ import {
  * velista 0092 built them for: a line added in the aisle to one list, bought,
  * and then asked for again from the settle sheet, which the API confirms
  * reached the household's list.
+ *
+ * The last step is two baskets over one line (velista `0131`, backend `0188`).
+ * The owner buys a line through her **own** basket, the permanent one, and the
+ * member's open basket keeps the row: done, saying it was bought on another
+ * basket, with nothing to undo it, and without a reload.
  */
 test.describe('a registered participant', () => {
   let alice: Session;
@@ -67,6 +75,9 @@ test.describe('a registered participant', () => {
     let basketId = '';
     let link = '';
     const aisleLine = `Torch ${Date.now()}`;
+    // A line of its own, which the next run's reset deletes, so the purchase made
+    // on it leaves nothing behind on the seeded lines the other specs read.
+    const elsewhereLine = `Rope ${Date.now()}`;
 
     await test.step('1. Alice generates a basket from Groceries and Hardware and shares it', async () => {
       await signIn(page, ALICE_EMAIL);
@@ -181,6 +192,62 @@ test.describe('a registered participant', () => {
             )?.quantity
         )
         .toBe(1);
+    });
+
+    await test.step('4. Alice buys a line from her own basket, and Dana\u2019s open basket shows it done', async () => {
+      // Alice's permanent basket covers Hardware too, so the two baskets hold the
+      // same line. Everything she does here goes over the gateway: no page of hers
+      // is involved, which is what "another basket" means to Dana's screen.
+      const live = await readLiveBasket(alice);
+      expect(live.id).not.toBe(basketId);
+      const added = await addBasketLine(alice, live.id, {
+        targetListId: LIST_HARDWARE_ID,
+        content: elsewhereLine,
+        quantity: 2,
+      });
+
+      // On Dana's open basket as a line still to buy, with nothing reloaded.
+      await expect(
+        row(dana, elsewhereLine).getByRole('button', {
+          name: `Mark ${elsewhereLine} as got`,
+        })
+      ).toBeVisible();
+
+      await buyBasketRow(alice, live.id, added.rowKey, {
+        quantity: 2,
+        from: 2,
+      });
+
+      // What the backend serves on the shared basket: the row stays, done, with
+      // nothing bought here and two bought elsewhere (backend `0188`).
+      await expect
+        .poll(async () => {
+          const held = (await readBasketRows(alice, basketId)).find(
+            (r) => r.content === elsewhereLine
+          );
+          return held === undefined
+            ? null
+            : {
+                state: held.state,
+                left: held.left,
+                bought: held.bought,
+                boughtElsewhere: held.boughtElsewhere,
+              };
+        })
+        .toEqual({ state: 'DONE', left: 0, bought: 0, boughtElsewhere: 2 });
+
+      // And what Dana's screen draws, without a reload: a done row, the caption,
+      // and no control that takes the purchase back.
+      const done = row(dana, elsewhereLine);
+      await expect(done.locator('.row.is-done')).toBeVisible();
+      await expect(done).toContainText('Bought on another basket');
+      await expect(
+        done.getByRole('button', { name: `${elsewhereLine} is got. Undo it` })
+      ).toHaveCount(0);
+      await expect(
+        done.getByRole('button', { name: `Mark ${elsewhereLine} as got` })
+      ).toHaveCount(0);
+      await expectBasketUrl(dana, basketId);
     });
   });
 });

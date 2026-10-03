@@ -11,10 +11,11 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  BasketListRef,
-  BasketRow,
-  BasketRowEntry,
+import {
+  basketElsewhere,
+  type BasketListRef,
+  type BasketRow,
+  type BasketRowEntry,
 } from '@portfolio/velista/models';
 import { QuantityReel } from '@portfolio/velista/ui';
 
@@ -34,6 +35,9 @@ interface DrawnEntry {
    * not served cannot be allocated to, because the server refuses an `allocations`
    * naming a list they may not write, and a control that is refused is not drawn
    * (`0030`).
+   *
+   * Nor on an entry somebody closed through another basket (velista `0131`):
+   * lowering the reel is a revert, and this basket has no purchase to take back.
    */
   readonly editable: boolean;
   /**
@@ -199,13 +203,18 @@ export class RowEntries {
           // when two households both keep one called "Groceries".
           `${ref.name} · ${ref.zoneName}`;
 
+    // Closed by a purchase made through another basket (velista `0131`). Both
+    // plain numbers read the server's `boughtElsewhere`, as the row's own caption
+    // does: this basket's pair is zero and zero, which says nothing was wanted.
+    const closedElsewhere = basketElsewhere(entry)?.closed === true;
+
     return {
       lineId: entry.lineId,
       name,
-      asked: entry.asked,
-      bought: entry.bought,
+      asked: closedElsewhere ? entry.boughtElsewhere : entry.asked,
+      bought: closedElsewhere ? entry.boughtElsewhere : entry.bought,
       left: entry.left,
-      editable: ref !== undefined && !this.finished(),
+      editable: ref !== undefined && !this.finished() && !closedElsewhere,
       demandEditable: this._mayDemand(entry),
       label: this._translator.t('basket.entries.gotLabel', undefined, locale, {
         name,

@@ -1,6 +1,8 @@
 import type { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
 import {
+  basketElsewhere,
   formatVisitMoment,
+  type BasketElsewhere,
   type BasketListRef,
   type BasketParticipant,
   type BasketRow,
@@ -260,10 +262,24 @@ export function touchedCaption(
 }
 
 export function quantityCaption(
-  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left'>,
+  row: Pick<
+    BasketRow,
+    'state' | 'bought' | 'asked' | 'left' | 'boughtElsewhere'
+  >,
   translator: RokuTranslatorService,
   locale: string
 ): string {
+  const elsewhere = basketElsewhere(row);
+  if (elsewhere?.closed === true) {
+    // Closed by a purchase made through another basket (velista `0131`). This
+    // basket bought none and asks for none, so its own pair reads "0 of 0". The
+    // count is the server's `boughtElsewhere`, said on both sides because
+    // nothing is left: what was got is what there was to get.
+    return translator.t('basket.row.boughtOf', undefined, locale, {
+      bought: elsewhere.count,
+      asked: elsewhere.count,
+    });
+  }
   if (row.state === 'PARTLY') {
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
@@ -284,6 +300,23 @@ export function quantityCaption(
         count: row.left,
       })
     : '';
+}
+
+/**
+ * "Bought on another basket", or null (velista `0131`).
+ *
+ * One sentence for a row closed from elsewhere and for a row that still has
+ * something left. **It names nobody and says no time**: the server sends neither
+ * the person nor the basket, and the row leaves when a read no longer holds it.
+ */
+export function elsewhereCaption(
+  elsewhere: BasketElsewhere | null,
+  translator: RokuTranslatorService,
+  locale: string
+): string | null {
+  return elsewhere === null
+    ? null
+    : translator.t('basket.elsewhere.caption', undefined, locale);
 }
 
 /**

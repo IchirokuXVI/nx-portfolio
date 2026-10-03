@@ -149,7 +149,10 @@ describe('BasketMemory: the counts', () => {
   it('counts done, unavailable and the total', async () => {
     const basket = await new BasketMemory().getBasket(BASKET);
 
-    expect(basket.progress).toEqual({ done: 0, unavailable: 1, total: 3 });
+    // The one done row is the butter, which another basket bought (velista
+    // `0131`): it counts in the total and in done, so a reader's progress does
+    // not fall when somebody else buys.
+    expect(basket.progress).toEqual({ done: 1, unavailable: 1, total: 4 });
   });
 
   /** `total - done - unavailable`. The client never works it out. */
@@ -170,7 +173,8 @@ describe('BasketMemory: the counts', () => {
     });
 
     const basket = await memory.getBasket(BASKET);
-    expect(basket.progress.done).toBe(1);
+    // The eggs, and the butter another basket bought.
+    expect(basket.progress.done).toBe(2);
     expect(basket.pending).toBe(1);
   });
 });
@@ -280,7 +284,7 @@ describe('BasketMemory: settling a row', () => {
     });
 
     expect(result.row.content).toBe('Eggs');
-    expect(result.progress.total).toBe(3);
+    expect(result.progress.total).toBe(4);
     expect(result.pending).toBe(2);
     expect(result.replacedRowKey).toBeNull();
   });
@@ -595,8 +599,7 @@ describe('BasketMemory: putting a row off for now', () => {
     const memory = at(NOON);
     await memory.skip(BASKET, 'zl-1');
 
-    memory.now = () =>
-      new Date(NOON.getTime() + 12 * 60 * 60 * 1000 - 1000);
+    memory.now = () => new Date(NOON.getTime() + 12 * 60 * 60 * 1000 - 1000);
 
     expect(rowOf(await rowsOf(memory), 'Milk').state).toBe('SKIPPED');
   });
@@ -760,5 +763,84 @@ describe('BasketMemory: adding a line', () => {
         })
       )
     ).toBe('basket_finished');
+  });
+});
+
+/**
+ * Velista `0131`: what another basket bought (backend `0188`).
+ *
+ * The fake keeps the server's rules here too, so the app in its memory mode
+ * shows the row and a spec meets the refusals the real server makes.
+ */
+describe('BasketMemory: a line bought through another basket', () => {
+  const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+  it('keeps the row as done, with the count and the note, and no purchase of its own', async () => {
+    const butter = rowOf(await rowsOf(new BasketMemory()), 'Butter');
+
+    expect(butter.state).toBe('DONE');
+    expect(butter.left).toBe(0);
+    expect(butter.bought).toBe(0);
+    expect(butter.boughtElsewhere).toBe(1);
+    expect(butter.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
+    expect(butter.noteAt).not.toBeNull();
+    expect(butter.entries[0].boughtElsewhere).toBe(1);
+    expect(butter.entries[0].state).toBe('DONE');
+    // Nobody is named: the purchase is not an act of this basket.
+    expect(butter.touchedBy).toBeNull();
+  });
+
+  /** The row leaves when a read no longer holds it. There is no event. */
+  it('drops the row once the six hours have passed, by its own clock', async () => {
+    const memory = new BasketMemory();
+    memory.now = () => new Date(Date.now() + SIX_HOURS_MS + 60_000);
+
+    const rows = await rowsOf(memory);
+
+    expect(rows.some((row) => row.content === 'Butter')).toBe(false);
+  });
+
+  it('keeps a row with something left as it was, with the count and the note', async () => {
+    const memory = new BasketMemory();
+    memory.buyElsewhere('zl-1', 1);
+
+    const milk = rowOf(await rowsOf(memory), 'Milk');
+
+    expect(milk.left).toBe(2);
+    expect(milk.state).toBe('WANTED');
+    expect(milk.boughtElsewhere).toBe(1);
+    expect(milk.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
+  });
+
+  /** One basket never takes back a purchase of another (backend `0188`). */
+  it('refuses a revert on a row this basket bought none of', async () => {
+    const memory = new BasketMemory();
+    const butter = rowOf(await rowsOf(memory), 'Butter');
+
+    expect(
+      await codeOf(
+        memory.revert(BASKET, butter.rowKey, {
+          target: 'UNITS',
+          units: 1,
+          from: 0,
+        })
+      )
+    ).toBe('validation_failed');
+    expect(rowOf(await rowsOf(memory), 'Butter').boughtElsewhere).toBe(1);
+  });
+
+  it('makes the row wanted again when the list asks for more', async () => {
+    const memory = new BasketMemory();
+    const butter = rowOf(await rowsOf(memory), 'Butter');
+
+    const result = await memory.setDemand(BASKET, butter.rowKey, {
+      lineId: butter.entries[0].lineId,
+      quantity: 1,
+      from: 0,
+    });
+
+    expect(result.row?.state).toBe('WANTED');
+    expect(result.row?.left).toBe(1);
+    expect(result.row?.boughtElsewhere).toBe(1);
   });
 });

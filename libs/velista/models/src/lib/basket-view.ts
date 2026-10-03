@@ -524,6 +524,14 @@ export interface BasketRowEntry {
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
+  /**
+   * Units of this line bought lately through **another** basket, or through none
+   * (velista `0131`; backend `0188`). Zero when there are none.
+   *
+   * A count and nothing else: it names no person and no basket. It is in neither
+   * {@link bought} nor {@link asked}, which count this basket alone.
+   */
+  readonly boughtElsewhere: number;
   /** This entry's own state, by the server. Never `REMOVED` (backend `0136`). */
   readonly state: BasketRowState;
   /**
@@ -568,6 +576,14 @@ export interface BasketRow {
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
+  /**
+   * The sum of the entries' `boughtElsewhere` (velista `0131`; backend `0188`):
+   * units somebody bought lately through another basket, or through none.
+   *
+   * The server keeps such a row for six hours, by its own clock, and the row
+   * leaves when a read no longer holds it. Nothing on this side counts the hours.
+   */
+  readonly boughtElsewhere: number;
   readonly state: BasketRowState;
   /** A fact about the row's past worth a caption, or null. */
   readonly note: BasketRowNote | null;
@@ -678,6 +694,43 @@ export function basketRowPick(
 ): BasketProduct | undefined {
   const first = row.optionIds[0];
   return first === undefined ? undefined : products.get(first);
+}
+
+/**
+ * What a row, or one entry of it, says about a purchase made through another
+ * basket (velista `0131`), or null when nothing was bought elsewhere.
+ */
+export interface BasketElsewhere {
+  /** The units bought elsewhere. The server's number, passed through. */
+  readonly count: number;
+  /**
+   * Whether that purchase is all that closed the row: the state is `DONE` and
+   * this basket bought none of it.
+   *
+   * Such a row is drawn as a done row and offers **no revert**. A revert takes
+   * back this basket's own purchases, it has none here, and the server refuses to
+   * let one basket undo a purchase of another (backend `0188`, target 8).
+   */
+  readonly closed: boolean;
+}
+
+/**
+ * Read {@link BasketElsewhere} off a row or an entry.
+ *
+ * One function, so the row, the entries pane and the settle sheet agree about
+ * which rows are closed from elsewhere. It compares the state the server wrote
+ * and two numbers the server sent with zero, and derives no number of its own.
+ */
+export function basketElsewhere(
+  unit: Pick<BasketRow, 'state' | 'bought' | 'boughtElsewhere'>
+): BasketElsewhere | null {
+  if (!(unit.boughtElsewhere > 0)) {
+    return null;
+  }
+  return {
+    count: unit.boughtElsewhere,
+    closed: unit.state === 'DONE' && unit.bought === 0,
+  };
 }
 
 /**

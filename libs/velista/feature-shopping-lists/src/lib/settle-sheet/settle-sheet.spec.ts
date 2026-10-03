@@ -82,6 +82,7 @@ function line(overrides: Partial<BasketRow> = {}): BasketRow {
     left: 4,
     bought: 0,
     asked: 4,
+    boughtElsewhere: 0,
     state: 'WANTED',
     note: null,
     noteAt: null,
@@ -108,6 +109,7 @@ function entry(
     left,
     bought: 0,
     asked: left,
+    boughtElsewhere: 0,
     state: 'WANTED',
     awaitingApproval: false,
     demandEditable: true,
@@ -2208,5 +2210,85 @@ describe('SettleSheet: the product somebody got', () => {
       expect(body['supermarketLocationId']).toBe('loc-merca');
       expect(body).not.toHaveProperty('priceScopeId');
     });
+  });
+});
+
+/**
+ * Velista `0131`: the sheet over a row somebody bought through another basket.
+ *
+ * The purchase is not this basket's, so nothing on the sheet takes it back. The
+ * one thing left to do is to ask the list for more, where the server allows it.
+ */
+describe('SettleSheet: a row bought on another basket (velista 0131)', () => {
+  const elsewhere = (demandEditable = true) =>
+    line({
+      left: 0,
+      bought: 0,
+      asked: 0,
+      boughtElsewhere: 2,
+      state: 'DONE',
+      note: 'BOUGHT_ON_ANOTHER_BASKET',
+      noteAt: new Date('2026-10-04T10:00:00.000Z'),
+      entries: [
+        entry('l1', 'zl1', 0, {
+          asked: 0,
+          boughtElsewhere: 2,
+          state: 'DONE',
+          demandEditable,
+        }),
+      ],
+    });
+
+  const reels = (fixture: ComponentFixture<SettleSheet>, which: string) =>
+    fixture.debugElement.queryAll(By.css(`lib-quantity-reel.${which}`));
+
+  it('says where it was bought, in the row\u2019s own words', async () => {
+    const { fixture } = await render({ lines: [elsewhere()] });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.happened')
+        ?.textContent
+    ).toContain('basket.elsewhere.caption');
+  });
+
+  it('offers no revert and no settle target', async () => {
+    const { fixture, store } = await render({ lines: [elsewhere()] });
+
+    // Lowering the got reel is the sheet's only revert, and it is not drawn.
+    expect(reels(fixture, 'got-reel')).toHaveLength(0);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.actions')
+    ).toBeNull();
+    expect(store.revert).not.toHaveBeenCalled();
+  });
+
+  it('keeps the quantity control where demandEditable is true', async () => {
+    const { fixture, store } = await render({ lines: [elsewhere(true)] });
+
+    expect(reels(fixture, 'ask-reel')).toHaveLength(1);
+
+    await commitReel(fixture, 'ask-reel', { from: 0, to: 1 });
+
+    expect(store.setDemand).toHaveBeenCalledWith(LINE_ID, {
+      lineId: 'zl1',
+      quantity: 1,
+      from: 0,
+    });
+  });
+
+  it('draws no quantity control where demandEditable is false', async () => {
+    const { fixture } = await render({ lines: [elsewhere(false)] });
+
+    expect(reels(fixture, 'ask-reel')).toHaveLength(0);
+  });
+
+  it('adds the caption to a row with something left, and keeps its controls', async () => {
+    const { fixture } = await render({
+      lines: [line({ boughtElsewhere: 1, note: 'BOUGHT_ON_ANOTHER_BASKET' })],
+    });
+
+    expect(text(fixture)).toContain('basket.elsewhere.caption');
+    expect(text(fixture)).toContain('basket.settle.none');
+    expect(reels(fixture, 'got-reel').length).toBeGreaterThan(0);
   });
 });
