@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: a chain</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:15px;line-height:1.4;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.phead{height:48px;padding:0 4px;display:flex;align-items:center;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.pb{width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.pb .ic{width:20px;height:20px}
+.pb i{width:26px;height:26px;border-radius:13px;border:1px solid #c3c8c0;font-style:normal;font-size:13px;font-weight:600;color:#555c63;display:flex;align-items:center;justify-content:center}
+.tabs{display:flex;padding:0 6px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:44px;padding:0 10px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.btn{height:44px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:15px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.inp{height:44px;padding:0 12px;border-radius:6px;border:1px solid #c3c8c0;background:#fff;font:inherit;font-size:16px;color:#14171a;min-width:0}
+.inp::placeholder{color:#6a7178}
+.li{display:flex;gap:3px;padding:9px 16px;border-top:1px solid #e6e8e3;min-height:60px;background:#fcfcfa;flex-direction:column;justify-content:center;color:#14171a !important}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.bnav{height:58px;display:flex;background:#6b4605;flex:none}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.bnav a.on{color:#fff;box-shadow:inset 0 2px 0 #f6e7c8}
+.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.badge{position:absolute;top:5px;right:14px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="ab" style="width: 390px; height: 844px">
+
+<header class="phead">
+<a class="pb" aria-label="Back to chains" style="color: #14171a"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+<h1 class="grow">Mercadona</h1>
+<button class="pb" aria-label="How this page works"><i>i</i></button>
+<button class="pb" aria-label="More actions for this chain"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></button>
+</header>
+<nav class="tabs" aria-label="Mercadona">
+<a class="tab on">Shops <span class="cnt">1,612</span></a>
+<a class="tab">Sections <span class="cnt">24</span></a>
+<a class="tab">Scopes <span class="cnt">3</span></a>
+<a class="tab">Details</a>
+</nav>
+
+<div class="rowx" style="padding: 10px 12px; gap: 8px">
+<input class="inp grow" placeholder="Address, city or postal code" aria-label="Find a shop">
+<button class="btn" style="width: 44px; padding: 0" aria-label="Filter shops"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
+</div>
+<div class="rowx" style="padding: 0 16px 10px; gap: 8px">
+<span class="chip">Sevilla <svg class="ic" style="width: 12px; height: 12px" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+<span class="mut" style="font-size: 13px">38 shops</span>
+</div>
+
+<div class="grow col" style="min-height: 0; overflow: hidden">
+<a class="li" href="Phone-Shop.dc.html"><span style="font-weight: 600">Av. de la Constitución 12</span><span class="rowx mut" style="gap: 8px; font-size: 13px"><span>Sevilla 41004</span><span class="chip ok">Own section order</span><span class="chip">Map</span></span></a>
+<a class="li"><span>C. Feria 98</span><span class="mut" style="font-size: 13px">Sevilla 41002</span></a>
+<a class="li"><span>Av. Kansas City 32</span><span class="rowx mut" style="gap: 8px; font-size: 13px"><span>Sevilla 41007</span><span class="chip">Map</span></span></a>
+<a class="li"><span>C. Asunción 44</span><span class="mut" style="font-size: 13px">Sevilla 41011</span></a>
+<a class="li"><span>Ronda de Triana 5</span><span class="rowx mut" style="gap: 8px; font-size: 13px"><span>Sevilla 41010</span><span class="chip wait">Postal code guessed</span></span></a>
+<a class="li"><span>Av. de la Palmera 61</span><span class="mut" style="font-size: 13px">Sevilla 41013</span></a>
+<a class="li"><span>C. Luis Montoto 120</span><span class="rowx mut" style="gap: 8px; font-size: 13px"><span>Sevilla 41005</span><span class="chip ok">Own section order</span></span></a>
+<a class="li"><span>Av. de Andalucía 7</span><span class="mut" style="font-size: 13px">Sevilla 41006</span></a>
+<a class="li"><span>C. Arroyo 55</span><span class="mut" style="font-size: 13px">Sevilla 41008</span></a>
+</div>
+
+<div class="rowx" style="padding: 8px 12px; background: #fcfcfa; border-top: 1px solid #d9dcd6">
+<button class="btn grow">Add a shop</button>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Phone-Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

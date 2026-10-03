@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: a shop</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:15px;line-height:1.4;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.ab input[type=checkbox]{width:20px;height:20px;accent-color:#0b6b53;margin:0;flex:none}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.phead{height:48px;padding:0 4px;display:flex;align-items:center;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.pb{width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center;padding:0;flex:none}
+.pb .ic{width:20px;height:20px}
+.pb i{width:26px;height:26px;border-radius:13px;border:1px solid #c3c8c0;font-style:normal;font-size:13px;font-weight:600;color:#555c63;display:flex;align-items:center;justify-content:center}
+.tabs{display:flex;padding:0 6px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:44px;padding:0 10px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.btn{height:44px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:15px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.li{display:flex;align-items:center;gap:10px;padding:0 4px 0 16px;border-top:1px solid #e6e8e3;min-height:48px;background:#fcfcfa}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.bnav{height:58px;display:flex;background:#6b4605;flex:none}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.bnav a.on{color:#fff;box-shadow:inset 0 2px 0 #f6e7c8}
+.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.badge{position:absolute;top:5px;right:14px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="ab" style="width: 390px; height: 844px">
+
+<header class="phead">
+<a class="pb" href="Phone-Chain.dc.html" aria-label="Back to Mercadona" style="color: #14171a"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div class="grow col"><h1>Av. de la Constitución 12</h1><span class="mut" style="font-size: 12px; line-height: 1.2">Mercadona, Sevilla 41004</span></div>
+<button class="pb" aria-label="How this page works"><i>i</i></button>
+<button class="pb" aria-label="More actions for this shop"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></button>
+</header>
+
+<div class="col" style="padding: 10px 16px; gap: 6px; background: #fcfcfa; border-bottom: 1px solid #d9dcd6">
+<div class="rowx" style="gap: 8px"><h3 class="grow">Priced by</h3><a style="font-size: 13px; padding: 4px 0">Change</a></div>
+<div class="rowx" style="gap: 6px; flex-wrap: wrap">
+<span class="chip"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span>Nationwide</span>
+<span class="chip"><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span>Andalucía</span>
+<span class="chip"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>This shop only</span>
+</div>
+</div>
+
+<nav class="tabs" aria-label="Shop">
+<a class="tab">Details</a>
+<a class="tab on">Sections <span class="cnt">9</span></a>
+<a class="tab">Products <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="rowx" style="padding: 8px 4px 8px 16px; gap: 8px">
+<span class="chip wait">A map writes this list</span>
+<div class="grow"></div>
+<button class="pb" aria-label="What a map does to this list"><i>i</i></button>
+</div>
+
+<div class="grow col" style="min-height: 0; overflow: hidden">
+<div class="li"><input type="checkbox" checked aria-label="Fruta y verdura is in this shop"><span class="mut num" style="width: 16px">1</span><span class="grow">Fruta y verdura</span><button class="pb" aria-label="Move Fruta y verdura up" disabled style="color: #a9afa6"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Fruta y verdura down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Panadería is in this shop"><span class="mut num" style="width: 16px">2</span><span class="grow">Panadería</span><button class="pb" aria-label="Move Panadería up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Panadería down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Carnicería is in this shop"><span class="mut num" style="width: 16px">3</span><span class="grow">Carnicería</span><button class="pb" aria-label="Move Carnicería up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Carnicería down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Charcutería is in this shop"><span class="mut num" style="width: 16px">4</span><span class="grow">Charcutería</span><button class="pb" aria-label="Move Charcutería up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Charcutería down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Lácteos is in this shop"><span class="mut num" style="width: 16px">5</span><span class="grow">Lácteos</span><button class="pb" aria-label="Move Lácteos up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Lácteos down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Congelados is in this shop"><span class="mut num" style="width: 16px">6</span><span class="grow">Congelados</span><button class="pb" aria-label="Move Congelados up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Congelados down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Bebidas is in this shop"><span class="mut num" style="width: 16px">7</span><span class="grow">Bebidas</span><button class="pb" aria-label="Move Bebidas up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Bebidas down"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li"><input type="checkbox" checked aria-label="Limpieza is in this shop"><span class="mut num" style="width: 16px">8</span><span class="grow">Limpieza</span><button class="pb" aria-label="Move Limpieza up"><svg class="ic" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button><button class="pb" aria-label="Move Limpieza down" disabled style="color: #a9afa6"><svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<div class="li" style="min-height: 48px; padding-right: 16px"><input type="checkbox" aria-label="Pescadería is in this shop"><span style="width: 16px"></span><span class="grow mut">Pescadería</span><span class="mut" style="font-size: 13px">Not in this shop</span></div>
+</div>
+
+<div class="rowx" style="padding: 8px 12px; gap: 8px; background: #fcfcfa; border-top: 1px solid #d9dcd6">
+<button class="btn">Discard</button>
+<button class="btn pri grow">Save this order</button>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" href="Phone-Chain.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Phone-Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admins: the accounts, with the info panel open</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p,.ab ul{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.rail{width:76px;background:#6b4605;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.rail a.on{background:#8a5d0c;color:#fff}
+.rail svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #a67a2a;background:none;color:#f6e7c8 !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fcfcfa;color:#14171a}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column;position:relative}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #0b6b53;background:#e3f1ec;font-size:13px;font-weight:600;color:#085441 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:52px}
+.th{display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12px;font-weight:600;color:#555c63}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap}
+.chip.ok{background:#e3f1ec;color:#085441}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="Overview.dc.html"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="Shoppers.dc.html"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers<span class="badge">3</span></a>
+<a class="on"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<h1>Admins</h1>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How admins are added" aria-expanded="true">i</button>
+</header>
+<nav class="tabs" aria-label="Admins">
+<a class="tab on">Accounts <span class="cnt">3</span></a>
+<a class="tab">Failed sign ins <span class="cnt wait">2 today</span></a>
+</nav>
+
+<div class="grow col" style="padding: 16px 20px; min-height: 0">
+<div class="panel col" style="overflow: hidden; max-width: 860px">
+<div class="th"><span class="grow">Name</span><span style="width: 180px">Sign in name</span><span style="width: 110px">State</span><span style="width: 170px">Last sign in</span></div>
+<div class="li"><span class="grow" style="font-weight: 600">Dev Admin <span class="mut" style="font-weight: 400">(you)</span></span><span class="mono" style="width: 180px">dev-admin</span><span style="width: 110px"><span class="chip ok">Active</span></span><span class="mut" style="width: 170px">Today 13:58</span></div>
+<div class="li"><span class="grow" style="font-weight: 600">[NAME]</span><span class="mono" style="width: 180px">[sign in name]</span><span style="width: 110px"><span class="chip ok">Active</span></span><span class="mut" style="width: 170px">28 Sep 10:12</span></div>
+<div class="li"><span class="grow mut" style="font-weight: 600">[NAME]</span><span class="mono mut" style="width: 180px">[sign in name]</span><span style="width: 110px"><span class="chip">Turned off</span></span><span class="mut" style="width: 170px">Never</span></div>
+</div>
+</div>
+
+<section role="dialog" aria-label="How admins are added" class="panel col" style="position: absolute; top: 46px; right: 20px; width: 380px; padding: 16px; gap: 10px; box-shadow: 0 8px 24px rgba(20, 33, 29, 0.16)">
+<h2>Admins</h2>
+<ul class="col" style="padding-left: 18px; gap: 6px">
+<li>This list is read only. An admin is added on the server, not here.</li>
+<li>To add one, run this where the auth service runs:</li>
+</ul>
+<div class="rowx" style="gap: 8px; padding: 8px 10px; border-radius: 6px; background: #f3f4f1; border: 1px solid #d9dcd6"><span class="mono grow" style="overflow-wrap: anywhere">npx nx run luna-shopper-backend-auth:admin:create</span><button class="btn sm">Copy</button></div>
+<button class="btn" style="align-self: flex-end">Close</button>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

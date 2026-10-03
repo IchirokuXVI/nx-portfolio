@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Product: prices by chain and scope</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rail{width:76px;background:#6b4605;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.rail a.on{background:#8a5d0c;color:#fff}
+.rail svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #a67a2a;background:none;color:#f6e7c8 !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fdf3e0;color:#7a4f05}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:44px}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+.kv{display:flex;gap:10px;padding:5px 0;font-size:13.5px}
+.kv span:first-child{width:86px;color:#555c63;flex:none}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<a href="Products.dc.html" class="rowx" style="gap: 4px"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Products</a>
+<h1>Leche entera</h1>
+<span class="mut">Hacendado, 1 L</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How this page works">i</button>
+<button class="btn">Edit product</button>
+</header>
+<nav class="tabs" aria-label="Leche entera">
+<a class="tab">Details</a>
+<a class="tab on">Prices <span class="cnt">5 scopes</span></a>
+<a class="tab">Where it is</a>
+<a class="tab">Sources <span class="cnt">3</span></a>
+</nav>
+
+<div class="grow" style="display: flex; min-height: 0; padding: 16px 20px; gap: 16px">
+
+<section class="grow col" style="gap: 12px; min-height: 0">
+<div class="rowx" style="gap: 8px">
+<button class="btn">Chain: all <svg class="ic" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+<span class="mut" style="font-size: 13px">Open a row to see every price behind it.</span>
+<div class="grow"></div>
+<button class="btn pri">Add a price</button>
+</div>
+
+<div class="panel col" style="overflow: hidden">
+<div class="rowx" style="padding: 10px 14px; gap: 10px"><h2 class="grow">Mercadona</h2><span class="mut" style="font-size: 13px">2 scopes</span></div>
+<div class="li" style="background: #f3f4f1"><svg class="ic mut" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg><span class="lad"><i class="f"></i><i></i><i></i><i></i></span><span class="grow col"><span style="font-weight: 600">Nationwide</span><span class="mut" style="font-size: 12.5px">1,612 shops</span></span><span class="chip">Chain's site</span><span class="mut" style="width: 110px">2 days ago</span><span class="mut num" style="width: 80px; text-align: right">0,98 €/L</span><span class="num" style="width: 70px; text-align: right; font-size: 16px; font-weight: 600">0,98 €</span></div>
+<div class="col" style="background: #f3f4f1; padding: 0 14px 12px 50px; gap: 0">
+<div class="rowx" style="gap: 10px; padding: 7px 0; border-top: 1px solid #d9dcd6"><span class="chip ok">Shown</span><span class="grow">Chain's site</span><a style="width: 150px">Run of 1 Oct</a><span class="mut" style="width: 150px">Seen 1 Oct</span><span class="num" style="width: 70px; text-align: right; font-weight: 600">0,98 €</span><span style="width: 76px"></span></div>
+<div class="rowx" style="gap: 10px; padding: 7px 0; border-top: 1px solid #d9dcd6"><span class="chip">Ended</span><span class="grow">Leaflet</span><a style="width: 150px">Run of 12 Sep</a><span class="mut" style="width: 150px">Until 19 Sep</span><span class="num" style="width: 70px; text-align: right">0,95 €</span><span style="width: 76px; text-align: right"><button class="btn sm">Remove</button></span></div>
+<div class="rowx" style="gap: 10px; padding: 7px 0; border-top: 1px solid #d9dcd6"><span class="chip">Too old</span><span class="grow">Typed in by an admin</span><span class="mut" style="width: 150px">Dev Admin</span><span class="mut" style="width: 150px">Seen 3 Aug</span><span class="num" style="width: 70px; text-align: right">1,02 €</span><span style="width: 76px; text-align: right"><button class="btn sm">Remove</button></span></div>
+<div class="rowx" style="gap: 10px; padding-top: 10px"><span class="grow mut" style="font-size: 13px">Shown because it is the newest price from the highest ranked source.</span><button class="btn sm">Add a price here</button></div>
+</div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span><span class="grow col"><span style="font-weight: 600">This shop only</span><span class="mut" style="font-size: 12.5px">Av. de la Constitución 12, Sevilla</span></span><span class="chip wait">Held until 9 Oct</span><span class="chip">Typed in by an admin</span><span class="mut" style="width: 110px">Yesterday</span><span class="mut num" style="width: 80px; text-align: right">1,05 €/L</span><span class="num" style="width: 70px; text-align: right; font-size: 16px; font-weight: 600">1,05 €</span></div>
+</div>
+
+<div class="panel col" style="overflow: hidden">
+<div class="rowx" style="padding: 10px 14px; gap: 10px"><h2 class="grow">DIA</h2><span class="mut" style="font-size: 13px">2 scopes</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg><span class="lad"><i class="f"></i><i></i><i></i><i></i></span><span class="grow col"><span style="font-weight: 600">Nationwide</span><span class="mut" style="font-size: 12.5px">2,304 shops</span></span><span class="chip">Chain's site</span><span class="mut" style="width: 110px">4 days ago</span><span class="mut num" style="width: 80px; text-align: right">0,99 €/L</span><span class="num" style="width: 70px; text-align: right; font-size: 16px; font-weight: 600">0,99 €</span></div>
+<div class="li"><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span><span class="grow col"><span style="font-weight: 600">Región Sur</span><span class="mut" style="font-size: 12.5px">412 shops</span></span><span class="chip bad">Out of date</span><span class="chip">Leaflet</span><span class="mut" style="width: 110px">5 weeks ago</span><span class="mut num" style="width: 80px; text-align: right">0,95 €/L</span><span class="num" style="width: 70px; text-align: right; font-size: 16px; font-weight: 600">0,95 €</span></div>
+</div>
+
+<div class="panel col" style="overflow: hidden">
+<div class="rowx" style="padding: 10px 14px; gap: 10px"><h2 class="grow">Carrefour</h2><span class="mut" style="font-size: 13px">1 scope</span></div>
+<div class="li"><span style="width: 16px"></span><span class="lad"><i class="f"></i><i></i><i></i><i></i></span><span class="grow col"><span style="font-weight: 600">Nationwide</span><span class="mut" style="font-size: 12.5px">1,145 shops</span></span><span class="mut">No price yet. A run or a person can add one.</span><button class="btn sm">Add a price here</button></div>
+</div>
+</section>
+
+<aside class="col" style="width: 300px; flex: none; gap: 12px">
+<div class="panel" style="padding: 14px">
+<h3 style="padding-bottom: 6px">Product</h3>
+<div class="kv"><span>Brand</span><a>Hacendado</a></div>
+<div class="kv"><span>Size</span><span>1 L</span></div>
+<div class="kv"><span>Barcode</span><span class="mono">8480000100115</span></div>
+<div class="kv"><span>Group</span><a>Leche entera</a></div>
+<div class="kv"><span>Categories</span><span class="rowx" style="gap: 6px; flex-wrap: wrap"><span class="chip">Lácteos y huevos</span><span class="chip">Leche</span></span></div>
+</div>
+<div class="panel" style="padding: 14px">
+<div class="rowx" style="gap: 8px; padding-bottom: 8px"><h3 class="grow">How specific a scope is</h3><button class="ibtn" aria-label="How a scope is chosen for a shop">i</button></div>
+<div class="rowx" style="gap: 10px; padding: 4px 0"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span>Nationwide</div>
+<div class="rowx" style="gap: 10px; padding: 4px 0"><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span>Chain region</div>
+<div class="rowx" style="gap: 10px; padding: 4px 0"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i></i></span>Local area</div>
+<div class="rowx" style="gap: 10px; padding: 4px 0"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>Single shop</div>
+<p class="mut" style="font-size: 13px; padding-top: 8px">A shop shows the price of its most specific scope.</p>
+</div>
+</aside>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

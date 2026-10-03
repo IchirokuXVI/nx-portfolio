@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shoppers: a zone, its members and its lists</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p{margin:0}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.rail{width:76px;background:#6b4605;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.rail a.on{background:#8a5d0c;color:#fff}
+.rail svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #a67a2a;background:none;color:#f6e7c8 !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fcfcfa;color:#14171a}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+.cnt.wait{background:#fdf3e0;color:#7a4f05}
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.inp{height:36px;padding:0 10px;border-radius:6px;border:1px solid #c3c8c0;background:#fff;font:inherit;font-size:14px;color:#14171a;min-width:0}
+.inp::placeholder{color:#6a7178}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e6e8e3;min-height:48px}
+.li.sel{background:#e3f1ec}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="Overview.dc.html"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Main.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Products.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="Review.dc.html"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a class="on"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers<span class="badge">3</span></a>
+<a href="Admins.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<h1>Shoppers</h1>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How this page works">i</button>
+</header>
+<nav class="tabs" aria-label="Shoppers">
+<a class="tab">People <span class="cnt">412</span></a>
+<a class="tab on">Zones <span class="cnt">97</span></a>
+</nav>
+
+<div class="grow" style="display: flex; min-height: 0">
+
+<section class="col" style="width: 340px; flex: none; border-right: 1px solid #d9dcd6; background: #fcfcfa">
+<div class="rowx" style="padding: 10px 12px; gap: 8px">
+<input class="inp grow" placeholder="Zone name" aria-label="Find a zone">
+<button class="btn" aria-label="Filter zones"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
+</div>
+<a class="li sel col" style="align-items: stretch; gap: 2px; color: #14171a"><span class="rowx" style="gap: 8px"><span class="grow" style="font-weight: 600">Casa García</span><span class="chip wait">1 request</span></span><span class="mut" style="font-size: 12.5px">Owner marta. 4 members, 3 lists</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Piso Triana</span><span class="mut" style="font-size: 12.5px">Owner lucas. 3 members, 1 list</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span class="rowx" style="gap: 8px"><span class="grow">Los Romero</span><span class="chip wait">2 requests</span></span><span class="mut" style="font-size: 12.5px">Owner ines. 5 members, 4 lists</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Oficina</span><span class="mut" style="font-size: 12.5px">Owner pablo. 8 members, 2 lists</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span class="rowx" style="gap: 8px"><span class="grow">Casa de la playa</span><span class="chip bad">Marked for deletion</span></span><span class="mut" style="font-size: 12.5px">No owner. 1 member, 0 lists</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Abuelos</span><span class="mut" style="font-size: 12.5px">Owner pili. 2 members, 1 list</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a"><span>Compis Nervión</span><span class="mut" style="font-size: 12.5px">Owner alba. 4 members, 2 lists</span></a>
+<a class="li col" style="align-items: stretch; gap: 2px; color: #14171a; border-bottom: 1px solid #e6e8e3"><span>Familia Ortega</span><span class="mut" style="font-size: 12.5px">Owner raul. 3 members, 2 lists</span></a>
+</section>
+
+<section class="grow col" style="padding: 18px 20px; gap: 14px; min-height: 0">
+<div class="rowx" style="gap: 12px">
+<div class="grow col" style="gap: 2px">
+<h2 style="font-size: 17px">Casa García</h2>
+<span class="mut">Owner <a>marta</a>. Join code <span class="mono">[REAL DATA]</span>. Made on 14 Jun</span>
+</div>
+<button class="btn">Edit zone</button>
+<button class="btn" aria-label="More actions for this zone"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button>
+</div>
+
+<nav class="rowx" style="gap: 4px; border-bottom: 1px solid #d9dcd6" aria-label="Zone">
+<a class="tab on">Members <span class="cnt">4</span></a>
+<a class="tab">Lists <span class="cnt">3</span></a>
+<a class="tab">Shopping lists</a>
+<a class="tab">Details</a>
+</nav>
+
+<div class="panel col" style="overflow: hidden">
+<div class="li" style="border-top: 0; background: #fdf3e0"><span class="grow col"><a style="font-weight: 600; color: #14171a">dani</a><span style="font-size: 12.5px; color: #7a4f05">Asked to join yesterday</span></span><button class="btn sm">Reject</button><button class="btn sm pri">Approve</button></div>
+<div class="li"><span class="grow col"><a style="font-weight: 600; color: #14171a">marta</a><span class="mut" style="font-size: 12.5px">In the zone since 14 Jun</span></span><span class="chip ok">Owner</span><span style="width: 36px"></span></div>
+<div class="li"><span class="grow col"><a style="font-weight: 600; color: #14171a">abuela.pili</a><span class="mut" style="font-size: 12.5px">In the zone since 2 Jul</span></span><span class="chip">Admin</span><button class="btn sm" style="width: 36px; padding: 0" aria-label="Actions for abuela.pili"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button></div>
+<div class="li"><span class="grow col"><a style="font-weight: 600; color: #14171a">lucas</a><span class="mut" style="font-size: 12.5px">In the zone since 9 Aug</span></span><span class="chip">Member</span><button class="btn sm" style="width: 36px; padding: 0" aria-label="Actions for lucas"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button></div>
+<div class="li"><span class="grow col"><span class="mut" style="font-weight: 600">guest 7f2a</span><span class="mut" style="font-size: 12.5px">Removed on 20 Sep</span></span><span class="chip bad">Removed</span><button class="btn sm" style="width: 36px; padding: 0" aria-label="Actions for guest 7f2a"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></button></div>
+</div>
+
+<div class="panel col" style="width: 240px; align-self: flex-end; margin-top: -6px; box-shadow: 0 6px 18px rgba(20, 33, 29, 0.14); overflow: hidden">
+<button class="li" style="border: 0; background: none; text-align: left; min-height: 40px">Open this person</button>
+<button class="li" style="border: 0; border-top: 1px solid #e6e8e3; background: none; text-align: left; min-height: 40px">Make owner</button>
+<button class="li" style="border: 0; border-top: 1px solid #e6e8e3; background: none; text-align: left; min-height: 40px">Change role or name</button>
+<button class="li" style="border: 0; border-top: 1px solid #e6e8e3; background: none; text-align: left; min-height: 40px">Remove from the zone</button>
+<button class="li" style="border: 0; border-top: 1px solid #e6e8e3; background: none; text-align: left; min-height: 40px; color: #b4232a">Ban from the zone</button>
+</div>
+
+<div class="grow"></div>
+<p class="rowx" style="gap: 8px; font-size: 13px; color: #7a4f05"><svg class="ic" viewBox="0 0 24 24"><path d="M12 8v5M12 16.5h.01M10.3 3.9L2.6 17.5A2 2 0 004.3 20.5h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>Everybody in the zone sees a change here at once.</p>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
