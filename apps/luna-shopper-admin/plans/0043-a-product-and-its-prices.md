@@ -1,6 +1,6 @@
 # 0043 A product and its prices
 
-> Third of the four remodel plans. Needs `0041` (the frame) and `0042` (the "Chains" section,
+> Third of the seven remodel plans. Needs `0041` (the frame) and `0042` (the "Chains" section,
 > which this plan links to). Prerequisite reading: `0041`, `0033` (prices at every scope),
 > `0035` (bulk work), `0036` (the category tree), backend `0080` (prices side by side).
 >
@@ -148,3 +148,14 @@ Remove the Catalog section. Use the `nx-portfolio-angular-developer` skill.
 - **Price rules under Products.** They decide which source wins a price, so they sit beside
   the prices. The other candidate is Harvest, Setup.
 - **The two follow ups in section 2** ("No price" and "No category").
+
+## 4. What this plan deletes
+
+- The `PRICES` descriptor as a list screen, `PriceDetailPage` as a page, and
+  `item-prices-page.ts`. Their content is the Prices tab. `PriceFormPage` stays as the form.
+- `CatalogDashboard` and the Catalog section with its `home`.
+- The sections entries Products, Categories, Product groups, Prices and Price policies.
+- `catalog.prices.note`, `catalog.prices.byItem.lead`, `catalog.pricePolicies.note`,
+  `catalog.productGroups.addItems.lead`, and the link text "Prices at every scope".
+- The two panels inside `ItemFormPage`, which are tabs now.
+- The path constants of `catalog-sources.ts` that nothing imports after the move.

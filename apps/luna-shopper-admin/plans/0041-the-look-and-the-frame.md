@@ -1,12 +1,13 @@
 # 0041 The look and the frame
 
-> First of four plans that remodel the back office: `0041` (this one, the frame every screen
-> sits in), `0042` (chains), `0043` (products), `0044` (the harvester). Each one is a pull
-> request that leaves a working app. Build them in that order.
+> First of seven plans that remodel the back office: `0041` (this one, the frame every screen
+> sits in), `0042` (chains), `0043` (products), `0044` (the harvester), `0045` (shoppers),
+> `0046` (the overview, the admins and the way in), `0047` (the removal sweep). Each one is a
+> pull request that leaves a working app. Build them in that order.
 >
 > Mock: `plans/mocks/remodel/` in this app, published at
 > <https://claude.ai/artifact/KJTKDyRWfdJTL9PCUPwjQv>. The boards for this plan are
-> `Tokens`, and the chrome of every other board.
+> `Tokens`, `Deployments`, and the chrome of every other board.
 
 The header of the back office is two rows of links. It reserves about 180 px before the first
 row of data, and more when a row wraps. On a phone the menu opens inside the header and pushes
@@ -38,12 +39,15 @@ the `design-taste-frontend` and `antislop` skills for the look.
 
 ### Target state
 
-1. **Rail on a wide screen.** A column 76 px wide at the left edge, dark (`--admin-nav`). One
+1. **Rail on a wide screen.** A column 76 px wide at the left edge. It takes the color of the
+   deployment (section 2), so that the operator sees at once whether this is production,
+   staging or a local stack. One
    entry per section: an icon above a label. The current section has a lighter background. A
    section whose screens carry badges shows their sum as a count. At the bottom of the rail:
    the cluster label, the content language as a button that opens a menu, and the account as a
    button that opens a menu with the operator name and "Sign out". There is no top bar.
-2. **Bar on a phone.** Below 48 rem the rail is a bar 58 px high, fixed at the bottom, with at
+2. **Bar on a phone.** Below 48 rem the rail is a bar 58 px high, fixed at the bottom, in the
+   same deployment color, with at
    most five entries. The first four sections show, and "More" opens a sheet with the other
    sections, the content language, the cluster label and "Sign out". The page reserves the
    height of the bar plus `env(safe-area-inset-bottom)`, so that the last row is reachable.
@@ -67,7 +71,9 @@ the `design-taste-frontend` and `antislop` skills for the look.
    because a caution must be seen before the action. Section 3 holds the rule for which text
    goes where, and the new text for each note that exists today.
 7. **Tokens.** The values in section 2 replace the palette. The accent no longer follows the
-   cluster. The cluster keeps its three colors, but only on the label in the rail.
+   deployment. The deployment colors the rail and the bar instead, and the sign in page shows
+   the same color as a band 8 px high at its top edge. The name of the deployment is also
+   written in the rail and in the "More" sheet, so that color is never the only sign.
 8. **Typeface.** IBM Plex Sans (400, 500, 600) for text and IBM Plex Mono (400) for barcodes,
    keys and ids. Self hosted through `@fontsource/ibm-plex-sans` and
    `@fontsource/ibm-plex-mono`, with `font-display: swap`. Numbers in a column use
@@ -127,7 +133,8 @@ the `design-taste-frontend` and `antislop` skills for the look.
 
 - A dark scheme. The app has one scheme and two specs that prove its contrast. A second scheme
   doubles those pairs and nobody asked for it. The tokens are named so that one can follow.
-- Shoppers, Admins and Overview keep their content. They take the frame and the tokens.
+- Shoppers, Admins and Overview keep their content here and take the frame and the tokens.
+  Plans `0045` and `0046` redesign them.
 
 ## 2. Tokens
 
@@ -143,10 +150,10 @@ the `design-taste-frontend` and `antislop` skills for the look.
 | `--admin-accent-ink` | `#ffffff` | text on the accent |
 | `--admin-accent-wash` | `#e3f1ec` | selected row, good state |
 | `--admin-accent-on-wash` | `#085441` | text on the accent wash |
-| `--admin-nav` | `#14211d` | rail and bottom bar |
-| `--admin-nav-ink` | `#b9c4bf` | entry at rest |
-| `--admin-nav-current` | `#24362f` | current entry, with `#ffffff` text |
-| `--admin-count` | `#f0b23a` | count on the rail, with `--admin-ink` text |
+| `--admin-nav` | by deployment, below | rail and bottom bar |
+| `--admin-nav-ink` | by deployment, below | entry at rest |
+| `--admin-nav-current` | by deployment, below | current entry, with `#ffffff` text |
+| `--admin-count` | `#fcfcfa` | count on the rail, with `--admin-ink` text |
 | `--admin-waiting-wash` | `#fdf3e0` | something waits for a person |
 | `--admin-waiting-on-wash` | `#7a4f05` | text on the waiting wash |
 | `--admin-danger` | `#b4232a` | unchanged, with its wash and inks |
@@ -155,15 +162,24 @@ the `design-taste-frontend` and `antislop` skills for the look.
 | `--admin-radius-state` | `0.25rem` | state labels |
 
 `--admin-status-attention` and its wash are removed, and their uses take the waiting pair. The
-`[data-deployment]` rules set `--admin-env` and `--admin-env-wash` only (production
-`#8f1b21` on `#fbeaeb`, staging `#7a4f05` on `#fdf3e0`, development `#1a5179` on `#e8f1f8`).
-The chart colors do not change.
+chart colors do not change. The `[data-deployment]` rules set the three navigation tokens and
+nothing else:
+
+| Deployment | `--admin-nav` | `--admin-nav-current` | `--admin-nav-ink` |
+| --- | --- | --- | --- |
+| production | `#6e1a1f` | `#8f2a30` | `#f3d9da` |
+| staging | `#6b4605` | `#8a5d0c` | `#f6e7c8` |
+| development (a local stack) | `#173f5c` | `#23587d` | `#d3e3ef` |
+| none of these | `#14211d` | `#24362f` | `#b9c4bf` |
+
+Each ink is 6.5 to 1 or more on its rail. Add the four pairs to `wash-contrast.spec.ts`. The
+label reads "PRODUCTION", "STAGING" or "LOCAL", dark text on `--admin-count`.
 
 Why these: the ground is a cool grey with a little green so that the pine accent sits in it.
-Pine is the one accent, and it marks what is selected and what is the main action. Amber means
-only "a person must decide", so the count on the rail and the waiting state share it. Red means
-only danger. The cluster label keeps red for production, and it is small and in the rail, so
-that it does not read as a danger state of the page.
+Pine is the one accent, and it marks what is selected and what is the main action. Amber on
+the page means only "a person must decide". Red on the page means only danger. The deployment
+color lives only in the navigation, which is the one part that looks the same on every screen,
+so a red rail reads as "this is production" and not as an error on the page.
 
 ## 3. Which text goes where
 
@@ -196,3 +212,37 @@ that it does not read as a danger state of the page.
   After `0042` to `0044` those are Overview, Chains, Products and Harvest, and Shoppers and
   Admins sit under "More".
 - **Dark scheme.** Left out. Say so if you want it, and it becomes a plan of its own.
+
+## 5. What this plan deletes
+
+- The two row header: the template and styles of `app-shell.ts` that draw the top bar, the
+  section row and the second row, and the "Menu" button with its `open` state.
+- `ResourceDescriptor.note` and `formNote`, the `<p class="note">` of `resource-list.ts`, and
+  every lead paragraph of a hand written page that section 3 lists as removed.
+- The translation keys that section 3 lists as removed, and `shell.menu`.
+- `--admin-status-attention` and its wash, and the accent values of the `admin-deployments`
+  mixin.
+- `environment-badge` in the header. The sign in page keeps it until `0046`.
+- The `max-inline-size: 72rem` of `main`.
+
+## 6. Why this is not a new app
+
+The question was whether to build a second app and switch, or to change this one. Change this
+one.
+
+- **Most of the app does not change.** Of 261 source files, 97 are `data-access`, `models`
+  and `feature-resource`, which hold the gateway calls, the wire types, the stores and the
+  list and form engine. None of them draws the look. The queue pages, the run form and the
+  panels hold logic that the remodel moves to a new address and does not rewrite.
+- **A new app is a second deployment.** It needs a project, a port and a slot entry, a
+  Dockerfile, a chart entry, a host name, a CORS origin on the gateway and a place in both
+  workflows. The old app then needs all of that removed at the switch.
+- **Nothing proves that two apps match.** No e2e project drives the back office. Two copies
+  of 118 spec files drift apart during the weeks that both exist, and every gateway change in
+  that time lands twice.
+- **The seven plans already give what a new app gives.** Each one leaves a working app, the
+  frame comes first so that every later screen is built in the new look, each plan lists what
+  it deletes, and `0047` removes what is left.
+
+A new app is the better choice only when the old one must stay in use, untouched, for a long
+time beside the new one. One operator uses this app, and staging takes each plan as it merges.

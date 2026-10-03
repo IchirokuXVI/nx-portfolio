@@ -1,6 +1,6 @@
 # 0042 A chain holds its shops
 
-> Second of the four remodel plans. Needs `0041` (the frame, `PageHeader`, `PageTabs`,
+> Second of the seven remodel plans. Needs `0041` (the frame, `PageHeader`, `PageTabs`,
 > `InfoButton`, `ScopeMark`). Prerequisite reading: `0041`, `0037` (sections), `0028` (a shop
 > priced at several scopes), `0040` (the map notice).
 >
@@ -142,3 +142,15 @@ and price scopes, and a shop holds its section order and its products. Use the
   product row). Small backend changes. The screens work without them.
 - **Whether a shop can also be reached without its chain.** This plan says no, apart from the
   redirect of an old address.
+
+## 4. What this plan deletes
+
+- The sections entries Supermarkets, Shops, Shop sections, Price scopes and Products in a
+  shop, and their flat routes. The redirects of target 9 stay until `0047`.
+- `requires` on `LOCATIONS`, `SECTIONS` and `LOCATION_ITEMS`, and the blocked state "choose a
+  chain first" of the list for these three.
+- `catalog.locations.note`, `catalog.sections.note`, `catalog.locationItems.note` and
+  `catalog.chainSections.says`.
+- The inner tabs of `SupermarketFormPage` (`catalog.chainTabs`), and the sections panel inside
+  `LocationFormPage`. Both panels live on as tabs.
+- The chain filter of the shops, sections and price scopes lists, which the address replaces.

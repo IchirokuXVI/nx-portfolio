@@ -1,6 +1,6 @@
 # 0044 The harvester in three tabs
 
-> Last of the four remodel plans. Needs `0041` (the frame). It does not need `0042` or `0043`,
+> Fourth of the seven remodel plans. Needs `0041` (the frame). It does not need `0042` or `0043`,
 > but its links to a chain and to a product point at their addresses, so build it after them.
 > Prerequisite reading: `0041`, `0014` (one queue), `0020` (a queue is also a list), `0030`
 > (presets), `0035` (bulk work), `0027` and `0032` (brands), `0021` (postal codes).
@@ -148,3 +148,14 @@ their counts, and put presets and file import on the Runs page. Use the
 - **Review opens first.** The other candidate is Runs. Review is where a person has work.
 - **Registered brands under Setup.** They are reference data that the brand queue feeds. The
   other candidate is a fifth tab of Products.
+
+## 4. What this plan deletes
+
+- `HarvestDashboard`, `HARVEST_LINKS` and `BRANDS_LINKS` as flat link lists, and the ten
+  entries of the old second row.
+- `PlaceGroupsPage` as a routed page, `PresetsPage` as a routed page, and `lib-switch-panel`.
+  Their content lives in the Places queue, the Runs tab and the "Runs may start" state.
+- Every lead paragraph that `0041` section 3 lists under `harvest.*` and `brands.*`.
+- `harvest.nav.*` keys with no tab, and the three absence checks in `routes.spec.ts`.
+- The chain picker copies of the presets page and the shops queue, which the shared chain
+  filter and the remembered chain replace.
