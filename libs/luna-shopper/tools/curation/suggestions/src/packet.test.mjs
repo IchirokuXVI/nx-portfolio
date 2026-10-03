@@ -185,13 +185,13 @@ test('a candidate names its categories by slug, in the order it holds them', () 
     id: 'i1',
     name: { es: 'Pizza cuatro quesos' },
     categories: [
-      { id: 'c1', parentId: 'r1', slug: 'frozen-meals-and-pizzas', name: {} },
-      { id: 'c2', parentId: 'r2', slug: 'pizzas', name: {} },
+      { id: 'c1', parentId: 'r1', slug: 'pizzas-and-doughs', name: {} },
+      { id: 'c2', parentId: 'r2', slug: 'frozen-pizzas', name: {} },
     ],
   });
   assert.deepEqual(candidate.categorySlugs, [
-    'frozen-meals-and-pizzas',
-    'pizzas',
+    'pizzas-and-doughs',
+    'frozen-pizzas',
   ]);
   assert.deepEqual(toCandidate({ id: 'i2', name: {} }).categorySlugs, []);
 });

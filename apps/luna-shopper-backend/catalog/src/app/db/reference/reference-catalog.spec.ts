@@ -1,12 +1,10 @@
 import { CATEGORY_SLUG_MAX_LENGTH } from '@portfolio/luna-shopper/contracts';
 import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
-import {
-  LANDING_LEAVES,
-  ROOTS,
-} from '../migrations/1758100000000-CategoryTree';
+import { DIA_CATEGORY_TREE } from '../migrations/1758500000000-DiaCategoryTree';
 import {
   REFERENCE_CATEGORIES,
   REFERENCE_LEAF_SLUGS,
+  UNCATEGORISED_SLUG,
   referenceCategoryRows,
 } from './categories';
 import {
@@ -39,17 +37,58 @@ const EVERY_ITEM = ALL_ITEMS.flatMap(([store, items]) =>
 );
 
 describe('reference catalog', () => {
-  describe('the category taxonomy (plan 0166, section 5)', () => {
+  describe('the category taxonomy (plan 0173, appendix A)', () => {
     const rows = referenceCategoryRows();
     const roots = rows.filter((row) => row.parentId === null);
     const leaves = rows.filter((row) => row.parentId !== null);
 
-    it('holds the seventeen roots and eighty four leaves of appendix A', () => {
-      // The appendix's own text says eighty; its table holds eighty four, and
-      // the table is what is seeded.
-      expect(roots).toHaveLength(17);
-      expect(leaves).toHaveLength(84);
-      expect(REFERENCE_LEAF_SLUGS.size).toBe(84);
+    /**
+     * Appendix A as the migration froze it, in the shape of a taxonomy row.
+     * The migration's constant was generated from the appendix, so agreeing
+     * with it row for row is agreeing with the appendix.
+     */
+    const migrationRows = [
+      ...DIA_CATEGORY_TREE.map((root, position) => ({
+        id: categoryId(root.slug),
+        parentId: null,
+        slug: root.slug,
+        name: root.name,
+        position,
+      })),
+      ...DIA_CATEGORY_TREE.flatMap((root) =>
+        root.children.map((leaf, position) => ({
+          id: categoryId(leaf.slug),
+          parentId: categoryId(root.slug),
+          slug: leaf.slug,
+          name: leaf.name,
+          position,
+        }))
+      ),
+    ];
+
+    it('holds the twenty nine roots and two hundred and forty six leaves of appendix A', () => {
+      expect(roots).toHaveLength(29);
+      expect(leaves).toHaveLength(246);
+      expect(rows).toHaveLength(275);
+      expect(REFERENCE_LEAF_SLUGS.size).toBe(246);
+    });
+
+    it('equals appendix A: every slug, parent, position and both names', () => {
+      expect(rows.map((row) => row.slug)).toEqual(
+        migrationRows.map((row) => row.slug)
+      );
+      expect(rows).toEqual(migrationRows);
+    });
+
+    it('agrees with the rows the migration inserts, id for id', () => {
+      // The migration froze the whole tree. The seed upserts over it by id, so
+      // a row that differed would be moved or renamed by the first boot after
+      // the migration.
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      expect(byId.size).toBe(migrationRows.length);
+      for (const row of migrationRows) {
+        expect(byId.get(row.id)).toEqual(row);
+      }
     });
 
     it('writes a slug in ascii kebab case, unique across the whole tree', () => {
@@ -68,16 +107,11 @@ describe('reference catalog', () => {
       }
     });
 
-    it('gives every root children and a catch all among them', () => {
+    it('gives every root at least one leaf', () => {
       for (const root of REFERENCE_CATEGORIES) {
-        expect(root.children.length).toBeGreaterThan(0);
-        // No children page is longer than a phone holds.
-        expect(root.children.length).toBeLessThanOrEqual(8);
-        const catchAll =
-          root.slug === 'other'
-            ? root.children.some((c) => c.slug === 'uncategorised')
-            : root.children.some((c) => c.slug.startsWith('other-'));
-        expect(`${root.slug}: ${catchAll}`).toBe(`${root.slug}: true`);
+        expect(`${root.slug}: ${root.children.length > 0}`).toBe(
+          `${root.slug}: true`
+        );
       }
     });
 
@@ -98,45 +132,11 @@ describe('reference catalog', () => {
       }
     });
 
-    it('agrees with the rows the migration inserted, id for id', () => {
-      // The migration froze the roots and the landing leaves it needed. The seed
-      // upserts over them by id, so the slugs and positions must match, or the
-      // first boot after the migration would move them.
-      expect(ROOTS.map((root) => root.slug)).toEqual(
-        REFERENCE_CATEGORIES.map((root) => root.slug)
-      );
-      const byId = new Map(rows.map((row) => [row.id, row]));
-      for (const leaf of LANDING_LEAVES) {
-        const row = byId.get(categoryId(leaf.slug));
-        expect(row).toMatchObject({
-          slug: leaf.slug,
-          parentId: categoryId(leaf.root),
-          position: leaf.position,
-          name: leaf.name,
-        });
-      }
-    });
-
-    it('lands each of the twelve old values on a named leaf', () => {
-      expect(LANDING_LEAVES.map((leaf) => leaf.from).sort()).toEqual(
-        [
-          'BAKERY',
-          'BEVERAGES',
-          'DAIRY',
-          'FROZEN',
-          'HOUSEHOLD',
-          'MEAT',
-          'OTHER',
-          'PANTRY',
-          'PERSONAL_CARE',
-          'PRODUCE',
-          'SEAFOOD',
-          'SNACKS',
-        ].sort()
-      );
-      for (const leaf of LANDING_LEAVES) {
-        expect(REFERENCE_LEAF_SLUGS.has(leaf.slug)).toBe(true);
-      }
+    it('keeps uncategorised under other, where the harvester files what it cannot place', () => {
+      expect(UNCATEGORISED_SLUG).toBe('uncategorised');
+      const row = rows.find((r) => r.slug === UNCATEGORISED_SLUG);
+      expect(row?.parentId).toBe(categoryId('other'));
+      expect(roots[roots.length - 1].slug).toBe('other');
     });
 
     it('puts every reference product on one or more leaves that exist', () => {

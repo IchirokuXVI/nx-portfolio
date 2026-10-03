@@ -374,11 +374,16 @@ export class SourceEntryService {
     // Slugs on the way in, ids on the way to catalog (plan 0166, section 7).
     // Resolved before the English name is fetched, so a typo in an override
     // costs no request to the chain.
+    // The chain's adapter is read first, because it decides how the row's
+    // category is read (plan 0174, section 7).
+    const source = await this.sources.findBySupermarket(entry.supermarketId);
     const categoryIds = await this.categoryIdsOf(
-      categorySlugsFor(req.categorySlugs, entry.categoryPath)
+      categorySlugsFor(req.categorySlugs, entry.categoryPath, {
+        adapterKey: source?.adapterKey,
+        extra: entry.extra,
+      })
     );
 
-    const source = await this.sources.findBySupermarket(entry.supermarketId);
     const name = acceptedName(req.name, entry.name, source?.adapterKey);
 
     // The source's own translation, so it fills a language the operator left

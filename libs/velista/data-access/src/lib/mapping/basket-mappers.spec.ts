@@ -377,19 +377,16 @@ describe('toBasket: the product’s aisle', () => {
   }
 
   const FROZEN_MEALS = {
-    id: 'cat-frozen-meals-and-pizzas',
-    parentId: 'cat-frozen',
-    slug: 'frozen-meals-and-pizzas',
-    name: {
-      en: 'Frozen meals and pizzas',
-      es: 'Platos preparados y pizzas congeladas',
-    },
+    id: 'cat-pizzas-and-doughs',
+    parentId: 'cat-frozen-foods-and-ice-cream',
+    slug: 'pizzas-and-doughs',
+    name: { en: 'Pizzas and doughs', es: 'Pizzas y masas' },
   };
   const PIZZAS = {
-    id: 'cat-pizzas',
-    parentId: 'cat-ready-meals',
-    slug: 'pizzas',
-    name: { en: 'Pizzas', es: 'Pizzas' },
+    id: 'cat-frozen-pizzas',
+    parentId: 'cat-prepared-meals-and-pizzas',
+    slug: 'frozen-pizzas',
+    name: { en: 'Frozen pizzas', es: 'Pizzas congeladas' },
   };
 
   it('reads every category of a product, in the wire’s order (velista `0118`)', () => {
@@ -397,7 +394,7 @@ describe('toBasket: the product’s aisle', () => {
       productsOf([{ id: 'i-1', categories: [FROZEN_MEALS, PIZZAS] }])
         ?.get('i-1')
         ?.categories.map((category) => category.slug)
-    ).toEqual(['frozen-meals-and-pizzas', 'pizzas']);
+    ).toEqual(['pizzas-and-doughs', 'frozen-pizzas']);
   });
 
   /**

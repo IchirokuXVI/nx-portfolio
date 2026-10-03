@@ -33,10 +33,11 @@ import { ITEMS_AT_LOCATION_SQL, SectionService } from './section.service';
  *
  * The rule of section 3 is one statement, so what this file proves is the
  * statement: each branch of the rule on the example the plan states (a frozen
- * pizza on `frozen-meals-and-pizzas`, under the root `frozen`, and on
- * `pizzas`, under `ready-meals`), a shop with a list of its own and a shop
- * with none, and the two triggers refusing a section of another chain. It
- * ends with the `EXPLAIN` of the rule for 100 products at one shop.
+ * pizza on `pizzas-and-doughs`, under the root `frozen-foods-and-ice-cream`,
+ * and on `frozen-pizzas`, under `prepared-meals-and-pizzas`), a shop with a
+ * list of its own and a shop with none, and the two triggers refusing a
+ * section of another chain. It ends with the `EXPLAIN` of the rule for 100
+ * products at one shop.
  *
  * It works in a scratch schema of its own, seeded with the whole taxonomy, and
  * drops it afterwards.
@@ -218,12 +219,16 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     foreignShop = await shop(otherChainId, 'foreign');
 
     // The chain's order: Pizzas, Frozen, Bakery, Promo.
-    pizzas = await section(chainId, 'pizzas', [leaf('pizzas')]);
-    frozen = await section(chainId, 'frozen', [leaf('frozen')]);
+    pizzas = await section(chainId, 'pizzas', [leaf('frozen-pizzas')]);
+    frozen = await section(chainId, 'frozen', [
+      leaf('frozen-foods-and-ice-cream'),
+    ]);
     bakery = await section(chainId, 'bakery', [leaf('bakery')]);
     // Covers nothing: it holds only what is pinned to it.
     promo = await section(chainId, 'promo', []);
-    foreignSection = await section(otherChainId, 'frescos', [leaf('frozen')]);
+    foreignSection = await section(otherChainId, 'frescos', [
+      leaf('frozen-foods-and-ice-cream'),
+    ]);
 
     // The configured shop walks Frozen, then Pizzas, then Bakery, and has no
     // Promo aisle.
@@ -234,15 +239,15 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     });
 
     pizza = await product('Pizza congelada', [
-      'frozen-meals-and-pizzas',
-      'pizzas',
+      'pizzas-and-doughs',
+      'frozen-pizzas',
     ]);
     pinnedPizza = await product('Pizza fija', [
-      'frozen-meals-and-pizzas',
-      'pizzas',
+      'pizzas-and-doughs',
+      'frozen-pizzas',
     ]);
-    iceCream = await product('Helado', ['ice-cream']);
-    pinnedAway = await product('Helado de promo', ['ice-cream']);
+    iceCream = await product('Helado', ['ice-creams-and-ice']);
+    pinnedAway = await product('Helado de promo', ['ice-creams-and-ice']);
     milk = await product('Leche', ['milk']);
 
     await sections.setPins({
@@ -270,8 +275,8 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
     it('covers a product through a leaf and through a root, in the shop order', async () => {
       const answer = await rule(configured, [pizza]);
       expect(answer.source).toBe('LOCATION');
-      // Frozen covers the root of `frozen-meals-and-pizzas`, Pizzas covers the
-      // leaf `pizzas`, and the shop walks Frozen first.
+      // Frozen covers the root of `pizzas-and-doughs`, Pizzas covers the
+      // leaf `frozen-pizzas`, and the shop walks Frozen first.
       expect(answer.items).toEqual([
         { itemId: pizza, step: 'COVERED', sectionIds: [frozen, pizzas] },
       ]);
@@ -330,7 +335,7 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
 
     it('reads a pin of this chain only', async () => {
       // The other chain's shop has only its own section, which covers the
-      // root `frozen`: this chain's pin to Pizzas says nothing there.
+      // root `frozen-foods-and-ice-cream`: this chain's pin to Pizzas says nothing there.
       const answer = await rule(foreignShop, [pinnedPizza]);
       expect(answer.items).toEqual([
         { itemId: pinnedPizza, step: 'COVERED', sectionIds: [foreignSection] },
@@ -362,7 +367,9 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
         pizzas,
         bakery,
       ]);
-      expect(view.sections[0].categoryIds).toEqual([leaf('frozen')]);
+      expect(view.sections[0].categoryIds).toEqual([
+        leaf('frozen-foods-and-ice-cream'),
+      ]);
       expect(view.sections[0]).not.toHaveProperty('locationCount');
     });
 
@@ -671,9 +678,12 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       const updated = await sections.update({
         ...as,
         sectionId: bakery,
-        categoryIds: [leaf('bread'), leaf('bakery')],
+        categoryIds: [leaf('freshly-baked-bread'), leaf('bakery')],
       });
-      expect(updated.categoryIds).toEqual([leaf('bakery'), leaf('bread')]);
+      expect(updated.categoryIds).toEqual([
+        leaf('bakery'),
+        leaf('freshly-baked-bread'),
+      ]);
       expect(updated.slug).toBe('bakery');
       const back = await sections.update({
         ...as,
@@ -739,10 +749,10 @@ describeIntegration('shop sections and the rule (real Postgres)', () => {
       const ids: string[] = [];
       const slugs = [
         'milk',
-        'bread',
-        'ice-cream',
-        'pizzas',
-        'frozen-meals-and-pizzas',
+        'freshly-baked-bread',
+        'ice-creams-and-ice',
+        'frozen-pizzas',
+        'pizzas-and-doughs',
       ];
       for (let i = 0; i < 100; i++) {
         ids.push(await product(`Producto ${i}`, [slugs[i % slugs.length]]));

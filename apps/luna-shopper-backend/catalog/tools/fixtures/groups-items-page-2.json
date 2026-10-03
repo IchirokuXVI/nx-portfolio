@@ -13,10 +13,10 @@
       "unitSize": 1,
       "categories": [
         {
-          "id": "41f8ae84-9986-5f85-825c-b867f5a39852",
-          "parentId": "308e49de-eaa7-59bd-aebd-938fabbcf84c",
-          "slug": "other-pantry",
-          "name": { "en": "Other pantry", "es": "Otra despensa" }
+          "id": "168ae12c-ba3a-507a-8b0a-70da9b529eb8",
+          "parentId": "271876fb-f43c-59f4-9ef2-d058734eee7b",
+          "slug": "oils",
+          "name": { "en": "Oils", "es": "Aceites" }
         }
       ],
       "defaultUnit": "LITER",
@@ -35,10 +35,10 @@
       "unitSize": 200,
       "categories": [
         {
-          "id": "0eabbe7e-1f72-53eb-85ed-78686d098ba4",
-          "parentId": "6124c1d7-829f-5a9e-91ff-9a9732a838e6",
-          "slug": "other-dairy",
-          "name": { "en": "Other dairy", "es": "Otros lácteos" }
+          "id": "c48fa9bd-6ac4-5ec7-b748-57ed886f0739",
+          "parentId": "e92e3d54-813f-5419-ab85-895bc217aa97",
+          "slug": "shredded-grated",
+          "name": { "en": "Shredded/Grated", "es": "Rallado" }
         }
       ],
       "defaultUnit": "GRAM",

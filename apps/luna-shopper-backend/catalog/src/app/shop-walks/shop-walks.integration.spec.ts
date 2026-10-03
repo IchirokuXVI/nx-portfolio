@@ -25,6 +25,7 @@ import { CatalogAuditService } from '../catalog/catalog-audit.service';
 import { PlatformAdminService } from '../catalog/platform-admin.service';
 import { SectionService } from '../catalog/section.service';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
+import { ShopWalks1758400000000 } from '../db/migrations/1758400000000-ShopWalks';
 import {
   CATALOG_ENTITIES,
   Supermarket,
@@ -535,7 +536,13 @@ describeIntegration('shop walks (real Postgres)', () => {
   });
 
   it('migrates down and up again', async () => {
-    await dataSource.undoLastMigration();
+    // Back through the shop walks migration, which is no longer the last one.
+    const later =
+      CATALOG_MIGRATIONS.length -
+      CATALOG_MIGRATIONS.indexOf(ShopWalks1758400000000);
+    for (let undone = 0; undone < later; undone++) {
+      await dataSource.undoLastMigration();
+    }
     // Named with the schema: the slot's own catalog in `public` has them too.
     const [{ present }] = (await dataSource.query(
       `SELECT to_regclass('"${SCHEMA}"."shop_walks"') IS NOT NULL AS "present"`

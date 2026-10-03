@@ -195,7 +195,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Hacendado',
     1,
     'LITER',
-    'oil-and-vinegar',
+    'oils',
     'LITER',
     { 'chain-mercadona': 8.45, 'chain-deza': 8.95 }
   ),
@@ -206,7 +206,7 @@ const PRODUCTS: readonly Fixture[] = [
     'SOS',
     1,
     'KILOGRAM',
-    'pasta-rice-and-legumes',
+    'rice',
     'KILOGRAM',
     { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 }
   ),
@@ -217,7 +217,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Calvo',
     0.24,
     'KILOGRAM',
-    'canned-food',
+    'tuna-and-bonito',
     'KILOGRAM',
     { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 }
   ),
@@ -228,7 +228,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Azucarera',
     1,
     'KILOGRAM',
-    'flour-sugar-and-baking',
+    'sugar-honey-and-sweeteners',
     'KILOGRAM',
     { 'chain-mercadona': 1.05, 'chain-deza': 1.15 }
   ),
@@ -239,7 +239,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Marcilla',
     0.25,
     'KILOGRAM',
-    'coffee-tea-and-cocoa',
+    'ground-coffee',
     'KILOGRAM',
     { 'chain-deza': 2.19, 'chain-carrefour': 2.39 }
   ),
@@ -283,7 +283,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Kaiku',
     1,
     'LITER',
-    'milk',
+    'lactose-free-and-fortified-milk',
     'LITER',
     { 'chain-deza': 1.35 },
     true
@@ -295,7 +295,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Bimbo',
     0.45,
     'KILOGRAM',
-    'bread',
+    'sliced-and-specialty-breads',
     'KILOGRAM',
     { 'chain-mercadona': null, 'chain-carrefour': 1.99 }
   ),
@@ -306,7 +306,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Danone',
     0.5,
     'KILOGRAM',
-    'yogurts-and-desserts',
+    'natural-and-skimmed-yogurts',
     'KILOGRAM',
     { 'chain-mercadona': 1.1, 'chain-deza': 1.25, 'chain-carrefour': 1.19 }
   ),
@@ -318,7 +318,7 @@ const PRODUCTS: readonly Fixture[] = [
     'Alvalle',
     1,
     'LITER',
-    'soups-and-stock',
+    'gazpachos-and-salmorejos',
     'LITER',
     {}
   ),

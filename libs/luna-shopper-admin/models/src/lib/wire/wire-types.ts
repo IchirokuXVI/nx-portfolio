@@ -1229,6 +1229,7 @@ export type UpsertSupermarketSourceDto = {
     | 'carrefour-web'
     | 'lidl-api'
     | 'eljamon-web'
+    | 'dia-api'
     | 'manual';
   enabled?: boolean;
   autoImportPlaces?: boolean;
@@ -3351,6 +3352,7 @@ export type EnumsAdapterKey =
   | 'carrefour-web'
   | 'lidl-api'
   | 'eljamon-web'
+  | 'dia-api'
   | 'osm-places'
   | 'manual';
 
@@ -3808,6 +3810,18 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: null,
+  },
+  'dia-api': {
+    writesPrices: true,
+    scopesItsOwn: true,
+    listsItsOwnStores: true,
+    hasProductPages: false,
+    skipsKnownDetails: false,
+    printedLocale: 'es',
+    walkablePriorities: {
+      min: 200,
+      max: 200,
+    },
   },
   'osm-places': {
     writesPrices: false,

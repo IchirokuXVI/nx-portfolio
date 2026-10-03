@@ -34,7 +34,7 @@ const item = (id: string, productGroupId: string | null = null) =>
     sku: null,
     ean: null,
     unitSize: '1',
-    categoryIds: ['other-dairy'],
+    categoryIds: ['milk'],
     defaultUnit: UnitOfMeasure.LITER,
     productGroupId,
     createdAt: new Date(),

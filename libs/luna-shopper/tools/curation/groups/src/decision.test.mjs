@@ -23,10 +23,10 @@ const MILK = {
   defaultUnit: 'LITER',
   categories: [
     {
-      id: '0eabbe7e-1f72-53eb-85ed-78686d098ba4',
-      parentId: '6124c1d7-829f-5a9e-91ff-9a9732a838e6',
-      slug: 'other-dairy',
-      name: { en: 'Other dairy', es: 'Otros lácteos' },
+      id: 'f24b9e5b-8d91-5450-87e7-9f6669138e36',
+      parentId: '1e2d7d3d-3f84-5948-a425-1b6e6f9095c6',
+      slug: 'milk',
+      name: { en: 'Milk', es: 'Leche' },
     },
   ],
 };

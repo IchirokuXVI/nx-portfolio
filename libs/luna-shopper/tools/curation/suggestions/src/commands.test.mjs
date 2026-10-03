@@ -263,9 +263,9 @@ test('start reads the category tree once and every later step reads its file', a
   // Leaf slugs grouped under their root's name, never a root itself.
   assert.match(
     answer.prompt,
-    /- Dairy and eggs: `milk`, `eggs`, `other-dairy`/
+    /- Eggs, milk, and butter: `eggs`, `milk`, `butter-and-margarine`/
   );
-  assert.doesNotMatch(answer.prompt, /`dairy-and-eggs`/);
+  assert.doesNotMatch(answer.prompt, /`eggs-milk-and-butter`/);
   assert.deepEqual(
     answer.schema.properties.item.properties.categorySlugs.items.enum,
     VOCABULARIES.categories

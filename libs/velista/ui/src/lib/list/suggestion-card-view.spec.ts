@@ -62,7 +62,7 @@ function product(overrides: Partial<CatalogItem> = {}): CatalogItem {
     categories: [
       {
         id: 'cat-milk',
-        parentId: 'cat-dairy-and-eggs',
+        parentId: 'cat-eggs-milk-and-butter',
         slug: 'milk',
         name: { en: 'Milk', es: 'Leche' },
       },

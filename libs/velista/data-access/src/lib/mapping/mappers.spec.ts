@@ -1090,15 +1090,15 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
 describe('toCatalogItem: the categories', () => {
   const MILK = {
     id: 'cat-milk',
-    parentId: 'cat-dairy-and-eggs',
+    parentId: 'cat-eggs-milk-and-butter',
     slug: 'milk',
     name: { en: 'Milk', es: 'Leche' },
   };
   const PLANT = {
-    id: 'cat-plant-drinks',
-    parentId: 'cat-dairy-and-eggs',
-    slug: 'plant-drinks',
-    name: { es: 'Bebidas vegetales' },
+    id: 'cat-plant-based-drinks-and-horchata',
+    parentId: 'cat-eggs-milk-and-butter',
+    slug: 'plant-based-drinks-and-horchata',
+    name: { es: 'Bebidas vegetales y horchatas' },
   };
   const item = {
     id: 'item-milk-1l',
@@ -1109,7 +1109,7 @@ describe('toCatalogItem: the categories', () => {
   it('reads every category off the wire, in the wire’s order', () => {
     expect(toCatalogItem(item)?.categories).toEqual([
       MILK,
-      { ...PLANT, name: { en: '', es: 'Bebidas vegetales' } },
+      { ...PLANT, name: { en: '', es: 'Bebidas vegetales y horchatas' } },
     ]);
   });
 
@@ -1128,7 +1128,7 @@ describe('toCatalogItem: the categories', () => {
         ...item,
         categories: [...broken, PLANT],
       })?.categories.map((category) => category.id)
-    ).toEqual(['cat-plant-drinks']);
+    ).toEqual(['cat-plant-based-drinks-and-horchata']);
   });
 
   it('keeps a repeated category once', () => {

@@ -4,6 +4,7 @@ import type { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import type { CatalogDiscoveryInput } from './catalog-runner';
 import type { DezaCatalogRunner } from './deza-catalog.runner';
+import type { DiaCatalogRunner } from './dia-catalog.runner';
 import type { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import type { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -30,15 +31,17 @@ describe('CatalogDiscoveryRunner', () => {
     const carrefourDetail = { run: jest.fn(async () => undefined) };
     const lidl = { run: jest.fn(async () => undefined) };
     const elJamon = { run: jest.fn(async () => undefined) };
+    const dia = { run: jest.fn(async () => undefined) };
     const runner = new CatalogDiscoveryRunner(
       mercadona as unknown as MercadonaCatalogRunner,
       deza as unknown as DezaCatalogRunner,
       carrefour as unknown as CarrefourCatalogRunner,
       carrefourDetail as unknown as CarrefourDetailRunner,
       lidl as unknown as LidlCatalogRunner,
-      elJamon as unknown as ElJamonCatalogRunner
+      elJamon as unknown as ElJamonCatalogRunner,
+      dia as unknown as DiaCatalogRunner
     );
-    return { runner, mercadona, deza, lidl, elJamon };
+    return { runner, mercadona, deza, lidl, elJamon, dia };
   }
 
   const source = (adapterKey: string): SupermarketSource =>
@@ -79,6 +82,16 @@ describe('CatalogDiscoveryRunner', () => {
     expect(elJamon.run).toHaveBeenCalledTimes(1);
     expect(mercadona.run).not.toHaveBeenCalled();
     expect(deza.run).not.toHaveBeenCalled();
+  });
+
+  it('sends a dia-api source down the DIA path', async () => {
+    const { runner, mercadona, elJamon, dia } = build();
+
+    await runner.run(context, report, input, source('dia-api'));
+
+    expect(dia.run).toHaveBeenCalledTimes(1);
+    expect(mercadona.run).not.toHaveBeenCalled();
+    expect(elJamon.run).not.toHaveBeenCalled();
   });
 
   it('refuses an adapter that has no assortment to walk', async () => {

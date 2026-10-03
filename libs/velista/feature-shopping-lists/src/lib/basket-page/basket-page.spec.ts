@@ -1195,7 +1195,7 @@ describe('the number on a row', () => {
           categories: [
             {
               id: 'cat-milk',
-              parentId: 'cat-dairy-and-eggs',
+              parentId: 'cat-eggs-milk-and-butter',
               slug: 'milk',
               name: { en: 'Milk', es: 'Leche' },
             },
@@ -2214,7 +2214,7 @@ describe('searching the basket', () => {
       categories: [
         {
           id: 'cat-milk',
-          parentId: 'cat-dairy-and-eggs',
+          parentId: 'cat-eggs-milk-and-butter',
           slug: 'milk',
           name: { en: 'Milk', es: 'Leche' },
         },
@@ -3374,7 +3374,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       categories: [
         {
           id: 'cat-milk',
-          parentId: 'cat-dairy-and-eggs',
+          parentId: 'cat-eggs-milk-and-butter',
           slug: 'milk',
           name: { en: 'Milk', es: 'Leche' },
         },
@@ -3579,7 +3579,7 @@ describe('similar products on the basket', () => {
     categories: [
       {
         id: 'cat-milk',
-        parentId: 'cat-dairy-and-eggs',
+        parentId: 'cat-eggs-milk-and-butter',
         slug: 'milk',
         name: { en: 'Milk', es: 'Leche' },
       },
@@ -3596,7 +3596,7 @@ describe('similar products on the basket', () => {
     categories: [
       {
         id: 'cat-milk',
-        parentId: 'cat-dairy-and-eggs',
+        parentId: 'cat-eggs-milk-and-butter',
         slug: 'milk',
         name: { en: 'Milk', es: 'Leche' },
       },
@@ -3742,10 +3742,10 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   const PRODUCTS = new Map([
     [
       'i-pizza',
-      item('i-pizza', 'Pizza', 'pizzas', ['sec-frozen', 'sec-pizzas']),
+      item('i-pizza', 'Pizza', 'frozen-pizzas', ['sec-frozen', 'sec-pizzas']),
     ],
-    ['i-apple', item('i-apple', 'Apple', 'fruit', ['sec-fruit'])],
-    ['i-oil', item('i-oil', 'Olive oil', 'oil', [])],
+    ['i-apple', item('i-apple', 'Apple', 'apples-and-pears', ['sec-fruit'])],
+    ['i-oil', item('i-oil', 'Olive oil', 'oils', [])],
   ]);
 
   const LINES = [
@@ -3797,11 +3797,11 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   it('draws the shop’s aisles in its order, a row in two of them in both, then the band and the rest', async () => {
     const { fixture } = await atMercadona();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oil']);
+    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
     const band = query(fixture, '.uncovered-band');
     expect(band?.textContent).toContain('basket.group.uncovered');
     // The band sits between the last aisle and the first category, in document order.
-    expect(band?.nextElementSibling?.textContent).toContain('oil');
+    expect(band?.nextElementSibling?.textContent).toContain('oils');
     // A paragraph, not a heading: moving by heading reads one flat run of groups.
     expect(band?.querySelector('h1, h2, h3')).toBeNull();
   });
@@ -3809,13 +3809,17 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   it('draws by category, with no band, until the shop’s aisles land', async () => {
     const { fixture, shopSections } = await atMercadona(false);
 
-    expect(headings(fixture)).toEqual(['oil', 'pizzas', 'fruit']);
+    expect(headings(fixture)).toEqual([
+      'oils',
+      'frozen-pizzas',
+      'apples-and-pears',
+    ]);
     expect(query(fixture, '.uncovered-band')).toBeNull();
 
     shopSections.land('loc-mayor', WALK);
     fixture.detectChanges();
 
-    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oil']);
+    expect(headings(fixture)).toEqual(['Fruit', 'Pizzas', 'Frozen', 'oils']);
   });
 
   it('opens the explanation from the info control, and closes it on a second press', async () => {

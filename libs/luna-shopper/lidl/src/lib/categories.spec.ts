@@ -49,19 +49,19 @@ describe('resolveCategory', () => {
   const cases: ReadonlyArray<readonly [string, string]> = [
     [
       'Mundos de necesidad/Comida y cerca de la comida/Frutas y hortalizas/Fruta',
-      'fruit',
+      'other-fruits',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Pescado y marisco',
-      'other-seafood',
+      'uncategorised',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Carne y aves/Embutidos y fiambres',
-      'cured-ham-and-sausages',
+      'fuet-and-salchichon',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso',
-      'cheese',
+      'semi-cured',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Leche y nata',
@@ -69,43 +69,43 @@ describe('resolveCategory', () => {
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Panadería/Pasteles',
-      'pastries-and-cakes',
+      'pastries-cakes-and-sugar-cakes',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Dulces y aperitivos/Aperitivos salados',
-      'salty-snacks',
+      'savory-snacks',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Café, té y cacao',
-      'coffee-tea-and-cocoa',
+      'ground-coffee',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Papel higiénico',
-      'paper-and-wipes',
+      'toilet-paper-kitchen-paper-and-napkins',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Presupuesto/Detergentes y cuidado de la ropa',
-      'laundry',
+      'detergents',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Productos de droguería y cuidado personal/Cuidado del cabello',
-      'hair',
+      'shampoo',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Bebidas/Refrescos',
-      'soft-drinks',
+      'cola',
     ],
     [
       'Mundos de necesidad/Vino, cerveza y licores/Cerveza y sidra',
-      'beer',
+      'beers',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Platos precocinados/Platos preparados refrigerados',
-      'prepared-dishes',
+      'ready-to-eat-dishes',
     ],
     [
       'Mundos de necesidad/Comida y cerca de la comida/Artículos para mascotas/Comida para gatos',
-      'cats',
+      'dry-cat-food',
     ],
   ];
 
@@ -114,22 +114,30 @@ describe('resolveCategory', () => {
   });
 
   it('reaches a mapped parent through a node nobody mapped', () => {
-    // `Congelados varios` has no entry of its own, and it is frozen food
-    // because its parent is. That climb is what keeps the table short.
+    // `Congelados varios` has no entry of its own, and it is answered by its
+    // parent, which is `uncategorised` and not null. That climb is what keeps
+    // the table short.
     expect(
       resolveCategory(
         categoryPathOf(
           'Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Congelados varios'
         )
       )
-    ).toBe('other-frozen');
+    ).toBe('uncategorised');
     expect(
       resolveCategory(
         categoryPathOf(
           'Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Helado'
         )
       )
-    ).toBe('ice-cream');
+    ).toBe('ice-creams-and-ice');
+    expect(
+      resolveCategory(
+        categoryPathOf(
+          'Mundos de necesidad/Comida y cerca de la comida/Alimentos congelados/Helado/Un nodo sin fila'
+        )
+      )
+    ).toBe('ice-creams-and-ice');
   });
 
   it('falls back rather than guessing when LIDL files a product wrongly', () => {

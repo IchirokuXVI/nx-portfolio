@@ -254,8 +254,14 @@ test('the categories are the leaf slugs of the tree, grouped under their root', 
     [...CATEGORY_TREE].reverse()
   );
   assert.deepEqual(categoryGroups.slice(0, 2), [
-    { name: 'Dairy and eggs', slugs: ['milk', 'eggs', 'other-dairy'] },
-    { name: 'Bakery', slugs: ['bread', 'other-bakery'] },
+    {
+      name: 'Eggs, milk, and butter',
+      slugs: ['eggs', 'milk', 'butter-and-margarine'],
+    },
+    {
+      name: 'Bakery',
+      slugs: ['freshly-baked-bread', 'sliced-and-specialty-breads'],
+    },
   ]);
   assert.deepEqual(
     categories,
@@ -263,7 +269,7 @@ test('the categories are the leaf slugs of the tree, grouped under their root', 
   );
   // A root holds no product (backend plan 0166, rule R2), so it is not a word
   // the model can answer.
-  assert.equal(categories.includes('dairy-and-eggs'), false);
+  assert.equal(categories.includes('eggs-milk-and-butter'), false);
   assert.equal(categories.includes('uncategorised'), true);
 });
 
@@ -272,8 +278,8 @@ test('a root with no leaf, and a leaf with no root, reach no prompt', () => {
     {
       id: 'r1',
       parentId: null,
-      slug: 'baby',
-      name: { es: 'Bebé' },
+      slug: 'children',
+      name: { es: 'Infantil' },
       position: 0,
     },
     {
@@ -286,19 +292,19 @@ test('a root with no leaf, and a leaf with no root, reach no prompt', () => {
     {
       id: 'l1',
       parentId: 'r2',
-      slug: 'dogs',
-      name: { en: 'Dogs' },
+      slug: 'dry-dog-food',
+      name: { en: 'Dry dog food' },
       position: 0,
     },
     {
       id: 'l2',
       parentId: 'gone',
-      slug: 'cats',
-      name: { en: 'Cats' },
+      slug: 'dry-cat-food',
+      name: { en: 'Dry cat food' },
       position: 0,
     },
   ]);
-  assert.deepEqual(categoryGroups, [{ name: 'Pets', slugs: ['dogs'] }]);
+  assert.deepEqual(categoryGroups, [{ name: 'Pets', slugs: ['dry-dog-food'] }]);
 });
 
 test('a tree with no leaf at all is refused before a run can start on it', () => {
@@ -317,7 +323,10 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
     supermarkets: SUPERMARKETS,
   });
   assert.match(prompt, /## Category vocabulary/);
-  assert.match(prompt, /- Dairy and eggs: `milk`, `eggs`, `other-dairy`/);
+  assert.match(
+    prompt,
+    /- Eggs, milk, and butter: `eggs`, `milk`, `butter-and-margarine`/
+  );
   assert.match(prompt, /- Other: `uncategorised`/);
   assert.match(prompt, /## Unit vocabulary/);
   assert.match(prompt, /- `LITER`/);
@@ -356,7 +365,7 @@ test('the prompt names printedAs and what a linked spelling leaves behind', () =
 
 test('the decision schema takes its enums from the same two vocabularies', () => {
   const schema = buildDecisionSchema({
-    categories: ['milk', 'oil-and-vinegar'],
+    categories: ['milk', 'oils'],
     units: ['LITER', 'UNIT'],
   });
 
@@ -375,7 +384,7 @@ test('the decision schema takes its enums from the same two vocabularies', () =>
   const slugs = schema.properties.item.properties.categorySlugs;
   assert.equal(slugs.type, 'array');
   assert.equal(slugs.minItems, 1);
-  assert.deepEqual(slugs.items.enum, ['milk', 'oil-and-vinegar']);
+  assert.deepEqual(slugs.items.enum, ['milk', 'oils']);
   assert.deepEqual(schema.properties.item.properties.defaultUnit.enum, [
     'LITER',
     'UNIT',
@@ -525,7 +534,7 @@ function validates(schema, value) {
 }
 
 const SCHEMA = buildDecisionSchema({
-  categories: ['milk', 'plant-drinks'],
+  categories: ['milk', 'plant-based-drinks-and-horchata'],
   units: ['LITER', 'UNIT'],
 });
 
@@ -613,7 +622,10 @@ test('a CREATE names one or more leaf slugs, and nothing else', () => {
     ...CREATE,
     item: { ...CREATE.item, categorySlugs },
   });
-  assert.equal(validates(SCHEMA, withSlugs(['milk', 'plant-drinks'])), true);
+  assert.equal(
+    validates(SCHEMA, withSlugs(['milk', 'plant-based-drinks-and-horchata'])),
+    true
+  );
   assert.equal(validates(SCHEMA, withSlugs([])), false);
   assert.equal(validates(SCHEMA, withSlugs('milk')), false);
   assert.equal(validates(SCHEMA, withSlugs(['DAIRY'])), false);

@@ -2,13 +2,14 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 
 /**
  * A slice of the category tree, as it looks with no backend listening (admin
- * plan 0036, backend plan 0166 appendix A).
+ * plan 0036, backend plan 0166).
  *
- * Five roots and ten of their children, enough to drive every rule the screens
- * explain: a product goes on a child and never on a root, a child holds no
- * children, and every root has an `other` child for a product that fits the
- * root and no leaf. `uncategorised` is the one a harvested product lands on
- * when nothing says better, which is why the harvest twin reads this too.
+ * Five roots and ten of their children, a slice of DIA's tree (backend plan
+ * 0173, appendix A) with its own names and positions, enough to drive every
+ * rule the screens explain: a product goes on a child and never on a root, and
+ * a child holds no children. `uncategorised` is the one a harvested product
+ * lands on when nothing says better, which is why the harvest twin reads this
+ * too.
  *
  * Here rather than beside the catalog seed, because two in memory twins need
  * it: the catalog's own table, and the harvest queue's create, which resolves a
@@ -20,41 +21,80 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
  * twin that recounted would be a second implementation of it.
  */
 export const CATEGORY_SEED: readonly Wire.CatalogCategoryView[] = [
-  root('dairy-and-eggs', 'Dairy and eggs', 'Lácteos y huevos', 4, 2),
-  child('milk', 'dairy-and-eggs', 'Milk', 'Leche', 0, 2),
+  root(
+    'eggs-milk-and-butter',
+    'Eggs, milk, and butter',
+    'Huevos, leche y mantequilla',
+    6,
+    2
+  ),
+  child('milk', 'eggs-milk-and-butter', 'Milk', 'Leche', 1, 2),
   child(
-    'yogurts-and-desserts',
-    'dairy-and-eggs',
-    'Yogurts and desserts',
-    'Yogures y postres',
+    'lactose-free-and-fortified-milk',
+    'eggs-milk-and-butter',
+    'Lactose-free and fortified milk',
+    'Leche sin lactosa y enriquecidas',
     2,
     0
   ),
-  child('other-dairy', 'dairy-and-eggs', 'Other dairy', 'Otros lácteos', 5, 0),
-  root('pantry', 'Pantry', 'Despensa', 7, 1),
   child(
-    'oil-and-vinegar',
-    'pantry',
-    'Oil and vinegar',
-    'Aceite y vinagre',
-    2,
-    1
+    'butter-and-margarine',
+    'eggs-milk-and-butter',
+    'Butter and margarine',
+    'Mantequilla y margarina',
+    7,
+    0
   ),
-  child('other-pantry', 'pantry', 'Other pantry', 'Otra despensa', 7, 0),
-  root('frozen', 'Frozen', 'Congelados', 8, 0),
-  child('ice-cream', 'frozen', 'Ice cream', 'Helados', 3, 0),
-  child('other-frozen', 'frozen', 'Other frozen', 'Otros congelados', 4, 0),
-  root('household', 'Household', 'Hogar y limpieza', 14, 1),
-  child('dishwashing', 'household', 'Dishwashing', 'Lavavajillas', 2, 1),
+  root(
+    'frozen-foods-and-ice-cream',
+    'Frozen foods and ice cream',
+    'Congelados y helados',
+    9,
+    0
+  ),
   child(
-    'other-household',
-    'household',
-    'Other household',
-    'Otros de hogar',
+    'ice-creams-and-ice',
+    'frozen-foods-and-ice-cream',
+    'Ice creams and ice',
+    'Helados y hielo',
     5,
     0
   ),
-  root('other', 'Other', 'Otros', 16, 0),
+  child(
+    'cakes-and-churros',
+    'frozen-foods-and-ice-cream',
+    'Cakes and churros',
+    'Tartas y churros',
+    6,
+    0
+  ),
+  root(
+    'oils-sauces-and-spices',
+    'Oils, sauces and spices',
+    'Aceites, salsas y especias',
+    11,
+    1
+  ),
+  child('oils', 'oils-sauces-and-spices', 'Oils', 'Aceites', 0, 1),
+  child(
+    'vinegars-and-dressings',
+    'oils-sauces-and-spices',
+    'Vinegars and dressings',
+    'Vinagres y aliños',
+    1,
+    0
+  ),
+  root('cleaning-and-home', 'Cleaning and home', 'Limpieza y hogar', 22, 1),
+  child('dishwasher', 'cleaning-and-home', 'Dishwasher', 'Lavavajillas', 2, 1),
+  child(
+    'bleach-and-disinfectants',
+    'cleaning-and-home',
+    'Bleach and disinfectants',
+    'Lejía y desinfectantes',
+    8,
+    0
+  ),
+  root('other', 'Other', 'Otros', 28, 0),
   child('uncategorised', 'other', 'Not yet categorised', 'Sin categoría', 0, 0),
 ];
 

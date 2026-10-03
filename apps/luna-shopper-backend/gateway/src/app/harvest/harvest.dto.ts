@@ -72,7 +72,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`, `eljamon-web`).',
+      'Required for CATALOG_DISCOVERY and FILE_IMPORT, and for a STORE_DISCOVERY of a chain that publishes its own shop list (`lidl-api`, `mercadona-api`, `eljamon-web`, `dia-api`).',
   })
   @IsOptional()
   @IsUUID()
@@ -81,7 +81,7 @@ export class SpawnHarvestRunDto {
   @ApiPropertyOptional({
     format: 'uuid',
     description:
-      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`, and `eljamon-web`, whose one chain wide price list goes to the chain’s NATIONAL scope). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead.',
+      'The scope the run writes its prices for. Required for a CATALOG_DISCOVERY of a chain whose adapter yields prices and names none of its own (`carrefour-web`, and `eljamon-web`, whose one chain wide price list goes to the chain’s NATIONAL scope). A `deza-web` one accepts it and ignores it, because the site prints none, and a `lidl-api` one refuses it, because that chain publishes a price per region and creates the scopes itself. A `mercadona-api` one takes `priceScopeIds` instead. A `dia-api` one takes `priceScopeIds` too, and beside them this field optionally names the chain’s NATIONAL scope, which receives the prices of the fulfilment store an anonymous visitor is priced by.',
   })
   @IsOptional()
   @IsUUID()
@@ -91,7 +91,7 @@ export class SpawnHarvestRunDto {
     type: [String],
     format: 'uuid',
     description:
-      'The scopes a `mercadona-api` CATALOG_DISCOVERY covers, one warehouse each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.',
+      'The scopes a `mercadona-api` or a `dia-api` CATALOG_DISCOVERY covers, one warehouse or one online fulfilment store each, and required and non-empty for one. Each scope’s own `externalKey` is the warehouse or the store the walk fetches, so a run cannot walk one warehouse and label its prices with another. A list and not one id because the detail phase, which is where the eighteen minutes go, is shared across warehouses: six of them cost about 5,300 requests together against 26,298 apart. A scope with no key is refused, and so is one whose priority is outside the band the adapter’s walk may write.',
   })
   @IsOptional()
   @IsArray()

@@ -683,6 +683,105 @@ describe('HarvestRunService.spawn', () => {
     );
   });
 
+  it('starts a DIA walk with its fulfilment stores and the national scope beside them', async () => {
+    // Plan 0174, section 6.6. The scope list is the stores the walk covers,
+    // each inside the LOCAL_AREA band. The default scope beside them is the
+    // chain's NATIONAL one, which the band never checks: it is where a price
+    // with no scope key lands, and not a scope the walk is given.
+    const national = '5efa0000-0000-4000-a000-0000000000a1';
+    const { service, store } = build({
+      source: { adapterKey: 'dia-api' },
+      scopes: [
+        warehouse({ externalKey: '13835' }),
+        warehouse({
+          id: national,
+          externalKey: null,
+          kind: PriceScopeKind.NATIONAL,
+          priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+        }),
+      ],
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeId: national,
+      priceScopeIds: [SCOPE],
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priceScopeId: national,
+        payload: expect.objectContaining({
+          priceScopeId: national,
+          priceScopeIds: [SCOPE],
+          // No detail phase to skip, so the only value there is.
+          details: 'ALL',
+        }),
+      })
+    );
+  });
+
+  it('starts a DIA walk with no default scope, which writes no national row', async () => {
+    const { service, store } = build({
+      source: { adapterKey: 'dia-api' },
+      scopes: [warehouse({ externalKey: '959' })],
+    });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      supermarketId: SUPERMARKET,
+      priceScopeIds: [SCOPE],
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({ priceScopeId: null })
+    );
+  });
+
+  it('refuses a DIA walk given the national scope as a scope to walk', async () => {
+    // A walk prices fulfilment stores. NATIONAL is outside the band, so it is
+    // refused as a walked scope, as it is for Mercadona.
+    const { service } = build({
+      source: { adapterKey: 'dia-api' },
+      scopes: [
+        warehouse({
+          kind: PriceScopeKind.NATIONAL,
+          priority: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.NATIONAL],
+        }),
+      ],
+    });
+
+    await expect(
+      service.spawn({
+        userId: ADMIN,
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        supermarketId: SUPERMARKET,
+        priceScopeIds: [SCOPE],
+      })
+    ).rejects.toBeInstanceOf(ValidationException);
+  });
+
+  it('starts a DIA store discovery with no postal code', async () => {
+    // The shop file names every shop (plan 0174, section 5).
+    const { service, store } = build({ source: { adapterKey: 'dia-api' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    );
+  });
+
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
     // A chain that publishes an assortment and no store list is still a radius
     // over OpenStreetMap and still needs a centre. Mercadona was this case

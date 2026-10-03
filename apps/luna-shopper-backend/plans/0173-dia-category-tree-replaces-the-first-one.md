@@ -1,3 +1,5 @@
+> **PR:** [#597](https://github.com/IchirokuXVI/nx-portfolio/pull/597)
+
 # 0173: DIA's category tree replaces the first one
 
 > Prerequisite reading: `0166` (categories as rows: the model, the triggers, the seed, the

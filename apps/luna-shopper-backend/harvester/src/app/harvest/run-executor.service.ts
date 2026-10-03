@@ -608,6 +608,7 @@ export class RunExecutor implements OnApplicationShutdown {
 const SOURCE_KIND_BY_ADAPTER: Partial<Record<AdapterKey, PriceSourceKind>> = {
   'mercadona-api': PriceSourceKind.OFFICIAL_API,
   'lidl-api': PriceSourceKind.OFFICIAL_API,
+  'dia-api': PriceSourceKind.OFFICIAL_API,
   'deza-web': PriceSourceKind.OFFICIAL_WEB,
   'carrefour-web': PriceSourceKind.OFFICIAL_WEB,
 };

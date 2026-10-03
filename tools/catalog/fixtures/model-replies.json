@@ -15,7 +15,7 @@
         "brand": "Hacendado",
         "unitSize": 800,
         "defaultUnit": "GRAM",
-        "categorySlugs": ["biscuits"],
+        "categorySlugs": ["classic-and-digestive-biscuits"],
         "ean": "8480000111111"
       },
       "confidence": 0.94,
@@ -30,7 +30,7 @@
         "brand": null,
         "unitSize": null,
         "defaultUnit": "UNIT",
-        "categorySlugs": ["cleaning"],
+        "categorySlugs": ["detergents"],
         "ean": null
       },
       "confidence": 0.55,
@@ -57,7 +57,7 @@
         "brand": "Hacendado",
         "unitSize": 1,
         "defaultUnit": "LITER",
-        "categorySlugs": ["oil-and-vinegar"],
+        "categorySlugs": ["oils"],
         "ean": null
       },
       "confidence": 0.93,

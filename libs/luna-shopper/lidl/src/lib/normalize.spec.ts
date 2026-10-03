@@ -154,7 +154,7 @@ describe('normalizeProduct', () => {
     // real EAN and no price, which the catalog is allowed to hold.
     expect(product?.prices).toEqual([]);
     expect(product?.ean).toBe('8410436428972');
-    expect(product?.categorySlug).toBe('laundry');
+    expect(product?.categorySlug).toBe('detergents');
   });
 
   it('never reads an eight digit code as an EAN', () => {
@@ -168,7 +168,7 @@ describe('normalizeProduct', () => {
     expect(product?.sizeFormat).toBe('400 g');
     // A single size is not a pack (plan 0162).
     expect(product?.packCount).toBeNull();
-    expect(product?.categorySlug).toBe('fruit');
+    expect(product?.categorySlug).toBe('other-fruits');
   });
 
   it('falls back to the index row for what the page does not state', () => {

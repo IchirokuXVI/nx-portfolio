@@ -55,9 +55,10 @@ const ADAPTER_ORDER: Record<SourceAdapterKey, number> = {
   'mercadona-api': 1,
   'deza-web': 2,
   'eljamon-web': 3,
-  'carrefour-web': 4,
-  'lidl-api': 5,
-  manual: 6,
+  'dia-api': 4,
+  'carrefour-web': 5,
+  'lidl-api': 6,
+  manual: 7,
 };
 
 const ADAPTERS: readonly SourceAdapterKey[] = (

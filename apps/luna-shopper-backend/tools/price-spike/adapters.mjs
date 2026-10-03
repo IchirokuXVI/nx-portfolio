@@ -142,24 +142,11 @@ export const mercadona = {
 };
 
 /* ------------------------------------------------------------------ *
- * DIA — real online shop, JSON under the hood, but fronted by bot
- * protection: every working open-source scraper drives undetected
- * Chrome rather than calling fetch(). Left as an explicit stub so the
- * spike reports it honestly instead of silently returning nothing.
+ * DIA is not a spike any more: the adapter is written, in
+ * `libs/luna-shopper/dia` (plan 0174). The stub that stood here said the
+ * site needed a browser. It does not: it needs browser headers, and the
+ * plan's section 2 records what it refuses.
  * ------------------------------------------------------------------ */
-export const dia = {
-  id: 'dia',
-  label: 'DIA',
-  priceScope: 'store',
-  status: 'browser-required',
-  reason:
-    'Online shop is JSON-backed but behind anti-bot protection; needs Playwright with a real ' +
-    'browser context, plus a postal code to pin the store. Franchised stores price independently ' +
-    '(DIA sets a maximum, franchisees may undercut it), so the online price is its own price list.',
-  async search() {
-    throw new Error('dia: browser automation required — see reason');
-  },
-};
 
 /* ------------------------------------------------------------------ *
  * Lidl — lidl.es sells the non-food bazaar online; the grocery
@@ -203,4 +190,4 @@ export const deza = {
   },
 };
 
-export const ADAPTERS = [mercadona, dia, lidl, deza];
+export const ADAPTERS = [mercadona, lidl, deza];

@@ -1405,13 +1405,13 @@ describe('ListPage: searching and viewing one category', () => {
   }
 
   const ITEMS = [
-    product('milk', 'milk', 'dairy-and-eggs', 'Milk', 'Leche'),
+    product('milk', 'milk', 'eggs-milk-and-butter', 'Milk', 'Leche'),
     product(
       'carrot',
+      'potatoes-and-carrots',
       'vegetables',
-      'fruit-and-vegetables',
-      'Vegetables',
-      'Verduras y hortalizas'
+      'Potatoes and carrots',
+      'Patatas y zanahorias'
     ),
   ];
 
@@ -1489,12 +1489,12 @@ describe('ListPage: searching and viewing one category', () => {
   it('draws only the picked category, under an h2 naming it from its data', async () => {
     const { fixture, view } = await render({ lines: LINES, items: ITEMS });
 
-    view.pickCategory('cat-vegetables');
+    view.pickCategory('cat-potatoes-and-carrots');
     fixture.detectChanges();
 
     expect(rows(fixture).map((row) => row.id)).toEqual(['ln-carrot']);
     const heading = query(fixture, 'h2.category-heading');
-    expect(heading?.textContent?.trim()).toBe('Vegetables');
+    expect(heading?.textContent?.trim()).toBe('Potatoes and carrots');
   });
 
   it('puts a line with no products under No category', async () => {
@@ -1788,7 +1788,7 @@ describe('ListPage: searching and viewing one category', () => {
       items: ITEMS,
     });
 
-    view.pickCategory('cat-vegetables');
+    view.pickCategory('cat-potatoes-and-carrots');
     fixture.detectChanges();
 
     expect(query(fixture, 'lib-line-list')).toBeNull();

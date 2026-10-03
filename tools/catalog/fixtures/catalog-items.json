@@ -10,7 +10,7 @@
     "categories": [
       {
         "id": "cat-milk",
-        "parentId": "cat-dairy-and-eggs",
+        "parentId": "cat-eggs-milk-and-butter",
         "slug": "milk",
         "name": { "en": "Milk", "es": "Leche" }
       }
@@ -28,10 +28,10 @@
     "unitSize": 1,
     "categories": [
       {
-        "id": "cat-oil-and-vinegar",
-        "parentId": "cat-pantry",
-        "slug": "oil-and-vinegar",
-        "name": { "en": "Oil and vinegar", "es": "Aceite y vinagre" }
+        "id": "cat-oils",
+        "parentId": "cat-oils-sauces-and-spices",
+        "slug": "oils",
+        "name": { "en": "Oils", "es": "Aceites" }
       }
     ],
     "defaultUnit": "LITER",
@@ -47,10 +47,13 @@
     "unitSize": 0.46,
     "categories": [
       {
-        "id": "cat-bread",
+        "id": "cat-sliced-and-specialty-breads",
         "parentId": "cat-bakery",
-        "slug": "bread",
-        "name": { "en": "Bread", "es": "Pan" }
+        "slug": "sliced-and-specialty-breads",
+        "name": {
+          "en": "Sliced and specialty breads",
+          "es": "Pan de molde y especiales"
+        }
       }
     ],
     "defaultUnit": "KILOGRAM",
@@ -67,7 +70,7 @@
     "categories": [
       {
         "id": "cat-milk",
-        "parentId": "cat-dairy-and-eggs",
+        "parentId": "cat-eggs-milk-and-butter",
         "slug": "milk",
         "name": { "en": "Milk", "es": "Leche" }
       }

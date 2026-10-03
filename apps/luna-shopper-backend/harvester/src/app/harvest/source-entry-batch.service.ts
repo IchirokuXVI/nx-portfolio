@@ -477,13 +477,21 @@ export class SourceEntryBatchService {
       return { outcomes, idsOf };
     }
     const index = new CategorySlugIndex(await this.catalog.categoryTree());
+    // The chain's adapter decides how a row's category is read (plan 0174,
+    // section 7). One read per chain on the file, as for the names.
+    const adapterKeys = await this.adapterKeysOf([...rows.values()]);
     for (const [position, operation] of operations.entries()) {
       if (!isCreate(operation)) {
         continue;
       }
+      const row = rows.get(operation.entryId);
       const slugs = categorySlugsFor(
         operation.item.categorySlugs,
-        rows.get(operation.entryId)?.categoryPath
+        row?.categoryPath,
+        {
+          adapterKey: row ? adapterKeys.get(row.supermarketId) : null,
+          extra: row?.extra,
+        }
       );
       const resolved = index.resolve(slugs);
       if (resolved.ids === null) {

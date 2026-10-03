@@ -582,7 +582,7 @@ const catalog: CatalogSeed = {
     makeItem({
       id: ITEM_BREAD_ID,
       name: { en: 'Bread', es: 'Pan' },
-      categories: ['bread'],
+      categories: ['freshly-baked-bread'],
       defaultUnit: UnitOfMeasure.UNIT,
       productGroupId: PRODUCT_GROUP_BREAD_ID,
     }),

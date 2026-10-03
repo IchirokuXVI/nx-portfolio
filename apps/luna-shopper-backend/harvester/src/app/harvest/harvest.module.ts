@@ -11,6 +11,8 @@ import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DiaCatalogRunner } from './dia-catalog.runner';
+import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
@@ -83,6 +85,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     LidlStoreDiscoveryRunner,
     MercadonaStoreDiscoveryRunner,
     ElJamonStoreDiscoveryRunner,
+    DiaStoreDiscoveryRunner,
     StoreDiscoveryRunner,
     // The second half of every run, whatever the first half was (plan 0086, D5).
     //
@@ -99,6 +102,7 @@ import { SupermarketSourceService } from './supermarket-source.service';
     CarrefourDetailRunner,
     LidlCatalogRunner,
     ElJamonCatalogRunner,
+    DiaCatalogRunner,
     CatalogDiscoveryRunner,
     // The one runner that fetches nothing at all (plan 0086, D6): its input is
     // an uploaded document rather than a storefront.

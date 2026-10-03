@@ -57,23 +57,31 @@ describe('CategoryStore', () => {
     await store.ensure();
 
     expect(store.roots().map((branch) => branch.root.slug)).toEqual([
-      'dairy-and-eggs',
+      'eggs-milk-and-butter',
       'bakery',
-      'breakfast-and-sweets',
-      'pantry',
+      'yoghurts-and-desserts',
+      'rice-pasta-and-pulses',
+      'oils-sauces-and-spices',
+      'canned-food-broths-and-creams',
+      'coffee-cocoa-and-infusions',
+      'pastries-cakes-and-sugar',
+      'prepared-meals-and-pizzas',
     ]);
     expect(store.roots()[0].children.map((child) => child.slug)).toEqual([
-      'milk',
-      'plant-drinks',
-      'yogurts-and-desserts',
       'eggs',
+      'milk',
+      'lactose-free-and-fortified-milk',
+      'plant-based-drinks-and-horchata',
     ]);
-    expect(store.byId('cat-bread')?.name).toEqual({ en: 'Bread', es: 'Pan' });
-    expect(store.bySlug('ice-cream')).toBeNull();
+    expect(store.byId('cat-freshly-baked-bread')?.name).toEqual({
+      en: 'Freshly baked bread',
+      es: 'Pan recién horneado',
+    });
+    expect(store.bySlug('ice-creams-and-ice')).toBeNull();
     expect(store.bySlug('eggs')?.id).toBe('cat-eggs');
     // A root, then its children, then the next root.
-    expect(store.rank('cat-dairy-and-eggs')).toBe(0);
-    expect(store.rank('cat-milk')).toBe(1);
+    expect(store.rank('cat-eggs-milk-and-butter')).toBe(0);
+    expect(store.rank('cat-milk')).toBe(2);
     expect(store.rank('cat-bakery')).toBe(5);
     expect(store.rank('cat-nothing')).toBeNull();
   });
@@ -89,7 +97,7 @@ describe('CategoryStore', () => {
     await store.ensure();
     expect(calls).toHaveLength(2);
     expect(store.state()).toBe('loaded');
-    expect(store.rank('cat-milk')).toBe(1);
+    expect(store.rank('cat-milk')).toBe(2);
   });
 
   it('never throws out of a catalog that does', async () => {
