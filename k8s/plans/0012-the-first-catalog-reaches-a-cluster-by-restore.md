@@ -139,9 +139,9 @@ tasks dump staging at all.
 
 ```sh
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
-CATALOG_SHA256="<64 hex, from the owner>"
+CATALOG_SHA256="53caacd7f8d8551da3de7d32e5ed7b71d5af701f6bec94696485939c88717aa8"
 HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
-HARVESTER_SHA256="<64 hex, from the owner>"
+HARVESTER_SHA256="841cf6dfdcc814c3f9e1799dd9cbd6d71e7a93c1ed29fd9d6f0ec9e316f06642"
 
 CATALOG_LAST_MIGRATION="DiaCategoryTree1758500000000"
 CATALOG_MIGRATIONS=26
