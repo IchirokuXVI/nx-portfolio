@@ -5,6 +5,7 @@ import {
   runInInjectionContext,
 } from '@angular/core';
 import type { ActivatedRouteSnapshot } from '@angular/router';
+import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import {
   idOf,
   type AnyResourceDescriptor,
@@ -18,7 +19,6 @@ import type {
   ReferenceOption,
   ReferenceScope,
 } from '@portfolio/luna-shopper-admin/ui';
-import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import { ADMIN_SECTIONS } from './admin-section';
 import { routeParam } from './resource-route-data';
 

@@ -13,12 +13,12 @@ import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_LIST_EMBED,
+  SPLIT_UNDER_HEADER,
 } from './resource-route-data';
 import {
   ResourceSplitPage,
   SPLIT_EMPTY_KEY,
   SPLIT_LIST_WIDTH,
-  SPLIT_UNDER_HEADER,
 } from './resource-split-page';
 
 /**
@@ -134,65 +134,65 @@ function resourceFormRoutes(descriptor: AnyResourceDescriptor): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
 
   return [
-        // A create screen only where there is something to create. A resource
-        // with no `POST` behind it would otherwise answer a typed URL with a
-        // form that fills in, submits, and is refused by the gateway, which is
-        // a worse answer than the not found page (plan 0007, section 1).
-        ...(descriptor.actions?.create === true
-          ? [
-              {
-                // The resource's own editor where it named one, and the generic
-                // form otherwise. Create and edit stay one component either
-                // way, which is what keeps them one act.
-                path: 'new',
-                component: descriptor.editor ?? ResourceFormPage,
-                data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
-              },
-            ]
-          : []),
+    // A create screen only where there is something to create. A resource
+    // with no `POST` behind it would otherwise answer a typed URL with a
+    // form that fills in, submits, and is refused by the gateway, which is
+    // a worse answer than the not found page (plan 0007, section 1).
+    ...(descriptor.actions?.create === true
+      ? [
+          {
+            // The resource's own editor where it named one, and the generic
+            // form otherwise. Create and edit stay one component either
+            // way, which is what keeps them one act.
+            path: 'new',
+            component: descriptor.editor ?? ResourceFormPage,
+            data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
+          },
+        ]
+      : []),
 
-        // The edit screen, for a resource whose `:id` is taken by a detail
-        // component of its own.
-        //
-        // Without it, turning on `edit` for a zone or a list would change
-        // nothing at all: `detail` wins at `:id`, so the generic form would
-        // have no route to be reached at, and the operator would find a
-        // resource that claims to be editable and offers no way to edit it.
-        // The resources whose detail view *is* the generic form need no such
-        // route, because for them `:id` is already the editor.
-        //
-        // Before `:id` for readability only. A terminal route has to consume
-        // the whole remaining URL, so `:id` cannot match two segments whatever
-        // the order.
-        ...(descriptor.detail !== undefined && descriptor.actions?.edit === true
-          ? [
-              {
-                path: ':id/edit',
-                component: descriptor.editor ?? ResourceFormPage,
-                data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-              },
-            ]
-          : []),
+    // The edit screen, for a resource whose `:id` is taken by a detail
+    // component of its own.
+    //
+    // Without it, turning on `edit` for a zone or a list would change
+    // nothing at all: `detail` wins at `:id`, so the generic form would
+    // have no route to be reached at, and the operator would find a
+    // resource that claims to be editable and offers no way to edit it.
+    // The resources whose detail view *is* the generic form need no such
+    // route, because for them `:id` is already the editor.
+    //
+    // Before `:id` for readability only. A terminal route has to consume
+    // the whole remaining URL, so `:id` cannot match two segments whatever
+    // the order.
+    ...(descriptor.detail !== undefined && descriptor.actions?.edit === true
+      ? [
+          {
+            path: ':id/edit',
+            component: descriptor.editor ?? ResourceFormPage,
+            data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
+          },
+        ]
+      : []),
 
-        // The detail screen: the resource's own component where it named one,
-        // and the generic form otherwise, which draws the fields it cannot
-        // change beside the ones it can. A resource with neither has no such
-        // route, and `resource-list` draws its rows as text rather than as
-        // controls that lead nowhere.
-        //
-        // `detail` before `editor`, because a resource naming both means the two
-        // screens are genuinely different: one reads a row and one changes it.
-        // Nothing names both today, and the order says which would win.
-        ...(hasDetailScreen(descriptor)
-          ? [
-              {
-                path: ':id',
-                component:
-                  descriptor.detail ?? descriptor.editor ?? ResourceFormPage,
-                data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-              },
-            ]
-          : []),
+    // The detail screen: the resource's own component where it named one,
+    // and the generic form otherwise, which draws the fields it cannot
+    // change beside the ones it can. A resource with neither has no such
+    // route, and `resource-list` draws its rows as text rather than as
+    // controls that lead nowhere.
+    //
+    // `detail` before `editor`, because a resource naming both means the two
+    // screens are genuinely different: one reads a row and one changes it.
+    // Nothing names both today, and the order says which would win.
+    ...(hasDetailScreen(descriptor)
+      ? [
+          {
+            path: ':id',
+            component:
+              descriptor.detail ?? descriptor.editor ?? ResourceFormPage,
+            data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
+          },
+        ]
+      : []),
   ];
 }
 

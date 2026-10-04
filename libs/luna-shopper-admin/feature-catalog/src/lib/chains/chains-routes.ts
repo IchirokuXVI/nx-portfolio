@@ -9,8 +9,8 @@ import {
   resourceTabRoute,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
-import { LOCATION_ITEMS } from '../location-items';
 import { LocationFormPage } from '../location-form-page';
+import { LOCATION_ITEMS } from '../location-items';
 import { LOCATIONS } from '../locations';
 import { PRICE_SCOPES } from '../price-scopes';
 import { SECTIONS } from '../sections';

@@ -116,7 +116,8 @@
       "blocked": "Choose {{filters}} to see the rows."
     },
     "filter": {
-      "any": "Any"
+      "any": "Any",
+      "more": "Filters"
     },
     "sort": {
       "label": "Order",
@@ -373,8 +374,9 @@
       "grip": "{{name}}, place {{place}} of {{count}}. Press the up or down arrow key to move it.",
       "movedTo": "{{name}} is now at place {{place}} of {{count}}.",
       "mapState": "A map writes this list",
-      "mapInfo": {
-        "title": "what a map does to this list"
+      "info": {
+        "title": "what a map does to this list",
+        "map": "This list follows the shop's map. The next save of the map's walk replaces any change made here."
       },
       "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
       "mapConfirm": {

@@ -170,7 +170,11 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
   },
 
   // The chain is in the address: `/chains/{chainId}/scopes`.
-  parent: { resource: 'supermarkets', param: 'chainId', filter: 'supermarketId' },
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
 
   // The one question the list answers besides "which chain": the general
   // scopes of a chain are a handful, and its single shop scopes are one per
@@ -208,6 +212,11 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
      * It writes the chain and not the scope: the default is the chain's
      * `defaultPriceScopeId`. So it exists only on a list under a chain's page,
      * which is what holds the chain and reads it again afterwards.
+     *
+     * Not on a single shop scope. The default is what a shop of the chain
+     * falls back to when nothing more specific holds a price, and one shop's
+     * own scope is the most specific there is. The gateway accepts it, so
+     * this is the screen declining to offer a mistake.
      */
     named: () => {
       const chain = inject(ChainContext, { optional: true });
@@ -219,6 +228,7 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
               name: 'makeDefault',
               label: 'catalog.priceScopes.makeDefault',
               available: (row) =>
+                row.kind !== 'STORE' &&
                 chain.chain()?.defaultPriceScopeId !== row.id,
               run: (row) => chain.setDefaultScope(row.id),
             },

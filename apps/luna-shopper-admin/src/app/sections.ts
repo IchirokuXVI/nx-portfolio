@@ -98,20 +98,17 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * ## Order
  *
  * The sections run in the order an operator meets them: the overview, then the
- * catalog, which is the half that gets edited; then the people
- * and what they share, which is read far more often than it is touched; then the
- * harvester, which produces most of the catalog; then the admin table, which is
- * opened to answer one question and never to change anything.
+ * chains, which hold the shops, the sections and the price scopes (admin plan
+ * 0042); then the catalog, which is the products and their prices; then the
+ * people and what they share, which is read far more often than it is touched;
+ * then the harvester, which produces most of the catalog; then the admin
+ * table, which is opened to answer one question and never to change anything.
  *
  * Inside the catalog the order follows what an operator is holding in their head
- * rather than the alphabet. A chain, then the shops it has, the sections those
- * shops are laid out in (admin plan 0037) and the scopes it prices against,
- * because all three belong to a chain and none can be read without naming one. Then the products, then the categories they sit in (admin plan
- * 0036), then the groups that make two products comparable, then the prices,
- * which need a product and a scope to exist at all.
- * Backend plan 0080 puts the price policies straight after the prices they
- * decide between. The per shop rows are last: they are the narrowest question in
- * the catalog and the one asked least often.
+ * rather than the alphabet. The products, then the categories they sit in
+ * (admin plan 0036), then the groups that make two products comparable, then
+ * the prices, which need a product and a scope to exist at all. Backend plan
+ * 0080 puts the price policies straight after the prices they decide between.
  *
  * Among the shoppers, each nested collection follows the resource it hangs off:
  * a membership after zones, a line after lists. Neither can be listed from

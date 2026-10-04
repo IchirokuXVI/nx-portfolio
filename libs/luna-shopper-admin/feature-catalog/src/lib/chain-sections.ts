@@ -237,7 +237,11 @@ export function panelErrorKey(error: unknown): string {
       background: var(--admin-danger-wash);
     }
 
+    /* Positioned, so that the hidden heading of the actions column is laid out
+       inside the box that scrolls. Left to the page, it sat past the window's
+       edge on a phone and the whole page scrolled sideways by its offset. */
     .scroll {
+      position: relative;
       inline-size: 100%;
       overflow-x: auto;
     }

@@ -219,11 +219,26 @@ export function moveId(
           </p>
         }
 
+        <!-- On a phone the bar holds the two buttons of the edit in hand, and
+             the way back to the chain's order sits under the list. Three
+             buttons in 390 px wrap their own words. -->
+        @if (ownList() && compact()) {
+          <button
+            (click)="useChainDefault()"
+            [disabled]="busy()"
+            class="below"
+            type="button"
+            data-use-chain
+          >
+            {{ 'catalog.locationSections.useChain' | rokuT }}
+          </button>
+        }
+
         <!-- A bar at the bottom of the tab, in view while the list scrolls
              under it, so that a long list can be ordered and saved without
              going back up. -->
         <div class="controls">
-          @if (ownList()) {
+          @if (ownList() && !compact()) {
             <button
               (click)="useChainDefault()"
               [disabled]="busy()"
@@ -318,6 +333,10 @@ export function moveId(
       flex: 1;
     }
 
+    .below {
+      align-self: flex-start;
+    }
+
     .visually-hidden {
       position: absolute;
       overflow: hidden;
@@ -346,7 +365,6 @@ export function moveId(
       border-radius: var(--admin-radius);
       color: var(--admin-ink-muted);
     }
-
 
     .failure {
       display: flex;
@@ -586,8 +604,8 @@ export class LocationSections {
 
   /** What the info button beside the map state says (admin plan 0040). */
   readonly mapInfo: InfoContent = {
-    title: 'catalog.locationSections.mapInfo.title',
-    points: ['catalog.locationSections.mapNotice'],
+    title: 'catalog.locationSections.info.title',
+    points: ['catalog.locationSections.info.map'],
   };
 
   /** A phone gets a button each way. A wider screen drags, or uses the keys. */

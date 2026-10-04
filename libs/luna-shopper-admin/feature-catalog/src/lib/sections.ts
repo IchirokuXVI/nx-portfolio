@@ -41,7 +41,11 @@ export const SECTIONS = defineResource<Section>({
   labels: { one: 'catalog.sections.one', many: 'catalog.sections.many' },
 
   // The chain is in the address.
-  parent: { resource: 'supermarkets', param: 'chainId', filter: 'supermarketId' },
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
 

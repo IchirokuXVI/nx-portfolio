@@ -91,8 +91,7 @@ function chainsTree(): UrlTree {
 
 function chainTree(id: string): UrlTree {
   const registry = inject(ResourceRegistry);
-  const path =
-    registry.rowPath('supermarkets', id) ??
+  const path = registry.rowPath('supermarkets', id) ??
     registry.pathOf('supermarkets') ?? ['/'];
   return inject(Router).createUrlTree([...path]);
 }

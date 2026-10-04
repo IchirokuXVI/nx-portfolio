@@ -32,7 +32,6 @@ import {
 import {
   ConfirmDialog,
   PageHeader,
-  PageTabs,
   Viewport,
   type PageTab,
 } from '@portfolio/luna-shopper-admin/ui';
@@ -76,7 +75,6 @@ export const CHAIN_INFO: InfoContent = {
   selector: 'lib-chain-page',
   imports: [
     PageHeader,
-    PageTabs,
     RouterOutlet,
     RouterLink,
     ConfirmDialog,
@@ -90,9 +88,10 @@ export const CHAIN_INFO: InfoContent = {
       <lib-page-header
         [backLabel]="split() ? null : ('catalog.chains.back' | rokuT)"
         [backLink]="listPath"
-        [frameTabs]="false"
         [heading]="name() || ('resource.form.loading' | rokuT)"
         [info]="info"
+        [tabs]="tabs()"
+        [tabsLabel]="name()"
       >
         @switch (chain.source()) {
           @case ('fetched') {
@@ -111,7 +110,7 @@ export const CHAIN_INFO: InfoContent = {
             }}</span>
           }
         }
-        <a [routerLink]="detailsPath()" class="button" pageAction>{{
+        <a [routerLink]="detailsPath()" class="button" pageMoreAction>{{
           'catalog.chains.edit' | rokuT
         }}</a>
         <button
@@ -123,8 +122,6 @@ export const CHAIN_INFO: InfoContent = {
           {{ 'catalog.chains.delete' | rokuT }}
         </button>
       </lib-page-header>
-
-      <lib-page-tabs [label]="name()" [tabs]="tabs()" />
     </div>
 
     @if (refusalKey(); as key) {
@@ -427,8 +424,6 @@ export class ChainPage {
   private _isShopOpen(): boolean {
     const tab = this._route.snapshot.firstChild;
     const shops = this._registry.byName('locations')?.segment;
-    return (
-      tab != null && tab.url[0]?.path === shops && tab.firstChild !== null
-    );
+    return tab != null && tab.url[0]?.path === shops && tab.firstChild !== null;
   }
 }

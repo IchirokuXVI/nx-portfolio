@@ -48,6 +48,7 @@ import {
   ConfirmDialog,
   ResourceList,
   Viewport,
+  type ReferenceLookup,
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
@@ -60,6 +61,7 @@ import {
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_LIST_EMBED,
+  SPLIT_UNDER_HEADER,
   type ResourceListEmbed,
 } from './resource-route-data';
 
@@ -116,6 +118,7 @@ interface PendingAction extends RowAction {
       [errorKey]="errorKey()"
       [failed]="failed()"
       [filters]="filters"
+      [filterScope]="embed === null ? '' : descriptor.name"
       [filterValues]="store.filters()"
       [hasMore]="store.hasMore()"
       [heading]="heading()"
@@ -124,7 +127,7 @@ interface PendingAction extends RowAction {
       [layout]="embed === 'column' ? 'rows' : 'auto'"
       [loading]="store.status() === 'loading'"
       [loadingMore]="store.loadingMore()"
-      [lookup]="references"
+      [lookup]="lookup"
       [moreFailed]="moreFailed()"
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
@@ -322,12 +325,6 @@ export class ResourceListPage {
   readonly descriptor = this._route.snapshot.data[RESOURCE_DESCRIPTOR];
 
   /**
-   * The gateway, built here because this is an injection context.
-   *
-   * A field initializer runs during construction, which is where `inject` works.
-   * It has to come after `descriptor`, and does.
-   */
-  /**
    * Whether the list is part of a larger page, and which part (admin plan
    * 0042). `null` when it is the whole page.
    */
@@ -355,6 +352,36 @@ export class ResourceListPage {
     (this.descriptor.filters ?? []) as readonly FilterDescriptor[]
   ).filter((filter) => filter.param !== this.descriptor.parent?.filter);
 
+  /**
+   * How a reference filter finds its rows, kept under the same parent.
+   *
+   * The shops of a chain can be narrowed to a price scope, and the scopes to
+   * pick from are that chain's. A target that lives under a parent this list
+   * is also under is searched under it. Any other target is searched as it
+   * always was, because a parameter its route does not declare is refused.
+   */
+  readonly lookup: ReferenceLookup = {
+    search: (resource, term, scope) => {
+      const filter = this._registry.byName(resource)?.parent?.filter;
+      const parent = filter === undefined ? undefined : this._parents[filter];
+
+      return this.references.search(
+        resource,
+        term,
+        filter === undefined || parent === undefined
+          ? scope
+          : { [filter]: parent, ...scope }
+      );
+    },
+    resolve: (resource, id) => this.references.resolve(resource, id),
+  };
+
+  /**
+   * The gateway, built here because this is an injection context.
+   *
+   * A field initializer runs during construction, which is where `inject` works.
+   * It has to come after `descriptor`, and does.
+   */
   readonly store = new ResourceListStore<ResourceRow>(
     this.descriptor,
     this.descriptor.gateway(),
@@ -377,6 +404,11 @@ export class ResourceListPage {
       return 'none';
     }
     if (this.embed === 'column') {
+      // Under a page's header and its tab the column needs no title: the tab
+      // says what is listed.
+      if (this._route.snapshot.data[SPLIT_UNDER_HEADER] === true) {
+        return 'none';
+      }
       return this._viewport.split() ? 'pane' : 'page';
     }
     return 'page';
@@ -648,7 +680,8 @@ export class ResourceListPage {
   /** What the address already decided, for every read. */
   private _fixedFilters(): Record<string, string> {
     const parent = this.descriptor.parent;
-    const value = parent === undefined ? undefined : this._parents[parent.filter];
+    const value =
+      parent === undefined ? undefined : this._parents[parent.filter];
 
     return parent === undefined || value === undefined
       ? {}
@@ -671,7 +704,8 @@ export class ResourceListPage {
     const brief: BriefPresentation | undefined = this.descriptor.list.brief;
     const textOf = (name: string): string => {
       const field = fieldOf(this.descriptor, name);
-      const cell = field === undefined ? undefined : toCell(field, row, options);
+      const cell =
+        field === undefined ? undefined : toCell(field, row, options);
       return cell === undefined || cell.key !== undefined ? '' : cell.text;
     };
 

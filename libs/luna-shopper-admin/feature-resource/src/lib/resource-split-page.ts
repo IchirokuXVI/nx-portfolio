@@ -9,16 +9,7 @@ import { ActivatedRoute, RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { PAGE_HEADING_LEVEL, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { ResourceListPage } from './resource-list-page';
-
-/**
- * Route `data` key: whether the split sits under a page header of its own
- * (admin plan 0042).
- *
- * A chain's shops are split under the chain's header, so on a wide screen the
- * shop that is open titles a pane and not the page. The chains themselves are
- * split under nothing, and the chain that is open titles the page.
- */
-export const SPLIT_UNDER_HEADER = 'splitUnderHeader';
+import { SPLIT_UNDER_HEADER } from './resource-route-data';
 
 /**
  * Route `data` key: how wide the list is beside the open row, as a CSS length.
@@ -137,7 +128,6 @@ export const SPLIT_EMPTY_KEY = 'splitEmptyKey';
       .split:not(.under) > .list {
         min-block-size: 100dvh;
       }
-
     }
 
     .hint {

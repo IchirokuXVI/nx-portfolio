@@ -99,7 +99,11 @@ export const LOCATIONS = defineResource<Location>({
 
   // The chain is in the address. It used to be a filter the operator had to
   // pick before the list would read anything.
-  parent: { resource: 'supermarkets', param: 'chainId', filter: 'supermarketId' },
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
 
   /**
    * A shop's name is usually its address, because that is what distinguishes

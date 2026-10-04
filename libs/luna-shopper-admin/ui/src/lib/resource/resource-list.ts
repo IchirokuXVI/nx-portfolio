@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type {
@@ -120,13 +122,59 @@ export interface RowAction {
       <p class="notice" role="status">{{ notice | rokuT }}</p>
     }
 
-    @if (filters().length > 0 || sorts().length > 0) {
+    @if (layout() === 'rows') {
+      <!-- A column has room for one field. The search stays in view, and the
+           other filters and the order open under a button, which says how
+           many of them are narrowing the list. -->
+      @if (searchFilters().length > 0 || hasMoreFilters()) {
+        <div class="column-tools">
+          @if (searchFilters().length > 0) {
+            <lib-resource-filters
+              (filterChange)="filterChange.emit($event)"
+              [filters]="searchFilters()"
+              [lookup]="lookup()"
+              [scope]="filterScope()"
+              [sorts]="[]"
+              [values]="filterValues()"
+              class="column-search"
+            />
+          }
+          @if (hasMoreFilters()) {
+            <button
+              (click)="filtersOpen.set(!filtersOpen())"
+              [attr.aria-expanded]="filtersOpen()"
+              class="filter-toggle"
+              type="button"
+              data-more-filters
+            >
+              {{ 'resource.filter.more' | rokuT }}
+              @if (narrowedBy(); as count) {
+                <span class="filter-count">{{ count }}</span>
+              }
+            </button>
+          }
+        </div>
+        @if (filtersOpen() && hasMoreFilters()) {
+          <lib-resource-filters
+            (filterChange)="filterChange.emit($event)"
+            (orderChange)="orderChange.emit($event)"
+            [filters]="otherFilters()"
+            [lookup]="lookup()"
+            [order]="order()"
+            [scope]="filterScope()"
+            [sorts]="sorts()"
+            [values]="filterValues()"
+          />
+        }
+      }
+    } @else if (filters().length > 0 || sorts().length > 0) {
       <lib-resource-filters
         (filterChange)="filterChange.emit($event)"
         (orderChange)="orderChange.emit($event)"
         [filters]="filters()"
         [lookup]="lookup()"
         [order]="order()"
+        [scope]="filterScope()"
         [sorts]="sorts()"
         [values]="filterValues()"
       />
@@ -415,6 +463,38 @@ export interface RowAction {
       letter-spacing: -0.01em;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .column-tools {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: flex-end;
+    }
+
+    .column-search {
+      flex: 1;
+      min-inline-size: 0;
+    }
+
+    .filter-toggle {
+      display: inline-flex;
+      flex: none;
+      gap: 0.375rem;
+      align-items: center;
+    }
+
+    .filter-toggle[aria-expanded='true'] {
+      border-color: var(--admin-accent);
+    }
+
+    .filter-count {
+      padding: 0.0625rem 0.375rem;
+      border-radius: 0.5625rem;
+      background: var(--admin-accent-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-accent-on-wash);
     }
 
     .tools {
@@ -768,6 +848,11 @@ export class ResourceList {
   readonly layout = input<'auto' | 'rows'>('auto');
   /** The row that is open beside a `rows` list, which is marked as current. */
   readonly currentId = input<string | null>(null);
+  /**
+   * A name that keeps the ids of this list's filters apart from those of
+   * another list on the same page. Empty for a list that is the whole page.
+   */
+  readonly filterScope = input('');
   readonly columns = input.required<readonly FieldDescriptor[]>();
   /** The subset that survives to a phone, in card order. */
   readonly compactColumns = input.required<readonly FieldDescriptor[]>();
@@ -859,6 +944,33 @@ export class ResourceList {
   readonly orderChange = output<string>();
   /** A row's tick box was pressed. */
   readonly pick = output<string>();
+
+  /** Whether the filters behind the button of a column are shown. */
+  readonly filtersOpen = signal(false);
+
+  /** The filters a column keeps in view: what the operator types into. */
+  readonly searchFilters = computed(() =>
+    this.filters().filter((filter) => filter.kind === 'search')
+  );
+
+  /** The filters a column puts behind its button. */
+  readonly otherFilters = computed(() =>
+    this.filters().filter((filter) => filter.kind !== 'search')
+  );
+
+  readonly hasMoreFilters = computed(
+    () => this.otherFilters().length > 0 || this.sorts().length > 0
+  );
+
+  /** How many of the filters behind the button are set, order included. */
+  readonly narrowedBy = computed(() => {
+    const values = this.filterValues();
+    const set = this.otherFilters().filter(
+      (filter) => (values[filter.param] ?? '') !== ''
+    ).length;
+
+    return set + (this.order() === undefined ? 0 : 1);
+  });
 
   isSelected(id: string): boolean {
     return this.selected().has(id);

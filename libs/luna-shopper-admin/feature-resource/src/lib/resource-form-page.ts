@@ -392,7 +392,8 @@ export class ResourceFormPage {
 
     // The parent the address names. A row made under a chain belongs to it.
     const parent = this.descriptor.parent;
-    const parentId = parent === undefined ? undefined : this.parents[parent.filter];
+    const parentId =
+      parent === undefined ? undefined : this.parents[parent.filter];
     if (parent !== undefined && parentId !== undefined) {
       draft[parent.filter] = parentId;
     }

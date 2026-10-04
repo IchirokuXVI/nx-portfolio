@@ -117,7 +117,7 @@ export interface PricedByScope {
       [heading]="title() || ('resource.form.loading' | rokuT)"
       [subtitle]="subtitle()"
     >
-      <a [routerLink]="detailsPath()" class="button" pageAction>{{
+      <a [routerLink]="detailsPath()" class="button" pageMoreAction>{{
         'catalog.shops.edit' | rokuT
       }}</a>
       <button
@@ -279,6 +279,15 @@ export interface PricedByScope {
       flex-wrap: wrap;
       gap: 0.375rem;
       list-style: none;
+    }
+
+    /* On a phone the heading and its two controls are one row, and the scopes
+       take the row under it, where three of them fit. */
+    @media (max-width: 47.99rem) {
+      .scopes {
+        order: 1;
+        flex-basis: 100%;
+      }
     }
 
     .chip {

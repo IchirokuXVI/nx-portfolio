@@ -44,6 +44,18 @@ export const RESOURCE_LIST_EMBED = 'embed';
 export type ResourceListEmbed = 'tab' | 'column';
 
 /**
+ * Route `data` key: whether a list drawn as a column sits under a page header
+ * that the page holding it drew (admin plan 0042).
+ *
+ * A chain's shops are split under the chain's header and its Shops tab. The
+ * column then needs no title of its own, and on a wide screen the shop that is
+ * open titles a pane and not the page. The chains themselves are split under
+ * nothing: their column says "Chains", and the chain that is open titles the
+ * page.
+ */
+export const SPLIT_UNDER_HEADER = 'splitUnderHeader';
+
+/**
  * A route parameter, read from the closest route that holds it.
  *
  * A child route does not inherit the parameters of a parent that has a
