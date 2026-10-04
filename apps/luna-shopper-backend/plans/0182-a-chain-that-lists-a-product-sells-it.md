@@ -112,3 +112,46 @@ Report each criterion with its spec output.
 The claims of the October run were never stored, so they cannot be replayed. Plan `0186`
 runs Deza again on slot 1 after this plan lands. Its 11,153 rows are already bound, so the
 end of that run writes their availability.
+
+## Rows that were already bound
+
+Target state 5 writes the offer with no price when a row is bound. A row that was bound
+before this plan landed was never bound again, so it got no offer. That was the state of
+the 11,153 Deza rows.
+
+**The owner decided on 2026-10-04 that those rows get the offer too.** A follow up built
+it (pull request #620).
+
+### What was built
+
+- At the end of a run, the harvester reads every `ACTIVE` row of the chain that the run
+  saw and that holds no open price in any scope. For each product of those rows it sends
+  the offer to the chain's default scope. A chain with no default scope gets none.
+- The bind and the end of a run send the offer through one method, `offerWithNoPrice` in
+  `source-entry-availability.ts`.
+- The message `supermarketItem.setAvailability` has an option, `onlyIfMissing`. With it,
+  catalog creates the row of a product that has none in the scope, and it never changes a
+  row that exists. Catalog derives the flag of a row that exists from the shop rows, and
+  a write of `true` on every run would flip a derived `false` back on every run. The bind
+  sends the option too.
+- In catalog the option is one insert that does nothing on a conflict. A row that a bind
+  or the shop derivation inserted first is kept. A product that catalog no longer holds
+  creates no row and does not fail the other products of the call.
+- The offers go in calls of 500 products. A call that fails does not fail the run and
+  does not stop the calls after it. The next run sends the offer again.
+- The run report has two counts: `pricelessOffersWritten`, the rows that catalog created,
+  and `pricelessOffersFailed`, the products of the calls that failed.
+- A run that writes prices only writes no offer.
+
+### What stays open
+
+- **The default scope can say available while every shop says not stocked.** Catalog
+  derives the flag from the shops into the scope that each shop is quoted from. That
+  scope is not always the chain's default scope. So the row in the default scope keeps
+  `available: true` from the offer, and no shop claim changes it. The owner must decide
+  what the default scope row means for a chain whose shops have scopes of their own.
+- **An incomplete run can state `available: false` and still be followed by the offer.**
+  The offer goes to every bound row that the run saw. A run that stopped early saw a part
+  of the chain only. A product can get `available: false` from a claim of that run in one
+  scope, and the offer in the default scope, in the same run. The offer changes no row
+  that exists, but it does create the default scope row when that row is missing.

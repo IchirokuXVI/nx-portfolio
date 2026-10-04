@@ -510,9 +510,13 @@ describe('SourceEntryService', () => {
         // A chain that lists a product sells it. Before this, accepting a
         // DEZA row wrote nothing at all and the product was sold nowhere.
         expect(setAvailability).toHaveBeenCalledTimes(1);
-        expect(setAvailability).toHaveBeenCalledWith(NATIONAL, [
-          { itemId: 'item-1', available: true },
-        ]);
+        // Create only: a row catalog already holds keeps the flag it derived
+        // from the shops.
+        expect(setAvailability).toHaveBeenCalledWith(
+          NATIONAL,
+          [{ itemId: 'item-1', available: true }],
+          { onlyIfMissing: true }
+        );
         // Availability is the only write: no price is invented for it.
         expect(addPrices).not.toHaveBeenCalled();
       });
@@ -596,9 +600,11 @@ describe('SourceEntryService', () => {
           entryId: 'e-1',
         });
 
-        expect(setAvailability).toHaveBeenCalledWith(NATIONAL, [
-          { itemId: result.createdItem?.id, available: true },
-        ]);
+        expect(setAvailability).toHaveBeenCalledWith(
+          NATIONAL,
+          [{ itemId: result.createdItem?.id, available: true }],
+          { onlyIfMissing: true }
+        );
       });
     });
 

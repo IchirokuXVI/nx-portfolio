@@ -110,6 +110,17 @@ export function fakeAudit(
             target: EntityTarget<ObjectLiteral>,
             criteria: unknown
           ) => bindingFor(target).repository.delete?.(criteria as never),
+          // A raw statement names no entity, so it goes to the bound
+          // repository that answers `query`. Fatal when none does, for the
+          // reason an unbound entity is.
+          query: async (sql: string, parameters?: unknown[]) => {
+            for (const { repository } of bound.values()) {
+              if (repository.query) {
+                return repository.query(sql, parameters);
+              }
+            }
+            throw new Error('fakeAudit: no bound repository answers query');
+          },
         },
         create: async (
           target: EntityTarget<ObjectLiteral>,

@@ -275,6 +275,11 @@ export interface SourceIngestResult {
  * `UNRESOLVED` one is already waiting for a person. Only an EAN or a person ever
  * makes a row `ACTIVE`.
  *
+ * **A waiting row is asked the EAN rung again every time a run sees it** (plan
+ * 0185). A product can be taught the barcode after the row was queued, and the
+ * row would otherwise wait for a person for ever. {@link bindWaitingByEan} is
+ * the whole rule.
+ *
  * **Rung 1 is silent.** The leaflet import used to warn per offer for a rejected
  * or an already queued name; a walk touches four thousand unresolved rows and a
  * warning for each is a `warnings` column nobody reads. Section 5 leaves it to
@@ -392,7 +397,14 @@ export class SourceIngest {
         }
         // Asked before the write, because the write is what makes it false.
         changed = soldByWeightChanged(held, observation);
-        outcome = await this.see(held, observation, context.runId, seenAt);
+        outcome = await this.see(
+          held,
+          observation,
+          context.runId,
+          seenAt,
+          items,
+          eans
+        );
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
         // Asked before the touch writes, because the touch is what makes it false.
@@ -722,8 +734,14 @@ export class SourceIngest {
    * it moved (plan 0119, section 6).
    *
    * {@link applySourceGroup} is not called, so the stored name, brand and EAN
-   * stay what the last full read wrote, and no status is re-derived: only a new
-   * EAN may do that, and this read fetched none.
+   * stay what the last full read wrote. This read fetched no EAN, so the row
+   * learns none here.
+   *
+   * **A waiting row is still asked the EAN rung, with the EAN it holds** (plan
+   * 0185, {@link bindWaitingByEan}). The read learned nothing, but catalog may
+   * have: a product taught the barcode since the last run holds it now. A
+   * known row is read from the listing alone on every run (plan 0119), so
+   * without this such a row would never be asked again.
    *
    * **The one thing it does write is whether the row is sold by weight** (plan
    * 0181), when the listing says. The prices this observation carries are the
@@ -743,7 +761,9 @@ export class SourceIngest {
     row: SourceCatalogEntry,
     observation: PartialSourceObservation,
     runId: string,
-    seenAt: Date
+    seenAt: Date,
+    items: ItemMatchIndex,
+    eans: ChainEanIndex
   ): Promise<SourceEntryOutcome> {
     if (soldByWeightChanged(row, observation)) {
       row.soldByWeight = observation.soldByWeight === true;
@@ -755,11 +775,12 @@ export class SourceIngest {
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
+    const rung = bindWaitingByEan(row, items, eans, seenAt) ? 2 : 1;
     const saved = await this.entries.save(row);
     return {
       entry: saved,
       created: false,
-      rung: 1,
+      rung,
       itemId: activeItemOf(saved),
     };
   }
@@ -805,6 +826,10 @@ export class SourceIngest {
    * does, so an entire chain sits in the queue until a backfill run reads those
    * pages, and before plan 0103 that run wrote the EAN and promoted the row
    * itself, holding a repository to do it.
+   *
+   * **The other is a barcode a product learned** (plan 0185). A row that is
+   * waiting and learned nothing new is asked the EAN rung again with the EAN
+   * it holds, and only that rung: {@link bindWaitingByEan}.
    */
   private async touch(
     row: SourceCatalogEntry,
@@ -843,6 +868,8 @@ export class SourceIngest {
         }
         rung = 2;
       }
+    } else if (bindWaitingByEan(row, items, eans, seenAt)) {
+      rung = 2;
     }
 
     const saved = await this.entries.save(row);
@@ -1168,6 +1195,58 @@ function undecided(row: SourceCatalogEntry): boolean {
     (row.status === SourceEntryStatus.UNRESOLVED ||
       row.status === SourceEntryStatus.CANDIDATE)
   );
+}
+
+/**
+ * The EAN rung, asked again for a row that is waiting (plan 0185).
+ *
+ * The ingest binds by EAN on the first sight of a row and when a row learns a
+ * new EAN. Neither happens for a row that was queued with its barcode before
+ * a product held it: a person accepts a sibling row of another chain, the
+ * accept teaches the barcode to the product, and this row still waits. So
+ * every run that sees a waiting row asks the rung again.
+ *
+ * It binds exactly as a first sight binds: `ACTIVE`, `matchedBy: EAN`,
+ * confidence 1. The prices and the availability follow from the outcome, as
+ * they do for any `ACTIVE` row.
+ *
+ * It does nothing, and answers false, for:
+ *
+ * - **A row a person decided.** `ACTIVE` with `MANUAL` and `REJECTED` are
+ *   decisions, and a run reopens none. {@link undecided} says which rows wait.
+ * - **A row with no real barcode.** An in-store code or an invalid code names
+ *   no product (plan 0184).
+ * - **A barcode no product holds.** Catalog holds a barcode on one product at
+ *   most, so "one product holds it" is the only match there is.
+ * - **A barcode another row of the chain prints** (plan 0155). A shared EAN
+ *   binds nothing by itself. The row keeps the status and the proposal it
+ *   has; this never demotes a row and never changes what a proposal names.
+ *
+ * The name rungs are not asked. No automated match binds a printed name to a
+ * product, and a waiting row already carries what they proposed.
+ *
+ * Mutates the row and leaves the save to the caller.
+ */
+function bindWaitingByEan(
+  row: SourceCatalogEntry,
+  items: ItemMatchIndex,
+  eans: ChainEanIndex,
+  seenAt: Date
+): boolean {
+  if (!undecided(row) || eans.shared(row.ean)) {
+    return false;
+  }
+  const itemId = items.holderOf(row.ean);
+  if (itemId === null) {
+    return false;
+  }
+  row.itemId = itemId;
+  row.candidateEntryId = null;
+  row.status = SourceEntryStatus.ACTIVE;
+  row.matchedBy = ItemSourceMatch.EAN;
+  row.confidence = 1;
+  row.decidedAt = seenAt;
+  return true;
 }
 
 function fieldsOf(

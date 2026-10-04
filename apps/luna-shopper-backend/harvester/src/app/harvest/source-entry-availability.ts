@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import {
   SourceEntryAvailability,
@@ -31,6 +32,22 @@ import { openPrices } from './source-entry-write';
  *
  * All three read the table through {@link send}, so what "ready" means is
  * stated once: the row is bound to a product and the shop names a location.
+ *
+ * ## The offer with no price, at two of those moments
+ *
+ * A bound row that holds no price is still an offer: a chain that lists a
+ * product sells it. The offer is a `supermarket_items` row with no price in
+ * the chain's default scope, and it is written when a row is bound
+ * ({@link writeForEntries}) and when a run ends
+ * ({@link writePricelessOffersForRun}), through one method,
+ * {@link offerWithNoPrice}. The end of a run is what reaches the rows that
+ * were bound before the offer existed.
+ *
+ * **The offer creates a row and never changes one.** Catalog derives the flag
+ * of a row that exists from the shops of the scope. An offer that wrote `true`
+ * over it would flip a derived `false` back on every run, and the next shop
+ * claim would flip it again. So the message carries `onlyIfMissing`, and
+ * catalog leaves every row that exists alone.
  *
  * **Bound means `ACTIVE`, and {@link BOUND} is the one place that says so.** A
  * `CANDIDATE` row carries the product a fuzzy match proposed, and its claims
@@ -78,8 +95,19 @@ export interface AvailabilitySent {
   shops: number;
   /** Rows a person typed, which catalog left alone and reported. */
   conflicts: Record<string, unknown>[];
-  /** Products given an offer with no price in their chain's default scope. */
+  /**
+   * Offers with no price that catalog created in a chain's default scope. A
+   * product that already had a row there counts nothing.
+   */
   pricelessOffers: number;
+}
+
+/** What the offers with no price of one run came to. */
+export interface PricelessOffersSent {
+  /** Rows catalog created. A product that already had a row counts nothing. */
+  written: number;
+  /** Products whose call to catalog failed, so nothing is known about them. */
+  failed: number;
 }
 
 /** The claims one run stated, by what became of them. */
@@ -120,8 +148,17 @@ const STORE_CHUNK = 5000;
 /** How many rows go to catalog in one call. */
 const SEND_BATCH = 200;
 
+/**
+ * How many offers with no price go to catalog in one call. Larger than
+ * {@link SEND_BATCH}, because the end of a DEZA run sends about 11,000 of
+ * them and nearly all of them already exist, so a call is one read.
+ */
+const OFFER_BATCH = 500;
+
 @Injectable()
 export class SourceEntryAvailabilityWriter {
+  private readonly logger = new Logger(SourceEntryAvailabilityWriter.name);
+
   constructor(
     @InjectRepository(SourceEntryAvailability)
     private readonly claims: Repository<SourceEntryAvailability>,
@@ -185,9 +222,9 @@ export class SourceEntryAvailabilityWriter {
    * gets no row: there is no scope to say it in.
    *
    * Then the stored claims of every product these rows are now bound to, for
-   * the shops that are mapped. The offer goes first, because catalog derives a
-   * scope's flag from its shops when a shop's claim lands and that answer is
-   * the better one.
+   * the shops that are mapped. The offer goes first, so the claims that follow
+   * it derive the flag of the row it created. The order is not what keeps the
+   * derived flag safe: the offer never changes a row that exists.
    *
    * Takes several rows because the bulk route binds a thousand at once, and a
    * call per row is a thousand round trips for one file.
@@ -262,6 +299,57 @@ export class SourceEntryAvailabilityWriter {
   }
 
   /**
+   * The offer with no price for every bound row that one run saw (plan 0182).
+   *
+   * A row is read when it is bound ({@link BOUND}), this run is the last one
+   * that saw it, and it holds no price whose window is open, in any scope.
+   * That is the rule {@link writeForEntries} applies to the rows it is given,
+   * so a row bound long ago is owed what a row bound today is owed.
+   *
+   * One query for the chain, then {@link offerWithNoPrice}. Answers the offers
+   * catalog created, which is zero on every run after the first.
+   *
+   * **A call that fails is counted and does not fail the run.** The offer is
+   * the last write of a run, after every price and every claim has landed,
+   * and the next run sends it again. So a batch catalog refused is named in
+   * the answer, the batches after it are still sent, and what was written is
+   * kept. The query itself still throws: it is the harvester's own database.
+   */
+  async writePricelessOffersForRun(
+    runId: string,
+    supermarketId: string
+  ): Promise<PricelessOffersSent> {
+    const rows: { itemId: string }[] = await this.claims.query(
+      `
+      SELECT DISTINCT e."itemId"::text AS "itemId"
+        FROM "source_catalog_entries" e
+       WHERE ${BOUND}
+         AND e."supermarketId" = $1::uuid
+         AND e."lastRunId" = $2::uuid
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM "source_entry_prices" p
+                WHERE p."entryId" = e."id"
+                  AND (p."validUntil" IS NULL OR p."validUntil" > $3::timestamptz)
+             )
+       ORDER BY 1
+      `,
+      [supermarketId, runId, new Date()]
+    );
+    const sent = await this.offerWithNoPrice(
+      supermarketId,
+      rows.map((row) => row.itemId)
+    );
+    if (sent.error !== null) {
+      this.logger.warn(
+        `Run ${runId}: ${sent.failed} product(s) could not be offered with ` +
+          `no price: ${describeError(sent.error).message}`
+      );
+    }
+    return { written: sent.written, failed: sent.failed };
+  }
+
+  /**
    * An offer with no price, in the chain's default scope, for every product
    * whose row holds no price at all.
    */
@@ -280,21 +368,65 @@ export class SourceEntryAvailabilityWriter {
     }
 
     let offers = 0;
+    let failure: unknown = null;
     for (const [supermarketId, items] of byChain) {
-      const chain = await this.catalog.getSupermarket(supermarketId);
-      if (!chain.defaultPriceScopeId) {
-        continue;
-      }
-      const entries = [...items].map((itemId) => ({ itemId, available: true }));
-      for (let i = 0; i < entries.length; i += SEND_BATCH) {
-        await this.catalog.setAvailability(
-          chain.defaultPriceScopeId,
-          entries.slice(i, i + SEND_BATCH)
-        );
-      }
-      offers += entries.length;
+      const sent = await this.offerWithNoPrice(supermarketId, [...items]);
+      offers += sent.written;
+      failure ??= sent.error;
+    }
+    // A bind answers with the write that failed, as it does for a price and
+    // for a claim. Every batch was still tried first.
+    if (failure !== null) {
+      throw failure;
     }
     return offers;
+  }
+
+  /**
+   * The one write of an offer with no price, for a bind and for a run.
+   *
+   * A chain with no default scope gets none: there is no scope to say it in.
+   * Sent with `onlyIfMissing`, so catalog creates the row of a product that
+   * has none and changes no row that exists.
+   *
+   * **It never throws, and a failed batch does not stop the ones after it.**
+   * It answers the rows catalog created, the products whose call failed, and
+   * the first error. What to do with a failure is the caller's: a bind
+   * answers with it, and the end of a run counts it.
+   */
+  private async offerWithNoPrice(
+    supermarketId: string,
+    itemIds: readonly string[]
+  ): Promise<PricelessOffersSent & { error: unknown }> {
+    const sent = { written: 0, failed: 0, error: null as unknown };
+    if (itemIds.length === 0) {
+      return sent;
+    }
+    let scopeId: string | null;
+    try {
+      const chain = await this.catalog.getSupermarket(supermarketId);
+      scopeId = chain.defaultPriceScopeId ?? null;
+    } catch (error) {
+      return { written: 0, failed: itemIds.length, error };
+    }
+    if (!scopeId) {
+      return sent;
+    }
+    for (let i = 0; i < itemIds.length; i += OFFER_BATCH) {
+      const batch = itemIds.slice(i, i + OFFER_BATCH);
+      try {
+        const { updated } = await this.catalog.setAvailability(
+          scopeId,
+          batch.map((itemId) => ({ itemId, available: true })),
+          { onlyIfMissing: true }
+        );
+        sent.written += updated;
+      } catch (error) {
+        sent.failed += batch.length;
+        sent.error ??= error;
+      }
+    }
+    return sent;
   }
 
   /**

@@ -329,7 +329,7 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const teach = await this.barcodeToTeach(entry, req.itemId);
+    const teach = await this.barcodeToTeach(entry, { itemId: req.itemId });
     const bound = await this.bind(entry, req.itemId);
     const pricesWritten = await this.writeRowPrices(bound);
     if (teach !== null) {
@@ -358,6 +358,15 @@ export class SourceEntryService {
    * this moment for this one product. A leaflet row of the Mercadona chain is
    * never fetched by its key, which is the hazard plan 0081 section 2 named and
    * the reason `sourceKind` exists.
+   *
+   * **A create teaches and refuses like an accept** (plan 0185). The product is
+   * created with the EAN the request names, or the row's when it names none.
+   * When the request names another EAN, or none at all, the new product does
+   * not hold the barcode its own row prints. The rule of {@link accept} then
+   * applies to that barcode: another product that holds it refuses the create
+   * with `item_ean_held` before anything is written, and otherwise the barcode
+   * is added to the new product after the bind. A row whose EAN another row of
+   * its chain prints does neither, as on an accept.
    */
   async createItem(
     req: CreateItemFromSourceEntryRequest
@@ -379,6 +388,9 @@ export class SourceEntryService {
         );
       }
     }
+    // The row's own barcode, when the product is not created with it (plan
+    // 0185). Asked before anything is created, so a refusal writes nothing.
+    const teach = await this.barcodeToTeach(entry, { createdWith: ean });
 
     // Slugs on the way in, ids on the way to catalog (plan 0166, section 7).
     // Resolved before the English name is fetched, so a typo in an override
@@ -438,6 +450,9 @@ export class SourceEntryService {
 
     const bound = await this.bind(entry, item.id);
     const pricesWritten = await this.writeRowPrices(bound);
+    if (teach !== null) {
+      await this.teachBarcode(item.id, teach);
+    }
     return {
       entry: toSourceCatalogEntryView(bound),
       pricesWritten,
@@ -787,20 +802,27 @@ export class SourceEntryService {
   }
 
   /**
-   * The barcode accepting this row onto `itemId` will give the product, or
-   * null when there is nothing to give (plan 0185).
+   * The barcode this decision will give the row's product, or null when there
+   * is nothing to give (plan 0185). One rule for an accept and for a create.
+   *
+   * The product is `itemId` for an accept. A create has no product yet, and
+   * names the EAN it will be created with instead.
    *
    * Null for a row with no real barcode, for one whose barcode the product
-   * already holds, and for one whose EAN another row of its chain prints.
-   * Refuses with `item_ean_held` when another product holds it. Asked before
-   * the bind, so a refusal writes nothing.
+   * already holds or is created with, and for one whose EAN another row of
+   * its chain prints. Refuses with `item_ean_held` when another product holds
+   * it. Asked before anything is written, so a refusal writes nothing.
    */
   private async barcodeToTeach(
     entry: SourceCatalogEntry,
-    itemId: string
+    product: { itemId: string } | { createdWith: string | null }
   ): Promise<string | null> {
+    const itemId = 'itemId' in product ? product.itemId : null;
     const ean = taughtEan(entry);
     if (ean === null) {
+      return null;
+    }
+    if ('createdWith' in product && product.createdWith === ean) {
       return null;
     }
     // Shared inside its chain: no teach and no refusal, and catalog is not
@@ -821,7 +843,8 @@ export class SourceEntryService {
   }
 
   /**
-   * Give the product the barcode its accepted row printed (plan 0185).
+   * Give the product the barcode its row printed (plan 0185), after an accept
+   * or a create.
    *
    * The check before the bind already found nobody holding it, so a refusal
    * here is another write that took it in between, and it is answered as the

@@ -86,9 +86,11 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * a reason that says it was the availability.
  *
  * **The barcodes follow the availability, under the same rule** (plan 0185).
- * An accepted row whose real EAN no product holds gives it to its product, in
- * one call for the whole file. Whether another product holds a row's barcode
- * is decided in step 1, where it refuses the file before anything is written.
+ * A decided row whose real EAN no product holds gives it to its product, in
+ * one call for the whole file. That is an accepted row, and a row whose
+ * product is created with another EAN or with none. Whether another product
+ * holds a row's barcode is decided in step 1, where it refuses the file before
+ * anything is written.
  * What is left for step 4 is the write itself, and a barcode that could not be
  * written is named in `priceSkips` with a reason that says it was the barcode.
  *
@@ -160,7 +162,7 @@ export class SourceEntryBatchService {
     }
     const creates = operations.filter(isCreate);
     // Every row the file names. A create reads its row for the product's
-    // defaults, and an accept reads it for the barcode it prints (plan 0185).
+    // defaults, and both kinds read it for the barcode it prints (plan 0185).
     const rows = await this.entries.find({
       where: { id: In(operations.map((operation) => operation.entryId)) },
     });
@@ -181,7 +183,7 @@ export class SourceEntryBatchService {
     if (taken.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, taken, null);
     }
-    // The barcode each accepted row prints (plan 0185): refused here when
+    // The barcode each decided row prints (plan 0185): refused here when
     // another product holds it, and remembered for step 4 when nobody does.
     const { outcomes: held, teach } = await this.checkBarcodes(
       operations,
@@ -341,7 +343,7 @@ export class SourceEntryBatchService {
       );
     }
 
-    // The barcodes the accepted rows teach their products (plan 0185). Last,
+    // The barcodes the decided rows teach their products (plan 0185). Last,
     // and under the rule of this step: every bind stands, and a barcode that
     // could not be written is named with a reason that says so.
     if (teach.size > 0) {
@@ -516,22 +518,29 @@ export class SourceEntryBatchService {
   }
 
   /**
-   * The barcode every `accept` teaches its product, and the accepts that are
+   * The barcode every decision teaches its product, and the decisions that are
    * refused because another product holds the row's barcode (plan 0185).
+   *
+   * **A create follows the rule of an accept.** A `createItem` is an accept
+   * onto the product it creates. That product is created with the EAN the
+   * operation names, or the row's when it names none ({@link checkEans}
+   * answers for that one). When it names another EAN, or none at all, the new
+   * product does not hold the barcode its own row prints, and the three cases
+   * below apply to that barcode, with the created product as the target.
    *
    * **Part of validation, so a refusal writes nothing.** The file applies
    * completely or not at all, and the one barcode conflict a person has to
    * settle must stop it here, with the row, the barcode and the product that
    * holds it, like a taken barcode on a create ({@link checkEans}).
    *
-   * Three cases for an accepted row that prints a real barcode:
+   * Three cases for a decided row that prints a real barcode:
    *
-   * - The product it is accepted onto holds the barcode: nothing to do.
+   * - The product it is bound to holds the barcode: nothing to do.
    * - Another product holds it, in catalog or by a create of this same file:
    *   refused with `EAN_HELD`.
    * - Nobody holds it: remembered, and written in step 4.
    *
-   * Two accepts of one file that give one barcode to two products are the
+   * Two decisions of one file that give one barcode to two products are the
    * second case for the later of the two. A row with an in-store code, an
    * invalid code or no code teaches nothing and is never refused here.
    *
@@ -568,32 +577,37 @@ export class SourceEntryBatchService {
       }
     }
 
-    const accepted = operations
-      .filter((operation) => !isCreate(operation))
+    const decided = operations
       .map((operation) => rows.get(operation.entryId))
       .filter(
         (entry): entry is SourceCatalogEntry =>
           entry !== undefined && taughtEan(entry) !== null
       );
-    const shared = await chainEanCounts(this.entries, accepted);
+    const shared = await chainEanCounts(this.entries, decided);
 
     const accepts: { index: number; ean: string; target: string }[] = [];
     for (const [index, operation] of operations.entries()) {
-      if (isCreate(operation)) {
-        continue;
-      }
       const entry = rows.get(operation.entryId);
       const ean =
         entry && !sharesEanInChain(entry, shared) ? taughtEan(entry) : null;
-      if (ean) {
-        accepts.push({
-          index,
-          ean,
-          target: operation.itemId
-            ? `id:${operation.itemId}`
-            : `ref:${operation.itemRef}`,
-        });
+      if (!entry || !ean) {
+        continue;
       }
+      if (isCreate(operation)) {
+        // Created with the row's own barcode: the product holds it from the
+        // start, and `checkEans` already asked whether catalog holds it.
+        if (createdEan(entry, operation.item.ean) !== ean) {
+          accepts.push({ index, ean, target: `ref:${operation.ref}` });
+        }
+        continue;
+      }
+      accepts.push({
+        index,
+        ean,
+        target: operation.itemId
+          ? `id:${operation.itemId}`
+          : `ref:${operation.itemRef}`,
+      });
     }
     if (accepts.length === 0) {
       return { outcomes, teach };
@@ -634,8 +648,8 @@ export class SourceEntryBatchService {
             'names one product.'
         );
       }
-      // Claimed by the same target: the product this row is accepted onto is
-      // created with the barcode, or an earlier accept already teaches it.
+      // Claimed by the same target: the product this row is bound to is
+      // created with the barcode, or an earlier decision already teaches it.
     }
     return { outcomes, teach };
   }

@@ -194,6 +194,95 @@ describe('SupermarketItemService', () => {
       expect(saved).toEqual([]);
       expect(audit.recorded).toEqual([]);
     });
+
+    describe('onlyIfMissing (plan 0182)', () => {
+      const ITEM_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const ITEM_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const SCOPE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+      /**
+       * The statement is proved against Postgres in
+       * `location-availability.integration.spec.ts`. Here the database is a
+       * double that answers the rows it "created".
+       */
+      function buildOffer(created: string[]) {
+        const query = jest.fn(async () => created.map((id) => ({ id })));
+        const find = jest.fn(async () =>
+          created.map((id) =>
+            storedRow({ id, itemId: ITEM_A, priceScopeId: SCOPE, price: null })
+          )
+        );
+        return {
+          ...build({ query, find } as unknown as Partial<
+            Repository<SupermarketItem>
+          >),
+          query,
+        };
+      }
+
+      const offer = (
+        svc: SupermarketItemService,
+        itemIds: string[] = [ITEM_A, ITEM_B]
+      ) =>
+        svc.setAvailability({
+          userId: ADMIN,
+          priceScopeId: SCOPE,
+          entries: itemIds.map((itemId) => ({ itemId, available: true })),
+          onlyIfMissing: true,
+        });
+
+      it('creates in one statement that does nothing on a conflict and reads the product from items', async () => {
+        const { svc, query, saved, audit } = buildOffer(['si-new']);
+
+        expect(await offer(svc)).toEqual({ updated: 1 });
+
+        expect(query).toHaveBeenCalledTimes(1);
+        const [sql, parameters] = query.mock.calls[0] as unknown as [
+          string,
+          unknown[],
+        ];
+        expect(sql).toContain('INSERT INTO "supermarket_items"');
+        // A row a bind or the shop derivation inserted first wins, and the
+        // statement does not fail on it.
+        expect(sql).toContain(
+          'ON CONFLICT ("itemId", "priceScopeId") DO NOTHING'
+        );
+        // A product catalog no longer holds is left out by the join, so it
+        // breaks no foreign key for the others.
+        expect(sql).toContain('JOIN "items" i');
+        expect(parameters).toEqual([SCOPE, [ITEM_A, ITEM_B], [true, true]]);
+        // Nothing goes through the read then save path.
+        expect(saved).toEqual([]);
+        expect(audit.recorded.map((r) => r.action)).toEqual(['CREATE']);
+        expect(audit.recorded[0].entityId).toBe('si-new');
+      });
+
+      it('counts nothing and records nothing when every row exists', async () => {
+        const { svc, saved, audit } = buildOffer([]);
+
+        expect(await offer(svc)).toEqual({ updated: 0 });
+
+        expect(saved).toEqual([]);
+        expect(audit.recorded).toEqual([]);
+      });
+
+      it('drops an id that is not a uuid instead of failing the batch on the cast', async () => {
+        const { svc, query } = buildOffer([]);
+
+        await offer(svc, ['not-a-uuid', ITEM_B]);
+
+        expect(
+          (query.mock.calls[0] as unknown as [string, unknown[]])[1]
+        ).toEqual([SCOPE, [ITEM_B], [true]]);
+      });
+
+      it('sends no statement when no id is usable', async () => {
+        const { svc, query } = buildOffer([]);
+
+        expect(await offer(svc, ['not-a-uuid'])).toEqual({ updated: 0 });
+        expect(query).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('reads', () => {

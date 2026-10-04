@@ -472,15 +472,21 @@ export class CatalogClient {
    * Whether a scope carries each of these products. A separate write from the
    * prices, because a 404 from a detail call says "not stocked here" and
    * states no price (plan 0080, section 2).
+   *
+   * `onlyIfMissing` creates the row of a product the scope has none for and
+   * changes no row that exists (plan 0182). The offer with no price sends it,
+   * so a flag catalog derived from the shops is never written over.
    */
   setAvailability(
     priceScopeId: string,
-    entries: { itemId: string; available: boolean }[]
+    entries: { itemId: string; available: boolean }[],
+    options: { onlyIfMissing?: boolean } = {}
   ): Promise<SetSupermarketItemAvailabilityResult> {
     return this.send(SUPERMARKET_ITEM_PATTERNS.setAvailability, {
       userId: this.actor(),
       priceScopeId,
       entries,
+      ...(options.onlyIfMissing ? { onlyIfMissing: true } : {}),
     });
   }
 

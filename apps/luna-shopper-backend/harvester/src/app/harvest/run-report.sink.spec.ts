@@ -90,6 +90,10 @@ function build(
     sent?: Partial<AvailabilitySent>;
     /** What became of the claims the run stored (plan 0182). */
     counts?: Partial<RunClaimCounts>;
+    /** The offers with no price catalog created at the end of the run. */
+    pricelessOffers?: number;
+    /** The products whose offer could not be sent. */
+    pricelessOffersFailed?: number;
     /** What the ingest counted, which the sink carries into the report. */
     counters?: Partial<SourceIngestCounters>;
     /** The scopes this run copies to, by the scope copied from (plan 0118). */
@@ -214,6 +218,10 @@ function build(
       waitingForBinding: 0,
       waitingForShop: 0,
       ...options.counts,
+    })),
+    writePricelessOffersForRun: jest.fn(async () => ({
+      written: options.pricelessOffers ?? 0,
+      failed: options.pricelessOffersFailed ?? 0,
     })),
   } as unknown as SourceEntryAvailabilityWriter;
 
@@ -796,6 +804,75 @@ describe('RunReportSink', () => {
         claimsWaiting: 6,
         claimsWaitingForBinding: 5,
         claimsWaitingForShop: 1,
+      });
+    });
+
+    describe('the offer with no price, at the end of a run', () => {
+      it('asks for the offers of the rows this run saw, last, and counts what catalog created', async () => {
+        const { sink, availability } = build({
+          resolves: { p1: { itemId: 'item-1', active: true } },
+          shops: [shop('T1', 'loc-1')],
+          pricelessOffers: 7,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        sink.availability({
+          externalId: 'p1',
+          shopCode: 'T1',
+          available: true,
+        });
+        const written = await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).toHaveBeenCalledTimes(
+          1
+        );
+        expect(availability.writePricelessOffersForRun).toHaveBeenCalledWith(
+          RUN,
+          CHAIN
+        );
+        expect(written.pricelessOffersWritten).toBe(7);
+        expect(written.pricelessOffersFailed).toBe(0);
+        // After the shop claims, so a row they derived is one it leaves alone.
+        const order = (mock: unknown) =>
+          (mock as jest.Mock).mock.invocationCallOrder[0];
+        expect(order(availability.writeForRun)).toBeLessThan(
+          order(availability.writePricelessOffersForRun)
+        );
+      });
+
+      it('carries the products that could not be offered into the result, beside what was written', async () => {
+        const { sink } = build({
+          pricelessOffers: 500,
+          pricelessOffersFailed: 500,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        const written = await sink.drain();
+
+        expect(written).toMatchObject({
+          pricelessOffersWritten: 500,
+          pricelessOffersFailed: 500,
+        });
+      });
+
+      it('asks for none in a run that reported no product', async () => {
+        const { sink, availability } = build();
+
+        const written = await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).not.toHaveBeenCalled();
+        expect(written.pricelessOffersWritten).toBe(0);
+      });
+
+      it('asks for none in a run that writes prices only (plan 0119)', async () => {
+        const { sink, availability } = build({
+          writes: HarvestRunWrites.PRICES,
+        });
+
+        sink.product(observation({ externalId: 'p1' }));
+        await sink.drain();
+
+        expect(availability.writePricelessOffersForRun).not.toHaveBeenCalled();
       });
     });
 

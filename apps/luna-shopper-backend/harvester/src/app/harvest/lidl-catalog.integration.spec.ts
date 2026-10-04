@@ -13,6 +13,7 @@ import { DataSource, type Repository } from 'typeorm';
 import {
   HARVESTER_ENTITIES,
   SourceCatalogEntry,
+  SourceEntryAvailability,
   SourceEntryPrice,
   type SupermarketSource,
 } from '../entities';
@@ -21,6 +22,7 @@ import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import { RunReportSink } from './run-report.sink';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceIngest } from './source-ingest';
 
 /**
@@ -118,8 +120,13 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
         shops: {} as never,
         catalog,
         entries,
-        // LIDL states no claim about a shop of its own.
-        availability: {} as never,
+        // LIDL states no claim about a shop of its own. The end of a run
+        // still asks which bound rows hold no price (plan 0182), and that is
+        // a query, so the writer is the real one.
+        availability: new SourceEntryAvailabilityWriter(
+          entries.manager.getRepository(SourceEntryAvailability),
+          catalog
+        ),
       }
     );
   }
