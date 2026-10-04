@@ -159,6 +159,12 @@ export const ERROR_CATALOG: Record<
     en: 'That printed name is already this brand’s own key. A homonym is a printed name that belongs to another brand too.',
     es: 'Ese nombre impreso ya es la clave de esta marca. Un homónimo es un nombre impreso que también pertenece a otra marca.',
   },
+  // The delete's one refusal. It says what to do first, because the counts in
+  // `details` say how much of it there is.
+  [ERROR_CODES.BRAND_IN_USE]: {
+    en: 'This brand cannot be deleted while products hold it or spellings are linked to it. Move them first.',
+    es: 'Esta marca no se puede borrar mientras haya productos que la tengan o grafías enlazadas a ella. Muévelos primero.',
+  },
   // The three refusals of the places queue (plan 0152).
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: {
     en: 'That place is already imported into the catalog.',

@@ -1,4 +1,5 @@
 import {
+  measuresContent,
   sourceSizeOf,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
@@ -36,6 +37,10 @@ export interface DiaSize {
   /**
    * How many units the name prints before an `x`, or null. The raw count: the
    * caller applies the bounds every source shares (plan 0162).
+   *
+   * Null when the unit is a length (plan 0183). `2 x 30 m` and `60 x 40 cm`
+   * are the dimensions of one object, and a count needs a unit that measures
+   * what is inside: a weight, a volume or a count.
    */
   packCount: number | null;
   /** `aprox.`: the pack has no fixed weight and the price is per kilogram. */
@@ -90,7 +95,7 @@ export function splitSize(printed: string): DiaSize {
     name,
     sizeFormat: match[1],
     ...sourceSizeOf(round(count ? count * amount : amount), match[4]),
-    packCount: count,
+    packCount: measuresContent(match[4]) ? count : null,
     approximate: match[5] !== undefined,
   };
 }

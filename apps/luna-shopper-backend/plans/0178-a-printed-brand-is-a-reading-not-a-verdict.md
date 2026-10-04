@@ -98,5 +98,11 @@ Report each reader and the gate change only with spec output.
 
 ## The data a person settles after this lands
 
-- Remove the "D.O." brand, then let the 92 Deza wines be decided again.
+- Remove the "D.O." brand with `DELETE /v1/admin/catalog/brands/:id`, then let the 92 Deza
+  wines be decided again. The owner decided on 2026-10-04 to add this route.
+  - If nothing points at the brand, the route deletes it. Its homonyms go with it.
+  - If a product holds the brand, or a spelling is linked to it, the route writes nothing.
+    It answers 409 `brand_in_use`. The counts `itemCount` and `linkCount` are in `details`.
+  - The route never changes a product's brand. So first give each product that holds
+    "D.O." its real brand. Then unlink or delete each spelling linked to it.
 - Register Poseidon Food's homonym for "poseidon", then decide El Jamón's salmon again.

@@ -16,9 +16,11 @@ import { BaseEntity } from './base.entity';
  * run registers a brand. An unregistered brand is still accepted on an item,
  * because refusing it is the curator's decision and not the catalog's.
  *
- * **Only a spelling of another brand can be deleted** (plan 0124). Every other
- * row stays, by section 9, and the foreign key from `items.brandId` sets null
- * rather than cascading whichever row goes.
+ * **A spelling of another brand can be deleted** (plan 0124), **and so can a
+ * brand that nothing points at** (the follow up of plan 0178). A row that a
+ * product holds stays, by section 9. The foreign key from `items.brandId` sets
+ * null rather than cascading whichever row goes, so the service refuses that
+ * delete rather than let the key unbrand a product.
  */
 @Entity({ name: 'brands' })
 export class Brand extends BaseEntity {

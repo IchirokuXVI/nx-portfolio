@@ -578,6 +578,7 @@ export type ProblemDetails = {
     | 'brand_link_keeps_key'
     | 'brand_not_linked'
     | 'brand_homonym_is_own_key'
+    | 'brand_in_use'
     | 'place_already_imported'
     | 'place_matches_location'
     | 'scope_not_found'

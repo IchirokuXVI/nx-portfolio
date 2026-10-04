@@ -5,18 +5,21 @@ import {
   SOURCE_ENTRY_PATTERNS,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BRAND_IN_USE_ITEMS_DETAIL,
+  BRAND_IN_USE_LINKS_DETAIL,
   BRAND_KEY_HOLDER_DETAIL,
   BRAND_LINK_BLOCKER_DETAIL,
   BrandHomonymIsOwnKeyException,
+  BrandInUseException,
   BrandKeyTakenException,
   BrandLabelEmptyException,
   BrandLinkKeepsKeyException,
   BrandLinkOwnsNoChainException,
   BrandLinkTooDeepException,
   BrandLinkToSelfException,
-  BrandNotLinkedException,
   createValidationPipe,
   GlobalExceptionFilter,
+  NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
@@ -51,7 +54,7 @@ interface SentMessage {
 /** What the stub broker answers for one subject, by subject. */
 type Answers = Record<string, unknown | (() => unknown)>;
 
-async function boot(answers: Answers = {}) {
+async function boot(answers: Answers = {}, { admin = true } = {}) {
   const sent: SentMessage[] = [];
 
   const nest = (
@@ -80,6 +83,11 @@ async function boot(answers: Answers = {}) {
         canActivate: (context: {
           switchToHttp(): { getRequest(): Record<string, unknown> };
         }) => {
+          // A guard that answers false is how Nest refuses a request, so the
+          // route under test is reached only when an admin was let through.
+          if (!admin) {
+            return false;
+          }
           context.switchToHttp().getRequest()['user'] = {
             adminId: 'admin-1',
             token: 'operator-token',
@@ -557,10 +565,41 @@ describe('the brand routes, over HTTP', () => {
     }
   });
 
-  it('answers 409 brand_not_linked for a brand that is nobody’s spelling', async () => {
+  it('deletes a brand that nothing points at, through the same route', async () => {
+    const { nest, sent, origin } = await boot({
+      [BRAND_PATTERNS.delete]: { id: BRAND.id, movedItems: 0 },
+    });
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/brands/${BRAND.id}`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: BRAND.id, movedItems: 0 });
+      expect(sent).toEqual([
+        {
+          subject: BRAND_PATTERNS.delete,
+          payload: {
+            userId: 'admin-1',
+            adminToken: 'operator-token',
+            brandId: BRAND.id,
+          },
+        },
+      ]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('answers 409 brand_in_use with the counts for a brand something points at', async () => {
     const { nest, origin } = await boot({
       [BRAND_PATTERNS.delete]: () => {
-        throw new BrandNotLinkedException('Only a spelling can be deleted.');
+        throw new BrandInUseException('Products hold this brand.', {
+          details: {
+            [BRAND_IN_USE_ITEMS_DETAIL]: 92,
+            [BRAND_IN_USE_LINKS_DETAIL]: 1,
+          },
+        });
       },
     });
     try {
@@ -569,10 +608,69 @@ describe('the brand routes, over HTTP', () => {
       });
 
       expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({ code: 'brand_not_linked' });
+      // The counts are what the back office says next, so they are published.
+      expect(await res.json()).toMatchObject({
+        code: 'brand_in_use',
+        details: { itemCount: 92, linkCount: 1 },
+      });
     } finally {
       await nest.close();
     }
+  });
+
+  it('answers 404 for a brand that is not there', async () => {
+    const { nest, origin } = await boot({
+      [BRAND_PATTERNS.delete]: () => {
+        throw new NotFoundException('Brand not found');
+      },
+    });
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/brands/${BRAND.id}`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ code: 'not_found' });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('answers 400 for an id that is not a uuid, and sends nothing', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/brands/d.o.`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(400);
+      expect(sent).toEqual([]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses the delete without an admin, and sends nothing', async () => {
+    const { nest, sent, origin } = await boot({}, { admin: false });
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/brands/${BRAND.id}`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(403);
+      expect(sent).toEqual([]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('holds every brand route behind the admin guard', () => {
+    const guards = (Reflect.getMetadata(
+      '__guards__',
+      AdminCatalogBrandsController
+    ) ?? []) as unknown[];
+
+    expect(guards).toContain(AdminJwtGuard);
   });
 
   describe('homonyms (plan 0178)', () => {

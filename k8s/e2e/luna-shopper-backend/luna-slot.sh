@@ -1749,6 +1749,7 @@ serve_services() {
     state="$(probe_ports "$port" | cut -f2)"
     if [[ "$state" != "closed" ]]; then
       echo "port $port ($svc, slot ${LUNA_SLOT:-?}) is already $state; run --down or --restart" >&2
+      describe_port_holder "$port" >&2
       return 1
     fi
 
@@ -1921,27 +1922,169 @@ up() {
 # is a wrapper, the process that binds is a grandchild, and on Windows the pid bash
 # hands back is an MSYS pid taskkill does not recognise. The port is what has to be
 # freed, so the port is what to resolve. Same reasoning as tools/dev/ng-slot.sh.
+#
+# The listener is the bottom of a tree, and the tree is what has to go. Above it
+# sit the executor that watches the sources, `nx run`, and the `npx` wrapper, and
+# killing the listener alone leaves all of them: the watcher starts the service
+# again on the next rebuild in that worktree, on a port no claim and no record
+# names any more. So the listener is traced up to the wrapper that started it,
+# and the kill starts there.
 kill_port() {
-  local port="$1" pid killed=0
+  local port="$1" pid root killed=0
+  while read -r pid; do
+    [[ -n "$pid" && "$pid" != "0" ]] || continue
+    root="$(port_lineage "$pid" | tail -n 1 | cut -f1)"
+    kill_tree "${root:-$pid}" && killed=1
+  done < <(port_listeners "$port")
+  return $(( killed ? 0 : 1 ))
+}
+
+# The pids listening on a port, in the numbering the operating system uses: a
+# Windows pid under Git Bash, which is not the one bash hands back from `$!`.
+port_listeners() {
+  local port="$1"
   case "$(uname -s)" in
     MINGW* | MSYS* | CYGWIN*)
-      while read -r pid; do
-        [[ -n "$pid" && "$pid" != "0" ]] || continue
-        taskkill //F //T //PID "$pid" >/dev/null 2>&1 && killed=1
-      done < <(netstat -ano | tr -d '\r' | awk -v p=":$port\$" '$1=="TCP" && $2 ~ p && $4=="LISTENING" { print $5 }' | sort -u)
+      netstat -ano | tr -d '\r' | awk -v p=":$port\$" '$1=="TCP" && $2 ~ p && $4=="LISTENING" { print $5 }' | sort -u
       ;;
     *)
       if command -v lsof >/dev/null 2>&1; then
-        while read -r pid; do
-          [[ -n "$pid" ]] || continue
-          kill -TERM "$pid" 2>/dev/null && killed=1
-        done < <(lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | sort -u)
+        lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | sort -u
       elif command -v fuser >/dev/null 2>&1; then
-        fuser -k "$port/tcp" >/dev/null 2>&1 && killed=1
+        fuser "$port/tcp" 2>/dev/null | tr -s ' ' '\n' | grep -E '^[0-9]+$' | sort -u
       fi
       ;;
   esac
+}
+
+# A listener and the wrapper that started it, as "<pid>\t<command line>" lines:
+# the listener first, and then, when one is found, the topmost ancestor whose
+# command line names a `luna-shopper-backend-<service>:serve` task.
+#
+# The climb starts at a pid that holds one of THIS slot's ports and takes only
+# ancestors, so it cannot reach another slot's tree: two slots served from one
+# checkout have identical command lines, and the port is the only thing that
+# tells them apart. It stops at the first ancestor past the wrapper that is not
+# part of it, so the shell or the tool that launched the slot is never named.
+# On Windows a parent pid can be a number some later process was given, so a
+# "parent" younger than its child is not one.
+port_lineage() {
+  local pid="$1"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+      powershell.exe -NoProfile -NonInteractive -Command '
+        $all = @{}
+        Get-CimInstance Win32_Process | ForEach-Object { $all[[int]$_.ProcessId] = $_ }
+        $p = $all['"$pid"']
+        if (-not $p) { exit }
+        "{0}`t{1}" -f $p.ProcessId, $p.CommandLine
+        $top = $null
+        for ($hops = 0; $hops -lt 12; $hops++) {
+          $q = $all[[int]$p.ParentProcessId]
+          if (-not $q -or $q.CreationDate -gt $p.CreationDate) { break }
+          if ($q.CommandLine -match "luna-shopper-backend-[a-z]+:serve") { $top = $q }
+          elseif ($top -or $hops -ge 3) { break }
+          $p = $q
+        }
+        if ($top) { "{0}`t{1}" -f $top.ProcessId, $top.CommandLine }
+      ' 2>/dev/null | tr -d '\r' || true
+      ;;
+    *)
+      local top='' parent args hops
+      printf '%s\t%s\n' "$pid" "$(ps -o args= -p "$pid" 2>/dev/null || true)"
+      for (( hops = 0; hops < 12; hops++ )); do
+        parent="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
+        [[ "$parent" =~ ^[0-9]+$ ]] && (( parent > 1 )) || break
+        args="$(ps -o args= -p "$parent" 2>/dev/null || true)"
+        if [[ "$args" =~ luna-shopper-backend-[a-z]+:serve ]]; then
+          top="$parent"$'\t'"$args"
+        elif [[ -n "$top" ]] || (( hops >= 3 )); then
+          break
+        fi
+        pid="$parent"
+      done
+      [[ -z "$top" ]] || printf '%s\n' "$top"
+      ;;
+  esac
+}
+
+# Stop a process and everything below it. The pid is the operating system's own.
+kill_tree() {
+  local pid="$1" child killed=0
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  case "$(uname -s)" in
+    MINGW* | MSYS* | CYGWIN*)
+      # Not `taskkill //T`: it follows the parent pid alone, and Windows hands a
+      # dead parent's number to a new process. An unrelated program whose parent
+      # died long ago then reads as a child of whichever wrapper was given that
+      # number, and goes down with the tree. Seen with a game launcher sitting
+      # under a slot's `cmd.exe`. A real child is never older than its parent,
+      # so the walk takes only those. The whole set is collected before anything
+      # is stopped, and stopped from the top, so the watcher dies before the
+      # service it would start again.
+      local stopped
+      stopped="$(powershell.exe -NoProfile -NonInteractive -Command '
+        $all = @(Get-CimInstance Win32_Process)
+        $root = $all | Where-Object { $_.ProcessId -eq '"$pid"' } | Select-Object -First 1
+        if (-not $root) { exit }
+        $tree = New-Object System.Collections.ArrayList
+        $queue = New-Object System.Collections.Queue
+        $queue.Enqueue($root)
+        while ($queue.Count) {
+          $p = $queue.Dequeue()
+          [void]$tree.Add($p)
+          $all | Where-Object { $_.ParentProcessId -eq $p.ProcessId -and $_.ProcessId -ne $p.ProcessId -and $_.CreationDate -ge $p.CreationDate } |
+            ForEach-Object { $queue.Enqueue($_) }
+        }
+        $n = 0
+        foreach ($p in $tree) {
+          try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $n++ } catch {}
+        }
+        $n
+      ' 2>/dev/null | tr -d '\r' || true)"
+      if [[ "$stopped" =~ ^[0-9]+$ ]]; then
+        (( stopped > 0 )) && killed=1
+      else
+        # No answer from PowerShell: stop the one process, never a tree. The
+        # doubled slash is MSYS path escaping.
+        taskkill //F //PID "$pid" >/dev/null 2>&1 && killed=1
+      fi
+      ;;
+    *)
+      # Children are read before the parent dies, because an orphan is adopted
+      # and can no longer be found from here.
+      local -a children=()
+      mapfile -t children < <(pgrep -P "$pid" 2>/dev/null || true)
+      kill -TERM "$pid" 2>/dev/null && killed=1
+      for child in "${children[@]}"; do
+        kill_tree "$child" && killed=1
+      done
+      ;;
+  esac
   return $(( killed ? 0 : 1 ))
+}
+
+# Say who holds a port, for the `--up` that found it open. A port that is open
+# with no claim, no lock and no record is nearly always a watcher an earlier stop
+# left behind, and its command line names the worktree it is serving from.
+describe_port_holder() {
+  local port="$1" pid line first
+  while read -r pid; do
+    [[ -n "$pid" && "$pid" != "0" ]] || continue
+    first=1
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      if (( first )); then
+        echo "  held by pid ${line%%$'\t'*}: ${line#*$'\t'}"
+        first=0
+      else
+        echo "  started by pid ${line%%$'\t'*}: ${line#*$'\t'}"
+      fi
+    done < <(port_lineage "$pid")
+    (( first )) && echo "  held by pid $pid (its command line could not be read)"
+  done < <(port_listeners "$port")
+  return 0
 }
 
 # Bounce the Nest services and leave the compose stack exactly where it is.
@@ -2016,19 +2159,35 @@ restart_services() {
 # unrecognised pid costs nothing and removes the chance of killing a stranger.
 kill_recorded_pid() {
   local pid="$1" cmdline=''
-  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
 
   # Where /proc exists the command line settles it outright.
   if [[ -r "/proc/$pid/cmdline" ]]; then
     cmdline="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
     case "$cmdline" in
       *node*|*npx*|*npm*|*nx*) ;;
-      *) return 0 ;;
+      *) return 1 ;;
     esac
+  fi
+
+  # The recorded pid is the root of everything `npx nx run` started, and the
+  # whole tree goes with it. Killing the root alone orphans npx, nx and the
+  # executor that watches the sources, and that watcher starts the service again
+  # on the next rebuild. Under Git Bash the recorded pid is an MSYS pid, and
+  # winpid is the same process in the numbering Windows uses. The test is on
+  # this shell and not on the recorded pid, because a recorded process that is
+  # already gone has no winpid, and its MSYS number must never be read as a
+  # Windows pid: that number belongs to somebody else there.
+  local stopped=0
+  if [[ -r "/proc/$$/winpid" ]]; then
+    kill_tree "$(cat "/proc/$pid/winpid" 2>/dev/null || true)" && stopped=1
+  else
+    kill_tree "$pid" && stopped=1
   fi
 
   kill -TERM "$pid" 2>/dev/null || true
   kill -KILL "$pid" 2>/dev/null || true
+  return $(( stopped ? 0 : 1 ))
 }
 
 # Both arguments name arrays in the caller: the services to stop, and their ports.
@@ -2043,7 +2202,12 @@ stop_services() {
     pidfile="$RUN_DIR/$svc.pid"
     [[ -e "$pidfile" ]] || continue
     pid="$(cat "$pidfile" 2>/dev/null || true)"
-    [[ -n "$pid" ]] && kill_recorded_pid "$pid"
+    # A tree stopped here leaves the sweep below nothing to free, and it still
+    # counts: "none of them were running" would be false.
+    if [[ -n "$pid" ]] && kill_recorded_pid "$pid"; then
+      echo "  stopped $svc"
+      freed=$(( freed + 1 ))
+    fi
     rm -f "$pidfile"
   done
 

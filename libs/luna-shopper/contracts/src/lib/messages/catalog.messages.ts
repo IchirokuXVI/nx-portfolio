@@ -447,10 +447,11 @@ export const PRODUCT_GROUP_PATTERNS = {
  * run registers a brand: an unregistered brand is still accepted on an item,
  * and deciding it is really a brand is curation.
  *
- * **The only brand that can be deleted is a spelling of another** (plan 0124).
- * Every other brand still cannot be removed, by section 9: its products have
+ * **A brand can be deleted when it is a spelling of another** (plan 0124), **or
+ * when nothing points at it** (the follow up of plan 0178). A brand that a
+ * product holds still cannot be removed, by section 9: its products have
  * nowhere to go, and the foreign key from `items.brandId` sets null rather than
- * cascading.
+ * cascading, so the delete refuses rather than let it.
  */
 export const BRAND_PATTERNS = {
   create: 'brand.create',
@@ -468,14 +469,18 @@ export const BRAND_PATTERNS = {
    */
   registerSuggestion: 'brand.registerSuggestion',
   /**
-   * Remove a spelling, and only a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * **The one brand that may be deleted is one linked to another.** Deleting it
-   * puts its products back exactly where they were before it was registered,
-   * unbranded and still carrying its printed text, so its key returns to the
-   * suggestions list by itself and registering it again picks them up. Every
-   * other brand still cannot be removed, by section 9 of plan 0115: there is
-   * nowhere for its products to go.
+   * **A brand linked to another** is a spelling. Deleting it puts its products
+   * back exactly where they were before it was registered, unbranded and still
+   * carrying its printed text, so its key returns to the suggestions list by
+   * itself and registering it again picks them up.
+   *
+   * **Any other brand** is deleted only when nothing points at it, and its
+   * homonyms go with it. While a product holds it or a spelling is linked to
+   * it, the answer is `brand_in_use` with `itemCount` and `linkCount` in
+   * `details`, and nothing is written: section 9 of plan 0115 still holds for
+   * a brand whose products would have nowhere to go.
    */
   delete: 'brand.delete',
   /**
@@ -2705,19 +2710,24 @@ export interface BrandIdRequest {
   brandId: string;
 }
 
-/** Remove a spelling. A brand that is nobody's spelling is refused. */
+/**
+ * Delete a brand. A brand that is nobody's spelling is refused while a product
+ * holds it or a spelling is linked to it.
+ */
 export interface DeleteBrandRequest extends AdminCredential {
   brandId: string;
 }
 
 /**
- * A spelling removed, and how many products went back to unbranded
+ * A brand deleted, and how many products went back to unbranded
  * (plan 0124).
  *
  * `id` is the convention every other admin catalog delete answers with.
- * `movedItems` is beside it because the number is the visible effect of the
- * delete: those products keep their printed text and lose their brand, which is
- * the state they were in before the spelling was registered.
+ * `movedItems` is beside it because the number is the visible effect of
+ * deleting a spelling: those products keep their printed text and lose their
+ * brand, which is the state they were in before the spelling was registered.
+ * It is always zero for a brand that was nobody's spelling, because that
+ * delete is refused while a product holds the brand.
  */
 export interface DeleteBrandResult {
   id: string;

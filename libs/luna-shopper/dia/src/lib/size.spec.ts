@@ -214,6 +214,39 @@ describe('splitSize', () => {
     });
   });
 
+  describe('a pack count needs a unit of content (plan 0183)', () => {
+    // No captured fixture prints a dimension, so these are written from the
+    // shapes the format allows.
+    it.each([
+      ['Papel de horno Dia 2 x 30 m', 'Papel de horno Dia', '2 x 30 m'],
+      ['Mantel de papel Dia 60 x 40 cm', 'Mantel de papel Dia', '60 x 40 cm'],
+      ['Papel film Dia pack 2 x 30 m', 'Papel film Dia', 'pack 2 x 30 m'],
+    ])('%s is one object and no pack', (printed, name, sizeFormat) => {
+      expect(splitSize(printed)).toEqual({
+        name,
+        // The printed text is the key, and it is exactly what the chain wrote.
+        sizeFormat,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+        approximate: false,
+      });
+    });
+
+    it.each([
+      ['Cerveza especial 6 x 33 cl', 6, 1980, 'MILLILITER'],
+      ['Coca-Cola 2 x 2 L', 2, 4, 'LITER'],
+      ['Yogur natural Dia 4 x 125 g', 4, 500, 'GRAM'],
+      ['Pañuelos Dia 2 x 10 ud', 2, 20, 'UNIT'],
+    ])('%s still reads a pack', (printed, packCount, unitSize, sizeUnit) => {
+      expect(splitSize(printed)).toMatchObject({
+        packCount,
+        unitSize,
+        sizeUnit,
+      });
+    });
+  });
+
   it('still finds every name of the table in the fixtures', () => {
     // A name that left the fixtures is still a real name, but a table that
     // shares nothing with them is no longer evidence about the source.
