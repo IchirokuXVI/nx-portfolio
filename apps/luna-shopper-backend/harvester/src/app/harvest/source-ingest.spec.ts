@@ -1943,6 +1943,136 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
     expect(counters.pricesConflicted).toBe(1);
   });
 
+  describe('a known row seen from the listing alone', () => {
+    /** The row plan 0181 found in the queue: a fixed pack of 1.54 kg. */
+    const stale = {
+      externalId: '50946',
+      name: 'Queso semicurado mezcla Hacendado',
+      brand: 'Hacendado',
+      ean: '2105600509460',
+      unitSize: 1.54,
+      sizeUnit: UnitOfMeasure.KILOGRAM as const,
+      sizeFormat: 'kg',
+      soldByWeight: false,
+    };
+    const seen = (
+      externalId: string,
+      perKilo: number,
+      soldByWeight: boolean | null = true
+    ): PartialSourceObservation => ({
+      externalId,
+      detailFetched: false,
+      observedAt: new Date('2026-10-04T06:00:00.000Z'),
+      ...(soldByWeight === null ? {} : { soldByWeight }),
+      prices: [
+        {
+          scopeKey: null,
+          ...PRICE,
+          price: perKilo,
+          unitPrice: perKilo,
+          unitPriceLabel: 'kg',
+        },
+      ],
+    });
+
+    it('ends sold by weight with no size, and keeps its key and its identity', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 9.41)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        // Nothing else moved: the key, the name, the brand and the EAN are
+        // what the last whole read wrote.
+        sizeFormat: 'kg',
+        externalId: '50946',
+        name: 'Queso semicurado mezcla Hacendado',
+        brand: 'Hacendado',
+        ean: '2105600509460',
+      });
+      // The row now says something it did not say before, so it is counted.
+      expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+    });
+
+    it('writes one price for two known pieces bound to one product, the lower per kilo figure', async () => {
+      const { ingest, context, catalog } = build({
+        rows: [
+          { id: 'entry-a', ...stale, ...accepted },
+          {
+            id: 'entry-b',
+            ...stale,
+            externalId: '50943',
+            ean: '2105600509439',
+            unitSize: 0.42,
+            ...accepted,
+          },
+        ],
+        batch: { inserted: 1, confirmed: 0 },
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50943', 9.7), seen('50946', 9.41)],
+      });
+
+      // Both rows said `soldByWeight: false` when the run started. The listing
+      // corrected them before the prices were settled, so this is not the
+      // conflict plan 0155 refuses.
+      expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+      expect(catalog.addPrices).toHaveBeenCalledWith(
+        SCOPE,
+        [expect.objectContaining({ itemId: 'item-1', price: 9.41 })],
+        RUN,
+        PriceSourceKind.OFFICIAL_API,
+        null
+      );
+      expect(counters.pricesConflicted).toBe(0);
+    });
+
+    it('clears the flag when the listing says it is a pack again, and invents no size', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          { ...stale, soldByWeight: true, unitSize: null, sizeUnit: null },
+        ],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, false)],
+      });
+
+      // A partial read never writes a size, so the row holds none until the
+      // next whole read states one.
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('leaves the row alone when the listing does not say', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, null)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 1.54,
+        sizeUnit: UnitOfMeasure.KILOGRAM,
+      });
+      expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+    });
+  });
+
   it('writes a row sold by weight with no size, and leaves its key alone', async () => {
     const { ingest, context, saved } = build({});
 

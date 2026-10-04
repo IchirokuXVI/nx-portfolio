@@ -32,7 +32,8 @@ export interface NamedSize {
  * with no size, whatever the row prints: a leaflet tile sold by the kilo can
  * print `pieza` or nothing at all, and the guess from that text is `UNIT`.
  * An operation that names a size or a unit is answered as below, because that
- * is a person saying the pack is fixed after all.
+ * is a person saying the pack is fixed after all. A size named as null is not
+ * a size: it says the same as naming none.
  *
  * **A size the operation names is in the row's unit unless it names a unit
  * too.** A request that names a size and no unit is converted with the row's
@@ -59,7 +60,7 @@ export function createdSize(
 ): BaseUnitSize {
   if (
     entry.soldByWeight === true &&
-    named.unitSize === undefined &&
+    (named.unitSize === undefined || named.unitSize === null) &&
     named.defaultUnit === undefined
   ) {
     return { unitSize: null, unit: UnitOfMeasure.KILOGRAM };

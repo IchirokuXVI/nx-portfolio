@@ -555,6 +555,49 @@ describe('SourceEntryBatchService', () => {
           ]);
         });
 
+        it('reads a size named as null as no size named', async () => {
+          expect(
+            await created(
+              { name: { es: 'Solomillo de cerdo' }, ...{ unitSize: null } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it.each([
+          UnitOfMeasure.KILOGRAM,
+          UnitOfMeasure.GRAM,
+          UnitOfMeasure.UNIT,
+        ])(
+          'takes a unit named alone as %p, with no size',
+          async (defaultUnit) => {
+            // The row holds no size to carry over, so only the unit is named.
+            expect(
+              await created(
+                { name: { es: 'Solomillo de cerdo' }, ...{ defaultUnit } },
+                {
+                  soldByWeight: true,
+                  unitSize: null,
+                  sizeUnit: null,
+                  sizeFormat: 'pieza',
+                }
+              )
+            ).toHaveBeenCalledWith([
+              expect.objectContaining({ unitSize: null, defaultUnit }),
+            ]);
+          }
+        );
+
         it('lets an operation that names a size overrule it', async () => {
           expect(
             await created(

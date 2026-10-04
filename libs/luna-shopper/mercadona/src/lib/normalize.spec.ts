@@ -1,6 +1,7 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
+import cheeseListing from './__fixtures__/category-listing-cheese.json';
 import approximateWeight from './__fixtures__/product-approximate-weight.json';
 import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
@@ -482,7 +483,92 @@ describe('a product sold by weight (plan 0181)', () => {
     });
   });
 
-  it('reads the same from a category listing, which is where a price comes from', () => {
+  describe('the listing, which is where a price comes from', () => {
+    /** The raw listing row of one product, wherever the category nests it. */
+    const rawRow = (id: string) =>
+      cheeseListing.categories
+        .flatMap((category) => category.products)
+        .find((product) => product.id === id);
+    const listed = (id: string) =>
+      normalizeCategoryProducts(cheeseListing).find(
+        (product) => product.externalId === id
+      );
+
+    it('is what the captured listing says it is', () => {
+      // `GET /categories/54/` as served on 2026-10-04. The listing row carries
+      // the price block whole, `approx_size` included, and no `ean`.
+      const weighed = rawRow('50946');
+      expect(weighed).not.toHaveProperty('ean');
+      expect(weighed?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 1.54,
+        size_format: 'kg',
+        unit_price: '14.49',
+        bulk_price: '9.41',
+      });
+      // A second piece of the same cheese, and a fixed pack beside them.
+      expect(rawRow('50943')?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 0.42,
+        unit_price: '4.07',
+        bulk_price: '9.70',
+      });
+      expect(rawRow('23561')?.price_instructions).toMatchObject({
+        approx_size: false,
+        unit_size: 0.35,
+        size_format: 'kg',
+        unit_price: '3.00',
+        bulk_price: '8.57',
+      });
+    });
+
+    it('prices each piece sold by weight by the kilo, with no size', () => {
+      expect(listed('50946')).toMatchObject({
+        soldByWeight: true,
+        price: 9.41,
+        unitPrice: 9.41,
+        unitSize: null,
+        // The chain's own token, untouched: it is what the row already holds.
+        sizeFormat: 'kg',
+      });
+      expect(listed('50943')).toMatchObject({
+        soldByWeight: true,
+        price: 9.7,
+        unitPrice: 9.7,
+        unitSize: null,
+      });
+    });
+
+    it('keeps the pack price and the size of a fixed pack', () => {
+      expect(listed('23561')).toMatchObject({
+        soldByWeight: false,
+        price: 3,
+        unitPrice: 8.57,
+        unitSize: 0.35,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('answers the price of a kilo for every row the listing calls approximate', () => {
+      const raw = cheeseListing.categories.flatMap(
+        (category) => category.products
+      );
+      const approximate = raw.filter(
+        (product) => product.price_instructions.approx_size
+      );
+      expect(approximate.length).toBeGreaterThan(0);
+      expect(approximate.length).toBeLessThan(raw.length);
+      for (const product of approximate) {
+        expect(listed(product.id)).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          price: Number(product.price_instructions.bulk_price),
+        });
+      }
+    });
+  });
+
+  it('reads the same from a detail payload laid into a listing', () => {
     const [weighed, fixed] = normalizeCategoryProducts({
       id: 54,
       name: 'Queso curado, semicurado y tierno',

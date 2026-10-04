@@ -202,12 +202,17 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     // warehouse that listed it, and no identity field, so the stored name, brand
     // and EAN stay what the last full read wrote (plan 0119, section 6). It
     // costs no request, so it is reported before the pool rather than in it.
+    //
+    // It does say whether the product is sold by weight (plan 0181), because
+    // that is what makes the prices beside it the price of a kilo. The listing
+    // carries `approx_size`, so no request is needed for it.
     for (const product of skipped) {
       observed += 1;
       report.product({
         externalId: product.externalId,
         detailFetched: false,
         observedAt,
+        soldByWeight: product.listing.soldByWeight,
         prices: pricesOf(product.externalId, CURRENCY, scopes, assortments),
       });
     }

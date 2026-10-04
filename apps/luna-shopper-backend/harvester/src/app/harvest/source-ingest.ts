@@ -138,6 +138,16 @@ export interface PartialSourceObservation {
   externalId: string;
   detailFetched: false;
   observedAt: Date;
+  /**
+   * Whether the listing says the product is sold by weight (plan 0181).
+   *
+   * It is not an identity field. It says what the prices beside it are: when
+   * it is true, each one is the price of a kilo. A listing that reprices a
+   * known row by the kilo and leaves the row saying that it is a fixed pack of
+   * 1.54 kg leaves a row that contradicts its own price, so the two travel
+   * together. Absent means the listing does not say, and the row is left alone.
+   */
+  soldByWeight?: boolean;
   /** Every price the listing stated for this product, as a full one carries. */
   prices: readonly SourceObservationPrice[];
 }
@@ -380,7 +390,9 @@ export class SourceIngest {
           await context.report({ processed: 1 });
           continue;
         }
-        outcome = await this.see(held, context.runId, seenAt);
+        // Asked before the write, because the write is what makes it false.
+        changed = soldByWeightChanged(held, observation);
+        outcome = await this.see(held, observation, context.runId, seenAt);
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
         // Asked before the touch writes, because the touch is what makes it false.
@@ -712,12 +724,34 @@ export class SourceIngest {
    * {@link applySourceGroup} is not called, so the stored name, brand and EAN
    * stay what the last full read wrote, and no status is re-derived: only a new
    * EAN may do that, and this read fetched none.
+   *
+   * **The one thing it does write is whether the row is sold by weight** (plan
+   * 0181), when the listing says. The prices this observation carries are the
+   * price of a kilo exactly when that is true, so a row that kept its old
+   * answer would hold a size of 1.54 kg beside a price of 9.41.
+   *
+   * - Sold by weight: the flag is set, and the size and its unit are cleared,
+   *   as the whole read path does for every adapter.
+   * - No longer sold by weight: the flag is cleared, and **no size is
+   *   invented**. The listing's number is not written, because a partial read
+   *   never writes a size. The row holds a null size and a null unit until the
+   *   next whole read states one.
+   *
+   * `sizeFormat`, `externalId` and the name are not touched in either case.
    */
   private async see(
     row: SourceCatalogEntry,
+    observation: PartialSourceObservation,
     runId: string,
     seenAt: Date
   ): Promise<SourceEntryOutcome> {
+    if (soldByWeightChanged(row, observation)) {
+      row.soldByWeight = observation.soldByWeight === true;
+    }
+    if (observation.soldByWeight === true) {
+      row.unitSize = null;
+      row.sizeUnit = null;
+    }
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
@@ -1106,6 +1140,20 @@ function copiesFor(
 /** The item an observation resolves to, which only an `ACTIVE` row states. */
 function activeItemOf(row: SourceCatalogEntry): string | null {
   return row.status === SourceEntryStatus.ACTIVE ? row.itemId : null;
+}
+
+/**
+ * Whether a partial observation says something new about how the row is sold
+ * (plan 0181). Never when the listing does not say.
+ */
+function soldByWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  return (
+    observation.soldByWeight !== undefined &&
+    (row.soldByWeight ?? false) !== observation.soldByWeight
+  );
 }
 
 /**

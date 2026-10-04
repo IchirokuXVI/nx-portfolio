@@ -496,7 +496,17 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       );
       expect(tray).toMatchObject({
         detailFetched: false,
+        // The listing's own answer, so the row it lands on stops saying that
+        // it is a fixed pack beside a price per kilo.
+        soldByWeight: true,
         prices: [expect.objectContaining({ price: 7.3, unitPrice: 7.3 })],
+      });
+      const bottle = report.partialProducts.find(
+        (product) => product.externalId === '4241'
+      );
+      expect(bottle).toMatchObject({
+        detailFetched: false,
+        soldByWeight: false,
       });
     });
   });
@@ -740,12 +750,15 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         (product) => product.externalId === '4241'
       );
       // A null for a field it did not read would blank the stored one, so the
-      // field is not there at all (plan 0119, section 6).
+      // field is not there at all (plan 0119, section 6). `soldByWeight` is
+      // not an identity field: it says what the prices beside it are, and the
+      // listing states it (plan 0181).
       expect(Object.keys(shared ?? {}).sort()).toEqual([
         'detailFetched',
         'externalId',
         'observedAt',
         'prices',
+        'soldByWeight',
       ]);
       // One price per warehouse that listed it, from that warehouse's listing,
       // exactly as a product read whole carries.

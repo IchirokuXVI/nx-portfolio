@@ -619,6 +619,49 @@ describe('SourceEntryService', () => {
           );
         });
 
+        it('reads a size named as null as no size named', async () => {
+          expect(
+            await sizeOf(
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              },
+              { unitSize: null }
+            )
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
+
+        it.each([
+          UnitOfMeasure.KILOGRAM,
+          UnitOfMeasure.GRAM,
+          UnitOfMeasure.UNIT,
+        ])(
+          'takes a unit named alone as %p, with no size',
+          async (defaultUnit) => {
+            // The row holds no size to carry over, so only the unit is named.
+            expect(
+              await sizeOf(
+                {
+                  soldByWeight: true,
+                  unitSize: null,
+                  sizeUnit: null,
+                  sizeFormat: 'pieza',
+                },
+                { defaultUnit }
+              )
+            ).toHaveBeenCalledWith(
+              expect.objectContaining({ unitSize: null, defaultUnit })
+            );
+          }
+        );
+
         it('lets a request that names a size overrule it', async () => {
           // A person saying the pack is fixed after all.
           expect(

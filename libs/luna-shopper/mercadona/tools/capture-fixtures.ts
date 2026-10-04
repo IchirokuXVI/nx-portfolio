@@ -16,7 +16,10 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MercadonaClient } from '../src/lib/mercadona.client';
+import {
+  MERCADONA_BASE_URL,
+  MercadonaClient,
+} from '../src/lib/mercadona.client';
 import {
   MERCADONA_STORES_TOTAL_URL,
   MERCADONA_STORES_URL,
@@ -94,6 +97,19 @@ const PRODUCTS: Array<{
   },
 ];
 
+/**
+ * file name -> the category whose listing that fixture pins, as the walk
+ * fetches it: `GET /categories/<id>/`, the products inline with their price
+ * block and no `ean`.
+ */
+const LISTINGS: Array<{ file: string; id: string; why: string }> = [
+  {
+    file: 'category-listing-cheese.json',
+    id: '54',
+    why: 'a listing that carries approx_size, holding product 50946 (plan 0181)',
+  },
+];
+
 async function main(): Promise<void> {
   await captureStores();
 
@@ -126,6 +142,25 @@ async function main(): Promise<void> {
   if (firstLevelOne) {
     const expanded = await client.getProduct(String(firstLevelOne.id));
     write('category-expanded.json', expanded);
+  }
+
+  for (const { file, id, why } of LISTINGS) {
+    // The same pacing the client keeps, on the one request it has no raw
+    // method for: the client answers a listing already normalized.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const query = new URLSearchParams({ lang: 'es', wh: warehouse });
+    const response = await fetch(
+      `${MERCADONA_BASE_URL}/categories/${id}/?${query.toString()}`,
+      { headers: { accept: 'application/json', 'user-agent': USER_AGENT } }
+    );
+    if (!response.ok) {
+      process.stderr.write(
+        `category ${id} answered ${response.status} in warehouse ${warehouse}; ` +
+          `the fixture for "${why}" was left as it was\n`
+      );
+      continue;
+    }
+    write(file, await response.json());
   }
 
   for (const { file, id, lang, why } of PRODUCTS) {
