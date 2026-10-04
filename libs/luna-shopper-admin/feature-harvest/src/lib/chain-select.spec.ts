@@ -143,6 +143,10 @@ describe('ChainSelect', () => {
    */
   it('reads a chosen chain the list does not hold, and adds it', async () => {
     const { fixture, asked } = await render(FAR.id);
+    // The list answers first, and only then is the chain known to be missing
+    // from it. So the read of the one chain is a second round.
+    await drain();
+    fixture.detectChanges();
 
     expect(asked.resolve).toContain(FAR.id);
     expect(options(fixture).at(-1)).toEqual({
