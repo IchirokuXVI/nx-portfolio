@@ -1,3 +1,5 @@
+> **PR:** [#614](https://github.com/IchirokuXVI/nx-portfolio/pull/614)
+
 # 0184: what a created product must carry
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03.
