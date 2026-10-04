@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { categoryId } from '../reference/ids';
+import { categoryId } from '../taxonomy/ids';
 import { LANDING_LEAVES, ROOTS } from './1758100000000-CategoryTree';
 
 /**

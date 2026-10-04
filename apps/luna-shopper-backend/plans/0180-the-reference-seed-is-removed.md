@@ -1,3 +1,5 @@
+> **PR:** [#606](https://github.com/IchirokuXVI/nx-portfolio/pull/606)
+
 # 0180: the reference seed is removed
 
 > Decided by the owner on 2026-10-03. The first production catalog is the curated harvest of

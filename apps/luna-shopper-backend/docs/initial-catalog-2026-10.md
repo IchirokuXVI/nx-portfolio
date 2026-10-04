@@ -65,9 +65,10 @@ here.
   and no products.
 - The slot ran one migration staging did not have, `DiaCategoryTree1758500000000`, which
   replaced the 29 categories with DIA's 275.
-- The slot was always started with `LUNA_REFERENCE_SEED=0`. A plain `--up` runs the
-  reference seed, which adds about 238 seeded products to the copy. That happened
-  once by accident and was undone by restoring the dump again.
+- The slot was always started with the reference seed switched off. At the time a plain
+  `--up` ran that seed, which added about 238 seeded products to the copy. That happened
+  once by accident and was undone by restoring the dump again. Plan 0180 has since removed
+  the seed, so a plain `--up` no longer adds anything and there is no switch to set.
 
 An earlier pass on the same day read the Deza leaflet first and created 71 products from
 it. The owner then asked for the opposite order: the websites and APIs first, as the source

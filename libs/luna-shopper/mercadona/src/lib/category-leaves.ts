@@ -2,8 +2,8 @@
  * The leaves of Luna Shopper's category taxonomy, by root (backend plan 0173,
  * appendix A, which replaced the tree of plan 0166).
  *
- * **This is a copy, and it exists so that a typo fails a test.** The catalog's
- * reference seed owns the taxonomy and turns each slug into a row; this library
+ * **This is a copy, and it exists so that a typo fails a test.** The catalog
+ * service owns the taxonomy and turns each slug into a row; this library
  * knows no ids and no database, so the only thing its resolver can answer is a
  * slug, and the only way to prove a slug it answers is real is to hold the list
  * here. `categories.spec.ts` asserts every slug the table names is one of these.

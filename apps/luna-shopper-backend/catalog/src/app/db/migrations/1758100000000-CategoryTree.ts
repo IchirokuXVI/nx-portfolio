@@ -1,5 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
-import { categoryId } from '../reference/ids';
+import { categoryId } from '../taxonomy/ids';
 
 /**
  * A category is a row, and a product has several (plan 0166, section 6).

@@ -85,7 +85,7 @@ export class ItemPriceService {
     ) {
       // Backlog 0008 opens the user kinds, and until then nothing writes one
       // through here (plan 0158). Not in the writer: the reference seed
-      // writes USER_RECEIPT through it on purpose, with no run.
+      // wrote USER_RECEIPT through it with no run until plan 0180 removed it.
       throw new ValidationException(
         `sourceKind ${req.sourceKind} is not accepted here. A price typed ` +
           'through the back office is ADMIN or one of the automated kinds.',
@@ -428,7 +428,8 @@ export class ItemPriceService {
    * distrusts, stale is the honest state.
    *
    * `ADMIN` rows carry no run id and are never touched. So does a `USER_RECEIPT`
-   * row from the reference seed. Rows another run wrote are never touched.
+   * row the reference seed wrote before plan 0180 removed it. Rows another
+   * run wrote are never touched.
    *
    * **Availability is not restored.** A refresh that met a 404 wrote
    * `available: false` through `supermarketItem.setAvailability`, which carries

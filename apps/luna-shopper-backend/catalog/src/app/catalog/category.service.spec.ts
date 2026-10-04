@@ -9,7 +9,7 @@ import {
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, type Repository } from 'typeorm';
-import { categoryId } from '../db/reference/ids';
+import { categoryId } from '../db/taxonomy/ids';
 // `Category` is a value here: the audit double keys on the entity class.
 import { Category } from '../entities';
 import { fakeAudit } from './catalog-audit.testing';
