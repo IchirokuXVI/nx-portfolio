@@ -1,3 +1,8 @@
+> **PR:** [#627](https://github.com/IchirokuXVI/nx-portfolio/pull/627)
+> Two things were left out, because the gateway does not serve them.
+> Target 4: a search for a zone by name, which the mock draws.
+> Target 5: the date a member was removed. A row says when the member joined.
+
 # 0045 A zone holds its members and lists
 
 > Fifth of the seven remodel plans. Needs `0041` (the frame) and the `parent` field that `0042`
