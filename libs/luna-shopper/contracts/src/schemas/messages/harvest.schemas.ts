@@ -421,6 +421,8 @@ const sourceCatalogEntryProperties = {
   ean: nullableString(),
   unitSize: numberOrNull(),
   sizeUnit: sizeUnitOrNull(),
+  // Whether the source sells the product by weight (plan 0181).
+  soldByWeight: boolean(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
@@ -454,6 +456,7 @@ const sourceCatalogEntryRequired = [
   'ean',
   'unitSize',
   'sizeUnit',
+  'soldByWeight',
   'sizeFormat',
   'packCount',
   'categoryPath',

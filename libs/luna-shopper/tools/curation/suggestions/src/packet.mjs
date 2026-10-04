@@ -123,6 +123,9 @@ export function buildEntryPacket({
       // The unit `unitSize` is in, as the source's own adapter stated it
       // (backend plan 0177), or null on a row no run has seen since.
       sizeUnit: entry.sizeUnit ?? null,
+      // Whether the source sells it by weight (backend plan 0181). The row
+      // then has no size, and its prices are the price of a kilo.
+      soldByWeight: entry.soldByWeight === true,
       sizeFormat: entry.sizeFormat ?? null,
       packCount: entry.packCount ?? null,
       categoryPath: entry.categoryPath ?? [],

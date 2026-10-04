@@ -516,6 +516,108 @@ describe('SourceEntryBatchService', () => {
         ]);
       });
 
+      describe('a row sold by weight (plan 0181)', () => {
+        it('creates KILOGRAM with no size when the operation names no size', async () => {
+          expect(
+            await created(
+              { name: { es: 'Queso semicurado' } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'kg',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it('does so whatever the row prints as its size', async () => {
+          expect(
+            await created(
+              { name: { es: 'Solomillo de cerdo' } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it('reads a size named as null as no size named', async () => {
+          expect(
+            await created(
+              { name: { es: 'Solomillo de cerdo' }, ...{ unitSize: null } },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
+
+        it.each([
+          UnitOfMeasure.KILOGRAM,
+          UnitOfMeasure.GRAM,
+          UnitOfMeasure.UNIT,
+        ])(
+          'takes a unit named alone as %p, with no size',
+          async (defaultUnit) => {
+            // The row holds no size to carry over, so only the unit is named.
+            expect(
+              await created(
+                { name: { es: 'Solomillo de cerdo' }, ...{ defaultUnit } },
+                {
+                  soldByWeight: true,
+                  unitSize: null,
+                  sizeUnit: null,
+                  sizeFormat: 'pieza',
+                }
+              )
+            ).toHaveBeenCalledWith([
+              expect.objectContaining({ unitSize: null, defaultUnit }),
+            ]);
+          }
+        );
+
+        it('lets an operation that names a size overrule it', async () => {
+          expect(
+            await created(
+              { name: { es: 'Queso' }, unitSize: 0.3 },
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'kg',
+              }
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: 300,
+              defaultUnit: UnitOfMeasure.GRAM,
+            }),
+          ]);
+        });
+      });
+
       it('converts a size the operation names with the row unit', async () => {
         expect(
           await created(

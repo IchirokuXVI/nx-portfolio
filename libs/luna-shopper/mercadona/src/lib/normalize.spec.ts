@@ -1,9 +1,12 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
+import cheeseListing from './__fixtures__/category-listing-cheese.json';
+import approximateWeight from './__fixtures__/product-approximate-weight.json';
 import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
 import oliveOil from './__fixtures__/product-detail-es.json';
+import fixedPackInStoreBarcode from './__fixtures__/product-fixed-pack-in-store-barcode.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
 import packOfPads from './__fixtures__/product-pack-of-pads.json';
@@ -32,6 +35,7 @@ describe('normalizeProduct', () => {
       ean: '8480000135636',
       name: { es: 'Aceite de oliva 0,4º Hacendado' },
       brand: 'Hacendado',
+      soldByWeight: false,
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
@@ -420,6 +424,202 @@ describe('a size of one unit (plan 0183)', () => {
       products: [packOfPads],
     });
     expect(listed).toMatchObject({ unitSize: 10, unit: UnitOfMeasure.UNIT });
+  });
+});
+
+describe('a product sold by weight (plan 0181)', () => {
+  it('is what the captured piece of cheese says it is', () => {
+    // The fixture's own fields, so a recapture that changes the product fails
+    // here and not in the rule below.
+    expect(approximateWeight.ean).toBe('2105600509460');
+    expect(approximateWeight.price_instructions).toMatchObject({
+      approx_size: true,
+      unit_size: 1.54,
+      size_format: 'kg',
+      unit_price: '14.49',
+      bulk_price: '9.41',
+      reference_format: 'kg',
+      selling_method: 0,
+    });
+  });
+
+  it('is what the captured fixed pack says it is', () => {
+    expect(fixedPackInStoreBarcode.ean).toBe('2105972846927');
+    expect(fixedPackInStoreBarcode.price_instructions).toMatchObject({
+      approx_size: false,
+      unit_size: 0.05,
+      size_format: 'kg',
+      unit_price: '0.55',
+      bulk_price: '11.00',
+      reference_format: 'kg',
+      selling_method: 0,
+    });
+  });
+
+  it('prices an approximate weight piece by the kilo and gives it no size', () => {
+    const product = normalizeProduct(approximateWeight);
+    expect(product).toMatchObject({
+      externalId: '50946',
+      soldByWeight: true,
+      // `bulk_price`, verbatim. Not the 14.49 of one estimated piece.
+      price: 9.41,
+      unitPrice: 9.41,
+      unitSize: null,
+      unit: UnitOfMeasure.KILOGRAM,
+      packCount: null,
+    });
+  });
+
+  it('keeps the piece price of a fixed pack, in-store barcode or not', () => {
+    const product = normalizeProduct(fixedPackInStoreBarcode);
+    expect(product).toMatchObject({
+      externalId: '84692',
+      ean: '2105972846927',
+      soldByWeight: false,
+      price: 0.55,
+      unitPrice: 11,
+      unitSize: 0.05,
+      unit: UnitOfMeasure.KILOGRAM,
+    });
+  });
+
+  describe('the listing, which is where a price comes from', () => {
+    /** The raw listing row of one product, wherever the category nests it. */
+    const rawRow = (id: string) =>
+      cheeseListing.categories
+        .flatMap((category) => category.products)
+        .find((product) => product.id === id);
+    const listed = (id: string) =>
+      normalizeCategoryProducts(cheeseListing).find(
+        (product) => product.externalId === id
+      );
+
+    it('is what the captured listing says it is', () => {
+      // `GET /categories/54/` as served on 2026-10-04. The listing row carries
+      // the price block whole, `approx_size` included, and no `ean`.
+      const weighed = rawRow('50946');
+      expect(weighed).not.toHaveProperty('ean');
+      expect(weighed?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 1.54,
+        size_format: 'kg',
+        unit_price: '14.49',
+        bulk_price: '9.41',
+      });
+      // A second piece of the same cheese, and a fixed pack beside them.
+      expect(rawRow('50943')?.price_instructions).toMatchObject({
+        approx_size: true,
+        unit_size: 0.42,
+        unit_price: '4.07',
+        bulk_price: '9.70',
+      });
+      expect(rawRow('23561')?.price_instructions).toMatchObject({
+        approx_size: false,
+        unit_size: 0.35,
+        size_format: 'kg',
+        unit_price: '3.00',
+        bulk_price: '8.57',
+      });
+    });
+
+    it('prices each piece sold by weight by the kilo, with no size', () => {
+      expect(listed('50946')).toMatchObject({
+        soldByWeight: true,
+        price: 9.41,
+        unitPrice: 9.41,
+        unitSize: null,
+        // The chain's own token, untouched: it is what the row already holds.
+        sizeFormat: 'kg',
+      });
+      expect(listed('50943')).toMatchObject({
+        soldByWeight: true,
+        price: 9.7,
+        unitPrice: 9.7,
+        unitSize: null,
+      });
+    });
+
+    it('keeps the pack price and the size of a fixed pack', () => {
+      expect(listed('23561')).toMatchObject({
+        soldByWeight: false,
+        price: 3,
+        unitPrice: 8.57,
+        unitSize: 0.35,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('answers the price of a kilo for every row the listing calls approximate', () => {
+      const raw = cheeseListing.categories.flatMap(
+        (category) => category.products
+      );
+      const approximate = raw.filter(
+        (product) => product.price_instructions.approx_size
+      );
+      expect(approximate.length).toBeGreaterThan(0);
+      expect(approximate.length).toBeLessThan(raw.length);
+      for (const product of approximate) {
+        expect(listed(product.id)).toMatchObject({
+          soldByWeight: true,
+          unitSize: null,
+          price: Number(product.price_instructions.bulk_price),
+        });
+      }
+    });
+  });
+
+  it('reads the same from a detail payload laid into a listing', () => {
+    const [weighed, fixed] = normalizeCategoryProducts({
+      id: 54,
+      name: 'Queso curado, semicurado y tierno',
+      products: [approximateWeight, fixedPackInStoreBarcode],
+    });
+    expect(weighed).toMatchObject({
+      soldByWeight: true,
+      price: 9.41,
+      unitPrice: 9.41,
+      unitSize: null,
+      // The chain's own token, untouched: it is what the row already holds.
+      sizeFormat: 'kg',
+    });
+    expect(fixed).toMatchObject({
+      soldByWeight: false,
+      price: 0.55,
+      unitPrice: 11,
+      unitSize: 0.05,
+      sizeFormat: 'kg',
+    });
+  });
+
+  it('never recomputes the price of a kilo', () => {
+    // 14.49 over 1.54 is 9.409. The chain says 9.41, and that is what is kept.
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        bulk_price: '9.99',
+      },
+    });
+    expect(product.price).toBe(9.99);
+  });
+
+  it('is not sold by weight when the approximate size is not in kilos', () => {
+    // No captured product shows this. The price of a kilo is `bulk_price`
+    // only when the size format is `kg`, so anything else keeps its price.
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        size_format: 'ud',
+      },
+    });
+    expect(product.soldByWeight).toBe(false);
+    expect(product.price).toBe(14.49);
+  });
+
+  it('is not sold by weight when the payload does not say', () => {
+    // Every fixture authored before the field was known carries none.
+    expect(normalizeProduct(oliveOil).soldByWeight).toBe(false);
   });
 });
 

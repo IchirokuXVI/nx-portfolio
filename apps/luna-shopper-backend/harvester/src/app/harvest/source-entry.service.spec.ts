@@ -187,7 +187,7 @@ function build(
   // bulk replay. The real one is used here rather than a double, so every
   // assertion below about which scopes were written and with which run keeps
   // testing the thing it was written to test.
-  const priceWriter = new SourceEntryPriceWriter(catalog);
+  const priceWriter = new SourceEntryPriceWriter(catalog, entries);
 
   const service = new SourceEntryService(
     entries,
@@ -582,6 +582,105 @@ describe('SourceEntryService', () => {
             defaultUnit: UnitOfMeasure.KILOGRAM,
           })
         );
+      });
+
+      describe('a row sold by weight (plan 0181)', () => {
+        it('creates KILOGRAM with no size when the request names no size', async () => {
+          expect(
+            await sizeOf({
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              sizeFormat: 'kg',
+            })
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
+
+        it('does so whatever the row prints as its size', async () => {
+          // A leaflet tile priced by the kilo. The text maps to no unit, and
+          // the guess from it used to be `UNIT`.
+          expect(
+            await sizeOf({
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              sizeFormat: 'pieza',
+            })
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
+
+        it('reads a size named as null as no size named', async () => {
+          expect(
+            await sizeOf(
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'pieza',
+              },
+              { unitSize: null }
+            )
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
+
+        it.each([
+          UnitOfMeasure.KILOGRAM,
+          UnitOfMeasure.GRAM,
+          UnitOfMeasure.UNIT,
+        ])(
+          'takes a unit named alone as %p, with no size',
+          async (defaultUnit) => {
+            // The row holds no size to carry over, so only the unit is named.
+            expect(
+              await sizeOf(
+                {
+                  soldByWeight: true,
+                  unitSize: null,
+                  sizeUnit: null,
+                  sizeFormat: 'pieza',
+                },
+                { defaultUnit }
+              )
+            ).toHaveBeenCalledWith(
+              expect.objectContaining({ unitSize: null, defaultUnit })
+            );
+          }
+        );
+
+        it('lets a request that names a size overrule it', async () => {
+          // A person saying the pack is fixed after all.
+          expect(
+            await sizeOf(
+              {
+                soldByWeight: true,
+                unitSize: null,
+                sizeUnit: null,
+                sizeFormat: 'kg',
+              },
+              { unitSize: 0.3 }
+            )
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: 300,
+              defaultUnit: UnitOfMeasure.GRAM,
+            })
+          );
+        });
       });
 
       it('converts a size the request names with the row unit', async () => {

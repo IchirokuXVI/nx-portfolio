@@ -5,6 +5,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   sourceSizeOf,
+  type HarvestDocumentPrice,
   type HarvestDocumentProduct,
   type HarvestDocumentScope,
   type HarvestDocumentSize,
@@ -232,6 +233,9 @@ export class FileImportRunner {
       // used to be dropped, which left a 750 read from `75 cl` with nothing to
       // say it was already millilitres.
       ...sizeOf(product.size),
+      // A tile priced by the kilo (plan 0181). The ingest then writes the row
+      // with no size, whatever the tile printed as one.
+      soldByWeight: soldByWeightOf(product),
       sizeFormat,
       categoryPath: product.category_path ?? [],
       url: product.url ?? null,
@@ -290,6 +294,8 @@ function pricesOf(
   product: HarvestDocumentProduct,
   window: ImportWindow | null
 ): SourceObservation['prices'] {
+  const soldByWeight = soldByWeightOf(product);
+  const unpayable = unpayableForOne(product);
   return (product.prices ?? []).map((price) => {
     const own = price.validity
       ? resolveImportWindow({
@@ -301,8 +307,9 @@ function pricesOf(
       scopeKey: price.scope ?? null,
       // Null when the source stated only a comparison figure. The ingest then
       // writes the unit price and no till price, which is plan 0081 section
-      // 6.1's one surviving decision.
-      price: price.amount,
+      // 6.1's one surviving decision. A product sold by weight is the
+      // exception (plan 0181): its price is the price of a kilo.
+      price: priceOf(price, soldByWeight, unpayable),
       currency: price.currency || DEFAULT_CURRENCY,
       unitPrice: price.unit_price?.amount ?? null,
       unitPriceLabel: price.unit_price?.label ?? null,
@@ -310,6 +317,90 @@ function pricesOf(
       validUntil: own?.validUntil ?? null,
     };
   });
+}
+
+/**
+ * Whether a product of the document is sold by weight (plan 0181).
+ *
+ * **It reads `extra.basis`, and it is the one rule that reads `extra`.** The
+ * file schema has no field for how a product is sold. The leaflet producer
+ * writes the tile's basis into `extra` (`unit`, `kg`, `l`), and a tile whose
+ * basis is `kg` prints the price of a kilo: a piece of cheese, a tray of
+ * meat, loose fruit.
+ *
+ * **A litre basis is not a way to sell.** It is the comparison figure of a
+ * bottle, and the bottle has a size and a price of its own. So `l` answers
+ * false and its price stays null when the producer stated none.
+ */
+export function soldByWeightOf(product: HarvestDocumentProduct): boolean {
+  return product.extra?.['basis'] === 'kg';
+}
+
+/**
+ * The price of one entry of a product, as the row holds it (plan 0181).
+ *
+ * The producer answers no till price for a tile priced by the kilo, because a
+ * leaflet prints no pack price for it, and puts the tile's headline figure in
+ * the unit price. That figure is the price of a kilo, and a product sold by
+ * weight has no other price, so it is written as the price as well. Without it
+ * 21 products showed no price at a chain whose leaflet printed one.
+ *
+ * A price the producer did state is never replaced. Nor is a null with no
+ * unit price beside it: that is a tile that needs a loyalty card, and a card
+ * price is not one a shopper without the card pays.
+ *
+ * **Nor is the null of a conditional promotion** ({@link unpayableForOne}).
+ * The unit price beside it is the tile's comparison line, and the producer
+ * left the price null because nobody pays that number for one unit.
+ */
+function priceOf(
+  price: HarvestDocumentPrice,
+  soldByWeight: boolean,
+  unpayable: boolean
+): number | null {
+  if (price.amount !== null && price.amount !== undefined) {
+    return price.amount;
+  }
+  return soldByWeight && !unpayable ? (price.unit_price?.amount ?? null) : null;
+}
+
+/**
+ * The promotion types whose printed number holds only under a condition: buy
+ * two, buy three, the second unit. They restate `CONDITIONAL_PROMOTIONS` of
+ * the leaflet producer (`to-harvest-document.mjs`), which is the list that
+ * decided the price was null.
+ */
+const CONDITIONAL_PROMOTIONS: ReadonlySet<unknown> = new Set([
+  'second_unit_discount',
+  'multibuy_unit_price',
+  'multibuy_total',
+  'buy_n_get_free',
+]);
+
+/**
+ * Whether the tile prints a conditional promotion and no price for a single
+ * unit (plan 0181).
+ *
+ * Read from `extra.promotion`, which the leaflet producer carries verbatim:
+ * its `type` is one of the conditional ones and its `single_unit_price`
+ * states no amount. That is exactly the case in which the producer answered
+ * no price and said the only number on the tile is one a shopper cannot pay
+ * for one unit. When the tile does print a single unit price, the producer
+ * put that number in the unit price, and it is the price of a kilo.
+ *
+ * A document with no `extra.promotion` answers false, so a producer that
+ * writes none is read as before.
+ */
+export function unpayableForOne(product: HarvestDocumentProduct): boolean {
+  const promotion = product.extra?.['promotion'];
+  if (typeof promotion !== 'object' || promotion === null) {
+    return false;
+  }
+  const { type, single_unit_price: single } = promotion as {
+    type?: unknown;
+    single_unit_price?: { amount?: unknown } | null;
+  };
+  return CONDITIONAL_PROMOTIONS.has(type) && typeof single?.amount !== 'number';
 }
 
 /**

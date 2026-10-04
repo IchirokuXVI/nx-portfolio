@@ -14,7 +14,7 @@ import type {
 } from '../entities';
 import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
-import { FileImportRunner } from './file-import.runner';
+import { FileImportRunner, unpayableForOne } from './file-import.runner';
 import { entryKey } from './matching';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
@@ -283,6 +283,212 @@ describe('FileImportRunner (plan 0086)', () => {
       price: null,
       unitPrice: 6.95,
       unitPriceLabel: 'el kilo',
+    });
+  });
+
+  describe('a product sold by weight (plan 0181)', () => {
+    it('writes the headline price of a kg basis offer as its price', async () => {
+      const { runner, context, priceRows, saved } = build({
+        document: document({
+          products: [
+            {
+              // The shape the leaflet producer writes for a tile priced by
+              // the kilo: no till price, and the headline in the unit price.
+              name: 'Solomillo de Cerdo Blanco',
+              size: { label: 'Kilo', unit: 'kg' },
+              unit_price: { amount: 7.95, currency: 'EUR', label: 'kg' },
+              extra: {
+                basis: 'kg',
+                headline_price: { amount: 7.95, currency: 'EUR' },
+              },
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(priceRows[0]).toMatchObject({
+        price: 7.95,
+        unitPrice: 7.95,
+        unitPriceLabel: 'kg',
+      });
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        // The key is what the leaflet printed, as it was before this plan.
+        sizeFormat: 'Kilo',
+        externalId: entryKey('Solomillo de Cerdo Blanco', 'Kilo'),
+      });
+    });
+
+    it('writes null for an l basis offer, which is not a way to sell', async () => {
+      const { runner, context, priceRows, saved } = build({
+        document: document({
+          products: [
+            {
+              name: 'Aceite de oliva a granel',
+              size: { label: 'litro', unit: 'l' },
+              unit_price: { amount: 6.5, currency: 'EUR', label: 'l' },
+              extra: {
+                basis: 'l',
+                headline_price: { amount: 6.5, currency: 'EUR' },
+              },
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(priceRows[0]).toMatchObject({
+        price: null,
+        unitPrice: 6.5,
+        unitPriceLabel: 'l',
+      });
+      expect(saved[0].soldByWeight).toBe(false);
+    });
+
+    it('keeps a till price the producer stated on a kg basis offer', async () => {
+      const { runner, context, priceRows } = build({
+        document: document({
+          products: [
+            {
+              name: 'Queso curado',
+              price: { amount: 4.2, currency: 'EUR' },
+              unit_price: { amount: 14, currency: 'EUR', label: 'kg' },
+              extra: { basis: 'kg' },
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(priceRows[0]).toMatchObject({ price: 4.2, unitPrice: 14 });
+    });
+
+    it('writes no price for a kg basis offer that states no figure at all', async () => {
+      // A tile that needs the loyalty card: the producer states no price and
+      // no unit price, and the headline in `extra` is the card's.
+      const { runner, context, priceRows, saved } = build({
+        document: document({
+          products: [
+            {
+              name: 'Lomo de cerdo',
+              extra: {
+                basis: 'kg',
+                headline_price: { amount: 5.95, currency: 'EUR' },
+                loyalty: { required: true, program: 'Club' },
+              },
+            },
+          ],
+        }),
+      });
+
+      await runner.run(context, input);
+
+      expect(priceRows).toEqual([]);
+      expect(saved[0].soldByWeight).toBe(true);
+    });
+
+    describe('a conditional promotion on a kg basis offer', () => {
+      /** What the leaflet producer writes for a multibuy priced by the kilo. */
+      const multibuy = (promotion: Record<string, unknown>) =>
+        document({
+          products: [
+            {
+              name: 'Chuleta de cerdo',
+              size: { label: 'Kilo', unit: 'kg' },
+              unit_price: { amount: 4.95, currency: 'EUR', label: 'kg' },
+              extra: { basis: 'kg', promotion },
+            },
+          ],
+        });
+
+      it.each([
+        'second_unit_discount',
+        'multibuy_unit_price',
+        'multibuy_total',
+        'buy_n_get_free',
+      ])(
+        'keeps the price null for %s with no single unit price',
+        async (type) => {
+          const { runner, context, priceRows, saved } = build({
+            document: multibuy({ type, raw_text: '2a unidad -50%' }),
+          });
+
+          await runner.run(context, input);
+
+          // The number is one nobody pays for one unit, so it stays the
+          // comparison figure it was before this plan.
+          expect(priceRows[0]).toMatchObject({ price: null, unitPrice: 4.95 });
+          // The row is still sold by weight: that is what the tile is.
+          expect(saved[0].soldByWeight).toBe(true);
+        }
+      );
+
+      it('writes the single unit price when the tile prints one', async () => {
+        // The producer put that number in the unit price, and it is what one
+        // kilo costs.
+        const { runner, context, priceRows } = build({
+          document: multibuy({
+            type: 'second_unit_discount',
+            single_unit_price: { amount: 4.95, currency: 'EUR' },
+          }),
+        });
+
+        await runner.run(context, input);
+
+        expect(priceRows[0]).toMatchObject({ price: 4.95, unitPrice: 4.95 });
+      });
+
+      it('writes the price for a promotion that sets no condition', async () => {
+        const { runner, context, priceRows } = build({
+          document: multibuy({ type: 'price_drop', raw_text: 'ANTES 5,95' }),
+        });
+
+        await runner.run(context, input);
+
+        expect(priceRows[0]).toMatchObject({ price: 4.95, unitPrice: 4.95 });
+      });
+    });
+
+    it('prices every kg tile of the El Jamón reading by the kilo', async () => {
+      const fixture = eljamon as unknown as HarvestDocument;
+      const { runner, context, saved, priceRows } = build({
+        document: fixture,
+      });
+
+      await runner.run(context, input);
+
+      const weighed = saved.filter((row) => row.soldByWeight);
+      expect(weighed).toHaveLength(
+        fixture.products.filter((product) => product.extra?.['basis'] === 'kg')
+          .length
+      );
+      expect(weighed.length).toBeGreaterThan(0);
+      const ids = new Set(weighed.map((row) => row.id));
+      const rows = priceRows.filter((row) => ids.has(row['entryId'] as string));
+      expect(rows.length).toBeGreaterThan(0);
+      // Every one of them, less the tiles whose only number is conditional.
+      const unpayable = new Set(
+        weighed
+          .filter((row) =>
+            unpayableForOne({ name: row.name, extra: row.extra })
+          )
+          .map((row) => row.id)
+      );
+      for (const row of rows) {
+        if (unpayable.has(row['entryId'] as string)) {
+          expect(row['price']).toBeNull();
+        } else {
+          expect(row['price']).not.toBeNull();
+          expect(row['price']).toBe(row['unitPrice']);
+        }
+      }
+      expect(unpayable.size).toBeLessThan(rows.length);
     });
   });
 

@@ -202,12 +202,17 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     // warehouse that listed it, and no identity field, so the stored name, brand
     // and EAN stay what the last full read wrote (plan 0119, section 6). It
     // costs no request, so it is reported before the pool rather than in it.
+    //
+    // It does say whether the product is sold by weight (plan 0181), because
+    // that is what makes the prices beside it the price of a kilo. The listing
+    // carries `approx_size`, so no request is needed for it.
     for (const product of skipped) {
       observed += 1;
       report.product({
         externalId: product.externalId,
         detailFetched: false,
         observedAt,
+        soldByWeight: product.listing.soldByWeight,
         prices: pricesOf(product.externalId, CURRENCY, scopes, assortments),
       });
     }
@@ -249,17 +254,19 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           name: detail.name.es ?? '',
           brand: detail.brand,
           ean: detail.ean,
-          // The detail's, and therefore the warehouse the detail was fetched
-          // from. `unit_size` differs between warehouses for a product sold by
-          // approximate weight, where the euros per kilo is national and the
-          // typical weight of the tray is not (plan 0108, section 5.1). The row
-          // holds one size, so it holds the one this read saw.
+          // The detail's. Null for a product sold by approximate weight (plan
+          // 0181): `unit_size` is then the typical weight of the tray, which
+          // differs between warehouses while the euros per kilo does not (plan
+          // 0108, section 5.1), so it is an estimate and not a size.
           unitSize: detail.unitSize,
           // The detail's own `size_format` as a catalog unit (plan 0177), read
           // from the same payload as the number so the two cannot disagree.
           // Null for `m`, which the catalog has no unit for.
           sizeUnit:
             detail.unitSize === null ? null : sourceSizeUnitOf(detail.unit),
+          // `approx_size` on a product sized in `kg` (plan 0181). The row
+          // then has no size, and every price below is the price of a kilo.
+          soldByWeight: detail.soldByWeight,
           sizeFormat: product.listing.sizeFormat,
           // Read from the detail's own `price_instructions` (plan 0162).
           packCount: detail.packCount,
@@ -388,6 +395,12 @@ interface Detailable {
  * a different pack weight and not a different price: the euros per kilo is
  * national and the typical weight of the tray is not, and 59 to 126 of the
  * differences between any pair of warehouses are of that kind.
+ *
+ * **So a product sold by weight is priced by the kilo (plan 0181).** The
+ * adapter reads `approx_size` from each warehouse's own listing row, and for
+ * such a row `listing.price` is already `bulk_price`: the price and the unit
+ * price are the same number, and the estimated piece price is not written at
+ * all. It used to be, which put 14.49 on a cheese that costs 9.41 a kilo.
  */
 function pricesOf(
   externalId: string,

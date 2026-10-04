@@ -4,6 +4,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  UnitOfMeasure,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
@@ -1774,6 +1775,345 @@ describe('SourceIngest, two entries of one item in one batch', () => {
       null
     );
     expect(counters.pricesConflicted).toBe(0);
+  });
+});
+
+describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', () => {
+  const accepted = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+  /** One piece of the cheese, priced by the kilo. */
+  const piece = (externalId: string, perKilo: number) =>
+    observation({
+      externalId,
+      name: 'Queso semicurado mezcla',
+      sizeFormat: 'kg',
+      soldByWeight: true,
+      price: {
+        ...PRICE,
+        price: perKilo,
+        unitPrice: perKilo,
+        unitPriceLabel: 'kg',
+      },
+    });
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+
+  it('writes one price for a scope, the lower per kilo figure', async () => {
+    const { ingest, context, catalog, priceRows } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      // The dearer piece first, so the answer is not the one reported last.
+      observations: [piece('50943', 9.7), piece('50946', 9.41)],
+    });
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [
+        expect.objectContaining({
+          itemId: 'item-1',
+          price: 9.41,
+          unitPrice: 9.41,
+        }),
+      ],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    // Both rows keep the price the chain stated for them, side by side.
+    expect(priceRows.map((row) => [row.entryId, row.price])).toEqual([
+      ['entry-b', 9.7],
+      ['entry-a', 9.41],
+    ]);
+    // Chosen, not refused: this is not a conflict a person has to settle.
+    expect(counters).toMatchObject({
+      pricesRecorded: 2,
+      pricesWritten: 1,
+      pricesConflicted: 0,
+    });
+  });
+
+  it('keeps the lower figure when the second piece arrives in a later chunk', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50946', 9.41)]);
+    // Sent last, this would be the price a shopper saw. It is not sent.
+    await open.push([piece('50943', 9.7)]);
+    await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 9.41 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('replaces the figure when a later chunk carries a lower one', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '50943', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50943', 9.7)]);
+    await open.push([piece('50946', 9.41)]);
+    await open.close();
+
+    expect(
+      (catalog.addPrices as jest.Mock).mock.calls.map(
+        (call) => call[1][0].price
+      )
+    ).toEqual([9.7, 9.41]);
+  });
+
+  it('lets one piece reported again replace its own figure, lower or not', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([piece('50946', 9.41)]);
+    await open.push([piece('50946', 9.95)]);
+    await open.close();
+
+    expect(
+      (catalog.addPrices as jest.Mock).mock.calls.map(
+        (call) => call[1][0].price
+      )
+    ).toEqual([9.41, 9.95]);
+  });
+
+  it('still refuses when one of the rows is a pack', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: '50946', name: 'Queso', ...accepted },
+        { id: 'entry-b', externalId: '51630', name: 'Queso', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [
+        piece('50946', 9.41),
+        // A fixed pack of 0.3 kg at 2.95: a pack price, not a price per kilo.
+        observation({
+          externalId: '51630',
+          name: 'Queso',
+          sizeFormat: 'kg',
+          unitSize: 0.3,
+          price: { ...PRICE, price: 2.95, unitPrice: 9.83 },
+        }),
+      ],
+    });
+
+    // The lowest of a pack price and a price per kilo means nothing, so plan
+    // 0155 still answers: nothing is sent and a person decides.
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+    expect(counters.pricesConflicted).toBe(1);
+  });
+
+  describe('a known row seen from the listing alone', () => {
+    /** The row plan 0181 found in the queue: a fixed pack of 1.54 kg. */
+    const stale = {
+      externalId: '50946',
+      name: 'Queso semicurado mezcla Hacendado',
+      brand: 'Hacendado',
+      ean: '2105600509460',
+      unitSize: 1.54,
+      sizeUnit: UnitOfMeasure.KILOGRAM as const,
+      sizeFormat: 'kg',
+      soldByWeight: false,
+    };
+    const seen = (
+      externalId: string,
+      perKilo: number,
+      soldByWeight: boolean | null = true
+    ): PartialSourceObservation => ({
+      externalId,
+      detailFetched: false,
+      observedAt: new Date('2026-10-04T06:00:00.000Z'),
+      ...(soldByWeight === null ? {} : { soldByWeight }),
+      prices: [
+        {
+          scopeKey: null,
+          ...PRICE,
+          price: perKilo,
+          unitPrice: perKilo,
+          unitPriceLabel: 'kg',
+        },
+      ],
+    });
+
+    it('ends sold by weight with no size, and keeps its key and its identity', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 9.41)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        sizeUnit: null,
+        // Nothing else moved: the key, the name, the brand and the EAN are
+        // what the last whole read wrote.
+        sizeFormat: 'kg',
+        externalId: '50946',
+        name: 'Queso semicurado mezcla Hacendado',
+        brand: 'Hacendado',
+        ean: '2105600509460',
+      });
+      // The row now says something it did not say before, so it is counted.
+      expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+    });
+
+    it('writes one price for two known pieces bound to one product, the lower per kilo figure', async () => {
+      const { ingest, context, catalog } = build({
+        rows: [
+          { id: 'entry-a', ...stale, ...accepted },
+          {
+            id: 'entry-b',
+            ...stale,
+            externalId: '50943',
+            ean: '2105600509439',
+            unitSize: 0.42,
+            ...accepted,
+          },
+        ],
+        batch: { inserted: 1, confirmed: 0 },
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50943', 9.7), seen('50946', 9.41)],
+      });
+
+      // Both rows said `soldByWeight: false` when the run started. The listing
+      // corrected them before the prices were settled, so this is not the
+      // conflict plan 0155 refuses.
+      expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+      expect(catalog.addPrices).toHaveBeenCalledWith(
+        SCOPE,
+        [expect.objectContaining({ itemId: 'item-1', price: 9.41 })],
+        RUN,
+        PriceSourceKind.OFFICIAL_API,
+        null
+      );
+      expect(counters.pricesConflicted).toBe(0);
+    });
+
+    it('clears the flag when the listing says it is a pack again, and invents no size', async () => {
+      const { ingest, context, saved } = build({
+        rows: [
+          { ...stale, soldByWeight: true, unitSize: null, sizeUnit: null },
+        ],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, false)],
+      });
+
+      // A partial read never writes a size, so the row holds none until the
+      // next whole read states one.
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: 'kg',
+      });
+    });
+
+    it('leaves the row alone when the listing does not say', async () => {
+      const { ingest, context, saved } = build({ rows: [stale] });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [seen('50946', 14.49, null)],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: false,
+        unitSize: 1.54,
+        sizeUnit: UnitOfMeasure.KILOGRAM,
+      });
+      expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+    });
+  });
+
+  it('writes a row sold by weight with no size, and leaves its key alone', async () => {
+    const { ingest, context, saved } = build({});
+
+    await ingest.ingest(context, {
+      ...session,
+      observations: [
+        observation({
+          externalId: 'k-1',
+          name: 'Chuleta de cerdo',
+          // What a leaflet tile can print beside a price per kilo.
+          sizeFormat: 'bandeja 1 kg aprox',
+          unitSize: 1,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          soldByWeight: true,
+        }),
+      ],
+    });
+
+    expect(saved[0]).toMatchObject({
+      externalId: 'k-1',
+      soldByWeight: true,
+      unitSize: null,
+      sizeUnit: null,
+      sizeFormat: 'bandeja 1 kg aprox',
+    });
+  });
+
+  it('says a row is not sold by weight when the source does not say', async () => {
+    const { ingest, context, saved } = build({
+      rows: [{ externalId: 'k-2', name: 'Chuleta', soldByWeight: true }],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      ...session,
+      observations: [observation({ externalId: 'k-2', name: 'Chuleta' })],
+    });
+
+    // The source's own field, so the next whole read rewrites it, and the
+    // change is counted.
+    expect(saved[0].soldByWeight).toBe(false);
+    expect(counters.updated).toBe(1);
   });
 });
 

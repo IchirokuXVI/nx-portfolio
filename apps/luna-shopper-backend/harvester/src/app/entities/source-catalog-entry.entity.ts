@@ -126,6 +126,18 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'varchar', length: 16, nullable: true })
   sizeUnit!: SourceSizeUnit | null;
 
+  /**
+   * Whether the source sells the product by weight (plan 0181): a piece of
+   * cheese, a tray of meat, loose fruit. The weight is not the same on every
+   * pack, so the row states no size ({@link unitSize} and {@link sizeUnit} are
+   * null) and every price it holds is the price of a kilo.
+   *
+   * The source's, like `sizeFormat`: every run that reads the product whole
+   * rewrites it. False on a row no such run has seen since that plan.
+   */
+  @Column({ type: 'boolean', default: false })
+  soldByWeight!: boolean;
+
   /** The source's own token (`kg`, `l`, `ud`, `m`), not a `UnitOfMeasure`. */
   @Column({ type: 'varchar', nullable: true })
   sizeFormat!: string | null;

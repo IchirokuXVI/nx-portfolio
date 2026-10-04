@@ -38316,6 +38316,9 @@
               }
             ]
           },
+          "soldByWeight": {
+            "type": "boolean"
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -38433,6 +38436,7 @@
           "ean",
           "unitSize",
           "sizeUnit",
+          "soldByWeight",
           "sizeFormat",
           "packCount",
           "categoryPath",
@@ -38692,6 +38696,9 @@
               }
             ]
           },
+          "soldByWeight": {
+            "type": "boolean"
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -38802,6 +38809,7 @@
           "ean",
           "unitSize",
           "sizeUnit",
+          "soldByWeight",
           "sizeFormat",
           "packCount",
           "categoryPath",

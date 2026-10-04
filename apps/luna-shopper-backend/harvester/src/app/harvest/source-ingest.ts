@@ -23,6 +23,7 @@ import {
   type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
+import { lowestPerKilo } from './source-entry-write';
 import {
   applySourceGroup,
   loadCatalogItems,
@@ -91,6 +92,16 @@ export interface SourceObservation {
    * a unit the catalog does not hold.
    */
   sizeUnit: SourceSizeUnit | null;
+  /**
+   * Whether the source sells the product by weight (plan 0181): a piece whose
+   * weight is not the same on every pack. Every price beside it is then the
+   * price of a kilo, and the row is written with no size, whatever
+   * `unitSize` says here.
+   *
+   * Absent is false, which is the answer of a source that never says: DEZA
+   * prints no prices at all, and LIDL, Carrefour and DIA have no field for it.
+   */
+  soldByWeight?: boolean;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
@@ -127,6 +138,16 @@ export interface PartialSourceObservation {
   externalId: string;
   detailFetched: false;
   observedAt: Date;
+  /**
+   * Whether the listing says the product is sold by weight (plan 0181).
+   *
+   * It is not an identity field. It says what the prices beside it are: when
+   * it is true, each one is the price of a kilo. A listing that reprices a
+   * known row by the kilo and leaves the row saying that it is a fixed pack of
+   * 1.54 kg leaves a row that contradicts its own price, so the two travel
+   * together. Absent means the listing does not say, and the row is left alone.
+   */
+  soldByWeight?: boolean;
   /** Every price the listing stated for this product, as a full one carries. */
   prices: readonly SourceObservationPrice[];
 }
@@ -211,6 +232,9 @@ export interface SourceIngestCounters {
    * current price per item, scope and kind, so sending both made the one
    * written last the one a shopper saw. No rule picks one of them: a person
    * does, in the queue.
+   *
+   * Rows sold by weight are not counted here. Their prices are all the price
+   * of a kilo, so they can be compared, and the lowest is sent (plan 0181).
    */
   pricesConflicted: number;
 }
@@ -320,7 +344,8 @@ export class SourceIngest {
     byExternalId: Map<string, SourceCatalogEntry>,
     siblings: SiblingEntryIndex,
     items: ItemMatchIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    weighed: Map<string, OwedCandidate> = new Map()
   ): Promise<SourceIngestResult> {
     const seenAt = new Date();
     const outcomes: SourceEntryOutcome[] = [];
@@ -365,7 +390,9 @@ export class SourceIngest {
           await context.report({ processed: 1 });
           continue;
         }
-        outcome = await this.see(held, context.runId, seenAt);
+        // Asked before the write, because the write is what makes it false.
+        changed = soldByWeightChanged(held, observation);
+        outcome = await this.see(held, observation, context.runId, seenAt);
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
         // Asked before the touch writes, because the touch is what makes it false.
@@ -457,6 +484,7 @@ export class SourceIngest {
     // and by where the price was read, because a batch states that once.
     // Within a batch, by item: catalog keeps one current price per item, scope
     // and kind, so two entries of one item would each overwrite the other.
+    // Which of them is sent, if any, is {@link settle}'s to say.
     const owed = new Map<string, OwedBatch>();
     for (const [index, outcome] of outcomes.entries()) {
       const observation = observations[index];
@@ -476,27 +504,28 @@ export class SourceIngest {
           outcome.entry,
           place.price
         );
-        const held = batch.byItem.get(outcome.itemId);
-        if (held) {
-          // The same row twice in one chunk is one row, and its later
-          // observation is the one it holds. Another row is a conflict.
-          held.entryIds.add(outcome.entry.id);
-          held.entry = entry;
-        } else {
-          batch.byItem.set(outcome.itemId, {
-            entryIds: new Set([outcome.entry.id]),
-            entry,
-          });
-        }
+        // The same row twice in one chunk is one row, and its later
+        // observation is the one it holds. Another row is a second candidate.
+        const candidates = batch.byItem.get(outcome.itemId) ?? new Map();
+        candidates.set(outcome.entry.id, {
+          entryId: outcome.entry.id,
+          entry,
+          soldByWeight: outcome.entry.soldByWeight === true,
+        });
+        batch.byItem.set(outcome.itemId, candidates);
         owed.set(key, batch);
       }
     }
 
     let owedCount = 0;
     for (const batch of owed.values()) {
-      const entries = this.withoutConflicts(context.runId, batch);
+      const { entries, conflicted } = this.settle(
+        context.runId,
+        batch,
+        weighed
+      );
       if (batch.copiedFromScopeId === null) {
-        counters.pricesConflicted += batch.byItem.size - entries.length;
+        counters.pricesConflicted += conflicted;
       }
       const written = await this.writePrices(
         context,
@@ -530,32 +559,65 @@ export class SourceIngest {
   }
 
   /**
-   * The prices of one batch, less every item two entries priced (plan 0155).
+   * The one price each item of a batch is sent, or none (plans 0155 and 0181).
    *
-   * **Refuse, do not choose.** Keeping either price would be a rule that picks
-   * one cut's price for a product several cuts share, and the answer to that
-   * is a person's: accept one entry, or create the cuts as products.
+   * **Refuse, do not choose, when the rows are packs.** Keeping either price
+   * would be a rule that picks one cut's price for a product several cuts
+   * share, and the answer to that is a person's: accept one entry, or create
+   * the cuts as products. That item is counted as a conflict and sent nothing.
+   *
+   * **Choose the lowest when every row is sold by weight.** Two pieces of one
+   * cheese are one product by the owner's rule, and each price is the price of
+   * a kilo, so the two can be compared and {@link lowestPerKilo} states which
+   * one a shopper is shown.
+   *
+   * `weighed` is what the run already sent for such an item at this scope, so
+   * the rule holds across chunks: a later chunk carrying a second piece sends
+   * its price only when it is the lower one. A piece reported again replaces
+   * its own earlier figure, because its later observation is the one it holds.
    */
-  private withoutConflicts(
+  private settle(
     runId: string,
-    batch: OwedBatch
-  ): ItemPriceBatchEntry[] {
+    batch: OwedBatch,
+    weighed: Map<string, OwedCandidate>
+  ): { entries: ItemPriceBatchEntry[]; conflicted: number } {
     const entries: ItemPriceBatchEntry[] = [];
-    for (const [itemId, owed] of batch.byItem) {
-      if (owed.entryIds.size > 1) {
+    let conflicted = 0;
+    for (const [itemId, byEntry] of batch.byItem) {
+      const candidates = [...byEntry.values()];
+      const allWeighed = candidates.every((each) => each.soldByWeight);
+      if (!allWeighed) {
+        if (candidates.length === 1) {
+          entries.push(candidates[0].entry);
+          continue;
+        }
         this.logger.warn(
-          `Run ${runId}: entries ${[...owed.entryIds].join(', ')} all price ` +
+          `Run ${runId}: entries ${[...byEntry.keys()].join(', ')} all price ` +
             `item ${itemId} at scope ${batch.priceScopeId}` +
             (batch.copiedFromScopeId === null
               ? ''
               : ` (copied from ${batch.copiedFromScopeId})`) +
             ', so none of their prices was sent.'
         );
+        conflicted += 1;
         continue;
       }
-      entries.push(owed.entry);
+
+      const key = `${batch.priceScopeId}|${batch.copiedFromScopeId ?? ''}|${itemId}`;
+      const sent = weighed.get(key);
+      const earlier = sent && !byEntry.has(sent.entryId) ? [sent] : [];
+      const lowest = lowestPerKilo(
+        [...earlier, ...candidates],
+        (each) => each.entry.unitPrice ?? each.entry.price ?? null
+      );
+      if (!lowest || lowest === sent) {
+        // An earlier chunk already sent the lower figure of another piece.
+        continue;
+      }
+      weighed.set(key, lowest);
+      entries.push(lowest.entry);
     }
-    return entries;
+    return { entries, conflicted };
   }
 
   /**
@@ -662,12 +724,34 @@ export class SourceIngest {
    * {@link applySourceGroup} is not called, so the stored name, brand and EAN
    * stay what the last full read wrote, and no status is re-derived: only a new
    * EAN may do that, and this read fetched none.
+   *
+   * **The one thing it does write is whether the row is sold by weight** (plan
+   * 0181), when the listing says. The prices this observation carries are the
+   * price of a kilo exactly when that is true, so a row that kept its old
+   * answer would hold a size of 1.54 kg beside a price of 9.41.
+   *
+   * - Sold by weight: the flag is set, and the size and its unit are cleared,
+   *   as the whole read path does for every adapter.
+   * - No longer sold by weight: the flag is cleared, and **no size is
+   *   invented**. The listing's number is not written, because a partial read
+   *   never writes a size. The row holds a null size and a null unit until the
+   *   next whole read states one.
+   *
+   * `sizeFormat`, `externalId` and the name are not touched in either case.
    */
   private async see(
     row: SourceCatalogEntry,
+    observation: PartialSourceObservation,
     runId: string,
     seenAt: Date
   ): Promise<SourceEntryOutcome> {
+    if (soldByWeightChanged(row, observation)) {
+      row.soldByWeight = observation.soldByWeight === true;
+    }
+    if (observation.soldByWeight === true) {
+      row.unitSize = null;
+      row.sizeUnit = null;
+    }
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
@@ -806,7 +890,9 @@ export class SourceIngest {
       name: observation.name,
       brand: observation.brand,
       ean: observation.ean,
-      unitSize: observation.unitSize,
+      // The row's size and not the observation's: a row sold by weight holds
+      // none, whatever the source printed beside it (plan 0181).
+      unitSize: fields.unitSize,
     });
     if (match && isSharedEan(match, observation.ean, eans)) {
       proposeSharedEan(draft, match.itemId);
@@ -826,7 +912,7 @@ export class SourceIngest {
       const sibling = siblings.match(
         observation.name,
         observation.sizeFormat,
-        observation.unitSize
+        fields.unitSize
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -958,17 +1044,19 @@ interface ObservedPrice extends PlacedPrice {
   entry: SourceCatalogEntry;
 }
 
-/** The price one item is owed in a batch, and every entry that stated one. */
-interface OwedPrice {
-  entryIds: Set<string>;
+/** The price one row states for the item it is bound to. */
+interface OwedCandidate {
+  entryId: string;
   entry: ItemPriceBatchEntry;
+  /** The row's own flag (plan 0181): its price is the price of a kilo. */
+  soldByWeight: boolean;
 }
 
-/** The prices owed to one scope, all read at the same place, by item. */
+/** The prices owed to one scope, all read at the same place, by item and row. */
 interface OwedBatch {
   priceScopeId: string;
   copiedFromScopeId: string | null;
-  byItem: Map<string, OwedPrice>;
+  byItem: Map<string, Map<string, OwedCandidate>>;
 }
 
 function emptyCounters(): SourceIngestCounters {
@@ -1055,6 +1143,20 @@ function activeItemOf(row: SourceCatalogEntry): string | null {
 }
 
 /**
+ * Whether a partial observation says something new about how the row is sold
+ * (plan 0181). Never when the listing does not say.
+ */
+function soldByWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  return (
+    observation.soldByWeight !== undefined &&
+    (row.soldByWeight ?? false) !== observation.soldByWeight
+  );
+}
+
+/**
  * A row nobody has decided, which is the only kind a new EAN may promote.
  *
  * A `REJECTED` row is the owner saying this is not a product he tracks, and an
@@ -1072,6 +1174,12 @@ function fieldsOf(
   observation: SourceObservation,
   sourceKind: PriceSourceKind
 ): SourceEntryFields {
+  const soldByWeight = observation.soldByWeight === true;
+  // A row sold by weight states no size, held here for every adapter (plan
+  // 0181): the weight is not the same on every pack, so a leaflet tile that
+  // prints `1 kg aprox` beside its price per kilo has no size either.
+  // `sizeFormat` is not touched. It is half of the row's key.
+  const unitSize = soldByWeight ? null : observation.unitSize;
   return {
     externalId: observation.externalId,
     sourceKind,
@@ -1081,10 +1189,11 @@ function fieldsOf(
     // reaches a row carries the key (plan 0115, section 6).
     brandKey: brandKey(observation.brand),
     ean: observation.ean,
-    unitSize: observation.unitSize,
+    unitSize,
     // Held to the size here as well as in every adapter: a unit beside no
     // number describes nothing, and the column's own doc says it is null then.
-    sizeUnit: observation.unitSize === null ? null : observation.sizeUnit,
+    sizeUnit: unitSize === null ? null : observation.sizeUnit,
+    soldByWeight,
     sizeFormat: observation.sizeFormat,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
@@ -1140,6 +1249,11 @@ export class SourceIngestSession {
   private readonly siblings: SiblingEntryIndex;
   private readonly eans: ChainEanIndex;
   private readonly outcomes: SourceEntryOutcome[] = [];
+  /**
+   * The price this run already sent for an item sold by weight, by scope and
+   * item (plan 0181), so a second piece in a later chunk is compared with it.
+   */
+  private readonly weighed = new Map<string, OwedCandidate>();
   private readonly counters = emptyCounters();
   private readonly copies = emptyCopies();
   private closed = false;
@@ -1183,7 +1297,8 @@ export class SourceIngestSession {
       this.byExternalId,
       this.siblings,
       this.items,
-      this.eans
+      this.eans,
+      this.weighed
     );
     this.outcomes.push(...result.outcomes);
     this.counters.created += result.counters.created;
