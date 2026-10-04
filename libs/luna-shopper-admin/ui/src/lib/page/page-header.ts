@@ -33,7 +33,7 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
  * ```html
  * <lib-page-header
  *   (back)="leave()"
- *   [backLabel]="'people.detail.page-back' | rokuT"
+ *   [backLabel]="'people.detail.back' | rokuT"
  *   [heading]="name()"
  *   [info]="descriptor.info ?? null"
  *   [subtitle]="'Owner marta, 4 members'"
@@ -58,8 +58,17 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
  *
  * Until each section has a page of its own (admin plans 0042 to 0044), the
  * frame's tabs are drawn here, under every header, from {@link PAGE_FRAME_TABS}.
- * A page that draws its own `lib-page-tabs` turns them off with
- * `[frameTabs]="false"`.
+ *
+ * A page with tabs of its own hands them to `[tabs]`, with `[tabsLabel]` as
+ * their name for a screen reader. They take the place of the frame's tabs and
+ * sit flush under the header, with no gap of the page's own between the two. A
+ * sibling `lib-page-tabs` under `[frameTabs]="false"` still works, and sits
+ * as far below the header as the page spaces its children.
+ *
+ * ## On a phone
+ *
+ * The row never wraps, so the header stays 48 px. The title keeps the room:
+ * it shrinks last, and a chip shrinks first, to an ellipsis.
  */
 @Component({
   selector: 'lib-page-header',
@@ -131,13 +140,16 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       </div>
     </header>
 
-    @if (tabs().length > 0) {
-      <lib-page-tabs [label]="'shell.screens' | rokuT" [tabs]="tabs()" />
+    @if (shownTabs().length > 0) {
+      <lib-page-tabs
+        [label]="tabs() === null ? ('shell.screens' | rokuT) : tabsLabel()"
+        [tabs]="shownTabs()"
+      />
     }
   `,
   host: {
     '(document:click)': 'pressed($event)',
-    '(document:keydown.escape)': 'closeMore()',
+    '(document:keydown.escape)': 'closeMore(true)',
   },
   styles: `
     /* It reaches the edges of the main column whatever the page lays its own
@@ -174,10 +186,15 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       min-inline-size: 0;
     }
 
+    /* On a phone the title takes what the row has left and gives way last: it
+       never goes under 5.5rem, which is a short name in full and a long one to
+       its first word. */
     .compact .page-titles {
+      flex: 1 1 0;
       flex-direction: column;
       gap: 0;
       align-items: stretch;
+      min-inline-size: 5.5rem;
     }
 
     h1 {
@@ -212,6 +229,34 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       display: flex;
       gap: var(--admin-space-2);
       align-items: center;
+    }
+
+    /* A chip never wraps, on any screen: a second line would make the header
+       taller on some pages and not on others. The chip belongs to the page and
+       not to this component, so the rule has to reach through to it. */
+    :host ::ng-deep [pageChip] {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* On a phone the chips give way before the title does. */
+    .compact .page-chips {
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      max-inline-size: 40%;
+      overflow: hidden;
+    }
+
+    .compact .page-grow {
+      display: none;
+    }
+
+    .compact .page-actions,
+    .compact .page-overflow,
+    .compact lib-info-button {
+      flex: none;
     }
 
     .page-chips:empty,
@@ -293,18 +338,6 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
     .page-overflow-actions.page-menu.open {
       display: flex;
     }
-
-    @media (prefers-reduced-motion: no-preference) {
-      .page-overflow-actions.page-menu.open {
-        animation: appear 120ms ease-out;
-      }
-    }
-
-    @keyframes appear {
-      from {
-        opacity: 0;
-      }
-    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -349,6 +382,15 @@ export class PageHeader {
    * `lib-page-tabs` itself.
    */
   readonly frameTabs = input(true);
+  /**
+   * The page's own tabs, drawn flush under the header.
+   *
+   * Given, they take the place of the frame's tabs, whatever {@link frameTabs}
+   * says. `null`, which is the default, leaves the frame's tabs in place.
+   */
+  readonly tabs = input<readonly PageTab[] | null>(null);
+  /** What the page's own tabs are, already translated, for a screen reader. */
+  readonly tabsLabel = input('');
 
   /** The way back was pressed, and no {@link backLink} was given. */
   readonly back = output<void>();
@@ -357,40 +399,56 @@ export class PageHeader {
 
   readonly moreOpen = signal(false);
 
-  readonly tabs = computed<readonly PageTab[]>(() =>
-    this.frameTabs() ? (this._frameTabs?.() ?? []) : []
+  /** The tabs under the header: the page's own, or else the frame's. */
+  readonly shownTabs = computed<readonly PageTab[]>(
+    () => this.tabs() ?? (this.frameTabs() ? (this._frameTabs?.() ?? []) : [])
   );
 
   toggleMore(): void {
     this.moreOpen.update((open) => !open);
   }
 
-  /** Close the "More actions" menu and give the focus back to its toggle. */
-  closeMore(): void {
+  /**
+   * Close the "More actions" menu.
+   *
+   * `refocus` gives the focus back to the toggle. That is right for Escape,
+   * and for an action chosen from the menu, whose button has just been taken
+   * off the screen. It is wrong for a press somewhere else on the page: the
+   * operator pressed that other thing, and the focus belongs to it.
+   */
+  closeMore(refocus = false): void {
     if (!this.moreOpen()) {
       return;
     }
 
     this.moreOpen.set(false);
-    this._moreToggle()?.nativeElement.focus();
+
+    if (refocus) {
+      this._moreToggle()?.nativeElement.focus();
+    }
   }
 
   /**
    * A press somewhere in the document, while the menu is open.
    *
-   * Anywhere but the toggle closes it: outside the header, or on one of the
+   * Anywhere but the toggle closes it: outside the menu, or on one of the
    * actions, whose own handler ran before the press reached the document. The
    * toggle opens and closes the menu by itself.
    */
   pressed(event: Event): void {
     const target = event.target;
 
-    if (!this.moreOpen() || !(target instanceof Node)) {
+    if (!this.moreOpen() || !(target instanceof Element)) {
       return;
     }
 
-    if (this._moreToggle()?.nativeElement.contains(target) !== true) {
-      this.closeMore();
+    if (this._moreToggle()?.nativeElement.contains(target) === true) {
+      return;
     }
+
+    const menu = this._host.nativeElement.querySelector(
+      '.page-overflow-actions'
+    );
+    this.closeMore(menu?.contains(target) === true);
   }
 }

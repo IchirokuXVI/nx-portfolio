@@ -2,14 +2,20 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
+  inject,
   input,
   output,
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { InfoContent } from '@portfolio/luna-shopper-admin/models';
+import { keepTabInside } from '../focus-trap';
 import { CautionLine } from './caution-line';
+
+/** How far the panel sits from the button, and from the edge of the window. */
+const GAP = 8;
 
 /**
  * What an info button opens (admin plan 0041, section 5).
@@ -24,6 +30,21 @@ import { CautionLine } from './caution-line';
  * find on a small screen. Which one is drawn is an input, so a spec can ask for
  * either.
  *
+ * ## Where it is drawn
+ *
+ * In the top layer, through the `popover` attribute, and placed from the
+ * rectangle of the button. A panel laid out inside the button's own box is
+ * clipped by any ancestor that scrolls (a split pane, a table that scrolls
+ * sideways), and a fixed sheet stops being fixed to the window under an
+ * ancestor with a transform. The top layer has neither problem: nothing clips
+ * it and its containing block is the window. A browser without the attribute
+ * draws the same fixed boxes in place, which is right wherever no ancestor
+ * clips or transforms.
+ *
+ * The sheet is modal: the scrim covers the page, the focus moves in, and Tab
+ * stays in. The panel on a wide screen is not: the page beside it is in view
+ * and in reach, and whoever opened it closes it when the focus leaves.
+ *
  * It closes nothing by itself. It says that it was asked to close, and whoever
  * opened it decides, because that one also knows where the focus goes back to.
  */
@@ -35,15 +56,18 @@ import { CautionLine } from './caution-line';
          it hears that press on the document. The scrim itself is not a
          control: a keyboard closes the sheet with Escape or its button. -->
     @if (sheet()) {
-      <div class="scrim" data-info-scrim></div>
+      <div #scrim class="scrim" popover="manual" data-info-scrim></div>
     }
 
     <section
+      (keydown)="onKeydown($event)"
       [attr.aria-labelledby]="headingId()"
+      [attr.aria-modal]="sheet() ? 'true' : null"
       [class.end]="align() === 'end'"
       [class.sheet]="sheet()"
       #panel
       class="panel"
+      popover="manual"
       role="dialog"
       tabindex="-1"
     >
@@ -71,22 +95,34 @@ import { CautionLine } from './caution-line';
       display: contents;
     }
 
+    /* Both boxes are popovers, so each rule also undoes what a browser gives a
+       popover by default: centered with auto margins, a border, a padding and
+       the canvas colors. */
     .scrim {
       position: fixed;
       z-index: 30;
       inset: 0;
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      margin: 0;
+      padding: 0;
+      border: none;
       background: rgb(20 33 29 / 50%);
     }
 
     .panel {
-      position: absolute;
+      position: fixed;
       z-index: 31;
-      inset-block-start: calc(100% + var(--admin-space-2));
-      inset-inline-start: 0;
+      inset: auto;
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-3);
       inline-size: min(22rem, calc(100vw - 2rem));
+      block-size: auto;
+      max-block-size: calc(100dvh - 1rem);
+      margin: 0;
+      overflow-y: auto;
       padding: var(--admin-space-4);
       border: 1px solid var(--admin-border-strong);
       border-radius: var(--admin-radius);
@@ -101,16 +137,10 @@ import { CautionLine } from './caution-line';
       color: var(--admin-ink);
     }
 
-    .panel.end {
-      inset-inline: auto 0;
-    }
-
     .panel.sheet {
-      position: fixed;
       inset: auto 0 0;
       inline-size: auto;
       max-block-size: 80dvh;
-      overflow-y: auto;
       padding: var(--admin-space-4) var(--admin-space-4)
         calc(var(--admin-space-4) + env(safe-area-inset-bottom, 0px));
       border: none;
@@ -139,7 +169,8 @@ import { CautionLine } from './caution-line';
     }
 
     .close {
-      min-block-size: 2.75rem;
+      flex: none;
+      min-block-size: var(--admin-control);
       font-weight: 500;
       cursor: pointer;
     }
@@ -160,6 +191,8 @@ import { CautionLine } from './caution-line';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class InfoPanel {
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   /** What to say. */
   readonly info = input.required<InfoContent>();
   /** A sheet from the bottom edge, for a phone. A panel under the button otherwise. */
@@ -173,16 +206,100 @@ export class InfoPanel {
   readonly align = input<'start' | 'end'>('end');
   /** A document unique id for the heading, which names the dialog. */
   readonly headingId = input('info-panel-heading');
+  /**
+   * The element the panel is placed from, which is the button that opened it.
+   *
+   * Left out, the panel is placed from the element that holds it. Ignored by
+   * the sheet, which is placed from the window.
+   */
+  readonly anchor = input<HTMLElement | null>(null);
 
   /** Asked to close: the Close button of the sheet. */
   readonly closed = output<void>();
 
   private readonly _panel =
     viewChild.required<ElementRef<HTMLElement>>('panel');
+  private readonly _scrim = viewChild<ElementRef<HTMLElement>>('scrim');
 
   constructor() {
-    // Focus goes into the dialog when it opens, so that Tab continues from it
-    // and a screen reader starts reading at its heading.
-    afterNextRender(() => this._panel().nativeElement.focus());
+    const destroyed = inject(DestroyRef);
+
+    afterNextRender(() => {
+      const panel = this._panel().nativeElement;
+
+      // The scrim first, so that the panel is above it in the top layer.
+      show(this._scrim()?.nativeElement);
+      show(panel);
+      this.place();
+
+      // Focus goes into the dialog when it opens, so that Tab continues from
+      // it and a screen reader starts reading at its heading.
+      panel.focus();
+
+      // The panel is fixed to the window and its button is not, so a scroll or
+      // a resize moves the one and not the other. Placing it again keeps them
+      // together. Capture, because the thing that scrolls may be a pane.
+      const again = () => this.place();
+      window.addEventListener('scroll', again, {
+        capture: true,
+        passive: true,
+      });
+      window.addEventListener('resize', again, { passive: true });
+      destroyed.onDestroy(() => {
+        window.removeEventListener('scroll', again, { capture: true });
+        window.removeEventListener('resize', again);
+      });
+    });
+  }
+
+  /** Tab stays inside the sheet. The panel on a wide screen lets it leave. */
+  onKeydown(event: KeyboardEvent): void {
+    if (this.sheet()) {
+      keepTabInside(event, this._panel().nativeElement);
+    }
+  }
+
+  /**
+   * Put the panel under its button, inside the window.
+   *
+   * Under the button and lined up with the edge `align` names. Moved back in
+   * where that would leave the window, and put above the button where there is
+   * no room under it and there is room above. Written straight to the element:
+   * it has to be in place before it takes the focus.
+   */
+  place(): void {
+    const panel = this._panel().nativeElement;
+
+    if (this.sheet()) {
+      panel.style.top = '';
+      panel.style.left = '';
+      return;
+    }
+
+    const anchor = this.anchor() ?? this._host.nativeElement.parentElement;
+    if (anchor === null) {
+      return;
+    }
+
+    const from = anchor.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const left = this.align() === 'end' ? from.right - width : from.left;
+    const below = from.bottom + GAP;
+    const fitsBelow = below + height <= window.innerHeight - GAP;
+    const fitsAbove = from.top - GAP - height >= GAP;
+    const top = fitsBelow || !fitsAbove ? below : from.top - GAP - height;
+
+    panel.style.left = `${Math.round(
+      Math.max(GAP, Math.min(left, window.innerWidth - width - GAP))
+    )}px`;
+    panel.style.top = `${Math.round(Math.max(GAP, top))}px`;
+  }
+}
+
+/** Move an element to the top layer, where the browser can. */
+function show(element: HTMLElement | undefined): void {
+  if (element !== undefined && typeof element.showPopover === 'function') {
+    element.showPopover();
   }
 }

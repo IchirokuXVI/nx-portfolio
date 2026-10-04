@@ -26,6 +26,8 @@ const INFO: InfoContent = {
       [heading]="'Mercadona'"
       [info]="info()"
       [subtitle]="subtitle()"
+      [tabs]="ownTabs()"
+      [tabsLabel]="'Mercadona'"
     >
       @if (chip()) {
         <span class="chip" pageChip>Fetched</span>
@@ -45,6 +47,7 @@ class TestPage {
   readonly subtitle = signal<string | null>(null);
   readonly info = signal<InfoContent | null>(null);
   readonly frameTabs = signal(true);
+  readonly ownTabs = signal<readonly PageTab[] | null>(null);
   readonly chip = signal(false);
   readonly second = signal(true);
   readonly left = signal(0);
@@ -217,6 +220,140 @@ describe('PageHeader', () => {
     expect(document.activeElement).toBe(one(fixture, '.page-overflow-toggle'));
 
     fixture.nativeElement.remove();
+  });
+
+  /**
+   * The operator pressed something else, and the focus belongs to that. Pulling
+   * it back to the toggle would take a field out from under a keyboard.
+   */
+  it('closes on a press elsewhere and leaves the focus where the press put it', async () => {
+    const fixture = await render(true);
+    const elsewhere = document.createElement('button');
+    document.body.append(fixture.nativeElement, elsewhere);
+
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+    elsewhere.focus();
+    elsewhere.click();
+    fixture.detectChanges();
+
+    expect(
+      one(fixture, '.page-overflow-actions')?.classList.contains('open')
+    ).toBe(false);
+    expect(document.activeElement).toBe(elsewhere);
+
+    fixture.nativeElement.remove();
+    elsewhere.remove();
+  });
+
+  /** The chosen action has just left the screen, so the toggle takes the focus. */
+  it('gives the focus back to the toggle when an action is chosen', async () => {
+    const fixture = await render(true);
+    document.body.append(fixture.nativeElement);
+
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+    one(fixture, '.page-overflow-actions button')?.click();
+    fixture.detectChanges();
+
+    expect(document.activeElement).toBe(one(fixture, '.page-overflow-toggle'));
+
+    fixture.nativeElement.remove();
+  });
+});
+
+/**
+ * A page with tabs of its own hands them to the header, which draws them flush
+ * under itself: a sibling row of tabs sits as far below the header as the page
+ * spaces its children.
+ */
+describe('PageHeader, and the tabs of the page', () => {
+  const OWN: readonly PageTab[] = [
+    { path: '/chain/shops', label: 'tabs.shops', count: () => 1612 },
+    { path: '/chain/details', label: 'tabs.details' },
+  ];
+
+  const hrefs = (fixture: { nativeElement: HTMLElement }) =>
+    [...fixture.nativeElement.querySelectorAll('lib-page-tabs a')].map((a) =>
+      a.getAttribute('href')
+    );
+
+  it('draws the tabs it is given, inside itself, named for a screen reader', async () => {
+    const fixture = await render();
+
+    fixture.componentInstance.ownTabs.set(OWN);
+    fixture.detectChanges();
+
+    expect(hrefs(fixture)).toEqual(['/chain/shops', '/chain/details']);
+    expect(
+      one(fixture, 'lib-page-header > lib-page-tabs nav')?.getAttribute(
+        'aria-label'
+      )
+    ).toBe('Mercadona');
+    expect(one(fixture, 'lib-page-tabs .count')?.textContent?.trim()).toBe(
+      '1612'
+    );
+  });
+
+  it('draws them in place of the tabs of the frame', async () => {
+    const fixture = await render(false, TABS);
+
+    fixture.componentInstance.ownTabs.set(OWN);
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelectorAll('lib-page-tabs')
+    ).toHaveLength(1);
+    expect(hrefs(fixture)).toEqual(['/chain/shops', '/chain/details']);
+  });
+
+  it('draws them with the frame tabs turned off as well', async () => {
+    const fixture = await render(false, TABS);
+
+    fixture.componentInstance.frameTabs.set(false);
+    fixture.componentInstance.ownTabs.set(OWN);
+    fixture.detectChanges();
+
+    expect(hrefs(fixture)).toEqual(['/chain/shops', '/chain/details']);
+  });
+
+  it('goes back to the tabs of the frame when it is given none', async () => {
+    const fixture = await render(false, TABS);
+
+    expect(hrefs(fixture)).toEqual(['/catalog/shops', '/catalog/items']);
+    expect(one(fixture, 'lib-page-tabs nav')?.getAttribute('aria-label')).toBe(
+      'shell.screens'
+    );
+  });
+});
+
+/**
+ * On a phone the header holds a way back, a chip, the info button, an action
+ * and the toggle in one row of 48 px. Read out of the source, because jsdom
+ * lays nothing out; the browser walk measures the row itself.
+ */
+describe('PageHeader, the row on a phone', () => {
+  const source = readFileSync(join(__dirname, 'page-header.ts'), 'utf8');
+
+  it('never wraps a chip, and ends it with an ellipsis', () => {
+    expect(source).toMatch(
+      /:host ::ng-deep \[pageChip\] \{[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap;/
+    );
+  });
+
+  it('lets the chips give way before the title', () => {
+    expect(source).toMatch(
+      /\.compact \.page-chips \{[^}]*flex: 0 1 auto;[^}]*max-inline-size: 40%;/
+    );
+    expect(source).toMatch(
+      /\.compact \.page-titles \{[^}]*flex: 1 1 0;[^}]*min-inline-size: 5\.5rem;/
+    );
+    expect(source).not.toContain('flex-wrap');
+  });
+
+  /** The plan names a fade for the info panel and the sheets, and for nothing else. */
+  it('opens its menu with no motion', () => {
+    expect(source).not.toMatch(/animation|transition/);
   });
 });
 
