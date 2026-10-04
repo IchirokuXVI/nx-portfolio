@@ -1,4 +1,5 @@
 import type { Route } from '@angular/router';
+import { oldChainAddresses } from './chains/old-addresses';
 import { ItemPricesPage } from './item-prices-page';
 
 /**
@@ -14,7 +15,14 @@ import { ItemPricesPage } from './item-prices-page';
  * There is no navigation entry for it, for the reason `runs/:id` has none: a
  * link to a route with a parameter has nothing to put in it. It is reached from
  * the product's screen and from a price's history.
+ *
+ * After it come the addresses the chain screens had while they were lists of
+ * this section, as redirects to where a chain holds them now (admin plan 0042,
+ * target 9).
  */
 export function catalogRoutes(): Route[] {
-  return [{ path: 'items/:id/prices', component: ItemPricesPage }];
+  return [
+    { path: 'items/:id/prices', component: ItemPricesPage },
+    ...oldChainAddresses(),
+  ];
 }

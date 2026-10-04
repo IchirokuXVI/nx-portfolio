@@ -10,6 +10,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { PRICE_SCOPE_KIND_OPTIONS, priceScopeMark } from './catalog-enums';
 import { priceScopeSource } from './catalog-sources';
+import { ChainContext } from './chains/chain-context';
 
 /** A set of shops that share one price, as the gateway describes it. */
 export type PriceScope = Wire.CatalogPriceScopeView;
@@ -63,16 +64,18 @@ export function priorityBand(priority: number): FieldMessage {
  * walks a bounded number of pages and then answers not found, which is what the
  * screen would have said anyway.
  *
- * **No `sorts`.** `GET /v1/admin/catalog/price-scopes` accepts a cursor, a limit
- * and a chain, and nothing else. It orders by creation and a control offering
- * anything else would be a control that changes nothing.
+ * **No `sorts`.** `GET /v1/admin/catalog/price-scopes` accepts a cursor, a
+ * limit, a chain and kinds, and nothing that orders. It orders by creation and
+ * a control offering anything else would be a control that changes nothing.
  */
 export const PRICE_SCOPES = defineResource<PriceScope>({
   name: 'price-scopes',
-  segment: 'price-scopes',
+  // The Price scopes tab of a chain (admin plan 0042).
+  segment: 'scopes',
   labels: {
     one: 'catalog.priceScopes.one',
     many: 'catalog.priceScopes.many',
+    create: 'catalog.priceScopes.add',
   },
 
   /**
@@ -159,23 +162,69 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
   ],
 
   list: {
-    columns: ['label', 'kind', 'priority', 'externalKey', 'supermarketId'],
+    // The chain is the page this list is a tab of, so it is not a column.
+    columns: ['label', 'kind', 'externalKey', 'priority'],
     // A scope is told from its siblings by what kind it is and which warehouse
-    // it stands for. Its chain is the thing the filter above already fixed, so
-    // repeating it on every card would spend the width saying one answer twice.
+    // it stands for.
     compact: ['kind', 'externalKey'],
   },
 
+  // The chain is in the address: `/chains/{chainId}/scopes`.
+  parent: { resource: 'supermarkets', param: 'chainId', filter: 'supermarketId' },
+
+  // The one question the list answers besides "which chain": the general
+  // scopes of a chain are a handful, and its single shop scopes are one per
+  // shop. The route takes `kind`, and takes nothing that orders by it.
   filters: [
     {
-      kind: 'reference',
-      param: 'supermarketId',
-      label: 'catalog.priceScopes.filter.supermarketId',
-      resource: 'supermarkets',
+      kind: 'enum',
+      param: 'kind',
+      label: 'catalog.priceScopes.filter.kind',
+      options: PRICE_SCOPE_KIND_OPTIONS,
     },
   ],
 
-  actions: { create: true, edit: true, delete: true },
+  /**
+   * "Default" on the scope its chain falls back to (admin plan 0042, target
+   * 7). A fact about the chain, so it is read from the chain's page and drawn
+   * only on a list that is a tab of one.
+   */
+  rowStates: () => {
+    const chain = inject(ChainContext, { optional: true });
+
+    return (row) =>
+      chain !== null && chain.chain()?.defaultPriceScopeId === row.id
+        ? [{ label: 'catalog.priceScopes.state.default', tone: 'good' }]
+        : [];
+  },
+
+  actions: {
+    create: true,
+    edit: true,
+    delete: true,
+    /**
+     * "Make default", on every scope but the one that already is.
+     *
+     * It writes the chain and not the scope: the default is the chain's
+     * `defaultPriceScopeId`. So it exists only on a list under a chain's page,
+     * which is what holds the chain and reads it again afterwards.
+     */
+    named: () => {
+      const chain = inject(ChainContext, { optional: true });
+
+      return chain === null
+        ? []
+        : [
+            {
+              name: 'makeDefault',
+              label: 'catalog.priceScopes.makeDefault',
+              available: (row) =>
+                chain.chain()?.defaultPriceScopeId !== row.id,
+              run: (row) => chain.setDefaultScope(row.id),
+            },
+          ];
+    },
+  },
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource()),
 });

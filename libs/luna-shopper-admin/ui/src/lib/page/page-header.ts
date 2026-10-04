@@ -4,10 +4,12 @@ import {
   computed,
   ElementRef,
   inject,
+  InjectionToken,
   input,
   output,
   signal,
   viewChild,
+  type Signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -16,6 +18,21 @@ import { ChevronLeftIcon, MoreIcon } from '@portfolio/shared/ui';
 import { InfoButton } from '../info/info-button';
 import { Viewport } from '../viewport';
 import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
+
+/**
+ * Whether a header drawn here is the page's own, or sits under one (admin plan
+ * 0042).
+ *
+ * A page has one `h1`. On a wide screen a shop is open beside its chain's shop
+ * list and under the chain's header, so the chain's name is the `h1` and the
+ * shop's is an `h2`. On a phone the shop is the whole page and its name is the
+ * `h1`. The pane that holds the page knows which, and says so here.
+ *
+ * Absent means 1, which is every page that is not inside another.
+ */
+export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
+  'PAGE_HEADING_LEVEL'
+);
 
 /**
  * The one header every page has (admin plan 0041, section 3).
@@ -92,7 +109,11 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       }
 
       <div class="page-titles">
-        <h1>{{ heading() }}</h1>
+        @if (level() === 2) {
+          <h2 class="page-title">{{ heading() }}</h2>
+        } @else {
+          <h1 class="page-title">{{ heading() }}</h1>
+        }
         @if (subtitle(); as text) {
           <p class="page-subtitle">{{ text }}</p>
         }
@@ -180,7 +201,7 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       align-items: stretch;
     }
 
-    h1 {
+    .page-title {
       overflow: hidden;
       font-size: 1.25rem;
       font-weight: 600;
@@ -189,7 +210,14 @@ import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
       white-space: nowrap;
     }
 
-    .compact h1 {
+    .compact .page-title {
+      font-size: 1.0625rem;
+      letter-spacing: 0;
+    }
+
+    /* A header under another one is the title of a pane and not of the page,
+       so it is a step smaller than the header above it. */
+    h2.page-title {
       font-size: 1.0625rem;
       letter-spacing: 0;
     }
@@ -312,6 +340,10 @@ export class PageHeader {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _viewport = inject(Viewport);
   private readonly _frameTabs = inject(PAGE_FRAME_TABS, { optional: true });
+  private readonly _level = inject(PAGE_HEADING_LEVEL, { optional: true });
+
+  /** 1 for the page's own header, 2 for one that sits under it. */
+  readonly level = computed<1 | 2>(() => this._level?.() ?? 1);
   private readonly _moreToggle =
     viewChild<ElementRef<HTMLButtonElement>>('moreToggle');
 

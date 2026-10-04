@@ -89,8 +89,17 @@ export function isOwnStoreScope(
  */
 export const LOCATIONS = defineResource<Location>({
   name: 'locations',
-  segment: 'locations',
-  labels: { one: 'catalog.locations.one', many: 'catalog.locations.many' },
+  // The Shops tab of a chain, at `/chains/{chainId}/shops` (admin plan 0042).
+  segment: 'shops',
+  labels: {
+    one: 'catalog.locations.one',
+    many: 'catalog.locations.many',
+    create: 'catalog.locations.add',
+  },
+
+  // The chain is in the address. It used to be a filter the operator had to
+  // pick before the list would read anything.
+  parent: { resource: 'supermarkets', param: 'chainId', filter: 'supermarketId' },
 
   /**
    * A shop's name is usually its address, because that is what distinguishes
@@ -240,7 +249,40 @@ export const LOCATIONS = defineResource<Location>({
     // the two columns this screen exists for: the postal code and whether
     // anybody actually knows it.
     compact: ['city', 'postalCode', 'postalCodeSource'],
+    // The column beside the open shop: the address, then the town and the
+    // postal code. The states below say the rest.
+    brief: {
+      heading: (row, locales) =>
+        localizedTextValue(row.label, locales) || row.address || row.city || '',
+      line: ['city', 'postalCode'],
+    },
   },
+
+  /**
+   * What a row says beside its address, at most two today.
+   *
+   * "Map" for a shop with a walk shown to shoppers, and "Postal code guessed"
+   * for a code that was inferred and that nobody has checked, which is the
+   * one a person has to look at.
+   *
+   * The mock has a third, "Own section order". The list read does not say
+   * whether a shop's sections are its own or its chain's: only the read of one
+   * shop's sections does. So the shop's Sections tab says it, and the row does
+   * not guess.
+   */
+  rowStates: () => (row) => [
+    ...(row.hasMap
+      ? [{ label: 'catalog.locations.state.map', tone: 'neutral' as const }]
+      : []),
+    ...(row.postalCodeSource === 'DERIVED'
+      ? [
+          {
+            label: 'catalog.locations.state.postalCodeGuessed',
+            tone: 'waiting' as const,
+          },
+        ]
+      : []),
+  ],
 
   filters: [
     /**
@@ -261,12 +303,6 @@ export const LOCATIONS = defineResource<Location>({
       label: 'catalog.locations.filter.query',
     },
     {
-      kind: 'reference',
-      param: 'supermarketId',
-      label: 'catalog.locations.filter.supermarketId',
-      resource: 'supermarkets',
-    },
-    {
       kind: 'enum',
       param: 'postalCodeSource',
       label: 'catalog.locations.filter.postalCodeSource',
@@ -280,14 +316,10 @@ export const LOCATIONS = defineResource<Location>({
     },
   ],
 
-  // Nothing can be read until a chain is named, because there is no route that
-  // lists shops across chains. The screen says so rather than drawing an empty
-  // table, which would be a claim nothing had checked.
-  requires: ['supermarketId'],
-
   actions: { create: true, edit: true, delete: true },
 
-  // The generic form, with the shop's sections under it (admin plan 0037).
+  // The generic form: the page of a new shop, and the Details tab of one that
+  // exists (admin plan 0042).
   editor: LocationFormPage,
 
   gateway: () => inject(RESOURCE_GATEWAYS).for<Location>(locationSource()),

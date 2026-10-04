@@ -44,6 +44,19 @@ export interface AdminSection {
   readonly home?: Type<unknown>;
   /** Resources mounted under the segment, in navigation order. */
   readonly resources?: readonly AnyResourceDescriptor[];
+  /**
+   * Resources this section holds and mounts itself, through {@link screens}
+   * (admin plan 0042).
+   *
+   * A chain is a page and its shops are a tab of that page, so neither is a
+   * flat list with a tab of its own, and the route factory cannot mount them.
+   * They are named here so that the registry still finds them: a reference
+   * field pointing at a chain has to resolve, and a link to a shop has to be
+   * built from where shops are mounted. Their address is the section's segment
+   * and then their own, with the parent row between for a resource that
+   * declares a `parent`.
+   */
+  readonly held?: readonly AnyResourceDescriptor[];
   /** Hand written screens under the segment. */
   readonly screens?: readonly Route[];
   /** Navigation entries for those hand written screens. */
@@ -108,8 +121,23 @@ export function sectionLink(section: AdminSection): string | null {
   }
 
   const [only] = sectionScreens(section);
+  if (only !== undefined) {
+    return only.path;
+  }
 
-  return only?.path ?? null;
+  // A section that mounts its own resources opens on the one that has no
+  // parent: the chains, which every other resource of that section is under
+  // (admin plan 0042).
+  const root = (section.held ?? []).find(
+    (descriptor) => descriptor.parent === undefined
+  );
+  if (root === undefined) {
+    return null;
+  }
+
+  return section.segment === undefined
+    ? `/${root.segment}`
+    : `/${section.segment}/${root.segment}`;
 }
 
 /**

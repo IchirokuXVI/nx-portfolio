@@ -579,6 +579,9 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: 'ADMIN',
       availabilityObservedAt: '2026-08-02T09:15:00.000Z',
       availabilitySourceRunId: null,
+      // Joined on by the read (admin plan 0042, section 2).
+      itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+      itemBrand: 'Hacendado',
     },
     {
       id: 'sli_oil_centro',
@@ -590,6 +593,11 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: 'OFFICIAL_WEB',
       availabilityObservedAt: '2026-09-01T06:40:00.000Z',
       availabilitySourceRunId: 'run_deza_1',
+      itemName: {
+        en: 'Extra virgin olive oil 1 L',
+        es: 'Aceite de oliva virgen extra 1 L',
+      },
+      itemBrand: 'Hacendado',
     },
     {
       id: 'sli_milk_oeste',
@@ -601,5 +609,7 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       availabilitySourceKind: null,
       availabilityObservedAt: null,
       availabilitySourceRunId: null,
+      itemName: { en: 'Whole milk 1 L', es: 'Leche entera 1 L' },
+      itemBrand: 'Hacendado',
     },
   ];

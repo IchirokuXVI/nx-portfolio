@@ -9,7 +9,17 @@ import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
-import { RESOURCE_DESCRIPTOR, RESOURCE_FORM_MODE } from './resource-route-data';
+import {
+  RESOURCE_DESCRIPTOR,
+  RESOURCE_FORM_MODE,
+  RESOURCE_LIST_EMBED,
+} from './resource-route-data';
+import {
+  ResourceSplitPage,
+  SPLIT_EMPTY_KEY,
+  SPLIT_LIST_WIDTH,
+  SPLIT_UNDER_HEADER,
+} from './resource-split-page';
 
 /**
  * The three routes every resource has.
@@ -38,7 +48,92 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
       path: descriptor.segment,
       children: [
         { path: '', component: ResourceListPage, data },
+        ...resourceFormRoutes(descriptor),
+      ],
+    },
+  ];
+}
 
+/**
+ * The list of a resource as part of a larger page (admin plan 0042): a tab of
+ * its parent's page, at the tab's own path.
+ *
+ * The same list component, told through route `data` that the page above it
+ * already drew the header. Its forms are {@link resourceFormRoutes}, mounted by
+ * the caller beside the page and not inside it, so that a form is a page of its
+ * own with its own header and its way back.
+ */
+export function resourceTabRoute(descriptor: AnyResourceDescriptor): Route {
+  return {
+    path: descriptor.segment,
+    component: ResourceListPage,
+    data: { [RESOURCE_DESCRIPTOR]: descriptor, [RESOURCE_LIST_EMBED]: 'tab' },
+  };
+}
+
+/**
+ * The list of a resource as a column, with whatever is open beside it (admin
+ * plan 0042).
+ *
+ * `children` are what can be open: the row's own page, and a form for a new
+ * one. The list navigates to the row's id relative to this route, so the
+ * row's page is the child whose path is a parameter.
+ */
+export function resourceSplitRoute(
+  descriptor: AnyResourceDescriptor,
+  options: {
+    readonly children: Route[];
+    /** How wide the column is beside the open row, as a CSS length. */
+    readonly listWidth: string;
+    /** Whether a page header is drawn above the split by the page holding it. */
+    readonly underHeader?: boolean;
+    /** What the pane beside the list says while nothing is open, as a key. */
+    readonly emptyKey?: string;
+  }
+): Route {
+  return {
+    path: descriptor.segment,
+    component: ResourceSplitPage,
+    data: {
+      [RESOURCE_DESCRIPTOR]: descriptor,
+      [RESOURCE_LIST_EMBED]: 'column',
+      [SPLIT_LIST_WIDTH]: options.listWidth,
+      [SPLIT_UNDER_HEADER]: options.underHeader === true,
+      [SPLIT_EMPTY_KEY]: options.emptyKey ?? null,
+    },
+    children: options.children,
+  };
+}
+
+/**
+ * The form routes of a resource, without its list: `new`, and `:id`.
+ *
+ * Under the resource's own segment, so that the form's way back, which is one
+ * route up, is the address the list is at.
+ */
+export function resourceFormBranch(descriptor: AnyResourceDescriptor): Route {
+  return {
+    path: descriptor.segment,
+    children: resourceFormRoutes(descriptor),
+  };
+}
+
+/** The create route of a resource alone, for a caller that mounts the rest. */
+export function resourceCreateRoute(descriptor: AnyResourceDescriptor): Route {
+  return {
+    path: 'new',
+    component: descriptor.editor ?? ResourceFormPage,
+    data: {
+      [RESOURCE_DESCRIPTOR]: descriptor,
+      [RESOURCE_FORM_MODE]: 'create',
+    },
+  };
+}
+
+function resourceFormRoutes(descriptor: AnyResourceDescriptor): Route[] {
+  const data = { [RESOURCE_DESCRIPTOR]: descriptor };
+
+  return [
         // A create screen only where there is something to create. A resource
         // with no `POST` behind it would otherwise answer a typed URL with a
         // form that fills in, submits, and is refused by the gateway, which is
@@ -98,8 +193,6 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
               },
             ]
           : []),
-      ],
-    },
   ];
 }
 

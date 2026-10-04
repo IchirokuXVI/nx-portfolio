@@ -38,14 +38,22 @@ export const SUPERMARKETS_PATH = '/v1/admin/catalog/supermarkets';
  * a scope of another chain, so the picker offers this chain's scopes only.
  *
  * A chain with no default is a gap, not a resting state: chains made before
- * `0153` have none until somebody sets one. The list flags them.
+ * `0153` have none until somebody sets one. The chain's Price scopes tab is
+ * where one is made the default.
+ *
+ * **A chain is a page, and its list is the column beside that page** (admin
+ * plan 0042). The section mounts it at `/chains`, a chain at
+ * `/chains/{chainId}`, and its shops, sections and price scopes are tabs of
+ * that page. So the segment is `chains` and nothing mounts this as a flat
+ * list.
  */
 export const SUPERMARKETS = defineResource<Supermarket>({
   name: 'supermarkets',
-  segment: 'supermarkets',
+  segment: 'chains',
   labels: {
     one: 'catalog.supermarkets.one',
     many: 'catalog.supermarkets.many',
+    create: 'catalog.supermarkets.add',
   },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
@@ -104,6 +112,14 @@ export const SUPERMARKETS = defineResource<Supermarket>({
           : null,
       unsetFlag: 'catalog.supermarkets.noDefaultScope',
     },
+    {
+      kind: 'number',
+      name: 'locationCount',
+      label: 'catalog.supermarkets.locationCount',
+      // Counted by catalog on every read of a chain (admin plan 0042, section
+      // 2), and never typed.
+      editable: false,
+    },
   ],
 
   list: {
@@ -113,6 +129,9 @@ export const SUPERMARKETS = defineResource<Supermarket>({
     // that tells Carrefour from Carrefour Express. Its website is not what
     // anybody is scanning a phone screen for.
     compact: ['name', 'externalBrandKey', 'defaultPriceScopeId'],
+    // In the column beside the open chain, a chain is its name and the shops
+    // it holds.
+    brief: { trailing: 'locationCount' },
   },
 
   sorts: [

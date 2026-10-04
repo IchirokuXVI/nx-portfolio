@@ -3,6 +3,7 @@ import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   compositeIdOf,
   defineResource,
+  localizedTextValue,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { LOCATION_ITEM_KEY, locationItemSource } from './catalog-sources';
@@ -44,18 +45,29 @@ export type LocationItem = Wire.CatalogSupermarketLocationItemView;
  */
 export const LOCATION_ITEMS = defineResource<LocationItem>({
   name: 'location-items',
-  segment: 'location-items',
+  // The Products tab of a shop, at
+  // `/chains/{chainId}/shops/{shopId}/products` (admin plan 0042).
+  segment: 'products',
   labels: {
     one: 'catalog.locationItems.one',
     many: 'catalog.locationItems.many',
+    create: 'catalog.locationItems.add',
+  },
+
+  // The shop is in the address.
+  parent: {
+    resource: 'locations',
+    param: 'shopId',
+    filter: 'supermarketLocationId',
   },
 
   // The pair the row is keyed on, because no route reads one by its own uuid.
   rowId: (row) => compositeIdOf(row, LOCATION_ITEM_KEY),
 
-  // A uuid, and that is the honest title: the row carries the product's id and
-  // not its name, and resolving one name per row is a request per row.
-  title: (row) => row.itemId,
+  // The product's name, which the read joins on (admin plan 0042, section 2).
+  // The id only when the product is gone and the join found nothing.
+  title: (row, locales) =>
+    localizedTextValue(row.itemName, locales) || row.itemId,
 
   fields: [
     {
@@ -73,6 +85,16 @@ export const LOCATION_ITEMS = defineResource<LocationItem>({
       // Half of what the row *is*. Changing it would write a second row rather
       // than move this one, so it is settable once.
       editable: 'create',
+      // Named by the row itself, never by a request per row.
+      nameFrom: 'itemName',
+    },
+    {
+      kind: 'text',
+      name: 'itemBrand',
+      label: 'catalog.locationItems.itemBrand',
+      // The product's brand, joined on beside its name. Changed on the
+      // product, never here.
+      editable: false,
     },
     {
       kind: 'reference',
@@ -110,20 +132,9 @@ export const LOCATION_ITEMS = defineResource<LocationItem>({
   ],
 
   list: {
-    columns: ['itemId', 'positionInStore', 'available'],
-    compact: ['positionInStore', 'available'],
+    columns: ['itemId', 'itemBrand', 'positionInStore', 'available'],
+    compact: ['itemBrand', 'positionInStore', 'available'],
   },
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'supermarketLocationId',
-      label: 'catalog.locationItems.filter.supermarketLocationId',
-      resource: 'locations',
-    },
-  ],
-
-  requires: ['supermarketLocationId'],
 
   actions: { create: true, edit: true },
 

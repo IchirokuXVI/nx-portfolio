@@ -7,15 +7,12 @@ import {
   CatalogDashboard,
   catalogRoutes,
   CATEGORIES,
+  CHAIN_RESOURCES,
+  chainsRoutes,
   ITEMS,
-  LOCATION_ITEMS,
-  LOCATIONS,
   PRICE_POLICIES,
-  PRICE_SCOPES,
   PRICES,
   PRODUCT_GROUPS,
-  SECTIONS,
-  SUPERMARKETS,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import {
@@ -42,6 +39,7 @@ import {
   PeopleIcon,
   ShieldIcon,
   StoreIcon,
+  TagIcon,
 } from '@portfolio/shared/ui';
 
 /**
@@ -130,25 +128,30 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     home: DashboardPage,
   },
   {
+    // A chain holds its shops (admin plan 0042). Second on the rail, after the
+    // overview, because a chain is where an operator starts: a shop, a section
+    // and a price scope each belong to one.
+    //
+    // **No segment and no tabs.** The chains are at `/chains`, which is the
+    // segment of the one resource here that has no parent, and a chain's own
+    // page draws its tabs. The five resources are held and not mounted: the
+    // section's own route table is where each of them is.
+    key: 'chains',
+    label: 'shell.sections.chains',
+    icon: StoreIcon,
+    held: CHAIN_RESOURCES,
+    screens: chainsRoutes(),
+  },
+  {
     key: 'catalog',
     label: 'shell.sections.catalog',
-    icon: StoreIcon,
+    icon: TagIcon,
     segment: CATALOG_SEGMENT,
     home: CatalogDashboard,
-    resources: [
-      SUPERMARKETS,
-      LOCATIONS,
-      SECTIONS,
-      PRICE_SCOPES,
-      ITEMS,
-      CATEGORIES,
-      PRODUCT_GROUPS,
-      PRICES,
-      PRICE_POLICIES,
-      LOCATION_ITEMS,
-    ],
+    resources: [ITEMS, CATEGORIES, PRODUCT_GROUPS, PRICES, PRICE_POLICIES],
     // One product at every scope (admin plan 0033), reached from the product
-    // and from a price's history rather than from the navigation.
+    // and from a price's history rather than from the navigation. Then the
+    // addresses the chain screens had here, as redirects (admin plan 0042).
     screens: catalogRoutes(),
   },
   {

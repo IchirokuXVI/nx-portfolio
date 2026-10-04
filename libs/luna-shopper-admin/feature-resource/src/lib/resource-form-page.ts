@@ -20,6 +20,7 @@ import {
   toCell,
   type ErrorLink,
   type ErrorLinkTarget,
+  type FieldDescriptor,
   type FieldMessage,
   type FormMode,
   type ResourceCell,
@@ -33,11 +34,18 @@ import {
   type FieldChange,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
-import { ResourceReferences, ResourceRegistry } from './resource-registry';
+import { ResourceChanges } from './resource-changes';
+import {
+  parentsFromRoute,
+  ResourceReferences,
+  ResourceRegistry,
+} from './resource-registry';
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
+  RESOURCE_ID_FROM,
   RESOURCE_ID_PARAM,
+  routeParam,
 } from './resource-route-data';
 
 /**
@@ -99,7 +107,7 @@ const STRING_FIELD_KINDS: readonly string[] = [
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
-        [fields]="descriptor.fields"
+        [fields]="fields"
         [header]="false"
         [lookup]="references"
         [messages]="messages()"
@@ -162,8 +170,46 @@ export class ResourceFormPage {
       ? 'create'
       : 'edit';
 
+  private readonly _changes = inject(ResourceChanges);
+
+  /**
+   * The row's id, from the route.
+   *
+   * On this route under the usual name, or on a route above under the name the
+   * route's data gives: a form that is a tab of a page reads the id that page
+   * is addressed by (admin plan 0042).
+   */
   private readonly _id =
-    this._route.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null;
+    this._route.snapshot.data[RESOURCE_ID_FROM] === undefined
+      ? (this._route.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
+      : routeParam(
+          this._route.snapshot,
+          this._route.snapshot.data[RESOURCE_ID_FROM]
+        );
+
+  /** The rows above this one that the address names, by filter. */
+  protected readonly parents = parentsFromRoute(
+    this._registry,
+    this.descriptor,
+    this._route.snapshot
+  );
+
+  /**
+   * The fields the form draws: the descriptor's, less the parent the address
+   * already names.
+   *
+   * A shop made at `/chains/{chainId}/shops/new` belongs to that chain. A
+   * picker for the chain there would be a second place to answer a question
+   * the address answered, and the two could disagree.
+   */
+  readonly fields: readonly FieldDescriptor[] = (
+    this.descriptor.fields as readonly FieldDescriptor[]
+  ).filter(
+    (field) =>
+      this.descriptor.parent === undefined ||
+      field.name !== this.descriptor.parent.filter ||
+      this.parents[this.descriptor.parent.filter] === undefined
+  );
 
   readonly store = new ResourceFormStore<ResourceRow>(
     this.descriptor,
@@ -304,7 +350,12 @@ export class ResourceFormPage {
       declared.detail === undefined
         ? this._id
         : error.detailString(declared.detail);
-    return id === null ? null : this._registry.linkFor(declared, id);
+    return id === null
+      ? null
+      : this._registry.linkFor(declared, id, {
+          ...this.context(),
+          ...this.parents,
+        });
   });
 
   // Drawn only while `store.status()` is `'error'`, so the fallback is for the
@@ -339,12 +390,19 @@ export class ResourceFormPage {
     const params = this._route.snapshot.queryParamMap;
     const draft: Record<string, string> = {};
 
+    // The parent the address names. A row made under a chain belongs to it.
+    const parent = this.descriptor.parent;
+    const parentId = parent === undefined ? undefined : this.parents[parent.filter];
+    if (parent !== undefined && parentId !== undefined) {
+      draft[parent.filter] = parentId;
+    }
+
     for (const field of this.descriptor.fields) {
       if (!STRING_FIELD_KINDS.includes(field.kind)) {
         continue;
       }
       const value = params.get(field.name);
-      if (value !== null && value !== '') {
+      if (value !== null && value !== '' && draft[field.name] === undefined) {
         draft[field.name] = value;
       }
     }
@@ -359,8 +417,29 @@ export class ResourceFormPage {
   async submit(): Promise<void> {
     const saved = await this.store.submit();
     if (saved !== null) {
-      this.goBack();
+      this.saved(saved);
     }
+  }
+
+  /**
+   * The row was written. Whatever still shows this resource reads again
+   * (admin plan 0042), and then the form does what follows a save.
+   */
+  protected saved(row: ResourceRow): void {
+    this._changes.wrote(this.descriptor.name);
+    this.afterSave(row);
+  }
+
+  /**
+   * What follows a save: back to the list.
+   *
+   * A form that is a tab of the row's own page has no list to go back to, and
+   * overrides this to stay where it is. A form that made a row with a page of
+   * its own overrides it to open that page.
+   */
+  protected afterSave(row: ResourceRow): void {
+    void row;
+    this.goBack();
   }
 
   /** Cancel: straight back, unless there is something to lose. */

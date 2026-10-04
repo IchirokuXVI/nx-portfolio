@@ -1,49 +1,46 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
   inject,
+  signal,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import {
-  RESOURCE_ID_PARAM,
-  ResourceFormPage,
-} from '@portfolio/luna-shopper-admin/feature-resource';
+import { ResourceFormPage } from '@portfolio/luna-shopper-admin/feature-resource';
+import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   PageHeader,
   ResourceForm,
 } from '@portfolio/luna-shopper-admin/ui';
-import { LocationSections } from './location-sections';
+import { ShopContext } from './chains/shop-context';
 
 /**
- * The shop screen: the generic form, and under it the sections this shop has
- * (admin plan 0037, target 2).
+ * The shop's form, in the two places it is drawn (admin plan 0042, target 5).
  *
- * The panel needs the shop's chain, which only the row read can say, so it is
- * drawn once the form has read the shop. A shop being created has no sections
- * of its own yet and gets no panel.
+ * - **A new shop** is a page at `/chains/{chainId}/shops/new`, with the header
+ *   every form has. Its chain is the one in the address. Saving opens the shop
+ *   that was made.
+ * - **A shop that exists** is the Details tab of its page, which drew the
+ *   header. Saving stays on the tab, and the page reads the shop again so that
+ *   its title and its "Priced by" line say what was saved.
+ *
+ * The shop's sections used to be a panel under this form. They are the tab
+ * beside it now.
  */
 @Component({
   selector: 'lib-location-form-page',
-  imports: [
-    PageHeader,
-    ResourceForm,
-    ConfirmDialog,
-    LocationSections,
-    RokuTranslatorPipe,
-  ],
+  imports: [PageHeader, ResourceForm, ConfirmDialog, RokuTranslatorPipe],
   template: `
-    <!-- At the top of the page and in every state, so that the title, the way
-         back and the tabs do not arrive a moment after the page. -->
-    <lib-page-header
-      (back)="leave()"
-      [backDisabled]="store.busy()"
-      [backLabel]="'resource.action.back' | rokuT"
-      [heading]="titleKey() | rokuT: titleArgs()"
-      [subtitle]="subtitle()"
-    />
+    @if (mode === 'create') {
+      <lib-page-header
+        (back)="leave()"
+        [backDisabled]="store.busy()"
+        [backLabel]="'resource.action.back' | rokuT"
+        [frameTabs]="false"
+        [heading]="titleKey() | rokuT: titleArgs()"
+      />
+    }
 
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
@@ -60,7 +57,7 @@ import { LocationSections } from './location-sections';
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
-        [fields]="descriptor.fields"
+        [fields]="fields"
         [header]="false"
         [lookup]="references"
         [messages]="messages()"
@@ -71,17 +68,8 @@ import { LocationSections } from './location-sections';
         [titleArgs]="titleArgs()"
         [titleKey]="titleKey()"
       />
-    }
-
-    @if (locationId(); as id) {
-      @if (chainId(); as chain) {
-        <div class="beside">
-          <lib-location-sections
-            [hasMap]="hasMap()"
-            [locationId]="id"
-            [supermarketId]="chain"
-          />
-        </div>
+      @if (savedNow() && !store.dirty()) {
+        <p class="saved" role="status">{{ 'resource.form.saved' | rokuT }}</p>
       }
     }
 
@@ -100,7 +88,7 @@ import { LocationSections } from './location-sections';
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-6);
+      gap: var(--admin-space-4);
     }
 
     .state {
@@ -117,32 +105,45 @@ import { LocationSections } from './location-sections';
       color: var(--admin-ink);
     }
 
-    .beside {
-      padding-block-start: var(--admin-space-4);
-      border-block-start: 1px solid var(--admin-border);
+    .saved {
+      color: var(--admin-ink-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LocationFormPage extends ResourceFormPage {
   private readonly _shopRoute = inject(ActivatedRoute);
+  private readonly _shopRouter = inject(Router);
+  private readonly _shop = inject(ShopContext, { optional: true });
 
-  /** The shop being edited, or `null` on a create. */
-  readonly locationId = computed(() =>
-    this.mode === 'edit'
-      ? (this._shopRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
-      : null
-  );
+  /** Whether the last act was a save, for the line under the form. */
+  readonly savedNow = signal(false);
+
+  /** A new shop opens its own page. A changed one stays on its tab. */
+  protected override afterSave(row: ResourceRow): void {
+    const id = row['id'];
+    if (this.mode === 'create' && typeof id === 'string') {
+      void this._shopRouter.navigate(['..', id], {
+        relativeTo: this._shopRoute,
+      });
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(true);
+    void this._shop?.reload();
+  }
 
   /**
-   * Whether the shop has a walk shown to shoppers, from the location read
-   * (backend plan 0168). Its section list follows that map (admin plan 0040).
+   * Cancel. From a new shop, back to the chain's shops. On the Details tab
+   * there is nowhere to go back to, so it puts back what the shop holds.
    */
-  readonly hasMap = computed(() => this.store.row()?.['hasMap'] === true);
-
-  /** The shop's chain, once the row has been read. */
-  readonly chainId = computed(() => {
-    const chain = this.store.row()?.['supermarketId'];
-    return typeof chain === 'string' && chain !== '' ? chain : null;
-  });
+  override goBack(): void {
+    if (this.mode === 'create') {
+      super.goBack();
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(false);
+    void this.store.load();
+  }
 }

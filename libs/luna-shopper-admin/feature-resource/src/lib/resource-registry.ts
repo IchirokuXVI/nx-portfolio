@@ -4,6 +4,7 @@ import {
   Injector,
   runInInjectionContext,
 } from '@angular/core';
+import type { ActivatedRouteSnapshot } from '@angular/router';
 import {
   idOf,
   type AnyResourceDescriptor,
@@ -19,6 +20,7 @@ import type {
 } from '@portfolio/luna-shopper-admin/ui';
 import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
 import { ADMIN_SECTIONS } from './admin-section';
+import { routeParam } from './resource-route-data';
 
 /**
  * Finding a descriptor, working out where it is mounted, and building the
@@ -36,6 +38,44 @@ import { ADMIN_SECTIONS } from './admin-section';
  * service is not, because it is asked for a gateway long after it was
  * constructed, so it keeps an `Injector` and runs the factory inside it.
  */
+/**
+ * The ids of the rows above a resource, by the name of each parent's filter.
+ *
+ * Loosely typed on purpose, so that a row read off the gateway can be handed
+ * over whole: only the string values under the names a `parent` declares are
+ * ever read.
+ */
+export type KnownParents = Readonly<Record<string, unknown>>;
+
+/**
+ * The parents the address names, for a resource and everything above it.
+ *
+ * `{ supermarketId, supermarketLocationId }` on the products tab of a shop:
+ * each `parent` up the chain names a route parameter, and the closest route
+ * that holds it answers. It is what {@link ResourceRegistry.pathOf} wants as
+ * `known`, read from where the screen already is.
+ */
+export function parentsFromRoute(
+  registry: ResourceRegistry,
+  descriptor: AnyResourceDescriptor,
+  route: ActivatedRouteSnapshot
+): Record<string, string> {
+  const known: Record<string, string> = {};
+  let current: AnyResourceDescriptor | undefined = descriptor;
+
+  while (current?.parent !== undefined) {
+    const { param, filter, resource } = current.parent;
+    const value = routeParam(route, param);
+
+    if (value !== null) {
+      known[filter] = value;
+    }
+    current = registry.byName(resource);
+  }
+
+  return known;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ResourceRegistry {
   private readonly _sections = inject(ADMIN_SECTIONS);
@@ -43,7 +83,10 @@ export class ResourceRegistry {
 
   /** Every resource, section by section, in the order the app named them. */
   all(): readonly AnyResourceDescriptor[] {
-    return this._sections.flatMap((section) => section.resources ?? []);
+    return this._sections.flatMap((section) => [
+      ...(section.resources ?? []),
+      ...(section.held ?? []),
+    ]);
   }
 
   /** The resource with this name, or `undefined`. */
@@ -58,21 +101,72 @@ export class ResourceRegistry {
    * did not mount. Everything that used to build such a path out of
    * `descriptor.segment` asks this instead: a segment says what a resource
    * calls itself and says nothing at all about which section holds it.
+   *
+   * **A resource under a parent is listed under one row of that parent**
+   * (admin plan 0042), so its list has an address only once that row is
+   * known: `['/', 'chains', '<chain>', 'shops']`. `known` is where the caller
+   * says so, by the name of the parent's filter (`supermarketId`). A row of
+   * the resource itself, or of anything that carries the same ids, can be
+   * passed as it is.
+   *
+   * Without the parent's id the answer is the closest list that does have an
+   * address: `/chains` for the shops of a chain nobody named. A tile that
+   * counts every shop therefore still leads somewhere, to the place the
+   * operator picks the chain.
    */
-  pathOf(name: string): readonly string[] | null {
-    for (const section of this._sections) {
-      const found = (section.resources ?? []).find(
-        (descriptor) => descriptor.name === name
-      );
-
-      if (found !== undefined) {
-        return section.segment === undefined
-          ? ['/', found.segment]
-          : ['/', section.segment, found.segment];
-      }
+  pathOf(name: string, known: KnownParents = {}): readonly string[] | null {
+    const descriptor = this.byName(name);
+    if (descriptor === undefined) {
+      return null;
     }
 
-    return null;
+    const parent = descriptor.parent;
+    if (parent === undefined) {
+      return this._mounted(descriptor);
+    }
+
+    const id = known[parent.filter];
+    const above =
+      typeof id === 'string' && id !== ''
+        ? this.rowPath(parent.resource, id, known)
+        : null;
+
+    return above === null
+      ? this.pathOf(parent.resource, known)
+      : [...above, descriptor.segment];
+  }
+
+  /**
+   * Where one row lives, or `null` when it has no address that can be built.
+   *
+   * Stricter than {@link pathOf}: a list can fall back to the list above it,
+   * and a row cannot, because the list above is not the row. A shop whose
+   * chain is unknown gets no link, and a name without a link is still an
+   * answer.
+   */
+  rowPath(
+    name: string,
+    id: string,
+    known: KnownParents = {}
+  ): readonly string[] | null {
+    const descriptor = this.byName(name);
+    if (descriptor === undefined) {
+      return null;
+    }
+
+    const parent = descriptor.parent;
+    if (parent === undefined) {
+      const list = this._mounted(descriptor);
+      return list === null ? null : [...list, id];
+    }
+
+    const parentId = known[parent.filter];
+    if (typeof parentId !== 'string' || parentId === '') {
+      return null;
+    }
+
+    const above = this.rowPath(parent.resource, parentId, known);
+    return above === null ? null : [...above, descriptor.segment, id];
   }
 
   /**
@@ -82,18 +176,41 @@ export class ResourceRegistry {
    * when the link names one: a category that still holds products opens its
    * products (admin plan 0036).
    */
-  linkFor(link: ErrorLink, id: string): ErrorLinkTarget | null {
-    const path = this.pathOf(link.resource);
-    if (path === null) {
-      return null;
-    }
+  linkFor(
+    link: ErrorLink,
+    id: string,
+    known: KnownParents = {}
+  ): ErrorLinkTarget | null {
     // The least a link can say, for a resource that did not name its own
     // words. Every one that does reads better than this.
     const labelKey = link.label ?? 'resource.error.openRow';
 
-    return link.filter === undefined
-      ? { commands: [...path, id], labelKey }
-      : { commands: path, queryParams: { [link.filter]: id }, labelKey };
+    if (link.filter === undefined) {
+      const row = this.rowPath(link.resource, id, known);
+      return row === null ? null : { commands: [...row], labelKey };
+    }
+
+    const path = this.pathOf(link.resource, known);
+    return path === null
+      ? null
+      : { commands: [...path], queryParams: { [link.filter]: id }, labelKey };
+  }
+
+  /** Where the section that names a resource mounts it, before any parent. */
+  private _mounted(
+    descriptor: AnyResourceDescriptor
+  ): readonly string[] | null {
+    for (const section of this._sections) {
+      const named = [...(section.resources ?? []), ...(section.held ?? [])];
+
+      if (named.includes(descriptor)) {
+        return section.segment === undefined
+          ? ['/', descriptor.segment]
+          : ['/', section.segment, descriptor.segment];
+      }
+    }
+
+    return null;
   }
 
   /** The gateway for a resource, built in an injection context. */
