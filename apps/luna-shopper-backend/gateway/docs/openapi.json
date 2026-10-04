@@ -36903,6 +36903,22 @@
               "string",
               "null"
             ]
+          },
+          "itemName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itemBrand": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -36913,7 +36929,9 @@
           "available",
           "availabilitySourceKind",
           "availabilityObservedAt",
-          "availabilitySourceRunId"
+          "availabilitySourceRunId",
+          "itemName",
+          "itemBrand"
         ],
         "additionalProperties": false
       },
@@ -37194,6 +37212,11 @@
               "string",
               "null"
             ]
+          },
+          "locationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view."
           }
         },
         "required": [

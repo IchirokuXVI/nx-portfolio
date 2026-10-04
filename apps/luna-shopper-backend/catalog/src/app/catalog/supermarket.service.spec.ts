@@ -29,8 +29,12 @@ interface Written {
   row: Record<string, unknown>;
 }
 
-function build(options: { failOn?: unknown } = {}) {
+function build(
+  options: { failOn?: unknown; shops?: Record<string, number> } = {}
+) {
   const committed: Written[] = [];
+  /** The ids each shop count asked about, one entry per query. */
+  const counted: string[][] = [];
   let transactions = 0;
   let nextId = 0;
 
@@ -79,6 +83,13 @@ function build(options: { failOn?: unknown } = {}) {
       const row = rows.get(where.id);
       return row ? { ...row } : null;
     },
+    // The grouped shop count. A chain with no shop has no group, as in SQL.
+    query: async (_sql: string, [ids]: [string[]]) => {
+      counted.push([...ids]);
+      return ids
+        .filter((id) => (options.shops?.[id] ?? 0) > 0)
+        .map((id) => ({ id, count: options.shops?.[id] }));
+    },
   } as unknown as Repository<Supermarket>;
 
   const scopes: Record<string, { id: string; supermarketId: string }> = {
@@ -99,7 +110,7 @@ function build(options: { failOn?: unknown } = {}) {
     admin,
     audit
   );
-  return { service, committed, transactions: () => transactions };
+  return { service, committed, counted, transactions: () => transactions };
 }
 
 describe('SupermarketService', () => {
@@ -178,6 +189,60 @@ describe('SupermarketService', () => {
       });
 
       expect(view.defaultPriceScopeId).toBeNull();
+    });
+  });
+
+  /**
+   * The shop count of a chain (admin plan 0042, section 2). The fake only
+   * proves which reads carry it and that a missing group reads as zero; the
+   * query itself is proved in `localized-name-paging.integration.spec.ts`.
+   */
+  describe('locationCount', () => {
+    it('answers zero for a new chain without counting anything', async () => {
+      const { service, counted } = build();
+
+      const view = await service.create({
+        userId: 'admin-1',
+        name: { es: 'Lidl' },
+      });
+
+      expect(view.locationCount).toBe(0);
+      expect(counted).toEqual([]);
+    });
+
+    it('counts the shops of the chain a get names', async () => {
+      const { service, counted } = build({ shops: { [CHAIN]: 3 } });
+
+      const view = await service.get({
+        userId: 'admin-1',
+        supermarketId: CHAIN,
+      });
+
+      expect(view.locationCount).toBe(3);
+      expect(counted).toEqual([[CHAIN]]);
+    });
+
+    it('reads a chain with no shop as zero', async () => {
+      const { service } = build();
+
+      const view = await service.get({
+        userId: 'admin-1',
+        supermarketId: CHAIN,
+      });
+
+      expect(view.locationCount).toBe(0);
+    });
+
+    it('carries the count on the answer of an update', async () => {
+      const { service } = build({ shops: { [CHAIN]: 2 } });
+
+      const view = await service.update({
+        userId: 'admin-1',
+        supermarketId: CHAIN,
+        defaultPriceScopeId: 'scope-own',
+      });
+
+      expect(view.locationCount).toBe(2);
     });
   });
 });

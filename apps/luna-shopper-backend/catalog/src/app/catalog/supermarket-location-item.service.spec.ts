@@ -79,7 +79,15 @@ interface BuildOptions {
   scopeOpinions?: SupermarketLocationItem[];
   /** The materialized rows the scope already has. */
   scopeRows?: SupermarketItem[];
+  /** The products catalog holds. Absent means the one named `item-1`. */
+  products?: Partial<Item>[];
 }
+
+const PRODUCT: Partial<Item> = {
+  id: 'item-1',
+  name: { en: 'Whole milk', es: 'Leche entera' },
+  brand: 'Hacendado',
+};
 
 function build(options: BuildOptions = {}) {
   const {
@@ -87,6 +95,7 @@ function build(options: BuildOptions = {}) {
     scopeLocations = [{ id: 'loc-1' }],
     scopeOpinions,
     scopeRows = [],
+    products = [PRODUCT],
   } = options;
 
   const savedShopRows: SupermarketLocationItem[] = [];
@@ -116,10 +125,28 @@ function build(options: BuildOptions = {}) {
         return input;
       }
     ),
+    // The page read of `listByLocation`: every held row, whatever was asked.
+    createQueryBuilder: jest.fn(() => {
+      const builder = {
+        where: () => builder,
+        andWhere: () => builder,
+        orderBy: () => builder,
+        addOrderBy: () => builder,
+        take: () => builder,
+        getMany: async () => held,
+      };
+      return builder;
+    }),
   } as unknown as Repository<SupermarketLocationItem>;
 
   const items = {
-    findOne: jest.fn(async () => ({ id: 'item-1' }) as Item),
+    findOne: jest.fn(
+      async ({ where }: { where: { id: string } }) =>
+        (products.find((product) => product.id === where.id) as Item) ?? null
+    ),
+    // The batched name read of a page. It answers every product held rather
+    // than reading the `In(...)`, so a row with no product proves the null.
+    find: jest.fn(async () => products as Item[]),
   } as unknown as Repository<Item>;
 
   const locations = {
@@ -169,7 +196,7 @@ function build(options: BuildOptions = {}) {
     audit.service,
     stacks
   );
-  return { svc, rows, locations, audit, savedShopRows, savedScopeRows };
+  return { svc, rows, items, locations, audit, savedShopRows, savedScopeRows };
 }
 
 function request(
@@ -450,5 +477,77 @@ describe('SupermarketLocationItemService.upsert', () => {
     // none is one no automated writer could tell from an unwritten one.
     expect(savedShopRows[0].available).toBe(true);
     expect(savedShopRows[0].availabilitySourceKind).toBeNull();
+  });
+});
+
+/**
+ * The product's name and brand ride on every read of the row (admin plan 0042,
+ * section 2). The fake proves which reads fill them and what a missing product
+ * or brand reads as; the join itself is proved against real Postgres in
+ * `location-availability.integration.spec.ts`.
+ */
+describe('SupermarketLocationItemService, the product a row names', () => {
+  const named = {
+    itemName: { en: 'Whole milk', es: 'Leche entera' },
+    itemBrand: 'Hacendado',
+  };
+
+  it('fills both on the answer of an upsert, from the read it already made', async () => {
+    const { svc, items } = build({ held: [shopRow()] });
+    const view = await svc.upsert({
+      userId: ADMIN,
+      itemId: 'item-1',
+      supermarketLocationId: 'loc-1',
+      positionInStore: 'Aisle 4',
+    });
+    expect(view).toMatchObject(named);
+    expect(items.findOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('fills both on a get', async () => {
+    const { svc } = build({ held: [shopRow()] });
+    const view = await svc.get({
+      userId: ADMIN,
+      itemId: 'item-1',
+      supermarketLocationId: 'loc-1',
+    });
+    expect(view).toMatchObject(named);
+  });
+
+  it('fills both on every row of a page, with one read for the page', async () => {
+    const { svc, items } = build({
+      held: [
+        shopRow(),
+        shopRow({ id: 'sli-2', itemId: 'item-2' }),
+        shopRow({ id: 'sli-3', itemId: 'item-gone' }),
+      ],
+      products: [
+        PRODUCT,
+        { id: 'item-2', name: { es: 'Arroz redondo' }, brand: null },
+      ],
+    });
+    const page = await svc.listByLocation({
+      userId: ADMIN,
+      supermarketLocationId: 'loc-1',
+    });
+
+    expect(page.items.map((row) => [row.itemName, row.itemBrand])).toEqual([
+      [named.itemName, 'Hacendado'],
+      // A product with no brand keeps its name and a null brand.
+      [{ es: 'Arroz redondo' }, null],
+      // A row whose product is gone still lists, with both null.
+      [null, null],
+    ]);
+    expect(items.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads nothing for an empty page', async () => {
+    const { svc, items } = build();
+    const page = await svc.listByLocation({
+      userId: ADMIN,
+      supermarketLocationId: 'loc-1',
+    });
+    expect(page.items).toEqual([]);
+    expect(items.find).not.toHaveBeenCalled();
   });
 });

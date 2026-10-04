@@ -707,6 +707,16 @@ export interface SupermarketView {
    * store.
    */
   defaultPriceScopeId: string | null;
+  /**
+   * How many shops the chain holds (admin plan 0042, section 2): its rows of
+   * `supermarket_locations`, counted in one grouped query for the page.
+   *
+   * Present on the reads of a chain itself (`supermarket.create`, `list`, `get`
+   * and `update`), and absent where a chain rides inside another view (a shop's
+   * neighbours, a basket's shop), which is about one shop and would cost a
+   * count nobody there reads.
+   */
+  locationCount?: number;
 }
 
 export interface SupermarketLocationView {
@@ -1604,6 +1614,18 @@ export interface SupermarketLocationItemView {
   availabilityObservedAt: string | null;
   /** The harvest run that wrote it. Opaque, never joined. */
   availabilitySourceRunId: string | null;
+  /**
+   * The product's name, joined on as {@link AdminSupermarketItemView} joins it
+   * (admin plan 0042, section 2): a shop's page of products is a page of
+   * distinct products, so resolving the name client side would cost a request
+   * per row. Null when the join found nothing.
+   */
+  itemName: LocalizedText | null;
+  /**
+   * The product's brand as `ItemView.brand` states it, joined on beside the
+   * name. Null for a product with no brand, and when the join found nothing.
+   */
+  itemBrand: string | null;
 }
 
 // --- Supermarket requests --------------------------------------------------
