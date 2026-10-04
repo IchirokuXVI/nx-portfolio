@@ -2,8 +2,10 @@ import { categoryId } from './ids';
 import type { ReferenceCategoryRoot } from './types';
 
 /**
- * The taxonomy (plan 0173, appendix A): twenty nine roots and two hundred and
- * forty six leaves, and a product only ever on a leaf.
+ * The taxonomy: thirty three roots and two hundred and seventy six leaves, and
+ * a product only ever on a leaf. Twenty nine roots and two hundred and forty
+ * six leaves are plan 0173's appendix A, and four roots and thirty leaves are
+ * plan 0179's, for what DIA does not sell.
  *
  * It is DIA's own menu tree, read once on 2026-09-29 and copied as ours, in
  * DIA's order and with DIA's names in both languages, without its seasonal,
@@ -16,6 +18,12 @@ import type { ReferenceCategoryRoot } from './types';
  * cuts", "Ron and whisky", "Cakes" for both Tartas and Tortitas). They are kept
  * as served on purpose (section 9). Correcting one is the owner's call.
  *
+ * The rows marked `ours, plan 0179` are not DIA's. Mercadona, Deza and El
+ * Jamón sell make-up, books, stationery, home textiles, toys and more, and
+ * DIA's tree had no leaf for any of it. The migration `CategoriesBeyondDia`
+ * added them: eight leaves at the end of roots DIA has, and four roots placed
+ * before `other`, which stays the last root.
+ *
  * The comment beside each row is DIA's id for that node. It is not data: the
  * table has no column for it and the id means nothing to the catalog.
  *
@@ -25,8 +33,8 @@ import type { ReferenceCategoryRoot } from './types';
  * made of it since.
  *
  * **A slug is an identity and never changes once shipped.** The id is derived
- * from it, the migration `DiaCategoryTree` wrote every row here under those
- * same ids, and the demo world and the harvest resolvers all name a category
+ * from it, the migrations `DiaCategoryTree` and `CategoriesBeyondDia` wrote
+ * every row here under those same ids, and the demo world and the harvest resolvers all name a category
  * by slug. Rename the `name`, never the `slug`.
  *
  * There are no catch all leaves. A product that fits no leaf goes on
@@ -1127,6 +1135,17 @@ export const REFERENCE_CATEGORIES: ReferenceCategoryRoot[] = [
           es: 'Cremas, licores y brandy',
         },
       },
+      {
+        slug: 'sherry-and-fortified-wines', // ours, plan 0179
+        name: {
+          en: 'Sherry and fortified wines',
+          es: 'Vinos generosos y dulces',
+        },
+      },
+      {
+        slug: 'premixed-drinks', // ours, plan 0179
+        name: { en: 'Premixed drinks', es: 'Combinados y bebidas con alcohol' },
+      },
     ],
   },
   {
@@ -1216,6 +1235,10 @@ export const REFERENCE_CATEGORIES: ReferenceCategoryRoot[] = [
           es: 'Pilas, menaje y bolsas',
         },
       },
+      {
+        slug: 'shoe-care', // ours, plan 0179
+        name: { en: 'Shoe care', es: 'Cuidado del calzado' },
+      },
     ],
   },
   {
@@ -1292,6 +1315,10 @@ export const REFERENCE_CATEGORIES: ReferenceCategoryRoot[] = [
       {
         slug: 'perfumes-and-colognes', // L2155
         name: { en: 'Perfumes and colognes', es: 'Perfumes y colonias' },
+      },
+      {
+        slug: 'hair-accessories', // ours, plan 0179
+        name: { en: 'Hair accessories', es: 'Accesorios para el cabello' },
       },
     ],
   },
@@ -1389,6 +1416,143 @@ export const REFERENCE_CATEGORIES: ReferenceCategoryRoot[] = [
       {
         slug: 'dog-treats-and-care', // L2311
         name: { en: 'Dog treats and care', es: 'Perro snacks y cuidado' },
+      },
+      {
+        slug: 'bird-food-and-care', // ours, plan 0179
+        name: { en: 'Birds', es: 'Pájaros' },
+      },
+      {
+        slug: 'small-animal-food-and-care', // ours, plan 0179
+        name: { en: 'Rodents and rabbits', es: 'Roedores y conejos' },
+      },
+      {
+        slug: 'fish-and-reptile-care', // ours, plan 0179
+        name: { en: 'Fish and reptiles', es: 'Peces y reptiles' },
+      },
+      {
+        slug: 'pet-accessories', // ours, plan 0179
+        name: { en: 'Pet accessories', es: 'Accesorios para mascotas' },
+      },
+    ],
+  },
+  {
+    slug: 'makeup', // ours, plan 0179
+    name: { en: 'Make-up', es: 'Maquillaje' },
+    children: [
+      {
+        slug: 'face-makeup', // ours, plan 0179
+        name: { en: 'Foundations and concealers', es: 'Bases y correctores' },
+      },
+      {
+        slug: 'powders-and-blush', // ours, plan 0179
+        name: { en: 'Powders and blush', es: 'Polvos y colorete' },
+      },
+      {
+        slug: 'eye-makeup', // ours, plan 0179
+        name: { en: 'Eyes', es: 'Ojos' },
+      },
+      {
+        slug: 'lip-makeup', // ours, plan 0179
+        name: { en: 'Lips', es: 'Labios' },
+      },
+      {
+        slug: 'nail-care', // ours, plan 0179
+        name: { en: 'Nails', es: 'Manicura y pedicura' },
+      },
+      {
+        slug: 'makeup-tools', // ours, plan 0179
+        name: { en: 'Brushes and tools', es: 'Brochas y accesorios' },
+      },
+    ],
+  },
+  {
+    slug: 'home-and-garden', // ours, plan 0179
+    name: { en: 'Home and garden', es: 'Hogar y jardín' },
+    children: [
+      {
+        slug: 'home-textiles', // ours, plan 0179
+        name: { en: 'Home textiles', es: 'Textil hogar' },
+      },
+      {
+        slug: 'home-decor', // ours, plan 0179
+        name: { en: 'Home decor', es: 'Decoración' },
+      },
+      {
+        slug: 'storage-and-organisation', // ours, plan 0179
+        name: { en: 'Storage and organisation', es: 'Orden y almacenaje' },
+      },
+      {
+        slug: 'garden-and-plants', // ours, plan 0179
+        name: { en: 'Garden and plants', es: 'Jardín y plantas' },
+      },
+      {
+        slug: 'diy-and-hardware', // ours, plan 0179
+        name: { en: 'DIY and hardware', es: 'Bricolaje y ferretería' },
+      },
+      {
+        slug: 'lighting-and-electrical', // ours, plan 0179
+        name: {
+          en: 'Lighting and electrical',
+          es: 'Iluminación y electricidad',
+        },
+      },
+      {
+        slug: 'small-appliances', // ours, plan 0179
+        name: { en: 'Small appliances', es: 'Pequeño electrodoméstico' },
+      },
+      {
+        slug: 'car-care', // ours, plan 0179
+        name: { en: 'Car care', es: 'Cuidado del coche' },
+      },
+    ],
+  },
+  {
+    slug: 'leisure-and-stationery', // ours, plan 0179
+    name: { en: 'Leisure and stationery', es: 'Ocio y papelería' },
+    children: [
+      {
+        slug: 'stationery-and-school', // ours, plan 0179
+        name: {
+          en: 'Stationery and school',
+          es: 'Papelería y material escolar',
+        },
+      },
+      {
+        slug: 'books', // ours, plan 0179
+        name: { en: 'Books', es: 'Libros' },
+      },
+      {
+        slug: 'magazines-and-collectibles', // ours, plan 0179
+        name: {
+          en: 'Magazines and collectibles',
+          es: 'Revistas y coleccionables',
+        },
+      },
+      {
+        slug: 'toys-and-games', // ours, plan 0179
+        name: { en: 'Toys and games', es: 'Juguetes y juegos' },
+      },
+      {
+        slug: 'party-and-celebrations', // ours, plan 0179
+        name: { en: 'Party and costumes', es: 'Fiestas y disfraces' },
+      },
+      {
+        slug: 'beach-and-pool', // ours, plan 0179
+        name: { en: 'Beach and pool', es: 'Playa y piscina' },
+      },
+    ],
+  },
+  {
+    slug: 'clothing-and-accessories', // ours, plan 0179
+    name: { en: 'Clothing and accessories', es: 'Ropa y complementos' },
+    children: [
+      {
+        slug: 'clothing', // ours, plan 0179
+        name: { en: 'Clothing', es: 'Ropa' },
+      },
+      {
+        slug: 'clothing-accessories', // ours, plan 0179
+        name: { en: 'Accessories', es: 'Complementos' },
       },
     ],
   },

@@ -47,9 +47,10 @@ const NO_LEAF = 'uncategorised';
  *
  * Nothing outside food is listed. `Vivir y amueblar` and `Deporte y ocio` are
  * not aisles of a supermarket, and leaving them out is what makes them fall
- * back rather than claim a leaf. `Flores y plantas` is left out too: the
- * taxonomy has no leaf for it, and the index files plants as `P+F`, which
- * {@link isGroceryCategory} drops before anything is resolved.
+ * back rather than claim a leaf. `Flores y plantas` is left out too. The
+ * taxonomy has had a leaf for it since plan 0179 (`garden-and-plants`), but
+ * the index files plants as `P+F`, which {@link isGroceryCategory} drops
+ * before anything is resolved, so a row for it here would answer nothing.
  */
 const CATEGORY_NODES: ReadonlyArray<readonly [string, string]> = [
   ['Frutas y hortalizas', NO_LEAF],
