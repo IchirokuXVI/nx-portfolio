@@ -1,3 +1,5 @@
+> **PR:** [#623](https://github.com/IchirokuXVI/nx-portfolio/pull/623)
+
 # 0041 The look and the frame
 
 > First of seven plans that remodel the back office: `0041` (this one, the frame every screen
