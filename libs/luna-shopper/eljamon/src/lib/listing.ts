@@ -1,3 +1,4 @@
+import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
 import { decodeEntities, decodeText, textOf } from './html';
 import { parseSpanishPrice, parseUnitPrice } from './price';
 import type {
@@ -104,11 +105,20 @@ function parseRow(code: string, block: string): ElJamonListingRow | null {
   return {
     code,
     description: textOf(nameLink[2]),
-    brand: brand ? textOf(brand[1]) || null : null,
+    brand: brand ? brandOf(textOf(brand[1])) : null,
     url: decodeEntities(nameLink[1]),
     price: current ? parseSpanishPrice(current[1]) : null,
     previousPrice: previous ? parseSpanishPrice(previous[1]) : null,
     unitPrice: unit?.unitPrice ?? null,
     unitPriceLabel: unit?.unitPriceLabel ?? null,
   };
+}
+
+/**
+ * The printed brand, or null when the chain printed something that is not one
+ * (plan 0178). `p.marca` is a free text field: beside real brands it carries a
+ * protected origin, and a word `NEVER_A_BRAND` lists reads as no brand at all.
+ */
+function brandOf(printed: string): string | null {
+  return printed === '' || isNeverABrand(printed) ? null : printed;
 }

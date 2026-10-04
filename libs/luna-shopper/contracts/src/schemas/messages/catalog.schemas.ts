@@ -13,6 +13,7 @@ import {
   ADMIN_POSTAL_CODE_PATTERNS,
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
+  BRAND_MATCHES_MAX_KEYS,
   BRAND_ORDERS,
   BRAND_PATTERNS,
   BULK_DECISION_MAX_OPERATIONS,
@@ -103,6 +104,14 @@ export const CATALOG_SCHEMA_IDS = {
   registerBrandsRequest: schemaId('msg/brand.registerMany/request'),
   registerBrandsOutcome: schemaId('catalog/RegisterBrandsOutcome'),
   registerBrandsResult: schemaId('msg/brand.registerMany/response'),
+  // Plan 0178: a printed key that names more than one brand.
+  brandMatchView: schemaId('catalog/BrandMatchView'),
+  brandKeyMatches: schemaId('catalog/BrandKeyMatches'),
+  brandHomonymsView: schemaId('catalog/BrandHomonymsView'),
+  addBrandHomonymRequest: schemaId('msg/brand.addHomonym/request'),
+  removeBrandHomonymRequest: schemaId('msg/brand.removeHomonym/request'),
+  brandMatchesRequest: schemaId('msg/brand.matches/request'),
+  brandMatchesResult: schemaId('msg/brand.matches/response'),
   catalogSuggestion: schemaId('catalog/CatalogSuggestion'),
   catalogSuggestResponse: schemaId('catalog/CatalogSuggestResponse'),
   priceScopeChainView: schemaId('catalog/PriceScopeChainView'),
@@ -1853,6 +1862,77 @@ const brandKeysResult = object(
   { keys: array(nonEmptyString()) },
   ['keys']
 );
+// Plan 0178. One brand a printed key names, always one that stands for itself.
+const brandMatchView = object(
+  CATALOG_SCHEMA_IDS.brandMatchView,
+  {
+    brandId: nonEmptyString(),
+    key: {
+      ...nonEmptyString(),
+      description:
+        'That brand’s own key, which differs from the printed key for a homonym.',
+    },
+    label: { ...nonEmptyString(), description: 'The brand to write.' },
+    privateLabelSupermarketId: nullableString(),
+    printedAs: {
+      ...nullableString(),
+      description:
+        'The registered spelling the printed key names, when the registry holds it as a spelling of `label`. Null when the two are the same brand, and on a homonym.',
+    },
+  },
+  ['brandId', 'key', 'label', 'privateLabelSupermarketId', 'printedAs']
+);
+const brandKeyMatches = object(
+  CATALOG_SCHEMA_IDS.brandKeyMatches,
+  {
+    printedKey: nonEmptyString(),
+    brands: {
+      ...array(ref(CATALOG_SCHEMA_IDS.brandMatchView)),
+      description: 'Every brand the printed key names, its own brand first.',
+    },
+  },
+  ['printedKey', 'brands']
+);
+const brandHomonymsView = object(
+  CATALOG_SCHEMA_IDS.brandHomonymsView,
+  {
+    brandId: nonEmptyString(),
+    printedKeys: {
+      ...array(nonEmptyString()),
+      description:
+        'The printed keys that also name this brand, sorted. Never its own key.',
+    },
+  },
+  ['brandId', 'printedKeys']
+);
+const brandHomonymRequestProperties = {
+  ...adminCredentialProperties,
+  brandId: nonEmptyString(),
+  printedKey: nonEmptyString({ maxLength: BRAND_LABEL_MAX_LENGTH }),
+};
+const addBrandHomonymRequest = object(
+  CATALOG_SCHEMA_IDS.addBrandHomonymRequest,
+  brandHomonymRequestProperties,
+  ['userId', 'brandId', 'printedKey']
+);
+const removeBrandHomonymRequest = object(
+  CATALOG_SCHEMA_IDS.removeBrandHomonymRequest,
+  brandHomonymRequestProperties,
+  ['userId', 'brandId', 'printedKey']
+);
+const brandMatchesRequest = object(
+  CATALOG_SCHEMA_IDS.brandMatchesRequest,
+  {
+    userId: nonEmptyString(),
+    keys: { ...array(nonEmptyString()), maxItems: BRAND_MATCHES_MAX_KEYS },
+  },
+  ['userId', 'keys']
+);
+const brandMatchesResult = object(
+  CATALOG_SCHEMA_IDS.brandMatchesResult,
+  { matches: array(ref(CATALOG_SCHEMA_IDS.brandKeyMatches)) },
+  ['matches']
+);
 // Plan 0160. A name is what `brand.create` takes, without a link: a batch
 // registers brands, and a spelling is a decision about two of them.
 const registerBrandsEntry = object(
@@ -2785,6 +2865,13 @@ export const catalogSchemas: JsonSchema[] = [
   registerBrandsRequest,
   registerBrandsOutcome,
   registerBrandsResult,
+  brandMatchView,
+  brandKeyMatches,
+  brandHomonymsView,
+  addBrandHomonymRequest,
+  removeBrandHomonymRequest,
+  brandMatchesRequest,
+  brandMatchesResult,
   supermarketItemPage,
   adminSupermarketItemPage,
   supermarketLocationItemPage,
@@ -3107,6 +3194,18 @@ export const catalogMessageContracts: Record<
   [BRAND_PATTERNS.registerMany]: {
     request: CATALOG_SCHEMA_IDS.registerBrandsRequest,
     response: CATALOG_SCHEMA_IDS.registerBrandsResult,
+  },
+  [BRAND_PATTERNS.addHomonym]: {
+    request: CATALOG_SCHEMA_IDS.addBrandHomonymRequest,
+    response: CATALOG_SCHEMA_IDS.brandHomonymsView,
+  },
+  [BRAND_PATTERNS.removeHomonym]: {
+    request: CATALOG_SCHEMA_IDS.removeBrandHomonymRequest,
+    response: CATALOG_SCHEMA_IDS.brandHomonymsView,
+  },
+  [BRAND_PATTERNS.matches]: {
+    request: CATALOG_SCHEMA_IDS.brandMatchesRequest,
+    response: CATALOG_SCHEMA_IDS.brandMatchesResult,
   },
   [PRODUCT_GROUP_PATTERNS.create]: {
     request: CATALOG_SCHEMA_IDS.createProductGroupRequest,

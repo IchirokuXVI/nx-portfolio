@@ -154,6 +154,11 @@ export const ERROR_CATALOG: Record<
     en: 'A spelling of another brand keeps its key. Register the other spelling as its own brand.',
     es: 'La grafía de otra marca conserva su clave. Registra la otra grafía como una marca propia.',
   },
+  // The homonym's one refusal of its own (plan 0178).
+  [ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY]: {
+    en: 'That printed name is already this brand’s own key. A homonym is a printed name that belongs to another brand too.',
+    es: 'Ese nombre impreso ya es la clave de esta marca. Un homónimo es un nombre impreso que también pertenece a otra marca.',
+  },
   // The three refusals of the places queue (plan 0152).
   [ERROR_CODES.PLACE_ALREADY_IMPORTED]: {
     en: 'That place is already imported into the catalog.',

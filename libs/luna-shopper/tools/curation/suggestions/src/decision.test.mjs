@@ -58,6 +58,23 @@ const BRANDS = indexBrands([
     privateLabelSupermarketId: null,
     canonicalBrandId: 'b-hacendado',
   },
+  // One name, two businesses (backend plan 0178): the registered `Poseidon` is
+  // a cologne, and `Poseidon Food` is the fish brand El Jamón prints as
+  // `Poseidón`.
+  {
+    id: 'b-poseidon',
+    key: 'poseidon',
+    label: 'Poseidon',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
+  {
+    id: 'b-poseidon-food',
+    key: 'poseidonfood',
+    label: 'Poseidon Food',
+    privateLabelSupermarketId: null,
+    canonicalBrandId: null,
+  },
 ]);
 
 const ENTRY = {
@@ -652,6 +669,102 @@ test('BRAND_DIFFERS_FROM_SOURCE fires for another brand and for null', () => {
     units: UNITS,
   });
   assert.ok(codes(dropped).includes('BRAND_DIFFERS_FROM_SOURCE'));
+});
+
+/**
+ * A salmon loin El Jamón prints `Poseidón` on, as the queue answers it.
+ *
+ * `brandMatches` is what the gateway composes: the key's own brand, then every
+ * brand a homonym points that key at. With no homonym registered it holds the
+ * cologne alone.
+ */
+function salmon(brandMatches) {
+  return {
+    ...ENTRY,
+    supermarketId: 'sm-2',
+    name: 'Lomos de salmón 250 g',
+    brand: 'Poseidón',
+    brandMatches,
+  };
+}
+const POSEIDON_MATCH = {
+  brandId: 'b-poseidon',
+  key: 'poseidon',
+  label: 'Poseidon',
+  privateLabelSupermarketId: null,
+  printedAs: null,
+};
+const POSEIDON_FOOD_MATCH = {
+  brandId: 'b-poseidon-food',
+  key: 'poseidonfood',
+  label: 'Poseidon Food',
+  privateLabelSupermarketId: null,
+  printedAs: null,
+};
+
+function decideSalmon(entry, brand) {
+  return validateDecision({
+    decision: createDecision(goodItem({ brand })),
+    entry,
+    supermarket: EL_JAMON,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('a CREATE under Poseidon Food is accepted for a row printed "Poseidón" when the homonym is registered (backend plan 0178)', () => {
+  const withHomonym = salmon([POSEIDON_MATCH, POSEIDON_FOOD_MATCH]);
+
+  assert.deepEqual(decideSalmon(withHomonym, 'Poseidon Food'), []);
+  // The key's own brand stays an answer: the curator chooses, the gate does
+  // not.
+  assert.deepEqual(decideSalmon(withHomonym, 'Poseidon'), []);
+});
+
+test('the same CREATE is refused when the homonym is not registered', () => {
+  for (const entry of [
+    salmon([POSEIDON_MATCH]),
+    // A gateway that predates the plan sends no list at all.
+    salmon(undefined),
+  ]) {
+    const issues = decideSalmon(entry, 'Poseidon Food');
+    assert.deepEqual(codes(issues), ['BRAND_DIFFERS_FROM_SOURCE']);
+    assert.match(
+      issues[0].detail,
+      /the chain prints "Poseidón", a registered brand/
+    );
+    assert.match(issues[0].detail, /"Poseidon Food"/);
+  }
+});
+
+test('a homonym widens the answer to the brands it names, and no further', () => {
+  const withHomonym = salmon([POSEIDON_MATCH, POSEIDON_FOOD_MATCH]);
+
+  const other = decideSalmon(withHomonym, 'Carbonell');
+  assert.deepEqual(codes(other), ['BRAND_DIFFERS_FROM_SOURCE']);
+  // Both brands are named, so the person reading the REVIEW sees the choice.
+  assert.match(
+    other[0].detail,
+    /names the registered brands "Poseidon" and "Poseidon Food", and the decision writes "Carbonell"/
+  );
+
+  const dropped = decideSalmon(withHomonym, null);
+  assert.deepEqual(codes(dropped), ['BRAND_DIFFERS_FROM_SOURCE']);
+  assert.match(dropped[0].detail, /writes no brand/);
+});
+
+test('a homonym on a printed key nothing holds makes its brand the source’s brand', () => {
+  const entry = {
+    ...salmon([POSEIDON_FOOD_MATCH]),
+    brand: 'Salmones del Norte',
+  };
+
+  assert.deepEqual(decideSalmon(entry, 'Poseidon Food'), []);
+  assert.deepEqual(codes(decideSalmon(entry, 'Carbonell')), [
+    'BRAND_DIFFERS_FROM_SOURCE',
+  ]);
 });
 
 test('BRAND_DIFFERS_FROM_SOURCE is quiet when the chain prints no registered brand', () => {

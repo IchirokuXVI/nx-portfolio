@@ -1,3 +1,5 @@
+> **PR:** [#615](https://github.com/IchirokuXVI/nx-portfolio/pull/615)
+
 # 0178: a printed brand is a reading, not a verdict
 
 > Found by the curation of the October 2026 harvest on local slot 1. The evidence is in the

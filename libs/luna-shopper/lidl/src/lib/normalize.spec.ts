@@ -8,6 +8,7 @@ import storePage from './__fixtures__/store-page.json';
 import { isGroceryCategory } from './categories';
 import {
   normalizeListPage,
+  normalizeListRow,
   normalizeProduct,
   normalizeStorePage,
   openingHoursLine,
@@ -96,6 +97,37 @@ describe('normalizeListPage', () => {
   it('prints a size whose N is the pack count (plan 0162)', () => {
     const [almonds] = page.rows;
     expect(packCountIn(almonds.sizeFormat)).toBe(4);
+  });
+
+  describe('a brand field that holds no brand (plan 0178)', () => {
+    /** The first row of the captured index, with the brand name replaced. */
+    function rowPrinting(brand: string) {
+      const [item] = (searchPage as { items: unknown[] }).items;
+      const data = (item as { gridbox: { data: Record<string, unknown> } })
+        .gridbox.data;
+      return normalizeListRow({ ...data, brand: { name: brand } } as never);
+    }
+
+    it('reads the HALLOWEEN brand as null, since a season is not a brand', () => {
+      expect(rowPrinting('HALLOWEEN')?.brand).toBeNull();
+      expect(rowPrinting('Halloween')?.brand).toBeNull();
+      expect(rowPrinting('NAVIDAD')?.brand).toBeNull();
+    });
+
+    it('still reads a real brand, and the dash as none', () => {
+      expect(rowPrinting('Vemondo')?.brand).toBe('Vemondo');
+      expect(rowPrinting('-')?.brand).toBeNull();
+    });
+
+    it('does not let a listed word on the index row fill a product in', () => {
+      // The page states no brand, so the row's is the fallback: a row that
+      // went through `normalizeListRow` carries null and the product does too.
+      const row = rowPrinting('HALLOWEEN');
+      const product = readFixture(productShortCode, '11029954', {
+        brand: row?.brand ?? null,
+      });
+      expect(product?.brand).toBeNull();
+    });
   });
 });
 

@@ -1803,6 +1803,25 @@ export class RegisterBrandsDto {
 }
 
 /**
+ * A printed name that also names this brand (plan 0178).
+ *
+ * One field, and it is the printed text rather than a key: the service keys it
+ * with the same function every brand is keyed with, so `Poseidón` and
+ * `poseidon` are one homonym.
+ */
+export class AddBrandHomonymDto {
+  @ApiProperty({
+    maxLength: BRAND_LABEL_MAX_LENGTH,
+    description:
+      'The printed name, or its key. It is keyed before it is stored, a text with no letter or digit is refused, and so is the brand’s own key.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(BRAND_LABEL_MAX_LENGTH)
+  printedKey!: string;
+}
+
+/**
  * Register a suggestion under a name somebody typed (plan 0124, section 5).
  *
  * Two names rather than one: `spelling` is what the chains print, which is the

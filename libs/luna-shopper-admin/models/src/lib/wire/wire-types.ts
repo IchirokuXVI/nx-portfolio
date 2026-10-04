@@ -40,6 +40,13 @@ export type AddBasketParticipantDto = {
 };
 
 /**
+ * `AddBrandHomonymDto` in the gateway's OpenAPI document.
+ */
+export type AddBrandHomonymDto = {
+  printedKey: string;
+};
+
+/**
  * `AddCommentDto` in the gateway's OpenAPI document.
  */
 export type AddCommentDto = {
@@ -563,6 +570,7 @@ export type ProblemDetails = {
     | 'brand_link_owns_no_chain'
     | 'brand_link_keeps_key'
     | 'brand_not_linked'
+    | 'brand_homonym_is_own_key'
     | 'place_already_imported'
     | 'place_matches_location'
     | 'scope_not_found'
@@ -2287,6 +2295,25 @@ export type CatalogAppendShopWalkEntryResult = {
   walk: CatalogShopWalkSummaryView;
   entry: CatalogShopWalkTimelineEntry;
   replayed: boolean;
+};
+
+/**
+ * `catalog.BrandHomonymsView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandHomonymsView = {
+  brandId: string;
+  printedKeys: string[];
+};
+
+/**
+ * `catalog.BrandMatchView` in the gateway's OpenAPI document.
+ */
+export type CatalogBrandMatchView = {
+  brandId: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  printedAs: string | null;
 };
 
 /**
@@ -4183,13 +4210,49 @@ export type HarvestPostalCodeDiscoverySummaryView = {
 };
 
 /**
- * `harvest.SourceCatalogEntryPage` in the gateway's OpenAPI document.
+ * `harvest.QueuedSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
  */
-export type HarvestSourceCatalogEntryPage = {
-  items: HarvestSourceCatalogEntryView[];
+export type HarvestQueuedSourceEntryPage = {
+  items: HarvestQueuedSourceEntryView[];
   nextCursor: string | null;
+};
+
+/**
+ * `harvest.QueuedSourceEntryView` in the gateway's OpenAPI document.
+ */
+export type HarvestQueuedSourceEntryView = {
+  id: string;
+  supermarketId: string;
+  externalId: string;
+  sourceKind: EnumsPriceSourceKind;
+  name: string;
+  brand: string | null;
+  ean: string | null;
+  unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
+  soldByWeight: boolean;
+  sizeFormat: string | null;
+  packCount: number | null;
+  categoryPath: string[];
+  url: string | null;
+  extra: {
+    [key: string]: unknown;
+  } | null;
+  timesSeen: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  firstRunId: string | null;
+  lastRunId: string | null;
+  itemId: string | null;
+  candidateEntryId: string | null;
+  status: EnumsSourceEntryStatus;
+  matchedBy: EnumsItemSourceMatch | null;
+  confidence: number;
+  decidedAt: string | null;
+  prices: HarvestSourceEntryPriceView[];
+  brandMatches: CatalogBrandMatchView[];
 };
 
 /**

@@ -73,6 +73,21 @@ describe('parseListingPage', () => {
     expect([...labels]).toEqual(expect.arrayContaining(['Kilo', '100gr']));
   });
 
+  it('reads a printed word that is never a brand as no brand (plan 0178)', () => {
+    const rowPrinting = (brand: string) =>
+      parseListingPage(
+        `<div id="x_articulo_1" class="articulo"><p class="marca">${brand}</p>` +
+          '<p class="nombre"> <a href="/detalle/-/Producto/queso-azul/1">' +
+          ' queso azul, 200g </a> </p><p class="precio"> <span>3,49 €</span>' +
+          ' </p></div>'
+      ).rows[0];
+
+    expect(rowPrinting('D.O.P.').brand).toBeNull();
+    expect(rowPrinting('I.G.P.').brand).toBeNull();
+    expect(rowPrinting('NAVIDAD').brand).toBeNull();
+    expect(rowPrinting('DOÑA ANA').brand).toBe('DOÑA ANA');
+  });
+
   it('parses a page with no rows as zero rows', () => {
     expect(parseListingPage('<html></html>')).toEqual({
       articleCount: null,

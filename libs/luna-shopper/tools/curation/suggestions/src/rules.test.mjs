@@ -29,6 +29,7 @@ import {
   productGtin,
   readGtin,
   sameBaseSize,
+  sourceBrands,
   suggestBrandLabel,
   toBaseSize,
   toBaseUnit,
@@ -346,21 +347,88 @@ test('the system prompt carries the rules, both vocabularies and the labels', ()
   assert.doesNotMatch(prompt, /Pascual/);
 });
 
-test('the prompt names brandMatch and the range rule', () => {
+test('the prompt names brandMatches and the range rule', () => {
   const template = loadPromptTemplate();
-  assert.match(template, /entry\.brandMatch/);
-  assert.match(template, /brandMatch\.label/);
+  assert.match(template, /entry\.brandMatches/);
+  assert.match(template, /write its `label` as `item\.brand`/);
+  // The single field is gone from the packet, so the prompt must not name it.
+  assert.doesNotMatch(template, /brandMatch\b(?!es)/);
   assert.match(template, /BRAND_UNREGISTERED/);
   assert.match(template, /BRAND_DIFFERS_FROM_SOURCE/);
   // A range is never a brand, which is the defect the registry was built for.
   assert.match(template, /A range, a flavour or a claim is never a brand/);
 });
 
+test('the prompt says a printed brand can name several brands, chosen by the product (backend plan 0178)', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /`entry\.brandMatches` can hold several brands/);
+  assert.match(template, /Choose by the product's type/);
+  // The way out when the product does not say which, so the model is not left
+  // guessing between two registered brands.
+  assert.match(
+    template,
+    /If the product does not\s+tell you which, answer `REVIEW`/
+  );
+});
+
+test('sourceBrands answers the key’s own brand, then each homonym the snapshot holds', () => {
+  const brands = indexBrands([
+    { id: 'b1', key: 'poseidon', label: 'Poseidon' },
+    { id: 'b2', key: 'poseidonfood', label: 'Poseidon Food' },
+    { id: 'b3', key: 'deborah', label: 'Deborah' },
+    {
+      id: 'b4',
+      key: 'deborah48h',
+      label: 'DEBORAH 48H',
+      canonicalBrandId: 'b3',
+    },
+  ]);
+  const labels = (entry) =>
+    sourceBrands(brands, entry).map(({ brand, printedAs }) => [
+      brand.label,
+      printedAs,
+    ]);
+
+  assert.deepEqual(labels({ brand: 'Poseidón' }), [['Poseidon', null]]);
+  assert.deepEqual(
+    labels({
+      brand: 'Poseidón',
+      brandMatches: [
+        { key: 'poseidonfood', label: 'Poseidon Food' },
+        { key: 'poseidon', label: 'Poseidon' },
+      ],
+    }),
+    [
+      ['Poseidon', null],
+      ['Poseidon Food', null],
+    ]
+  );
+  // The printed spelling keeps `printedAs`, and a homonym never carries one.
+  assert.deepEqual(
+    labels({
+      brand: 'DEBORAH 48H',
+      brandMatches: [{ key: 'poseidonfood', label: 'Poseidon Food' }],
+    }),
+    [
+      ['Deborah', 'DEBORAH 48H'],
+      ['Poseidon Food', null],
+    ]
+  );
+  // Nothing printed, nothing registered, a field of the wrong shape: no brand.
+  assert.deepEqual(labels({ brand: null }), []);
+  assert.deepEqual(labels({ brand: 'Otra', brandMatches: 'poseidon' }), []);
+  assert.deepEqual(
+    labels({ brand: 'Otra', brandMatches: [{ key: 'unknown' }, null] }),
+    []
+  );
+  assert.deepEqual(labels(null), []);
+});
+
 test('the prompt names printedAs and what a linked spelling leaves behind', () => {
   const template = loadPromptTemplate();
   // A packet field the prompt does not name is a field the model ignores, so
-  // the pair is pinned here as `brandMatch` itself is.
-  assert.match(template, /entry\.brandMatch\.printedAs/);
+  // the pair is pinned here as `brandMatches` itself is.
+  assert.match(template, /`printedAs` on a brand of `entry\.brandMatches`/);
   assert.match(template, /BRAND_IS_LINKED/);
   // The half of the instruction that is not "write the label": what the
   // spelling adds stays in the name, which is what makes the second attempt

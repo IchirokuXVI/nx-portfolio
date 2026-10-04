@@ -481,6 +481,25 @@ export const BRAND_PATTERNS = {
    * which keeps each registration a decision.
    */
   registerMany: 'brand.registerMany',
+  /**
+   * Say that a printed key also names this brand (plan 0178).
+   *
+   * One name can belong to two businesses: El Jamón prints `Poseidón` on salmon
+   * and the registered `Poseidon` is a cologne. The key stays unique and stays
+   * the first brand's; the homonym is an extra pointer from that printed key to
+   * a second brand, so the curator chooses between them from the product.
+   */
+  addHomonym: 'brand.addHomonym',
+  /** Take that pointer back. The brand and the key's own brand are untouched. */
+  removeHomonym: 'brand.removeHomonym',
+  /**
+   * Every brand each printed key names, the key's own brand first
+   * (plan 0178).
+   *
+   * Asked by the gateway for the keys one page of the queue prints, so it is a
+   * handful of keys per message and the ceiling `keys` documents is far away.
+   */
+  matches: 'brand.matches',
 } as const;
 
 /**
@@ -890,6 +909,46 @@ export interface BrandView {
   linkCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One brand a printed key names (plan 0178).
+ *
+ * Always a brand that stands for itself: a key that names a linked spelling
+ * answers the brand it spells, and `printedAs` then keeps the spelling.
+ */
+export interface BrandMatchView {
+  brandId: string;
+  /** That brand's own key, which differs from the printed key for a homonym. */
+  key: string;
+  /** The brand to write. */
+  label: string;
+  /** The chain that owns this private label, or null for an ordinary brand. */
+  privateLabelSupermarketId: string | null;
+  /**
+   * The registered spelling the printed key names, when the registry holds it
+   * as a spelling of `label`. Null when the two are the same brand, and on a
+   * homonym.
+   */
+  printedAs: string | null;
+}
+
+/** One printed key and every brand it names, the key's own brand first. */
+export interface BrandKeyMatches {
+  printedKey: string;
+  brands: BrandMatchView[];
+}
+
+/**
+ * The printed keys that also name one brand (plan 0178).
+ *
+ * The answer of both homonym writes, and it is the whole list after the write
+ * rather than the one row, because the list is what a person checks.
+ */
+export interface BrandHomonymsView {
+  brandId: string;
+  /** Sorted. Never holds the brand's own key. */
+  printedKeys: string[];
 }
 
 /**
@@ -2680,6 +2739,32 @@ export interface RegisterBrandsOutcome {
 
 export interface RegisterBrandsResult {
   results: RegisterBrandsOutcome[];
+}
+
+/**
+ * Add or remove one homonym of one brand (plan 0178).
+ *
+ * `printedKey` is keyed with `brandKey` before it is stored or compared, so
+ * `Poseidón` and `poseidon` are one homonym. A text that makes no key is
+ * refused, and so is the brand's own key.
+ */
+export interface BrandHomonymRequest extends AdminCredential {
+  brandId: string;
+  printedKey: string;
+}
+
+/** The most printed keys one `brand.matches` request may carry. */
+export const BRAND_MATCHES_MAX_KEYS = 200;
+
+/** Which brands each of these printed keys names. Carries no page. */
+export interface BrandMatchesRequest {
+  userId: string;
+  /** Keys as `brandKey` makes them. A key nothing names is left out of the answer. */
+  keys: string[];
+}
+
+export interface BrandMatchesResult {
+  matches: BrandKeyMatches[];
 }
 
 // --- Item price requests (plan 0080, section 9) -----------------------------

@@ -3,9 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BrandBatchOutcome,
   brandKey,
+  type BrandHomonymRequest,
+  type BrandHomonymsView,
   type BrandIdRequest,
+  type BrandKeyMatches,
   type BrandKeysRequest,
   type BrandKeysResult,
+  type BrandMatchesRequest,
+  type BrandMatchesResult,
+  type BrandMatchView,
   type BrandPage,
   type BrandView,
   type CreateBrandRequest,
@@ -24,6 +30,7 @@ import {
 import {
   BRAND_KEY_HOLDER_DETAIL,
   BRAND_LINK_BLOCKER_DETAIL,
+  BrandHomonymIsOwnKeyException,
   BrandKeyTakenException,
   BrandLabelEmptyException,
   BrandLinkKeepsKeyException,
@@ -39,7 +46,7 @@ import {
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { QueryFailedError, Repository, type EntityManager } from 'typeorm';
-import { Brand, Item } from '../entities';
+import { Brand, BrandHomonym, Item } from '../entities';
 import {
   CatalogAuditService,
   type AuditedWrite,
@@ -65,6 +72,22 @@ interface BrandRow {
   updatedAt: Date;
   itemCount: number;
   linkCount: number;
+}
+
+/**
+ * One brand a printed key names, as the raw query hands it back: the brand the
+ * key or the homonym reached, and the brand that one points at, if any.
+ */
+interface BrandMatchRow {
+  printedKey: string;
+  id: string;
+  key: string;
+  label: string;
+  privateLabelSupermarketId: string | null;
+  canonicalId: string | null;
+  canonicalKey: string | null;
+  canonicalLabel: string | null;
+  canonicalPrivateLabelSupermarketId: string | null;
 }
 
 /**
@@ -107,6 +130,14 @@ type BrandCursor = {
  *   anything**. The order is what stops two requests linking `A` to `B` and `B`
  *   to `A` from deadlocking, and the lock is what makes the second of them see
  *   the first.
+ *
+ * Plan 0178 adds the last one:
+ *
+ * - **A printed key may name more than one brand.** The key stays unique and
+ *   stays its own brand's. A homonym is an extra pointer from that printed key
+ *   to a second brand, and it moves no product: it widens what a queued row may
+ *   be created under, and the curator chooses between the brands from the
+ *   product.
  *
  * Nothing here creates a row on its own: a person creates every one. The only
  * row a person may delete is a spelling linked to another brand; every other
@@ -679,6 +710,171 @@ export class BrandService {
       `SELECT "key" FROM "brands" ORDER BY "key" ASC`
     );
     return { keys: rows.map((row) => row.key) };
+  }
+
+  /**
+   * Say that a printed key also names this brand (plan 0178).
+   *
+   * The key is `brandKey(printedKey)`, the same function every brand is keyed
+   * with, so `Poseidón` and `poseidon` are one homonym. Two refusals: a text
+   * that makes no key, and **the brand's own key**, which already names it. The
+   * second is checked under the brand's row lock, because a rename arriving at
+   * the same moment could otherwise move the brand onto the key this write is
+   * about to store.
+   *
+   * Adding a homonym that is already there writes nothing and answers the list
+   * as it stands, so the route can be repeated.
+   */
+  async addHomonym(req: BrandHomonymRequest): Promise<BrandHomonymsView> {
+    const actor = await this.admin.requireAdmin(req);
+    await this.load(req.brandId);
+    const printedKey = this.requireKey((req.printedKey ?? '').trim());
+
+    return this.audit.write(actor, async (tx) => {
+      const brand = (await this.lockInIdOrder(tx.manager, [req.brandId])).get(
+        req.brandId
+      );
+      if (!brand) {
+        throw new NotFoundException('Brand not found');
+      }
+      if (brand.key === printedKey) {
+        throw new BrandHomonymIsOwnKeyException(
+          'That printed key is already this brand’s own key.'
+        );
+      }
+      const held = await tx.manager.findOne(BrandHomonym, {
+        where: { printedKey, brandId: brand.id },
+      });
+      if (!held) {
+        await tx.create(
+          BrandHomonym,
+          tx.manager.create(BrandHomonym, { printedKey, brandId: brand.id })
+        );
+      }
+      return this.homonymsOf(tx.manager, brand.id);
+    });
+  }
+
+  /**
+   * Take a homonym back (plan 0178).
+   *
+   * Only the pointer goes. The brand, the key's own brand and every product
+   * stay exactly as they were. A homonym that is not there answers 404 rather
+   * than an unchanged list, so a mistyped key is not read as a removal.
+   */
+  async removeHomonym(req: BrandHomonymRequest): Promise<BrandHomonymsView> {
+    const actor = await this.admin.requireAdmin(req);
+    await this.load(req.brandId);
+    const printedKey = this.requireKey((req.printedKey ?? '').trim());
+
+    return this.audit.write(actor, async (tx) => {
+      const held = await tx.manager.findOne(BrandHomonym, {
+        where: { printedKey, brandId: req.brandId },
+      });
+      if (!held) {
+        throw new NotFoundException('Brand homonym not found');
+      }
+      await tx.delete(BrandHomonym, held);
+      return this.homonymsOf(tx.manager, req.brandId);
+    });
+  }
+
+  /**
+   * Every brand each printed key names, the key's own brand first
+   * (plan 0178).
+   *
+   * Two reads, one for the brand that holds each key and one for the brands a
+   * homonym points each key at, both resolved one hop through a link: the
+   * answer is always a brand that stands for itself, which is the brand a
+   * product is written under. A key that names a linked spelling keeps that
+   * spelling in `printedAs`.
+   *
+   * A key nothing names is left out. A brand reached twice for one key, as its
+   * own brand and through a homonym on one of its spellings, is answered once.
+   */
+  async matches(req: BrandMatchesRequest): Promise<BrandMatchesResult> {
+    const keys = [...new Set(req.keys ?? [])];
+    if (keys.length === 0) {
+      return { matches: [] };
+    }
+    const select = `
+             b."id",
+             b."key",
+             b."label",
+             b."privateLabelSupermarketId",
+             c."id" AS "canonicalId",
+             c."key" AS "canonicalKey",
+             c."label" AS "canonicalLabel",
+             c."privateLabelSupermarketId" AS "canonicalPrivateLabelSupermarketId"`;
+    const own: BrandMatchRow[] = await this.brands.query(
+      `
+      SELECT b."key" AS "printedKey",${select}
+        FROM "brands" b
+        LEFT JOIN "brands" c ON c."id" = b."canonicalBrandId"
+       WHERE b."key" = ANY($1::text[])
+      `,
+      [keys]
+    );
+    const homonyms: BrandMatchRow[] = await this.brands.query(
+      `
+      SELECT h."printedKey",${select}
+        FROM "brand_homonyms" h
+        JOIN "brands" b ON b."id" = h."brandId"
+        LEFT JOIN "brands" c ON c."id" = b."canonicalBrandId"
+       WHERE h."printedKey" = ANY($1::text[])
+       ORDER BY COALESCE(c."label", b."label") ASC, b."id" ASC
+      `,
+      [keys]
+    );
+
+    const byKey = new Map<string, BrandMatchView[]>();
+    const add = (row: BrandMatchRow, isOwn: boolean): void => {
+      const linked = row.canonicalId !== null;
+      const match: BrandMatchView = {
+        brandId: row.canonicalId ?? row.id,
+        key: row.canonicalKey ?? row.key,
+        label: row.canonicalLabel ?? row.label,
+        privateLabelSupermarketId: linked
+          ? row.canonicalPrivateLabelSupermarketId
+          : row.privateLabelSupermarketId,
+        // Only the key's own brand was printed. A homonym is another brand
+        // altogether, so it carries no spelling of the printed text.
+        printedAs: isOwn && linked ? row.label : null,
+      };
+      const brands = byKey.get(row.printedKey) ?? [];
+      if (!brands.some((held) => held.brandId === match.brandId)) {
+        brands.push(match);
+      }
+      byKey.set(row.printedKey, brands);
+    };
+    for (const row of own) {
+      add(row, true);
+    }
+    for (const row of homonyms) {
+      add(row, false);
+    }
+
+    const matches: BrandKeyMatches[] = [];
+    // In the order the keys were asked, so the answer is stable for one page.
+    for (const printedKey of keys) {
+      const brands = byKey.get(printedKey);
+      if (brands) {
+        matches.push({ printedKey, brands });
+      }
+    }
+    return { matches };
+  }
+
+  /** The printed keys that also name one brand, sorted. */
+  private async homonymsOf(
+    manager: EntityManager,
+    brandId: string
+  ): Promise<BrandHomonymsView> {
+    const rows = await manager.find(BrandHomonym, {
+      where: { brandId },
+      order: { printedKey: 'ASC' },
+    });
+    return { brandId, printedKeys: rows.map((row) => row.printedKey) };
   }
 
   /** Load a brand by id, or say it is not there as every catalog read does. */

@@ -23,6 +23,7 @@ import {
   printedUnit,
   productGtin,
   sameBaseSize,
+  sourceBrands,
   toBaseSize,
   toBaseUnit,
 } from './rules.mjs';
@@ -548,7 +549,9 @@ export function validateDecision({
   // what the row needs is the person who can register it. `BRAND_IS_LINKED` is
   // the exception, for the reason `RETRYABLE_ISSUE_CODES` gives.
   if (decision.decision === 'CREATE' && item) {
-    const sourceBrand = canonicalBrand(brands, findBrand(brands, entry?.brand));
+    // Every brand the printed brand names (backend plan 0178). Usually one,
+    // and several when a person registered a homonym for the printed key.
+    const sources = sourceBrands(brands, entry).map((source) => source.brand);
     const writtenBrand = findBrand(brands, item.brand);
     const writtenCanonical = canonicalBrand(brands, writtenBrand);
 
@@ -588,14 +591,26 @@ export function validateDecision({
     // person's time. Both sides are compared as canonical brands (plan 0005):
     // a chain printing `DEBORAH 48H` and a decision writing `Deborah` agree,
     // and it is `BRAND_IS_LINKED` above that answers the other way round.
+    //
+    // **Any brand the printed brand names is the source's brand** (backend plan
+    // 0178). One printed name can belong to two businesses, so a chain printing
+    // `Poseidón` on salmon agrees with a decision writing `Poseidon Food` once
+    // a person registered that homonym, and with one writing `Poseidon` too:
+    // which of them made the product is the curator's reading, not the gate's.
     const writtenKey = writtenCanonical
       ? writtenCanonical.key
       : brandKey(item.brand);
-    if (sourceBrand && writtenKey !== sourceBrand.key) {
+    if (
+      sources.length > 0 &&
+      !sources.some((source) => source.key === writtenKey)
+    ) {
+      const written = item.brand ? `"${item.brand}"` : 'no brand';
       issues.push(
         issue(
           'BRAND_DIFFERS_FROM_SOURCE',
-          `the chain prints "${entry.brand}", a registered brand, and the decision writes ${item.brand ? `"${item.brand}"` : 'no brand'}.`
+          sources.length === 1
+            ? `the chain prints "${entry.brand}", a registered brand, and the decision writes ${written}.`
+            : `the chain prints "${entry.brand}", which names the registered brands ${sources.map((source) => `"${source.label}"`).join(' and ')}, and the decision writes ${written}.`
         )
       );
     }

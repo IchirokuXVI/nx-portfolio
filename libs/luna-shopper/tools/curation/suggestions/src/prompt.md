@@ -30,20 +30,27 @@ Work the steps in that order and stop at the first one that fires.
 
 ## The brand on a `CREATE`
 
-The catalog keeps a registry of brands a person filled, and `entry.brandMatch` is this
-entry's own brand as that registry holds it, or null.
+The catalog keeps a registry of brands a person filled, and `entry.brandMatches` lists the
+brands of that registry this entry's own printed brand names. The list is empty when it
+names none.
 
-- When `entry.brandMatch` is present, write `brandMatch.label` as `item.brand`, exactly as
+- When `entry.brandMatches` holds one brand, write its `label` as `item.brand`, exactly as
   it is spelled there.
-- When `entry.brandMatch.printedAs` is present, the chain printed a registered spelling of
-  the brand. Write `brandMatch.label` as the brand, and keep what the spelling adds (a line,
-  range or claim such as `48H`) in the name, by rule 4.
-- When it is absent and the product plainly has a brand, write that brand. If the registry
-  does not hold it the tool sends the row to a person, which is the intended outcome. Never
-  drop a printed brand to null to avoid that.
+- `entry.brandMatches` can hold several brands. One printed name can belong to more than
+  one business: a chain prints `Poseidón` on a salmon loin, and the registry holds
+  `Poseidon`, a cologne, and `Poseidon Food`, a fish brand. Choose by the product's type:
+  read the name and the category path, and write the `label` of the brand that makes that
+  kind of product. Write one of the listed brands and no other. If the product does not
+  tell you which, answer `REVIEW`.
+- When a brand's `printedAs` is present, the chain printed a registered spelling of that
+  brand. Write its `label` as the brand, and keep what the spelling adds (a line, range or
+  claim such as `48H`) in the name, by rule 4.
+- When the list is empty and the product plainly has a brand, write that brand. If the
+  registry does not hold it the tool sends the row to a person, which is the intended
+  outcome. Never drop a printed brand to null to avoid that.
 - A range, a flavour or a claim is never a brand, so `+Proteínas`, `Sin lactosa` and
   `Listo para comer` stay in the name under rule 4.
-- `brandMatch.privateLabelOf` is the chain that owns the brand, when it owns one. That is
+- A brand's `privateLabelOf` is the chain that owns the brand, when it owns one. That is
   rule 6 stated as a fact about this entry.
 
 ## The six rules
@@ -107,10 +114,13 @@ format apart, and rule 1 merges anything they do not separate.
   barcode. A shared barcode cannot tell two products apart. If `entry.sharedEan` is present,
   answer `REVIEW`. The tool records a `REVIEW` for any answer.
 - `entry.chainName` is the chain this entry belongs to, which is what rule 6 turns on.
-- `entry.brandMatch` is the entry's brand as the registry holds it, or null. Candidates are
-  not annotated: a `LINK` takes the candidate's brand as it is.
-- `entry.brandMatch.printedAs` is the spelling the chain printed, when the registry holds it
-  as a spelling of `brandMatch.label`. It is null when the two are the same brand.
+- `entry.brandMatches` is every registered brand the entry's printed brand names, as
+  `{ label, privateLabelOf, printedAs }`. It is usually one brand, can be several, and is
+  empty when the registry holds none. Candidates are not annotated: a `LINK` takes the
+  candidate's brand as it is.
+- `printedAs` on a brand of `entry.brandMatches` is the spelling the chain printed, when
+  the registry holds it as a spelling of that brand's `label`. It is null when the two are
+  the same brand.
 - `entry.extra` is whatever else the source carried, truncated.
 
 `candidates` are the catalog products a search for the entry's name found, most relevant
@@ -162,7 +172,7 @@ list and you `LINK` onto it.
   `Pain au chocolat` are the same in `nameEs` and in `nameEn`. If you cannot name the
   product in English, answer `REVIEW`.
 - `item.brand` is the brand, or null when the product carries none. When
-  `entry.brandMatch` is present it is `brandMatch.label`, copied exactly.
+  `entry.brandMatches` is not empty it is the `label` of one of its brands, copied exactly.
 - `item.unitSize` is a number, or null when the product has no size. Write it in grams,
   millilitres or a count. 0.25 kg is 250 `GRAM`. 1.5 l is 1500 `MILLILITER`. If
   `entry.sizeUnit` is `KILOGRAM` or `LITER`, multiply `entry.unitSize` by 1000.
@@ -219,8 +229,8 @@ send it:
 - `PRIVATE_LABEL_CROSSES_CHAIN`: rule 6.
 - `BRAND_UNREGISTERED`: a `CREATE` whose `item.brand` the registry does not hold. A null
   brand is never this, because plenty of products carry none.
-- `BRAND_DIFFERS_FROM_SOURCE`: a `CREATE` whose `item.brand` is not the brand
-  `entry.brandMatch` names.
+- `BRAND_DIFFERS_FROM_SOURCE`: a `CREATE` whose `item.brand` is none of the brands
+  `entry.brandMatches` names.
 - `BRAND_IS_LINKED`: a `CREATE` whose `item.brand` the registry holds as a spelling of
   another brand. Write that other brand.
 

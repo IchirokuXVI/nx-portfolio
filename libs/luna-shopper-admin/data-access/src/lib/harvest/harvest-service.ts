@@ -110,7 +110,7 @@ export interface HarvestServiceI {
    * `setManualItemRef`, `confirmItemRef`, `rejectItemRef`, `listAliases`,
    * `acceptAlias`, `createItemFromAlias` and `rejectAlias` are gone with them.
    */
-  listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage>;
+  listEntries(query: EntryQuery): Promise<Wire.HarvestQueuedSourceEntryPage>;
 
   /**
    * Bind a row to a product the catalog already holds.

@@ -94,14 +94,12 @@ test('a run walks every fixture row and reports what it decided', async () => {
     if (row.entry.id === 'entry-oil') {
       // `Hacendado` is Mercadona's house label in the fixture registry, and
       // this row is a Mercadona row, so the packet names both.
-      assert.deepEqual(row.entry.brandMatch, {
-        label: 'Hacendado',
-        privateLabelOf: 'Mercadona',
-        printedAs: null,
-      });
+      assert.deepEqual(row.entry.brandMatches, [
+        { label: 'Hacendado', privateLabelOf: 'Mercadona', printedAs: null },
+      ]);
     }
     if (row.entry.id === 'entry-detergent') {
-      assert.equal(row.entry.brandMatch, null);
+      assert.deepEqual(row.entry.brandMatches, []);
     }
 
     // Every packet the model would see carries the chain it belongs to and a
@@ -109,9 +107,10 @@ test('a run walks every fixture row and reports what it decided', async () => {
     assert.equal(typeof row.entry.name, 'string');
     assert.equal(row.entry.chainRegistered, true);
     assert.ok(Array.isArray(row.candidates));
-    // Every packet names the field, present or null, so the prompt can speak
-    // about it on every row rather than on the rows that happen to have one.
-    assert.ok('brandMatch' in row.entry);
+    // Every packet names the field, a list that may be empty, so the prompt can
+    // speak about it on every row rather than on the rows that happen to have
+    // a brand.
+    assert.ok(Array.isArray(row.entry.brandMatches));
 
     await decide({
       runDir: dir,

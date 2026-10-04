@@ -139,6 +139,9 @@ export const HARVEST_SCHEMA_IDS = {
   listEntriesByItemRequest: schemaId('msg/sourceEntry.listByItem/request'),
   itemSourceEntryView: schemaId('harvest/ItemSourceEntryView'),
   itemSourceEntryPage: schemaId('harvest/ItemSourceEntryPage'),
+  // Plan 0178: the queue's rows, with the brands each printed brand names.
+  queuedSourceEntryView: schemaId('harvest/QueuedSourceEntryView'),
+  queuedSourceEntryPage: schemaId('harvest/QueuedSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
@@ -489,6 +492,22 @@ const itemSourceEntryView = object(
   },
   [...sourceCatalogEntryRequired, 'eanSharedBy']
 );
+/**
+ * A row as the queue answers it (plan 0178). Composed at the gateway: the
+ * harvester answers the rows and catalog answers what each printed key names.
+ */
+const queuedSourceEntryView = object(
+  HARVEST_SCHEMA_IDS.queuedSourceEntryView,
+  {
+    ...sourceCatalogEntryProperties,
+    brandMatches: {
+      ...array(ref(CATALOG_SCHEMA_IDS.brandMatchView)),
+      description:
+        'Every registered brand the row’s printed brand names, the key’s own brand first and then each brand a homonym points that key at. Empty when the row prints no brand or nothing registered answers to it. Several brands is an ordinary answer: which one made the product is read from the product.',
+    },
+  },
+  [...sourceCatalogEntryRequired, 'brandMatches']
+);
 
 /**
  * The latest price one scope stated for one row (plan 0086, section 3.2).
@@ -727,6 +746,10 @@ const sourceCatalogEntryPage = paginated(
 const itemSourceEntryPage = paginated(
   HARVEST_SCHEMA_IDS.itemSourceEntryPage,
   HARVEST_SCHEMA_IDS.itemSourceEntryView
+);
+const queuedSourceEntryPage = paginated(
+  HARVEST_SCHEMA_IDS.queuedSourceEntryPage,
+  HARVEST_SCHEMA_IDS.queuedSourceEntryView
 );
 const sourceLocationPage = paginated(
   HARVEST_SCHEMA_IDS.sourceLocationPage,
@@ -1414,6 +1437,7 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlaceGroupsResult,
   sourceCatalogEntryView,
   itemSourceEntryView,
+  queuedSourceEntryView,
   sourceEntryPriceView,
   sourceEntryAcceptResult,
   sourceLocationCandidate,
@@ -1425,6 +1449,7 @@ export const harvestSchemas: JsonSchema[] = [
   discoveredPlacePage,
   sourceCatalogEntryPage,
   itemSourceEntryPage,
+  queuedSourceEntryPage,
   sourceLocationPage,
   brandSuggestionChain,
   brandSuggestionView,

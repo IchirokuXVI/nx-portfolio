@@ -344,6 +344,16 @@ export class BrandNotLinkedException extends DomainException {
 }
 
 /**
+ * A homonym's printed key is the brand's own key (plan 0178).
+ *
+ * No details: the brand is the one the client asked about, and what it does
+ * next is type the key of the other brand that shares the printed name.
+ */
+export class BrandHomonymIsOwnKeyException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY;
+}
+
+/**
  * The discovered place is already imported (plan 0152, section 5). No details:
  * the place is the one the client asked about.
  */
