@@ -216,10 +216,10 @@ export const ERROR_CODES = {
   /**
    * A brand that is nobody's spelling was asked to be deleted (plan 0124).
    *
-   * A spelling can go away, because deleting it puts its products back exactly
-   * where they were before it was registered and its key returns to the
-   * suggestions list by itself. Every other brand still cannot be removed, by
-   * section 9 of plan 0115: there is nowhere for its products to go.
+   * **Nothing raises this any more.** Such a brand is now deleted when nothing
+   * points at it and refused with {@link BRAND_IN_USE} when something does. The
+   * code stays in the list because clients were built against it, and a code
+   * that leaves the list breaks their build for no gain.
    */
   BRAND_NOT_LINKED: 'brand_not_linked',
   /**
@@ -231,6 +231,18 @@ export const ERROR_CODES = {
    * name.
    */
   BRAND_HOMONYM_IS_OWN_KEY: 'brand_homonym_is_own_key',
+  /**
+   * A brand was asked to be deleted while something still points at it (the
+   * follow up of plan 0178).
+   *
+   * A brand that is nobody's spelling may be deleted, and only when no product
+   * holds it and no spelling is linked to it. The delete never decides for a
+   * product: it does not unbrand one and it does not move one to another
+   * brand. A person moves the products and the spellings first, and the counts
+   * that say how many are left travel in the envelope's `details` as
+   * `itemCount` and `linkCount`.
+   */
+  BRAND_IN_USE: 'brand_in_use',
   /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
@@ -487,6 +499,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 400, because what is wrong is a value in the body: the printed key is the
   // brand's own key (plan 0178).
   [ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY]: HttpStatus.BAD_REQUEST,
+  // 409: the request is well formed and the caller may make it, and what
+  // refuses it is the products and the spellings that still point at the brand.
+  [ERROR_CODES.BRAND_IN_USE]: HttpStatus.CONFLICT,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).
