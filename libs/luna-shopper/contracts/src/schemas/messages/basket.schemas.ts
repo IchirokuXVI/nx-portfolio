@@ -145,11 +145,22 @@ const rowEntryView = object(
     listId: nonEmptyString(),
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
+    // Bought lately through another basket or through none (plan 0188). A
+    // count alone: the row never names who bought.
+    boughtElsewhere: integer({ minimum: 0 }),
     state: ref(BASKET_SCHEMA_IDS.rowState),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
     demandEditable: boolean(),
   },
-  ['lineId', 'left', 'bought', 'state', 'approvalStatus', 'demandEditable']
+  [
+    'lineId',
+    'left',
+    'bought',
+    'boughtElsewhere',
+    'state',
+    'approvalStatus',
+    'demandEditable',
+  ]
 );
 
 const rowView = object(
@@ -160,6 +171,7 @@ const rowView = object(
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
     asked: integer({ minimum: 0 }),
+    boughtElsewhere: integer({ minimum: 0 }),
     state: ref(BASKET_SCHEMA_IDS.rowState),
     note: { anyOf: [ref(BASKET_SCHEMA_IDS.rowNote), { type: 'null' }] },
     noteAt: nullableString(),
@@ -178,6 +190,7 @@ const rowView = object(
     'left',
     'bought',
     'asked',
+    'boughtElsewhere',
     'state',
     'note',
     'noteAt',

@@ -491,6 +491,7 @@ describe('contract schemas', () => {
         left: 1,
         bought: 0,
         asked: 1,
+        boughtElsewhere: 0,
         state: 'WANTED',
         note: null,
         noteAt: null,
@@ -518,6 +519,40 @@ describe('contract schemas', () => {
       ).toBe(false);
       // Counts only: seven is past the window, and nothing else may ride along.
       expect(answer({ state: 'HERE', bought: 7, of: 7 })).toBe(false);
+
+      // What another basket bought is required on a row and on each entry, and
+      // the note that says so is one of the two a row may carry (plan 0188).
+      const elsewhere = (over: Record<string, unknown>) =>
+        validateMessageResponse('basket.row.settle', {
+          row: { ...row, usual: null, ...over },
+          progress,
+        }).valid;
+      const entry = {
+        lineId: 'l-1',
+        left: 0,
+        bought: 0,
+        boughtElsewhere: 2,
+        state: 'DONE',
+        approvalStatus: 'APPROVED',
+        demandEditable: true,
+      };
+      expect(
+        elsewhere({
+          left: 0,
+          asked: 0,
+          boughtElsewhere: 2,
+          state: 'DONE',
+          note: 'BOUGHT_ON_ANOTHER_BASKET',
+          noteAt: '2026-10-04T10:00:00.000Z',
+          entries: [entry],
+        })
+      ).toBe(true);
+      expect(elsewhere({ boughtElsewhere: undefined })).toBe(false);
+      expect(elsewhere({ boughtElsewhere: -1 })).toBe(false);
+      expect(
+        elsewhere({ entries: [{ ...entry, boughtElsewhere: undefined }] })
+      ).toBe(false);
+      expect(elsewhere({ note: 'ELSEWHERE' })).toBe(false);
       expect(answer({ state: 'SOMEWHERE', bought: 0, of: 1 })).toBe(false);
       expect(
         answer({ state: 'HERE', bought: 1, of: 1, supermarketId: 's-1' })

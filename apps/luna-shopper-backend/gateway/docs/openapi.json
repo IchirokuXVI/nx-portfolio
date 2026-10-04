@@ -32723,6 +32723,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "boughtElsewhere": {
+            "type": "integer",
+            "minimum": 0
+          },
           "state": {
             "$ref": "#/components/schemas/enums.BasketRowState"
           },
@@ -32737,6 +32741,7 @@
           "lineId",
           "left",
           "bought",
+          "boughtElsewhere",
           "state",
           "approvalStatus",
           "demandEditable"
@@ -32810,6 +32815,10 @@
             "minimum": 0
           },
           "asked": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "boughtElsewhere": {
             "type": "integer",
             "minimum": 0
           },
@@ -32887,6 +32896,7 @@
           "left",
           "bought",
           "asked",
+          "boughtElsewhere",
           "state",
           "note",
           "noteAt",
@@ -36854,7 +36864,8 @@
       "enums.BasketRowNote": {
         "type": "string",
         "enum": [
-          "SKIPPED_EARLIER"
+          "SKIPPED_EARLIER",
+          "BOUGHT_ON_ANOTHER_BASKET"
         ]
       },
       "enums.BasketRowState": {

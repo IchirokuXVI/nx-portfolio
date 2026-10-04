@@ -58,13 +58,22 @@ export enum BasketRowState {
 /**
  * A fact about a row's past worth saying beside it (plan 0130, section 4).
  *
- * One value today, and a union rather than a boolean for the same reason
- * {@link BasketRowState} is declared whole: the shape does not move when the
- * second value arrives.
+ * A union rather than a boolean for the same reason {@link BasketRowState} is
+ * declared whole: the shape did not move when the second value arrived.
+ *
+ * A row carries one note. When both apply, `SKIPPED_EARLIER` wins (plan 0188).
  */
 export enum BasketRowNote {
   /** This row was skipped earlier on this trip. Never produced before plan 0137. */
   SKIPPED_EARLIER = 'SKIPPED_EARLIER',
+  /**
+   * Somebody bought some of this row lately through another basket, or through
+   * no basket at all (plan 0188). `noteAt` is the newest such purchase.
+   *
+   * Not `ELSEWHERE`: `BasketRowUsualState.ELSEWHERE` is about another chain,
+   * and this is about another basket.
+   */
+  BOUGHT_ON_ANOTHER_BASKET = 'BOUGHT_ON_ANOTHER_BASKET',
 }
 
 /**

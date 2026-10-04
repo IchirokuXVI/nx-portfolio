@@ -200,6 +200,7 @@ describe('withUsual (plan 0165, section 2)', () => {
       left: 1,
       bought: 0,
       asked: 1,
+      boughtElsewhere: 0,
       state: BasketRowState.WANTED,
       note: null,
       noteAt: null,
@@ -212,6 +213,7 @@ describe('withUsual (plan 0165, section 2)', () => {
         lineId,
         left: 1,
         bought: 0,
+        boughtElsewhere: 0,
         state: BasketRowState.WANTED,
         approvalStatus:
           'APPROVED' as BasketRowView['entries'][number]['approvalStatus'],
