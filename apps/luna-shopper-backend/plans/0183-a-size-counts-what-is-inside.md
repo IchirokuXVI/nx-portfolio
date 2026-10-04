@@ -1,3 +1,5 @@
+> **PR:** [#610](https://github.com/IchirokuXVI/nx-portfolio/pull/610)
+
 # 0183: a size counts what is inside
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03.
