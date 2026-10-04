@@ -1,3 +1,5 @@
+> **PR:** [#609](https://github.com/IchirokuXVI/nx-portfolio/pull/609)
+
 # 0177: a source size states its own unit
 
 > Found by the curation of the October 2026 harvest (Mercadona, LIDL, Deza, El Jamón and
