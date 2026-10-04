@@ -32,6 +32,12 @@
 #   check.sh is absent or fails                     refused, exit 1
 #   otherwise                                       due
 #
+# A task with dumps in the ledger and no state has started: an earlier deploy
+# took its dumps, and its pre.sh failed or never ran. Inside its window, in its
+# release, it is due again, behind check.sh as before. Outside them it is
+# refused and never recorded as skipped or expired, and it never waits, because
+# nobody knows how far its pre.sh got. A person reads the cluster and decides.
+#
 # The window is RUN_UNTIL_STAGING or RUN_UNTIL_PRODUCTION in task.env: a UTC
 # date, YYYY-MM-DD, inclusive, or the word `never`. PRODUCTION_RELEASE is the
 # one version that runs the task in production.
@@ -236,8 +242,12 @@ dump() {
 # words that explain it. It reads and never writes, so both the check phase and
 # the pre phase call it and cannot disagree.
 decide() {
-  local dir="$1" window release databases missing output
+  local dir="$1" task window release databases missing output started stopped
+  # Cleared first, so that a path that sets nothing reads as no decision, which
+  # every caller refuses.
+  DECISION=''
   DETAIL=''
+  task="$(basename "$dir")"
 
   if ! window="$(task_field "$dir" "$WINDOW_FIELD")" \
     || ! release="$(task_field "$dir" PRODUCTION_RELEASE)" \
@@ -268,22 +278,32 @@ decide() {
     return 0
   fi
 
+  # Dumps and no state: an earlier deploy started this task and did not reach
+  # the end of its pre phase. The three quiet outcomes below would each lose
+  # that fact, so each one becomes a refusal for a started task.
+  started="$(ledger_get "$task.dumps")"
+  stopped=''
+
   if [ "$FRESH" = true ]; then
+    [ -z "$started" ] || stopped='the helm release is gone, so this reads as a first install'
     DECISION=fresh
     DETAIL='first install'
-    return 0
-  fi
   # Both sides are YYYY-MM-DD, so the order of the strings is the order of the days.
-  if [[ "$TODAY" > "$window" ]]; then
+  elif [[ "$TODAY" > "$window" ]]; then
+    [ -z "$started" ] || stopped="its window closed on $window"
     DECISION=expired
     DETAIL="its window closed on $window"
-    return 0
-  fi
-  if [ "$ENVIRONMENT" = production ] && [ "$release" != "$RELEASE" ]; then
+  elif [ "$ENVIRONMENT" = production ] && [ "$release" != "$RELEASE" ]; then
+    [ -z "$started" ] || stopped="it belongs to release $release and this is $RELEASE"
     DECISION=waits
     DETAIL="waits for release $release"
+  fi
+  if [ -n "$stopped" ]; then
+    DECISION=refused
+    DETAIL="an earlier deploy started it and its pre phase did not finish. Dumps taken: $started. It cannot retry by itself, because $stopped. Read the cluster to see how far pre.sh got. Then either remove the key $task.dumps from configmap/$LEDGER, which lets the window decide, or finish the task by hand and set the key $task to 'done' and a UTC time"
     return 0
   fi
+  [ -z "$DECISION" ] || return 0
 
   if ! output="$(run_check "$dir")"; then
     DECISION=refused
@@ -294,6 +314,7 @@ decide() {
   DETAIL="until $window"
   [ "$ENVIRONMENT" != production ] || DETAIL="$DETAIL, release $release"
   DETAIL="$DETAIL, databases: $databases"
+  [ -z "$started" ] || DETAIL="$DETAIL. A retry: an earlier deploy took dumps and did not finish its pre phase"
 
   missing="$(missing_cronjobs "$dir")"
   if [ -n "$missing" ]; then
@@ -317,9 +338,22 @@ fi
 
 # A first install has no data for a task to change. Every due task is recorded
 # as skipped, so a task written for an existing cluster never runs on a new one.
+#
+# Only helm saying that the release is not found counts. A cluster that does not
+# answer is not a new cluster, and `skipped` is final, so any other failure
+# stops here.
 FRESH=false
-if [ "$PHASE" != post ] && ! helm status "$RELEASE_NAME" --namespace "$NAMESPACE" > /dev/null 2>&1; then
-  FRESH=true
+if [ "$PHASE" != post ]; then
+  if ! helm_answer="$(helm status "$RELEASE_NAME" --namespace "$NAMESPACE" 2>&1 > /dev/null)"; then
+    case "$helm_answer" in
+      *'release: not found'*) FRESH=true ;;
+      *)
+        echo "cannot tell whether the helm release '$RELEASE_NAME' exists: ${helm_answer:-helm status failed and printed nothing}" >&2
+        echo "  A release that cannot be read is not a first install. Nothing was changed." >&2
+        exit 1
+        ;;
+    esac
+  fi
 fi
 
 shopt -s nullglob
@@ -342,6 +376,9 @@ for dir in "${TASKS[@]}"; do
   task="$(basename "$dir")"
   ledger="$(ledger_get "$task")"
   state="${ledger%% *}"
+  # A value that starts with a space has an empty first word. It is not "no
+  # state": something wrote to the ledger, and it is refused as unknown below.
+  if [ -n "$ledger" ] && [ -z "$state" ]; then state='?'; fi
 
   # The state is read before the window, so that a task the ledger already
   # knows is never judged by its window again.
@@ -367,6 +404,10 @@ for dir in "${TASKS[@]}"; do
         refused)
           # A reason of several lines goes on one, so the list stays a list.
           line "$task" "REFUSED   $(printf '%s' "$DETAIL" | tr '\n' ' ')"
+          REFUSALS=$((REFUSALS + 1))
+          ;;
+        *)
+          line "$task" "REFUSED   the runner reached no decision ('$DECISION')"
           REFUSALS=$((REFUSALS + 1))
           ;;
       esac
@@ -412,6 +453,14 @@ for dir in "${TASKS[@]}"; do
           echo "  It runs at the next deploy, once this upgrade has created them." >&2
           continue
           ;;
+        due) ;;
+        *)
+          # Only `due` goes on to the dumps and pre.sh. Anything else that
+          # reaches this point is a decision this phase does not know.
+          echo "$task: REFUSED. The runner reached no decision ('$DECISION')." >&2
+          echo "  Nothing was changed. The deploy stops here." >&2
+          exit 1
+          ;;
       esac
       echo "$task: due, $DETAIL"
       dumps="$(ledger_get "$task.dumps")"
@@ -446,18 +495,32 @@ for dir in "${TASKS[@]}"; do
       ;;
 
     *)
-      if [ "$PHASE" = check ]; then
-        line "$task" "REFUSED   unknown state '$state' in configmap/$LEDGER"
-        REFUSALS=$((REFUSALS + 1))
-        continue
-      fi
-      echo "$task: unknown state '$state' in configmap/$LEDGER" >&2
-      exit 1
+      case "$PHASE" in
+        check)
+          line "$task" "REFUSED   unknown state in configmap/$LEDGER: '$ledger'"
+          REFUSALS=$((REFUSALS + 1))
+          ;;
+        post)
+          # Counted, and the walk goes on: a later task that is pre-done still
+          # runs its post.sh, and the phase fails after the last one.
+          echo "$task: REFUSED. Unknown state in configmap/$LEDGER: '$ledger'" >&2
+          REFUSALS=$((REFUSALS + 1))
+          ;;
+        *)
+          echo "$task: REFUSED. Unknown state in configmap/$LEDGER: '$ledger'" >&2
+          echo "  Nothing was changed by this task. The deploy stops here." >&2
+          exit 1
+          ;;
+      esac
       ;;
   esac
 done
 
 if [ "$REFUSALS" -gt 0 ]; then
-  echo "$REFUSALS release task(s) refused. Nothing was changed, and the deploy must not start." >&2
+  if [ "$PHASE" = check ]; then
+    echo "$REFUSALS release task(s) refused. Nothing was changed, and the deploy must not start." >&2
+  else
+    echo "$REFUSALS release task(s) refused. Every task that was pre-done still ran its post.sh." >&2
+  fi
   exit 1
 fi

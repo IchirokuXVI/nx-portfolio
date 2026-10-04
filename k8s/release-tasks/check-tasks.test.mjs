@@ -13,9 +13,16 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -297,6 +304,33 @@ function run(dir) {
   });
   return { ...result, output: `${result.stdout}${result.stderr}` };
 }
+
+test('the command still checks when it is run through a linked path', (t) => {
+  // node resolves a link for the module's own URL and not for argv[1]. A
+  // command that compares the two as written believes it was imported, checks
+  // nothing and exits 0, so the fixture here is one that must fail.
+  const dir = tasksDir({ '0001-a-task': { files: ['post.sh'] } });
+  const link = join(dir, '.linked');
+  try {
+    symlinkSync(dirname(CHECKER), link, 'junction');
+  } catch (error) {
+    t.skip(`this machine cannot create a link: ${error.code}`);
+    return;
+  }
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [join(link, 'check-tasks.mjs'), dir],
+      { encoding: 'utf8' }
+    );
+    assert.equal(result.status, 1, `${result.stdout}${result.stderr}`);
+    assert.match(result.stderr, /0001-a-task: check\.sh is absent/);
+  } finally {
+    // The link goes first and by itself, so that the cleanup of the fixture
+    // can never walk through it into the directory it points at.
+    unlinkSync(link);
+  }
+});
 
 test('the command measures the 14 days from the commit that last changed task.env', () => {
   // Committed on 2026-01-01 with a window on 2026-01-15, which is day 14. The
