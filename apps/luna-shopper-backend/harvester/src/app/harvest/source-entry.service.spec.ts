@@ -139,6 +139,8 @@ function build(
     readyClaims?: Record<string, unknown>[];
     /** The product catalog says holds the barcode it is asked about. */
     eanHolder?: ItemView | null;
+    /** How many rows of the row's chain print its EAN. One when absent. */
+    chainRowsWithEan?: number;
     /** What catalog answers when it cannot write the barcode it is taught. */
     teachRefusal?: {
       reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
@@ -158,6 +160,15 @@ function build(
     find: jest.fn(async () => [row]),
     delete: jest.fn(async () => ({ affected: 1 })),
     createQueryBuilder: jest.fn(),
+    // How many rows of the chain print each EAN (plan 0185). One, unless a
+    // test says the chain prints the row's barcode on other rows too.
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      eans.map((ean) => ({
+        supermarketId: row.supermarketId,
+        ean,
+        count: options.chainRowsWithEan ?? 1,
+      }))
+    ),
   } as unknown as Repository<SourceCatalogEntry>;
 
   const prices = {

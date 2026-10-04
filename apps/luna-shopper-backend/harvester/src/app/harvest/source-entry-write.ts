@@ -91,6 +91,69 @@ export function barcodesOf(item: Pick<ItemView, 'ean' | 'eans'>): string[] {
   return [...new Set([...(item.eans ?? []), ...(item.ean ? [item.ean] : [])])];
 }
 
+/**
+ * How many rows each (chain, EAN) of these rows has, in one query.
+ *
+ * Every row of the chain counts, this one included, whatever its status and
+ * whatever its source kind. That is what `ChainEanIndex` counts for the
+ * ingest, which loads every row of the chain and nothing narrower.
+ */
+export async function chainEanCounts(
+  entries: Repository<SourceCatalogEntry>,
+  rows: readonly Pick<SourceCatalogEntry, 'supermarketId' | 'ean'>[]
+): Promise<Map<string, number>> {
+  const eans = [
+    ...new Set(
+      rows.map((row) => row.ean).filter((ean): ean is string => !!ean)
+    ),
+  ];
+  const counts = new Map<string, number>();
+  if (eans.length === 0) {
+    return counts;
+  }
+  const found: { supermarketId: string; ean: string; count: number }[] =
+    await entries.query(
+      `
+      SELECT e."supermarketId"::text AS "supermarketId",
+             e."ean"                 AS "ean",
+             count(*)::int           AS "count"
+        FROM "source_catalog_entries" e
+       WHERE e."ean" = ANY($1::varchar[])
+       GROUP BY e."supermarketId", e."ean"
+      `,
+      [eans]
+    );
+  for (const row of found) {
+    counts.set(chainEanKey(row), row.count);
+  }
+  return counts;
+}
+
+/** The key {@link chainEanCounts} answers under. */
+export function chainEanKey(
+  row: Pick<SourceCatalogEntry, 'supermarketId' | 'ean'>
+): string {
+  return `${row.supermarketId}|${row.ean}`;
+}
+
+/**
+ * Whether more than one row of the row's own chain prints its EAN (plan 0185).
+ *
+ * **The ingest's own notion of shared, and no second one**: `ChainEanIndex`
+ * calls an EAN shared when more than one row of the chain carries it (plan
+ * 0155). Mercadona gives one EAN to five cuts of one fish, and each cut is a
+ * product of its own. Such a barcode names no single product, so a row that
+ * prints it neither teaches it nor is refused because another product holds
+ * it: the accept binds the row and writes its prices, as it did before the
+ * plan. The owner can change this rule.
+ */
+export function sharesEanInChain(
+  entry: Pick<SourceCatalogEntry, 'supermarketId' | 'ean'>,
+  counts: ReadonlyMap<string, number>
+): boolean {
+  return (counts.get(chainEanKey(entry)) ?? 0) > 1;
+}
+
 /** The sentence a decision is refused with when another product holds the row's barcode. */
 export function eanHeldDetail(
   ean: string,

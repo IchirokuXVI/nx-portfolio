@@ -58,8 +58,11 @@ import { acceptedName } from './source-entry-name';
 import { createdSize } from './source-entry-size';
 import {
   bindFields,
+  chainEanCounts,
+  chainEanKey,
   createdEan,
   eanHeldDetail,
+  sharesEanInChain,
   SourceEntryPriceWriter,
   taughtEan,
 } from './source-entry-write';
@@ -286,9 +289,7 @@ export class SourceEntryService {
     return {
       items: page.map((row) => ({
         ...toSourceCatalogEntryView(row),
-        eanSharedBy: row.ean
-          ? (shared.get(`${row.supermarketId}|${row.ean}`) ?? 1)
-          : null,
+        eanSharedBy: row.ean ? (shared.get(chainEanKey(row)) ?? 1) : null,
       })),
       nextCursor:
         hasMore && last
@@ -298,34 +299,10 @@ export class SourceEntryService {
   }
 
   /** How many rows each (chain, EAN) of these rows has, in one query. */
-  private async eanCounts(
+  private eanCounts(
     rows: readonly SourceCatalogEntry[]
   ): Promise<Map<string, number>> {
-    const eans = [
-      ...new Set(
-        rows.map((row) => row.ean).filter((ean): ean is string => !!ean)
-      ),
-    ];
-    const counts = new Map<string, number>();
-    if (eans.length === 0) {
-      return counts;
-    }
-    const found: { supermarketId: string; ean: string; count: number }[] =
-      await this.entries.query(
-        `
-        SELECT e."supermarketId"::text AS "supermarketId",
-               e."ean"                 AS "ean",
-               count(*)::int           AS "count"
-          FROM "source_catalog_entries" e
-         WHERE e."ean" = ANY($1::varchar[])
-         GROUP BY e."supermarketId", e."ean"
-        `,
-        [eans]
-      );
-    for (const row of found) {
-      counts.set(`${row.supermarketId}|${row.ean}`, row.count);
-    }
-    return counts;
+    return chainEanCounts(this.entries, rows);
   }
 
   /**
@@ -338,6 +315,10 @@ export class SourceEntryService {
    * accept is refused with `item_ean_held` before anything is written: either
    * the row belongs to that product, or the barcode sits on the wrong one, and
    * a person settles which.
+   *
+   * **A row whose EAN another row of its chain prints does neither.** That
+   * barcode names no single product (plan 0155), so the row is bound and its
+   * prices are written as before the plan, with no teach and no refusal.
    *
    * The barcode is written last, after the prices and the availability, and
    * under the rule they follow on this route: the bind stands, and a write
@@ -809,9 +790,10 @@ export class SourceEntryService {
    * The barcode accepting this row onto `itemId` will give the product, or
    * null when there is nothing to give (plan 0185).
    *
-   * Null for a row with no real barcode, and for one whose barcode the product
-   * already holds. Refuses with `item_ean_held` when another product holds it.
-   * Asked before the bind, so a refusal writes nothing.
+   * Null for a row with no real barcode, for one whose barcode the product
+   * already holds, and for one whose EAN another row of its chain prints.
+   * Refuses with `item_ean_held` when another product holds it. Asked before
+   * the bind, so a refusal writes nothing.
    */
   private async barcodeToTeach(
     entry: SourceCatalogEntry,
@@ -819,6 +801,11 @@ export class SourceEntryService {
   ): Promise<string | null> {
     const ean = taughtEan(entry);
     if (ean === null) {
+      return null;
+    }
+    // Shared inside its chain: no teach and no refusal, and catalog is not
+    // asked. The count is the ingest's own (`ChainEanIndex`).
+    if (sharesEanInChain(entry, await this.eanCounts([entry]))) {
       return null;
     }
     const { item } = await this.catalog.findItemByEan(ean);

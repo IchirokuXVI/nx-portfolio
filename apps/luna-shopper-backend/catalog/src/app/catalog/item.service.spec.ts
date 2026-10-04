@@ -1054,14 +1054,16 @@ describe('ItemService', () => {
       expect(replaced.eans).toEqual([THIRD, SECOND]);
       expect(eans.rows.has(FIRST)).toBe(false);
 
-      // One of its own further barcodes becomes the first, and stays one row.
+      // A barcode the product already holds is a reorder: it becomes the
+      // first, and the old first barcode stays one of the product's barcodes.
       const promoted = await service.update({
         userId: ADMIN,
         itemId: 'i1',
         ean: SECOND,
       });
       expect(promoted.ean).toBe(SECOND);
-      expect(promoted.eans).toEqual([SECOND]);
+      expect(promoted.eans).toEqual([SECOND, THIRD]);
+      expect(eans.rows.get(THIRD)).toBe('i1');
 
       // Another product's further barcode is a conflict `uq_items_ean` cannot
       // see, and it is refused all the same.
@@ -1076,8 +1078,8 @@ describe('ItemService', () => {
         itemId: 'i1',
         ean: null,
       });
-      expect(cleared.ean).toBe(FIRST);
-      expect(cleared.eans).toEqual([FIRST]);
+      expect(cleared.ean).toBe(THIRD);
+      expect(cleared.eans).toEqual([THIRD, FIRST]);
       // And the barcode it gave up is free for the other product.
       const taken = await service.update({
         userId: ADMIN,

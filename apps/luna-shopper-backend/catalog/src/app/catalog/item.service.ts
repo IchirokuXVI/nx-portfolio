@@ -1795,12 +1795,16 @@ export class ItemService {
    * Keep `item_eans` in step with an edit that changed `items.ean` (plan
    * 0185), inside the edit's own transaction and before the product is saved.
    *
-   * The `ean` field of an update is the product's **first** barcode, so
-   * changing it replaces that one barcode: the old one is taken off the
-   * product and the new one is given to it. The product's further barcodes
-   * are not touched. An edit that clears the first barcode while the product
-   * holds others promotes the oldest of them, so `items.ean` is never empty
-   * while the product holds a barcode.
+   * The `ean` field of an update is the product's **first** barcode. Three
+   * cases:
+   *
+   * - **A barcode the product already holds** is a reorder. It becomes the
+   *   first, and the old first barcode stays one of the product's barcodes.
+   * - **A barcode the product does not hold** replaces the first one: the old
+   *   first barcode is taken off the product and the new one is given to it.
+   *   The product's further barcodes are not touched.
+   * - **Null** takes the first barcode off and promotes the oldest of the
+   *   rest, so `items.ean` is never empty while the product holds a barcode.
    */
   private async moveFirstEan(
     tx: AuditedWrite,
@@ -1811,6 +1815,17 @@ export class ItemService {
     if (row.ean === before.ean) {
       return;
     }
+    const holder =
+      row.ean === null ? null : await this.eans.holder(tx.manager, row.ean);
+    if (holder === row.id) {
+      // A reorder: nothing leaves the product.
+      return;
+    }
+    if (holder !== null) {
+      // One of another product's barcodes. `uq_items_ean` cannot see it when
+      // it is not that product's `items.ean`.
+      throw new ConflictException(eanTaken);
+    }
     if (before.ean) {
       await this.eans.remove(tx.manager, row.id, before.ean);
     }
@@ -1818,14 +1833,7 @@ export class ItemService {
       row.ean = await this.oldestEan(tx, row.id);
       return;
     }
-    const holder = await this.eans.holder(tx.manager, row.ean);
-    if (holder === null) {
-      await this.eans.insert(tx.manager, row.id, row.ean);
-    } else if (holder !== row.id) {
-      // One of another product's further barcodes. `uq_items_ean` cannot see
-      // it, because it is not that product's `items.ean`.
-      throw new ConflictException(eanTaken);
-    }
+    await this.eans.insert(tx.manager, row.id, row.ean);
   }
 
   /**

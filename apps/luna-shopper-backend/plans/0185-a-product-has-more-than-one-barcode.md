@@ -131,8 +131,10 @@ the 211 products that carry an in-store code. The constraint wins.
 `items.ean` is the first barcode. The builder chose these rules, and the plan does not
 state them:
 
-- An update that changes `ean` replaces the first barcode. The old first barcode leaves
-  the product. The further barcodes stay.
+- An update of `ean` to a barcode that the product does not hold replaces the first
+  barcode. The old first barcode leaves the product. The further barcodes stay.
+- An update of `ean` to a barcode that the product already holds is a reorder. That
+  barcode becomes the first. The old first barcode stays a barcode of the product.
 - An update that clears `ean` promotes the oldest further barcode. So `items.ean` is null
   only for a product with no barcode.
 - A removal of the first barcode promotes the oldest further barcode in the same way.
@@ -153,16 +155,25 @@ A person must decide it.
 **For the owner:** to bind those rows too, `touch` in `source-ingest.ts` must match an
 undecided row again. That file is outside the scope of this plan.
 
-### One barcode on two products of one chain
+### An EAN that a chain prints on several rows
 
 Plan `0155` found chains that print one EAN on several products, for example five cuts of
-one fish. Before this plan a person accepted each cut onto its own product. Now the first
-accept gives the barcode to its product. The second accept is refused with `item_ean_held`:
-another product holds the barcode.
+one fish. Such a barcode names no single product. So a row whose EAN another row of its own
+chain prints behaves as it did before this plan:
 
-**For the owner:** decide whether a row that shares its EAN inside its chain must be
-exempt from the teaching and from the refusal. The curation tool already sends such a row
-to `REVIEW` with `SHARED_EAN`.
+- The accept binds the row as `MANUAL` and writes its prices and its availability.
+- The accept does not teach the barcode to the product.
+- The accept is not refused, also when another product holds the barcode.
+- On the bulk route, two sibling rows that are accepted onto two products in one file
+  both land.
+
+"Shared" is the ingest's own count, the one `ChainEanIndex` keeps: more than one row of
+the chain carries the EAN. Every row of the chain counts, whatever its status and its
+source kind. A row of another chain with the same EAN is not shared. It still teaches,
+and it is still refused when another product holds its barcode.
+
+**The owner can change this rule.** The session that directed the build decided it on
+2026-10-04, after a review found that the first build refused the second cut.
 
 ### Two barcodes of one product in one chain
 

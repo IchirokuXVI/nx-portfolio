@@ -266,6 +266,18 @@ describeIntegration('a product’s barcodes (real Postgres)', () => {
     expect(replaced.ean).toBe(THIRD);
     expect(replaced.eans).toEqual([THIRD, SECOND]);
 
+    // A barcode the product already holds is a reorder: it becomes the first,
+    // and the old first barcode stays a barcode of the product.
+    const reordered = await items.update({
+      userId: OWNER,
+      itemId: milk.id,
+      ean: SECOND,
+    });
+    expect(reordered.ean).toBe(SECOND);
+    expect(reordered.eans).toEqual([SECOND, THIRD]);
+    expect(await count('item_eans')).toBe(2);
+    await items.update({ userId: OWNER, itemId: milk.id, ean: THIRD });
+
     // Taking the first one off promotes the oldest of the rest.
     const promoted = await items.removeEan({
       userId: OWNER,

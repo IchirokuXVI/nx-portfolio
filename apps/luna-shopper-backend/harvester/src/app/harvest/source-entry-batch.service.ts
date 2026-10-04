@@ -29,8 +29,10 @@ import { createdSize } from './source-entry-size';
 import {
   barcodesOf,
   bindFields,
+  chainEanCounts,
   createdEan,
   eanHeldDetail,
+  sharesEanInChain,
   SourceEntryPriceWriter,
   taughtEan,
 } from './source-entry-write';
@@ -533,6 +535,12 @@ export class SourceEntryBatchService {
    * second case for the later of the two. A row with an in-store code, an
    * invalid code or no code teaches nothing and is never refused here.
    *
+   * **Neither is a row whose EAN another row of its chain prints.** That
+   * barcode names no single product (plan 0155), so the row is left out of
+   * all three cases: it is bound, and nothing is taught or refused for it. Two
+   * such sibling rows accepted onto two products in one file both land.
+   * "Shared" is the ingest's own count, read in one query for the whole file.
+   *
    * One round trip to catalog for the whole file, outside any transaction, for
    * the reasons {@link checkEans} gives.
    */
@@ -560,13 +568,23 @@ export class SourceEntryBatchService {
       }
     }
 
+    const accepted = operations
+      .filter((operation) => !isCreate(operation))
+      .map((operation) => rows.get(operation.entryId))
+      .filter(
+        (entry): entry is SourceCatalogEntry =>
+          entry !== undefined && taughtEan(entry) !== null
+      );
+    const shared = await chainEanCounts(this.entries, accepted);
+
     const accepts: { index: number; ean: string; target: string }[] = [];
     for (const [index, operation] of operations.entries()) {
       if (isCreate(operation)) {
         continue;
       }
       const entry = rows.get(operation.entryId);
-      const ean = entry ? taughtEan(entry) : null;
+      const ean =
+        entry && !sharesEanInChain(entry, shared) ? taughtEan(entry) : null;
       if (ean) {
         accepts.push({
           index,

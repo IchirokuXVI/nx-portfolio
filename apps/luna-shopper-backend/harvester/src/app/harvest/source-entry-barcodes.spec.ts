@@ -228,10 +228,35 @@ const sources = {
   ),
 } as unknown as SupermarketSourceService;
 
-/** The one row route, over the fake catalog. */
+/**
+ * What the chain EAN count query answers over these rows: how many rows of
+ * each chain print each EAN, which is what `ChainEanIndex` counts.
+ */
+function chainEanRows(
+  rows: readonly SourceCatalogEntry[],
+  eans: readonly string[]
+): { supermarketId: string; ean: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.ean && eans.includes(row.ean)) {
+      const key = `${row.supermarketId}|${row.ean}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([key, count]) => {
+    const [supermarketId, ean] = key.split('|');
+    return { supermarketId, ean, count };
+  });
+}
+
+/**
+ * The one row route, over the fake catalog. `chain` is every row the harvester
+ * holds, which is what the shared EAN count reads. The row alone when absent.
+ */
 function oneRowRoute(
   catalog: ReturnType<typeof fakeCatalog>,
-  row: SourceCatalogEntry
+  row: SourceCatalogEntry,
+  chain: readonly SourceCatalogEntry[] = [row]
 ) {
   const saved: SourceCatalogEntry[] = [];
   const entries = {
@@ -241,6 +266,9 @@ function oneRowRoute(
       saved.push({ ...input } as SourceCatalogEntry);
       return input;
     }),
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      chainEanRows(chain, eans)
+    ),
   } as unknown as Repository<SourceCatalogEntry>;
   const availability = new SourceEntryAvailabilityWriter(
     {
@@ -265,7 +293,9 @@ function oneRowRoute(
 /** The bulk route, over the fake catalog. */
 function bulkRoute(
   catalog: ReturnType<typeof fakeCatalog>,
-  rows: SourceCatalogEntry[]
+  rows: SourceCatalogEntry[],
+  // Every row the harvester holds. The file's own rows when absent.
+  chain: readonly SourceCatalogEntry[] = rows
 ) {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const saved: SourceCatalogEntry[] = [];
@@ -288,6 +318,9 @@ function bulkRoute(
   const entries = {
     manager,
     find: jest.fn(async (opts: { where?: unknown }) => named(opts)),
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      chainEanRows(chain, eans)
+    ),
   } as unknown as Repository<SourceCatalogEntry>;
   const write = jest.fn(
     async (row: SourceCatalogEntry) => (row.prices ?? []).length
@@ -459,7 +492,7 @@ describe('accepting a row teaches its barcode (plan 0185)', () => {
       catalog.teachItemEans.mockClear();
       await oneRowRoute(
         catalog,
-        queued({ id: 'e-2', externalId: '10382' })
+        queued({ id: 'e-2', externalId: '10382', supermarketId: OTHER_CHAIN })
       ).service.accept({ userId: ADMIN, entryId: 'e-2', itemId: 'item-milk' });
       expect(catalog.teachItemEans).not.toHaveBeenCalled();
 
@@ -609,9 +642,11 @@ describe('accepting a row teaches its barcode (plan 0185)', () => {
         milk('item-milk', [PRODUCT_EAN]),
         milk('item-butter', []),
       ]);
+      // Two chains, one row each: the barcode is shared inside neither, so
+      // it names one product and cannot go to two.
       const { service, saved } = bulkRoute(catalog, [
         queued(),
-        queued({ id: 'e-2', externalId: '10382' }),
+        queued({ id: 'e-2', externalId: '10382', supermarketId: OTHER_CHAIN }),
       ]);
 
       const result = await service.applyDecisions({
@@ -681,5 +716,179 @@ describe('accepting a row teaches its barcode (plan 0185)', () => {
       expect(result.priceSkips[0].reason).toContain('item-other');
       expect(catalog.products[0].eans).toEqual([PRODUCT_EAN]);
     });
+  });
+});
+
+/**
+ * An EAN one chain prints on several products (plan 0155) names no single
+ * product. Mercadona gives one EAN to five cuts of one fish, and each cut is a
+ * product of its own. A row that prints such a barcode is bound as it was
+ * before plan 0185: it teaches nothing, and it is not refused because another
+ * product holds the barcode. "Shared" is the ingest's own count: more than one
+ * row of the chain carries the EAN.
+ */
+describe('an EAN the chain prints on several rows (plan 0185)', () => {
+  const DORADA = '8436000000016';
+  const CUTS = ['entera', 'limpia', 'filetes', 'lomos', 'rodajas'];
+  const cuts = () =>
+    CUTS.map((cut, index) =>
+      queued({
+        id: `cut-${index + 1}`,
+        externalId: `dorada-${index + 1}`,
+        name: `Dorada ${cut}`,
+        brand: null,
+        ean: DORADA,
+        itemId: null,
+      })
+    );
+  const products = () =>
+    CUTS.map((_cut, index) => milk(`item-cut-${index + 1}`, []));
+
+  it('the one row route accepts each of five cuts onto its own product, refuses none and teaches nothing', async () => {
+    const catalog = fakeCatalog(products());
+    const rows = cuts();
+
+    for (const [index, row] of rows.entries()) {
+      const { service, saved } = oneRowRoute(catalog, row, rows);
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: row.id,
+        itemId: `item-cut-${index + 1}`,
+      });
+      expect(result.entry.status).toBe(SourceEntryStatus.ACTIVE);
+      expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
+      expect(result.entry.itemId).toBe(`item-cut-${index + 1}`);
+      expect(result.pricesWritten).toBe(1);
+      expect(saved).toHaveLength(1);
+    }
+
+    // Catalog was never asked who holds the barcode, and no product got it.
+    expect(catalog.findItemByEan).not.toHaveBeenCalled();
+    expect(catalog.teachItemEans).not.toHaveBeenCalled();
+    expect(catalog.products.map((product) => product.eans)).toEqual([
+      [],
+      [],
+      [],
+      [],
+      [],
+    ]);
+    expect(catalog.addPrices).toHaveBeenCalledTimes(5);
+  });
+
+  it('the one row route is not refused for a shared EAN that another product already holds', async () => {
+    // What a database taught before this rule looks like: one product holds
+    // the shared barcode. The next cut still lands on its own product.
+    const catalog = fakeCatalog([
+      milk('item-cut-1', [DORADA]),
+      milk('item-cut-2', []),
+    ]);
+    const rows = cuts();
+    const { service } = oneRowRoute(catalog, rows[1], rows);
+
+    const result = await service.accept({
+      userId: ADMIN,
+      entryId: 'cut-2',
+      itemId: 'item-cut-2',
+    });
+
+    expect(result.entry.itemId).toBe('item-cut-2');
+    expect(catalog.teachItemEans).not.toHaveBeenCalled();
+    expect(catalog.products[1].eans).toEqual([]);
+  });
+
+  it('the bulk route lands five sibling accepts of one file, each onto its own product, and teaches nothing', async () => {
+    const catalog = fakeCatalog(products());
+    const rows = cuts();
+    const { service, saved, write } = bulkRoute(catalog, rows);
+
+    const result = await service.applyDecisions({
+      userId: ADMIN,
+      operations: rows.map((row, index) =>
+        accept(row.id, `item-cut-${index + 1}`)
+      ),
+    });
+
+    expect(result.applied).toBe(true);
+    expect(result.failedStep).toBeNull();
+    expect(result.priceSkips).toEqual([]);
+    expect(result.results.map((outcome) => outcome.itemId)).toEqual([
+      'item-cut-1',
+      'item-cut-2',
+      'item-cut-3',
+      'item-cut-4',
+      'item-cut-5',
+    ]);
+    expect(saved.map((row) => row.matchedBy)).toEqual(
+      CUTS.map(() => ItemSourceMatch.MANUAL)
+    );
+    expect(write).toHaveBeenCalledTimes(5);
+    expect(catalog.findItemsByEans).not.toHaveBeenCalled();
+    expect(catalog.teachItemEans).not.toHaveBeenCalled();
+    expect(catalog.products.every((product) => product.eans.length === 0)).toBe(
+      true
+    );
+  });
+
+  it('the bulk route counts the chain, not the file: one cut in the file is still shared', async () => {
+    // The other four cuts are in the queue and not in this file, and one
+    // product already holds the barcode.
+    const catalog = fakeCatalog([
+      milk('item-cut-1', [DORADA]),
+      milk('item-cut-2', []),
+    ]);
+    const rows = cuts();
+    const { service } = bulkRoute(catalog, [rows[1]], rows);
+
+    const result = await service.applyDecisions({
+      userId: ADMIN,
+      operations: [accept('cut-2', 'item-cut-2')],
+    });
+
+    expect(result.applied).toBe(true);
+    expect(catalog.teachItemEans).not.toHaveBeenCalled();
+  });
+
+  it('a row of another chain with the same EAN is not shared: it still teaches, and is still refused', async () => {
+    // The count is per chain. Another chain prints the barcode once, so there
+    // it names one product.
+    const rows = cuts();
+    // A fresh row each time: an accept binds the object it is handed.
+    const other = () =>
+      queued({
+        id: 'other-1',
+        externalId: 'x-1',
+        supermarketId: OTHER_CHAIN,
+        ean: DORADA,
+      });
+    const all = [...rows, other()];
+
+    const free = fakeCatalog([milk('item-fish', [])]);
+    await oneRowRoute(free, other(), all).service.accept({
+      userId: ADMIN,
+      entryId: 'other-1',
+      itemId: 'item-fish',
+    });
+    expect(free.teachItemEans).toHaveBeenCalledWith([
+      { itemId: 'item-fish', ean: DORADA },
+    ]);
+
+    const held = fakeCatalog([
+      milk('item-fish', []),
+      milk('item-holder', [DORADA]),
+    ]);
+    await expect(
+      oneRowRoute(held, other(), all).service.accept({
+        userId: ADMIN,
+        entryId: 'other-1',
+        itemId: 'item-fish',
+      })
+    ).rejects.toBeInstanceOf(ItemEanHeldException);
+
+    const bulk = await bulkRoute(held, [other()], all).service.applyDecisions({
+      userId: ADMIN,
+      operations: [accept('other-1', 'item-fish')],
+    });
+    expect(bulk.applied).toBe(false);
+    expect(bulk.results[0].error?.code).toBe(BulkOperationErrorCode.EAN_HELD);
   });
 });

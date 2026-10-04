@@ -109,6 +109,24 @@ function item(id: string): ItemView {
   } as unknown as ItemView;
 }
 
+/** What the chain EAN count query answers over these rows. */
+function chainEanRows(
+  rows: readonly SourceCatalogEntry[],
+  eans: readonly string[]
+): { supermarketId: string; ean: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.ean && eans.includes(row.ean)) {
+      const key = `${row.supermarketId}|${row.ean}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([key, count]) => {
+    const [supermarketId, ean] = key.split('|');
+    return { supermarketId, ean, count };
+  });
+}
+
 /** The ids an `In(...)` criterion names, whichever way TypeORM wrapped them. */
 function idsOf(where: unknown): string[] {
   const id = (where as { id?: FindOperator<string> | string })?.id;
@@ -169,6 +187,11 @@ function build(
       idsOf(opts?.where)
         .map((id) => byId.get(id))
         .filter(Boolean)
+    ),
+    // How many rows of each chain print each EAN (plan 0185), counted over
+    // the rows the test holds, as the real query counts the table.
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      chainEanRows(rows, eans)
     ),
   } as unknown as Repository<SourceCatalogEntry>;
 

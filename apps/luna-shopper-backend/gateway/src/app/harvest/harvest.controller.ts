@@ -559,7 +559,11 @@ export class AdminHarvestEntriesController {
    * **Accepting a row teaches its barcode** (plan 0185). A row whose real EAN
    * no product holds gives that EAN to the product it is accepted onto, as one
    * more of its barcodes. When another product holds it, the accept answers
-   * 409 `item_ean_held`, names that product in `details`, and writes nothing.
+   * 409 `item_ean_held` and names that product in `details`. The check runs
+   * before the bind, and a refusal there writes nothing. If another write
+   * takes the barcode between that check and the teach, the answer is the
+   * same 409, and the bind and its prices stand. A row whose EAN another row
+   * of its chain prints teaches nothing and is never refused for it.
    */
   @Post(':id/accept')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
@@ -621,7 +625,8 @@ export class AdminHarvestEntriesController {
    * own operation with `EAN_HELD` (plan 0185), at `VALIDATE`, so nothing of the
    * file lands. An accepted row whose EAN no product holds gives it to its
    * product after the binds, and a barcode that could not be written is named
-   * in `priceSkips` with a reason that starts with `Barcode`.
+   * in `priceSkips` with a reason that starts with `Barcode`. A row whose EAN
+   * another row of its chain prints teaches nothing and is never refused.
    *
    * There is no bulk reject, and there will not be one: junk is a person's call,
    * and a wrong reject hides a row from the queue that nobody looks at again.
