@@ -2,6 +2,10 @@ import { CATEGORY_SLUG_MAX_LENGTH } from '@portfolio/luna-shopper/contracts';
 import { demoWorld } from '@portfolio/luna-shopper/test-fixtures';
 import { DIA_CATEGORY_TREE } from '../migrations/1758500000000-DiaCategoryTree';
 import {
+  NEW_LEAVES_UNDER_DIA_ROOTS,
+  NEW_ROOTS,
+} from '../migrations/1758600000000-CategoriesBeyondDia';
+import {
   REFERENCE_CATEGORIES,
   REFERENCE_LEAF_SLUGS,
   UNCATEGORISED_SLUG,
@@ -9,31 +13,58 @@ import {
 } from './categories';
 import { categoryId } from './ids';
 
-describe('the category taxonomy (plan 0173, appendix A)', () => {
+describe('the category taxonomy (plans 0173 and 0179)', () => {
   const rows = referenceCategoryRows();
   const roots = rows.filter((row) => row.parentId === null);
   const leaves = rows.filter((row) => row.parentId !== null);
 
   /**
-   * Appendix A as the migration froze it, in the shape of a taxonomy row.
-   * The migration's constant was generated from the appendix, so agreeing
-   * with it row for row is agreeing with the appendix.
+   * The tree the two migrations leave, root by root, in the order it is shown.
+   *
+   * `DiaCategoryTree` froze appendix A of plan 0173. `CategoriesBeyondDia`
+   * (plan 0179) appended leaves to four of those roots, each at the position
+   * it states, and put four roots before `other`, which stays last.
    */
+  const diaRoots = DIA_CATEGORY_TREE.map((root) => ({
+    slug: root.slug,
+    name: root.name,
+    children: [
+      ...root.children.map((leaf, position) => ({ ...leaf, position })),
+      ...NEW_LEAVES_UNDER_DIA_ROOTS.filter(
+        (leaf) => leaf.root === root.slug
+      ).map((leaf) => ({
+        slug: leaf.slug,
+        name: leaf.name,
+        position: leaf.position,
+      })),
+    ],
+  }));
+  const migratedTree = [
+    ...diaRoots.slice(0, -1),
+    ...NEW_ROOTS.map((root) => ({
+      slug: root.slug,
+      name: root.name,
+      children: root.children.map((leaf, position) => ({ ...leaf, position })),
+    })),
+    ...diaRoots.slice(-1),
+  ];
+
+  /** That tree in the shape of a taxonomy row, roots first. */
   const migrationRows = [
-    ...DIA_CATEGORY_TREE.map((root, position) => ({
+    ...migratedTree.map((root, position) => ({
       id: categoryId(root.slug),
       parentId: null,
       slug: root.slug,
       name: root.name,
       position,
     })),
-    ...DIA_CATEGORY_TREE.flatMap((root) =>
-      root.children.map((leaf, position) => ({
+    ...migratedTree.flatMap((root) =>
+      root.children.map((leaf) => ({
         id: categoryId(leaf.slug),
         parentId: categoryId(root.slug),
         slug: leaf.slug,
         name: leaf.name,
-        position,
+        position: leaf.position,
       }))
     ),
   ];
@@ -61,24 +92,74 @@ describe('the category taxonomy (plan 0173, appendix A)', () => {
     });
   });
 
-  it('holds the twenty nine roots and two hundred and forty six leaves of appendix A', () => {
-    expect(roots).toHaveLength(29);
-    expect(leaves).toHaveLength(246);
-    expect(rows).toHaveLength(275);
-    expect(REFERENCE_LEAF_SLUGS.size).toBe(246);
+  it('holds the 29 + 4 roots and the 246 + 30 leaves of appendix A and plan 0179', () => {
+    expect(roots).toHaveLength(29 + 4);
+    expect(leaves).toHaveLength(246 + 30);
+    expect(rows).toHaveLength(275 + 34);
+    expect(REFERENCE_LEAF_SLUGS.size).toBe(246 + 30);
   });
 
-  it('equals appendix A: every slug, parent, position and both names', () => {
+  it('adds exactly the rows plan 0179 names, and nothing DIA already had', () => {
+    const dia = new Set(
+      DIA_CATEGORY_TREE.flatMap((root) => [
+        root.slug,
+        ...root.children.map((leaf) => leaf.slug),
+      ])
+    );
+    const added = rows.filter((row) => !dia.has(row.slug));
+    expect(added.filter((row) => row.parentId === null)).toHaveLength(4);
+    expect(added.filter((row) => row.parentId !== null)).toHaveLength(30);
+    expect(NEW_ROOTS.map((root) => root.slug)).toEqual([
+      'makeup',
+      'home-and-garden',
+      'leisure-and-stationery',
+      'clothing-and-accessories',
+    ]);
+    // A leaf under a root DIA has goes after every child DIA gave that root.
+    for (const root of DIA_CATEGORY_TREE) {
+      const appended = NEW_LEAVES_UNDER_DIA_ROOTS.filter(
+        (leaf) => leaf.root === root.slug
+      );
+      expect(appended.map((leaf) => leaf.position)).toEqual(
+        appended.map((_, index) => root.children.length + index)
+      );
+    }
+    expect(
+      NEW_LEAVES_UNDER_DIA_ROOTS.filter((leaf) => !dia.has(leaf.root))
+    ).toEqual([]);
+  });
+
+  it('keeps every row of appendix A: its slug, its parent, its position and both names', () => {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const root of DIA_CATEGORY_TREE) {
+      expect(byId.get(categoryId(root.slug))).toMatchObject({
+        slug: root.slug,
+        parentId: null,
+        name: root.name,
+      });
+      for (const [position, leaf] of root.children.entries()) {
+        expect(byId.get(categoryId(leaf.slug))).toEqual({
+          id: categoryId(leaf.slug),
+          parentId: categoryId(root.slug),
+          slug: leaf.slug,
+          name: leaf.name,
+          position,
+        });
+      }
+    }
+  });
+
+  it('equals what the migrations leave: every slug, parent, position and both names', () => {
     expect(rows.map((row) => row.slug)).toEqual(
       migrationRows.map((row) => row.slug)
     );
     expect(rows).toEqual(migrationRows);
   });
 
-  it('agrees with the rows the migration inserts, id for id', () => {
-    // The migration froze the whole tree. `seedTaxonomy` upserts over it by
+  it('agrees with the rows the migrations insert, id for id', () => {
+    // The migrations froze the whole tree. `seedTaxonomy` upserts over it by
     // id, so a row that differed would be moved or renamed by the first demo
-    // seed after the migration.
+    // seed after them.
     const byId = new Map(rows.map((row) => [row.id, row]));
     expect(byId.size).toBe(migrationRows.length);
     for (const row of migrationRows) {
