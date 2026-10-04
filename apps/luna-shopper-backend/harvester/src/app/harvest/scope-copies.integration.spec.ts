@@ -191,6 +191,8 @@ describeIntegration('scope copies of a Mercadona walk (real Postgres)', () => {
         shops: {} as never,
         catalog,
         entries,
+        // A walk of warehouses states no claim about a shop of its own.
+        availability: {} as never,
       }
     );
     const runner = new MercadonaCatalogRunner({
@@ -268,6 +270,7 @@ describeIntegration('scope copies of a Mercadona walk (real Postgres)', () => {
       prices,
       undefined as never,
       catalog,
+      undefined as never,
       undefined as never,
       undefined as never,
       undefined as never,

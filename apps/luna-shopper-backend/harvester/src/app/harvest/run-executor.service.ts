@@ -28,6 +28,7 @@ import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunContext } from './run-context';
 import { RunReportSink, type RunReportResult } from './run-report.sink';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceIngest, type SourceIngestCounters } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
 import { StoreDiscoveryRunner } from './store-discovery.runner';
@@ -64,7 +65,8 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly places: DiscoveredPlaceService,
     private readonly shops: SourceLocationService,
     private readonly catalog: CatalogClient,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   /**
@@ -391,6 +393,7 @@ export class RunExecutor implements OnApplicationShutdown {
                 shops: this.shops,
                 catalog: this.catalog,
                 entries: this.entries,
+                availability: this.availability,
               }
             );
 
@@ -689,6 +692,14 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // thousand.
     shopsUnmapped: written.shopsUnmapped,
     availabilityWritten: written.availabilityWritten,
+    // Plan 0182: what the run said about each shop, kept on the source's own
+    // rows. Stored is written plus waiting, and a waiting claim is sent when
+    // its row is bound or its shop is mapped.
+    claimsStored: written.claimsStored,
+    claimsWritten: written.claimsWritten,
+    claimsWaiting: written.claimsWaiting,
+    claimsWaitingForBinding: written.claimsWaitingForBinding,
+    claimsWaitingForShop: written.claimsWaitingForShop,
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,

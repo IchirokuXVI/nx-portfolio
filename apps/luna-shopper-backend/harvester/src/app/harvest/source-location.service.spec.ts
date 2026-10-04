@@ -11,6 +11,7 @@ import type { Repository } from 'typeorm';
 import type { SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
+import type { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceLocationService } from './source-location.service';
 
 const ADMIN = 'owner-1';
@@ -110,8 +111,26 @@ function build(
     ),
   } as unknown as jest.Mocked<CatalogClient>;
 
-  const svc = new SourceLocationService(shops, catalog, makeAdmin());
-  return { svc, shops, catalog, saved };
+  // What sends a shop's stored claims once it is mapped (plan 0182). The real
+  // one is a query over real Postgres, proved in
+  // `source-entry-availability.integration.spec.ts`.
+  const writeForLocation = jest.fn(async () => ({
+    written: 0,
+    shops: 0,
+    conflicts: [],
+    pricelessOffers: 0,
+  }));
+  const availability = {
+    writeForLocation,
+  } as unknown as SourceEntryAvailabilityWriter;
+
+  const svc = new SourceLocationService(
+    shops,
+    catalog,
+    makeAdmin(),
+    availability
+  );
+  return { svc, shops, catalog, saved, writeForLocation };
 }
 
 /**
@@ -285,9 +304,53 @@ describe('SourceLocationService, the queue actions', () => {
     expect(saved).toHaveLength(1);
   });
 
+  /**
+   * Plan 0182. A run keeps its claims whether or not the shop is mapped, so
+   * mapping is the moment they can be sent. It used to send nothing, and the
+   * shop stayed empty until the chain was run again.
+   */
+  it('sends the stored claims of the shop it has just mapped', async () => {
+    const { svc, writeForLocation } = build({
+      held: [
+        heldRow({
+          status: SourceLocationStatus.UNMAPPED,
+          supermarketLocationId: null,
+        }),
+      ],
+      catalogLocations: [catalogLocation('loc-zoco', 'Zoco')],
+    });
+
+    await svc.map({
+      userId: ADMIN,
+      sourceLocationId: 'sl-1',
+      supermarketLocationId: 'loc-zoco',
+    });
+
+    expect(writeForLocation).toHaveBeenCalledTimes(1);
+    // The row as it was saved, so the writer reads the new location.
+    expect(writeForLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'sl-1',
+        supermarketLocationId: 'loc-zoco',
+        status: SourceLocationStatus.ACTIVE,
+      })
+    );
+  });
+
+  it('sends nothing when a shop is unmapped or ignored', async () => {
+    const { svc, writeForLocation } = build({ held: [heldRow()] });
+
+    await svc.unmap({ userId: ADMIN, sourceLocationId: 'sl-1' });
+    await svc.ignore({ userId: ADMIN, sourceLocationId: 'sl-1' });
+    await svc.unignore({ userId: ADMIN, sourceLocationId: 'sl-1' });
+
+    // What catalog already holds is left alone: a claim is never deleted.
+    expect(writeForLocation).not.toHaveBeenCalled();
+  });
+
   /** A uuid from a picker is not evidence that the shop belongs to the chain. */
   it('refuses a location belonging to another chain', async () => {
-    const { svc } = build({ held: [heldRow()] });
+    const { svc, writeForLocation } = build({ held: [heldRow()] });
     await expect(
       svc.map({
         userId: ADMIN,
@@ -295,6 +358,7 @@ describe('SourceLocationService, the queue actions', () => {
         supermarketLocationId: 'loc-elsewhere',
       })
     ).rejects.toBeInstanceOf(ValidationException);
+    expect(writeForLocation).not.toHaveBeenCalled();
   });
 
   it('unmaps back to the queue and drops the manual binding', async () => {

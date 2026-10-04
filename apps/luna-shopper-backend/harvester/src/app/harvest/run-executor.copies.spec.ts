@@ -53,6 +53,7 @@ function build(held: string[]) {
     undefined as never,
     undefined as never,
     catalog,
+    undefined as never,
     undefined as never
   );
   const warnings: HarvestRunWarning[] = [];

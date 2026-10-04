@@ -1,3 +1,5 @@
+> **PR:** [#613](https://github.com/IchirokuXVI/nx-portfolio/pull/613)
+
 # 0182: a chain that lists a product sells it
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03.

@@ -39,6 +39,7 @@ function build(
     undefined as never,
     undefined as never,
     undefined as never,
+    undefined as never,
     undefined as never
   );
   const known = (details: HarvestDetailFetch, detailBackfill = false) =>

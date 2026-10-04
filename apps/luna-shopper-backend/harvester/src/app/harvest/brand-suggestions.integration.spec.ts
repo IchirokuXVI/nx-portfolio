@@ -66,7 +66,9 @@ describeIntegration('brand suggestions and spellings (real Postgres)', () => {
       {} as unknown as SourceEntryPriceWriter,
       {
         getOrThrow: () => ({ harvestEnabled: true }),
-      } as unknown as ConfigService
+      } as unknown as ConfigService,
+      // A read binds nothing, so nothing here writes availability.
+      undefined as never
     );
   }, 120_000);
 
