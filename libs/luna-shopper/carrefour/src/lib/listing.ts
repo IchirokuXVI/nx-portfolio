@@ -30,22 +30,32 @@ import { priceToCents, unitPriceLabel } from './price';
 import type { CarrefourCard, CarrefourProduct } from './types';
 
 /**
- * The units a trailing size may end in, and what one of them is in the family's
- * own base unit.
+ * The units a trailing size may end in, and the family each belongs to.
+ *
+ * The family is what the card's `measure_unit` is checked against. A `factor`
+ * is what one of the unit is in the family's own base unit, and only a weight
+ * and a count carry one, because only they are written in that base unit.
  *
  * **A closed list on purpose**, as DEZA's is. The alternative, "a number
  * followed by any short word", reads a till key number or a flavour as a size.
  */
-const UNITS: Readonly<Record<string, { base: string; factor: number }>> = {
-  // Volume, in litres.
-  l: { base: 'l', factor: 1 },
-  lt: { base: 'l', factor: 1 },
-  litro: { base: 'l', factor: 1 },
-  litros: { base: 'l', factor: 1 },
-  dl: { base: 'l', factor: 0.1 },
-  cl: { base: 'l', factor: 0.01 },
-  ml: { base: 'l', factor: 0.001 },
-  cc: { base: 'l', factor: 0.001 },
+interface CardUnit {
+  base: string;
+  factor?: number;
+}
+
+const UNITS: Readonly<Record<string, CardUnit>> = {
+  // Volume. No factor: a volume is written in the unit the name printed, and
+  // the one table that converts it is the shared one in contracts, so `cl` is
+  // ten millilitres there and nowhere else (plan 0177).
+  l: { base: 'l' },
+  lt: { base: 'l' },
+  litro: { base: 'l' },
+  litros: { base: 'l' },
+  dl: { base: 'l' },
+  cl: { base: 'l' },
+  ml: { base: 'l' },
+  cc: { base: 'l' },
   // Weight, in kilograms.
   kg: { base: 'kg', factor: 1 },
   kgs: { base: 'kg', factor: 1 },
@@ -80,10 +90,11 @@ const UNITS: Readonly<Record<string, { base: string; factor: number }>> = {
   pastillas: { base: 'ud', factor: 1 },
   racion: { base: 'ud', factor: 1 },
   raciones: { base: 'ud', factor: 1 },
-  // Length, in metres.
-  m: { base: 'm', factor: 1 },
-  cm: { base: 'm', factor: 0.01 },
-  mm: { base: 'm', factor: 0.001 },
+  // Length. No factor: a length is a dimension and states no size at all, so
+  // there is nothing to convert (plan 0183).
+  m: { base: 'm' },
+  cm: { base: 'm' },
+  mm: { base: 'm' },
 };
 
 /** A quantity: one number, or several joined by `x` or `+`. */
@@ -236,7 +247,7 @@ export function splitCardName(
  * the number is in.
  */
 function statedSize(
-  unit: { base: string; factor: number },
+  unit: CardUnit,
   word: string,
   quantity: number | null
 ): SourceSize {
@@ -247,6 +258,9 @@ function statedSize(
   if (unit.base === 'l') {
     const size = sourceSizeOf(quantity, word);
     return size.sizeUnit === null ? none : size;
+  }
+  if (unit.factor === undefined) {
+    return none;
   }
   // Four decimals is what `source_catalog_entries.unitSize` stores, so rounding
   // here is the same rounding the column would do, done where it can be read.

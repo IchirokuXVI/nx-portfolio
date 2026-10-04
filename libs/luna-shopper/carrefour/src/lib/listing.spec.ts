@@ -89,6 +89,33 @@ describe('splitCardName', () => {
     });
   });
 
+  it('writes a decilitre and a cubic centimetre as millilitres too', () => {
+    // Both were fractions of a litre, as the centilitre was.
+    expect(
+      splitCardName('Nata para cocinar CARREFOUR 2 dl', 'l')
+    ).toMatchObject({
+      sizeFormat: '2 dl',
+      unitSize: 200,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(splitCardName('Jarabe CARREFOUR 150 cc', 'l')).toMatchObject({
+      sizeFormat: '150 cc',
+      unitSize: 150,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
+  it('reads the unit whatever case the chain printed it in', () => {
+    expect(
+      splitCardName('Cerveza Mahou clásica lata 33 CL', 'l')
+    ).toMatchObject({
+      name: 'Cerveza Mahou clásica lata',
+      sizeFormat: '33 CL',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
   it('still checks the unit of the name against what the card measures in', () => {
     // The check is on the family, and a centilitre is still a volume: it is
     // read on a card priced per litre and refused on one priced per unit.
@@ -264,10 +291,36 @@ describe('the pack count (plan 0162, section 1)', () => {
   });
 
   it('reads the N of NxQ printed in centilitres', () => {
-    expect(splitCardName('Cerveza MAHOU 6x33 cl', 'l')).toMatchObject({
+    expect(splitCardName('Cerveza MAHOU 6x33 cl', 'l')).toEqual({
       name: 'Cerveza MAHOU',
       sizeFormat: '6x33 cl',
+      // This reader never multiplies an `NxQ`, in any unit: the count is read
+      // and the size is left for the printed text to state.
+      unitSize: null,
+      sizeUnit: null,
       packCount: 6,
+    });
+  });
+
+  it('uses the count of the pack phrase when the NxQ beside it is a dimension (plan 0183)', () => {
+    // Both answered null before: the phrase and the `140x` each looked like a
+    // count, and a name that states two is a pack of packs. A length is not a
+    // count, so the phrase is now the only one and it is read.
+    expect(splitCardName('Mantel 2 unidades de 140x200 cm', 'm')).toEqual({
+      name: 'Mantel',
+      sizeFormat: '2 unidades de 140x200 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 2,
+    });
+    expect(
+      splitCardName('Mantel CARREFOUR pack de 2 unidades de 140x200 cm', 'm')
+    ).toEqual({
+      name: 'Mantel CARREFOUR',
+      sizeFormat: 'pack de 2 unidades de 140x200 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 2,
     });
   });
 
