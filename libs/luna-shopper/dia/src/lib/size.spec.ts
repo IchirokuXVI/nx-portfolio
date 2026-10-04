@@ -205,10 +205,10 @@ describe('splitSize', () => {
       });
     });
 
-    it('keeps a length as printed and states no unit for it', () => {
+    it('keeps a length as printed and states no size for it (plan 0183)', () => {
       expect(splitSize('Papel de aluminio Dia 30 m')).toMatchObject({
         sizeFormat: '30 m',
-        unitSize: 30,
+        unitSize: null,
         sizeUnit: null,
       });
     });

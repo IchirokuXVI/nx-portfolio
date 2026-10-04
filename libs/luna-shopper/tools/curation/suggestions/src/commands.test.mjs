@@ -35,7 +35,7 @@ const SUPERMARKETS = [
 
 const VOCABULARIES = {
   ...categoryVocabulary(CATEGORY_TREE),
-  units: ['UNIT', 'LITER', 'GRAM'],
+  units: ['UNIT', 'LITER', 'GRAM', 'MILLILITER', 'KILOGRAM'],
 };
 
 /** The registry the fake main gateway answers, one house label and one not. */
@@ -168,8 +168,9 @@ const CREATE_MILK = {
     nameEs: 'Leche entera',
     nameEn: 'Whole milk',
     brand: null,
-    unitSize: 1,
-    defaultUnit: 'LITER',
+    // A CREATE is written in a base unit (backend plan 0183).
+    unitSize: 1000,
+    defaultUnit: 'MILLILITER',
     categorySlugs: ['milk'],
     ean: null,
   },
@@ -1264,11 +1265,11 @@ const CREATE_ROW = {
     nameEn: 'Whole milk',
     brand: null,
     ean: null,
-    unitSize: 1,
+    unitSize: 1000,
     categorySlugs: ['milk'],
     // The rehearsal slot's ids, which `decide` records for a resume.
     categoryIds: ['cat-milk'],
-    defaultUnit: 'LITER',
+    defaultUnit: 'MILLILITER',
   },
   expect: { status: 'CANDIDATE', lastSeenAt: '2026-09-08T10:00:00.000Z' },
 };
@@ -1315,9 +1316,9 @@ test('buildOperations keeps the decided order and skips every REVIEW', () => {
     name: { es: 'Leche entera', en: 'Whole milk' },
     brand: null,
     ean: null,
-    unitSize: 1,
+    unitSize: 1000,
     categorySlugs: ['milk'],
-    defaultUnit: 'LITER',
+    defaultUnit: 'MILLILITER',
   });
   assert.deepEqual(operations[0].expect, CREATE_ROW.expect);
 });

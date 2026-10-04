@@ -39,10 +39,15 @@ describe('splitCardName', () => {
     ).toMatchObject({ unitSize: 16, sizeUnit: 'UNIT' });
   });
 
-  it('states no unit for a length, which the catalog has none for', () => {
+  it('states no size for a length, which is a dimension (plan 0183)', () => {
     expect(
       splitCardName('Papel de aluminio CARREFOUR 30 m.', 'm')
-    ).toMatchObject({ sizeFormat: '30 m.', unitSize: 30, sizeUnit: null });
+    ).toMatchObject({
+      name: 'Papel de aluminio CARREFOUR',
+      sizeFormat: '30 m.',
+      unitSize: null,
+      sizeUnit: null,
+    });
   });
 
   it('converts the size into the unit the card measures in', () => {

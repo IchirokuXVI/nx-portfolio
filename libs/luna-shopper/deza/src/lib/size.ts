@@ -1,4 +1,5 @@
 import {
+  measuresContent,
   packCountOf,
   sourceSizeOf,
   type SourceSize,
@@ -169,7 +170,20 @@ export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
 
 /** One count times one quantity and a unit, `3x187 ml`, and nothing else. */
 const COUNT_TIMES_QUANTITY =
-  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*[A-Za-zÀ-ſ]{1,10}$/i;
+  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})$/i;
+
+/**
+ * The `N` of a trailing `NxQ`, when `Q` measures what is inside (plan 0183).
+ *
+ * The pattern alone takes any word for the unit, so it read `125x157 cm` as a
+ * pack of 125 and `5x1.2 m` as a pack of 5. Those are the two sides of one
+ * tablecloth and of one sheet. A count needs a unit of content: a weight, a
+ * volume or a count. A length is a dimension and states no pack.
+ */
+function multipliedCount(sizeFormat: string | null): string | null {
+  const match = sizeFormat ? COUNT_TIMES_QUANTITY.exec(sizeFormat) : null;
+  return match && measuresContent(match[2]) ? match[1] : null;
+}
 
 /**
  * A pack phrase at the end of what is left once the size is split off:
@@ -188,15 +202,16 @@ const TRAILING_PACK =
  * is null, because it prints a pack of packs and neither number alone is the
  * count. Everything else is null, a summed `23+12 lavados` and a bare `6 ud`
  * included: the first is a sum and the second is a size, and reading either as
- * a pack is the guess the plan refuses. Proved by the `3x187 ml` row of
+ * a pack is the guess the plan refuses. Neither is a dimension, `125x157 cm`:
+ * see {@link multipliedCount}. Proved by the `3x187 ml` row of
  * `landing-page.html` and by the literals in `size.spec.ts`.
  */
 export function packCountIn(description: string): number | null {
   const { name, sizeFormat } = splitSize(description);
-  const multiplied = sizeFormat ? COUNT_TIMES_QUANTITY.exec(sizeFormat) : null;
+  const multiplied = multipliedCount(sizeFormat);
   const phrase = TRAILING_PACK.exec(name);
   if (multiplied && phrase) {
     return null;
   }
-  return packCountOf(multiplied?.[1] ?? phrase?.[1] ?? null);
+  return packCountOf(multiplied ?? phrase?.[1] ?? null);
 }

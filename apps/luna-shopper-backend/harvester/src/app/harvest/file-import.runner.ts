@@ -320,7 +320,9 @@ function pricesOf(
  * unit is: `ml`, `MILLILITER`, `unit` and `ud` all name a catalog unit, and a
  * centilitre is written as ten millilitres. A unit the catalog does not hold,
  * or no unit at all, keeps the quantity as the document stated it and states
- * no unit, which is what every row imported before this plan says.
+ * no unit, which is what every row imported before this plan says. A length
+ * (`m`, `cm`) is the one exception: it is a dimension and not a size, so it
+ * states no quantity either (plan 0183).
  *
  * `size.label` is not read here. It is the row's `sizeFormat` and half of its
  * key, and it stays exactly what the source printed.

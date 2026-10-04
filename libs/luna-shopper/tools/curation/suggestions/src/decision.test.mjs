@@ -11,7 +11,7 @@ import { indexBrands } from './rules.mjs';
 
 /** Leaf slugs of the category tree (backend plan 0173, appendix A). */
 const CATEGORIES = ['milk', 'oils', 'uncategorised'];
-const UNITS = ['UNIT', 'LITER', 'GRAM'];
+const UNITS = ['UNIT', 'LITER', 'GRAM', 'KILOGRAM', 'MILLILITER', 'PACK'];
 
 const MERCADONA = { id: 'sm-1', name: { es: 'Mercadona', en: 'Mercadona' } };
 const EL_JAMON = { id: 'sm-2', name: { es: 'El Jamón', en: 'El Jamón' } };
@@ -74,8 +74,9 @@ function goodItem(overrides = {}) {
     nameEs: 'Leche entera',
     nameEn: 'Whole milk',
     brand: 'Hacendado',
-    unitSize: 1,
-    defaultUnit: 'LITER',
+    // A CREATE is written in a base unit (backend plan 0183).
+    unitSize: 1000,
+    defaultUnit: 'MILLILITER',
     categorySlugs: ['milk'],
     ean: null,
     ...overrides,
@@ -1166,4 +1167,89 @@ test('SHARED_EAN names the barcode and the other entries, and only when shared',
   assert.match(found.detail, /EAN 8480000000017 .*e3, e4/);
   assert.equal(sharedEanIssue(ENTRY, null), null);
   assert.equal(sharedEanIssue(ENTRY, []), null);
+});
+
+// ---------------------------------------------------------------------------
+// Base units (backend plan 0183)
+// ---------------------------------------------------------------------------
+
+function createIssues(item) {
+  return validateDecision({
+    decision: createDecision(goodItem(item)),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('NOT_A_BASE_UNIT refuses a CREATE of 1 LITER, and names what to write', () => {
+  const found = createIssues({ unitSize: 1, defaultUnit: 'LITER' });
+  assert.deepEqual(codes(found), ['NOT_A_BASE_UNIT']);
+  assert.equal(
+    found[0].detail,
+    '1 LITER is not a base unit. A CREATE is written in GRAM, MILLILITER or UNIT: write 1000 MILLILITER.'
+  );
+});
+
+test('NOT_A_BASE_UNIT passes a CREATE of KILOGRAM with a null size', () => {
+  // A product sold by weight: priced per kilo and weighed at the till.
+  assert.deepEqual(
+    createIssues({ unitSize: null, defaultUnit: 'KILOGRAM' }),
+    []
+  );
+});
+
+test('NOT_A_BASE_UNIT refuses a sized KILOGRAM, any LITER and any PACK', () => {
+  const sized = createIssues({ unitSize: 0.25, defaultUnit: 'KILOGRAM' });
+  assert.deepEqual(codes(sized), ['NOT_A_BASE_UNIT']);
+  assert.match(sized[0].detail, /write 250 GRAM\.$/);
+
+  const litre = createIssues({ unitSize: null, defaultUnit: 'LITER' });
+  assert.deepEqual(codes(litre), ['NOT_A_BASE_UNIT']);
+  assert.match(litre[0].detail, /write no size MILLILITER\.$/);
+
+  const pack = createIssues({ unitSize: 6, defaultUnit: 'PACK' });
+  assert.deepEqual(codes(pack), ['NOT_A_BASE_UNIT']);
+  assert.match(pack[0].detail, /write 6 UNIT\.$/);
+});
+
+test('NOT_A_BASE_UNIT passes grams, millilitres and a count, sized or not', () => {
+  for (const item of [
+    { unitSize: 250, defaultUnit: 'GRAM' },
+    { unitSize: 1500, defaultUnit: 'MILLILITER' },
+    { unitSize: 16, defaultUnit: 'UNIT' },
+    { unitSize: null, defaultUnit: 'UNIT' },
+  ]) {
+    assert.deepEqual(createIssues(item), []);
+  }
+});
+
+test('NOT_A_BASE_UNIT is not worth a second attempt and says nothing about a LINK', () => {
+  assert.deepEqual(
+    retryableIssues([issue('NOT_A_BASE_UNIT', '1 LITER is not a base unit.')]),
+    []
+  );
+  // A LINK creates nothing: the product it names keeps the unit it has.
+  assert.deepEqual(
+    validateDecision({
+      decision: linkDecision(),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      linkTarget: {
+        id: 'i1',
+        brand: 'Hacendado',
+        unitSize: 1,
+        defaultUnit: 'LITER',
+        ean: null,
+      },
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
+      categories: CATEGORIES,
+      units: UNITS,
+    }),
+    []
+  );
 });

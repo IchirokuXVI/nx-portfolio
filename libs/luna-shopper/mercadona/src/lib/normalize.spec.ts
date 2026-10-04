@@ -6,7 +6,11 @@ import capsules from './__fixtures__/product-capsules-per-unit.json';
 import oliveOil from './__fixtures__/product-detail-es.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
+import packOfPads from './__fixtures__/product-pack-of-pads.json';
+import packOfWipes from './__fixtures__/product-pack-of-wipes.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
+import rollOfServices from './__fixtures__/product-roll-of-services.json';
+import singleRazor from './__fixtures__/product-single-razor.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
 import {
   normalizeCategories,
@@ -104,10 +108,10 @@ describe('normalizeProduct', () => {
     expect(product.brand).toBeNull();
   });
 
-  it('leaves the unit null for size_format "m", which has no UnitOfMeasure', () => {
+  it('states no size and no unit for size_format "m": a length is not a size (plan 0183)', () => {
     const product = normalizeProduct(sizeFormatM);
     expect(product.unit).toBeNull();
-    expect(product.unitSize).toBe(30);
+    expect(product.unitSize).toBeNull();
     expect(isImportableSizeFormat('m')).toBe(false);
   });
 
@@ -304,6 +308,118 @@ describe('the unit a size is in (plan 0177)', () => {
       unitSize: 1,
       unit: UnitOfMeasure.UNIT,
     });
+  });
+});
+
+describe('a size of one unit (plan 0183)', () => {
+  /** The pad fixture with its price block changed, for the cases no capture shows. */
+  const padsWith = (fields: Record<string, unknown>) => ({
+    ...packOfPads,
+    price_instructions: { ...packOfPads.price_instructions, ...fields },
+  });
+
+  it('is what the captured pack of pads says it is', () => {
+    expect(packOfPads.id).toBe('16566');
+    expect(packOfPads.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 10,
+      unit_name: 'ud.',
+      unit_price: '3.20',
+      reference_price: '0.320',
+      reference_format: 'ud',
+      is_pack: false,
+      pack_size: null,
+    });
+  });
+
+  it('reads the real count of a pack of pads from total_units', () => {
+    expect(normalizeProduct(packOfPads)).toMatchObject({
+      unitSize: 10,
+      unit: UnitOfMeasure.UNIT,
+      packCount: null,
+    });
+  });
+
+  it('reads the real count of a pack of wipes from total_units', () => {
+    expect(packOfWipes.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 15,
+      unit_price: '0.80',
+      reference_price: '0.054',
+    });
+    expect(normalizeProduct(packOfWipes)).toMatchObject({
+      unitSize: 15,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+
+  it('keeps 1 for a single razor, whose comparison price is its own price', () => {
+    expect(singleRazor.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: null,
+      unit_price: '3.00',
+      reference_price: '3.000',
+    });
+    expect(normalizeProduct(singleRazor)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+
+  it('keeps 1 for one roll whose total_units counts sheets and not pieces', () => {
+    expect(rollOfServices.price_instructions).toMatchObject({
+      unit_size: 1,
+      size_format: 'ud',
+      total_units: 600,
+      unit_name: 'servicios',
+      unit_price: '3.75',
+      reference_price: '3.750',
+    });
+    expect(normalizeProduct(rollOfServices).unitSize).toBe(1);
+  });
+
+  it('states no size when the comparison price matches neither reading', () => {
+    expect(
+      normalizeProduct(
+        padsWith({ reference_price: '0.800', bulk_price: '0.80' })
+      ).unitSize
+    ).toBeNull();
+    expect(
+      normalizeProduct(
+        padsWith({ total_units: null, reference_price: '0.320' })
+      ).unitSize
+    ).toBeNull();
+  });
+
+  it('states no size when the payload carries no comparison price at all', () => {
+    expect(
+      normalizeProduct(padsWith({ reference_price: null, bulk_price: null }))
+        .unitSize
+    ).toBeNull();
+  });
+
+  it('falls back to bulk_price when reference_price is absent', () => {
+    expect(
+      normalizeProduct(padsWith({ reference_price: undefined })).unitSize
+    ).toBe(10);
+  });
+
+  it('leaves every other size as the chain stated it', () => {
+    // A size that is already a count, and a weight, are not placeholders.
+    expect(normalizeProduct(padsWith({ unit_size: 20 })).unitSize).toBe(20);
+    expect(normalizeProduct(boxOfCapsules).unitSize).toBe(0.16);
+  });
+
+  it('reads the same count from a category listing', () => {
+    const [listed] = normalizeCategoryProducts({
+      id: 190,
+      name: 'Higiene íntima',
+      products: [packOfPads],
+    });
+    expect(listed).toMatchObject({ unitSize: 10, unit: UnitOfMeasure.UNIT });
   });
 });
 

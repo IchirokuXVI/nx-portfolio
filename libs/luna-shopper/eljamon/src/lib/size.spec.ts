@@ -75,11 +75,37 @@ describe('splitSize', () => {
       });
     });
 
-    it('keeps a length as printed and states no unit for it', () => {
-      expect(splitSize('papel de aluminio, 30m')).toMatchObject({
-        sizeFormat: '30m',
-        unitSize: 30,
-        sizeUnit: null,
+    describe('a length is a dimension, not a size (plan 0183)', () => {
+      it('keeps the printed text and states no size for a roll', () => {
+        expect(splitSize('papel de aluminio, 30m')).toMatchObject({
+          sizeFormat: '30m',
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+        });
+      });
+
+      it.each([
+        ['mantel rectangular, 125x157 cm', '125x157 cm'],
+        ['sábana ajustable, 5x1.2 m', '5x1.2 m'],
+        ['mantel rectangular, 125x157cm', '125x157cm'],
+      ])('%p states no count and no size', (printed, sizeFormat) => {
+        expect(splitSize(printed)).toMatchObject({
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          soldByWeight: false,
+        });
+      });
+
+      it('still reads the count of a pack of cans', () => {
+        expect(splitSize('cerveza rubia, 6x33 cl')).toMatchObject({
+          sizeFormat: '6x33 cl',
+          unitSize: 1980,
+          sizeUnit: 'MILLILITER',
+          packCount: 6,
+        });
       });
     });
 

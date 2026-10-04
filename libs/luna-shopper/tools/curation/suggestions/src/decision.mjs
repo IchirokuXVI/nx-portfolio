@@ -22,6 +22,7 @@ import {
   printedUnit,
   sameBaseSize,
   toBaseSize,
+  toBaseUnit,
 } from './rules.mjs';
 
 /** Below this a decision is a REVIEW, whatever the model wrote. */
@@ -427,6 +428,22 @@ export function validateDecision({
         issue(
           'UNKNOWN_UNIT',
           `"${item.defaultUnit}" is not one of ${units.join(', ')}.`
+        )
+      );
+    }
+
+    // A created product is measured in grams, millilitres or a count (backend
+    // plan 0183). One chain prints a bottle as `1,5 l` and another as
+    // `1500 ml`, and the same product in two units never matches itself. A
+    // `KILOGRAM` with no size passes: that is a product sold by weight. The
+    // detail names the pair to write, so the row a person reads says what the
+    // answer should have been.
+    const base = toBaseUnit(item.unitSize, item.defaultUnit);
+    if (base.unit !== item.defaultUnit) {
+      issues.push(
+        issue(
+          'NOT_A_BASE_UNIT',
+          `${describeSize(item.unitSize ?? 'no size', item.defaultUnit)} is not a base unit. A CREATE is written in GRAM, MILLILITER or UNIT: write ${describeSize(base.unitSize ?? 'no size', base.unit)}.`
         )
       );
     }

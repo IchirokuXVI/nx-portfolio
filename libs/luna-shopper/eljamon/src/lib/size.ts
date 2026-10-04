@@ -1,4 +1,6 @@
 import {
+  isPrintedLength,
+  measuresContent,
   packCountOf,
   sourceSizeOf,
   type SourceSizeUnit,
@@ -18,6 +20,11 @@ import {
  * because the catalog holds no centilitre, and `1,5l` is 1.5 `LITER`. A form
  * that states no quantity (`ud`, `kg`, `pk 3`) answers null, because a sold by
  * weight row has no pack to measure and `ud` is a count, not a size.
+ *
+ * **A length is a dimension, not a size (plan 0183).** `30m` is how long the
+ * roll is and `125x157cm` is the two sides of one tablecloth, so a size
+ * printed in `m`, `cm` or `mm` answers no `unitSize` and no `packCount`. Only
+ * a weight, a volume or a count is multiplied, and only its `N` is a pack.
  */
 export interface ElJamonSize {
   /** The printed name without its size. Never empty. */
@@ -28,8 +35,7 @@ export interface ElJamonSize {
   unitSize: number | null;
   /**
    * The catalog unit {@link unitSize} is in (plan 0177). Null when there is
-   * no size, and for a length (`m`, `cm`, `mm`), which the catalog has no
-   * unit for: that number stays as it was printed.
+   * no size, which a length (`m`, `cm`, `mm`) is one case of.
    */
   sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds (plan 0162), or null. */
@@ -103,6 +109,18 @@ export function splitSize(printed: string): ElJamonSize {
   }
 
   const quantity = QUANTITY.exec(lower);
+  if (quantity && UNITS.has(quantity[3]) && isPrintedLength(quantity[3])) {
+    // The printed text is kept, because it is half of the row's key. The
+    // number is not: it measures the object and not what is inside it.
+    return {
+      name,
+      sizeFormat,
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+      soldByWeight: false,
+    };
+  }
   if (quantity && UNITS.has(quantity[3])) {
     const count = quantity[1] ? Number(quantity[1]) : null;
     const amount = Number(quantity[2].replace(',', '.'));
@@ -112,7 +130,7 @@ export function splitSize(printed: string): ElJamonSize {
       // The amount through the one conversion every adapter shares, so a
       // centilitre is written as ten millilitres here as it is everywhere.
       ...sourceSizeOf(round(count ? count * amount : amount), quantity[3]),
-      packCount: packCountOf(count),
+      packCount: measuresContent(quantity[3]) ? packCountOf(count) : null,
       soldByWeight: false,
     };
   }

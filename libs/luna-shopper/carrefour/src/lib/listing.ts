@@ -136,12 +136,15 @@ export interface SplitCardName {
   name: string;
   /** The trailing size, exactly as printed, or null. */
   sizeFormat: string | null;
-  /** The size as a number in the card's `measure_unit`, or null. */
+  /**
+   * The size as a number in the card's `measure_unit`, or null. A length is
+   * null too: it is a dimension and not a size (plan 0183).
+   */
   unitSize: number | null;
   /**
    * The catalog unit {@link unitSize} is in (plan 0177): `LITER`, `KILOGRAM`
    * or `UNIT`, the three families a card measures in. Null when there is no
-   * size, and for a length, which the catalog has no unit for.
+   * size.
    */
   sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
@@ -189,7 +192,14 @@ export function splitCardName(
 
   // Either shape of the pack phrase states the count, and only one of them
   // matched, so the first that is set is the one this name used.
-  const unitSize = sizeAsNumber(match[3] ?? match[4], match[5], unit.factor);
+  //
+  // A length is a dimension and not a size (plan 0183): `30 m.` is how long
+  // the roll is, and the catalog has no unit to hold it in. The printed text
+  // still moves across, because it is half of the row's key.
+  const unitSize =
+    BASE_UNIT[unit.base] === undefined
+      ? null
+      : sizeAsNumber(match[3] ?? match[4], match[5], unit.factor);
   return {
     name,
     // Verbatim, trailing full stop and all, because that is what the chain
@@ -198,7 +208,7 @@ export function splitCardName(
     unitSize,
     // The number is in the family's base unit, so the family names the unit
     // and a centilitre needs no word of its own: `50 cl.` is 0.5 `LITER`.
-    sizeUnit: unitSize === null ? null : (BASE_UNIT[unit.base] ?? null),
+    sizeUnit: unitSize === null ? null : BASE_UNIT[unit.base],
     packCount: packCountIn(match[3] ?? match[4], match[5]),
   };
 }
@@ -216,7 +226,7 @@ function unsized(name: string): SplitCardName {
 
 /**
  * The catalog unit each family's base is (plan 0177). Metres have none, so a
- * length states a number and no unit.
+ * length states no size at all (plan 0183).
  */
 const BASE_UNIT: Readonly<Record<string, SourceSizeUnit>> = {
   l: UnitOfMeasure.LITER,
