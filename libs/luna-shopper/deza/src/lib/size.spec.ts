@@ -194,4 +194,29 @@ describe('packCountIn (plan 0162, section 1)', () => {
   it('reads nothing into a pack phrase in the middle of a name', () => {
     expect(packCountIn('Estuche pack 3 regalo ALTEZA 500 g')).toBeNull();
   });
+
+  describe('a dimension is not a pack (plan 0183)', () => {
+    it.each([
+      ['Mantel rectangular ALTEZA 125x157 cm', '125x157 cm'],
+      ['Sábana ajustable ALTEZA 5x1.2 m', '5x1.2 m'],
+    ])('%p states no count and no size', (description, sizeFormat) => {
+      // The printed text is still split off and kept: it is half of the key.
+      expect(splitSize(description).sizeFormat).toBe(sizeFormat);
+      expect(packCountIn(description)).toBeNull();
+      expect(sizeOf(sizeFormat)).toEqual({ unitSize: null, sizeUnit: null });
+    });
+
+    it('still reads the count of a pack of cans', () => {
+      expect(packCountIn('Cerveza MAHOU 6x33 cl')).toBe(6);
+      expect(sizeOf('6x33 cl')).toEqual({
+        unitSize: 1980,
+        sizeUnit: 'MILLILITER',
+      });
+    });
+
+    it('still reads a pack phrase in front of a length', () => {
+      // The phrase states the count in words, and the length states none.
+      expect(packCountIn('Papel aluminio ALTEZA pack de 2 30 m')).toBe(2);
+    });
+  });
 });

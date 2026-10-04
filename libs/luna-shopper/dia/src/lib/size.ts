@@ -29,8 +29,8 @@ export interface DiaSize {
   unitSize: number | null;
   /**
    * The catalog unit {@link unitSize} is in (plan 0177). Null when there is
-   * no size, and for a length (`m`, `cm`), which the catalog has no unit for:
-   * that number stays as it was printed.
+   * no size, which a length (`m`, `cm`) is one case of: a length is a
+   * dimension, and the shared reader states no size for it (plan 0183).
    */
   sizeUnit: SourceSizeUnit | null;
   /**

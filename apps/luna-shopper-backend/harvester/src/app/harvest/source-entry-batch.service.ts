@@ -4,7 +4,6 @@ import {
   BULK_DECISION_MAX_OPERATIONS,
   BulkOperationErrorCode,
   SourceEntryStatus,
-  UnitOfMeasure,
   type ApplySourceEntryDecisionsRequest,
   type ApplySourceEntryDecisionsResult,
   type CreateItemFromSourceEntryOperation,
@@ -14,7 +13,6 @@ import {
   type SourceEntryDecisionOutcome,
   type SourceEntryPriceSkip,
 } from '@portfolio/luna-shopper/contracts';
-import { mapSizeFormat } from '@portfolio/luna-shopper/mercadona';
 import {
   describeError,
   ValidationException,
@@ -25,6 +23,7 @@ import { CatalogClient } from './catalog-client.service';
 import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
 import { acceptedName } from './source-entry-name';
+import { createdSize } from './source-entry-size';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -538,6 +537,9 @@ function itemFrom(
   categoryIds: string[]
 ): CreateItemInput {
   const item = operation.item;
+  // The row's size in a base unit, unless the operation names its own (plan
+  // 0183), as on the per row route.
+  const size = createdSize(entry, item);
   return {
     // Plan 0079: a product with no English name gets no `en` key rather than a
     // copy of the Spanish one, so the gap stays visible and a reader still sees
@@ -545,12 +547,7 @@ function itemFrom(
     name: acceptedName(item.name, entry.name, adapterKey),
     brand: item.brand === undefined ? entry.brand : item.brand,
     ean: item.ean === undefined ? entry.ean : item.ean,
-    unitSize:
-      item.unitSize === undefined
-        ? entry.unitSize === null
-          ? null
-          : Number(entry.unitSize)
-        : item.unitSize,
+    unitSize: size.unitSize,
     // The row's count unless the operation names one (plan 0162).
     packCount:
       item.packCount === undefined ? (entry.packCount ?? null) : item.packCount,
@@ -560,13 +557,7 @@ function itemFrom(
     // Resolved from slugs by `checkCategories`, through one read of the tree
     // for the whole file (plan 0166, section 7).
     categoryIds,
-    // The unit the row states its size in comes before the guess from the
-    // printed text (plan 0177), as on the per row route.
-    defaultUnit:
-      (item.defaultUnit as UnitOfMeasure | undefined) ??
-      entry.sizeUnit ??
-      mapSizeFormat(entry.sizeFormat) ??
-      UnitOfMeasure.UNIT,
+    defaultUnit: size.unit,
   };
 }
 

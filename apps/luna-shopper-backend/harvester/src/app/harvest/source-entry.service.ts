@@ -9,7 +9,6 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
-  UnitOfMeasure,
   type AcceptSourceEntryRequest,
   type BrandSpellingsRequest,
   type BrandSpellingsResult,
@@ -28,10 +27,7 @@ import {
   type SourceEntryAcceptResult,
   type SourceEntryIdRequest,
 } from '@portfolio/luna-shopper/contracts';
-import {
-  mapSizeFormat,
-  MercadonaClient,
-} from '@portfolio/luna-shopper/mercadona';
+import { MercadonaClient } from '@portfolio/luna-shopper/mercadona';
 import {
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotFoundException,
@@ -55,6 +51,7 @@ import {
 import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
 import { acceptedName } from './source-entry-name';
+import { createdSize } from './source-entry-size';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -397,6 +394,12 @@ export class SourceEntryService {
       }
     }
 
+    // The row's size in a base unit, unless the request names its own (plan
+    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
+    // unit the row states comes before the guess from the printed text (plan
+    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
+    // nothing, which made the product 750 units.
+    const size = createdSize(entry, req);
     const item: ItemView = await this.catalog.createItem({
       // Plan 0079 reverses plan 0038 section 11: a product the source does not
       // translate gets no `en` key rather than a copy of the Spanish string. A
@@ -408,12 +411,7 @@ export class SourceEntryService {
       name,
       brand: req.brand === undefined ? entry.brand : req.brand,
       ean,
-      unitSize:
-        req.unitSize === undefined
-          ? entry.unitSize === null
-            ? null
-            : Number(entry.unitSize)
-          : req.unitSize,
+      unitSize: size.unitSize,
       // The row's count unless the request names one (plan 0162).
       packCount:
         req.packCount === undefined ? (entry.packCount ?? null) : req.packCount,
@@ -423,14 +421,7 @@ export class SourceEntryService {
       imageUrl: null,
       sku: null,
       categoryIds,
-      // The unit the row states its size in comes before the guess from the
-      // printed text (plan 0177): `75 cl` is held as 750 `MILLILITER`, and the
-      // text alone maps to nothing, which made the product 750 units.
-      defaultUnit:
-        (req.defaultUnit as UnitOfMeasure | undefined) ??
-        entry.sizeUnit ??
-        mapSizeFormat(entry.sizeFormat) ??
-        UnitOfMeasure.UNIT,
+      defaultUnit: size.unit,
     });
 
     const bound = await this.bind(entry, item.id);

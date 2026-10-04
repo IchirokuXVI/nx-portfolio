@@ -278,6 +278,43 @@ export function toBaseSize(size, unit, extra = 1) {
 }
 
 /**
+ * The size and unit a created product may carry, in a base unit (backend plan
+ * 0183): grams, millilitres or a count.
+ *
+ * A copy of `toBaseUnit` in
+ * `libs/luna-shopper/contracts/src/lib/units/source-size.ts`. This library is
+ * plain `.mjs` and cannot import the TypeScript, and `rules.test.mjs` holds
+ * the two to the same table of cases.
+ *
+ * A sized `KILOGRAM` is `GRAM` and a `LITER` is `MILLILITER`, both times a
+ * thousand. A `KILOGRAM` with no size stays as it is: that is a product sold
+ * by weight. A `PACK` is a `UNIT`, because how many a pack holds is
+ * `packCount`. Any other unit, one the vocabulary does not hold included, is
+ * answered as it came, and `UNKNOWN_UNIT` is what speaks about that.
+ */
+export function toBaseUnit(size, unit) {
+  const number = Number(size);
+  const unitSize =
+    size === null || size === undefined || !Number.isFinite(number)
+      ? null
+      : number;
+  const scaled =
+    unitSize === null ? null : Math.round(unitSize * 1000 * 10_000) / 10_000;
+  switch (String(unit ?? '').toUpperCase()) {
+    case 'KILOGRAM':
+      return unitSize === null
+        ? { unitSize: null, unit: 'KILOGRAM' }
+        : { unitSize: scaled, unit: 'GRAM' };
+    case 'LITER':
+      return { unitSize: scaled, unit: 'MILLILITER' };
+    case 'PACK':
+      return { unitSize, unit: 'UNIT' };
+    default:
+      return { unitSize, unit };
+  }
+}
+
+/**
  * The bounds of a pack count, a copy of `PACK_COUNT_MIN` and `PACK_COUNT_MAX`
  * in `libs/luna-shopper/contracts` (backend plan 0162).
  *

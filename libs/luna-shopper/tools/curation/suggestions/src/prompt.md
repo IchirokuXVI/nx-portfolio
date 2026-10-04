@@ -153,10 +153,18 @@ list and you `LINK` onto it.
 - `item.nameEn` is the English name when you are confident of the translation, else null.
 - `item.brand` is the brand, or null when the product carries none. When
   `entry.brandMatch` is present it is `brandMatch.label`, copied exactly.
-- `item.unitSize` is a number, or null when the product has no size.
-- `item.defaultUnit` is one value from the unit vocabulary below, and is never null: a
-  product with no printed size is sold by the piece, so `defaultUnit` is `UNIT` and
-  `unitSize` is null.
+- `item.unitSize` is a number, or null when the product has no size. Write it in grams,
+  millilitres or a count. 0.25 kg is 250 `GRAM`. 1.5 l is 1500 `MILLILITER`. If
+  `entry.sizeUnit` is `KILOGRAM` or `LITER`, multiply `entry.unitSize` by 1000.
+- `item.defaultUnit` is `GRAM`, `MILLILITER` or `UNIT` from the unit vocabulary below, and
+  is never null. A product with no printed size is sold by the piece, so `defaultUnit` is
+  `UNIT` and `unitSize` is null. Never write `LITER` or `PACK`.
+- `KILOGRAM` is only for a product sold by weight, which is priced per kilo and weighed at
+  the till. Write it with `unitSize` null, and never with a size.
+- A dimension or a capacity is never the size. The length of a roll (`30 m`), the sides of
+  a tablecloth (`125x157 cm`) and the capacity of a container (a 25 litre bin, a 70 litre
+  storage box, a bottle sold empty) say how big the object is. Such a product is `UNIT`
+  with `unitSize` null.
 - `item.packCount` is optional, and is a whole number from 2 to 1000. If the entry states
   the number of pieces and `entry.packCount` is null or wrong, write it. In every other
   case leave it out, and the product takes `entry.packCount`. Never guess one.
@@ -193,6 +201,8 @@ send it:
   `may1onesa`. Read both names back before you send them.
 - `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a category slug or a unit outside the two
   vocabularies below. Copy those strings exactly.
+- `NOT_A_BASE_UNIT`: a `CREATE` with a sized `KILOGRAM`, any `LITER` or any `PACK`. Write
+  the size in `GRAM`, `MILLILITER` or `UNIT`. `KILOGRAM` with `unitSize` null is allowed.
 - `PRIVATE_LABEL_CROSSES_CHAIN`: rule 6.
 - `BRAND_UNREGISTERED`: a `CREATE` whose `item.brand` the registry does not hold. A null
   brand is never this, because plenty of products carry none.

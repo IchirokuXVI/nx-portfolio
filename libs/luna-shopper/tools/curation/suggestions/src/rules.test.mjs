@@ -28,6 +28,7 @@ import {
   sameBaseSize,
   suggestBrandLabel,
   toBaseSize,
+  toBaseUnit,
 } from './rules.mjs';
 
 function fixture(name) {
@@ -832,4 +833,43 @@ test('the prompt names the fields and codes plan 0006 added', () => {
   assert.match(template, /LINK_TARGET_NOT_SHOWN/);
   assert.match(template, /LINK_TARGET_MISSING/);
   assert.match(template, /420 g and 0\.42 kg are one format/);
+});
+
+// ---------------------------------------------------------------------------
+// Base units (backend plan 0183)
+// ---------------------------------------------------------------------------
+
+test('toBaseUnit states a size in grams, millilitres or a count', () => {
+  // The same table `source-size.spec.ts` holds the contracts function to.
+  for (const [size, unit, unitSize, base] of [
+    [0.25, 'KILOGRAM', 250, 'GRAM'],
+    [1.5, 'LITER', 1500, 'MILLILITER'],
+    [0.4636, 'KILOGRAM', 463.6, 'GRAM'],
+    [500, 'GRAM', 500, 'GRAM'],
+    [330, 'MILLILITER', 330, 'MILLILITER'],
+    [16, 'UNIT', 16, 'UNIT'],
+    [6, 'PACK', 6, 'UNIT'],
+    [null, 'KILOGRAM', null, 'KILOGRAM'],
+    [null, 'LITER', null, 'MILLILITER'],
+    [undefined, 'PACK', null, 'UNIT'],
+  ]) {
+    assert.deepEqual(toBaseUnit(size, unit), { unitSize, unit: base });
+  }
+});
+
+test('toBaseUnit answers a unit it does not know as it came', () => {
+  assert.deepEqual(toBaseUnit(2, 'BOTTLE'), { unitSize: 2, unit: 'BOTTLE' });
+});
+
+test('the prompt names the base unit rule, its code, and what is not a size', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /NOT_A_BASE_UNIT/);
+  assert.match(template, /Never write `LITER` or `PACK`/);
+  assert.match(template, /0\.25 kg is 250 `GRAM`/);
+  assert.match(template, /1\.5 l is 1500 `MILLILITER`/);
+  // A product sold by weight is the one thing a kilogram is still written for.
+  assert.match(template, /`KILOGRAM` is only for a product sold by weight/);
+  // The capacity of a container is how big the object is, never its size.
+  assert.match(template, /A dimension or a capacity is never the size/);
+  assert.match(template, /a bottle sold empty/);
 });

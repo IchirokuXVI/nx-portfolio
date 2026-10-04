@@ -56,6 +56,30 @@ const PRODUCTS: Array<{
     lang: 'es',
     why: 'a box priced as one piece that prints how many capsules it holds (plan 0177)',
   },
+  {
+    file: 'product-pack-of-pads.json',
+    id: '16566',
+    lang: 'es',
+    why: 'a pack of pads sized `1 ud` whose count is in total_units (plan 0183)',
+  },
+  {
+    file: 'product-pack-of-wipes.json',
+    id: '47293',
+    lang: 'es',
+    why: 'a pack of wipes sized `1 ud` whose count is in total_units (plan 0183)',
+  },
+  {
+    file: 'product-single-razor.json',
+    id: '22083',
+    lang: 'es',
+    why: 'a single object sized `1 ud` with no total_units (plan 0183)',
+  },
+  {
+    file: 'product-roll-of-services.json',
+    id: '49173',
+    lang: 'es',
+    why: 'one roll sized `1 ud` whose total_units counts sheets and not pieces (plan 0183)',
+  },
 ];
 
 async function main(): Promise<void> {

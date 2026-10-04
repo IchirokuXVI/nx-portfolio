@@ -321,11 +321,11 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       expect(
         await sizesOf({
           '4241': { size_format: 'ud', unit_size: 12 },
-          // Foil and cling film: the catalog has no unit for a length, so the
-          // number is kept and nothing claims to know what it counts.
+          // Foil and cling film: a length is a dimension and not a size, so
+          // the row states neither a number nor a unit (plan 0183).
           '7012': { size_format: 'm', unit_size: 30 },
         })
-      ).toEqual({ '4241': [12, 'UNIT'], '7012': [30, null] });
+      ).toEqual({ '4241': [12, 'UNIT'], '7012': [null, null] });
     });
 
     it('states no unit beside no size', async () => {

@@ -231,7 +231,9 @@ describe('FileImportRunner (plan 0086)', () => {
           // No unit, which is every document written before this plan: the
           // quantity is kept and nothing claims to know what it counts.
           { name: 'Yogur natural', size: { label: '4x125 g', quantity: 500 } },
-          // A unit the catalog does not hold.
+          // A length, which is a dimension and not a size (plan 0183): the
+          // label is kept, because it is half of the key, and the number is
+          // not.
           {
             name: 'Papel de aluminio',
             size: { label: '30 m', quantity: 30, unit: 'm' },
@@ -253,7 +255,7 @@ describe('FileImportRunner (plan 0086)', () => {
       ['Café en cápsulas', '16 ud', 16, 'UNIT'],
       ['Leche entera', '1,5 l', 1500, 'MILLILITER'],
       ['Yogur natural', '4x125 g', 500, null],
-      ['Papel de aluminio', '30 m', 30, null],
+      ['Papel de aluminio', '30 m', null, null],
       ['Pan de molde', null, null, null],
     ]);
     // The key is built from the name and the printed label, and from nothing

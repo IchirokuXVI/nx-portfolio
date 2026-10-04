@@ -1,0 +1,131 @@
+{
+  "id": "47293",
+  "ean": "8402001052682",
+  "slug": "papel-higienico-humedo-wc-bosque-verde-con-aloe-vera-camomila-paquete",
+  "brand": "Bosque Verde",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": "",
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/b28e83f87f4061d7092638225b942bdf.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/b28e83f87f4061d7092638225b942bdf.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/b28e83f87f4061d7092638225b942bdf.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/f195d8ba9a6fbfc94a879ebcd6835a12.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/f195d8ba9a6fbfc94a879ebcd6835a12.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/f195d8ba9a6fbfc94a879ebcd6835a12.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Bosque Verde",
+    "origin": "",
+    "suppliers": [],
+    "legal_name": "",
+    "description": "Papel higiénico húmedo WC Bosque Verde con aloe vera y camomila",
+    "counter_info": null,
+    "danger_mentions": "",
+    "alcohol_by_volume": "",
+    "mandatory_mentions": "",
+    "production_variant": "",
+    "usage_instructions": "",
+    "storage_instructions": "",
+    "is_prepared_by_mercadona": false
+  },
+  "is_bulk": false,
+  "packaging": "Paquete",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/47293/papel-higienico-humedo-wc-bosque-verde-con-aloe-vera-camomila-paquete",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/b28e83f87f4061d7092638225b942bdf.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 20,
+      "name": "Cuidado facial y corporal",
+      "level": 0,
+      "order": 241,
+      "categories": [
+        {
+          "id": 189,
+          "name": "Cuidado corporal",
+          "level": 1,
+          "order": 241,
+          "categories": [
+            {
+              "id": 614,
+              "name": "Toallitas",
+              "level": 2,
+              "order": 241
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Limpieza y hogar",
+      "level": 0,
+      "order": 374,
+      "categories": [
+        {
+          "id": 238,
+          "name": "Papel higiénico y celulosa",
+          "level": 1,
+          "order": 374,
+          "categories": [
+            {
+              "id": 755,
+              "name": "Papel higiénico",
+              "level": 2,
+              "order": 374
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    ""
+  ],
+  "display_name": "Papel higiénico húmedo WC Bosque Verde",
+  "main_feature": "",
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": 21,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": "ud.",
+    "unit_size": 1,
+    "bulk_price": "0.05",
+    "unit_price": "0.80",
+    "approx_size": false,
+    "size_format": "ud",
+    "total_units": 15,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "21.000",
+    "price_decreased": false,
+    "reference_price": "0.054",
+    "min_bunch_amount": 1,
+    "reference_format": "ud",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": "",
+    "ingredients": ""
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

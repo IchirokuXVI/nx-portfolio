@@ -5,6 +5,8 @@ import {
   SourceLocationStatus,
   type PackCountFill,
 } from '@portfolio/luna-shopper/contracts';
+import { packCountIn as dezaPackCount } from '@portfolio/luna-shopper/deza';
+import { splitSize as elJamonSize } from '@portfolio/luna-shopper/eljamon';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -338,6 +340,52 @@ describe('RunReportSink', () => {
       expect(written.packCountConflicts).toEqual([
         { itemId: 'item-merged', packCounts: [4, 6] },
       ]);
+    });
+
+    it('receives no count from a dimension (plan 0183)', async () => {
+      // The fill is unchanged. What changed is what the readers hand it:
+      // `125x157 cm` used to arrive as a pack of 125 and `5x1.2 m` as a pack
+      // of 5, and the fill wrote both onto the product.
+      const { sink, catalog } = build({
+        resolves: {
+          cloth: { itemId: 'item-cloth', active: true },
+          sheet: { itemId: 'item-sheet', active: true },
+          jamonCloth: { itemId: 'item-cloth', active: true },
+          cans: { itemId: 'item-cans', active: true },
+        },
+      });
+
+      sink.product(
+        observation({
+          externalId: 'cloth',
+          packCount: dezaPackCount('Mantel rectangular ALTEZA 125x157 cm'),
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'sheet',
+          packCount: dezaPackCount('Sábana ajustable ALTEZA 5x1.2 m'),
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'jamonCloth',
+          packCount: elJamonSize('mantel rectangular, 125x157 cm').packCount,
+        })
+      );
+      sink.product(
+        observation({
+          externalId: 'cans',
+          packCount: dezaPackCount('Cerveza MAHOU 6x33 cl'),
+        })
+      );
+      const written = await sink.drain();
+
+      expect(catalog.fillPackCounts).toHaveBeenCalledTimes(1);
+      expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+        { itemId: 'item-cans', packCount: 6 },
+      ]);
+      expect(written.packCountConflicts).toEqual([]);
     });
 
     it('splits a long list into calls catalog accepts', async () => {

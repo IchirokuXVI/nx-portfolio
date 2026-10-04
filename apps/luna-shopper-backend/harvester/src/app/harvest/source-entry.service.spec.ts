@@ -515,15 +515,109 @@ describe('SourceEntryService', () => {
       });
 
       it('falls back to the printed text for a row with no unit, then to UNIT', async () => {
+        // The text says kilograms, and a sized kilogram is written in grams
+        // (plan 0183).
         expect(
           await unitOf({ unitSize: 0.5, sizeUnit: null, sizeFormat: 'kg' })
         ).toHaveBeenCalledWith(
-          expect.objectContaining({ defaultUnit: UnitOfMeasure.KILOGRAM })
+          expect.objectContaining({
+            unitSize: 500,
+            defaultUnit: UnitOfMeasure.GRAM,
+          })
         );
         expect(
           await unitOf({ unitSize: null, sizeUnit: null, sizeFormat: '75 cl' })
         ).toHaveBeenCalledWith(
           expect.objectContaining({ defaultUnit: UnitOfMeasure.UNIT })
+        );
+      });
+    });
+
+    describe('a created item is in a base unit (plan 0183)', () => {
+      const sizeOf = async (
+        row: Partial<SourceCatalogEntry>,
+        req: { unitSize?: number | null; defaultUnit?: UnitOfMeasure } = {}
+      ) => {
+        const { service, createItem } = build({ row: entry(row) });
+        await service.createItem({ userId: ADMIN, entryId: 'e-1', ...req });
+        return createItem;
+      };
+
+      it('writes a row of 0.25 kg as 250 GRAM', async () => {
+        expect(
+          await sizeOf({
+            unitSize: 0.25,
+            sizeUnit: UnitOfMeasure.KILOGRAM,
+            sizeFormat: 'kg',
+          })
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: 250,
+            defaultUnit: UnitOfMeasure.GRAM,
+          })
+        );
+      });
+
+      it('writes a row of 1.5 l as 1500 MILLILITER', async () => {
+        expect(
+          await sizeOf({
+            unitSize: 1.5,
+            sizeUnit: UnitOfMeasure.LITER,
+            sizeFormat: '1,5 l',
+          })
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: 1500,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+          })
+        );
+      });
+
+      it('keeps KILOGRAM for a row with no size, which is sold by weight', async () => {
+        expect(
+          await sizeOf({ unitSize: null, sizeUnit: null, sizeFormat: 'kg' })
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: null,
+            defaultUnit: UnitOfMeasure.KILOGRAM,
+          })
+        );
+      });
+
+      it('converts a size the request names with the row unit', async () => {
+        expect(
+          await sizeOf(
+            {
+              unitSize: 0.25,
+              sizeUnit: UnitOfMeasure.KILOGRAM,
+              sizeFormat: 'kg',
+            },
+            { unitSize: 0.5 }
+          )
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: 500,
+            defaultUnit: UnitOfMeasure.GRAM,
+          })
+        );
+      });
+
+      it('writes a unit the request names exactly as it was sent', async () => {
+        // An admin can still write any unit by hand.
+        expect(
+          await sizeOf(
+            {
+              unitSize: 0.25,
+              sizeUnit: UnitOfMeasure.KILOGRAM,
+              sizeFormat: 'kg',
+            },
+            { unitSize: 1, defaultUnit: UnitOfMeasure.LITER }
+          )
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: 1,
+            defaultUnit: UnitOfMeasure.LITER,
+          })
         );
       });
     });
