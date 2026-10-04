@@ -71,6 +71,13 @@ export class SupermarketItemService {
    * opinion about stock and none about price, and the materialized row can
    * hold exactly that. A row already saying so is left alone and counts for
    * nothing, so a run that re-reports the same 404s writes no audit rows.
+   *
+   * **`onlyIfMissing` creates and never changes** (plan 0182). The harvester's
+   * offer with no price says that a chain lists a product, and it says so at
+   * the end of every run. The flag of a row that exists is derived from the
+   * shops of the scope (`SupermarketLocationItemService`), so a plain write of
+   * `true` would flip a derived `false` back on every run. With the option a
+   * row that exists is left alone and counts for nothing.
    */
   async setAvailability(
     req: SetSupermarketItemAvailabilityRequest
@@ -106,7 +113,7 @@ export class SupermarketItemService {
         );
         continue;
       }
-      if (held.available === available) {
+      if (req.onlyIfMissing === true || held.available === available) {
         continue;
       }
       const before = { ...held };

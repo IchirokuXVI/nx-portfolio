@@ -700,6 +700,9 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     claimsWaiting: written.claimsWaiting,
     claimsWaitingForBinding: written.claimsWaitingForBinding,
     claimsWaitingForShop: written.claimsWaitingForShop,
+    // Plan 0182: offers with no price created for bound rows the run saw. A
+    // product that already had a row in the default scope is not counted.
+    pricelessOffersWritten: written.pricelessOffersWritten,
     // Plan 0084, section 3: a person always wins, and the run reports the
     // disagreement rather than applying it.
     availabilityConflicts: written.conflicts,

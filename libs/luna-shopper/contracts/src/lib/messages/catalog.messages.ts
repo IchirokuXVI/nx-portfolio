@@ -2967,6 +2967,17 @@ export interface DeleteItemPricesByRunResult {
 export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   priceScopeId: string;
   entries: { itemId: string; available: boolean }[];
+  /**
+   * True creates the row of a product the scope has none for and leaves every
+   * row that exists exactly as it is, whatever `available` says here (plan
+   * 0182).
+   *
+   * It is what the harvester's offer with no price sends. That offer says "the
+   * chain lists this product", and catalog derives the flag of a row that
+   * exists from the shops of the scope. A plain write of `true` would flip a
+   * derived `false` back on every run.
+   */
+  onlyIfMissing?: boolean;
 }
 
 export interface SetSupermarketItemAvailabilityResult {

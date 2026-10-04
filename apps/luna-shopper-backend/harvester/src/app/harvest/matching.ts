@@ -1,5 +1,6 @@
 import {
   ItemSourceMatch,
+  productGtin,
   readGtin,
   SourceEntryStatus,
   type ItemView,
@@ -124,6 +125,19 @@ export class ItemMatchIndex {
         this.byNameKey.set(key, [item]);
       }
     }
+  }
+
+  /**
+   * The product that holds this barcode, or null (plan 0185).
+   *
+   * Rung 2 alone, for a row that is already in the queue: the name rungs are
+   * not asked, because a waiting row already carries whatever they proposed.
+   * Only a real barcode is looked up (`productGtin`), so an in-store code that
+   * 211 products still hold on `items.ean` binds nothing here.
+   */
+  holderOf(ean: string | null): string | null {
+    const gtin = productGtin(ean);
+    return gtin === null ? null : (this.byEan.get(gtin)?.id ?? null);
   }
 
   /**

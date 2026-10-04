@@ -194,6 +194,62 @@ describe('SupermarketItemService', () => {
       expect(saved).toEqual([]);
       expect(audit.recorded).toEqual([]);
     });
+
+    describe('onlyIfMissing (plan 0182)', () => {
+      it('creates the row of a product the scope has none for', async () => {
+        const { svc, saved, audit } = build();
+        const result = await svc.setAvailability({
+          userId: ADMIN,
+          priceScopeId: 'scope-1',
+          entries: [{ itemId: 'item-1', available: true }],
+          onlyIfMissing: true,
+        });
+        expect(result).toEqual({ updated: 1 });
+        expect(saved[0]).toMatchObject({
+          itemId: 'item-1',
+          priceScopeId: 'scope-1',
+          available: true,
+          priceSourceKind: null,
+        });
+        expect(audit.recorded.map((r) => r.action)).toEqual(['CREATE']);
+      });
+
+      it('leaves a row that says false alone, and counts nothing', async () => {
+        // The flag of a row that exists is derived from the shops of the
+        // scope. The offer says only that the chain lists the product, so it
+        // must not write `true` over a derived `false`.
+        const { svc, saved, audit } = build({
+          find: jest.fn(async () => [storedRow({ available: false })]),
+        } as unknown as Partial<Repository<SupermarketItem>>);
+        const result = await svc.setAvailability({
+          userId: ADMIN,
+          priceScopeId: 'scope-1',
+          entries: [{ itemId: 'item-1', available: true }],
+          onlyIfMissing: true,
+        });
+        expect(result).toEqual({ updated: 0 });
+        expect(saved).toEqual([]);
+        expect(audit.recorded).toEqual([]);
+      });
+
+      it('creates the missing rows of a batch and changes none that exist', async () => {
+        const { svc, saved, audit } = build({
+          find: jest.fn(async () => [storedRow({ available: false })]),
+        } as unknown as Partial<Repository<SupermarketItem>>);
+        const result = await svc.setAvailability({
+          userId: ADMIN,
+          priceScopeId: 'scope-1',
+          entries: [
+            { itemId: 'item-1', available: true },
+            { itemId: 'item-2', available: true },
+          ],
+          onlyIfMissing: true,
+        });
+        expect(result).toEqual({ updated: 1 });
+        expect(saved.map((row) => row.itemId)).toEqual(['item-2']);
+        expect(audit.recorded.map((r) => r.action)).toEqual(['CREATE']);
+      });
+    });
   });
 
   describe('reads', () => {

@@ -71,6 +71,8 @@ const LOC_T1 = '01820000-0000-4000-8000-0000000000a1';
 const LOC_C1 = '01820000-0000-4000-8000-0000000000a2';
 
 const ITEM_BREAD = '01820000-0000-4000-8000-0000000000b1';
+const ITEM_CROISSANT = '01820000-0000-4000-8000-0000000000b2';
+const ITEM_MUFFIN = '01820000-0000-4000-8000-0000000000b3';
 
 const RUN_1 = '01820000-0000-4000-8000-0000000000c1';
 const RUN_2 = '01820000-0000-4000-8000-0000000000c2';
@@ -131,6 +133,8 @@ interface LocationWrite {
 interface ScopeWrite {
   priceScopeId: string;
   entries: { itemId: string; available: boolean }[];
+  /** Whether the write may only create a row: the offer with no price. */
+  onlyIfMissing: boolean;
 }
 
 describeIntegration(
@@ -151,6 +155,12 @@ describeIntegration(
     let locationWrites: LocationWrite[];
     /** Every per scope write catalog was sent, in order. */
     let scopeWrites: ScopeWrite[];
+    /**
+     * The `supermarket_items` rows catalog holds, as `scope|item`. A write
+     * with `onlyIfMissing` creates the rows that are not here and answers how
+     * many it created, which is what the real service does.
+     */
+    let scopeRows: Set<string>;
     /** The chain's default scope, which a test can take away. */
     let defaultScope: string | null;
     /** What catalog holds, which is what the ladder can propose. */
@@ -204,10 +214,22 @@ describeIntegration(
         }),
         setAvailability: async (
           priceScopeId: string,
-          sent: { itemId: string; available: boolean }[]
+          sent: { itemId: string; available: boolean }[],
+          options: { onlyIfMissing?: boolean } = {}
         ) => {
-          scopeWrites.push({ priceScopeId, entries: sent });
-          return { updated: sent.length };
+          const onlyIfMissing = options.onlyIfMissing === true;
+          scopeWrites.push({ priceScopeId, entries: sent, onlyIfMissing });
+          let updated = 0;
+          for (const { itemId } of sent) {
+            const key = `${priceScopeId}|${itemId}`;
+            if (!scopeRows.has(key)) {
+              scopeRows.add(key);
+              updated += 1;
+            } else if (!onlyIfMissing) {
+              updated += 1;
+            }
+          }
+          return { updated };
         },
         setLocationAvailability: async (
           supermarketLocationId: string,
@@ -261,6 +283,7 @@ describeIntegration(
     beforeEach(async () => {
       locationWrites = [];
       scopeWrites = [];
+      scopeRows = new Set();
       defaultScope = DEFAULT_SCOPE;
       catalogItems = [];
       await clean();
@@ -453,6 +476,8 @@ describeIntegration(
         {
           priceScopeId: DEFAULT_SCOPE,
           entries: [{ itemId: ITEM_BREAD, available: true }],
+          // Create only: a row catalog holds keeps the flag it derived.
+          onlyIfMissing: true,
         },
       ]);
       // T1 is the one mapped shop. C1 and Z1 are not, so nothing is sent for
@@ -478,6 +503,125 @@ describeIntegration(
       // The shop claims do not depend on the chain having one.
       expect(locationWrites).toHaveLength(1);
     }, 120_000);
+
+    describe('a row bound before the offer existed (plan 0182, decided 2026-10-04)', () => {
+      /**
+       * Bind a row the way the 11,153 DEZA rows are bound: `ACTIVE`, with a
+       * product, and with nothing written to catalog for it.
+       */
+      async function bindSilently(
+        product: string,
+        itemId: string
+      ): Promise<SourceCatalogEntry> {
+        const row = await rowOf(product);
+        await dataSource.query(
+          `UPDATE "source_catalog_entries"
+              SET "status" = 'ACTIVE', "itemId" = $2, "matchedBy" = 'MANUAL',
+                  "confidence" = 1, "decidedAt" = now()
+            WHERE "id" = $1`,
+          [row.id, itemId]
+        );
+        return row;
+      }
+
+      it('gets its offer at the end of the next run, in one call, and the report counts it', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        await bindSilently('pan', ITEM_BREAD);
+        await bindSilently('croissants', ITEM_CROISSANT);
+        expect(scopeWrites).toEqual([]);
+
+        const written = await run(RUN_2, FIRST_LISTING);
+
+        // Both products in one call, create only, in the default scope. The
+        // magdalenas row is not bound, so it is owed nothing.
+        expect(scopeWrites).toEqual([
+          {
+            priceScopeId: DEFAULT_SCOPE,
+            entries: [
+              { itemId: ITEM_BREAD, available: true },
+              { itemId: ITEM_CROISSANT, available: true },
+            ],
+            onlyIfMissing: true,
+          },
+        ]);
+        expect(written.pricelessOffersWritten).toBe(2);
+      }, 120_000);
+
+      it('writes none again on the run after: the rows exist, and nothing is counted', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        await bindSilently('pan', ITEM_BREAD);
+        await run(RUN_2, FIRST_LISTING);
+        scopeWrites = [];
+
+        const written = await run(RUN_3, FIRST_LISTING);
+
+        // The run still offers, and every offer is create only, so catalog
+        // changes no row that exists: no flag it derived is written over.
+        expect(scopeWrites).toHaveLength(1);
+        expect(scopeWrites.every((write) => write.onlyIfMissing)).toBe(true);
+        expect(written.pricelessOffersWritten).toBe(0);
+      }, 120_000);
+
+      it('offers nothing for a row with an open price, a row the run did not see, or a row nobody accepted', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        // A price whose window is open, in any scope: the row writes that
+        // price, and is owed no offer without one.
+        const bread = await bindSilently('pan', ITEM_BREAD);
+        await dataSource.query(
+          `INSERT INTO "source_entry_prices"
+                  ("entryId", "priceScopeId", "price", "currency", "observedAt")
+           VALUES ($1, $2, 1.25, 'EUR', now())`,
+          [bread.id, DEFAULT_SCOPE]
+        );
+        // A proposal nobody accepted is not bound.
+        const croissants = await rowOf('croissants');
+        await dataSource.query(
+          `UPDATE "source_catalog_entries"
+              SET "status" = 'CANDIDATE', "itemId" = $2
+            WHERE "id" = $1`,
+          [croissants.id, ITEM_CROISSANT]
+        );
+        // Bound, and the chain stopped listing it: the next run does not see
+        // it, so the run says nothing about it.
+        await bindSilently('magdalenas', ITEM_MUFFIN);
+
+        const written = await run(RUN_2, FIRST_LISTING.slice(0, 2));
+
+        expect(scopeWrites).toEqual([]);
+        expect(written.pricelessOffersWritten).toBe(0);
+      }, 120_000);
+
+      it('offers once the only price of a row has expired', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        const bread = await bindSilently('pan', ITEM_BREAD);
+        await dataSource.query(
+          `INSERT INTO "source_entry_prices"
+                  ("entryId", "priceScopeId", "price", "currency", "observedAt",
+                   "validUntil")
+           VALUES ($1, $2, 1.25, 'EUR', now() - interval '9 days',
+                   now() - interval '2 days')`,
+          [bread.id, DEFAULT_SCOPE]
+        );
+
+        const written = await run(RUN_2, FIRST_LISTING);
+
+        expect(scopeWrites.map((write) => write.entries)).toEqual([
+          [{ itemId: ITEM_BREAD, available: true }],
+        ]);
+        expect(written.pricelessOffersWritten).toBe(1);
+      }, 120_000);
+
+      it('writes no offer for a chain that has no default scope', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        await bindSilently('pan', ITEM_BREAD);
+        defaultScope = null;
+
+        const written = await run(RUN_2, FIRST_LISTING);
+
+        expect(scopeWrites).toEqual([]);
+        expect(written.pricelessOffersWritten).toBe(0);
+      }, 120_000);
+    });
 
     it('writes the claims of rows already bound when a shop is mapped afterwards', async () => {
       await run(RUN_1, FIRST_LISTING);

@@ -2146,6 +2146,7 @@ const setSupermarketItemAvailabilityRequest = object(
       required: ['itemId', 'available'],
       additionalProperties: false,
     }),
+    onlyIfMissing: boolean(),
   },
   ['userId', 'priceScopeId', 'entries']
 );

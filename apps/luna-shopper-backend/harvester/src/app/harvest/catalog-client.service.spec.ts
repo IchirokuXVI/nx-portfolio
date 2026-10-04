@@ -69,6 +69,23 @@ describe('CatalogClient price writes (plan 0080)', () => {
     });
   });
 
+  it('setAvailability carries onlyIfMissing when asked, and only then', async () => {
+    const { client, send } = build();
+
+    await client.setAvailability(
+      'scope-1',
+      [{ itemId: 'i1', available: true }],
+      { onlyIfMissing: true }
+    );
+
+    expect(payloadOf(send)).toEqual({
+      userId: ACTOR,
+      priceScopeId: 'scope-1',
+      entries: [{ itemId: 'i1', available: true }],
+      onlyIfMissing: true,
+    });
+  });
+
   it('refuses to write anonymously when no actor is configured', async () => {
     const config = {
       getOrThrow: () => ({ actorId: '' }),

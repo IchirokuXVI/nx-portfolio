@@ -86,8 +86,8 @@ Do NOT touch: `source_catalog_entries.ean`, velista, the admin app, backlog plan
 - [x] `findByEan` finds a product by its second barcode.
 - [x] A harvester spec: accepting a row with a new real EAN onto a product adds the
       barcode, and a later ingest of a row with that EAN binds it with `matchedBy: EAN`.
-      The later ingest is the first sight of a row. See "A queued row is not matched
-      again" below.
+      The later ingest in that spec is the first sight of a row. A row that is already
+      in the queue binds too. See "A queued row is matched again" below.
 - [x] A harvester spec: accepting a row whose EAN another product holds is refused with
       the named code, and nothing is written. The codes are `item_ean_held` on the one row
       route and `EAN_HELD` on the bulk route.
@@ -144,16 +144,32 @@ state them:
 - `catalog_audit` keys on a uuid, so a further barcode is not a row of the trail. A change
   of `items.ean` is still recorded.
 
-### A queued row is not matched again
+### A queued row is matched again
 
 The match index maps every barcode of a product. When a run sees a row for the first
 time, it binds the row with `matchedBy: EAN`. When a row learns a new EAN, the run does
-the same. A row that is already in the queue with its EAN is only touched. So a
-`CANDIDATE` row of another chain that already prints the taught barcode stays in the queue.
-A person must decide it.
+the same.
 
-**For the owner:** to bind those rows too, `touch` in `source-ingest.ts` must match an
-undecided row again. That file is outside the scope of this plan.
+The first build stopped there. A row that was already in the queue with its EAN was only
+touched, so a `CANDIDATE` row of another chain that already printed the taught barcode
+stayed in the queue. The owner decided on 2026-10-04 that such a row must bind, and a
+follow up built it.
+
+Every run that sees a waiting row asks the EAN rung again, with the EAN that the row
+holds. The rule is `bindWaitingByEan` in `source-ingest.ts`:
+
+- A waiting row is `CANDIDATE` or `UNRESOLVED`, with no decision date.
+- If a product holds the row's real barcode, and no other row of the chain prints that
+  EAN, the row is bound `ACTIVE` with `matchedBy: EAN`. This is the bind of a first
+  sight. The prices of the run and the stored availability follow.
+- A row that a person decided is never touched. That is `ACTIVE` with `MANUAL`, and
+  `REJECTED`.
+- An in-store code and an invalid code bind nothing.
+- An EAN that another row of the chain prints binds nothing (plan `0155`). The row keeps
+  its status and its proposal. `unbindSharedEans` is unchanged.
+- The name rungs are not asked again. No automated match binds a printed name.
+- The rule also runs for a row that the run reads from the listing alone (plan `0119`).
+  A known row is read that way on every run, so without this it would never be asked.
 
 ### An EAN that a chain prints on several rows
 
@@ -182,8 +198,21 @@ not share an EAN, so both stay bound. If both rows state a price for the same sc
 run, the existing rule for two rows of one product applies: no price is sent, and the run
 counts a conflict. Rows that are sold in different scopes are not affected.
 
-### A create does not teach
+### A create teaches and refuses like an accept
 
-Only an `accept` teaches a barcode. A `createItem` writes the EAN that the operation or
-the row gives, as before. If the operation names another EAN, the row's own barcode is not
-added to the new product.
+The first build taught a barcode on an `accept` only. The owner decided on 2026-10-04
+that a create follows the same rule, and a follow up built it.
+
+A `createItem` writes the EAN that the operation or the row gives, as before. If the
+operation names another EAN, or none, the new product does not hold the row's own
+barcode. Then the rule of an accept applies to that barcode:
+
+- If the barcode is an in-store code or an invalid code, nothing happens.
+- If another row of the chain prints the EAN, nothing is taught and nothing is refused.
+- If another product holds the barcode, the create is refused and nothing is written. The
+  code is `item_ean_held` on the one row route. On the bulk route it is `EAN_HELD`, at
+  `VALIDATE`, and the whole file is refused.
+- If no product holds the barcode, it is added to the new product after the bind.
+
+The decision is still stamped `MANUAL`. A product that is created with the row's own
+barcode, and that barcode is taken, still answers the conflict of plan `0158`.

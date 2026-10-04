@@ -155,6 +155,14 @@ export interface RunReportResult {
   claimsWaitingForBinding: number;
   /** Claims whose row is bound and whose shop no location is mapped to yet. */
   claimsWaitingForShop: number;
+  /**
+   * Offers with no price this run created (plan 0182): one per product whose
+   * bound row the run saw, that holds no price in any scope, and that had no
+   * row yet in the chain's default scope. A product that already had a row is
+   * left alone and is not counted, so this is zero on a run that follows one
+   * which wrote them.
+   */
+  pricelessOffersWritten: number;
   /** Availability rows a person had typed, which the run left alone. */
   conflicts: Record<string, unknown>[];
   /** Every scope that received at least one price read at it (plan 0118). */
@@ -232,6 +240,7 @@ export class RunReportSink implements RunReport {
     claimsWaiting: 0,
     claimsWaitingForBinding: 0,
     claimsWaitingForShop: 0,
+    pricelessOffersWritten: 0,
     conflicts: [],
     pricedScopes: [],
     pricesCopied: {},
@@ -341,6 +350,7 @@ export class RunReportSink implements RunReport {
     if (this.input.writes !== HarvestRunWrites.PRICES) {
       await this.writeShopAvailability();
       await this.writeScopeAvailability();
+      await this.writePricelessOffers();
     }
     return this.result;
   }
@@ -536,6 +546,29 @@ export class RunReportSink implements RunReport {
     this.result.claimsWaitingForShop = counts.waitingForShop;
     this.result.claimsWaiting =
       counts.waitingForBinding + counts.waitingForShop;
+  }
+
+  /**
+   * The offer with no price for every bound row this run saw (plan 0182).
+   *
+   * A chain that lists a product sells it. A row bound today gets the offer
+   * when it is bound; a row bound before the offer existed gets it here, and
+   * both go through `SourceEntryAvailabilityWriter`. Last, after the two
+   * availability writes, so a row they created is one this leaves alone. The
+   * offer never changes a row that exists, so a run that follows one which
+   * wrote them reads and writes nothing.
+   */
+  private async writePricelessOffers(): Promise<void> {
+    const supermarketId = this.input.supermarketId;
+    if (!supermarketId || !this.session) {
+      // No chain, or a run that reported no product: it saw no row.
+      return;
+    }
+    this.result.pricelessOffersWritten =
+      await this.deps.availability.writePricelessOffersForRun(
+        this.context.runId,
+        supermarketId
+      );
   }
 
   /**

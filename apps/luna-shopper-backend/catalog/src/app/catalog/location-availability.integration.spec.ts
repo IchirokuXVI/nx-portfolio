@@ -23,6 +23,7 @@ import {
 import { CatalogAuditService } from './catalog-audit.service';
 import { LocationScopeService, setStack } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
+import { SupermarketItemService } from './supermarket-item.service';
 import { SupermarketLocationItemService } from './supermarket-location-item.service';
 
 /**
@@ -50,6 +51,7 @@ const BATCH = 3_000;
 describeIntegration('per shop availability (real Postgres)', () => {
   let dataSource: DataSource;
   let shopItems: SupermarketLocationItemService;
+  let admin: PlatformAdminService;
 
   beforeAll(async () => {
     const url = requiredEnv('CATALOG_DB_URL');
@@ -71,7 +73,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
     await dataSource.initialize();
     await dataSource.runMigrations();
 
-    const admin = new PlatformAdminService(new JwtService({}), {
+    admin = new PlatformAdminService(new JwtService({}), {
       getOrThrow: () => ({
         authJwtPublicKey: '',
         adminJwtPublicKey: '',
@@ -254,6 +256,80 @@ describeIntegration('per shop availability (real Postgres)', () => {
         })
       )?.available
     ).toBe(true);
+  }, 300_000);
+
+  /**
+   * The harvester's offer with no price (plan 0182) says a chain lists a
+   * product, at the end of every run. The flag of a row that exists is derived
+   * from the shops, so the offer creates a row and never changes one.
+   */
+  it('leaves a derived false alone under onlyIfMissing, and creates the row of a product that has none', async () => {
+    const scopeItems = new SupermarketItemService(
+      dataSource.getRepository(SupermarketItem),
+      dataSource.getRepository(Item),
+      dataSource.getRepository(PriceScope),
+      dataSource.getRepository(SupermarketLocation),
+      admin,
+      new CatalogAuditService(dataSource),
+      new LocationScopeService()
+    );
+    const scopeRows = dataSource.getRepository(SupermarketItem);
+    const flagOf = async (itemId: string) =>
+      (await scopeRows.findOneBy({ itemId, priceScopeId: scopeId }))?.available;
+    // Two products of their own: the first test gave every shared one a row.
+    const items = dataSource.getRepository(Item);
+    const [soldNowhere, neverSeen] = (
+      await items.save(
+        ['Sold nowhere', 'Never seen'].map((name) =>
+          items.create({
+            name: { en: name, es: name },
+            defaultUnit: UnitOfMeasure.UNIT,
+          })
+        )
+      )
+    ).map((item) => item.id);
+
+    // Both shops say no, so catalog derives a false for the scope.
+    await crawl(shopA, [{ itemId: soldNowhere, available: false }]);
+    await crawl(shopB, [{ itemId: soldNowhere, available: false }]);
+    expect(await flagOf(soldNowhere)).toBe(false);
+    expect(await flagOf(neverSeen)).toBeUndefined();
+
+    const offer = () =>
+      scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [
+          { itemId: soldNowhere, available: true },
+          { itemId: neverSeen, available: true },
+        ],
+        onlyIfMissing: true,
+      });
+
+    // One row created, and the derived false is still false.
+    expect(await offer()).toEqual({ updated: 1 });
+    expect(await flagOf(soldNowhere)).toBe(false);
+    expect(await flagOf(neverSeen)).toBe(true);
+    const created = await scopeRows.findOneByOrFail({
+      itemId: neverSeen,
+      priceScopeId: scopeId,
+    });
+    expect(created.price).toBeNull();
+    expect(created.priceSourceKind).toBeNull();
+
+    // The offer of the next run writes nothing at all.
+    expect(await offer()).toEqual({ updated: 0 });
+    expect(await flagOf(soldNowhere)).toBe(false);
+
+    // Without the option the same message is the plain write it always was.
+    expect(
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [{ itemId: soldNowhere, available: true }],
+      })
+    ).toEqual({ updated: 1 });
+    expect(await flagOf(soldNowhere)).toBe(true);
   }, 300_000);
 
   /**
