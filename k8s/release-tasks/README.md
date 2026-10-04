@@ -97,6 +97,29 @@ For a task with no state in the ledger, the runner decides in this order:
 A window in the past is normal. Every task ends that way, and its directory
 stays as the record of what ran.
 
+### A task that started and did not finish
+
+The runner writes the dump keys before it runs `pre.sh`, and the state after
+it. So a task with a `<task>.dumps` key and no state is a started task. Its
+`pre.sh` failed, or the write of `pre-done` failed. Nobody knows how far it got.
+
+- Inside its window, and in its release, the next deploy tries it again. It
+  takes new dumps and runs `check.sh` first. The second rule makes the second
+  run of `pre.sh` safe.
+- Outside them, the runner refuses the task and the deploy stops. This covers
+  a closed window, another production release and a first install. The task is
+  not recorded as `expired` or `skipped`, and it does not wait.
+
+The refusal prints the dump keys. A person then reads the cluster and chooses
+one of two steps:
+
+- Remove the `<task>.dumps` key. The task then has no trace of a start, and the
+  window decides. With a closed window, the next deploy records it as `expired`.
+- Finish the task by hand, then set the `<task>` key to `done` and a UTC time.
+
+The runner never runs `pre.sh` again by itself after the window closed. To do
+that, move the window in a pull request.
+
 ## What a task expects
 
 Every task directory holds a `check.sh`. It receives the same variables as the
@@ -175,6 +198,16 @@ CronJobs runs after the pre phase. A dump that fails still stops the deploy.
 If a deploy fails between the two phases, the next deploy runs the post phase.
 It does not take the dumps again or run `pre.sh` again. On a first install, the
 runner marks every task as skipped, because a new cluster has no data to change.
+A first install means that helm answers "release: not found". Any other failure
+of `helm status` stops the runner, because `skipped` is final.
+
+A refusal in the check phase or the pre phase stops the deploy. An earlier task
+can then sit at `pre-done`, because the tasks before the refused one already
+ran. That is safe. The next deploy that passes finishes it.
+
+The post phase does not stop at a refusal. A task with a state the runner does
+not know is counted, and the walk continues. So every task at `pre-done` still
+runs its `post.sh`. The phase then exits 1.
 
 ## The static check
 

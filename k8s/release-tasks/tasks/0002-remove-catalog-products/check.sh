@@ -30,6 +30,13 @@ NAMESPACE="${NAMESPACE:-nx-portfolio}"
 NUMBER="${TASK_NAME%%-*}"
 MARKER="products removed by release task ${TASK_NAME}"
 
+# What a command wrote to stderr is kept aside and never read as its answer. A
+# warning from Postgres on connect, or a note from kubectl about the container
+# it chose, would otherwise turn a good answer into a refusal. It is printed
+# only when the command fails.
+ERR="$(mktemp)"
+trap 'rm -f "$ERR"' EXIT
+
 MAX_ITEMS_STAGING=''
 MAX_ITEMS_PRODUCTION=''
 # shellcheck disable=SC1091
@@ -52,7 +59,8 @@ esac
 
 if [ -z "${CATALOG_PSQL:-}" ]; then
   pod=luna-shopper-backend-catalog-db-0
-  if ! answer="$(kubectl -n "$NAMESPACE" get pod "$pod" -o name 2>&1)"; then
+  if ! kubectl -n "$NAMESPACE" get pod "$pod" -o name > /dev/null 2> "$ERR"; then
+    answer="$(cat "$ERR")"
     case "$answer" in *NotFound* | *'not found'*)
       echo "$NUMBER has nothing to change: there is no catalog database pod"
       exit 0
@@ -67,8 +75,8 @@ fi
 # -X ignores any psqlrc, -A -t prints the bare value.
 ask() {
   local answer
-  if ! answer="$(echo "$1" | $CATALOG_PSQL -X -A -t -v ON_ERROR_STOP=1 2>&1)"; then
-    echo "$NUMBER cannot read the catalog: $answer" >&2
+  if ! answer="$(echo "$1" | $CATALOG_PSQL -X -A -t -v ON_ERROR_STOP=1 2> "$ERR")"; then
+    echo "$NUMBER cannot read the catalog: $(cat "$ERR")" >&2
     return 1
   fi
   printf '%s' "$answer" | tr -d '\r'

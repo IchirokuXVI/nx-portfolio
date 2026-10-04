@@ -33,9 +33,9 @@
 // Exits 0 when every task is complete, 1 when any is not.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const MAX_WINDOW_DAYS = 14;
 
@@ -254,9 +254,14 @@ function main(argv) {
   return 0;
 }
 
+// Run as a command, or imported by the tests? Real paths are compared, because
+// node resolves a symlink for `import.meta.url` and not for `argv[1]`. Comparing
+// the two as written would find them different under a symlinked checkout, and
+// the command would then check nothing and exit 0. A path that cannot be
+// resolved throws, which is a failure too.
 if (
   process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
   process.exitCode = main(process.argv.slice(2));
 }
