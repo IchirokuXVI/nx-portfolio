@@ -306,7 +306,9 @@ const SECTIONS: readonly MercadonaSectionMapping[] = [
     ],
   },
   {
-    // Cats and dogs only: the taxonomy has no leaf for any other animal.
+    // Cats and dogs only. The taxonomy has leaves for birds, rodents, fish and
+    // accessories since plan 0179, but no fixture holds the children that
+    // would name them, so those still climb to the section's answer.
     name: 'Mascotas',
     slug: NO_LEAF,
     children: [

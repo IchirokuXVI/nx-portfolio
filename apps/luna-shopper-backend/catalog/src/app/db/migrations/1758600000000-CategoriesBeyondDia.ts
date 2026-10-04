@@ -17,17 +17,22 @@ import { categoryId } from '../taxonomy/ids';
  *
  * ## Up
  *
- * 1. Move `other` to the end.
- * 2. Insert the four roots.
- * 3. Insert the leaves: eight under roots DIA's tree already has, each after
+ * 1. Refuse when a row with one of the thirty four slugs, or one of their
+ *    ids, already exists.
+ * 2. Move `other` to the end.
+ * 3. Insert the four roots.
+ * 4. Insert the leaves: eight under roots DIA's tree already has, each after
  *    the last child that root had, and twenty two under the new roots.
  *
- * Each insert is `ON CONFLICT ("id") DO UPDATE` of the parent, the name and
- * the position, the same statement `DiaCategoryTree1758500000000` uses, so a
- * development database where the demo seed already wrote these rows ends up
- * the same as a fresh one. A row added by hand under one of these slugs has a
- * different id, fails on `uq_categories_slug`, and the migration changes
- * nothing: rename that row in the back office and run it again.
+ * **Step 1 is why the inserts are plain.** The back office creates a category
+ * under `categoryId(slug)`, the same id this file derives, so a `books` made by
+ * hand is the very row an upsert would write over: moved under another root
+ * with its products, renamed and repositioned, and later deleted by `down`
+ * although it was there before `up`. So the migration reads first, names every
+ * such row with its parent, and changes nothing. What happens to that row is
+ * a person's decision, and the back office cannot rename a slug: move its
+ * products and sections to another category, delete it there, and run the
+ * migration again.
  *
  * ## Down
  *
@@ -42,23 +47,42 @@ export class CategoriesBeyondDia1758600000000 implements MigrationInterface {
   name = 'CategoriesBeyondDia1758600000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    // --- 1. `other` stays the last root ------------------------------------
+    const rows = [...rootRows(), ...leafRows()];
+
+    // --- 1. The refusal ------------------------------------------------------
+    const taken: { slug: string; parent: string | null }[] =
+      await queryRunner.query(
+        `SELECT c."slug", p."slug" AS "parent"
+           FROM "categories" c
+           LEFT JOIN "categories" p ON p."id" = c."parentId"
+          WHERE c."id" = ANY($1::uuid[]) OR c."slug" = ANY($2::text[])
+          ORDER BY c."slug"`,
+        [rows.map((row) => row.id), rows.map((row) => row.slug)]
+      );
+    if (taken.length > 0) {
+      const named = taken
+        .map(
+          (row) =>
+            `${row.slug} (${row.parent === null ? 'a root' : `under ${row.parent}`})`
+        )
+        .join(', ');
+      throw new Error(
+        `CategoriesBeyondDia1758600000000 cannot run while a category it adds already exists: ${named}. Move its products and sections, delete it in the back office and run it again.`
+      );
+    }
+
+    // --- 2. `other` stays the last root ------------------------------------
     await queryRunner.query(
       `UPDATE "categories" SET "position" = $2, "updatedAt" = now()
         WHERE "id" = $1`,
       [categoryId(OTHER), OTHER_POSITION_AFTER]
     );
 
-    // --- 2 and 3. The roots, then every leaf --------------------------------
-    for (const row of [...rootRows(), ...leafRows()]) {
+    // --- 3 and 4. The roots, then every leaf --------------------------------
+    for (const row of rows) {
       await queryRunner.query(
         `INSERT INTO "categories" ("id", "parentId", "slug", "name", "position")
-         VALUES ($1, $2, $3, $4::jsonb, $5)
-         ON CONFLICT ("id") DO UPDATE
-           SET "parentId" = EXCLUDED."parentId",
-               "name" = EXCLUDED."name",
-               "position" = EXCLUDED."position",
-               "updatedAt" = now()`,
+         VALUES ($1, $2, $3, $4::jsonb, $5)`,
         [row.id, row.parentId, row.slug, JSON.stringify(row.name), row.position]
       );
     }

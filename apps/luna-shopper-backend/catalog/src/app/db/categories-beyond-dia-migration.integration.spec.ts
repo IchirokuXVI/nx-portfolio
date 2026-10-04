@@ -27,9 +27,9 @@ import { categoryId } from './taxonomy/ids';
  * - one that holds DIA's tree with products and shop sections on it, which is
  *   a cluster. It goes up, is refused on the way down while a product or a
  *   section points at a new row, goes down once they are gone, and up again.
- * - one where four of the new rows already exist under the ids their slugs
- *   derive, with other names, which is a development database the demo seed
- *   reached first.
+ * - one where the back office already made a row under one of the slugs,
+ *   with a product on it. Up refuses and changes nothing, and runs once a
+ *   person has dealt with that row.
  *
  *   LUNA_INTEGRATION=1 CATALOG_DB_URL=postgres://luna_catalog:luna_catalog@localhost:<port>/luna_catalog \
  *     npx nx run luna-shopper-backend-catalog:test-integration --testFile=categories-beyond-dia-migration.integration.spec.ts
@@ -441,40 +441,85 @@ describeIntegration(
       }, 120_000);
     });
 
-    describe('a database where the demo seed wrote some of the rows first', () => {
+    describe('a database where the back office already made a row under one of the slugs', () => {
       let db: DataSource;
 
+      /**
+       * `books` the way `CategoryService.create` writes it: under the id its
+       * slug derives, which is the id the migration would insert. It sits
+       * under `other`, after `uncategorised`, and holds a product.
+       */
+      const BY_HAND: TreeRow = {
+        id: categoryId('books'),
+        parentId: categoryId('other'),
+        slug: 'books',
+        name: { en: 'Books by hand', es: 'Libros a mano' },
+        position: 1,
+      };
+      /** A row written with SQL: one of the slugs, under an id of its own. */
+      const BY_SQL: TreeRow = {
+        id: '0b0b0b0b-0000-4000-8000-000000000179',
+        parentId: categoryId('cleaning-and-home'),
+        slug: 'car-care',
+        name: { en: 'Car care by hand', es: 'Coche a mano' },
+        position: 14,
+      };
+      const BEFORE_ROWS = [...DIA_ROWS, BY_HAND, BY_SQL].sort(bySlug);
+
       beforeAll(async () => {
-        db = await migrated(`${SCHEMA}_seeded`, async (before) => {
-          const insert = (
-            slug: string,
-            parent: string | null,
-            position: number
-          ) =>
-            before.query(
+        db = await migrated(`${SCHEMA}_by_hand`, async (before) => {
+          for (const row of [BY_HAND, BY_SQL]) {
+            await before.query(
               `INSERT INTO "categories" ("id", "parentId", "slug", "name", "position")
                VALUES ($1, $2, $3, $4::jsonb, $5)`,
               [
-                categoryId(slug),
-                parent === null ? null : categoryId(parent),
-                slug,
-                JSON.stringify({ en: 'Stale', es: 'Viejo' }),
-                position,
+                row.id,
+                row.parentId,
+                row.slug,
+                JSON.stringify(row.name),
+                row.position,
               ]
             );
-          await insert('makeup', null, 40);
-          await insert('lip-makeup', 'makeup', 7);
-          await insert('shoe-care', 'cleaning-and-home', 30);
-          // On a product already, which the upsert must not disturb.
-          await addProduct(before, 'Pintalabios', ['lip-makeup']);
+          }
+          await addProduct(before, 'Libro Altitud', ['books']);
         });
-        await db.runMigrations();
       }, 300_000);
 
-      it('writes over them by id, so the tree is the same as on a fresh database', async () => {
+      it('up refuses, names each row with its parent, and changes nothing', async () => {
+        const error = await refusal(db.runMigrations());
+        expect(error.message).toContain(
+          'cannot run while a category it adds already exists'
+        );
+        expect(error.message).toContain('books (under other)');
+        expect(error.message).toContain('car-care (under cleaning-and-home)');
+
+        // Every row as it was: the two made by hand keep their parent, both
+        // names and their position, and `other` is still at 28.
+        expect(await tree(db)).toEqual(BEFORE_ROWS);
+        expect(await products(db)).toEqual({
+          'Libro Altitud': ['0:books'],
+        });
+        expect(await executed(db)).not.toContain(
+          'CategoriesBeyondDia1758600000000'
+        );
+      }, 120_000);
+
+      it('runs once a person has moved the product and deleted the rows', async () => {
+        await db.query(
+          `UPDATE "item_categories" SET "categoryId" = $1 WHERE "categoryId" = $2`,
+          [categoryId('uncategorised'), BY_HAND.id]
+        );
+        await db.query(
+          `DELETE FROM "categories" WHERE "id" = ANY($1::uuid[])`,
+          [[BY_HAND.id, BY_SQL.id]]
+        );
+
+        await db.runMigrations();
         expect(await tree(db)).toEqual(AFTER_ROWS);
-        expect(await products(db)).toEqual({ Pintalabios: ['0:lip-makeup'] });
-      });
+        expect(await products(db)).toEqual({
+          'Libro Altitud': ['0:uncategorised'],
+        });
+      }, 120_000);
     });
   }
 );
