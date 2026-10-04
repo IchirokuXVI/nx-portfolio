@@ -775,9 +775,21 @@ jobs:
       && needs.e2e-velista-luna.result != 'failure'
     runs-on: ubuntu-latest
     steps:
-      # Only the chart is needed here, and only at this commit.
+      # Only the chart is needed here, and only at this commit. The whole history
+      # comes with it, because the release task check below measures each window
+      # from the commit that last changed its task.env, and a shallow clone has
+      # no such commit to show.
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Before any SSH: every release task states a window per environment, the
+      # production release it belongs to and a check.sh (k8s plan 0011, section
+      # 4). It reads files only, so a task that leaves one of those out stops the
+      # deploy here, with no machine contacted.
+      - name: Every release task states when it can run
+        run: node k8s/release-tasks/check-tasks.mjs
 
       # Is there a staging host to deploy to?
       #
@@ -848,12 +860,21 @@ jobs:
 
       # A deploy that cannot possibly work is rejected in seconds here rather than
       # diagnosed in minutes from a crashloop (k8s plan 0006, section 3).
-      - name: Preflight the staging Secrets
+      #
+      # The release tasks are asked the same question next to it (k8s plan 0011,
+      # section 3). `--phase check` changes nothing: no dump, no hook except each
+      # task's check.sh, no write to the ledger. It prints one line per task and
+      # fails when a task states no window or meets data it was not written for.
+      - name: Preflight the staging Secrets and the release tasks
         if: steps.deploy-target.outputs.configured == 'true'
         run: |
           ssh $SSH_OPTS \
             ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
             "bash ~/k8s/bootstrap/provision-release.sh --check --env staging"
+
+          ssh $SSH_OPTS \
+            ${{ secrets.SSH_DEPLOY_USER }}@${{ secrets.SSH_DEPLOY_HOST_STAGING }} \
+            "bash ~/k8s/release-tasks/run-release-tasks.sh --env staging --phase check"
 
       - name: Deploy staging via Helm
         if: steps.deploy-target.outputs.configured == 'true'
@@ -869,6 +890,8 @@ jobs:
             # Release tasks (k8s/release-tasks): the pre phase dumps what each
             # due task touches and runs its pre.sh, before the upgrade's
             # migrations. A failure stops the deploy here, with nothing upgraded.
+            # It repeats the decisions of the check phase above, so a task with
+            # a closed window or unexpected data cannot start here either.
             # If the upgrade below fails and --atomic rolls it back, the ledger
             # remembers the pre phase and the next deploy finishes the task.
             bash $HOME/k8s/release-tasks/run-release-tasks.sh --env staging --phase pre

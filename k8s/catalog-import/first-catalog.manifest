@@ -1,0 +1,34 @@
+# What restore-first-catalog.sh holds the two dumps to (k8s plan 0012, section 1).
+# A shell file that the script sources. A checksum that differs is refused by
+# restore-database.sh before a scratch database exists, and a count that differs
+# is a refusal, not a warning.
+#
+# EVERY VALUE BELOW IS PROVISIONAL. They are the checksums and counts of the
+# dumps of 2026-10-03 20:44 (Madrid time). The owner went on editing slot 1
+# after that, so those dumps are not the ones that ship. When the owner declares
+# slot 1 final, both dumps are taken again and every value here is replaced
+# (README.md, "When slot 1 is final"). Until then this manifest refuses the new
+# files at the checksum, which is the intended failure.
+#
+# The object keys, under a prefix that the nightly dumps never use.
+CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
+CATALOG_SHA256="53caacd7f8d8551da3de7d32e5ed7b71d5af701f6bec94696485939c88717aa8"
+HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
+HARVESTER_SHA256="841cf6dfdcc814c3f9e1799dd9cbd6d71e7a93c1ed29fd9d6f0ec9e316f06642"
+#
+# The `migrations` table of each dump: how many rows, and the name with the
+# highest timestamp. The live database must hold the same names.
+CATALOG_LAST_MIGRATION="DiaCategoryTree1758500000000"
+CATALOG_MIGRATIONS="26"
+HARVESTER_LAST_MIGRATION="DiscoveredPlaceFootprint1757900000000"
+HARVESTER_MIGRATIONS="17"
+#
+# The state in numbers (apps/luna-shopper-backend/docs/initial-catalog-2026-10.md).
+EXPECT_SUPERMARKETS="5"
+EXPECT_PRICE_SCOPES="103"
+EXPECT_CATEGORIES="275"
+EXPECT_BRANDS="2782"
+EXPECT_ITEMS="19791"
+EXPECT_ITEM_PRICES="22335"
+EXPECT_SOURCE_ENTRIES="25725"
+EXPECT_SOURCE_ENTRIES_ACTIVE="21751"

@@ -1,0 +1,17 @@
+# The rows of a cluster's catalog that the first catalog restore is allowed to
+# lose (k8s plan 0012, section 2, step 4).
+#
+# restore-first-catalog.sh lists every id of supermarkets, price_scopes,
+# supermarket_locations, brands and product_groups that the live catalog holds
+# and the dump does not. It refuses unless each one has a line here, with the
+# reason on the same line:
+#
+#   <table> <id> <why losing this row is intended>
+#
+#   brands 00000000-0000-4000-8000-000000000000 an example of the format, not a real row
+#
+# A line with no reason accepts nothing. A line for an id that a cluster does
+# not hold does nothing, so one file serves staging and production.
+#
+# This file is written from a dry run on each cluster and read by the owner
+# before the release. No dry run has been made yet, so it accepts nothing.

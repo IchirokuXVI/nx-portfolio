@@ -3,11 +3,20 @@
 This procedure empties the catalog and harvester databases of one cluster. The
 auth and core databases, which hold the users' data, stay as they are.
 
-**It runs by itself** as release task
+**It ran by itself** as release task
 `k8s/release-tasks/tasks/0001-reset-catalog-and-harvester`, once in staging and
-once in production, at the first deploy that carries it. The steps below are
-what that task does, and they are the way to run it by hand, on the VPS as
-`deploy`.
+once in production, on 2026-09-25. The steps below are what that task did, and
+they are the way to run it by hand, on the VPS as `deploy`.
+
+**The task does not run again** (k8s plan 0011). Its window is the day it ran.
+A deploy that finds no entry for it in the ledger records it as expired. Its
+`check.sh` also refuses a catalog that holds a product. The same is true of
+task `0002-remove-catalog-products` below, which ran on 2026-10-02.
+`k8s/release-tasks/README.md` describes both guards.
+
+**By hand, nothing protects the data.** The two scripts in this directory read
+no window and no ceiling. They do what they are told, on whatever the databases
+hold. Run each one without arguments first, and read the counts it prints.
 
 ## What changes
 
