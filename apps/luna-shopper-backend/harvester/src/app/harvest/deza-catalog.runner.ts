@@ -31,8 +31,10 @@ export { entryKey } from './matching';
  * `CATALOG_DISCOVERY` against the `deza-web` adapter (plan 0085).
  *
  * **It writes no price.** The site prints none. What a run produces is candidate
- * products for review and, for every shop somebody has mapped, whether that shop
- * carries each product it resolved.
+ * products for review and, for every shop the listing names, whether that shop
+ * carries each product. Every one of those claims is kept (plan 0182), and it
+ * reaches catalog when its product is bound and its shop is mapped, whichever
+ * comes last.
  *
  * The order (section 9):
  *
@@ -45,9 +47,11 @@ export { entryKey } from './matching';
  *    reads.
  * 4. Read back which catalog item each product resolved to, from the outcomes.
  * 5. Resolve the shop codes through `source_locations` (plan 0084, section 6),
- *    skipping the unmapped.
- * 6. Call `supermarketLocationItem.setAvailability` once per resolved shop, with
- *    a value for every product the run resolved, positive **and** negative.
+ *    and store a claim for every product at every shop, positive **and**
+ *    negative, in `source_entry_availability` (plan 0182).
+ * 6. Call `supermarketLocationItem.setAvailability` once per mapped shop, with
+ *    the stored claims of the products that are bound. The rest wait in the
+ *    table for a binding or a mapping, and are sent when it happens.
  *
  * Step 3 is what makes an aborted run cheap to resume, exactly as plan 0038
  * section 6.3 describes: the snapshot is already the answer.
@@ -123,8 +127,8 @@ export class DezaCatalogRunner implements CatalogRunner {
     //
     // The codes are the source's own. Which catalog location each one is stays
     // a person's decision, resolved by the orchestrator through the queue that
-    // holds it (plan 0103, section 6.3), and an unmapped shop is skipped,
-    // counted and never guessed.
+    // holds it (plan 0103, section 6.3). An unmapped shop is named and never
+    // guessed, and its claims are kept until somebody maps it (plan 0182).
     await context.setStage('AVAILABILITY', 'Reading what each shop carries');
     this.reportAvailability(report, crawl);
 

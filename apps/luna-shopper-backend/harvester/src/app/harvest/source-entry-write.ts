@@ -107,7 +107,9 @@ export function lowestPerKilo<T>(
  * anybody is charged, and inserting one only to have the resolver filter it out
  * is work with a wrong row at the end of it. A row with no price at all writes
  * nothing and says zero, which for a DEZA row is the truth rather than a
- * failure.
+ * failure. What such a row is owed instead is an offer with no price and its
+ * stored availability, and `SourceEntryAvailabilityWriter` writes both in the
+ * same step (plan 0182).
  *
  * **A row sold by weight writes the lowest price per kilo of its product**
  * (plan 0181, and {@link lowestPerKilo}). The product may already be bound to
@@ -204,8 +206,16 @@ export class SourceEntryPriceWriter {
   }
 }
 
-/** The prices of a row whose window has not closed. */
-function openPrices(entry: SourceCatalogEntry, now: Date): SourceEntryPrice[] {
+/**
+ * The prices of a row whose window has not closed.
+ *
+ * Exported for the availability half of a bind (plan 0182): a row with none of
+ * these is the row that is owed an offer with no price.
+ */
+export function openPrices(
+  entry: SourceCatalogEntry,
+  now: Date
+): SourceEntryPrice[] {
   return (entry.prices ?? []).filter(
     (price) => price.validUntil === null || price.validUntil > now
   );

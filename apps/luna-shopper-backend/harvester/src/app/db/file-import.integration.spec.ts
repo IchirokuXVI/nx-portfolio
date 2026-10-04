@@ -78,7 +78,9 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       {
         requireAdmin: async () => ADMIN,
       } as unknown as PlatformAdminService,
-      undefined as unknown as ConfigService
+      undefined as never,
+      undefined as unknown as ConfigService,
+      undefined as never
     );
   });
 

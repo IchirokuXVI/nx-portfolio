@@ -118,6 +118,8 @@ describeIntegration('LIDL catalog run (real Postgres)', () => {
         shops: {} as never,
         catalog,
         entries,
+        // LIDL states no claim about a shop of its own.
+        availability: {} as never,
       }
     );
   }

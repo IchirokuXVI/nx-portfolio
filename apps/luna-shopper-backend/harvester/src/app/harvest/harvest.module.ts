@@ -33,6 +33,7 @@ import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunExecutor } from './run-executor.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
@@ -117,6 +118,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     SourceEntryService,
     SourceEntryBatchService,
     SourceEntryPriceWriter,
+    // Where a run's per shop claims wait for a binding and a shop, and the one
+    // thing that sends them to catalog (plan 0182).
+    SourceEntryAvailabilityWriter,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

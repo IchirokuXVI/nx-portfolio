@@ -16,12 +16,14 @@ import type { Repository } from 'typeorm';
 import type {
   HarvestRun,
   SourceCatalogEntry,
+  SourceEntryAvailability,
   SourceEntryPrice,
   SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -130,6 +132,10 @@ function build(
     row?: SourceCatalogEntry;
     source?: Partial<SupermarketSource> | null;
     english?: string | null;
+    /** The chain's default scope. `null` is a chain that has none. */
+    defaultScope?: string | null;
+    /** The stored claims that are ready, as the writer's query answers them. */
+    readyClaims?: Record<string, unknown>[];
   } = {}
 ) {
   const row = options.row ?? entry();
@@ -157,11 +163,33 @@ function build(
   const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
   const createItem = jest.fn(async () => item());
   const categoryTree = jest.fn(async () => fakeCategoryTree());
+  const setAvailability = jest.fn(
+    async (
+      _priceScopeId: string,
+      _entries: { itemId: string; available: boolean }[]
+    ) => ({ updated: 1 })
+  );
+  const setLocationAvailability = jest.fn(
+    async (
+      _supermarketLocationId: string,
+      _entries: { itemId: string; available: boolean }[],
+      _sourceRunId: string | null,
+      _sourceKind: PriceSourceKind,
+      _observedAt: Date
+    ) => ({ written: 1, skipped: 0, conflicts: [] })
+  );
   const catalog = {
     addPrices,
     createItem,
     categoryTree,
     findItemByEan: jest.fn(async () => ({ item: null })),
+    getSupermarket: jest.fn(async () => ({
+      id: CHAIN,
+      defaultPriceScopeId:
+        options.defaultScope === undefined ? NATIONAL : options.defaultScope,
+    })),
+    setAvailability,
+    setLocationAvailability,
   } as unknown as CatalogClient;
 
   const sources = {
@@ -189,6 +217,18 @@ function build(
   // testing the thing it was written to test.
   const priceWriter = new SourceEntryPriceWriter(catalog, entries);
 
+  // The availability half of a bind (plan 0182), the real one too, over a
+  // repository that answers the claims a test says are ready. Which claims are
+  // ready is a query, and that query is proved against real Postgres in
+  // `source-entry-availability.integration.spec.ts`.
+  const readClaims = jest.fn(
+    async (_sql: string, _parameters: unknown[]) => options.readyClaims ?? []
+  );
+  const availability = new SourceEntryAvailabilityWriter(
+    { query: readClaims } as unknown as Repository<SourceEntryAvailability>,
+    catalog
+  );
+
   const service = new SourceEntryService(
     entries,
     prices,
@@ -197,7 +237,8 @@ function build(
     sources,
     makeAdmin(),
     priceWriter,
-    config
+    config,
+    availability
   );
   // The English fetch is one HTTP request to a storefront, and nothing in a unit
   // test may make one. Stubbing the private method rather than the client keeps
@@ -218,6 +259,9 @@ function build(
     createItem,
     categoryTree,
     fetchEnglish,
+    setAvailability,
+    setLocationAvailability,
+    readClaims,
   };
 }
 
@@ -352,6 +396,116 @@ describe('SourceEntryService', () => {
       expect(addPrices).not.toHaveBeenCalled();
       // Not a failure: the site prints no price, and the back office says so.
       expect(result.pricesWritten).toBe(0);
+    });
+
+    describe('what a bound row is owed besides its prices (plan 0182)', () => {
+      const dezaRow = () =>
+        entry({ sourceKind: PriceSourceKind.OFFICIAL_WEB, prices: [] });
+
+      it('gives a row with no price an offer with no price in the default scope', async () => {
+        const { service, setAvailability, addPrices } = build({
+          row: dezaRow(),
+        });
+
+        await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        // A chain that lists a product sells it. Before this, accepting a
+        // DEZA row wrote nothing at all and the product was sold nowhere.
+        expect(setAvailability).toHaveBeenCalledTimes(1);
+        expect(setAvailability).toHaveBeenCalledWith(NATIONAL, [
+          { itemId: 'item-1', available: true },
+        ]);
+        // Availability is the only write: no price is invented for it.
+        expect(addPrices).not.toHaveBeenCalled();
+      });
+
+      it('writes the price and no such offer for a row that holds a price', async () => {
+        const { service, setAvailability, addPrices } = build();
+
+        await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        expect(addPrices).toHaveBeenCalledTimes(1);
+        expect(setAvailability).not.toHaveBeenCalled();
+      });
+
+      it('writes no offer for a chain that has no default scope', async () => {
+        const { service, setAvailability } = build({
+          row: dezaRow(),
+          defaultScope: null,
+        });
+
+        await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        expect(setAvailability).not.toHaveBeenCalled();
+      });
+
+      it('sends the stored claims of the product, one call per mapped shop', async () => {
+        const observedAt = new Date('2026-10-01T08:00:00.000Z');
+        const claim = (shop: string, available: boolean) => ({
+          supermarketLocationId: `loc-${shop}`,
+          shopCode: shop,
+          itemId: 'item-1',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          available,
+          observedAt,
+          runId: 'run-deza',
+        });
+        const { service, setLocationAvailability, readClaims } = build({
+          row: dezaRow(),
+          readyClaims: [claim('T1', true), claim('C1', false)],
+        });
+
+        await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        // Read for the product the row is now bound to, in its own chain.
+        expect(readClaims.mock.calls[0][1]).toEqual([['item-1'], [CHAIN]]);
+        // A shop the popup did not name is written as false, never skipped.
+        expect(setLocationAvailability.mock.calls).toEqual([
+          [
+            'loc-T1',
+            [{ itemId: 'item-1', available: true }],
+            'run-deza',
+            PriceSourceKind.OFFICIAL_WEB,
+            observedAt,
+          ],
+          [
+            'loc-C1',
+            [{ itemId: 'item-1', available: false }],
+            'run-deza',
+            PriceSourceKind.OFFICIAL_WEB,
+            observedAt,
+          ],
+        ]);
+      });
+
+      it('does the same for a product it creates', async () => {
+        const { service, setAvailability } = build({ row: dezaRow() });
+
+        const result = await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+        });
+
+        expect(setAvailability).toHaveBeenCalledWith(NATIONAL, [
+          { itemId: result.createdItem?.id, available: true },
+        ]);
+      });
     });
 
     it('refuses somebody who is not a platform admin', async () => {

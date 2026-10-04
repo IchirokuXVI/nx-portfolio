@@ -22,6 +22,7 @@ import { SourceCatalogEntry } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { createdSize } from './source-entry-size';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
@@ -55,7 +56,8 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * 3. **Bind every row**, in one transaction, re-checking the `expect`s against
  *    rows it has locked again. The re-check is not paranoia: step 2 is a round
  *    trip to another service, and step 1's lock was released before it.
- * 4. **Write the prices, per row, skipping failures.**
+ * 4. **Write the prices, per row, skipping failures.** Then the availability
+ *    the bound rows are owed (plan 0182), under the same rule.
  *
  * ## Step 4 is the one place this is not atomic, and that was decided
  *
@@ -64,6 +66,14 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * prices, is named in the answer, and leaves the bind standing. The alternative
  * is a cross service rollback to undo a price, which is a saga for something an
  * operator can simply write again.
+ *
+ * **Availability follows the prices, in the same step and under the same rule**
+ * (plan 0182). It crosses into catalog too, so it cannot join the bind either.
+ * It is written after every price, in one pass over the whole file rather than
+ * a row at a time: a row of DEZA has no price and up to ten shops, and a call
+ * per row and shop for a thousand rows is longer than the route's timeout. A
+ * failure leaves every bind standing and names the rows in `priceSkips`, with
+ * a reason that says it was the availability.
  *
  * ## A failed step 3 leaves orphans, and says so
  *
@@ -90,7 +100,8 @@ export class SourceEntryBatchService {
     private readonly catalog: CatalogClient,
     private readonly prices: SourceEntryPriceWriter,
     private readonly admin: PlatformAdminService,
-    private readonly sources: SupermarketSourceService
+    private readonly sources: SupermarketSourceService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   async applyDecisions(
@@ -271,6 +282,30 @@ export class SourceEntryBatchService {
             describeError(error).message
         );
       }
+    }
+
+    // The availability the bound rows are owed (plan 0182): the stored claims
+    // for the shops that are mapped, and an offer with no price for a row that
+    // holds none. After the prices and under their rule: the binds stand
+    // whatever happens here, and what could not be written is named.
+    try {
+      await this.availability.writeForEntries(bound);
+    } catch (error) {
+      const reason = `Availability: ${describeError(error).message}`;
+      const named = new Set(priceSkips.map((skip) => skip.entryId));
+      for (const outcome of outcomes) {
+        if (!named.has(outcome.entryId)) {
+          priceSkips.push({
+            entryId: outcome.entryId,
+            itemId: outcome.itemId ?? '',
+            reason,
+          });
+        }
+      }
+      this.logger.warn(
+        `Bound ${bound.length} entries but could not write their ` +
+          `availability: ${describeError(error).message}`
+      );
     }
 
     return {

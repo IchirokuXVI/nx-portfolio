@@ -59,6 +59,8 @@ describeIntegration('harvester schema (real Postgres)', () => {
       // The price each scope stated for one of those rows (plan 0086, D3).
       // `item_source_refs` and `source_aliases` folded into the row itself.
       'source_entry_prices',
+      // What a run said about each shop, kept until it can be sent (plan 0182).
+      'source_entry_availability',
       'discovered_places',
     ]) {
       expect(names.has(table)).toBe(true);

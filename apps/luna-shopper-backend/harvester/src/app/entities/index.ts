@@ -3,6 +3,7 @@ import { HarvestRunPreset } from './harvest-run-preset.entity';
 import { HarvestRun } from './harvest-run.entity';
 import { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
+import { SourceEntryAvailability } from './source-entry-availability.entity';
 import { SourceEntryPrice } from './source-entry-price.entity';
 import { SourceLocation } from './source-location.entity';
 import { SupermarketSource } from './supermarket-source.entity';
@@ -13,6 +14,7 @@ export { HarvestRunPreset } from './harvest-run-preset.entity';
 export { HarvestRun } from './harvest-run.entity';
 export { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
 export { SourceCatalogEntry } from './source-catalog-entry.entity';
+export { SourceEntryAvailability } from './source-entry-availability.entity';
 export { SourceEntryPrice } from './source-entry-price.entity';
 export { SourceLocation } from './source-location.entity';
 export { SupermarketSource } from './supermarket-source.entity';
@@ -29,6 +31,9 @@ export const HARVESTER_ENTITIES = [
   // The latest price each scope stated for one of those rows (plan 0086, D3).
   SourceEntryPrice,
   SourceLocation,
+  // Which shop of a source carries which of its rows, kept until the row is
+  // bound and the shop is mapped (plan 0182).
+  SourceEntryAvailability,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
 ];

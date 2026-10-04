@@ -27,6 +27,7 @@ import {
   type LocationCandidate,
 } from './matching';
 import { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 
 interface SourceLocationCursor {
   value: string;
@@ -49,13 +50,12 @@ export interface ObservedShop {
  * operator sees a shop waiting to be mapped rather than a silence in a log. That
  * is the owner's rule: an unknown location needs no action from the run.
  *
- * **Mapping a shop does not backfill it.** The availability the run skipped
- * stays skipped until the next run. That is deliberate, and it is the opposite
- * of `sourceAlias.accept` in plan 0081, which does write the price it was queued
- * for: a price sits in the run's stored document and is a small number of
- * offers, while a shop's availability is one boolean per product across a whole
- * assortment that the run never stored. Re running is cheaper than keeping the
- * snapshot.
+ * **Mapping a shop sends what the runs said about it** (plan 0182). Every run
+ * keeps its claims in `source_entry_availability` whether or not the shop is
+ * mapped, so binding a shop to a location writes the stored claims of that
+ * shop for every row that is bound to a product. This was the opposite until
+ * plan 0182: a run held its claims in memory, a claim for an unmapped shop was
+ * dropped, and the shop stayed empty until somebody ran the chain again.
  */
 @Injectable()
 export class SourceLocationService {
@@ -63,7 +63,8 @@ export class SourceLocationService {
     @InjectRepository(SourceLocation)
     private readonly shops: Repository<SourceLocation>,
     private readonly catalog: CatalogClient,
-    private readonly admin: PlatformAdminService
+    private readonly admin: PlatformAdminService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   /**
@@ -180,6 +181,12 @@ export class SourceLocationService {
    * The location has to belong to this row's chain, and that is checked against
    * catalog rather than assumed. A back office picker scoped to the chain still
    * sends a uuid, and a uuid is not evidence of anything.
+   *
+   * **Then the stored claims of this shop are sent** (plan 0182), for the rows
+   * that are bound to a product. The mapping is saved first: a catalog write
+   * that fails leaves the shop mapped and the request failed, and mapping it
+   * again sends the same claims, which catalog takes as many times as it is
+   * told.
    */
   async map(req: MapSourceLocationRequest): Promise<SourceLocationView> {
     await this.admin.requireAdmin(req);
@@ -196,7 +203,9 @@ export class SourceLocationService {
     row.supermarketLocationId = req.supermarketLocationId;
     row.status = SourceLocationStatus.ACTIVE;
     row.matchedBy = ItemSourceMatch.MANUAL;
-    return this.view(await this.shops.save(row));
+    const saved = await this.shops.save(row);
+    await this.availability.writeForLocation(saved);
+    return this.view(saved);
   }
 
   /**

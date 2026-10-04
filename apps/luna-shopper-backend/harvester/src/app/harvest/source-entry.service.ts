@@ -50,6 +50,7 @@ import {
 } from './harvest-export';
 import { toSourceCatalogEntryView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { createdSize } from './source-entry-size';
 import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
@@ -152,7 +153,8 @@ export class SourceEntryService {
     private readonly sources: SupermarketSourceService,
     private readonly admin: PlatformAdminService,
     private readonly priceWriter: SourceEntryPriceWriter,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly availability: SourceEntryAvailabilityWriter
   ) {}
 
   /**
@@ -774,9 +776,23 @@ export class SourceEntryService {
     return saved;
   }
 
-  /** Section 7's last paragraph, in {@link SourceEntryPriceWriter}. */
-  private writeRowPrices(entry: SourceCatalogEntry): Promise<number> {
-    return this.priceWriter.write(entry);
+  /**
+   * What a bound row owes catalog, and the one step both decisions make.
+   *
+   * Its prices first, which is section 7's last paragraph in
+   * {@link SourceEntryPriceWriter}. Then what the runs said about where the
+   * product is sold (plan 0182): the stored claims for the shops that are
+   * mapped, and for a row that holds no price an offer with no price in the
+   * chain's default scope, because a chain that lists a product sells it. A
+   * DEZA row has no price by design, so before this step existed accepting one
+   * wrote nothing at all and the product was sold nowhere.
+   *
+   * Answers the prices written, which is what the caller reports.
+   */
+  private async writeRowPrices(entry: SourceCatalogEntry): Promise<number> {
+    const written = await this.priceWriter.write(entry);
+    await this.availability.writeForEntries([entry]);
+    return written;
   }
 
   /**

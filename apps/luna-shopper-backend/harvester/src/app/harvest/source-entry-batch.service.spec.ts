@@ -17,6 +17,7 @@ import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
+import type { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import type { SourceEntryPriceWriter } from './source-entry-write';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -125,6 +126,8 @@ function build(
     failSaveOf?: string;
     /** Fail the price write for these entries, which is a step four skip. */
     failPricesOf?: string[];
+    /** Fail the availability write, which is a step four skip of every row. */
+    failAvailability?: boolean;
     /** Fail the cleanup delete, so the product is reported as an orphan. */
     failDelete?: boolean;
     createItems?: jest.Mock;
@@ -198,6 +201,21 @@ function build(
   });
   const prices = { write } as unknown as SourceEntryPriceWriter;
 
+  // The availability half of step four (plan 0182). What it sends is its own
+  // spec; what matters here is when it is called, with which rows, and what a
+  // failure does to the answer.
+  const writeAvailability = jest.fn(
+    async (_bound: readonly SourceCatalogEntry[]) => {
+      if (options.failAvailability) {
+        throw new Error('catalog is away');
+      }
+      return { written: 0, shops: 0, conflicts: [], pricelessOffers: 0 };
+    }
+  );
+  const availability = {
+    writeForEntries: writeAvailability,
+  } as unknown as SourceEntryAvailabilityWriter;
+
   const admin = {
     requireAdmin: jest.fn(async (credential: { userId: string }) => {
       if (credential.userId !== ADMIN) {
@@ -225,10 +243,12 @@ function build(
     catalog,
     prices,
     admin,
-    sources
+    sources,
+    availability
   );
   return {
     service,
+    writeAvailability,
     saved,
     createItems,
     categoryTree,
@@ -923,7 +943,7 @@ describe('SourceEntryBatchService', () => {
 
   it('refuses the whole file for one stale expect, and writes nothing anywhere', async () => {
     const rows = [entry(), entry({ id: 'e-2', externalId: '4242' })];
-    const { service, saved, createItems } = build({ rows });
+    const { service, saved, createItems, writeAvailability } = build({ rows });
 
     const result = await service.applyDecisions(
       request([
@@ -952,6 +972,8 @@ describe('SourceEntryBatchService', () => {
     expect(saved).toEqual([]);
     // Step two never ran, so the catalog holds nothing this file created.
     expect(createItems).not.toHaveBeenCalled();
+    // Nor step four: a refused file states no availability either (plan 0182).
+    expect(writeAvailability).not.toHaveBeenCalled();
     expect(result.results[0].error).toBeNull();
     expect(result.results[0].applied).toBe(false);
     expect(result.results[1].error?.code).toBe(
@@ -1103,6 +1125,87 @@ describe('SourceEntryBatchService', () => {
     expect(result.priceSkips).toEqual([
       { entryId: 'e-1', itemId: 'i-1', reason: 'scope is gone' },
     ]);
+  });
+
+  describe('the availability the bound rows are owed (plan 0182)', () => {
+    const twoRows = () => [entry(), entry({ id: 'e-2', externalId: '4242' })];
+    const twoAccepts = () =>
+      request([
+        { op: 'accept', entryId: 'e-1', itemId: 'i-1', expect: expectFresh },
+        { op: 'accept', entryId: 'e-2', itemId: 'i-2', expect: expectFresh },
+      ]);
+
+    it('writes it once for the whole file, after every price, with the rows as bound', async () => {
+      const { service, write, writeAvailability } = build({ rows: twoRows() });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.applied).toBe(true);
+      // One pass and not one per row: a DEZA row has no price and up to ten
+      // shops, and a thousand of them a row at a time outlasts the route.
+      expect(writeAvailability).toHaveBeenCalledTimes(1);
+      const [bound] = writeAvailability.mock.calls[0];
+      expect(bound.map((row) => [row.id, row.itemId])).toEqual([
+        ['e-1', 'i-1'],
+        ['e-2', 'i-2'],
+      ]);
+      // The rule the prices follow in this route: after the bind, in step four.
+      expect(Math.max(...write.mock.invocationCallOrder)).toBeLessThan(
+        writeAvailability.mock.invocationCallOrder[0]
+      );
+      expect(result.priceSkips).toEqual([]);
+    });
+
+    it('leaves every bind standing when it fails, and names the rows', async () => {
+      const { service, saved } = build({
+        rows: twoRows(),
+        failAvailability: true,
+      });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.applied).toBe(true);
+      expect(saved).toHaveLength(2);
+      expect(result.results.map((outcome) => outcome.applied)).toEqual([
+        true,
+        true,
+      ]);
+      // The prices landed, and the answer still says so.
+      expect(result.results.map((outcome) => outcome.pricesWritten)).toEqual([
+        1, 1,
+      ]);
+      expect(result.priceSkips).toEqual([
+        {
+          entryId: 'e-1',
+          itemId: 'i-1',
+          reason: 'Availability: catalog is away',
+        },
+        {
+          entryId: 'e-2',
+          itemId: 'i-2',
+          reason: 'Availability: catalog is away',
+        },
+      ]);
+    });
+
+    it('names a row once when its prices and the availability both fail', async () => {
+      const { service } = build({
+        rows: twoRows(),
+        failPricesOf: ['e-1'],
+        failAvailability: true,
+      });
+
+      const result = await service.applyDecisions(twoAccepts());
+
+      expect(result.priceSkips).toEqual([
+        { entryId: 'e-1', itemId: 'i-1', reason: 'scope is gone' },
+        {
+          entryId: 'e-2',
+          itemId: 'i-2',
+          reason: 'Availability: catalog is away',
+        },
+      ]);
+    });
   });
 
   it('refuses a create whose barcode catalog holds, naming the row and the product', async () => {
