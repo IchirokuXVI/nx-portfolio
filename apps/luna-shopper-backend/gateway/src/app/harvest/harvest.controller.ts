@@ -14,6 +14,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
+  BRAND_MATCHES_MAX_KEYS,
+  BRAND_PATTERNS,
+  brandKey,
   DISCOVERED_PLACE_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
@@ -25,6 +28,8 @@ import {
   SUPERMARKET_SOURCE_PATTERNS,
   validateHarvestDocument,
   type ApplySourceEntryDecisionsResult,
+  type BrandMatchesResult,
+  type BrandMatchView,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlacePage,
   type DiscoveredPlaceView,
@@ -37,6 +42,7 @@ import {
   type PostalCodeDiscoveryRequestPage,
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
+  type QueuedSourceEntryPage,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -472,22 +478,73 @@ export class AdminHarvestPlacesController {
 export class AdminHarvestEntriesController {
   constructor(private readonly nats: NatsClient) {}
 
+  /**
+   * The queue, each row with the brands its printed brand names (plan 0178).
+   *
+   * **Composed, and in this order.** The harvester answers the rows, and
+   * catalog answers which registered brands each printed key names: the
+   * registry lives in catalog and the harvester holds no copy of it, the rule
+   * the brand suggestions already follow. One catalog read per page, for the
+   * distinct keys the page prints, and none at all for a page that prints no
+   * brand.
+   *
+   * `brandMatches` can hold several brands. The key's own brand is first, and
+   * a brand a homonym points that key at follows.
+   */
   @Get()
-  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.list)
-  list(
+  @ApiComposedResponse(HARVEST_SCHEMA_IDS.queuedSourceEntryPage, {
+    description:
+      'The queue, newest observation first, each row with every registered brand its printed brand names. Composed: the rows are the harvester’s, and the brands are read from catalog’s registry for the keys the page prints.',
+  })
+  async list(
     @ActingAdmin() admin: CurrentAdmin,
     @Query() query: SourceEntryListQueryDto
-  ): Promise<SourceCatalogEntryPage> {
-    return this.nats.send<SourceCatalogEntryPage>(SOURCE_ENTRY_PATTERNS.list, {
-      ...adminCredential(admin),
-      supermarketId: query.supermarketId,
-      status: query.status,
-      sourceKind: query.sourceKind,
-      query: query.query,
-      brandKey: query.brandKey,
-      cursor: query.cursor,
-      limit: query.limit,
-    });
+  ): Promise<QueuedSourceEntryPage> {
+    const page = await this.nats.send<SourceCatalogEntryPage>(
+      SOURCE_ENTRY_PATTERNS.list,
+      {
+        ...adminCredential(admin),
+        supermarketId: query.supermarketId,
+        status: query.status,
+        sourceKind: query.sourceKind,
+        query: query.query,
+        brandKey: query.brandKey,
+        cursor: query.cursor,
+        limit: query.limit,
+      }
+    );
+
+    const keys = [
+      ...new Set(
+        page.items
+          .map((entry) => brandKey(entry.brand))
+          .filter((key): key is string => key !== null)
+      ),
+    ];
+    const byKey = new Map<string, BrandMatchView[]>();
+    // A page holds at most a hundred rows, so one request carries its keys
+    // with room to spare. The slices are there so that a larger page, the day
+    // one exists, costs a second request instead of a refused one.
+    for (let i = 0; i < keys.length; i += BRAND_MATCHES_MAX_KEYS) {
+      const { matches } = await this.nats.send<BrandMatchesResult>(
+        BRAND_PATTERNS.matches,
+        {
+          userId: admin.adminId,
+          keys: keys.slice(i, i + BRAND_MATCHES_MAX_KEYS),
+        }
+      );
+      for (const match of matches) {
+        byKey.set(match.printedKey, match.brands);
+      }
+    }
+
+    return {
+      items: page.items.map((entry) => ({
+        ...entry,
+        brandMatches: byKey.get(brandKey(entry.brand) ?? '') ?? [],
+      })),
+      nextCursor: page.nextCursor,
+    };
   }
 
   /**

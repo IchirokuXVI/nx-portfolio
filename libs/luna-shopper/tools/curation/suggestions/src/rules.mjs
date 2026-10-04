@@ -487,6 +487,52 @@ export function findCanonicalBrand(brands, text) {
 }
 
 /**
+ * Every registered brand an entry's printed brand names, the key's own brand
+ * first (backend plan 0178).
+ *
+ * One printed name can belong to two businesses. El Jamón prints `Poseidón` on
+ * salmon loins, which is Poseidon Food, and the registered `Poseidon` is a
+ * cologne. The registry key is unique, so the second brand is reached through a
+ * homonym a person registered, and the queue answers both in the entry's
+ * `brandMatches`.
+ *
+ * Two sources, and each is trusted for what it knows:
+ *
+ * - **The key's own brand comes from the snapshot**, exactly as it did before
+ *   homonyms existed, so a gateway that predates the plan and sends no
+ *   `brandMatches` reads as it always has.
+ * - **A homonym comes from the entry**, because the snapshot is the list of
+ *   brands and holds no pointer between a printed key and a second brand. It
+ *   is still resolved against the snapshot: a brand registered after this run
+ *   started is not seen by this run, by a homonym or any other way.
+ *
+ * Each answer is `{ brand, printedAs }`, the brand always a canonical one.
+ * `printedAs` is the linked spelling the chain printed, on the key's own brand
+ * only, and null everywhere else.
+ */
+export function sourceBrands(brands, entry) {
+  const found = [];
+  const add = (brand, printedAs) => {
+    if (brand && !found.some((held) => held.brand.key === brand.key)) {
+      found.push({ brand, printedAs });
+    }
+  };
+
+  const registered = findBrand(brands, entry?.brand);
+  if (registered) {
+    const canonical = canonicalBrand(brands, registered);
+    add(canonical, canonical === registered ? null : registered.label);
+  }
+
+  const matches = Array.isArray(entry?.brandMatches) ? entry.brandMatches : [];
+  for (const match of matches) {
+    const held = brands?.get(match?.key ?? brandKey(match?.label));
+    add(canonicalBrand(brands, held ?? null), null);
+  }
+  return found;
+}
+
+/**
  * The label to suggest for a brand, from the spellings the chains printed,
  * most printed first (plan 0006).
  *

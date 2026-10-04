@@ -445,7 +445,7 @@ export class HarvestMemory implements HarvestServiceI {
    */
   async listEntries(
     query: EntryQuery
-  ): Promise<Wire.HarvestSourceCatalogEntryPage> {
+  ): Promise<Wire.HarvestQueuedSourceEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
     const chain = query.supermarketId ?? '';
     const matching = this._entries.filter(
@@ -468,7 +468,14 @@ export class HarvestMemory implements HarvestServiceI {
           (entry.ean ?? '').includes(term))
     );
 
-    return page(matching, query);
+    // The route answers each row with the registered brands its printed brand
+    // names (backend plan 0178). Nothing here reads them yet, and this fake
+    // holds no registry to answer from, so every row names none.
+    const { items, nextCursor } = page(matching, query);
+    return {
+      items: items.map((entry) => ({ ...entry, brandMatches: [] })),
+      nextCursor,
+    };
   }
 
   /**

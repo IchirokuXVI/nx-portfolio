@@ -24,6 +24,7 @@ import type { PageQuery, Paginated } from '../pagination';
 import type { SourceSizeUnit } from '../units/source-size';
 import type { AdminCredential } from './admin-auth.messages';
 import type {
+  BrandMatchView,
   BulkOperationError,
   ContentLocale,
   ItemView,
@@ -1348,6 +1349,24 @@ export interface ItemSourceEntryView extends SourceCatalogEntryView {
   eanSharedBy: number | null;
 }
 
+/**
+ * A row as the queue answers it, with the brands its printed brand names
+ * (plan 0178).
+ *
+ * Composed at the gateway, as the brand suggestions are: the registry lives in
+ * catalog and the harvester holds no copy of it, so the harvester answers the
+ * rows and catalog answers what each printed key names.
+ *
+ * **Several brands is an ordinary answer.** The key's own brand comes first,
+ * and every brand a homonym points that key at follows. One printed name can
+ * belong to two businesses, and which one made this product is read from the
+ * product, by a person or by the curator. Empty when the row prints no brand
+ * or nothing registered answers to it.
+ */
+export interface QueuedSourceEntryView extends SourceCatalogEntryView {
+  brandMatches: BrandMatchView[];
+}
+
 /** Bind a queued row to a product the catalog already holds. */
 export interface AcceptSourceEntryRequest extends AdminCredential {
   entryId: string;
@@ -1680,6 +1699,7 @@ export type HarvestRunPresetPage = Paginated<HarvestRunPresetView>;
 export type DiscoveredPlacePage = Paginated<DiscoveredPlaceView>;
 export type SourceCatalogEntryPage = Paginated<SourceCatalogEntryView>;
 export type ItemSourceEntryPage = Paginated<ItemSourceEntryView>;
+export type QueuedSourceEntryPage = Paginated<QueuedSourceEntryView>;
 export type SourceLocationPage = Paginated<SourceLocationView>;
 export type SupermarketSourcePage = Paginated<SupermarketSourceView>;
 
