@@ -756,7 +756,11 @@ test('a glitched name is retryable and writes nothing', async () => {
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
@@ -785,7 +789,11 @@ test('--final records a second glitch as a REVIEW carrying the code', async () =
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     final: true,
     gateways: w.gateways,
@@ -816,7 +824,7 @@ test('a sizeless CREATE from a local model is recorded as a REVIEW', async () =>
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -858,7 +866,7 @@ test('the same sizeless CREATE from a Claude model is a CREATE', async () => {
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -1041,7 +1049,7 @@ test('a row raising both retryable codes carries both details into one retry', a
       item: {
         ...CREATE_MILK.item,
         nameEs: 'May1onesa',
-        nameEn: null,
+        nameEn: 'Mayonnaise',
         brand: 'DEBORAH 48H',
       },
     },

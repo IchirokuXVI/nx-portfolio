@@ -5,6 +5,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   UnitOfMeasure,
+  type CreateItemInput,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -136,6 +137,8 @@ function build(
     defaultScope?: string | null;
     /** The stored claims that are ready, as the writer's query answers them. */
     readyClaims?: Record<string, unknown>[];
+    /** The product catalog says holds the barcode it is asked about. */
+    eanHolder?: ItemView | null;
   } = {}
 ) {
   const row = options.row ?? entry();
@@ -161,7 +164,14 @@ function build(
   } as unknown as Repository<HarvestRun>;
 
   const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
-  const createItem = jest.fn(async () => item());
+  const createItem = jest.fn(
+    async (input: CreateItemInput): Promise<ItemView> =>
+      // Catalog answers the product as it stored it, barcode included.
+      ({ ...item(), ean: input.ean ?? null }) as ItemView
+  );
+  const findItemByEan = jest.fn(async (_ean: string) => ({
+    item: options.eanHolder ?? null,
+  }));
   const categoryTree = jest.fn(async () => fakeCategoryTree());
   const setAvailability = jest.fn(
     async (
@@ -182,7 +192,7 @@ function build(
     addPrices,
     createItem,
     categoryTree,
-    findItemByEan: jest.fn(async () => ({ item: null })),
+    findItemByEan,
     getSupermarket: jest.fn(async () => ({
       id: CHAIN,
       defaultPriceScopeId:
@@ -257,6 +267,7 @@ function build(
     saved,
     addPrices,
     createItem,
+    findItemByEan,
     categoryTree,
     fetchEnglish,
     setAvailability,
@@ -285,6 +296,80 @@ describe('SourceEntryService', () => {
       expect(saved[0].name).toBe('Leche semidesnatada Hacendado');
       expect(saved[0].brand).toBe('Hacendado');
       expect(saved[0].sizeFormat).toBe('1 L');
+    });
+
+    /** Plan 0184: `matchedBy` says what matched. */
+    describe('what the bound row says matched it (plan 0184)', () => {
+      const EAN = '8480000123459';
+
+      it('stamps EAN when the product holds the row’s own real barcode', async () => {
+        const { service, findItemByEan } = build({
+          row: entry({ ean: EAN }),
+          eanHolder: { ...item('item-1'), ean: EAN } as ItemView,
+        });
+
+        const result = await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        expect(findItemByEan).toHaveBeenCalledWith(EAN);
+        expect(result.entry.matchedBy).toBe(ItemSourceMatch.EAN);
+        expect(result.entry.confidence).toBe(1);
+        expect(result.entry.status).toBe(SourceEntryStatus.ACTIVE);
+      });
+
+      it('stamps MANUAL when the product holds no EAN', async () => {
+        // Nothing holds the row's barcode, so the product named does not.
+        const { service } = build({
+          row: entry({ ean: EAN }),
+          eanHolder: null,
+        });
+
+        const result = await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
+      });
+
+      it('stamps MANUAL when another product holds the row’s barcode', async () => {
+        const { service } = build({
+          row: entry({ ean: EAN }),
+          eanHolder: { ...item('item-other'), ean: EAN } as ItemView,
+        });
+
+        const result = await service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-1',
+        });
+
+        expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
+      });
+
+      it.each([
+        ['no barcode', null],
+        ['an in-store code', '2204500000000'],
+        ['an invalid code', '84100100012'],
+      ])(
+        'stamps MANUAL for a row with %s, and asks nothing',
+        async (_what, ean) => {
+          const { service, findItemByEan } = build({ row: entry({ ean }) });
+
+          const result = await service.accept({
+            userId: ADMIN,
+            entryId: 'e-1',
+            itemId: 'item-1',
+          });
+
+          expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
+          expect(findItemByEan).not.toHaveBeenCalled();
+        }
+      );
     });
 
     it('writes every open scope price, each with its own run and the row kind', async () => {
@@ -1138,17 +1223,85 @@ describe('SourceEntryService', () => {
     });
 
     it('refuses an EAN the catalog already holds, naming the item', async () => {
-      const { service } = build({ row: entry({ ean: '8480000123456' }) });
-      const catalog = (
-        service as unknown as {
-          catalog: { findItemByEan: jest.Mock };
-        }
-      ).catalog;
-      catalog.findItemByEan.mockResolvedValueOnce({ item: item('item-held') });
+      const { service } = build({
+        row: entry({ ean: '8480000123459' }),
+        eanHolder: item('item-held'),
+      });
 
       await expect(
         service.createItem({ userId: ADMIN, entryId: 'e-1' })
       ).rejects.toThrow(/item-held/);
+    });
+
+    /**
+     * Plan 0184: a product holds a real barcode or none, and the row keeps
+     * what the chain printed.
+     */
+    describe('the EAN (plan 0184)', () => {
+      it('creates a product with a null EAN from a row whose EAN starts with 2, and the row keeps its code', async () => {
+        const { service, createItem, findItemByEan, saved } = build({
+          row: entry({ ean: '2204500000000' }),
+        });
+
+        const result = await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+        });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ ean: null })
+        );
+        expect(saved[0].ean).toBe('2204500000000');
+        expect(result.entry.ean).toBe('2204500000000');
+        // Nothing is asked about a code no product will hold, and a product
+        // with no barcode was not matched by one.
+        expect(findItemByEan).not.toHaveBeenCalled();
+        expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
+      });
+
+      it.each([
+        ['an 11 digit code', '84100100012'],
+        ['a wrong check digit', '8480000123456'],
+      ])('creates a product with a null EAN from %s', async (_what, ean) => {
+        const { service, createItem, saved } = build({ row: entry({ ean }) });
+
+        await service.createItem({ userId: ADMIN, entryId: 'e-1' });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ ean: null })
+        );
+        expect(saved[0].ean).toBe(ean);
+      });
+
+      it('drops an in-store code the operator typed, too', async () => {
+        const { service, createItem } = build();
+
+        await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+          ean: '2000000000008',
+        });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ ean: null })
+        );
+      });
+
+      it('writes a real barcode, and says the barcode is what matched', async () => {
+        const { service, createItem } = build({
+          row: entry({ ean: '8480000123459' }),
+        });
+
+        const result = await service.createItem({
+          userId: ADMIN,
+          entryId: 'e-1',
+        });
+
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ ean: '8480000123459' })
+        );
+        expect(result.entry.matchedBy).toBe(ItemSourceMatch.EAN);
+      });
     });
   });
 

@@ -156,7 +156,11 @@ list and you `LINK` onto it.
 - `item` is required on `CREATE` and describes the product to create. Leave it out
   otherwise.
 - `item.nameEs` is the Spanish name, with no brand and no size in it.
-- `item.nameEn` is the English name when you are confident of the translation, else null.
+- `item.nameEn` is the English name, with no brand and no size in it. `item.nameEn` is
+  always written and is never null. A brand name, a range word and a foreign product name
+  stay as printed in both languages: `Delicias del mar`, `Monochrome n30` and
+  `Pain au chocolat` are the same in `nameEs` and in `nameEn`. If you cannot name the
+  product in English, answer `REVIEW`.
 - `item.brand` is the brand, or null when the product carries none. When
   `entry.brandMatch` is present it is `brandMatch.label`, copied exactly.
 - `item.unitSize` is a number, or null when the product has no size. Write it in grams,
@@ -174,6 +178,8 @@ list and you `LINK` onto it.
 - `item.packCount` is optional, and is a whole number from 2 to 1000. If the entry states
   the number of pieces and `entry.packCount` is null or wrong, write it. In every other
   case leave it out, and the product takes `entry.packCount`. Never guess one.
+- A name never says `pack`. The pack count carries it. `Cerveza pack` and `Cerveza 6 pack`
+  are both `nameEs` "Cerveza", and the 6 is the pack count.
 - `item.categorySlugs` is a list of one or more slugs from the category vocabulary below,
   the best fit first. When the product plainly sits in two sections, name both.
 - `item.ean` is the entry's own barcode when it has one, else null. Never invent one, and
@@ -202,7 +208,8 @@ send it:
 - `EAN_CONFLICT`: a `LINK` onto a product carrying a different barcode, or a `CREATE` whose
   `item.ean` a catalog product already holds.
 - `NAME_CARRIES_BRAND` and `NAME_CARRIES_SIZE`: rules 2 and 3, checked on `nameEs` and
-  `nameEn` alike.
+  `nameEn` alike. A `nameEs` that ends in the word `pack` is `NAME_CARRIES_SIZE` too.
+- `NAME_EN_MISSING`: a `CREATE` with no `item.nameEn`.
 - `NAME_GLITCH`: a digit inside a word of `nameEs` or `nameEn`, as in `fres1a` or
   `may1onesa`. Read both names back before you send them.
 - `UNKNOWN_CATEGORY` and `UNKNOWN_UNIT`: a category slug or a unit outside the two

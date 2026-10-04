@@ -7,6 +7,7 @@ import {
   CategoryNotFoundException,
   ConflictException,
   ForbiddenException,
+  ItemEanInvalidException,
   ItemNeedsACategoryException,
   NotFoundException,
   ValidationException,
@@ -432,8 +433,8 @@ describe('ItemService', () => {
         service.createMany({
           userId: ADMIN,
           items: [
-            milk({ ean: '8480000123456' }),
-            milk({ ean: '8480000123456' }),
+            milk({ ean: '8480000123459' }),
+            milk({ ean: '8480000123459' }),
           ],
         })
       ).rejects.toBeInstanceOf(ValidationException);
@@ -594,6 +595,156 @@ describe('ItemService', () => {
     });
   });
 
+  /**
+   * Plan 0184. A product holds a real barcode or none, and the check runs on
+   * a write that sets or changes the EAN, never on one that leaves it alone:
+   * 211 products already hold an in-store code, and each of them still has to
+   * load and still has to save its other fields.
+   */
+  describe('the EAN a product may hold (plan 0184)', () => {
+    const IN_STORE = '2204500000000';
+    const REAL = '4006381333931';
+
+    /** A catalog holding one product, with the EAN the test names. */
+    function holding(ean: string | null) {
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x) => ({ id: 'i1', ...x })),
+        findOne: jest.fn(async () => ({
+          id: 'i1',
+          name: { en: 'Cheese', es: 'Queso' },
+          brand: null,
+          imageUrl: null,
+          sku: null,
+          ean,
+          unitSize: 1,
+          packCount: null,
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+          productGroupId: null,
+        })),
+      } as unknown as Repository<Item>;
+    }
+
+    const cheese = (ean: string | null | undefined) => ({
+      name: { en: 'Cheese', es: 'Queso' },
+      categoryIds: ['milk'],
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      ean,
+    });
+
+    it.each([
+      ['an in-store code', IN_STORE, 'IN_STORE'],
+      ['an 11 digit code', '84100100012', 'LENGTH'],
+      ['a wrong check digit', '4006381333932', 'CHECK_DIGIT'],
+      ['a code with a space in it', '4006381 333931', 'NOT_DIGITS'],
+      ['an empty string', '', 'EMPTY'],
+    ])(
+      'refuses a create with %s, naming the code and the reason',
+      async (_what, ean, reason) => {
+        const { service, audit } = build({ items: holding(null) });
+
+        const refusal = await service
+          .create({ userId: ADMIN, ...cheese(ean) })
+          .catch((error: unknown) => error);
+
+        expect(refusal).toBeInstanceOf(ItemEanInvalidException);
+        expect((refusal as ItemEanInvalidException).code).toBe(
+          'item_ean_invalid'
+        );
+        expect((refusal as ItemEanInvalidException).details).toEqual({
+          ean,
+          reason,
+        });
+        expect(audit.recorded).toEqual([]);
+      }
+    );
+
+    it('creates with a real barcode, trimmed, and with none', async () => {
+      const { service } = build({ items: holding(null) });
+
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(` ${REAL} `) })).ean
+      ).toBe(REAL);
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(null) })).ean
+      ).toBeNull();
+      expect(
+        (await service.create({ userId: ADMIN, ...cheese(undefined) })).ean
+      ).toBeNull();
+    });
+
+    it('refuses a whole batch for one bad EAN, before it writes anything', async () => {
+      const { service, audit } = build({ items: holding(null) });
+
+      await expect(
+        service.createMany({
+          userId: ADMIN,
+          items: [cheese(REAL), cheese(IN_STORE)],
+        })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(audit.recorded).toEqual([]);
+    });
+
+    it('refuses an update that changes the EAN to an invalid one', async () => {
+      const { service, audit } = build({ items: holding(REAL) });
+
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', ean: IN_STORE })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i1', ean: '84100100012' })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(audit.recorded).toEqual([]);
+    });
+
+    it('lets a product that holds an in-store code load', async () => {
+      const { service } = build({ items: holding(IN_STORE) });
+
+      expect((await service.get({ userId: ADMIN, itemId: 'i1' })).ean).toBe(
+        IN_STORE
+      );
+    });
+
+    it('does not refuse an update that does not name the EAN', async () => {
+      const { service } = build({ items: holding(IN_STORE) });
+
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        sku: 'X-1',
+      });
+
+      expect(updated.sku).toBe('X-1');
+      expect(updated.ean).toBe(IN_STORE);
+    });
+
+    it('does not refuse an update that sends back the EAN the product holds', async () => {
+      // What a back office form does: every field goes back, changed or not.
+      const { service } = build({ items: holding(IN_STORE) });
+
+      const updated = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: IN_STORE,
+        sku: 'X-1',
+      });
+
+      expect(updated.sku).toBe('X-1');
+      expect(updated.ean).toBe(IN_STORE);
+    });
+
+    it('lets an update replace an in-store code with a real barcode, or clear it', async () => {
+      const { service } = build({ items: holding(IN_STORE) });
+
+      expect(
+        (await service.update({ userId: ADMIN, itemId: 'i1', ean: REAL })).ean
+      ).toBe(REAL);
+      expect(
+        (await service.update({ userId: ADMIN, itemId: 'i1', ean: null })).ean
+      ).toBeNull();
+    });
+  });
+
   describe('a barcode the catalog already holds', () => {
     /** What the driver raises on `uq_items_ean`, as the service reads it. */
     function duplicateEan(detail?: string) {
@@ -633,7 +784,7 @@ describe('ItemService', () => {
           name: { en: 'Milk', es: 'Leche' },
           categoryIds: ['milk'],
           defaultUnit: UnitOfMeasure.LITER,
-          ean: '8480000123456',
+          ean: '8480000123459',
         })
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -645,7 +796,7 @@ describe('ItemService', () => {
         service.update({
           userId: ADMIN,
           itemId: 'i1',
-          ean: '8480000123456',
+          ean: '8480000123459',
         })
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -661,7 +812,7 @@ describe('ItemService', () => {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
-              ean: '8480000123456',
+              ean: '8480000123459',
             },
           ],
         })
@@ -670,7 +821,7 @@ describe('ItemService', () => {
 
     it('names the barcode in the batch refusal (plan 0158)', async () => {
       const { service } = build({
-        items: refusingItems('Key (ean)=(8480000123456) already exists.'),
+        items: refusingItems('Key (ean)=(8480000123459) already exists.'),
       });
 
       await expect(
@@ -681,11 +832,11 @@ describe('ItemService', () => {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
               defaultUnit: UnitOfMeasure.LITER,
-              ean: '8480000123456',
+              ean: '8480000123459',
             },
           ],
         })
-      ).rejects.toThrow(/EAN 8480000123456/);
+      ).rejects.toThrow(/EAN 8480000123459/);
     });
 
     it('leaves an error that is not a duplicate barcode alone', async () => {

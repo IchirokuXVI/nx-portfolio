@@ -378,7 +378,7 @@ export class CreateItemDto {
     nullable: true,
     maxLength: 32,
     description:
-      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present.',
+      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A real barcode or null (plan 0184): 8, 12, 13 or 14 digits with a valid check digit. Anything else, and a 13 digit in-store code that starts with 2, is refused with `item_ean_invalid`.',
   })
   @IsOptional()
   @IsString()
@@ -491,7 +491,7 @@ export class UpdateItemDto {
     nullable: true,
     maxLength: 32,
     description:
-      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present.',
+      'The barcode: the only identifier that joins a product across chains (plan 0038, section 2.5). Unique across the catalog when present. A value that changes the EAN is a real barcode or null (plan 0184), and anything else is refused with `item_ean_invalid`. Absent, or the EAN the product already holds, is never refused, so a product that holds an old in-store code still saves its other fields.',
   })
   @IsOptional()
   @IsString()

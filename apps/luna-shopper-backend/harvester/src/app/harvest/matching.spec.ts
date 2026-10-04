@@ -57,6 +57,44 @@ describe('the catalog item index, rungs 2 and 3 (plan 0086, section 4)', () => {
     });
   });
 
+  /**
+   * Plan 0184. 13 digits starting with 2 are one shop's own numbering, so the
+   * same code on a row of another chain is another product. 211 products of
+   * the first catalog hold one, and none of them may bind a row by it.
+   */
+  it('leaves an in-store code out of its EAN map, so it binds nothing', () => {
+    const index = new ItemMatchIndex([
+      item({ ean: '2204500000000', name: { en: 'Cheese', es: 'Queso' } }),
+    ]);
+
+    expect(
+      index.match({
+        name: 'Something else entirely',
+        brand: null,
+        ean: '2204500000000',
+        unitSize: null,
+      })
+    ).toBeNull();
+  });
+
+  it('still proposes a product that holds an in-store code by its name', () => {
+    const index = new ItemMatchIndex([
+      item({ ean: '2204500000000', name: { en: 'Cheese', es: 'Queso' } }),
+    ]);
+
+    expect(
+      index.match({
+        name: 'Queso',
+        brand: 'Hacendado',
+        ean: '2204500000000',
+        unitSize: 1,
+      })
+    ).toMatchObject({
+      matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
+      status: SourceEntryStatus.CANDIDATE,
+    });
+  });
+
   it('matches on name, brand and size but only ever as a CANDIDATE', () => {
     // A bad fuzzy match writes a wrong price onto a real product that users then
     // shop on, so this rung never writes a price until the owner confirms it.

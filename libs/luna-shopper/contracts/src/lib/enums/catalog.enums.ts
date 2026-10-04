@@ -129,6 +129,11 @@ export enum BulkOperationErrorCode {
   MALFORMED_OPERATION = 'MALFORMED_OPERATION',
   /** Another row already holds the identifier this one would take. */
   ALREADY_TAKEN = 'ALREADY_TAKEN',
+  /**
+   * A `createItem` whose product would have no English name (plan 0184). The
+   * route translates nothing, so the file states both names.
+   */
+  NAME_EN_MISSING = 'NAME_EN_MISSING',
 }
 
 /**

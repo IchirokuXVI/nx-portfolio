@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ItemSourceMatch,
+  productGtin,
   SourceEntryStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { Not, Repository } from 'typeorm';
@@ -20,7 +21,7 @@ import { toItemPriceDetails } from './harvest.mappers';
  */
 
 /**
- * ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1.
+ * ACTIVE and bound: a decision was made, so the confidence is 1.
  *
  * Mutates and returns the row rather than saving it, because the caller decides
  * whether the save goes through a repository or through the entity manager of a
@@ -28,20 +29,64 @@ import { toItemPriceDetails } from './harvest.mappers';
  *
  * `name`, `brand` and `sizeFormat` are deliberately untouched. The item may be
  * renamed to anything at all and the next run that produces this key still
- * resolves through this row (plan 0086, D8).
+ * resolves through this row (plan 0086, D8). `ean` is untouched too: the row
+ * keeps what the chain printed, an in-store code included (plan 0184).
+ *
+ * **`matchedBy` says what matched** (plan 0184), and the caller states it,
+ * through {@link matchOf}. It was `MANUAL` on every decision, so 21,751 bound
+ * rows said a person matched them although most were bound to the product that
+ * carries their own barcode.
  */
 export function bindFields(
   entry: SourceCatalogEntry,
   itemId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  matchedBy: ItemSourceMatch = ItemSourceMatch.MANUAL
 ): SourceCatalogEntry {
   entry.itemId = itemId;
   entry.candidateEntryId = null;
   entry.status = SourceEntryStatus.ACTIVE;
-  entry.matchedBy = ItemSourceMatch.MANUAL;
+  entry.matchedBy = matchedBy;
   entry.confidence = 1;
   entry.decidedAt = now;
   return entry;
+}
+
+/**
+ * What matched a row to the product a decision binds it to (plan 0184).
+ *
+ * `EAN` when the row prints a real barcode and the product holds the same
+ * one. That is the match the ingest would have made itself: its index of
+ * products is built once per run, so a row harvested before its product
+ * existed is never matched by a run, and the decision is what binds it.
+ *
+ * `MANUAL` for everything else: a row with no barcode, a row with an in-store
+ * or invalid code, and a product with no barcode or another one.
+ */
+export function matchOf(
+  entry: Pick<SourceCatalogEntry, 'ean'>,
+  itemEan: string | null | undefined
+): ItemSourceMatch {
+  const printed = productGtin(entry.ean);
+  return printed !== null && printed === productGtin(itemEan)
+    ? ItemSourceMatch.EAN
+    : ItemSourceMatch.MANUAL;
+}
+
+/**
+ * The EAN a product created from a queue row is given (plan 0184): a real
+ * barcode or none.
+ *
+ * The request's own EAN when it names one, else the row's, as every other
+ * field of a create falls back. Whichever it is goes through `readGtin`, and
+ * an in-store code (13 digits starting with 2) or an invalid code answers
+ * null, so the product is created with no EAN. The row is not changed.
+ */
+export function createdEan(
+  entry: Pick<SourceCatalogEntry, 'ean'>,
+  requested: string | null | undefined
+): string | null {
+  return productGtin(requested === undefined ? entry.ean : requested);
 }
 
 /**

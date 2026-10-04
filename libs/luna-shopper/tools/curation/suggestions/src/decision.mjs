@@ -15,11 +15,13 @@ import {
   carriesSize,
   chainName,
   chainNamesById,
+  endsInPack,
   findBrand,
   findCanonicalBrand,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   printedUnit,
+  productGtin,
   sameBaseSize,
   toBaseSize,
   toBaseUnit,
@@ -154,6 +156,12 @@ export function checkDecisionShape(value) {
     if (!isString(item.nameEs)) {
       return { ok: false, error: 'a CREATE needs "item.nameEs"' };
     }
+    // Both names, always (backend plan 0184). The bulk route translates
+    // nothing and refuses a product with no English name, so a reply without
+    // one is a malformed reply and is asked again, like a missing unit.
+    if (!isString(item.nameEn)) {
+      return { ok: false, error: 'a CREATE needs "item.nameEn"' };
+    }
     const categorySlugs = Array.isArray(item.categorySlugs)
       ? [
           ...new Set(
@@ -200,7 +208,7 @@ export function checkDecisionShape(value) {
     }
     decision.item = {
       nameEs: item.nameEs.trim(),
-      nameEn: isString(item.nameEn) ? item.nameEn.trim() : null,
+      nameEn: item.nameEn.trim(),
       brand: isString(item.brand) ? item.brand.trim() : null,
       unitSize:
         item.unitSize === null || item.unitSize === undefined
@@ -208,7 +216,12 @@ export function checkDecisionShape(value) {
           : item.unitSize,
       defaultUnit: item.defaultUnit.trim(),
       categorySlugs,
-      ean: isString(item.ean) ? item.ean.trim() : null,
+      // A real barcode or none (backend plan 0184). The prompt asks for the
+      // entry's own barcode, and 211 entries of one chain printed a code of
+      // its scales there. Catalog refuses such a code on a product, so it is
+      // dropped here, once, and the rehearsal create and the bulk create then
+      // agree. The entry keeps what the chain printed.
+      ean: productGtin(item.ean),
       // Present only when the decision states one. An absent key is what lets
       // the bulk route fall back to the count the row itself read.
       ...(statesPackCount ? { packCount: item.packCount } : {}),
@@ -377,6 +390,30 @@ export function validateDecision({
   }
 
   if (decision.decision === 'CREATE' && item) {
+    // A product carries a name in both languages (backend plan 0184). The
+    // shape check already asked a reply without one again, so what reaches
+    // here is a decision built some other way, and it goes to a person
+    // rather than to a route that would refuse the whole file for it.
+    if (!isString(item.nameEn)) {
+      issues.push(
+        issue(
+          'NAME_EN_MISSING',
+          `"${item.nameEs}" has no nameEn. A CREATE writes both names: a brand name, a range word and a foreign product name stay as printed in both.`
+        )
+      );
+    }
+    // The pack count carries it (backend plan 0184). A name that ends in the
+    // word states a size with no number in it, which rule 3 forbids as surely
+    // as `6 pack`, so it is the same code. `6 pack` itself is left to the
+    // check below, so one name is not reported twice.
+    if (endsInPack(item.nameEs) && !carriesSize(item.nameEs)) {
+      issues.push(
+        issue(
+          'NAME_CARRIES_SIZE',
+          `nameEs "${item.nameEs}" ends in "pack". The pack count says it, in packCount, and the name does not (rule 3).`
+        )
+      );
+    }
     for (const [field, name] of [
       ['nameEs', item.nameEs],
       ['nameEn', item.nameEn],

@@ -75,6 +75,7 @@ import {
 import {
   MAX_PAGE_SIZE,
   PageQueryDto,
+  requireProductEan,
   UuidParam,
 } from '@portfolio/luna-shopper/platform';
 import { adminCredential } from '../admin/admin-credential';
@@ -557,16 +558,22 @@ export class AdminCatalogSectionsController {
 export class AdminCatalogItemsController {
   constructor(private readonly nats: NatsClient) {}
 
+  /**
+   * **The EAN is a real barcode or null, and it is refused here** (plan 0184)
+   * with `item_ean_invalid`, before anything crosses the broker. Catalog makes
+   * the same check for every other writer, with the same function.
+   */
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
   @ApiProblemResponses({ body: true, conflict: true })
-  create(
+  async create(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemDto
   ): Promise<ItemView> {
     return this.nats.send<ItemView>(ITEM_PATTERNS.create, {
       ...adminCredential(admin),
       ...dto,
+      ean: requireProductEan(dto.ean),
     });
   }
 
@@ -586,13 +593,17 @@ export class AdminCatalogItemsController {
     status: HttpStatus.CREATED,
   })
   @ApiProblemResponses({ body: true, conflict: true })
-  createMany(
+  async createMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemsDto
   ): Promise<CreateItemsResult> {
     return this.nats.send<CreateItemsResult>(ITEM_PATTERNS.createMany, {
       ...adminCredential(admin),
-      items: dto.items,
+      // Each EAN a real barcode or null, as on the single create (plan 0184).
+      items: dto.items.map((item) => ({
+        ...item,
+        ean: requireProductEan(item.ean),
+      })),
     });
   }
 
@@ -693,7 +704,15 @@ export class AdminCatalogItemsController {
     });
   }
 
-  /** The only place an item joins a product group, and it is a person doing it. */
+  /**
+   * The only place an item joins a product group, and it is a person doing it.
+   *
+   * **An EAN that is not a real barcode is refused with `item_ean_invalid`, by
+   * catalog and not here** (plan 0184). Only catalog holds the product, and
+   * the check runs only on a write that changes the EAN: the back office sends
+   * every field of the form, so a product that already holds an in-store code
+   * sends it back unchanged with every edit, and that edit must still save.
+   */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
   @ApiProblemResponses({ body: true, conflict: true })

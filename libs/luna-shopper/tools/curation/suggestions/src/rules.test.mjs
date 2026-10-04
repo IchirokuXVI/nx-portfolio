@@ -17,6 +17,7 @@ import {
   carriesGlitch,
   carriesSize,
   categoryVocabulary,
+  endsInPack,
   findBrand,
   findCanonicalBrand,
   indexBrands,
@@ -25,6 +26,8 @@ import {
   normalizeName,
   printedUnit,
   privateLabelLines,
+  productGtin,
+  readGtin,
   sameBaseSize,
   suggestBrandLabel,
   toBaseSize,
@@ -607,9 +610,10 @@ test('a CREATE carrying no item is not a document the schema allows', () => {
   assert.ok(item);
   assert.equal(validates(SCHEMA, withoutItem), false);
 
-  // The three fields the checker refuses a CREATE without are required here
-  // too, for the same reason and at the same cost.
-  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
+  // The fields the checker refuses a CREATE without are required here too,
+  // for the same reason and at the same cost. `nameEn` is one of them since
+  // backend plan 0184.
+  for (const field of ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(
@@ -644,7 +648,7 @@ test('a half filled item is refused by the loose root, with no alternation', () 
   assert.ok(anyOf);
 
   assert.equal(validates(root, CREATE), true);
-  for (const field of ['nameEs', 'categorySlugs', 'defaultUnit']) {
+  for (const field of ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit']) {
     const stripped = { ...CREATE.item };
     delete stripped[field];
     assert.equal(validates(root, { ...CREATE, item: stripped }), false, field);
@@ -872,4 +876,82 @@ test('the prompt names the base unit rule, its code, and what is not a size', ()
   // The capacity of a container is how big the object is, never its size.
   assert.match(template, /A dimension or a capacity is never the size/);
   assert.match(template, /a bottle sold empty/);
+});
+
+// ---------------------------------------------------------------------------
+// What a created product must carry (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+test('the readGtin copy answers every pair the contracts cases pin', () => {
+  // The contracts function is TypeScript and this library is plain `.mjs` with
+  // no build step, so the two are held together by this file rather than by an
+  // import. A pair added on the backend side fails here until the copy agrees.
+  const cases = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../contracts/src/lib/barcodes/gtin.cases.json',
+        import.meta.url
+      ),
+      'utf8'
+    )
+  );
+  assert.ok(cases.length > 0);
+  for (const [text, reading] of cases) {
+    assert.deepEqual(
+      readGtin(text),
+      reading,
+      `readGtin(${JSON.stringify(text)})`
+    );
+  }
+  assert.deepEqual(readGtin(undefined), { kind: 'INVALID', reason: 'EMPTY' });
+});
+
+test('productGtin answers a real barcode and nothing else', () => {
+  assert.equal(productGtin(' 4006381333931 '), '4006381333931');
+  assert.equal(productGtin('96385074'), '96385074');
+  assert.equal(productGtin('2204500000000'), null);
+  assert.equal(productGtin('84100100012'), null);
+  assert.equal(productGtin(null), null);
+});
+
+test('endsInPack reads the last word, whatever follows it', () => {
+  for (const name of [
+    'Cerveza pack',
+    'Cerveza PACK',
+    'Cerveza (pack)',
+    'pack',
+  ]) {
+    assert.equal(endsInPack(name), true, name);
+  }
+  for (const name of [
+    'Backpack',
+    'Pack de cervezas',
+    'Cerveza packs',
+    '',
+    null,
+  ]) {
+    assert.equal(endsInPack(name), false, String(name));
+  }
+});
+
+test('the schema types nameEn as a string that is never null', () => {
+  // Required and nullable is not required: a `null` satisfies it, and the
+  // checker refuses a CREATE whose nameEn is null.
+  const nulled = { ...CREATE, item: { ...CREATE.item, nameEn: null } };
+  assert.equal(validates(SCHEMA, nulled), false);
+  const { anyOf, ...root } = SCHEMA;
+  assert.ok(anyOf);
+  assert.equal(validates(root, nulled), false);
+});
+
+test('the prompt says nameEn is always written and that a name never says pack', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /`item\.nameEn` is\s+always written/);
+  assert.match(template, /stay as printed in both languages/);
+  assert.match(template, /NAME_EN_MISSING/);
+  assert.match(template, /A name never says `pack`/);
+  assert.match(template, /The pack count carries it/);
+  // The old permission to answer null is gone.
+  assert.doesNotMatch(template, /else null\.\n- `item\.brand`/);
+  assert.doesNotMatch(template, /when you are confident of the translation/);
 });

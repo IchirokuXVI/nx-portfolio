@@ -148,6 +148,7 @@ test('the schema check refuses what it cannot act on', () => {
       confidence: 1,
       item: {
         nameEs: 'Leche',
+        nameEn: 'Milk',
         categorySlugs: ['milk'],
         defaultUnit: 'LITER',
         unitSize: '1',
@@ -162,7 +163,12 @@ test('the schema check refuses what it cannot act on', () => {
       checkDecisionShape({
         decision: 'CREATE',
         confidence: 1,
-        item: { nameEs: 'Leche', categorySlugs, defaultUnit: 'LITER' },
+        item: {
+          nameEs: 'Leche',
+          nameEn: 'Milk',
+          categorySlugs,
+          defaultUnit: 'LITER',
+        },
       }).error,
       /needs "item.categorySlugs", one or more category slugs/,
       JSON.stringify(categorySlugs)
@@ -187,7 +193,7 @@ test('the schema check normalizes what it accepts', () => {
     confidence: 0.95,
     item: {
       nameEs: '  Leche entera  ',
-      nameEn: '',
+      nameEn: '  Whole milk ',
       brand: '  Hacendado ',
       categorySlugs: [' milk ', 'plant-based-drinks-and-horchata', 'milk', ''],
       defaultUnit: ' LITER ',
@@ -202,7 +208,7 @@ test('the schema check normalizes what it accepts', () => {
     'milk',
     'plant-based-drinks-and-horchata',
   ]);
-  assert.equal(checked.decision.item.nameEn, null);
+  assert.equal(checked.decision.item.nameEn, 'Whole milk');
   assert.equal(checked.decision.item.brand, 'Hacendado');
   assert.equal(checked.decision.item.unitSize, null);
   assert.equal(checked.decision.reasoning, 'because');
@@ -315,7 +321,7 @@ test('NAME_GLITCH leaves a real name alone, digit or no digit', () => {
     'Sombra dúo Monochrome n30',
   ]) {
     const issues = validateDecision({
-      decision: createDecision(goodItem({ nameEs: name, nameEn: null })),
+      decision: createDecision(goodItem({ nameEs: name })),
       entry: ENTRY,
       supermarket: MERCADONA,
       brands: BRANDS,
@@ -1252,4 +1258,142 @@ test('NOT_A_BASE_UNIT is not worth a second attempt and says nothing about a LIN
     }),
     []
   );
+});
+
+// ---------------------------------------------------------------------------
+// What a created product must carry (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+function createIssuesOf(item) {
+  return validateDecision({
+    decision: createDecision(item),
+    entry: ENTRY,
+    supermarket: MERCADONA,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+}
+
+test('the schema check refuses a CREATE with no nameEn, so the row is asked again', () => {
+  for (const nameEn of [undefined, null, '', '   ', 42]) {
+    const checked = checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      item: { ...goodItem(), nameEn },
+    });
+    assert.equal(checked.ok, false, JSON.stringify(nameEn));
+    assert.match(checked.error, /needs "item.nameEn"/);
+  }
+});
+
+test('NAME_EN_MISSING fires on a CREATE that reached the validators with no nameEn', () => {
+  // The shape check refuses such a reply, so this is a decision built some
+  // other way. It goes to a person and not to a route that would refuse the
+  // whole file for it.
+  for (const nameEn of [null, undefined, '', '  ']) {
+    const issues = createIssuesOf(goodItem({ nameEn }));
+    assert.deepEqual(
+      codes(issues),
+      ['NAME_EN_MISSING'],
+      JSON.stringify(nameEn)
+    );
+    assert.match(issues[0].detail, /Leche entera/);
+  }
+});
+
+test('NAME_EN_MISSING is quiet on a CREATE with both names, and on a LINK', () => {
+  assert.deepEqual(createIssuesOf(goodItem()), []);
+  // A brand name, a range word and a foreign product name are written the
+  // same in both languages, and that is a name in both.
+  assert.deepEqual(
+    createIssuesOf(
+      goodItem({ nameEs: 'Pain au chocolat', nameEn: 'Pain au chocolat' })
+    ),
+    []
+  );
+  assert.deepEqual(
+    validateDecision({
+      decision: linkDecision(),
+      entry: ENTRY,
+      supermarket: MERCADONA,
+      linkTarget: {
+        id: 'i1',
+        brand: 'Hacendado',
+        unitSize: 1,
+        defaultUnit: 'LITER',
+        ean: null,
+      },
+      brands: BRANDS,
+      supermarkets: SUPERMARKETS,
+      categories: CATEGORIES,
+      units: UNITS,
+    }),
+    []
+  );
+});
+
+test('NAME_EN_MISSING is a judgment for a person, not a second attempt', () => {
+  assert.deepEqual(
+    retryableIssues([issue('NAME_EN_MISSING', 'no nameEn')]),
+    []
+  );
+});
+
+test('NAME_CARRIES_SIZE fires on a Spanish name that ends in the word pack', () => {
+  for (const nameEs of [
+    'Cerveza pack',
+    'Cerveza Pack',
+    'Cerveza PACK',
+    'Cerveza especial (pack)',
+    'Cerveza pack.',
+    'Yogur natural, pack',
+  ]) {
+    const issues = createIssuesOf(goodItem({ nameEs }));
+    assert.deepEqual(codes(issues), ['NAME_CARRIES_SIZE'], nameEs);
+    assert.match(issues[0].detail, /ends in "pack"/, nameEs);
+    assert.match(issues[0].detail, /packCount/, nameEs);
+  }
+});
+
+test('a name that only holds the letters of pack, or says it elsewhere, is left alone', () => {
+  for (const nameEs of [
+    'Mochila Backpack',
+    'Pack de cervezas',
+    'Cerveza packs',
+    'Leche entera',
+  ]) {
+    assert.deepEqual(createIssuesOf(goodItem({ nameEs })), [], nameEs);
+  }
+});
+
+test('a name that ends in a counted pack is reported once, by the size check', () => {
+  const issues = createIssuesOf(goodItem({ nameEs: 'Cerveza 6 pack' }));
+  assert.deepEqual(codes(issues), ['NAME_CARRIES_SIZE']);
+  assert.match(issues[0].detail, /states a size/);
+});
+
+test('a CREATE keeps a real barcode and drops an in-store or invalid one', () => {
+  const eanOf = (ean) =>
+    checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      item: { ...goodItem(), ean },
+    }).decision.item.ean;
+
+  assert.equal(eanOf('4006381333931'), '4006381333931');
+  assert.equal(eanOf(' 4006381333931 '), '4006381333931');
+  // One shop's own code, a stub of one, a short code and a wrong check digit.
+  for (const ean of [
+    '2000000000008',
+    '2204500000000',
+    '84100100012',
+    '4006381333932',
+    '',
+    null,
+    undefined,
+  ]) {
+    assert.equal(eanOf(ean), null, JSON.stringify(ean));
+  }
 });

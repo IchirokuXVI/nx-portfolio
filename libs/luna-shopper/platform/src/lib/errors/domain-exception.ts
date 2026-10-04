@@ -408,6 +408,24 @@ export class ItemNeedsACategoryException extends DomainException {
   readonly code = ERROR_CODES.ITEM_NEEDS_A_CATEGORY;
 }
 
+/** The key the refused EAN travels under in {@link ItemEanInvalidException}. */
+export const ITEM_EAN_DETAIL = 'ean';
+
+/** The key that says why, as `readGtin` named it: `IN_STORE`, `LENGTH`, ... */
+export const ITEM_EAN_REASON_DETAIL = 'reason';
+
+/**
+ * A product was given an EAN that is not a real barcode (plan 0184).
+ *
+ * The details are public: the code the request carried and the reason
+ * `readGtin` gave for it. Both come straight from the request, so publishing
+ * them tells the caller nothing it did not send.
+ */
+export class ItemEanInvalidException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EAN_INVALID;
+  override readonly exposesDetails = true;
+}
+
 /**
  * A category with children or products cannot be deleted (plan 0166, rule R4).
  * No details: the category is the one the client asked to delete, and the back

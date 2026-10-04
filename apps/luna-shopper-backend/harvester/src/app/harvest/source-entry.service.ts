@@ -8,6 +8,7 @@ import {
   HarvestRunStatus,
   ItemSourceMatch,
   PriceSourceKind,
+  productGtin,
   SourceEntryStatus,
   type AcceptSourceEntryRequest,
   type BrandSpellingsRequest,
@@ -53,7 +54,12 @@ import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { createdSize } from './source-entry-size';
-import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import {
+  bindFields,
+  createdEan,
+  matchOf,
+  SourceEntryPriceWriter,
+} from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface EntryCursor {
@@ -325,7 +331,11 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const bound = await this.bind(entry, req.itemId);
+    const bound = await this.bind(
+      entry,
+      req.itemId,
+      await this.matchOnAccept(entry, req.itemId)
+    );
     const pricesWritten = await this.writeRowPrices(bound);
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -356,7 +366,9 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const ean = req.ean === undefined ? entry.ean : req.ean;
+    // A real barcode or none (plan 0184). The row keeps what the chain
+    // printed; an in-store code or an invalid one never reaches the product.
+    const ean = createdEan(entry, req.ean);
 
     // EAN is unique in catalog, so a duplicate would be refused by the database
     // anyway. Asking first turns that into a sentence naming the existing item.
@@ -426,7 +438,9 @@ export class SourceEntryService {
       defaultUnit: size.unit,
     });
 
-    const bound = await this.bind(entry, item.id);
+    // The product was created with the row's own barcode when it has a real
+    // one, and then the barcode is what joins the two (plan 0184).
+    const bound = await this.bind(entry, item.id, matchOf(entry, item.ean));
     const pricesWritten = await this.writeRowPrices(bound);
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -760,7 +774,7 @@ export class SourceEntryService {
   }
 
   /**
-   * ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1.
+   * ACTIVE and bound: a decision was made, so the confidence is 1.
    *
    * The fields it sets are {@link bindFields}, shared with the bulk replay of
    * plan 0100 so that what "accepting a row" means to the database is stated
@@ -769,11 +783,35 @@ export class SourceEntryService {
    */
   private async bind(
     entry: SourceCatalogEntry,
-    itemId: string
+    itemId: string,
+    matchedBy: ItemSourceMatch
   ): Promise<SourceCatalogEntry> {
-    const saved = await this.entries.save(bindFields(entry, itemId));
+    const saved = await this.entries.save(
+      bindFields(entry, itemId, new Date(), matchedBy)
+    );
     saved.prices = entry.prices ?? [];
     return saved;
+  }
+
+  /**
+   * What matched the row to the product an accept names (plan 0184): `EAN`
+   * when the product holds the row's own real barcode, `MANUAL` otherwise.
+   *
+   * A barcode is unique in catalog, so asking who holds the row's barcode
+   * answers it in one read. A row with no real barcode asks nothing.
+   */
+  private async matchOnAccept(
+    entry: SourceCatalogEntry,
+    itemId: string
+  ): Promise<ItemSourceMatch> {
+    const printed = productGtin(entry.ean);
+    if (printed === null) {
+      return ItemSourceMatch.MANUAL;
+    }
+    const { item } = await this.catalog.findItemByEan(printed);
+    return item?.id === itemId
+      ? matchOf(entry, item.ean)
+      : ItemSourceMatch.MANUAL;
   }
 
   /**

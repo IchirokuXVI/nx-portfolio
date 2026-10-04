@@ -76,6 +76,83 @@ export function carriesSize(name) {
   return SIZE_PATTERN.test(String(name ?? ''));
 }
 
+/**
+ * A name whose last word is `pack` (backend plan 0184).
+ *
+ * `Cerveza pack` states that the product is a multipack and not how many it
+ * holds, so {@link SIZE_PATTERN} has no number to find. The size and the pack
+ * count already say it, and 103 names of the first catalog ended this way
+ * while most multipacks did not, so the word told a shopper nothing either.
+ * A word that merely contains it (`Backpack`) is not the word.
+ */
+const ENDS_IN_PACK = /(?:^|[^\p{L}\p{N}])pack[^\p{L}\p{N}]*$/iu;
+
+/** True when the name ends in the word `pack`. */
+export function endsInPack(name) {
+  return ENDS_IN_PACK.test(String(name ?? ''));
+}
+
+// ---------------------------------------------------------------------------
+// Barcodes, character for character the contracts function
+// ---------------------------------------------------------------------------
+
+const GTIN_LENGTHS = new Set([8, 12, 13, 14]);
+
+function hasValidCheckDigit(code) {
+  let sum = 0;
+  let weight = 3;
+  for (let index = code.length - 2; index >= 0; index--) {
+    sum += Number(code[index]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  return (10 - (sum % 10)) % 10 === Number(code[code.length - 1]);
+}
+
+/**
+ * What a string is, read as a barcode (backend plan 0184).
+ *
+ * A copy of `readGtin` in
+ * `libs/luna-shopper/contracts/src/lib/barcodes/gtin.ts`, for the reason
+ * {@link brandKey} is a copy: this library is plain `.mjs` with no build step.
+ * The two are held together by `gtin.cases.json`, and every pair in that file
+ * is asserted against this function in `rules.test.mjs`.
+ *
+ * Digits only after a trim. 13 digits starting with 2 is a code one shop
+ * prints on its own scales, `IN_STORE`. Anything else is 8, 12, 13 or 14
+ * digits with a valid check digit, or `INVALID`.
+ */
+export function readGtin(text) {
+  const code = typeof text === 'string' ? text.trim() : '';
+  if (code === '') {
+    return { kind: 'INVALID', reason: 'EMPTY' };
+  }
+  if (!/^[0-9]+$/.test(code)) {
+    return { kind: 'INVALID', reason: 'NOT_DIGITS' };
+  }
+  if (code.length === 13 && code.startsWith('2')) {
+    return { kind: 'IN_STORE', code };
+  }
+  if (!GTIN_LENGTHS.has(code.length)) {
+    return { kind: 'INVALID', reason: 'LENGTH' };
+  }
+  if (!hasValidCheckDigit(code)) {
+    return { kind: 'INVALID', reason: 'CHECK_DIGIT' };
+  }
+  return { kind: 'GTIN', gtin: code };
+}
+
+/**
+ * The barcode a product may hold: the real one `text` is, or null.
+ *
+ * The catalog refuses a product whose EAN is an in-store or invalid code, and
+ * the bulk route creates such a product with no EAN. A decision is read
+ * through this, so the rehearsal create and the real one write the same thing.
+ */
+export function productGtin(text) {
+  const reading = readGtin(text);
+  return reading.kind === 'GTIN' ? reading.gtin : null;
+}
+
 /** True when the normalized brand appears as a run of tokens inside the name. */
 export function carriesBrand(name, brand) {
   const brandKey = normalizeName(brand);
@@ -724,7 +801,9 @@ export function buildDecisionSchema({ categories, units }) {
     type: ['object', 'null'],
     properties: {
       nameEs: { type: 'string' },
-      nameEn: nullableString,
+      // Always written (backend plan 0184), so non null and required like the
+      // three fields the paragraph above is about.
+      nameEn: { type: 'string' },
       brand: nullableString,
       unitSize: { type: ['number', 'null'] },
       // How many the pack holds (backend plans 0162 and 0177). Optional and
@@ -746,7 +825,7 @@ export function buildDecisionSchema({ categories, units }) {
       },
       ean: nullableString,
     },
-    required: ['nameEs', 'categorySlugs', 'defaultUnit'],
+    required: ['nameEs', 'nameEn', 'categorySlugs', 'defaultUnit'],
   };
 
   /**

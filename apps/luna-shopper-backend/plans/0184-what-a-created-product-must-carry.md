@@ -91,17 +91,18 @@ unique index, velista.
 
 ### Acceptance criteria
 
-- [ ] A contracts spec for `readGtin`: a valid EAN-13, a valid EAN-8, a bad check digit,
+- [x] A contracts spec for `readGtin`: a valid EAN-13, a valid EAN-8, a bad check digit,
       `2204500000000`, an 11 digit code, a code with spaces.
-- [ ] A harvester spec on the bulk route: a create with only `es` ends with both names, or
-      is refused with the named code, as chosen.
-- [ ] A harvester spec: a create from a row whose EAN starts with 2 writes a product with a
+- [x] A harvester spec on the bulk route: a create with only `es` ends with both names, or
+      is refused with the named code, as chosen. Chosen: refused, with `NAME_EN_MISSING`.
+- [x] A harvester spec: a create from a row whose EAN starts with 2 writes a product with a
       null EAN, and the row keeps its code.
-- [ ] A harvester spec: accepting a row onto a product with the same real EAN stamps
+- [x] A harvester spec: accepting a row onto a product with the same real EAN stamps
       `EAN`. Accepting onto a product with no EAN stamps `MANUAL`.
-- [ ] A gateway spec: item create with an 11 digit EAN answers 400 with the named code.
-- [ ] Two curation specs: `NAME_EN_MISSING`, and a name that ends in "pack".
-- [ ] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
+- [x] A gateway spec: item create with an 11 digit EAN answers 400 with the named code.
+      The code is `item_ean_invalid`.
+- [x] Two curation specs: `NAME_EN_MISSING`, and a name that ends in "pack".
+- [x] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
 
 ### Action boundaries
 
