@@ -38299,6 +38299,23 @@
               "null"
             ]
           },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -38415,6 +38432,7 @@
           "brand",
           "ean",
           "unitSize",
+          "sizeUnit",
           "sizeFormat",
           "packCount",
           "categoryPath",
@@ -38657,6 +38675,23 @@
               "null"
             ]
           },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -38766,6 +38801,7 @@
           "brand",
           "ean",
           "unitSize",
+          "sizeUnit",
           "sizeFormat",
           "packCount",
           "categoryPath",

@@ -118,6 +118,7 @@ export class RunExecutor implements OnApplicationShutdown {
       name: row.name,
       brand: row.brand,
       unitSize: row.unitSize === null ? null : Number(row.unitSize),
+      sizeUnit: row.sizeUnit ?? null,
       sizeFormat: row.sizeFormat,
       packCount: row.packCount ?? null,
       categoryPath: row.categoryPath ?? [],

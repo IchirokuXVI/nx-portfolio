@@ -181,6 +181,7 @@ describe('DiaCatalogRunner', () => {
       ean: null,
       sizeFormat: '2 L',
       unitSize: 2,
+      sizeUnit: 'LITER',
       packCount: null,
       categoryPath: ['Agua y refrescos', 'Cola'],
       url: 'https://www.dia.es/agua-y-refrescos/cola/p/659',
@@ -215,6 +216,7 @@ describe('DiaCatalogRunner', () => {
     expect(pack).toMatchObject({
       sizeFormat: '2 x 2 L',
       unitSize: 4,
+      sizeUnit: 'LITER',
       packCount: 2,
     });
   });

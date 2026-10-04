@@ -28,6 +28,7 @@ import {
   SOURCE_LOCATION_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
 } from '../../lib/messages/harvest.messages';
+import { SOURCE_SIZE_UNITS } from '../../lib/units/source-size';
 import {
   array,
   boolean,
@@ -173,6 +174,10 @@ const packCountOrNull = (): JsonSchema => ({
   type: ['integer', 'null'],
   minimum: PACK_COUNT_MIN,
   maximum: PACK_COUNT_MAX,
+});
+/** The unit a source's size is in (plan 0177), or null. */
+const sizeUnitOrNull = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...SOURCE_SIZE_UNITS] }, { type: 'null' }],
 });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
 /** A tag bag kept exactly as the provider sent it (plan 0038, section 8.2). */
@@ -415,6 +420,7 @@ const sourceCatalogEntryProperties = {
   brand: nullableString(),
   ean: nullableString(),
   unitSize: numberOrNull(),
+  sizeUnit: sizeUnitOrNull(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
@@ -447,6 +453,7 @@ const sourceCatalogEntryRequired = [
   'brand',
   'ean',
   'unitSize',
+  'sizeUnit',
   'sizeFormat',
   'packCount',
   'categoryPath',

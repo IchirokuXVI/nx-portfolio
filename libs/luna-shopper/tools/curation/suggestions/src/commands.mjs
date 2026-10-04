@@ -943,7 +943,9 @@ export async function decide({
     // The slot's own ids for the slugs, because the catalog create route takes
     // ids (backend plan 0166). The recorded item keeps them for a resume.
     item = withCategoryIds(proposal.item, await rehearsal.listCategories());
-    const created = await rehearsal.createItem(toCreateItemBody(item));
+    const created = await rehearsal.createItem(
+      toCreateItemBody(item, entry.packCount ?? null)
+    );
     rehearsalItemId = created?.id ?? null;
   } catch (error) {
     issues.push(

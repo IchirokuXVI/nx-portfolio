@@ -2,6 +2,7 @@ import {
   ItemSourceMatch,
   PriceSourceKind,
   SourceEntryStatus,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, OneToMany } from 'typeorm';
 import { BaseEntity } from './base.entity';
@@ -111,6 +112,19 @@ export class SourceCatalogEntry extends BaseEntity {
 
   @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
   unitSize!: number | null;
+
+  /**
+   * The catalog unit {@link unitSize} is in, as the source's own adapter
+   * stated it (plan 0177). The source's, like `sizeFormat`: every run rewrites
+   * it, and it is never part of a matching key.
+   *
+   * Null when there is no size, on a row no run has seen since that plan, and
+   * for a size printed in a unit the catalog does not hold, such as a length.
+   * `chk_source_catalog_entries_size_unit` holds it to the five units a size
+   * is measured in.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  sizeUnit!: SourceSizeUnit | null;
 
   /** The source's own token (`kg`, `l`, `ud`, `m`), not a `UnitOfMeasure`. */
   @Column({ type: 'varchar', nullable: true })

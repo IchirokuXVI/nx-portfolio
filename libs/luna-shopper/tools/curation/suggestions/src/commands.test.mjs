@@ -572,6 +572,54 @@ test('a CREATE writes into the rehearsal catalog and never into the main one', a
   assert.deepEqual(row.item.categoryIds, ['cat-milk']);
 });
 
+test('a CREATE carries a pack count through the rehearsal and into the bulk operation (backend plan 0177)', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [
+      // The row read its own count, and the decision states none.
+      entry('e1', 'Café con leche en cápsula', {
+        unitSize: 0.16,
+        sizeUnit: 'KILOGRAM',
+        sizeFormat: 'kg',
+        packCount: 16,
+      }),
+      // The row read none, and the decision states one.
+      entry('e2', 'Leche entera pack 6', { unitSize: 6, sizeUnit: 'LITER' }),
+    ],
+  });
+  await startIn(dir, w);
+
+  const decideRow = (entryId, item) =>
+    decide({
+      runDir: dir,
+      entryId,
+      input: { ...CREATE_MILK, item: { ...CREATE_MILK.item, ...item } },
+      gateways: w.gateways,
+      vocabularies: VOCABULARIES,
+    });
+  assert.equal(
+    (await decideRow('e1', { nameEs: 'Café con leche en cápsula' })).accepted,
+    true
+  );
+  assert.equal(
+    (await decideRow('e2', { nameEs: 'Leche entera', packCount: 6 })).accepted,
+    true
+  );
+
+  // The rehearsal product carries the count the real create will write, so a
+  // later row of the run is compared against what the catalog will hold.
+  assert.deepEqual(
+    w.rehearsalCatalog.rows.map((row) => row.packCount),
+    [16, 6]
+  );
+
+  const [, first, second] = readJsonl(join(dir, 'decisions.jsonl'));
+  const operations = buildOperations([first, second]);
+  // Absent on the first, so the bulk route takes the row's own 16.
+  assert.equal('packCount' in operations[0].item, false);
+  assert.equal(operations[1].item.packCount, 6);
+});
+
 test('a slug the rehearsal slot does not hold is a REVIEW, and writes nothing', async () => {
   const dir = runDir();
   const w = world({ entries: [entry('e1', 'Leche entera 1 L')] });

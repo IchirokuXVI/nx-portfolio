@@ -50,6 +50,12 @@ const PRODUCTS: Array<{
     lang: 'en',
     why: 'the same product in English (section 2.3)',
   },
+  {
+    file: 'product-box-of-capsules.json',
+    id: '11801',
+    lang: 'es',
+    why: 'a box priced as one piece that prints how many capsules it holds (plan 0177)',
+  },
 ];
 
 async function main(): Promise<void> {

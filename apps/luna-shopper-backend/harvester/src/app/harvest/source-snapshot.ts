@@ -1,6 +1,7 @@
 import type {
   ItemView,
   PriceSourceKind,
+  SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -31,6 +32,12 @@ export interface SourceEntryFields {
   brandKey: string | null;
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The catalog unit `unitSize` is in (plan 0177), and null whenever
+   * `unitSize` is. Written with the size on every observation, so the two
+   * cannot describe different reads of the source.
+   */
+  sizeUnit: SourceSizeUnit | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, or null (plan 0162).
@@ -66,6 +73,10 @@ export function sourceGroupChanged(
     (fields.packCount !== undefined &&
       (existing.packCount ?? null) !== fields.packCount) ||
     numeric(existing.unitSize) !== numeric(fields.unitSize) ||
+    // A row written before plan 0177 holds no unit, so the first run to see it
+    // again reports it `updated`, which is true: the row now says something it
+    // did not say before.
+    (existing.sizeUnit ?? null) !== fields.sizeUnit ||
     existing.url !== fields.url ||
     existing.sourceKind !== fields.sourceKind
   );
@@ -91,6 +102,7 @@ export function applySourceGroup(
   row.brandKey = fields.brandKey;
   row.ean = fields.ean;
   row.unitSize = fields.unitSize;
+  row.sizeUnit = fields.sizeUnit;
   row.sizeFormat = fields.sizeFormat;
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;

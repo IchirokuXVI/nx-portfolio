@@ -8,6 +8,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   type ItemPriceBatchEntry,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { Repository } from 'typeorm';
 import type { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
@@ -83,6 +84,13 @@ export interface SourceObservation {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The catalog unit `unitSize` is in, stated by the source's own adapter
+   * (plan 0177). Required, so an adapter cannot write a number without saying
+   * what it counts: null is the answer for no size, and for a size printed in
+   * a unit the catalog does not hold.
+   */
+  sizeUnit: SourceSizeUnit | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
@@ -1074,6 +1082,9 @@ function fieldsOf(
     brandKey: brandKey(observation.brand),
     ean: observation.ean,
     unitSize: observation.unitSize,
+    // Held to the size here as well as in every adapter: a unit beside no
+    // number describes nothing, and the column's own doc says it is null then.
+    sizeUnit: observation.unitSize === null ? null : observation.sizeUnit,
     sizeFormat: observation.sizeFormat,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,

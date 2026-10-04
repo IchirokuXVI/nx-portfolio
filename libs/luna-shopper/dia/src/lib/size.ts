@@ -1,3 +1,8 @@
+import {
+  sourceSizeOf,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
+
 /**
  * The format printed at the end of a DIA product name (plan 0174, section
  * 6.4).
@@ -10,17 +15,24 @@
  * sold and not how much of it there is.
  *
  * The removed text is `sizeFormat`, verbatim. The number read from it is
- * `unitSize`, in the unit DIA printed, the way the El Jamón adapter reads one:
- * `6 x 1,5 L` is 9. A name whose end the parser cannot read keeps the whole
- * name and states no size.
+ * `unitSize`, and `sizeUnit` is the catalog unit that number is in (plan
+ * 0177), the way the El Jamón adapter reads one: `6 x 1,5 L` is 9 `LITER` and
+ * `75 cl` is 750 `MILLILITER`, because the catalog holds no centilitre. A name
+ * whose end the parser cannot read keeps the whole name and states no size.
  */
 export interface DiaSize {
   /** The printed name without its format. Never empty. */
   name: string;
   /** The trailing format, verbatim, or null. */
   sizeFormat: string | null;
-  /** The quantity the format states, in its printed unit, or null. */
+  /** The quantity the format states, in {@link sizeUnit}, or null. */
   unitSize: number | null;
+  /**
+   * The catalog unit {@link unitSize} is in (plan 0177). Null when there is
+   * no size, and for a length (`m`, `cm`), which the catalog has no unit for:
+   * that number stays as it was printed.
+   */
+  sizeUnit: SourceSizeUnit | null;
   /**
    * How many units the name prints before an `x`, or null. The raw count: the
    * caller applies the bounds every source shares (plan 0162).
@@ -77,7 +89,7 @@ export function splitSize(printed: string): DiaSize {
   return {
     name,
     sizeFormat: match[1],
-    unitSize: round(count ? count * amount : amount),
+    ...sourceSizeOf(round(count ? count * amount : amount), match[4]),
     packCount: count,
     approximate: match[5] !== undefined,
   };
@@ -88,6 +100,7 @@ function unsized(text: string): DiaSize {
     name: text,
     sizeFormat: null,
     unitSize: null,
+    sizeUnit: null,
     packCount: null,
     approximate: false,
   };

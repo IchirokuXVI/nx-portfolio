@@ -89,6 +89,10 @@ format apart, and rule 1 merges anything they do not separate.
   what rules 2 and 3 are about: it is evidence, never a name you copy through.
 - `entry.unitSize` and `entry.sizeFormat` are the format. `sizeFormat` is the printed
   string and `unitSize` the number read out of it.
+- `entry.sizeUnit` is the unit of `entry.unitSize`, from the unit vocabulary below, or
+  null. If it is present, trust it over the printed string. A size printed `75 cl` can
+  carry `unitSize` 750 and `sizeUnit` `MILLILITER`. That is 750 ml and not 7,500.
+- `entry.packCount` is the number of pieces in the pack, or null.
 - `entry.categoryPath` is the chain's own shelf path. Read it as evidence for
   `item.categorySlugs`. The vocabulary is ours, and the chain's own words are not in it.
 - `entry.brand` can be null even when the printed name states a brand.
@@ -111,6 +115,11 @@ this same session created, because the search runs again for every entry.
 A candidate carrying `"proposedByLadder": true` is the product the deterministic ladder
 itself proposed. It is the answer the queue is most often waiting on, so read it first, and
 still judge it by rule 1 exactly like any other candidate.
+
+A candidate's `packCount` is the number of pieces in its pack, or null. One chain sizes a
+box of capsules by count, `16 ud`. Another chain sizes the same box by weight, 160 g. Only
+the pack count joins the two sizes. A candidate of 160 g with `packCount` 16 is the same
+box as an entry of 16 units. A candidate of 160 g with no `packCount` is not.
 
 `eanMatch` is the catalog product carrying the entry's own barcode, or null.
 
@@ -148,6 +157,9 @@ list and you `LINK` onto it.
 - `item.defaultUnit` is one value from the unit vocabulary below, and is never null: a
   product with no printed size is sold by the piece, so `defaultUnit` is `UNIT` and
   `unitSize` is null.
+- `item.packCount` is optional, and is a whole number from 2 to 1000. If the entry states
+  the number of pieces and `entry.packCount` is null or wrong, write it. In every other
+  case leave it out, and the product takes `entry.packCount`. Never guess one.
 - `item.categorySlugs` is a list of one or more slugs from the category vocabulary below,
   the best fit first. When the product plainly sits in two sections, name both.
 - `item.ean` is the entry's own barcode when it has one, else null. Never invent one, and

@@ -717,6 +717,7 @@ function observationOf(
     // Neither the listing nor the detail carries one (section 1).
     ean: null,
     unitSize: size.unitSize,
+    sizeUnit: size.sizeUnit,
     sizeFormat: size.sizeFormat,
     packCount: packCountOf(size.packCount),
     categoryPath: [product.firstLeaf.rootName, product.firstLeaf.name],

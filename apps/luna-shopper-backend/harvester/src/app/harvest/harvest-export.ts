@@ -251,6 +251,13 @@ function sizeOf(entry: SourceCatalogEntry): HarvestDocumentSize | null {
   return {
     ...(entry.sizeFormat ? { label: entry.sizeFormat } : {}),
     ...(quantity === null ? {} : { quantity }),
+    // The unit the quantity is in (plan 0177), so an import of this file
+    // writes the same `sizeUnit` the row holds. Only beside a label: the
+    // import reads `unit` as the size text when a size has no label, and a
+    // row with no `sizeFormat` must come back with none.
+    ...(quantity !== null && entry.sizeFormat && entry.sizeUnit
+      ? { unit: entry.sizeUnit }
+      : {}),
   };
 }
 

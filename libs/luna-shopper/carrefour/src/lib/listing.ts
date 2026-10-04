@@ -18,7 +18,11 @@
  * answer: a missing size is a weaker key, an invented one is a wrong key.
  */
 
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import {
+  packCountOf,
+  UnitOfMeasure,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 import { priceToCents, unitPriceLabel } from './price';
 import type { CarrefourCard, CarrefourProduct } from './types';
 
@@ -134,6 +138,12 @@ export interface SplitCardName {
   sizeFormat: string | null;
   /** The size as a number in the card's `measure_unit`, or null. */
   unitSize: number | null;
+  /**
+   * The catalog unit {@link unitSize} is in (plan 0177): `LITER`, `KILOGRAM`
+   * or `UNIT`, the three families a card measures in. Null when there is no
+   * size, and for a length, which the catalog has no unit for.
+   */
+  sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
   packCount: number | null;
 }
@@ -157,7 +167,7 @@ export function splitCardName(
   const trimmed = printed.replace(/\s+/g, ' ').trim();
   const match = TRAILING_SIZE.exec(trimmed);
   if (!match) {
-    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
+    return unsized(trimmed);
   }
 
   const unit = UNITS[match[6].toLowerCase()];
@@ -166,7 +176,7 @@ export function splitCardName(
   // another family is a coincidence: `Café molido 500 g` is a size when the
   // card measures in `kg` and a misread when it measures in `ud`.
   if (!unit || (expected && unit.base !== expected)) {
-    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
+    return unsized(trimmed);
   }
 
   const start = match.index + match[1].length;
@@ -174,20 +184,45 @@ export function splitCardName(
   // A name that is nothing but a size keeps the whole name: an empty name is
   // not a product, and the key it would build joins nothing.
   if (!name) {
-    return { name: trimmed, sizeFormat: null, unitSize: null, packCount: null };
+    return unsized(trimmed);
   }
 
+  // Either shape of the pack phrase states the count, and only one of them
+  // matched, so the first that is set is the one this name used.
+  const unitSize = sizeAsNumber(match[3] ?? match[4], match[5], unit.factor);
   return {
     name,
     // Verbatim, trailing full stop and all, because that is what the chain
     // printed and the matcher is the thing allowed to normalize it.
     sizeFormat: trimmed.slice(start).trim(),
-    // Either shape of the pack phrase states the count, and only one of them
-    // matched, so the first that is set is the one this name used.
-    unitSize: sizeAsNumber(match[3] ?? match[4], match[5], unit.factor),
+    unitSize,
+    // The number is in the family's base unit, so the family names the unit
+    // and a centilitre needs no word of its own: `50 cl.` is 0.5 `LITER`.
+    sizeUnit: unitSize === null ? null : (BASE_UNIT[unit.base] ?? null),
     packCount: packCountIn(match[3] ?? match[4], match[5]),
   };
 }
+
+/** A name that states no size keeps the whole of itself. */
+function unsized(name: string): SplitCardName {
+  return {
+    name,
+    sizeFormat: null,
+    unitSize: null,
+    sizeUnit: null,
+    packCount: null,
+  };
+}
+
+/**
+ * The catalog unit each family's base is (plan 0177). Metres have none, so a
+ * length states a number and no unit.
+ */
+const BASE_UNIT: Readonly<Record<string, SourceSizeUnit>> = {
+  l: UnitOfMeasure.LITER,
+  kg: UnitOfMeasure.KILOGRAM,
+  ud: UnitOfMeasure.UNIT,
+};
 
 /** One count times one quantity, `3x200` or `4 x 1,5`, and nothing else. */
 const COUNT_TIMES_QUANTITY = /^(\d+)\s*x\s*\d+(?:[.,]\d+)?$/i;
@@ -262,6 +297,7 @@ export function readCard(
     name: split.name,
     sizeFormat: split.sizeFormat,
     unitSize: split.unitSize,
+    sizeUnit: split.sizeUnit,
     packCount: split.packCount,
     brand: card.brand?.trim() || null,
     priceCents: priceToCents(card.price),

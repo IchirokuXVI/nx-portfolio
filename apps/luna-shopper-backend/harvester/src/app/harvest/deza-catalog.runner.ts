@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { SourceSizeUnit } from '@portfolio/luna-shopper/contracts';
 import {
   DEZA_CEILING_PAGES,
   DezaClient,
@@ -153,7 +154,11 @@ export class DezaCatalogRunner implements CatalogRunner {
         // The site states neither, and a field invented here is a field that
         // joins two different products in the one place chains meet.
         ean: null,
-        unitSize: null,
+        // The size the adapter's own parser read out of the printed text
+        // (plan 0177). The runner used to write null here whatever the row
+        // printed, so the format gate never ran for a DEZA row.
+        unitSize: product.unitSize,
+        sizeUnit: product.sizeUnit,
         sizeFormat: product.sizeFormat,
         packCount: product.packCount,
         categoryPath: product.categoryPath,
@@ -279,6 +284,9 @@ const MIN_TERM_LENGTH = 4;
 interface CrawledProduct {
   name: string;
   sizeFormat: string | null;
+  /** The number the size states and the unit it is in (plan 0177). */
+  unitSize: number | null;
+  sizeUnit: SourceSizeUnit | null;
   /** Read from the description by the adapter (plan 0162). */
   packCount: number | null;
   brand: string | null;
@@ -392,6 +400,8 @@ class Crawl {
     this.products.set(key, {
       name: row.name,
       sizeFormat: row.sizeFormat,
+      unitSize: row.unitSize,
+      sizeUnit: row.sizeUnit,
       packCount: row.packCount,
       brand: row.brand,
       // The attribute icons sit beside the section path because they are the

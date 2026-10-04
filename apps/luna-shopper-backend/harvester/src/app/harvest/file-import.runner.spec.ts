@@ -195,6 +195,73 @@ describe('FileImportRunner (plan 0086)', () => {
     expect(priceRows[0]).toMatchObject({ price: 0.89, currency: 'EUR' });
   });
 
+  it('writes the size with the unit the document states it in (plan 0177)', async () => {
+    const { runner, context, saved } = build({
+      document: document({
+        products: [
+          // The shape the leaflet tool writes: the label is what was printed,
+          // and the quantity is already millilitres.
+          {
+            name: 'Vino verdejo',
+            size: { label: '75 cl', quantity: 750, unit: 'ml' },
+          },
+          // A producer that kept the printed unit: centilitres are written as
+          // millilitres, as every adapter writes them.
+          {
+            name: 'Cerveza especial',
+            size: { label: '33 cl', quantity: 33, unit: 'cl' },
+          },
+          {
+            name: 'Aceite de oliva',
+            size: { label: '1 L', quantity: 1, unit: 'l' },
+          },
+          {
+            name: 'Arroz redondo',
+            size: { label: '1 kg', quantity: 1, unit: 'kg' },
+          },
+          {
+            name: 'Café en cápsulas',
+            size: { label: '16 ud', quantity: 16, unit: 'unit' },
+          },
+          // What `harvest-export` writes for a row that states its unit.
+          {
+            name: 'Leche entera',
+            size: { label: '1,5 l', quantity: 1500, unit: 'MILLILITER' },
+          },
+          // No unit, which is every document written before this plan: the
+          // quantity is kept and nothing claims to know what it counts.
+          { name: 'Yogur natural', size: { label: '4x125 g', quantity: 500 } },
+          // A unit the catalog does not hold.
+          {
+            name: 'Papel de aluminio',
+            size: { label: '30 m', quantity: 30, unit: 'm' },
+          },
+          { name: 'Pan de molde' },
+        ],
+      }),
+    });
+
+    await runner.run(context, input);
+
+    expect(
+      saved.map((row) => [row.name, row.sizeFormat, row.unitSize, row.sizeUnit])
+    ).toEqual([
+      ['Vino verdejo', '75 cl', 750, 'MILLILITER'],
+      ['Cerveza especial', '33 cl', 330, 'MILLILITER'],
+      ['Aceite de oliva', '1 L', 1, 'LITER'],
+      ['Arroz redondo', '1 kg', 1, 'KILOGRAM'],
+      ['Café en cápsulas', '16 ud', 16, 'UNIT'],
+      ['Leche entera', '1,5 l', 1500, 'MILLILITER'],
+      ['Yogur natural', '4x125 g', 500, null],
+      ['Papel de aluminio', '30 m', 30, null],
+      ['Pan de molde', null, null, null],
+    ]);
+    // The key is built from the name and the printed label, and from nothing
+    // this plan reads.
+    expect(saved[0].externalId).toBe(entryKey('Vino verdejo', '75 cl'));
+    expect(saved[1].externalId).toBe(entryKey('Cerveza especial', '33 cl'));
+  });
+
   it('writes the unit price alone for a product with no till price', async () => {
     const { runner, context, priceRows } = build({
       document: document({

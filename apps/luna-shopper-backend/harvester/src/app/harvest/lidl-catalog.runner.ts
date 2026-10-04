@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
+import {
+  PriceScopeKind,
+  sourceSizeUnitOf,
+} from '@portfolio/luna-shopper/contracts';
 import {
   isGroceryCategory,
   LidlClient,
@@ -230,6 +233,9 @@ function observationOf(product: LidlProduct): SourceObservation {
     brand: product.brand,
     ean: product.ean,
     unitSize: product.unitSize,
+    // The unit the adapter converted the printed size into (plan 0177): `75cl`
+    // is 750 here and `1,28 l` is 1.28, and this is what says which is which.
+    sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
     sizeFormat: product.sizeFormat,
     packCount: product.packCount,
     categoryPath: product.categoryPath,

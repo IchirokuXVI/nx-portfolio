@@ -938,6 +938,199 @@ test('FORMAT_MISMATCH compares the numbers when a unit cannot be read', () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Backend plan 0177: the row states its own unit, and a pack count joins a
+// count to a weight
+// ---------------------------------------------------------------------------
+
+test('"75 cl" stated as 750 ml links onto a 750 ml product', () => {
+  // What LIDL and the leaflet import write: the number is already millilitres
+  // and the printed text still says centilitres. The row's own unit is read,
+  // so the text is never multiplied by ten on top of it.
+  const entry = { unitSize: 750, sizeUnit: 'MILLILITER', sizeFormat: '75 cl' };
+  assert.deepEqual(
+    linkIssues(entry, { unitSize: 750, defaultUnit: 'MILLILITER' }),
+    []
+  );
+  assert.deepEqual(
+    linkIssues(entry, { unitSize: 0.75, defaultUnit: 'LITER' }),
+    []
+  );
+});
+
+test('"75 cl" stated as 750 ml is refused onto a 500 ml product', () => {
+  const found = validateDecision({
+    decision: linkDecision(),
+    entry: {
+      ...ENTRY,
+      unitSize: 750,
+      sizeUnit: 'MILLILITER',
+      sizeFormat: '75 cl',
+    },
+    supermarket: MERCADONA,
+    linkTarget: { id: 'i1', unitSize: 500, defaultUnit: 'MILLILITER' },
+    categories: CATEGORIES,
+    units: UNITS,
+  });
+  assert.deepEqual(codes(found), ['FORMAT_MISMATCH']);
+  // The detail states the unit the row is in, not the printed word.
+  assert.match(found[0].detail, /750 MILLILITER.*500 MILLILITER/);
+});
+
+test('the row unit is read first, whatever the printed text ends in', () => {
+  // The six leaflet links the October 2026 curation saw refused: Burn 50 cl,
+  // a vinegar "37,5 cl" and the rest, each already in millilitres.
+  for (const [unitSize, sizeFormat] of [
+    [500, '50 cl'],
+    [375, '37,5 cl'],
+    [750, '75cl'],
+  ]) {
+    assert.deepEqual(
+      linkIssues(
+        { unitSize, sizeUnit: 'MILLILITER', sizeFormat },
+        { unitSize, defaultUnit: 'MILLILITER' }
+      ),
+      [],
+      sizeFormat
+    );
+  }
+  // One source, two shapes: LIDL keeps `1,28 l` at 1.28 and says so.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 1.28, sizeUnit: 'LITER', sizeFormat: '1,28 l' },
+      { unitSize: 1280, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+});
+
+test('a row with no sizeUnit falls back to the printed text, as before', () => {
+  // A row no run has seen since the plan. It compares exactly as it did, which
+  // is right for a source that kept the printed unit...
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 33, sizeUnit: null, sizeFormat: '33 cl' },
+      { unitSize: 330, defaultUnit: 'MILLILITER' }
+    ),
+    []
+  );
+  // ...and still wrong for one that had already converted, which is the
+  // defect a run rewriting the row removes.
+  assert.ok(
+    linkIssues(
+      { unitSize: 750, sizeFormat: '75 cl' },
+      { unitSize: 750, defaultUnit: 'MILLILITER' }
+    ).includes('FORMAT_MISMATCH')
+  );
+});
+
+test('"16 ud" links onto 160 g with packCount 16', () => {
+  // A box of sixteen capsules, sized by count at one chain and by weight at
+  // another. The pack count is what says they are one box.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 160, defaultUnit: 'GRAM', packCount: 16 }
+    ),
+    []
+  );
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 0.16, defaultUnit: 'KILOGRAM', packCount: 16 }
+    ),
+    []
+  );
+});
+
+test('"16 ud" is refused onto 160 g with no pack count', () => {
+  for (const packCount of [null, undefined]) {
+    const found = validateDecision({
+      decision: linkDecision(),
+      entry: {
+        ...ENTRY,
+        unitSize: 16,
+        sizeUnit: 'UNIT',
+        sizeFormat: '16 ud',
+      },
+      supermarket: MERCADONA,
+      linkTarget: { id: 'i1', unitSize: 160, defaultUnit: 'GRAM', packCount },
+      categories: CATEGORIES,
+      units: UNITS,
+    });
+    assert.deepEqual(codes(found), ['FORMAT_MISMATCH']);
+    assert.match(found[0].detail, /16 UNIT.*160 GRAM/);
+  }
+});
+
+test('a count and a weight are joined by the same pack count and by nothing else', () => {
+  // A different count is a different box.
+  assert.ok(
+    linkIssues(
+      { unitSize: 16, sizeUnit: 'UNIT', sizeFormat: '16 ud' },
+      { unitSize: 300, defaultUnit: 'GRAM', packCount: 30 }
+    ).includes('FORMAT_MISMATCH')
+  );
+  // The other way round: the row is the one sized by weight, as Mercadona
+  // states product 11801, and the product was created from a `16 ud` row.
+  const byWeight = {
+    unitSize: 0.16,
+    sizeUnit: 'KILOGRAM',
+    sizeFormat: 'kg',
+    packCount: 16,
+  };
+  assert.deepEqual(
+    linkIssues(byWeight, { unitSize: 16, defaultUnit: 'UNIT' }),
+    []
+  );
+  assert.ok(
+    linkIssues(
+      { ...byWeight, packCount: null },
+      { unitSize: 16, defaultUnit: 'UNIT' }
+    ).includes('FORMAT_MISMATCH')
+  );
+  // Both sides stating one count agree, whatever the count side's size reads.
+  assert.deepEqual(
+    linkIssues(
+      { unitSize: 1, sizeUnit: 'UNIT', sizeFormat: 'ud', packCount: 16 },
+      { unitSize: 160, defaultUnit: 'GRAM', packCount: 16 }
+    ),
+    []
+  );
+  // A weight is still never a volume, pack count or not.
+  assert.ok(
+    linkIssues(
+      { unitSize: 160, sizeUnit: 'GRAM', sizeFormat: '160 g', packCount: 16 },
+      { unitSize: 160, defaultUnit: 'MILLILITER', packCount: 16 }
+    ).includes('FORMAT_MISMATCH')
+  );
+});
+
+test('a CREATE can carry packCount, and only a count that is one', () => {
+  const shape = (packCount) =>
+    checkDecisionShape({
+      decision: 'CREATE',
+      confidence: 1,
+      issues: [],
+      reasoning: '',
+      item: { ...goodItem(), packCount },
+    });
+
+  assert.equal(shape(16).decision.item.packCount, 16);
+  // Null, absent and 1 state no count, and the key is then absent, which is
+  // what lets the create take the count the row itself read.
+  for (const none of [null, undefined, 1]) {
+    const checked = shape(none);
+    assert.equal(checked.ok, true);
+    assert.equal('packCount' in checked.decision.item, false);
+  }
+  for (const bad of [0, 1001, 2.5, '16']) {
+    const checked = shape(bad);
+    assert.equal(checked.ok, false, String(bad));
+    assert.match(checked.error, /item\.packCount/);
+  }
+});
+
 test('LINK_TARGET_NOT_SHOWN fires in place of LINK_TARGET_MISSING', () => {
   const found = validateDecision({
     decision: linkDecision('i-real'),

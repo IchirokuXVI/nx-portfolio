@@ -4,9 +4,12 @@ import {
   PriceScopeKind,
   PriceSourceKind,
   SourceEntryStatus,
+  sourceSizeOf,
   type HarvestDocumentProduct,
   type HarvestDocumentScope,
+  type HarvestDocumentSize,
   type HarvestRunWarning,
+  type SourceSize,
 } from '@portfolio/luna-shopper/contracts';
 import { readHarvestDocument } from './harvest-document.reader';
 import { resolveImportWindow, type ImportWindow } from './import-window';
@@ -225,7 +228,10 @@ export class FileImportRunner {
       name: product.name,
       brand: product.brand ?? null,
       ean: product.ean ?? null,
-      unitSize: product.size?.quantity ?? null,
+      // `size.quantity` in the unit `size.unit` names (plan 0177). The unit
+      // used to be dropped, which left a 750 read from `75 cl` with nothing to
+      // say it was already millilitres.
+      ...sizeOf(product.size),
       sizeFormat,
       categoryPath: product.category_path ?? [],
       url: product.url ?? null,
@@ -304,6 +310,25 @@ function pricesOf(
       validUntil: own?.validUntil ?? null,
     };
   });
+}
+
+/**
+ * A document's size as the row holds it: the number, and the catalog unit the
+ * number is in (plan 0177).
+ *
+ * `size.unit` is free text in the file schema, so it is read the way a printed
+ * unit is: `ml`, `MILLILITER`, `unit` and `ud` all name a catalog unit, and a
+ * centilitre is written as ten millilitres. A unit the catalog does not hold,
+ * or no unit at all, keeps the quantity as the document stated it and states
+ * no unit, which is what every row imported before this plan says.
+ *
+ * `size.label` is not read here. It is the row's `sizeFormat` and half of its
+ * key, and it stays exactly what the source printed.
+ */
+export function sizeOf(
+  size: HarvestDocumentSize | null | undefined
+): SourceSize {
+  return sourceSizeOf(size?.quantity ?? null, size?.unit ?? null);
 }
 
 /** The keys more than one product in this document resolves to (D2). */

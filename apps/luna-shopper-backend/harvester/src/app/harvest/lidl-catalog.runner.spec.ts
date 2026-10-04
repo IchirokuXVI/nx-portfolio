@@ -287,6 +287,7 @@ describe('LidlCatalogRunner', () => {
       externalId: '1',
       ean: '4335619207615',
       unitSize: 500,
+      sizeUnit: 'GRAM',
       sizeFormat: '500 g',
     });
     expect(report.products[0].prices[0]).toMatchObject({

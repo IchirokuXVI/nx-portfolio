@@ -4,6 +4,8 @@
  * rows (plan 0085, section 5).
  */
 
+import type { SourceSizeUnit } from '@portfolio/luna-shopper/contracts';
+
 /** One node of the section tree, read from the search form rather than pinned. */
 export interface DezaSection {
   /** The chain's own code, e.g. `W011000009`. Empty string is "every section". */
@@ -44,6 +46,13 @@ export interface DezaProductRow {
   name: string;
   /** The trailing size, **verbatim**, or null when the row states none. */
   sizeFormat: string | null;
+  /**
+   * The number {@link sizeFormat} states, in {@link sizeUnit} (plan 0177), or
+   * null when it states none this adapter can read without inventing.
+   */
+  unitSize: number | null;
+  /** The catalog unit {@link unitSize} is in, and null exactly when it is null. */
+  sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, read from the description (plan 0162), or null. */
   packCount: number | null;
   /** The longest run of capitals in {@link name}, or null (section 8). */

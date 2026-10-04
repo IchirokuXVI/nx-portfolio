@@ -11,8 +11,38 @@ describe('splitCardName', () => {
       name: 'Agua mineral Bezoya',
       sizeFormat: '1,5 l.',
       unitSize: 1.5,
+      sizeUnit: 'LITER',
       packCount: null,
     });
+  });
+
+  it('states the unit the number is in, for each family a card measures in (plan 0177)', () => {
+    // The number is in the family's base unit, so a centilitre is a hundredth
+    // of a litre here and the unit says so.
+    expect(
+      splitCardName('Cerveza Mahou clásica lata 33 cl.', 'l')
+    ).toMatchObject({ unitSize: 0.33, sizeUnit: 'LITER' });
+    expect(splitCardName('Agua mineral Bezoya 1,5 l.', 'l')).toMatchObject({
+      unitSize: 1.5,
+      sizeUnit: 'LITER',
+    });
+    expect(splitCardName('Arroz redondo SOS 1 kg.', 'kg')).toMatchObject({
+      unitSize: 1,
+      sizeUnit: 'KILOGRAM',
+    });
+    expect(splitCardName('Café molido 500 g', 'kg')).toMatchObject({
+      unitSize: 0.5,
+      sizeUnit: 'KILOGRAM',
+    });
+    expect(
+      splitCardName('Cápsulas de café CARREFOUR 16 ud.', 'ud')
+    ).toMatchObject({ unitSize: 16, sizeUnit: 'UNIT' });
+  });
+
+  it('states no unit for a length, which the catalog has none for', () => {
+    expect(
+      splitCardName('Papel de aluminio CARREFOUR 30 m.', 'm')
+    ).toMatchObject({ sizeFormat: '30 m.', unitSize: 30, sizeUnit: null });
   });
 
   it('converts the size into the unit the card measures in', () => {
@@ -34,6 +64,7 @@ describe('splitCardName', () => {
       name: 'Leche entera CARREFOUR',
       sizeFormat: 'pack de 9 unidades de 1 l.',
       unitSize: 9,
+      sizeUnit: 'LITER',
       packCount: 9,
     });
   });
@@ -98,6 +129,7 @@ describe('splitCardName', () => {
       name: 'Rosquillos EL CATETO tecla 36',
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
     });
   });
@@ -109,6 +141,7 @@ describe('splitCardName', () => {
       name: 'Servilletas CARREFOUR 30 cm',
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
     });
   });
@@ -123,11 +156,13 @@ describe('splitCardName', () => {
       // matcher, and rewriting it here destroys what the chain printed.
       sizeFormat: '28+16 lavados',
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
     });
     expect(splitCardName('Zumo DON SIMON 3x200 ml', 'l')).toMatchObject({
       sizeFormat: '3x200 ml',
       unitSize: null,
+      sizeUnit: null,
       packCount: 3,
     });
   });
@@ -137,6 +172,7 @@ describe('splitCardName', () => {
       name: '1,5 l',
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
     });
   });

@@ -267,6 +267,13 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       expect.objectContaining({ scopeKey: '4661', price: 8.75 }),
     ]);
     expect(report.products[0].ean).toBe('8480000135636');
+    // The size and the unit it is in, from the one detail payload (plan
+    // 0177). The printed text is the listing's `size_format`, untouched.
+    expect(report.products[0]).toMatchObject({
+      unitSize: 1,
+      sizeUnit: 'LITER',
+      sizeFormat: 'l',
+    });
   });
 
   it('declares each warehouse as a LOCAL_AREA scope before any price names it', async () => {

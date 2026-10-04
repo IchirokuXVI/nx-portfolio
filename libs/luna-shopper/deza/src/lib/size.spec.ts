@@ -1,4 +1,4 @@
-import { packCountIn, splitSize } from './size';
+import { packCountIn, sizeOf, splitSize } from './size';
 
 /**
  * Real descriptions, read off the live listing on 2026-09-05, kept here rather
@@ -104,6 +104,61 @@ describe('splitSize', () => {
       name: 'Leche ALTEZA',
       sizeFormat: '1 Kg',
     });
+  });
+});
+
+describe('sizeOf (plan 0177)', () => {
+  it.each([
+    ['75 cl', 750, 'MILLILITER'],
+    ['1 L', 1, 'LITER'],
+    ['1.5 L', 1.5, 'LITER'],
+    ['1,75 l', 1.75, 'LITER'],
+    ['1 Kg', 1, 'KILOGRAM'],
+    ['400 g', 400, 'GRAM'],
+    ['10 ud', 10, 'UNIT'],
+    ['16 ud', 16, 'UNIT'],
+    ['44 lavados', 44, 'UNIT'],
+  ])('reads %p as %p %p', (sizeFormat, unitSize, sizeUnit) => {
+    expect(sizeOf(sizeFormat)).toEqual({ unitSize, sizeUnit });
+  });
+
+  it('states a multiplied pack as one pack', () => {
+    expect(sizeOf('3x187 ml')).toEqual({
+      unitSize: 561,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(sizeOf('5x30 g')).toEqual({ unitSize: 150, sizeUnit: 'GRAM' });
+    expect(sizeOf('6x33 cl')).toEqual({
+      unitSize: 1980,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
+  it('states no size for a sum, whose arithmetic the chain did not state', () => {
+    expect(sizeOf('23+12 lavados')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('states no size for a length, which the catalog has no unit for', () => {
+    expect(sizeOf('30 m')).toEqual({ unitSize: null, sizeUnit: null });
+    expect(sizeOf('125x157 cm')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('states no size where the row states none', () => {
+    expect(sizeOf(null)).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('reads the size of every row of the table that prints one number', () => {
+    // The same real descriptions the split is judged against, so the two
+    // cannot disagree about where a size starts.
+    for (const [description, , sizeFormat] of TABLE) {
+      const size = sizeOf(splitSize(description).sizeFormat);
+      if (sizeFormat === null || sizeFormat.includes('+')) {
+        expect(size).toEqual({ unitSize: null, sizeUnit: null });
+      } else {
+        expect(size.unitSize).toBeGreaterThan(0);
+        expect(size.sizeUnit).not.toBeNull();
+      }
+    }
   });
 });
 
