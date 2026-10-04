@@ -1,3 +1,5 @@
+> **PR:** [#621](https://github.com/IchirokuXVI/nx-portfolio/pull/621)
+
 # 0011 A release task runs in a window, on data it expects
 
 > Asked for by the owner on 2026-10-03, before the first curated catalog moves to staging
