@@ -73,17 +73,19 @@ function toListProduct(
 ): MercadonaListProduct {
   const price = readRecord(raw, 'price_instructions');
   const sizeFormat = readString(price, 'size_format');
+  const soldByWeight = readSoldByWeight(price);
   return {
     externalId: readString(raw, 'id') ?? '',
     displayName: readString(raw, 'display_name') ?? '',
     packaging: readString(raw, 'packaging'),
     shareUrl: readString(raw, 'share_url'),
     published: readBoolean(raw, 'published') ?? true,
-    unitSize: readUnitSize(price),
+    soldByWeight,
+    unitSize: soldByWeight ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     sizeFormat,
     packCount: readPackCount(price),
-    price: readNumber(price, 'unit_price'),
+    price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readString(price, 'reference_format'),
     categoryPath: path,
@@ -116,6 +118,7 @@ export function normalizeProduct(
   const path = options.categoryPath ?? readProductCategoryPath(raw);
   const spanishName = readString(raw, 'display_name') ?? '';
   const english = options.englishName?.trim();
+  const soldByWeight = readSoldByWeight(price);
 
   return {
     externalId: readString(raw, 'id') ?? '',
@@ -128,12 +131,13 @@ export function normalizeProduct(
       ...(english ? { en: english } : {}),
     },
     brand: readString(raw, 'brand'),
-    unitSize: readUnitSize(price),
+    soldByWeight,
+    unitSize: soldByWeight ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     packCount: readPackCount(price),
     categorySlug: resolveCategory(path),
     categoryPath: path.map((node) => node.name),
-    price: readNumber(price, 'unit_price'),
+    price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
     unitPriceLabel: readString(price, 'reference_format'),
     currency: 'EUR',
@@ -146,8 +150,56 @@ export function normalizeProduct(
 }
 
 /**
+ * Whether the chain sells the product by weight (plan 0181).
+ *
+ * **`approx_size` is the field.** It is true on a piece whose weight is not
+ * the same on every pack: a piece of cheese, a tray of meat, loose fruit. The
+ * weight the payload states for such a piece is an estimate, and the owner's
+ * rule is that a weight that is not the same on every pack is not a format.
+ *
+ * Proved by `product-approximate-weight.json`, product 50946, captured on
+ * 2026-10-04: a piece of cheese answers `approx_size: true`, `unit_size:
+ * 1.54`, `size_format: "kg"`, `unit_price: "14.49"`, `bulk_price: "9.41"`
+ * and `reference_format: "kg"`, under the in-store barcode 2105600509460.
+ *
+ * **An in-store barcode does not say it.** Product 84692, in
+ * `product-fixed-pack-in-store-barcode.json`, carries one too
+ * (2105972846927) and answers `approx_size: false`: a croissant of 0.05 kg
+ * at 0.55, the same on every piece. So a barcode that starts with 2 is never
+ * read as sold by weight. `selling_method` is 0 on both, so it does not
+ * separate them either.
+ *
+ * The size format must be `kg` as well, because the price written for such a
+ * product is the price of a kilo, and `bulk_price` is one only then.
+ */
+function readSoldByWeight(price: Json): boolean {
+  return (
+    readBoolean(price, 'approx_size') === true &&
+    mapSizeFormat(readString(price, 'size_format')) === UnitOfMeasure.KILOGRAM
+  );
+}
+
+/**
+ * The price of the product: of one pack, or of a kilo when the product is
+ * sold by weight (plan 0181).
+ *
+ * `unit_price` is the price of one piece. For a piece sold by approximate
+ * weight it is `bulk_price` times an estimated weight, so a 1.54 kg cheese
+ * carried 14.49 beside 9.41 a kilo, and the same cheese in another warehouse
+ * carried another number for the same kilo. The product has no size, so its
+ * price is the price of a kilo: `bulk_price`, read verbatim and never
+ * computed (plan 0038, section 2.4).
+ */
+function readPrice(price: Json, soldByWeight: boolean): number | null {
+  return readNumber(price, soldByWeight ? 'bulk_price' : 'unit_price');
+}
+
+/**
  * The size the chain states, or null when the number it sent is not one (plan
  * 0183).
+ *
+ * A product sold by weight never reaches this: its size is null, because the
+ * weight the payload states is an estimate (plan 0181).
  *
  * `unit_size` is the size as it stands for every product but two kinds.
  *
@@ -315,6 +367,7 @@ export function unavailableProduct(
     ean: null,
     name: {},
     brand: null,
+    soldByWeight: false,
     unitSize: null,
     unit: null,
     packCount: null,

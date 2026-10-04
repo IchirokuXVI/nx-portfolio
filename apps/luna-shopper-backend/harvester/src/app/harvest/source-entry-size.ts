@@ -27,6 +27,13 @@ export interface NamedSize {
  * The row's unit is the one it states (`sizeUnit`, plan 0177), then the guess
  * from the printed text for a row written before that plan, then `UNIT`.
  *
+ * **A row sold by weight creates a product by the kilo (plan 0181).** When
+ * the operation names neither a size nor a unit, the product is `KILOGRAM`
+ * with no size, whatever the row prints: a leaflet tile sold by the kilo can
+ * print `pieza` or nothing at all, and the guess from that text is `UNIT`.
+ * An operation that names a size or a unit is answered as below, because that
+ * is a person saying the pack is fixed after all.
+ *
  * **A size the operation names is in the row's unit unless it names a unit
  * too.** A request that names a size and no unit is converted with the row's
  * unit, the same way. A request that names the unit gets that unit, whatever
@@ -44,9 +51,19 @@ export interface NamedSize {
  * the row's number is written as it stands.
  */
 export function createdSize(
-  entry: Pick<SourceCatalogEntry, 'unitSize' | 'sizeUnit' | 'sizeFormat'>,
+  entry: Pick<
+    SourceCatalogEntry,
+    'unitSize' | 'sizeUnit' | 'sizeFormat' | 'soldByWeight'
+  >,
   named: NamedSize
 ): BaseUnitSize {
+  if (
+    entry.soldByWeight === true &&
+    named.unitSize === undefined &&
+    named.defaultUnit === undefined
+  ) {
+    return { unitSize: null, unit: UnitOfMeasure.KILOGRAM };
+  }
   const unitSize =
     named.unitSize === undefined
       ? entry.unitSize === null

@@ -188,11 +188,15 @@ describeIntegration('SourceEntrySizeUnit1758000000000 (real Postgres)', () => {
   }, 180_000);
 
   it('a run writes the unit beside the size, and the key stays what it was', async () => {
-    const entries = probe.getRepository(SourceCatalogEntry);
-    const row = await entries.findOneByOrFail({
-      supermarketId: CHAIN,
-      externalId: 'eljamon-6x33cl',
-    });
+    // Read and written with SQL and not through the repository (plan 0181).
+    // The probe stops at this migration and the entity describes the newest
+    // schema, so a repository selects a column a later plan added, and this
+    // case failed the day that plan landed.
+    const [row]: SourceCatalogEntry[] = await probe.query(
+      `SELECT * FROM "source_catalog_entries"
+        WHERE "supermarketId" = $1 AND "externalId" = 'eljamon-6x33cl'`,
+      [CHAIN]
+    );
 
     // What the El Jamón adapter states for this row after the plan: the same
     // printed text, the size in millilitres, and the unit that says so.
@@ -205,13 +209,30 @@ describeIntegration('SourceEntrySizeUnit1758000000000 (real Postgres)', () => {
       ean: row.ean,
       unitSize: 1980,
       sizeUnit: UnitOfMeasure.MILLILITER,
+      soldByWeight: false,
       sizeFormat: row.sizeFormat,
       packCount: 6,
       categoryPath: row.categoryPath,
       url: row.url,
       extra: row.extra,
     });
-    await entries.save(row);
+    // Every column the source group holds in this schema that the case reads
+    // back, the two halves of the key included, as `applySourceGroup` left
+    // them.
+    await probe.query(
+      `UPDATE "source_catalog_entries"
+          SET "externalId" = $1, "sizeFormat" = $2, "unitSize" = $3,
+              "sizeUnit" = $4, "packCount" = $5
+        WHERE "id" = $6`,
+      [
+        row.externalId,
+        row.sizeFormat,
+        row.unitSize,
+        row.sizeUnit,
+        row.packCount,
+        row.id,
+      ]
+    );
 
     const stored = (await read(probe)).find(
       (entry) => entry.externalId === 'eljamon-6x33cl'

@@ -93,6 +93,12 @@ format apart, and rule 1 merges anything they do not separate.
   null. If it is present, trust it over the printed string. A size printed `75 cl` can
   carry `unitSize` 750 and `sizeUnit` `MILLILITER`. That is 750 ml and not 7,500.
 - `entry.packCount` is the number of pieces in the pack, or null.
+- `entry.soldByWeight` is true when the chain sells the product by weight: a piece of
+  cheese, a tray of meat, loose fruit. The weight is not the same on every pack, so it is
+  not a format. The entry has no `unitSize`, and its prices are the price of a kilo. A
+  weight in `entry.sizeFormat` or in the name of such an entry is an estimate. Do not use
+  it to tell two products apart. When you `CREATE` from such an entry, write
+  `item.defaultUnit` `KILOGRAM` and `item.unitSize` null.
 - `entry.categoryPath` is the chain's own shelf path. Read it as evidence for
   `item.categorySlugs`. The vocabulary is ours, and the chain's own words are not in it.
 - `entry.brand` can be null even when the printed name states a brand.

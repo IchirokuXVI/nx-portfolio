@@ -744,7 +744,8 @@ export interface DiscoveredPlaceGroup {
  *
  * The fields fall into two groups, and the split is the contract. The first is
  * the **source's**, and every run rewrites it verbatim: `name`, `brand`, `ean`,
- * `unitSize`, `sizeUnit`, `sizeFormat`, `categoryPath`, `url`, `extra`. The second is a
+ * `unitSize`, `sizeUnit`, `soldByWeight`, `sizeFormat`, `categoryPath`, `url`,
+ * `extra`. The second is a
  * **person's**, or the EAN rung's, and a run only reads it: `itemId`,
  * `candidateEntryId`, `status`, `matchedBy`, `confidence`, `decidedAt`.
  *
@@ -773,6 +774,17 @@ export interface SourceCatalogEntryView {
    * 750 and another keeps `6x33cl` at 198.
    */
   sizeUnit: SourceSizeUnit | null;
+  /**
+   * Whether the source sells the product by weight (plan 0181): a piece of
+   * cheese, a tray of meat, loose fruit, whose weight is not the same on
+   * every pack. The row then states no size (`unitSize` and `sizeUnit` are
+   * null) and every price it holds is the price of a kilo. A product created
+   * from it defaults to `KILOGRAM` with no size.
+   *
+   * False on a row no run has read whole since that plan, and for a source
+   * whose payload has no field that says it.
+   */
+  soldByWeight: boolean;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**

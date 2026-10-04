@@ -207,6 +207,32 @@ test('the packet shows the unit and the pack count of the entry (backend plan 01
   assert.equal(old.entry.packCount, null);
 });
 
+test('the packet shows whether the entry is sold by weight (backend plan 0181)', () => {
+  const weighed = buildEntryPacket({
+    entry: entry({
+      unitSize: null,
+      sizeUnit: null,
+      sizeFormat: 'kg',
+      soldByWeight: true,
+    }),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+  });
+  assert.equal(weighed.entry.soldByWeight, true);
+  assert.equal(weighed.entry.unitSize, null);
+
+  // A row no run has read whole since the plan carries no such field, and the
+  // packet answers false rather than leaving the key out.
+  const old = buildEntryPacket({
+    entry: entry(),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+  });
+  assert.equal(old.entry.soldByWeight, false);
+});
+
 test('a candidate shows its pack count, and null when it has none', () => {
   assert.equal(
     toCandidate({ id: 'i1', name: {}, unitSize: 160, packCount: 16 }).packCount,

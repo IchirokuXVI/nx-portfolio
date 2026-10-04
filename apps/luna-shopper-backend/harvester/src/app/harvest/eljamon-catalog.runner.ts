@@ -302,6 +302,10 @@ function observationOf(
     ean: null,
     unitSize: size.unitSize,
     sizeUnit: size.sizeUnit,
+    // A bare `kg` after the comma (plan 0181): the row is weighed at the till
+    // and the price the chain prints for it is already the price of a kilo, so
+    // nothing about the price changes here.
+    soldByWeight: size.soldByWeight,
     sizeFormat: size.sizeFormat,
     packCount: size.packCount,
     categoryPath:

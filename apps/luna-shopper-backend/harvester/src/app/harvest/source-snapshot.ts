@@ -38,6 +38,12 @@ export interface SourceEntryFields {
    * cannot describe different reads of the source.
    */
   sizeUnit: SourceSizeUnit | null;
+  /**
+   * Whether the product is sold by weight (plan 0181). When it is, `unitSize`
+   * and `sizeUnit` are both null: the weight is not the same on every pack,
+   * so it is not a size.
+   */
+  soldByWeight: boolean;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, or null (plan 0162).
@@ -77,6 +83,7 @@ export function sourceGroupChanged(
     // again reports it `updated`, which is true: the row now says something it
     // did not say before.
     (existing.sizeUnit ?? null) !== fields.sizeUnit ||
+    (existing.soldByWeight ?? false) !== fields.soldByWeight ||
     existing.url !== fields.url ||
     existing.sourceKind !== fields.sourceKind
   );
@@ -103,6 +110,7 @@ export function applySourceGroup(
   row.ean = fields.ean;
   row.unitSize = fields.unitSize;
   row.sizeUnit = fields.sizeUnit;
+  row.soldByWeight = fields.soldByWeight;
   row.sizeFormat = fields.sizeFormat;
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;

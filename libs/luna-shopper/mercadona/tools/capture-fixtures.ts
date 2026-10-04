@@ -80,6 +80,18 @@ const PRODUCTS: Array<{
     lang: 'es',
     why: 'one roll sized `1 ud` whose total_units counts sheets and not pieces (plan 0183)',
   },
+  {
+    file: 'product-approximate-weight.json',
+    id: '50946',
+    lang: 'es',
+    why: 'a piece of cheese sold by approximate weight, with an in-store barcode (plan 0181)',
+  },
+  {
+    file: 'product-fixed-pack-in-store-barcode.json',
+    id: '84692',
+    lang: 'es',
+    why: 'a fixed pack that also carries an in-store barcode (plan 0181)',
+  },
 ];
 
 async function main(): Promise<void> {

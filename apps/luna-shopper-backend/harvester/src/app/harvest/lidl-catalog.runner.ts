@@ -225,6 +225,14 @@ function declareRegions(
  * Each price is verbatim. `unitPrice` is null: LIDL publishes no per kilogram
  * figure, and deriving one from the printed size would disagree with the chain
  * in the last cent on the field whose only purpose is comparison.
+ *
+ * **It never says a product is sold by weight (plan 0181).** The payload has
+ * no field for it. In the captured fixtures a price block carries `price`,
+ * `packaging.text` and a `basePrice` that is `{ prefix: false }` on every
+ * product, with no amount and no unit. The eight digit code LIDL keeps for a
+ * weight item does not say it either: `product-short-code.json` carries one
+ * and prints a fixed `400 g`. So the row is left as it is, and a person
+ * decides the unit when the product is created.
  */
 function observationOf(product: LidlProduct): SourceObservation {
   return {

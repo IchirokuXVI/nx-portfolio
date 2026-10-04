@@ -194,6 +194,7 @@ describe('ElJamonCatalogRunner', () => {
       ean: null,
       unitSize: 1,
       sizeUnit: 'KILOGRAM',
+      soldByWeight: false,
       sizeFormat: '1kg',
       packCount: null,
       categoryPath: ['Frescos', 'Arroz'],
@@ -218,6 +219,30 @@ describe('ElJamonCatalogRunner', () => {
           product.prices.length === 1 && product.prices[0].scopeKey === null
       )
     ).toBe(true);
+  });
+
+  it('says a row printed with a bare kg is sold by weight, at the price the chain prints (plan 0181)', async () => {
+    const report = new RecordingRunReport();
+    await new TestRunner(storefront).run(context(), report, input, source);
+
+    const bacon = report.products.find(
+      (product) => product.externalId === '102'
+    );
+    expect(bacon).toMatchObject({
+      name: 'bacon original',
+      soldByWeight: true,
+      unitSize: null,
+      sizeUnit: null,
+      sizeFormat: 'kg',
+      // The price is unchanged: the chain already prints the price of a kilo.
+      prices: [
+        expect.objectContaining({
+          price: 8.95,
+          unitPrice: 8.95,
+          unitPriceLabel: 'Kilo',
+        }),
+      ],
+    });
   });
 
   it('writes no availability, declares no scope and claims no complete assortment', async () => {
