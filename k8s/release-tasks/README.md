@@ -302,6 +302,39 @@ each `check.sh` also refuses a catalog that holds a product. That is the
 only guard that looks at the data, and it holds from the day a curated catalog
 is restored (k8s plan 0012).
 
+## Task 0003
+
+`0003-restore-the-first-catalog` puts the first curated catalog in place of the
+empty catalog and harvester databases (k8s plan 0012).
+`k8s/catalog-import/README.md` describes the procedure and how to revert it.
+
+- **It is disarmed.** Both windows say `never`, so no deploy runs it. The owner
+  arms it in a pull request that writes the two dates and `PRODUCTION_RELEASE`.
+- **It states four ceilings**, two per environment: the most products and the
+  most `source_catalog_entries` that the restore replaces. `check.sh` refuses
+  above either one. It also refuses a cluster with no backup Secret, because
+  the restore downloads the two dumps with those credentials.
+- **Its `check.sh` refuses a cluster with no catalog or no harvester database
+  pod.** The other tasks pass there, because they have nothing to delete. This
+  task has something to put there, so such a cluster is a question for a
+  person. A first install never reaches `check.sh`: the runner records the task
+  as skipped before it asks. `post.sh` exits 1 in the same case, so the runner
+  never writes `done` for a restore that did not happen.
+- **A refusal inside `post.sh` leaves the task at `pre-done`**, and a task at
+  `pre-done` always finishes. Every later deploy then runs `post.sh` again,
+  whatever the window and the release say. `k8s/catalog-import/README.md` says
+  how a person stops that.
+- **It has a `post.sh` and no `pre.sh`.** The restore compares the migrations
+  of the dumps with the migrations that this release ran, so it runs after
+  `helm upgrade`.
+- **The markers of tasks 0001 and 0002 do not travel with the swap.** The
+  comment of 0001 sits on the old database, and the comment of 0002 on the old
+  `items` table. After the restore, their closed windows and their ceilings of
+  0 are what stops them.
+- **It does not revert by a dump alone.** The old databases stay beside the new
+  ones for a week, and a rename brings them back. The dumps that the runner
+  takes are the second way back, for 14 days.
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote
@@ -310,6 +343,9 @@ it by hand. `k8s/helm/restore-database.sh` does the first half:
 ```sh
 k8s/helm/restore-database.sh luna-shopper-backend-catalog-db luna_catalog/<stamp>.dump
 ```
+
+A third argument holds the download to a SHA-256. The script then refuses a
+file that does not match, before it creates the scratch database.
 
 The dump holds the database as it was just before the task. A revert therefore
 also removes whatever was written to that database after the task ran.
