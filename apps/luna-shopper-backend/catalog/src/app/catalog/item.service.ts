@@ -1674,9 +1674,11 @@ export class ItemService {
       row.sku = input.sku;
     }
     // Checked only when the write changes the barcode (plan 0184). A product
-    // that already holds an in-store or invalid code still saves: a back
-    // office form sends every field, the unchanged EAN among them, and
-    // refusing that would lock the product against every other edit.
+    // that already holds an in-store or invalid code still saves: the rule is
+    // about a code being set, not about one that is already there. The back
+    // office sends only the fields that changed, so it never meets this. A
+    // client that sends the whole product back does, and refusing its
+    // unchanged EAN would lock the product against every other edit.
     if (input.ean !== undefined && input.ean !== row.ean) {
       row.ean = requireProductEan(input.ean);
     }

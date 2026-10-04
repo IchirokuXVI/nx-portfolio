@@ -719,7 +719,8 @@ describe('ItemService', () => {
     });
 
     it('does not refuse an update that sends back the EAN the product holds', async () => {
-      // What a back office form does: every field goes back, changed or not.
+      // What a client that sends the whole product back does. The back office
+      // sends only what changed, so this is the rule for every other writer.
       const { service } = build({ items: holding(IN_STORE) });
 
       const updated = await service.update({

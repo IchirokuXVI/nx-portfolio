@@ -709,9 +709,11 @@ export class AdminCatalogItemsController {
    *
    * **An EAN that is not a real barcode is refused with `item_ean_invalid`, by
    * catalog and not here** (plan 0184). Only catalog holds the product, and
-   * the check runs only on a write that changes the EAN: the back office sends
-   * every field of the form, so a product that already holds an in-store code
-   * sends it back unchanged with every edit, and that edit must still save.
+   * the check runs only on a write that changes the EAN. A product that already
+   * holds an in-store code keeps it, so an edit that sends that code back
+   * unchanged must still save, and this route cannot tell that edit from one
+   * that sets the code. The back office sends only the fields that changed;
+   * any other client may send the whole product.
    */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)

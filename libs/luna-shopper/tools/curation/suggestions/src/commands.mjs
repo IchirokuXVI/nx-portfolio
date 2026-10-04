@@ -38,6 +38,7 @@ import {
   loadUnits,
   normalizeName,
   privateLabelLines,
+  productGtin,
   suggestBrandLabel,
 } from './rules.mjs';
 import {
@@ -389,11 +390,18 @@ export async function collectCandidates({
     Object.entries(createdRefs ?? {}).map(([ref, itemId]) => [itemId, ref])
   );
 
+  // Only a real barcode is looked up (backend plan 0184). A code a shop prints
+  // on its own scales names another product in another chain, and the 211
+  // products that already hold one would come back as `eanMatch`, which the
+  // prompt calls the strongest evidence there is. The ingest stopped matching
+  // on such a code, and this is the same rule. `findByEan` answers null for
+  // no code, so no request is made.
+  const barcode = productGtin(entry.ean);
   const [mainHits, mainEan, runHits, runEan] = await Promise.all([
     main.searchItems(key),
-    main.findByEan(entry.ean),
+    main.findByEan(barcode),
     rehearsal.searchItems(key),
-    rehearsal.findByEan(entry.ean),
+    rehearsal.findByEan(barcode),
   ]);
 
   const candidates = [];
