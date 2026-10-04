@@ -151,10 +151,13 @@ export function normalizeProduct(
  *
  * `unit_size` is the size as it stands for every product but two kinds.
  *
- * **A length is not a size.** `size_format: "m"` is the metres on a roll of
- * foil or film (`product-size-format-m.json`). The catalog has no unit for a
- * length, so the number would be stored with no unit beside it, and a number
- * with no unit reads as a count. It answers null.
+ * **A size in a unit the catalog does not hold is no size.** Every
+ * `size_format` outside `kg`, `g`, `l`, `ml` and `ud` answers null, which is
+ * what `isImportableSizeFormat` decides. The one the assortment prints is
+ * `m`, the metres on a roll of foil or film (`product-size-format-m.json`),
+ * and a length is a dimension and not a size. Any other word would be stored
+ * as a number with no unit beside it, and a number with no unit reads as a
+ * count.
  *
  * **A count of one is a placeholder until the payload proves it.** For a pack
  * of pads, wipes or blades the chain answers `unit_size: 1` and `size_format:

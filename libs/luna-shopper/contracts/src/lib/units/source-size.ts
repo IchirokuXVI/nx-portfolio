@@ -252,17 +252,6 @@ export function toBaseUnit(
   }
 }
 
-/**
- * Whether a created product may carry this size and unit (plan 0183): the
- * pair {@link toBaseUnit} answers, and nothing else.
- */
-export function isBaseUnitSize(
-  size: number | null | undefined,
-  unit: UnitOfMeasure
-): boolean {
-  return toBaseUnit(size, unit).unit === unit;
-}
-
 function round(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }

@@ -1,6 +1,5 @@
 import { UnitOfMeasure } from '../enums/catalog.enums';
 import {
-  isBaseUnitSize,
   isPrintedLength,
   measuresContent,
   printedSizeUnit,
@@ -146,15 +145,5 @@ describe('toBaseUnit (plan 0183)', () => {
       unitSize: null,
       unit: UnitOfMeasure.UNIT,
     });
-  });
-
-  it('says which pairs a created product may carry', () => {
-    expect(isBaseUnitSize(1, UnitOfMeasure.LITER)).toBe(false);
-    expect(isBaseUnitSize(null, UnitOfMeasure.LITER)).toBe(false);
-    expect(isBaseUnitSize(1, UnitOfMeasure.PACK)).toBe(false);
-    expect(isBaseUnitSize(0.5, UnitOfMeasure.KILOGRAM)).toBe(false);
-    expect(isBaseUnitSize(null, UnitOfMeasure.KILOGRAM)).toBe(true);
-    expect(isBaseUnitSize(500, UnitOfMeasure.GRAM)).toBe(true);
-    expect(isBaseUnitSize(null, UnitOfMeasure.UNIT)).toBe(true);
   });
 });
