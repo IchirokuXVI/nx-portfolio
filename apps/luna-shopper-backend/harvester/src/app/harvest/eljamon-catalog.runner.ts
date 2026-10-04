@@ -301,6 +301,7 @@ function observationOf(
     // the article code (section 1), which is not an EAN.
     ean: null,
     unitSize: size.unitSize,
+    sizeUnit: size.sizeUnit,
     sizeFormat: size.sizeFormat,
     packCount: size.packCount,
     categoryPath:

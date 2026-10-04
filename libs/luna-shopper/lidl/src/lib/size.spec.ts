@@ -30,6 +30,27 @@ describe('parseSize', () => {
     });
   });
 
+  it('states the unit the number is in, which a run writes as sizeUnit (plan 0177)', () => {
+    // The two rows the plan measured: `75cl` is already 750 and `1,28 l` stays
+    // 1.28, so the printed text alone cannot say which unit the number is in.
+    expect(parseSize('75cl')).toMatchObject({
+      unitSize: 750,
+      unit: UnitOfMeasure.MILLILITER,
+    });
+    expect(parseSize('1,28 l')).toMatchObject({
+      unitSize: 1.28,
+      unit: UnitOfMeasure.LITER,
+    });
+    expect(parseSize('1 kg')).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.KILOGRAM,
+    });
+    expect(parseSize('10 ud')).toMatchObject({
+      unitSize: 10,
+      unit: UnitOfMeasure.UNIT,
+    });
+  });
+
   it('states a multipack as one pack, and keeps the count', () => {
     // `6x200ml` is 1200 millilitres, because that is what the price on it buys.
     expect(parseSize('6x200ml')).toEqual({

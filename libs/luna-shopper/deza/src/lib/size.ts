@@ -1,4 +1,8 @@
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import {
+  packCountOf,
+  sourceSizeOf,
+  type SourceSize,
+} from '@portfolio/luna-shopper/contracts';
 
 /**
  * Splitting the trailing size off a description (plan 0085, section 7).
@@ -130,6 +134,37 @@ export function splitSize(description: string): SplitDescription {
     return { name: trimmed, sizeFormat: null };
   }
   return { name, sizeFormat: trimmed.slice(start).trim() };
+}
+
+/** `75 cl`, `1.5 L`, `3x187 ml`: one optional count, one number, one word. */
+const STATED_SIZE =
+  /^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})$/i;
+
+/**
+ * The number a trailing size states and the catalog unit it is in (plan 0177).
+ *
+ * `75 cl` is 750 `MILLILITER`, because the catalog holds no centilitre, `1.5 L`
+ * is 1.5 `LITER` and `10 ud` is 10 `UNIT`. A multiplied pack is stated as one
+ * pack, the way the LIDL adapter states one: `3x187 ml` is 561 millilitres,
+ * which is what the shopper carries out.
+ *
+ * Two shapes answer no size at all, and both on purpose. A sum, `23+12
+ * lavados`, is a bonus pack whose arithmetic the chain did not state, so the
+ * pattern does not match it. A length, `30 m`, has no catalog unit, and a
+ * number with no unit beside it is what this plan exists to stop writing. The
+ * printed text is untouched either way: `sizeFormat` is half of the row's key.
+ */
+export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
+  const match = STATED_SIZE.exec((sizeFormat ?? '').trim());
+  if (!match) {
+    return { unitSize: null, sizeUnit: null };
+  }
+  const count = match[1] === undefined ? 1 : Number(match[1]);
+  const each = Number(match[2].replace(',', '.'));
+  const size = sourceSizeOf(count * each, match[3]);
+  return size.sizeUnit === null || !size.unitSize || size.unitSize <= 0
+    ? { unitSize: null, sizeUnit: null }
+    : size;
 }
 
 /** One count times one quantity and a unit, `3x187 ml`, and nothing else. */

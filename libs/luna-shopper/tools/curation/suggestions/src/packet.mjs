@@ -49,6 +49,9 @@ export function toCandidate(
     brand: item.brand ?? null,
     unitSize: item.unitSize ?? null,
     defaultUnit: item.defaultUnit ?? null,
+    // How many the pack holds (backend plans 0162 and 0177). It is what lets a
+    // box sized `16 ud` and the same box sized 160 g be read as one format.
+    packCount: item.packCount ?? null,
     ean: item.ean ?? null,
     // An item answers its categories as rows now (backend plan 0166), and the
     // slugs are the words the model names a category by.
@@ -117,7 +120,11 @@ export function buildEntryPacket({
           ? [...sharedEan]
           : null,
       unitSize: entry.unitSize ?? null,
+      // The unit `unitSize` is in, as the source's own adapter stated it
+      // (backend plan 0177), or null on a row no run has seen since.
+      sizeUnit: entry.sizeUnit ?? null,
       sizeFormat: entry.sizeFormat ?? null,
+      packCount: entry.packCount ?? null,
       categoryPath: entry.categoryPath ?? [],
       url: entry.url ?? null,
       sourceKind: entry.sourceKind ?? null,

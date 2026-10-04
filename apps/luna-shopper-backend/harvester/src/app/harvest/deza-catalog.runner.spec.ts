@@ -193,6 +193,66 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     });
   });
 
+  it('writes the size its own parser reads, with the unit it is in (plan 0177)', async () => {
+    // The runner used to write `unitSize: null` for every row, whatever the
+    // description printed.
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Cava rosé CODORNIU cuvée original 75 cl',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Refresco de naranja ALTEZA 1.5 L',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Arroz redondo ALTEZA 1 Kg',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Café con leche DOLCE GUSTO 16 ud',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Detergente en polvo COLON 44+6 lavados',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    const sizes = Object.fromEntries(
+      report.products.map((product) => [
+        product.sizeFormat,
+        [product.unitSize, product.sizeUnit],
+      ])
+    );
+    expect(sizes).toEqual({
+      // Centilitres are written as millilitres, and the text stays as printed.
+      '75 cl': [750, 'MILLILITER'],
+      '1.5 L': [1.5, 'LITER'],
+      '1 Kg': [1, 'KILOGRAM'],
+      '16 ud': [16, 'UNIT'],
+      // A sum states no size: the chain did not say what the arithmetic is.
+      '44+6 lavados': [null, null],
+    });
+    // The key is the name and the printed size, exactly as it was.
+    expect(report.products.map((product) => product.externalId)).toContain(
+      entryKey('Cava rosé CODORNIU cuvée original', '75 cl')
+    );
+  });
+
   it('writes no price of any kind', async () => {
     listing = await startFakeListing(SECTIONS, [
       {

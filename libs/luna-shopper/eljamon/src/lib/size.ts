@@ -1,4 +1,8 @@
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import {
+  packCountOf,
+  sourceSizeOf,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 
 /**
  * The size after the last comma of a printed name (plan 0169, section 6).
@@ -9,18 +13,25 @@ import { packCountOf } from '@portfolio/luna-shopper/contracts';
  * guessed about where a size starts. A name with no comma states no size.
  *
  * The size is stored verbatim as `sizeFormat`. The number read from it is
- * `unitSize`, in the unit the chain printed, the way the LIDL adapter reads
- * one: `6x33cl` is 198. A form that states no quantity (`ud`, `kg`, `pk 3`)
- * answers null, because a sold by weight row has no pack to measure and `ud`
- * is a count, not a size.
+ * `unitSize`, and `sizeUnit` is the catalog unit that number is in (plan
+ * 0177), the way the LIDL adapter reads one: `6x33cl` is 1980 `MILLILITER`,
+ * because the catalog holds no centilitre, and `1,5l` is 1.5 `LITER`. A form
+ * that states no quantity (`ud`, `kg`, `pk 3`) answers null, because a sold by
+ * weight row has no pack to measure and `ud` is a count, not a size.
  */
 export interface ElJamonSize {
   /** The printed name without its size. Never empty. */
   name: string;
   /** Everything after the last comma, verbatim, or null. */
   sizeFormat: string | null;
-  /** The quantity the size states, in its printed unit, or null. */
+  /** The quantity the size states, in {@link sizeUnit}, or null. */
   unitSize: number | null;
+  /**
+   * The catalog unit {@link unitSize} is in (plan 0177). Null when there is
+   * no size, and for a length (`m`, `cm`, `mm`), which the catalog has no
+   * unit for: that number stays as it was printed.
+   */
+  sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds (plan 0162), or null. */
   packCount: number | null;
   /** `kg` alone: the price is per kilogram and the pack has no fixed weight. */
@@ -72,6 +83,7 @@ export function splitSize(printed: string): ElJamonSize {
       name: name || text,
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
       soldByWeight: false,
     };
@@ -84,6 +96,7 @@ export function splitSize(printed: string): ElJamonSize {
       name,
       sizeFormat,
       unitSize: null,
+      sizeUnit: null,
       packCount: packCountOf(packOnly[1]),
       soldByWeight: false,
     };
@@ -96,7 +109,9 @@ export function splitSize(printed: string): ElJamonSize {
     return {
       name,
       sizeFormat,
-      unitSize: round(count ? count * amount : amount),
+      // The amount through the one conversion every adapter shares, so a
+      // centilitre is written as ten millilitres here as it is everywhere.
+      ...sourceSizeOf(round(count ? count * amount : amount), quantity[3]),
       packCount: packCountOf(count),
       soldByWeight: false,
     };
@@ -106,6 +121,7 @@ export function splitSize(printed: string): ElJamonSize {
     name,
     sizeFormat,
     unitSize: null,
+    sizeUnit: null,
     packCount: null,
     // `kg` with no number: the row is priced per kilogram and weighed at the
     // till, which is what the unit price label `Kilo` says beside it.

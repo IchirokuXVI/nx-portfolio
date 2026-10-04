@@ -178,6 +178,7 @@ describeIntegration('SourceEntryBrandKey1757200000000 (real Postgres)', () => {
       brandKey: 'cocacola',
       ean: null,
       unitSize: null,
+      sizeUnit: null,
       sizeFormat: null,
       categoryPath: [],
       url: null,

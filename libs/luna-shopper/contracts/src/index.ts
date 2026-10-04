@@ -9,6 +9,10 @@ export * from './lib/pagination';
 // (plan 0115, section 2). Browser reachable: it names no `process`.
 export * from './lib/brands/brand-key';
 
+// The unit a source's size is in, and the one conversion every adapter reads a
+// printed size through (plan 0177). Browser reachable, as the brand key is.
+export * from './lib/units/source-size';
+
 // Enums
 export * from './lib/enums/account-role.enums';
 export * from './lib/enums/assistant.enums';

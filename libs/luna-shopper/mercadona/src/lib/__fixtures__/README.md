@@ -16,6 +16,7 @@ Each file is one of the awkward cases section 9 names, not a random sample:
 | `product-inconsistent-bulk-price.json` | One of the **110 products (2.6%)** whose `bulk_price` matches neither derivation and disagrees with its own stated size. This is the fixture that makes "store it verbatim" a testable rule instead of a comment.                                                                           |
 | `product-no-ean.json`                  | A novelty product with no EAN and an empty brand string. 3 of 40 sampled products looked like this.                                                                                                                                                                                         |
 | `product-size-format-m.json`           | `size_format: 'm'` (foil, cling film): two products in the whole assortment, and no `UnitOfMeasure` value. Section 5.6 recommends not importing them.                                                                                                                                       |
+| `product-box-of-capsules.json`         | Product 11801, a box of 16 capsules priced as one piece (plan 0177). It answers `is_pack: false`, `total_units: 16`, `unit_size: 0.16` in `kg` and `reference_format: ud`. The pack count rule for a box was decided from it. Captured on 2026-10-04.                                       |
 | `categories-tree.json`                 | `GET /categories/`: the two level tree, roots holding the level 1 categories a walk fetches.                                                                                                                                                                                                |
 | `category-expanded.json`               | `GET /categories/<id>/`: one level 1 category expanded to its level 2 children with products inline, including the `Charcutería y quesos` split that sends cheese to DAIRY and everything else to MEAT.                                                                                     |
 | `stores.js`                            | The store finder's whole document, verbatim (plan 0106): 1,675 shops, 1,599 in Spain and 76 in Portugal, every one carrying a postal code and coordinates. It is a `var` assignment rather than JSON, which is what the parser strips, so it is checked in as text and never re-serialized. |
@@ -32,9 +33,9 @@ The two store finder documents are the exception: they **were** captured, from
 the live documents on 2026-09-11, and every number the tests assert about them
 was counted from that capture.
 
-`npx nx run luna-shopper/mercadona:capture-fixtures` replaces six of these files
+`npx nx run luna-shopper/mercadona:capture-fixtures` replaces seven of these files
 with real captures: `product-detail-es.json`, `product-detail-en.json`,
-`categories-tree.json`, `category-expanded.json`, `stores.js` and
+`product-box-of-capsules.json`, `categories-tree.json`, `category-expanded.json`, `stores.js` and
 `stores-total.js`. Run it before trusting a value that section 2 does not name,
 and commit the diff. It does not write the five edge case fixtures
 (`product-reference-format-100ml.json`, `product-capsules-per-unit.json`,

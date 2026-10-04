@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   ISSUE_DETAIL_MAX,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   REASONING_MAX,
   SEARCH_TEXT_MAX,
   UNIT_BASES,
@@ -771,6 +773,48 @@ test('every catalog unit has a base, and 420 g is 0.42 kg', () => {
   );
   assert.equal(toBaseSize(1, 'METER'), null);
   assert.equal(toBaseSize(null, 'GRAM'), null);
+});
+
+test('the pack count bounds are the ones the gateway enforces (backend plan 0177)', () => {
+  // Read from the committed OpenAPI document, which is generated from the
+  // contracts, so the copy in `rules.mjs` cannot drift from them unnoticed.
+  const doc = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../../../../../apps/luna-shopper-backend/gateway/docs/openapi.json',
+        import.meta.url
+      ),
+      'utf8'
+    )
+  );
+  const packCount =
+    doc.components.schemas['harvest.SourceCatalogEntryView'].properties
+      .packCount;
+  assert.equal(packCount.minimum, PACK_COUNT_MIN);
+  assert.equal(packCount.maximum, PACK_COUNT_MAX);
+});
+
+test('the decision schema lets a CREATE state a pack count, and does not require one', () => {
+  const schema = buildDecisionSchema({ categories: ['milk'], units: ['UNIT'] });
+  const create = schema.anyOf.find(
+    (shape) => shape.properties.decision.const === 'CREATE'
+  );
+  for (const item of [schema.properties.item, create.properties.item]) {
+    assert.deepEqual(item.properties.packCount, {
+      type: ['integer', 'null'],
+      minimum: PACK_COUNT_MIN,
+      maximum: PACK_COUNT_MAX,
+    });
+    assert.equal(item.required.includes('packCount'), false);
+  }
+});
+
+test('the prompt names the fields backend plan 0177 added', () => {
+  const template = loadPromptTemplate();
+  assert.match(template, /entry\.sizeUnit/);
+  assert.match(template, /entry\.packCount/);
+  assert.match(template, /item\.packCount/);
+  assert.match(template, /candidate of 160 g with `packCount` 16/);
 });
 
 test('suggestBrandLabel keeps a mixed case spelling and title cases capitals', () => {

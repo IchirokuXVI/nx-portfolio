@@ -174,7 +174,7 @@ describe('splitSize', () => {
   it.each(NAMES)(
     'splits %s',
     (printed, name, sizeFormat, unitSize, packCount, approximate) => {
-      expect(splitSize(printed)).toEqual({
+      expect(splitSize(printed)).toMatchObject({
         name,
         sizeFormat,
         unitSize,
@@ -183,6 +183,36 @@ describe('splitSize', () => {
       });
     }
   );
+
+  describe('the unit the number is in (plan 0177)', () => {
+    it.each([
+      // DIA prints no centilitre in the captured fixtures, and the parser reads
+      // one the way every adapter does: as ten millilitres.
+      ['Vino tinto crianza 75 cl', '75 cl', 750, 'MILLILITER'],
+      ['Cerveza especial 6 x 33 cl', '6 x 33 cl', 1980, 'MILLILITER'],
+      ['Coca-Cola 2 L', '2 L', 2, 'LITER'],
+      ['Agua mineral Dia pack 6 x 1,5 L', 'pack 6 x 1,5 L', 9, 'LITER'],
+      ['Coca-Cola 330 ml', '330 ml', 330, 'MILLILITER'],
+      ['Manzana roja dulce 1 Kg', '1 Kg', 1, 'KILOGRAM'],
+      ['Pera conferencia bandeja 700 g', '700 g', 700, 'GRAM'],
+      ['Café en cápsulas Dia 16 ud', '16 ud', 16, 'UNIT'],
+    ])('%s', (printed, sizeFormat, unitSize, sizeUnit) => {
+      // The printed text is the key, and it is exactly what the chain wrote.
+      expect(splitSize(printed)).toMatchObject({
+        sizeFormat,
+        unitSize,
+        sizeUnit,
+      });
+    });
+
+    it('keeps a length as printed and states no unit for it', () => {
+      expect(splitSize('Papel de aluminio Dia 30 m')).toMatchObject({
+        sizeFormat: '30 m',
+        unitSize: 30,
+        sizeUnit: null,
+      });
+    });
+  });
 
   it('still finds every name of the table in the fixtures', () => {
     // A name that left the fixtures is still a real name, but a table that
@@ -212,6 +242,7 @@ describe('splitSize', () => {
       name: 'Sandía entera',
       sizeFormat: null,
       unitSize: null,
+      sizeUnit: null,
       packCount: null,
       approximate: false,
     });

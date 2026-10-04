@@ -192,6 +192,7 @@ describe('CarrefourCatalogRunner', () => {
       name: 'Agua CARREFOUR',
       sizeFormat: '1,5 l.',
       unitSize: 1.5,
+      sizeUnit: 'LITER',
       // The listing card carries none. The backfill is what fills it.
       ean: null,
       categoryPath: ['Bebidas'],

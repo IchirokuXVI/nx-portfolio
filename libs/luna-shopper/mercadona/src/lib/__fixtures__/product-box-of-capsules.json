@@ -1,0 +1,113 @@
+{
+  "id": "11801",
+  "ean": "7613033174667",
+  "slug": "cafe-con-leche-capsula-dolce-gusto-caja",
+  "brand": "Dolce Gusto",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": "España",
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/8b275251105f06343190da9c9e8f8430.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/8b275251105f06343190da9c9e8f8430.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/8b275251105f06343190da9c9e8f8430.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/04b2daf6180dd93c34daadd20bb2a01a.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/04b2daf6180dd93c34daadd20bb2a01a.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/04b2daf6180dd93c34daadd20bb2a01a.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Dolce Gusto",
+    "origin": "España",
+    "suppliers": [
+      {
+        "name": "Nestlé España, S.A."
+      }
+    ],
+    "legal_name": "Preparado a base de leche en polvo y café soluble.",
+    "description": "Café con leche en cápsula Dolce Gusto",
+    "counter_info": null,
+    "danger_mentions": "",
+    "alcohol_by_volume": null,
+    "mandatory_mentions": "",
+    "production_variant": "",
+    "usage_instructions": "",
+    "storage_instructions": "Conservar en un lugar limpio, seco y a temperatura ambiente.",
+    "is_prepared_by_mercadona": false
+  },
+  "is_bulk": false,
+  "packaging": "Caja",
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/11801/cafe-con-leche-capsula-dolce-gusto-caja",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/8b275251105f06343190da9c9e8f8430.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 8,
+      "name": "Cacao, café e infusiones",
+      "level": 0,
+      "order": 16,
+      "categories": [
+        {
+          "id": 81,
+          "name": "Café cápsula y monodosis",
+          "level": 1,
+          "order": 16,
+          "categories": [
+            {
+              "id": 365,
+              "name": "Cápsulas compatibles Dolce gusto",
+              "level": 2,
+              "order": 16
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    null
+  ],
+  "display_name": "Café con leche en cápsula Dolce Gusto",
+  "main_feature": null,
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": null,
+    "is_new": false,
+    "is_pack": false,
+    "pack_size": null,
+    "unit_name": "cápsulas",
+    "unit_size": 0.16,
+    "bulk_price": "0.31",
+    "unit_price": "4.95",
+    "approx_size": false,
+    "size_format": "kg",
+    "total_units": 16,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "10.000",
+    "price_decreased": false,
+    "reference_price": "0.310",
+    "min_bunch_amount": 1,
+    "reference_format": "ud",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": "Contiene <strong>leche y sus derivados (incluida la lactosa)</strong>.",
+    "ingredients": "<strong>Leche</strong> en polvo (80,2%), café soluble (17,3%), estabilizantes (fosfatos de potasio, citratos de sodio), grasa <strong>láctea</strong> anhidra."
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

@@ -17,6 +17,8 @@ import {
   chainNamesById,
   findBrand,
   findCanonicalBrand,
+  PACK_COUNT_MAX,
+  PACK_COUNT_MIN,
   printedUnit,
   sameBaseSize,
   toBaseSize,
@@ -175,6 +177,26 @@ export function checkDecisionShape(value) {
     ) {
       return { ok: false, error: '"item.unitSize" must be a number or null' };
     }
+    // How many the pack holds (backend plans 0162 and 0177). Optional, and a
+    // count of 1 is not a pack, so null, absent and 1 all mean the same thing:
+    // the decision states no count and the create takes the row's own.
+    const statesPackCount =
+      item.packCount !== null &&
+      item.packCount !== undefined &&
+      item.packCount !== 1;
+    if (
+      statesPackCount &&
+      !(
+        Number.isInteger(item.packCount) &&
+        item.packCount >= PACK_COUNT_MIN &&
+        item.packCount <= PACK_COUNT_MAX
+      )
+    ) {
+      return {
+        ok: false,
+        error: `"item.packCount" must be a whole number from ${PACK_COUNT_MIN} to ${PACK_COUNT_MAX}, or null`,
+      };
+    }
     decision.item = {
       nameEs: item.nameEs.trim(),
       nameEn: isString(item.nameEn) ? item.nameEn.trim() : null,
@@ -186,6 +208,9 @@ export function checkDecisionShape(value) {
       defaultUnit: item.defaultUnit.trim(),
       categorySlugs,
       ean: isString(item.ean) ? item.ean.trim() : null,
+      // Present only when the decision states one. An absent key is what lets
+      // the bulk route fall back to the count the row itself read.
+      ...(statesPackCount ? { packCount: item.packCount } : {}),
     };
   }
 
@@ -217,29 +242,101 @@ export function sharedEanIssue(entry, sharedWith) {
   );
 }
 
-/** A size as a person reads it, with its unit when there is one. */
-function describeSize(size, unit) {
-  return unit ? `${size} ${unit}` : String(size);
+/**
+ * A size as a person reads it, with its unit when there is one, and the pack
+ * count beside it when the side states one.
+ */
+function describeSize(size, unit, packCount = null) {
+  const text = unit ? `${size} ${unit}` : String(size);
+  return packCountOf(packCount) === null
+    ? text
+    : `${text} (pack of ${packCount})`;
 }
 
 /**
- * Whether the entry and the link target are one format (plan 0006).
+ * The entry's size in its family's base unit, or null (backend plan 0177).
  *
- * Both sides are converted to grams, millilitres or units first. The entry's
- * unit is the word its `sizeFormat` ends in and the target's is its
- * `defaultUnit`, so a chain printing 0.42 `kg` and a product of 420 `GRAM` are
- * one format, and a weight is never the same format as a volume. When either
- * unit is one the table cannot read, the two numbers are compared as they
- * stand, which is what this check did before it read units at all.
+ * **The row's own `sizeUnit` first.** The adapter that read the size states
+ * which catalog unit the number is in, and that is the only thing that can:
+ * one source converts `75cl` to 750 and another keeps `6x33cl` at 198, so the
+ * printed text is right for one of them and wrong for the other. A stated unit
+ * needs no factor, because the number is already in it.
+ *
+ * **The printed text only for a row with no `sizeUnit`**, which is a row no
+ * run has seen since that plan. It is the guess this check made for every row
+ * before, kept so those rows compare exactly as they did.
  */
-export function sameFormat(entry, linkTarget) {
+export function entryBaseSize(entry) {
+  if (entry.sizeUnit) {
+    return toBaseSize(entry.unitSize, entry.sizeUnit);
+  }
   const printed = printedUnit(entry.sizeFormat);
-  const entryBase = printed
+  return printed
     ? toBaseSize(entry.unitSize, printed.unit, printed.factor)
     : null;
+}
+
+/** A pack count as a number, or null for a side that states none. */
+function packCountOf(value) {
+  const count = Number(value);
+  return value !== null && value !== undefined && Number.isInteger(count)
+    ? count
+    : null;
+}
+
+/**
+ * Whether a count and a weight or volume are one box (backend plan 0177).
+ *
+ * One chain prints a box of capsules as `16 ud` and another as 160 g. Neither
+ * number converts into the other, so the sizes can never agree, and the one
+ * product became two. What joins them is the pack count: the side sized by
+ * content has to state how many pieces it holds, and the side sized by count
+ * has to state the same number, as its own pack count or as the size itself.
+ *
+ * **A side that states no pack count joins nothing.** `16 ud` against 160 g
+ * with no pack count is two formats, because nothing says the 160 g holds
+ * sixteen of anything.
+ */
+function samePack(counted, measured) {
+  const pieces = packCountOf(measured.packCount);
+  if (pieces === null) {
+    return false;
+  }
+  return (
+    packCountOf(counted.packCount) === pieces ||
+    sameBaseSize(counted.base, { family: 'count', value: pieces })
+  );
+}
+
+/**
+ * Whether the entry and the link target are one format (plan 0006, and
+ * backend plan 0177).
+ *
+ * Both sides are converted to grams, millilitres or units first. The entry's
+ * unit is its own `sizeUnit` ({@link entryBaseSize}) and the target's is its
+ * `defaultUnit`, so a chain stating 0.42 `KILOGRAM` and a product of 420
+ * `GRAM` are one format, and a weight is never the same format as a volume.
+ * A count against a weight or a volume is one format only through the pack
+ * count ({@link samePack}). When either unit is one the table cannot read,
+ * the two numbers are compared as they stand, which is what this check did
+ * before it read units at all.
+ */
+export function sameFormat(entry, linkTarget) {
+  const entryBase = entryBaseSize(entry);
   const targetBase = toBaseSize(linkTarget.unitSize, linkTarget.defaultUnit);
   if (entryBase && targetBase) {
-    return sameBaseSize(entryBase, targetBase);
+    if (entryBase.family === targetBase.family) {
+      return sameBaseSize(entryBase, targetBase);
+    }
+    const entrySide = { base: entryBase, packCount: entry.packCount };
+    const targetSide = { base: targetBase, packCount: linkTarget.packCount };
+    if (entryBase.family === 'count') {
+      return samePack(entrySide, targetSide);
+    }
+    if (targetBase.family === 'count') {
+      return samePack(targetSide, entrySide);
+    }
+    return false;
   }
   return sameNumber(entry.unitSize, linkTarget.unitSize);
 }
@@ -381,7 +478,7 @@ export function validateDecision({
         issues.push(
           issue(
             'FORMAT_MISMATCH',
-            `The entry is ${describeSize(entry.unitSize, entry.sizeFormat)} and item ${linkTarget.id} is ${describeSize(linkTarget.unitSize, linkTarget.defaultUnit)}. Same brand plus same format merges, and nothing else does (rule 1).`
+            `The entry is ${describeSize(entry.unitSize, entry.sizeUnit ?? entry.sizeFormat, entry.packCount)} and item ${linkTarget.id} is ${describeSize(linkTarget.unitSize, linkTarget.defaultUnit, linkTarget.packCount)}. Same brand plus same format merges, and nothing else does (rule 1).`
           )
         );
       }

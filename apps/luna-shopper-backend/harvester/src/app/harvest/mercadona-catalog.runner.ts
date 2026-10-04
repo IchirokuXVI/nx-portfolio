@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   HarvestDetailFetch,
   PriceScopeKind,
+  sourceSizeUnitOf,
 } from '@portfolio/luna-shopper/contracts';
 import {
   MercadonaClient,
@@ -254,6 +255,11 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           // typical weight of the tray is not (plan 0108, section 5.1). The row
           // holds one size, so it holds the one this read saw.
           unitSize: detail.unitSize,
+          // The detail's own `size_format` as a catalog unit (plan 0177), read
+          // from the same payload as the number so the two cannot disagree.
+          // Null for `m`, which the catalog has no unit for.
+          sizeUnit:
+            detail.unitSize === null ? null : sourceSizeUnitOf(detail.unit),
           sizeFormat: product.listing.sizeFormat,
           // Read from the detail's own `price_instructions` (plan 0162).
           packCount: detail.packCount,

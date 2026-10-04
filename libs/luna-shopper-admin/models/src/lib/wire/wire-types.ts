@@ -4112,6 +4112,7 @@ export type HarvestItemSourceEntryView = {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -4200,6 +4201,7 @@ export type HarvestSourceCatalogEntryView = {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];

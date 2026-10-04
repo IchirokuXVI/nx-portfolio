@@ -178,6 +178,53 @@ test('the packet names the entries sharing its EAN, and null otherwise (plan 000
   }
 });
 
+test('the packet shows the unit and the pack count of the entry (backend plan 0177)', () => {
+  const packet = buildEntryPacket({
+    entry: entry({
+      unitSize: 0.16,
+      sizeUnit: 'KILOGRAM',
+      sizeFormat: 'kg',
+      packCount: 16,
+    }),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+  });
+  assert.equal(packet.entry.unitSize, 0.16);
+  assert.equal(packet.entry.sizeUnit, 'KILOGRAM');
+  assert.equal(packet.entry.sizeFormat, 'kg');
+  assert.equal(packet.entry.packCount, 16);
+
+  // A row no run has seen since the plan states neither, and both are null
+  // rather than absent, so the model reads one shape.
+  const old = buildEntryPacket({
+    entry: entry(),
+    supermarket: MERCADONA,
+    candidates: [],
+    eanMatch: null,
+  });
+  assert.equal(old.entry.sizeUnit, null);
+  assert.equal(old.entry.packCount, null);
+});
+
+test('a candidate shows its pack count, and null when it has none', () => {
+  assert.equal(
+    toCandidate({ id: 'i1', name: {}, unitSize: 160, packCount: 16 }).packCount,
+    16
+  );
+  assert.equal(toCandidate({ id: 'i2', name: {} }).packCount, null);
+  // A product this run created is shown the same way, by its ref.
+  assert.deepEqual(
+    (({ ref, packCount }) => ({ ref, packCount }))(
+      toCandidate(
+        { id: 'r1', name: {}, packCount: 6 },
+        { origin: 'run', ref: 'ref-e1' }
+      )
+    ),
+    { ref: 'ref-e1', packCount: 6 }
+  );
+});
+
 test('a candidate names its categories by slug, in the order it holds them', () => {
   // An item answers its categories as rows (backend plan 0166), and the model
   // names a category by slug, so the slug is all the packet carries.

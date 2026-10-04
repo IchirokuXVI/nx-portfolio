@@ -62,6 +62,7 @@ export function makeCatalog(items = []) {
         brand: body.brand ?? null,
         ean: body.ean ?? null,
         unitSize: body.unitSize ?? null,
+        packCount: body.packCount ?? null,
         categoryIds: body.categoryIds,
         defaultUnit: body.defaultUnit,
       };

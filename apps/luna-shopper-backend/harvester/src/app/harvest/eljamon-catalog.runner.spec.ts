@@ -193,6 +193,7 @@ describe('ElJamonCatalogRunner', () => {
       brand: 'DOÑA ANA',
       ean: null,
       unitSize: 1,
+      sizeUnit: 'KILOGRAM',
       sizeFormat: '1kg',
       packCount: null,
       categoryPath: ['Frescos', 'Arroz'],

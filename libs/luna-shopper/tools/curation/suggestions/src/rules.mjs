@@ -209,6 +209,13 @@ export const UNIT_BASES = {
  * catalog vocabulary and are millilitres times ten, which is a conversion and
  * not a guess. A word that is not here (`m`, `Paquete`) answers no unit, and
  * the comparison then falls back to the raw numbers.
+ *
+ * **Read only for a row with no `sizeUnit`** (backend plan 0177). The factor
+ * here assumes the number is still in the printed unit, which is wrong for
+ * every source that already converted it: LIDL and the leaflets write `75cl`
+ * as 750, so this table read a correct link as 7,500 ml against 750 ml. A row
+ * a run has seen since that plan states its own unit, and `entryBaseSize` in
+ * `decision.mjs` reads that and never this.
  */
 const PRINTED_UNITS = {
   g: { unit: 'GRAM', factor: 1 },
@@ -269,6 +276,18 @@ export function toBaseSize(size, unit, extra = 1) {
   }
   return { family: base.family, value: number * extra * base.factor };
 }
+
+/**
+ * The bounds of a pack count, a copy of `PACK_COUNT_MIN` and `PACK_COUNT_MAX`
+ * in `libs/luna-shopper/contracts` (backend plan 0162).
+ *
+ * The gateway refuses a count outside them, so a decision that carried one
+ * would fail the whole bulk request it is part of. This library is plain
+ * `.mjs` and cannot import the TypeScript, and `rules.test.mjs` holds the two
+ * to the committed OpenAPI document, which is generated from the contracts.
+ */
+export const PACK_COUNT_MIN = 2;
+export const PACK_COUNT_MAX = 1000;
 
 /** Two base sizes are one format when the family and the number agree. */
 export function sameBaseSize(a, b) {
@@ -671,6 +690,14 @@ export function buildDecisionSchema({ categories, units }) {
       nameEn: nullableString,
       brand: nullableString,
       unitSize: { type: ['number', 'null'] },
+      // How many the pack holds (backend plans 0162 and 0177). Optional and
+      // nullable: most products are not packs, and a decision that states none
+      // lets the create take the count the row itself read.
+      packCount: {
+        type: ['integer', 'null'],
+        minimum: PACK_COUNT_MIN,
+        maximum: PACK_COUNT_MAX,
+      },
       defaultUnit: { type: 'string', enum: [...units] },
       // One or more leaf slugs (backend plan 0166), most fitting first. A
       // product in two aisles names both, and an empty list is ungrammatical

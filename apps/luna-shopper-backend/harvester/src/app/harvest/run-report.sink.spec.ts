@@ -40,6 +40,7 @@ function observation(over: Partial<SourceObservation> = {}): SourceObservation {
     brand: null,
     ean: null,
     unitSize: null,
+    sizeUnit: null,
     sizeFormat: null,
     categoryPath: [],
     url: null,

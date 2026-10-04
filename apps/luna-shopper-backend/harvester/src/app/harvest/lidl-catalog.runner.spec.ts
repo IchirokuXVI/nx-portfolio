@@ -86,6 +86,8 @@ function row(options: {
 function product(options: {
   id: string;
   eans?: string[];
+  /** The size the page prints, verbatim. */
+  size?: string;
   groups?: Array<{ priceId: string; regions: string[]; price: number | null }>;
 }): string {
   const regionsV2: Record<string, unknown> = {};
@@ -123,7 +125,7 @@ function product(options: {
               wonCategoryPrimary:
                 'Mundos de necesidad/Comida y cerca de la comida/Quesos, productos lácteos y huevos/Queso',
             },
-            price: { packaging: { text: '500 g' } },
+            price: { packaging: { text: options.size ?? '500 g' } },
             storeFacts: { retail: true, online: false },
             regionsV2,
             regionsPrices,
@@ -258,6 +260,53 @@ describe('LidlCatalogRunner', () => {
     expect(idsOf()).toEqual(['1', '2']);
   });
 
+  it('writes the size with the unit it is in, for every shape the chain prints (plan 0177)', async () => {
+    // The two rows the plan measured are here: `75cl` is written as 750 and
+    // `1,28 l` stays 1.28, so the printed text alone cannot say which unit the
+    // number is in, and `sizeUnit` is what does.
+    const printed = [
+      '75cl',
+      '1,28 l',
+      '1 kg',
+      '500 g',
+      '10 ud',
+      '6x33cl',
+      'Paquete',
+    ];
+    const group = [{ priceId: 'a', regions: ['1'], price: 2.5 }];
+    const runner = new TestRunner({
+      index: printed.map((size, index) =>
+        row({ id: String(index + 1), title: 'Queso', category: 'Food', size })
+      ),
+      products: Object.fromEntries(
+        printed.map((size, index) => [
+          `/p/x/p${index + 1}`,
+          product({ id: String(index + 1), size, groups: group }),
+        ])
+      ),
+    });
+
+    await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+    expect(
+      Object.fromEntries(
+        report.products.map((observation) => [
+          observation.sizeFormat,
+          [observation.unitSize, observation.sizeUnit],
+        ])
+      )
+    ).toEqual({
+      '75cl': [750, 'MILLILITER'],
+      '1,28 l': [1.28, 'LITER'],
+      '1 kg': [1, 'KILOGRAM'],
+      '500 g': [500, 'GRAM'],
+      '10 ud': [10, 'UNIT'],
+      '6x33cl': [1980, 'MILLILITER'],
+      // A word that is not a size: no number, and so no unit either.
+      Paquete: [null, null],
+    });
+  });
+
   it('declares one scope per region, and creates none itself', async () => {
     const runner = new TestRunner({
       index: [row({ id: '1', title: 'Queso', category: 'Food' })],
@@ -287,6 +336,7 @@ describe('LidlCatalogRunner', () => {
       externalId: '1',
       ean: '4335619207615',
       unitSize: 500,
+      sizeUnit: 'GRAM',
       sizeFormat: '500 g',
     });
     expect(report.products[0].prices[0]).toMatchObject({

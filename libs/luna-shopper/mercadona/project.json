@@ -20,7 +20,7 @@
       "//": "Refreshes the checked in fixtures from the live API (plan 0038, section 9). Never run by CI: it makes real requests, and the fixtures are what keeps every other test off the network.",
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx tsx libs/luna-shopper/mercadona/tools/capture-fixtures.ts"
+        "command": "npx tsx --tsconfig tsconfig.base.json libs/luna-shopper/mercadona/tools/capture-fixtures.ts"
       }
     }
   }

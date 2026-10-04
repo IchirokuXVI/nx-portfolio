@@ -1,10 +1,11 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import capsules from './__fixtures__/product-capsules-per-unit.json';
-import categoryExpanded from './__fixtures__/category-expanded.json';
 import categoriesTree from './__fixtures__/categories-tree.json';
+import categoryExpanded from './__fixtures__/category-expanded.json';
+import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
+import capsules from './__fixtures__/product-capsules-per-unit.json';
+import oliveOil from './__fixtures__/product-detail-es.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
-import oliveOil from './__fixtures__/product-detail-es.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
 import {
@@ -159,6 +160,56 @@ describe('normalizeProduct', () => {
       }
     });
 
+    describe('a box priced as one piece (plan 0177)', () => {
+      /** Product 11801 with its price block changed, for the cases around it. */
+      const boxWith = (fields: Record<string, unknown>) => ({
+        ...boxOfCapsules,
+        price_instructions: { ...boxOfCapsules.price_instructions, ...fields },
+      });
+
+      it('is what the captured product says it is', () => {
+        // The fields the rule reads, pinned, so a recapture that moves one of
+        // them fails here rather than quietly changing what the rule means.
+        expect(boxOfCapsules.price_instructions).toMatchObject({
+          is_pack: false,
+          pack_size: null,
+          total_units: 16,
+          unit_size: 0.16,
+          size_format: 'kg',
+          reference_format: 'ud',
+        });
+      });
+
+      it('reads total_units as the count of a box the chain compares per piece', () => {
+        const product = normalizeProduct(boxOfCapsules);
+        expect(product.packCount).toBe(16);
+        // The size is what the box weighs, and the count is beside it.
+        expect(product.unitSize).toBe(0.16);
+        expect(product.unit).toBe(UnitOfMeasure.KILOGRAM);
+      });
+
+      it('reads nothing when the comparison price is not per piece', () => {
+        expect(
+          normalizeProduct(boxWith({ reference_format: 'kg' })).packCount
+        ).toBeNull();
+      });
+
+      it('reads nothing when the size is itself a count', () => {
+        expect(
+          normalizeProduct(boxWith({ size_format: 'ud' })).packCount
+        ).toBeNull();
+      });
+
+      it('reads nothing when total_units is not set, or is 1', () => {
+        expect(
+          normalizeProduct(boxWith({ total_units: null })).packCount
+        ).toBeNull();
+        expect(
+          normalizeProduct(boxWith({ total_units: 1 })).packCount
+        ).toBeNull();
+      });
+    });
+
     it('reads the same count from a category listing', () => {
       const [cheese] = normalizeCategoryProducts(categoryExpanded);
       expect(cheese.packCount).toBeNull();
@@ -188,7 +239,10 @@ describe('the category tree', () => {
   it('normalizes the two levels', () => {
     const roots = normalizeCategories(categoriesTree);
     expect(roots).toHaveLength(2);
-    expect(roots[0]).toMatchObject({ id: 12, name: 'Aceite, especias y salsas' });
+    expect(roots[0]).toMatchObject({
+      id: 12,
+      name: 'Aceite, especias y salsas',
+    });
     expect(roots[0].children.map((c) => c.id)).toEqual([112, 113]);
   });
 
@@ -223,6 +277,32 @@ describe('the category tree', () => {
     expect(product.categoryPath[0]).toEqual({
       id: 4,
       name: 'Charcutería y quesos',
+    });
+  });
+});
+
+describe('the unit a size is in (plan 0177)', () => {
+  // Mercadona prints the unit alone and never a centilitre: `kg`, `l`, `ud`
+  // and `m` are the four values of the whole assortment. A run writes `unit`
+  // as the row's `sizeUnit`, so these are the three it can state.
+  it('is the litre of a product sized in l', () => {
+    expect(normalizeProduct(oliveOil)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.LITER,
+    });
+  });
+
+  it('is the kilogram of a product sized in kg', () => {
+    expect(normalizeProduct(inconsistent)).toMatchObject({
+      unitSize: 0.15,
+      unit: UnitOfMeasure.KILOGRAM,
+    });
+  });
+
+  it('is the unit of a product sized in ud', () => {
+    expect(normalizeProduct(noEan)).toMatchObject({
+      unitSize: 1,
+      unit: UnitOfMeasure.UNIT,
     });
   });
 });

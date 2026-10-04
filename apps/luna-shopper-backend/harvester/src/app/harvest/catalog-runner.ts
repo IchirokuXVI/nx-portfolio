@@ -1,4 +1,7 @@
-import type { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
+import type {
+  HarvestDetailFetch,
+  SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -23,6 +26,8 @@ export interface BackfillEntry {
   name: string;
   brand: string | null;
   unitSize: number | null;
+  /** The unit the crawl stated for that size (plan 0177), carried with it. */
+  sizeUnit: SourceSizeUnit | null;
   sizeFormat: string | null;
   /** The count the crawl read (plan 0162), carried for the same reason. */
   packCount: number | null;

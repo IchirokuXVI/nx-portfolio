@@ -1,4 +1,4 @@
-import { packCountOf } from '@portfolio/luna-shopper/contracts';
+import { packCountOf, UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import { resolveCategory, type CategoryPathNode } from './categories';
 import {
   isRecord,
@@ -148,28 +148,53 @@ export function normalizeProduct(
 /**
  * How many units the pack holds (plan 0162, section 1).
  *
- * **Only a pack has a count.** When `is_pack` is true the count is `pack_size`,
- * or `total_units` when `pack_size` is not set. When both are set and differ
- * the source contradicts itself and the answer is null, because a count is
- * read and never chosen. `is_pack` false or absent is null whatever the other
- * two say: `total_units` alone is also set on products sold per capsule or per
- * piece that are not packs.
+ * **A pack has a count.** When `is_pack` is true the count is `pack_size`, or
+ * `total_units` when `pack_size` is not set. When both are set and differ the
+ * source contradicts itself and the answer is null, because a count is read
+ * and never chosen.
  *
  * Proved by `product-capsules-per-unit.json` (`is_pack: true`, `pack_size: 20`,
  * `total_units: 20`, so the two agree) and by `product-detail-es.json`
  * (`is_pack: false`). The other two cases are that capsule fixture with one
  * field changed in the spec, because no captured product shows them.
+ *
+ * **So has a box priced as one piece that the chain compares per piece inside
+ * (plan 0177).** `is_pack` is false on such a product, and the count is
+ * `total_units` when all three of these hold:
+ *
+ * 1. `total_units` is set,
+ * 2. `reference_format` is `ud`, so the comparison price the chain prints is
+ *    the box price over the pieces inside, and
+ * 3. `size_format` is a weight or a volume and not `ud`, so `unit_size` is
+ *    what the box weighs and not already a count.
+ *
+ * The second is what makes `total_units` a count of what is inside rather than
+ * a number about the sale, and the third keeps the rule off a product whose
+ * size is itself a count, where `unit_size` already says it. Proved by
+ * `product-box-of-capsules.json`, product 11801, captured on 2026-10-04: a box
+ * printed "Caja 16 cápsulas (160 g)" answers `is_pack: false`, `pack_size:
+ * null`, `total_units: 16`, `unit_size: 0.16`, `size_format: "kg"`,
+ * `reference_format: "ud"`, and its `bulk_price` of 0.31 is the 4.95 box over
+ * 16. The other two chains print the same box as `16 ud`, and the count here is
+ * what lets the two sizes be recognised as one format.
+ *
+ * Anything else is null: `total_units` with a comparison price per kilo or per
+ * litre says nothing this adapter can read as a count.
  */
 function readPackCount(price: Json): number | null {
-  if (readBoolean(price, 'is_pack') !== true) {
-    return null;
-  }
   const packSize = readNumber(price, 'pack_size');
   const totalUnits = readNumber(price, 'total_units');
-  if (packSize !== null && totalUnits !== null && packSize !== totalUnits) {
-    return null;
+  if (readBoolean(price, 'is_pack') === true) {
+    if (packSize !== null && totalUnits !== null && packSize !== totalUnits) {
+      return null;
+    }
+    return packCountOf(packSize ?? totalUnits);
   }
-  return packCountOf(packSize ?? totalUnits);
+  const comparedPerPiece =
+    readString(price, 'reference_format')?.trim().toLowerCase() === 'ud';
+  const sizeUnit = mapSizeFormat(readString(price, 'size_format'));
+  const sizedByContent = sizeUnit !== null && sizeUnit !== UnitOfMeasure.UNIT;
+  return comparedPerPiece && sizedByContent ? packCountOf(totalUnits) : null;
 }
 
 /**

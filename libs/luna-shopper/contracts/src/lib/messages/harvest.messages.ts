@@ -21,6 +21,7 @@ import type {
   SourceLocationStatus,
 } from '../enums/harvest.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { SourceSizeUnit } from '../units/source-size';
 import type { AdminCredential } from './admin-auth.messages';
 import type {
   BulkOperationError,
@@ -743,7 +744,7 @@ export interface DiscoveredPlaceGroup {
  *
  * The fields fall into two groups, and the split is the contract. The first is
  * the **source's**, and every run rewrites it verbatim: `name`, `brand`, `ean`,
- * `unitSize`, `sizeFormat`, `categoryPath`, `url`, `extra`. The second is a
+ * `unitSize`, `sizeUnit`, `sizeFormat`, `categoryPath`, `url`, `extra`. The second is a
  * **person's**, or the EAN rung's, and a run only reads it: `itemId`,
  * `candidateEntryId`, `status`, `matchedBy`, `confidence`, `decidedAt`.
  *
@@ -764,6 +765,14 @@ export interface SourceCatalogEntryView {
   /** The one identifier that joins across chains. Leaflets and DEZA rarely fill it. */
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The unit `unitSize` is in, as the source's own adapter stated it (plan
+   * 0177). Null when `unitSize` is null, on a row no run has seen since that
+   * plan, and for a size printed in a unit the catalog does not hold, such as
+   * a length. The printed text cannot say it: one source converts `75cl` to
+   * 750 and another keeps `6x33cl` at 198.
+   */
+  sizeUnit: SourceSizeUnit | null;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**
