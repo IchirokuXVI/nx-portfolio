@@ -4,15 +4,12 @@ import {
   brandsRoutes,
 } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
-  CatalogDashboard,
-  catalogRoutes,
-  CATEGORIES,
   CHAIN_RESOURCES,
   chainsRoutes,
-  ITEMS,
-  PRICE_POLICIES,
-  PRICES,
-  PRODUCT_GROUPS,
+  oldCatalogAddresses,
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import {
@@ -41,16 +38,6 @@ import {
   StoreIcon,
   TagIcon,
 } from '@portfolio/shared/ui';
-
-/**
- * The segment the catalog owns, for the rare screen that builds an absolute URL
- * into it by hand.
- *
- * Exported the way `HARVEST_SEGMENT` is, and used the same way: a **resource**
- * under this section is found through `ResourceRegistry.pathOf` and never
- * through this constant.
- */
-export const CATALOG_SEGMENT = 'catalog';
 
 /** The segment the shoppers section owns, for the same narrow use. */
 export const SHOPPERS_SEGMENT = 'shoppers';
@@ -99,16 +86,15 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  *
  * The sections run in the order an operator meets them: the overview, then the
  * chains, which hold the shops, the sections and the price scopes (admin plan
- * 0042); then the catalog, which is the products and their prices; then the
- * people and what they share, which is read far more often than it is touched;
- * then the harvester, which produces most of the catalog; then the admin
- * table, which is opened to answer one question and never to change anything.
+ * 0042); then the products, with their groups, their categories and the price
+ * rules (admin plan 0043); then the people and what they share, which is read
+ * far more often than it is touched; then the harvester, which produces most
+ * of the catalog; then the admin table, which is opened to answer one question
+ * and never to change anything.
  *
- * Inside the catalog the order follows what an operator is holding in their head
- * rather than the alphabet. The products, then the categories they sit in
- * (admin plan 0036), then the groups that make two products comparable, then
- * the prices, which need a product and a scope to exist at all. Backend plan
- * 0080 puts the price policies straight after the prices they decide between.
+ * **There is no Catalog section any more.** It held ten screens. Five went to
+ * the chains and five are the products, and its dashboard is a block of the
+ * overview. What is left of `/catalog` is redirects.
  *
  * Among the shoppers, each nested collection follows the resource it hangs off:
  * a membership after zones, a line after lists. Neither can be listed from
@@ -137,19 +123,27 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: 'shell.sections.chains',
     icon: StoreIcon,
     held: CHAIN_RESOURCES,
-    screens: chainsRoutes(),
+    // Beside the chains, at the root, everything that was under `/catalog`:
+    // redirects to where a chain or a product holds the same rows now (admin
+    // plans 0042 and 0043). They are here because this is the section whose
+    // screens are mounted at the root, and no section owns that segment.
+    screens: [...chainsRoutes(), oldCatalogAddresses()],
   },
   {
-    key: 'catalog',
-    label: 'shell.sections.catalog',
+    // A product and its prices (admin plan 0043). Third on the rail.
+    //
+    // The four lists are held and are the section's tabs: Products at the
+    // section's own address, then Groups, Categories and Price rules one
+    // segment under it. A product is a page with tabs of its own, so the
+    // section's route table mounts all of it and the route factory mounts
+    // none. The fifth resource, a price, sits under one product and is no tab.
+    key: 'products',
+    label: 'shell.sections.products',
     icon: TagIcon,
-    segment: CATALOG_SEGMENT,
-    home: CatalogDashboard,
-    resources: [ITEMS, CATEGORIES, PRODUCT_GROUPS, PRICES, PRICE_POLICIES],
-    // One product at every scope (admin plan 0033), reached from the product
-    // and from a price's history rather than from the navigation. Then the
-    // addresses the chain screens had here, as redirects (admin plan 0042).
-    screens: catalogRoutes(),
+    segment: PRODUCTS_SEGMENT,
+    held: PRODUCT_RESOURCES,
+    heldTabs: true,
+    screens: productsRoutes(),
   },
   {
     key: 'shoppers',

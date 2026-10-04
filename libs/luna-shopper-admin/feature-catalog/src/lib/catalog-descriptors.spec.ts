@@ -652,15 +652,26 @@ describe('the price form', () => {
   /**
    * Since backend plan 0080 the form **adds a row** and never edits one: an
    * effective price is derived, and correcting a typo is removing the row and
-   * adding another. So the descriptor offers a create and nothing else, and
-   * opens a row on a detail screen of its own rather than on the form.
+   * adding another. So the descriptor offers a create and nothing else. It has
+   * no detail screen: a price is read on the Prices tab of its product (admin
+   * plan 0043, target 7).
    */
   it('adds a price and never edits or deletes the effective row', () => {
     expect(PRICES.actions?.create).toBe(true);
     expect(PRICES.actions?.edit).toBeUndefined();
     expect(PRICES.actions?.delete).toBeUndefined();
-    expect(PRICES.detail).toBeDefined();
+    expect(PRICES.detail).toBeUndefined();
     expect(PRICES.editor).toBeDefined();
+  });
+
+  /** A price sits under its product: `/products/{productId}/prices`. */
+  it('is addressed under the product it prices', () => {
+    expect(PRICES.parent).toEqual({
+      resource: 'items',
+      param: 'productId',
+      filter: 'itemId',
+    });
+    expect(PRICES.segment).toBe('prices');
   });
 
   /**

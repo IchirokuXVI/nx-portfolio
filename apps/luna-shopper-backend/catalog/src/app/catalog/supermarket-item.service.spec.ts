@@ -412,6 +412,26 @@ describe('SupermarketItemService.adminList', () => {
   });
 
   /**
+   * Admin plan 0043, section 2: the price of every product on one page of the
+   * product list, in one read. The clause itself is proved against Postgres in
+   * `admin-product-list.integration.spec.ts`.
+   */
+  it('narrows to the products named', async () => {
+    const { svc, qb } = build();
+    await svc.adminList({ userId: ADMIN, itemIds: ['item-1', 'item-2'] });
+    expect(qb.andWhere).toHaveBeenCalledWith('si."itemId" IN (:...itemIds)', {
+      itemIds: ['item-1', 'item-2'],
+    });
+  });
+
+  /** `IN ()` is a syntax error, and an empty filter is no filter. */
+  it('reads an empty list of products as no filter', async () => {
+    const { svc, qb } = build();
+    await svc.adminList({ userId: ADMIN, itemIds: [] });
+    expect(qb.andWhere).not.toHaveBeenCalled();
+  });
+
+  /**
    * `available: false` is a filter and not an absent one. Reading it as "no
    * filter" is the obvious bug, and it would hide exactly the rows an operator
    * opened the screen to find.

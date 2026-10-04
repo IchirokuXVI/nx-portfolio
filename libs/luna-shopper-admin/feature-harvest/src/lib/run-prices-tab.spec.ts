@@ -61,8 +61,14 @@ async function render(
         },
       },
       {
+        // A product's prices are its Prices tab (admin plan 0043).
         provide: ResourceRegistry,
-        useValue: { pathOf: () => ['/', 'catalog', 'items'] },
+        useValue: {
+          pathOf: (name: string, known: Record<string, string> = {}) =>
+            name === 'prices'
+              ? ['/', 'products', known['itemId'], 'prices']
+              : null,
+        },
       },
     ],
   }).compileComponents();
@@ -89,20 +95,18 @@ describe('the prices a run wrote', () => {
     expect(text(fixture)).toContain('harvest.run.prices.written.CONFIRMED');
   });
 
-  it('names the product and links it to its prices at every scope', async () => {
+  it('names the product and links it to its Prices tab, at the scope written', async () => {
     const fixture = await render('run-catalog-completed');
     const [first] = fixture.componentInstance.shown();
 
     expect(first.item).toBe('Whole milk 1 L');
-    expect(first.link).toEqual([
-      '/',
-      'catalog',
-      'items',
-      'it_milk_1l',
-      'prices',
-    ]);
+    expect(first.link).toEqual(['/', 'products', 'it_milk_1l', 'prices']);
+    expect(first.query).toEqual({ scope: first.query.scope });
+    expect(first.query.scope).not.toBe('');
     const link = fixture.nativeElement.querySelector('tbody a');
-    expect(link.getAttribute('href')).toBe('/catalog/items/it_milk_1l/prices');
+    expect(link.getAttribute('href')).toBe(
+      `/products/it_milk_1l/prices?scope=${first.query.scope}`
+    );
   });
 
   it('keeps a product the lookup cannot name as its id', async () => {

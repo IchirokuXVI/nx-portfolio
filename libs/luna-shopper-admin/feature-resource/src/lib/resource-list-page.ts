@@ -385,7 +385,7 @@ export class ResourceListPage {
   readonly store = new ResourceListStore<ResourceRow>(
     this.descriptor,
     this.descriptor.gateway(),
-    this._linkedFilters(),
+    this.initialFilters(),
     this._fixedFilters()
   );
 
@@ -800,8 +800,13 @@ export class ResourceListPage {
    * string cannot send the gateway something the list would never send
    * itself. A refusal's link uses this to open a list already narrowed: the
    * products of a category that could not be deleted.
+   *
+   * A list that opens narrowed by something else as well overrides this
+   * (admin plan 0043): the products open at the price scope the operator
+   * chose last. It runs while the page is being built, so an override may
+   * call `inject` and may not read a field of its own class.
    */
-  private _linkedFilters(): Record<string, string> {
+  protected initialFilters(): Record<string, string> {
     const params = this._route.snapshot.queryParamMap;
     const filters: Record<string, string> = {};
     for (const filter of this.filters) {

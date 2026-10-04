@@ -82,7 +82,7 @@
     "sections": {
       "overview": "Overview",
       "chains": "Chains",
-      "catalog": "Catalog",
+      "products": "Products",
       "shoppers": "Shoppers",
       "harvest": "Harvester",
       "admins": "Admins"
@@ -426,7 +426,6 @@
       }
     },
     "items": {
-      "pricesLink": "Prices at every scope",
       "sources": {
         "heading": "Source products",
         "empty": "No chain product is bound to or proposed for this product.",
@@ -495,7 +494,42 @@
         "refused": "Nothing was changed.",
         "unknown": "Not found: {{names}}",
         "close": "Done"
+      },
+      "add": "Add a product",
+      "product": "Product",
+      "group": "Group",
+      "selectAll": "Select every loaded product",
+      "selected_one": "{{count}} product selected",
+      "selected_other": "{{count}} products selected",
+      "clearSelection": "Clear",
+      "info": {
+        "title": "the product list",
+        "tick": "Tick products to set their group or categories together.",
+        "scope": "Choose a scope in Prices at to see what each product costs there."
       }
+    },
+    "products": {
+      "back": "Back to products",
+      "edit": "Edit product",
+      "delete": "Delete product",
+      "deleteHeading": "Delete this product?",
+      "deleteBody": "{{name}} will be deleted, with every price it holds. There is no undo.",
+      "deleteConfirm": "Delete the product",
+      "summary": "Product",
+      "noGroup": "No group",
+      "tabs": {
+        "details": "Details",
+        "prices": "Prices",
+        "where": "Where it is",
+        "sources": "Sources"
+      }
+    },
+    "categoryTree": {
+      "all": "All products",
+      "none": "No category",
+      "open": "Show what is inside {{name}}",
+      "close": "Hide what is inside {{name}}",
+      "edit": "Edit the category tree"
     },
     "categories": {
       "one": "category",
@@ -518,11 +552,14 @@
         "query": "Name or handle contains",
         "parentId": "Inside",
         "kind": "Level"
-      }
+      },
+      "add": "Add a category",
+      "delete": "Delete {{name}}",
+      "products": "{{count}} products in {{name}}. Show them."
     },
     "productGroups": {
       "one": "product group",
-      "many": "Product groups",
+      "many": "Groups",
       "id": "Identifier",
       "name": "Name",
       "slug": "Handle",
@@ -604,34 +641,12 @@
       "observedAtHelp": "When the shown price was last observed by its source.",
       "stale": "Out of date",
       "staleHelp": "Nothing currently eligible prices this product, so the newest price anybody gave is shown and flagged. Set by the server from the price policies.",
-      "info": {
-        "row": "One row is the price a shopper sees at one scope.",
-        "open": "Open a row to see every price behind it, add one, or remove one."
-      },
       "filter": {
         "itemId": "Product",
         "priceScopeId": "Price scope",
         "sourceKind": "Source",
         "stale": "Out of date",
         "available": "Sold at this scope"
-      },
-      "history": {
-        "back": "Back to the prices",
-        "scope": "Scope",
-        "effective": "Shown to shoppers",
-        "noEffective": "No price is shown for this product in this scope.",
-        "staleYes": "Yes, nothing current prices it",
-        "staleNo": "No",
-        "rows": "Every price a source gave",
-        "none": "No source has priced this product in this scope.",
-        "shown": "shown",
-        "seen": "Seen",
-        "lastSeen": "last",
-        "run": "run",
-        "overriding": "Overriding {{kind}} at {{price}}",
-        "remove": "Remove",
-        "actions": "Actions",
-        "add": "Add a price"
       },
       "confirm": {
         "remove": {
@@ -657,28 +672,73 @@
         "use": "Use this unit price",
         "inUse": "The unit price field holds this proposal."
       },
-      "byItem": {
-        "open": "Every scope for this product",
-        "back": "Back to the product",
-        "empty": "No scope prices this product.",
-        "stale": "Shown on sufferance",
-        "nothingShown": "No row is shown at this scope.",
-        "protectedUntil": "Protected until {{date}}",
-        "protectionEnded": "Protection ended {{date}}",
-        "history": "History, and add a price here",
-        "more": "Show more scopes",
-        "because": {
-          "PROTECTED_ADMIN": "A person typed this price, it is inside its seven days of protection, and no source disputes it.",
-          "POLICY_PRIORITY": "Several rows were eligible, and this source comes first in the price policies.",
-          "ONLY_ROW": "No other row was a candidate.",
-          "NEWEST": "It is the newest: two eligible rows ranked the same, or nothing was eligible and the newest is shown as stale.",
-          "UNKNOWN": "The server gave a reason this screen does not know."
-        }
+      "chooseScope": "Choose a chain, then a scope"
+    },
+    "productPrices": {
+      "hint": "Open a row to see every price behind it.",
+      "add": "Add a price",
+      "addHere": "Add a price here",
+      "scopes_one": "{{count}} scope",
+      "scopes_other": "{{count}} scopes",
+      "none": "No price shown",
+      "noneYet": "No price yet. A run or a person can add one.",
+      "empty": "No chain has a price scope yet, so there is nowhere to add a price.",
+      "more": "Show more scopes",
+      "heldUntil": "Held until {{date}}",
+      "remove": "Remove",
+      "run": "Run of {{date}}.",
+      "seen": "Seen {{date}}",
+      "until": "Until {{date}}",
+      "overriding": "Overriding {{kind}} at {{price}}",
+      "noTillPrice": "Unit price only",
+      "nothingShown": "No price is shown at this scope.",
+      "state": {
+        "shown": "Shown",
+        "ended": "Ended",
+        "tooOld": "Too old"
+      },
+      "because": {
+        "PROTECTED_ADMIN": "Shown because a person typed it in, it is held for seven days, and no source says otherwise.",
+        "POLICY_PRIORITY": "Shown because it is the newest price from the highest ranked source.",
+        "ONLY_ROW": "Shown because it is the only price at this scope.",
+        "NEWEST": "Shown because it is the newest. Either two sources rank the same, or every price is out of date.",
+        "UNKNOWN": "The server gave a reason this screen does not know."
+      },
+      "info": {
+        "title": "the prices of a product",
+        "row": "One row is the price a shopper sees at one scope.",
+        "open": "Open a row to see every price behind it.",
+        "held": "A price typed in by an admin is held for seven days, then sources compete again."
+      },
+      "followers_one": "Also the price of {{count}} narrower scope",
+      "followers_other": "Also the price of {{count}} narrower scopes",
+      "fromWider": "Written at a wider scope"
+    },
+    "pricesAt": {
+      "label": "Prices at",
+      "choose": "Choose the price scope the list shows",
+      "none": "No scope",
+      "clear": "Show no prices",
+      "seen": "Seen",
+      "notSold": "Not sold here",
+      "state": {
+        "label": "Price state",
+        "any": "Any price",
+        "stale": "Out of date",
+        "note": "These rows show the product name and its price only. Choose Any price to search, filter and tick products again."
       }
     },
+    "scopePicker": {
+      "find": "Find a scope",
+      "noScopes": "This chain has no price scope to choose.",
+      "noChains": "There are no chains to choose from.",
+      "truncated": "Only the first 500 are listed.",
+      "shops": "Show single shop scopes",
+      "clear": "No scope"
+    },
     "pricePolicies": {
-      "one": "price policy",
-      "many": "Price policies",
+      "one": "price rule",
+      "many": "Price rules",
       "sourceKind": "Source",
       "priority": "Priority",
       "priorityHelp": "Lower wins. A leaflet at 10 outranks a website crawl at 30 whenever both are eligible.",
@@ -691,7 +751,11 @@
         "age": "A price older than the limit of its rule is out of date. A newer price from a lower rule then replaces it.",
         "off": "Turn a rule off to ignore every price from that kind of source."
       },
-      "caution": "Saving a rule works out the shown price of every product again. Expect a short wait."
+      "caution": "Saving a rule works out the shown price of every product again. Expect a short wait.",
+      "neverOld": "Never out of date",
+      "oldAfter_one": "Out of date after {{count}} day",
+      "oldAfter_other": "Out of date after {{count}} days",
+      "switch": "Use prices from {{source}}"
     },
     "locationItems": {
       "one": "shop product",
@@ -2090,6 +2154,7 @@
       "sources": "{{enabled}} of {{total}} chains enabled"
     },
     "catalog": {
+      "heading": "Catalog",
       "supermarkets": "Chains",
       "locations": "Shops",
       "items": "Products",

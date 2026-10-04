@@ -65,13 +65,19 @@ const MAY_BUILD = ['routes.ts', 'admin-section.ts', 'resource-registry.ts'];
  */
 const SEGMENTS = [
   ...new Set(
-    ADMIN_SECTIONS.flatMap((section) =>
-      [...(section.resources ?? []), ...(section.held ?? [])].map(
+    ADMIN_SECTIONS.flatMap((section) => [
+      ...[...(section.resources ?? []), ...(section.held ?? [])].map(
         (descriptor) => descriptor.segment
-      )
-    )
+      ),
+      // A section that holds a resource at its own address (admin plan 0043):
+      // the products have no segment of their own, and are at `/products`.
+      ...((section.held ?? []).some((descriptor) => descriptor.segment === '')
+        ? [section.segment ?? '']
+        : []),
+    ])
+    // A resource at its section's own address has no segment to look for.
   ),
-];
+].filter((segment) => segment !== '');
 
 /** A path that opens with one of them, quoted or as the head of a link array. */
 function literalPath(segment: string): RegExp {
@@ -152,6 +158,18 @@ describe('a resource path is never written by hand', () => {
         'products',
       ])
     );
+  });
+
+  it('looks for the segments of the Products section as well', () => {
+    expect(SEGMENTS).toEqual(
+      expect.arrayContaining([
+        'products',
+        'groups',
+        'categories',
+        'price-rules',
+      ])
+    );
+    expect(SEGMENTS).not.toContain('');
   });
 
   it.each(SEGMENTS)('builds no link out of the %s segment', (segment) => {

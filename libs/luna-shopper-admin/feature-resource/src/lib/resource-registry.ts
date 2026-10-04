@@ -204,9 +204,15 @@ export class ResourceRegistry {
       const named = [...(section.resources ?? []), ...(section.held ?? [])];
 
       if (named.includes(descriptor)) {
-        return section.segment === undefined
-          ? ['/', descriptor.segment]
-          : ['/', section.segment, descriptor.segment];
+        // A resource with no segment of its own is at its section's address
+        // (admin plan 0043): the products are at `/products`.
+        return [
+          '/',
+          ...[section.segment, descriptor.segment].filter(
+            (segment): segment is string =>
+              segment !== undefined && segment !== ''
+          ),
+        ];
       }
     }
 

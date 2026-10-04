@@ -32,7 +32,8 @@ export type PricePolicy = Wire.CatalogPricePolicyView;
  */
 export const PRICE_POLICIES = defineResource<PricePolicy>({
   name: 'price-policies',
-  segment: 'price-policies',
+  // The Price rules tab of the Products section (admin plan 0043).
+  segment: 'price-rules',
   labels: {
     one: 'catalog.pricePolicies.one',
     many: 'catalog.pricePolicies.many',

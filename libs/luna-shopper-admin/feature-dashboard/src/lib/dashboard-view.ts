@@ -20,11 +20,13 @@ import type { TileView } from '@portfolio/luna-shopper-admin/ui';
  * about assertions: the numbers are on a view model, never only in interpolated
  * text the testing translator does not fill in.
  *
- * **Three of them are left.** The counts and the charts moved to the section
- * that owns them: `peopleTiles`, `signUpsChart` and `zonesAndListsChart` to
- * `feature-people`, `catalogTiles` and `pricesWrittenChart` to
- * `feature-catalog`, `recentRunRows` and `runsByStatusChart` to
- * `feature-harvest`. None of them changed except to take {@link PathOf} where it
+ * **Three of them are left here.** The counts and the charts moved to the
+ * section that owns them: `peopleTiles`, `signUpsChart` and
+ * `zonesAndListsChart` to `feature-people`, `recentRunRows` and
+ * `runsByStatusChart` to `feature-harvest`. `catalogTiles` and
+ * `pricesWrittenChart` went to `feature-catalog` and came back, to
+ * `catalog-view.ts` beside this file, when the Catalog section went (admin
+ * plan 0043). None of them changed except to take {@link PathOf} where it
  * held a literal path, and nothing was copied. What stays is what is true of the
  * whole system rather than of one part of it: every queue in one place, a fact
  * about the tool itself, and a feed that crosses all three audit trails by
@@ -179,7 +181,9 @@ export function waitingTiles(
         'stale',
         translate('dashboard.waiting.stalePrices'),
         catalog.supermarketItems.stale,
-        pathOf('prices')
+        // Every out of date price over every scope has no list of its own
+        // (admin plan 0043): the product list shows them one scope at a time.
+        pathOf('items')
       )
     );
   }

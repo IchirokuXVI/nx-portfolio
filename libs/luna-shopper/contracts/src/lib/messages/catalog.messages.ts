@@ -2321,6 +2321,16 @@ export interface SearchItemsRequest extends PageQuery {
    */
   withoutProductGroup?: boolean;
   /**
+   * Only the products on no category at all (admin plan 0043, section 2).
+   *
+   * A product needs a category to be written, so these are the rows a source
+   * left behind and the rows a deleted category let go of. A separate flag for
+   * the reason {@link withoutProductGroup} is one: absent already means "any
+   * category". Setting it beside a `categoryId` answers nothing, which is what
+   * the two together mean.
+   */
+  withoutCategory?: boolean;
+  /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
    * **Absent and empty are the same answer since plan 0069, section 2**: the
@@ -3071,10 +3081,19 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
  * and is the only useful shape for somebody looking for the row they just broke,
  * so it is reachable by an operator token and by nothing else.
  */
+/** How many products one {@link AdminListSupermarketItemsRequest} may name. */
+export const ADMIN_PRICE_ITEM_IDS_MAX = 100;
+
 export interface AdminListSupermarketItemsRequest
   extends PageQuery, AdminCredential {
   /** One product's prices across every scope. */
   itemId?: string;
+  /**
+   * Several products at once (admin plan 0043, section 2): the price of every
+   * product on one page of the product list, in one read. At most
+   * {@link ADMIN_PRICE_ITEM_IDS_MAX}. Empty is the same as absent.
+   */
+  itemIds?: string[];
   /** One scope's prices, which is what a chain's price table is. */
   priceScopeId?: string;
   /** `ADMIN` answers "what have I overridden": the effective rows an operator's price won. */

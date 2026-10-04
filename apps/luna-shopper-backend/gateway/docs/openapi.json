@@ -16387,9 +16387,8 @@
             "name": "categoryId",
             "required": false,
             "in": "query",
-            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.",
+            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children. The literal `none` instead of a uuid asks for the products on no category at all.",
             "schema": {
-              "format": "uuid",
               "type": "string"
             }
           },
@@ -19721,6 +19720,19 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "name": "itemIds",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable, at most 100. Only the prices of these products: with priceScopeId, the price of every product on one page of the product list in one read (admin plan 0043). Empty and absent both mean every product.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
             }
           },
           {

@@ -59,10 +59,10 @@ function descriptor(name: string): AnyResourceDescriptor {
 /** The mount of admin plan 0022, as far as the overview's links reach into it. */
 const SECTIONS = [
   {
-    key: 'catalog',
-    label: 'shell.sections.catalog',
+    key: 'products',
+    label: 'shell.sections.products',
     segment: 'catalog',
-    resources: [descriptor('prices')],
+    resources: [descriptor('items')],
   },
   {
     key: 'shoppers',
@@ -128,10 +128,11 @@ afterEach(() => TestBed.resetTestingModule());
  */
 describe('DashboardPage against the seed', () => {
   /**
-   * Three things, and each is a question about the whole tool rather than about
-   * one part of it (admin plan 0022, section 6).
+   * Work waiting, the sign ins and the feed are each a question about the
+   * whole tool (admin plan 0022, section 6). The catalog's numbers are here
+   * as a block since its own section went (admin plan 0043, target 8).
    */
-  it('draws work waiting, the sign ins and the feed, and nothing else', async () => {
+  it('draws work waiting, the catalog, the sign ins and the feed, and nothing else', async () => {
     const fixture = await render();
     const headings = fixture.debugElement
       .queryAll(By.css('h2'))
@@ -139,19 +140,43 @@ describe('DashboardPage against the seed', () => {
 
     expect(headings).toEqual([
       'dashboard.waiting.heading',
+      'dashboard.catalog.heading',
       'dashboard.signIns.heading',
       'dashboard.activity.heading',
     ]);
   });
 
   /**
-   * The counts and the charts went to the section that owns them. A count of
-   * users was here only because there was nowhere else for it.
+   * The people's counts and charts are on their own section's dashboard. The
+   * catalog's are here: its five tiles, and the prices written per day.
    */
-  it('draws no chart at all', async () => {
+  it('draws the catalog block, with its one chart and no other', async () => {
     const fixture = await render();
 
     expect(fixture.debugElement.queryAll(By.directive(LineChart))).toEqual([]);
+    expect(fixture.debugElement.queryAll(By.directive(BarChart))).toHaveLength(
+      1
+    );
+    expect(
+      fixture.componentInstance.catalog().map((tile) => tile.key)
+    ).toEqual([
+      'supermarkets',
+      'locations',
+      'items',
+      'productGroups',
+      'supermarketItems',
+    ]);
+    expect(
+      fixture.componentInstance.pricesWritten().bars.length
+    ).toBeGreaterThan(0);
+  });
+
+  it('draws no catalog block when catalog did not answer', async () => {
+    const fixture = await render(dashboardSeedWithout('catalog'));
+
+    expect(
+      fixture.debugElement.query(By.css('[data-catalog-block]'))
+    ).toBeNull();
     expect(fixture.debugElement.queryAll(By.directive(BarChart))).toEqual([]);
   });
 
@@ -203,7 +228,7 @@ describe('DashboardPage against the seed', () => {
       'shops',
     ]);
     expect(byKey.get('places')?.link).toEqual(['/', 'harvest', 'places']);
-    expect(byKey.get('stale')?.link).toEqual(['/', 'catalog', 'prices']);
+    expect(byKey.get('stale')?.link).toEqual(['/', 'catalog', 'items']);
     expect(byKey.get('postalCodes')?.link).toEqual([
       '/',
       'harvest',
@@ -266,8 +291,11 @@ describe('DashboardPage against the seed', () => {
     const captioned = tiles(fixture).filter(
       (tile) => tile.caption() !== undefined
     );
-    expect(captioned).toHaveLength(1);
-    expect(captioned[0].label()).toBe('dashboard.waiting.postalCodes');
+    // The postal code queue, and the priced products of the catalog block.
+    expect(captioned.map((tile) => tile.label())).toEqual([
+      'dashboard.waiting.postalCodes',
+      'dashboard.catalog.supermarketItems',
+    ]);
 
     const entries = fixture.debugElement.query(
       By.css(`a.tile[href="/harvest/entries?supermarketId=${MERCADONA}"]`)

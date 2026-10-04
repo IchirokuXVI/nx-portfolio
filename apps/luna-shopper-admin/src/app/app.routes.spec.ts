@@ -174,12 +174,21 @@ describe('appRoutes', () => {
     ['/chains/sm_mercadona/scopes', 'the price scopes of a chain'],
     ['/chains/sm_mercadona/scopes/new', 'the form of a new price scope'],
     ['/chains/sm_mercadona/details', 'the form of a chain'],
-    ['/catalog', 'the catalog dashboard'],
-    ['/catalog/items', 'the products'],
-    ['/catalog/categories', 'the categories'],
-    ['/catalog/product-groups', 'the product groups'],
-    ['/catalog/prices', 'the prices'],
-    ['/catalog/price-policies', 'the price policies'],
+    // A product and its prices (admin plan 0043).
+    ['/products', 'the products'],
+    ['/products/new', 'the form of a new product'],
+    ['/products/groups', 'the product groups'],
+    ['/products/groups/new', 'the form of a new group'],
+    ['/products/groups/pg_whole_milk', 'a product group'],
+    ['/products/categories', 'the category tree'],
+    ['/products/categories/new', 'the form of a new category'],
+    ['/products/price-rules', 'the price rules'],
+    ['/products/price-rules/ADMIN', 'a price rule, its form open'],
+    ['/products/it_milk_1l/details', 'the form of a product'],
+    ['/products/it_milk_1l/prices', 'the prices of a product'],
+    ['/products/it_milk_1l/prices/new', 'the form of a new price'],
+    ['/products/it_milk_1l/where', 'where a product is'],
+    ['/products/it_milk_1l/sources', 'the source rows of a product'],
     ['/shoppers', 'the shoppers dashboard'],
     ['/shoppers/users', 'the users'],
     ['/shoppers/zones', 'the zones'],
@@ -205,13 +214,14 @@ describe('appRoutes', () => {
     expect(router.url).toBe(url);
   });
 
-  /** A chain and a shop each open on their first tab. */
+  /** A chain, a shop and a product each open on their first tab. */
   it.each([
     ['/chains/sm_mercadona', '/chains/sm_mercadona/shops'],
     [
       '/chains/sm_mercadona/shops/loc_cordoba_centro',
       '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
     ],
+    ['/products/it_milk_1l', '/products/it_milk_1l/details'],
   ])('opens %s on its first tab', async (url, tab) => {
     const { router } = await boot(true);
 
@@ -249,6 +259,34 @@ describe('appRoutes', () => {
       '/catalog/location-items?supermarketId=sm_consum',
       '/chains/sm_consum/shops',
     ],
+  ])('sends the old address %s to %s', async (old, now) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(old);
+
+    expect(router.url).toBe(now);
+  });
+
+  /**
+   * The addresses the five product screens had under `/catalog`, and the
+   * section's own (admin plan 0043, targets 7 and 8), against the app's own
+   * sections. `old-addresses.spec.ts` beside the product screens holds every
+   * case, and this is the proof that the app mounts them where the old
+   * screens were.
+   */
+  it.each([
+    ['/catalog', '/'],
+    ['/catalog/items', '/products'],
+    ['/catalog/items/it_milk_1l', '/products/it_milk_1l/details'],
+    ['/catalog/items/it_milk_1l/prices', '/products/it_milk_1l/prices'],
+    ['/catalog/categories', '/products/categories'],
+    ['/catalog/product-groups', '/products/groups'],
+    ['/catalog/prices', '/products'],
+    [
+      '/catalog/prices/it_milk_1l~ps_mercadona_4661',
+      '/products/it_milk_1l/prices?scope=ps_mercadona_4661',
+    ],
+    ['/catalog/price-policies', '/products/price-rules'],
   ])('sends the old address %s to %s', async (old, now) => {
     const { router } = await boot(true);
 

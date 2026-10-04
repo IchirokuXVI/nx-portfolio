@@ -34,7 +34,8 @@ export type ProductGroup = Wire.CatalogProductGroupView;
  */
 export const PRODUCT_GROUPS = defineResource<ProductGroup>({
   name: 'product-groups',
-  segment: 'product-groups',
+  // The Groups tab of the Products section (admin plan 0043).
+  segment: 'groups',
   labels: {
     one: 'catalog.productGroups.one',
     many: 'catalog.productGroups.many',

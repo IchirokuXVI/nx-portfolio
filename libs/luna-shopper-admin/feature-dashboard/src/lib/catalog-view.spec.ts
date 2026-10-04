@@ -3,7 +3,7 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { catalogTiles, pricesWrittenChart } from './catalog-dashboard-view';
+import { catalogTiles, pricesWrittenChart } from './catalog-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -42,7 +42,7 @@ function catalog(
 }
 
 describe('catalogTiles', () => {
-  it('is five tiles, the last of which opens the price list', () => {
+  it('is five tiles, the last of which opens the products', () => {
     const tiles = catalogTiles(catalog(), translate, pathOf);
 
     expect(tiles.map((tile) => tile.key)).toEqual([
@@ -52,7 +52,8 @@ describe('catalogTiles', () => {
       'productGroups',
       'supermarketItems',
     ]);
-    expect(tiles[4].link).toEqual(['/', 'catalog', 'prices']);
+    // A price has no screen of its own (admin plan 0043).
+    expect(tiles[4].link).toEqual(['/', 'catalog', 'items']);
     expect(tiles[4].value).toBe(900);
   });
 

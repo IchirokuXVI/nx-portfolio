@@ -6,12 +6,13 @@ import type {
 import type { BarChartView, TileView } from '@portfolio/luna-shopper-admin/ui';
 
 /**
- * The catalog block of the dashboard document, as the catalog screen draws it.
+ * The catalog block of the dashboard document, as the overview draws it.
  *
- * Both functions came from `feature-dashboard` with admin plan 0022 and neither
- * changed except to take {@link PathOf} where it held a literal path. They are
- * here because this is the library that owns the screens they link to, which is
- * the same rule that puts a descriptor beside its gateway.
+ * Admin plan 0022 moved both functions to `feature-catalog`, for a dashboard
+ * of the Catalog section. That section is gone (admin plan 0043): its screens
+ * are the Chains and the Products sections, neither of which opens on a
+ * dashboard. So the tiles and the chart are a block of the overview again,
+ * and the functions are back beside the page that draws them.
  */
 
 /** The six price source kinds, in the order that fixes their chart colours. */
@@ -61,7 +62,9 @@ export function catalogTiles(
       }),
       delta: null,
       trend: null,
-      link: pathOf('prices'),
+      // A price has no screen of its own (admin plan 0043). It is read on its
+      // product, and the products are where an operator starts.
+      link: pathOf('items'),
       query: null,
       tone: 'quiet',
     },

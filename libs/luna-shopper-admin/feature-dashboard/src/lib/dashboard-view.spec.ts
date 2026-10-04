@@ -26,7 +26,6 @@ const pathOf: PathOf = (name) => {
     zones: 'shoppers',
     lists: 'shoppers',
     users: 'shoppers',
-    prices: 'catalog',
     items: 'catalog',
     'postal-codes': 'harvest',
   };
@@ -206,13 +205,13 @@ describe('waitingTiles', () => {
     expect(places?.link).toEqual(['/', 'harvest', 'places']);
   });
 
-  it('sends the stale prices to the price list, wherever it is mounted', () => {
+  it('sends the stale prices to the products, wherever they are mounted', () => {
     const tile = waitingTiles(response(), translate, nameChain, pathOf).find(
       (entry) => entry.key === 'stale'
     );
 
     expect(tile?.value).toBe(61);
-    expect(tile?.link).toEqual(['/', 'catalog', 'prices']);
+    expect(tile?.link).toEqual(['/', 'catalog', 'items']);
   });
 
   /**

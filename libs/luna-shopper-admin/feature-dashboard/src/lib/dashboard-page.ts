@@ -26,10 +26,12 @@ import {
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  BarChart,
   PageHeader,
   StatTile,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
+import { catalogTiles, pricesWrittenChart } from './catalog-view';
 import {
   activityRows,
   loginFailureRows,
@@ -45,8 +47,13 @@ import {
  * That is an argument against an empty landing page and it stands. This one
  * answers, on arrival, what the operator came to find out.
  *
- * **Three things, and each is a question about the whole tool rather than about
- * one part of it.** Work waiting is every queue in the app in one place, which
+ * **The catalog's numbers are a block of this page** (admin plan 0043, target
+ * 8). They were the dashboard of a Catalog section, and that section is the
+ * Chains and the Products sections now, each of which opens on its list. So
+ * how much catalog there is, and how much of it is being priced, is read here.
+ *
+ * **Three other things, and each is a question about the whole tool rather
+ * than about one part of it.** Work waiting is every queue in the app in one place, which
  * is the reason to open the app at all. Failed sign ins are a fact about the
  * tool itself. Recent activity crosses all three audit trails by definition. A
  * count of users is none of those: it is the first line of the shoppers
@@ -68,7 +75,7 @@ import {
  */
 @Component({
   selector: 'lib-dashboard-page',
-  imports: [PageHeader, RouterLink, RokuTranslatorPipe, StatTile],
+  imports: [PageHeader, RouterLink, RokuTranslatorPipe, StatTile, BarChart],
   template: `
     <lib-page-header [heading]="'dashboard.heading' | rokuT">
       @if (measured(); as taken) {
@@ -143,6 +150,33 @@ import {
           <p class="state">{{ 'dashboard.waiting.clear' | rokuT }}</p>
         }
       </section>
+
+      <!-- How much catalog there is, and how much of it is being priced. Skipped
+           entirely when catalog did not answer, which the row above already
+           says. -->
+      @if (doc.catalog !== null) {
+        <section class="block" data-catalog-block>
+          <h2>{{ 'dashboard.catalog.heading' | rokuT }}</h2>
+
+          <div class="tiles">
+            @for (tile of catalog(); track tile.key) {
+              <lib-stat-tile
+                [caption]="tile.caption ?? undefined"
+                [label]="tile.label"
+                [link]="tile.link ?? undefined"
+                [tone]="tile.tone"
+                [value]="tile.value"
+              />
+            }
+          </div>
+
+          <lib-bar-chart
+            [bars]="pricesWritten().bars"
+            [series]="pricesWritten().series"
+            [title]="text('dashboard.catalog.pricesWritten')"
+          />
+        </section>
+      }
 
       <!-- Skipped entirely when auth did not answer, which the row above already
            says. -->
@@ -506,6 +540,22 @@ export class DashboardPage {
     return postalCodes === null ? tiles : [...tiles, postalCodes];
   });
 
+  /** The catalog's counts, each a way into the list it counts. */
+  readonly catalog = computed(() => {
+    const catalog = this.document()?.catalog ?? null;
+    return catalog === null
+      ? []
+      : catalogTiles(catalog, this._text, this._pathOf);
+  });
+
+  /** Prices written per day, one stacked series per kind of source. */
+  readonly pricesWritten = computed(() => {
+    const catalog = this.document()?.catalog ?? null;
+    return catalog === null
+      ? { bars: [], series: [] }
+      : pricesWrittenChart(catalog, this._text, (day) => this._day(day));
+  });
+
   readonly failures = computed(() => {
     const identity = this.document()?.identity ?? null;
     return identity === null
@@ -548,6 +598,19 @@ export class DashboardPage {
     // because the store answers a summary it already has and a refresh is the
     // one place an operator is asking for a newer one.
     void this._postalCodes.load(true);
+  }
+
+  /**
+   * A day of the window as a short label, with `Intl` and never with
+   * `DatePipe`. Parsed at noon UTC, so a viewer west of Greenwich is not shown
+   * the day before.
+   */
+  private _day(day: string): string {
+    return new Intl.DateTimeFormat(this._translate.locale(), {
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    }).format(new Date(`${day}T12:00:00.000Z`));
   }
 
   /** Every chain the queues mention, in a stable order. */
