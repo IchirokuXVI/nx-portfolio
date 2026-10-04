@@ -29,8 +29,11 @@ export class BrandHomonym extends BaseEntity {
   /**
    * The brand the printed key also names.
    *
-   * A real foreign key, `ON DELETE CASCADE`: the only brand that can be deleted
-   * is a spelling of another, and a pointer at a row that is gone says nothing.
+   * A real foreign key, `ON DELETE CASCADE`: a pointer at a row that is gone
+   * says nothing. A brand goes when it is a spelling of another, or when
+   * nothing else points at it, and a homonym never keeps it. The delete of a
+   * brand that is nobody's spelling removes these rows itself, through the
+   * trail, so the cascade is only the guarantee behind it.
    */
   @Index('ix_brand_homonyms_brand')
   @Column({ type: 'uuid' })
