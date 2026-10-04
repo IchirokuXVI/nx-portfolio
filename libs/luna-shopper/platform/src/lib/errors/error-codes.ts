@@ -275,6 +275,18 @@ export const ERROR_CODES = {
    */
   ITEM_NEEDS_A_CATEGORY: 'item_needs_a_category',
   /**
+   * A product was given an EAN that is not a real barcode (plan 0184): not 8,
+   * 12, 13 or 14 digits, a wrong check digit, or a code a shop prints on its
+   * own scales (13 digits starting with 2).
+   *
+   * Its own code rather than a plain {@link VALIDATION_FAILED}, because the
+   * sentence is particular: the operator typed a number that looks like a
+   * barcode, and has to be told that this one names no product. Only a write
+   * that sets or changes the EAN meets it. A product that already holds such
+   * a code still loads and still saves every other field.
+   */
+  ITEM_EAN_INVALID: 'item_ean_invalid',
+  /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
    * something.
@@ -478,6 +490,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.CATEGORY_IN_USE]: HttpStatus.CONFLICT,
   // 400, because what is wrong is a value in the body: an empty list.
   [ERROR_CODES.ITEM_NEEDS_A_CATEGORY]: HttpStatus.BAD_REQUEST,
+  // 400 for the same reason: what is wrong is a value in the body, a number
+  // that is not a barcode (plan 0184).
+  [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

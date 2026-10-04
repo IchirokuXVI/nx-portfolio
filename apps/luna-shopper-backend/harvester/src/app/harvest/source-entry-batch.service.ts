@@ -9,6 +9,7 @@ import {
   type CreateItemFromSourceEntryOperation,
   type CreateItemInput,
   type ItemView,
+  type LocalizedText,
   type SourceEntryDecisionOperation,
   type SourceEntryDecisionOutcome,
   type SourceEntryPriceSkip,
@@ -23,9 +24,13 @@ import { CatalogClient } from './catalog-client.service';
 import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
-import { acceptedName } from './source-entry-name';
+import { acceptedName, lacksEnglish } from './source-entry-name';
 import { createdSize } from './source-entry-size';
-import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import {
+  bindFields,
+  createdEan,
+  SourceEntryPriceWriter,
+} from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 /** The two statuses a decision may be made about (plan 0086, D7). */
@@ -149,13 +154,26 @@ export class SourceEntryBatchService {
           })
         : [];
     const byId = new Map(rows.map((row) => [row.id, row]));
+    // What each chain prints its own text in, so a row accepted with no name
+    // of its own files the printed string under the right language (plan
+    // 0111, section 7), and how its category is read (plan 0174, section 7).
+    // One read per chain on the file rather than one per row: a thousand row
+    // file names a handful of chains.
+    const adapterKeys = await this.adapterKeysOf(rows);
+    // Before anything that crosses to catalog, because it reads nothing: a
+    // product with no English name is refused here, on its own operation.
+    const unnamed = checkNames(operations, byId, adapterKeys);
+    if (unnamed.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, unnamed, null);
+    }
     const taken = await this.checkEans(operations, byId);
     if (taken.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, taken, null);
     }
     const { outcomes: unplaced, idsOf } = await this.checkCategories(
       operations,
-      byId
+      byId,
+      adapterKeys
     );
     if (unplaced.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, unplaced, null);
@@ -164,11 +182,6 @@ export class SourceEntryBatchService {
     // --- Step 2: create every product ---------------------------------------
     let created: ItemView[] = [];
     if (creates.length > 0) {
-      // What each chain prints its own text in, so a row accepted with no name
-      // of its own files the printed string under the right language (plan
-      // 0111, section 7). One read per chain on the file rather than one per
-      // row: a thousand row file names a handful of chains.
-      const adapterKeys = await this.adapterKeysOf(rows);
       try {
         const result = await this.catalog.createItems(
           creates.map((operation) => {
@@ -403,8 +416,9 @@ export class SourceEntryBatchService {
         continue;
       }
       const entry = rows.get(operation.entryId);
-      const ean =
-        operation.item.ean === undefined ? entry?.ean : operation.item.ean;
+      // Only the barcode the product will actually hold (plan 0184). An
+      // in-store or invalid code is not written, so it cannot be taken.
+      const ean = entry ? createdEan(entry, operation.item.ean) : null;
       if (ean) {
         eanOf.set(index, ean);
       }
@@ -500,7 +514,10 @@ export class SourceEntryBatchService {
    */
   private async checkCategories(
     operations: readonly SourceEntryDecisionOperation[],
-    rows: ReadonlyMap<string, SourceCatalogEntry>
+    rows: ReadonlyMap<string, SourceCatalogEntry>,
+    // The chain's adapter decides how a row's category is read (plan 0174,
+    // section 7). One read per chain on the file, as for the names.
+    adapterKeys: ReadonlyMap<string, string | null>
   ): Promise<{
     outcomes: SourceEntryDecisionOutcome[];
     idsOf: Map<string, string[]>;
@@ -511,9 +528,6 @@ export class SourceEntryBatchService {
       return { outcomes, idsOf };
     }
     const index = new CategorySlugIndex(await this.catalog.categoryTree());
-    // The chain's adapter decides how a row's category is read (plan 0174,
-    // section 7). One read per chain on the file, as for the names.
-    const adapterKeys = await this.adapterKeysOf([...rows.values()]);
     for (const [position, operation] of operations.entries()) {
       if (!isCreate(operation)) {
         continue;
@@ -563,7 +577,11 @@ export class SourceEntryBatchService {
  * **The English name is not fetched**, which is the one way the two differ:
  * that route pays one request to the chain for the one product an operator is
  * looking at, and a thousand of them inside one call would be a thousand
- * requests. The file already carries the name it decided.
+ * requests. The file carries both names instead, and {@link checkNames} has
+ * already refused one that does not (plan 0184).
+ *
+ * **The EAN is a real barcode or null** (plan 0184), whether the file or the
+ * row supplied it.
  */
 function itemFrom(
   operation: CreateItemFromSourceEntryOperation,
@@ -581,7 +599,7 @@ function itemFrom(
     // the Spanish string through the fallback. Plan 0111 says the same of `es`.
     name: acceptedName(item.name, entry.name, adapterKey),
     brand: item.brand === undefined ? entry.brand : item.brand,
-    ean: item.ean === undefined ? entry.ean : item.ean,
+    ean: createdEan(entry, item.ean),
     unitSize: size.unitSize,
     // The row's count unless the operation names one (plan 0162).
     packCount:
@@ -594,6 +612,63 @@ function itemFrom(
     categoryIds,
     defaultUnit: size.unit,
   };
+}
+
+/**
+ * Every `createItem` whose product would have no English name, refused on its
+ * own operation with `NAME_EN_MISSING` (plan 0184).
+ *
+ * **This route translates nothing, and that was decided.** The one at a time
+ * route fills a missing English name with one request to the chain, spaced a
+ * quarter of a second from the next. A file is up to a thousand operations,
+ * so the same fetch here is minutes of requests inside a call the gateway
+ * times out, between a validation that has passed and a bind that has not
+ * happened. It also answers for one chain only: every other chain publishes no
+ * English at all. So the file states both names, and one that does not is
+ * refused before anything is written, like every other thing a file gets
+ * wrong.
+ *
+ * The name judged is the one the product would be created with:
+ * {@link acceptedName}, so a file that names nothing falls back to what the
+ * chain printed, in the language that chain prints in. A row with no name at
+ * all is left for the create to refuse, in the words it always has.
+ */
+function checkNames(
+  operations: readonly SourceEntryDecisionOperation[],
+  rows: ReadonlyMap<string, SourceCatalogEntry>,
+  adapterKeys: ReadonlyMap<string, string | null>
+): SourceEntryDecisionOutcome[] {
+  const outcomes = blank(operations);
+  for (const [index, operation] of operations.entries()) {
+    if (!isCreate(operation)) {
+      continue;
+    }
+    const entry = rows.get(operation.entryId);
+    if (!entry) {
+      continue;
+    }
+    let name: LocalizedText;
+    try {
+      name = acceptedName(
+        operation.item.name,
+        entry.name,
+        adapterKeys.get(entry.supermarketId) ?? null
+      );
+    } catch {
+      continue;
+    }
+    if (lacksEnglish(name)) {
+      fail(
+        outcomes[index],
+        BulkOperationErrorCode.NAME_EN_MISSING,
+        `The product "${operation.ref}" would be created with no English ` +
+          'name. This route translates nothing: state `item.name.en` beside ' +
+          '`item.name.es`. A brand name, a range word and a foreign product ' +
+          'name are written the same in both.'
+      );
+    }
+  }
+  return outcomes;
 }
 
 /** Everything the file gets wrong on its own, with no database read. */

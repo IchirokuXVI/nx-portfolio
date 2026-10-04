@@ -8,6 +8,7 @@ import {
   apply,
   buildOperations,
   candidateIdentities,
+  collectCandidates,
   composeBatch,
   decide,
   end,
@@ -756,7 +757,11 @@ test('a glitched name is retryable and writes nothing', async () => {
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     gateways: w.gateways,
     vocabularies: VOCABULARIES,
@@ -785,7 +790,11 @@ test('--final records a second glitch as a REVIEW carrying the code', async () =
     entryId: 'e1',
     input: {
       ...CREATE_MILK,
-      item: { ...CREATE_MILK.item, nameEs: 'May1onesa', nameEn: null },
+      item: {
+        ...CREATE_MILK.item,
+        nameEs: 'May1onesa',
+        nameEn: 'Mayonnaise',
+      },
     },
     final: true,
     gateways: w.gateways,
@@ -816,7 +825,7 @@ test('a sizeless CREATE from a local model is recorded as a REVIEW', async () =>
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -858,7 +867,7 @@ test('the same sizeless CREATE from a Claude model is a CREATE', async () => {
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Sombra dúo Monochrome n30',
-        nameEn: null,
+        nameEn: 'Duo eyeshadow Monochrome n30',
         unitSize: null,
         defaultUnit: 'UNIT',
       },
@@ -1041,7 +1050,7 @@ test('a row raising both retryable codes carries both details into one retry', a
       item: {
         ...CREATE_MILK.item,
         nameEs: 'May1onesa',
-        nameEn: null,
+        nameEn: 'Mayonnaise',
         brand: 'DEBORAH 48H',
       },
     },
@@ -1872,12 +1881,12 @@ test('start stops on an empty registry, prints propose-brands and writes no run'
 function sharedEanWorld(catalogItems = []) {
   return world({
     entries: [
-      entry('e1', 'Alubias blancas', { ean: '8480000000017' }),
+      entry('e1', 'Alubias blancas', { ean: '8480000000019' }),
       entry('e2', 'Pan de molde'),
-      entry('e3', 'Alubias pintas', { ean: '8480000000017' }),
-      entry('e4', 'Alubias rojas', { ean: '8480000000017' }),
+      entry('e3', 'Alubias pintas', { ean: '8480000000019' }),
+      entry('e4', 'Alubias rojas', { ean: '8480000000019' }),
       entry('e5', 'Alubias negras', {
-        ean: '8480000000017',
+        ean: '8480000000019',
         supermarketId: 'sm-2',
       }),
     ],
@@ -1918,7 +1927,7 @@ test('a LINK on a shared EAN is a REVIEW, even when both sides print that EAN', 
       id: 'i1',
       name: { es: 'Alubias blancas' },
       brand: null,
-      ean: '8480000000017',
+      ean: '8480000000019',
       unitSize: null,
       defaultUnit: 'UNIT',
     },
@@ -1940,7 +1949,7 @@ test('a LINK on a shared EAN is a REVIEW, even when both sides print that EAN', 
   assert.equal(answer.decision.proposedDecision, 'LINK');
   assert.equal(answer.decision.itemId, null);
   assert.deepEqual(codesOf(answer.issues), ['SHARED_EAN']);
-  assert.match(answer.issues[0].detail, /8480000000017.*e3, e4/);
+  assert.match(answer.issues[0].detail, /8480000000019.*e3, e4/);
 });
 
 test('a CREATE on a shared EAN is a REVIEW and writes nothing to the rehearsal', async () => {
@@ -1956,7 +1965,7 @@ test('a CREATE on a shared EAN is a REVIEW and writes nothing to the rehearsal',
       item: {
         ...CREATE_MILK.item,
         nameEs: 'Alubias pintas',
-        ean: '8480000000017',
+        ean: '8480000000019',
       },
     },
     gateways: w.gateways,
@@ -2131,3 +2140,68 @@ test('the proposed item is dropped only when the catalog answers 404', async () 
 function codesOf(issues) {
   return (issues ?? []).map((entry) => entry.code);
 }
+
+// ---------------------------------------------------------------------------
+// The barcode lookup reads only a real barcode (backend plan 0184)
+// ---------------------------------------------------------------------------
+
+/** A gateway that answers one product for any barcode, and records the asks. */
+function eanRecordingGateway(holder) {
+  const asked = [];
+  return {
+    asked,
+    searchItems: async () => [],
+    getItem: async () => null,
+    findByEan: async (ean) => {
+      if (!ean) {
+        return null;
+      }
+      asked.push(ean);
+      return { ...holder, ean };
+    },
+  };
+}
+
+const SCALE_PRODUCT = {
+  id: 'i-scale',
+  name: { es: 'Queso al corte' },
+  brand: null,
+  unitSize: null,
+  defaultUnit: 'KILOGRAM',
+};
+
+test('an in-store code is not looked up, so it is never handed over as eanMatch', async () => {
+  // 211 products hold a code of one chain's scales. Another chain printing
+  // the same digits is another product, and `eanMatch` is what the prompt
+  // tells the model to link onto first.
+  for (const ean of ['2204500000000', '2000000000008', '84100100012', '']) {
+    const main = eanRecordingGateway(SCALE_PRODUCT);
+    const rehearsal = eanRecordingGateway(SCALE_PRODUCT);
+    const collected = await collectCandidates({
+      entry: entry('e1', 'Queso al corte', { ean }),
+      main,
+      rehearsal,
+      createdRefs: {},
+    });
+
+    assert.equal(collected.eanMatch, null, ean);
+    assert.deepEqual(collected.candidates, [], ean);
+    assert.deepEqual(main.asked, [], ean);
+    assert.deepEqual(rehearsal.asked, [], ean);
+  }
+});
+
+test('a real barcode is still looked up, trimmed, in both catalogs', async () => {
+  const main = eanRecordingGateway(SCALE_PRODUCT);
+  const rehearsal = eanRecordingGateway(SCALE_PRODUCT);
+  const collected = await collectCandidates({
+    entry: entry('e1', 'Galletas', { ean: ' 4006381333931 ' }),
+    main,
+    rehearsal,
+    createdRefs: {},
+  });
+
+  assert.deepEqual(main.asked, ['4006381333931']);
+  assert.deepEqual(rehearsal.asked, ['4006381333931']);
+  assert.equal(collected.eanMatch.itemId, 'i-scale');
+});

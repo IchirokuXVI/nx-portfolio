@@ -213,6 +213,12 @@ export function toCreateItemBody(item, rowPackCount = null) {
 /**
  * The `item` of the harvest bulk `createItem` op, which takes category slugs
  * as they are and resolves them itself (backend plan 0166, section 3).
+ *
+ * **Both names, always** (backend plan 0184): `checkDecisionShape` refuses a
+ * CREATE without `nameEn`, so every decision made since carries one. A
+ * decision recorded before that plan may hold none, and it is sent with `es`
+ * alone, as it was decided. The route then refuses that operation with
+ * `NAME_EN_MISSING`, which names the row a person has to finish.
  */
 export function toBulkCreateItem(item) {
   return {

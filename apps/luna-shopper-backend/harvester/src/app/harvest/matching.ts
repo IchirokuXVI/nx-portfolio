@@ -1,5 +1,6 @@
 import {
   ItemSourceMatch,
+  readGtin,
   SourceEntryStatus,
   type ItemView,
   type LocalizedText,
@@ -93,7 +94,11 @@ export class ItemMatchIndex {
 
   constructor(items: ItemView[]) {
     for (const item of items) {
-      if (item.ean) {
+      // An in-store code is left out (plan 0184). 13 digits starting with 2
+      // are one shop's own numbering, so the same code on a row of another
+      // chain is another product, and rung 2 would bind it with confidence 1.
+      // No product is created with one any more, but 211 already hold one.
+      if (item.ean && readGtin(item.ean).kind !== 'IN_STORE') {
         this.byEan.set(item.ean, item);
       }
       // The Spanish name, because what a Spanish chain states is Spanish (plan

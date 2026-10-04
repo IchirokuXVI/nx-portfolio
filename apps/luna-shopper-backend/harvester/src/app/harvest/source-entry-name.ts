@@ -11,7 +11,9 @@ import { ValidationException } from '@portfolio/luna-shopper/platform';
  * One function for both accept routes, because they have drifted once already.
  * The one at a time route required Spanish and the batch route required Spanish
  * without saying so, and the only difference between them that was ever meant
- * to exist is the English fetch, which the batch route does not pay for.
+ * to exist is the English fetch, which the batch route does not pay for. So
+ * the batch route asks its caller for the English name instead, through
+ * {@link lacksEnglish} (plan 0184).
  */
 
 /**
@@ -65,6 +67,21 @@ export function printedNameOrNull(
 ): LocalizedText | null {
   const name = printedName(printed, adapterKey);
   return Object.keys(name).length > 0 ? name : null;
+}
+
+/**
+ * Whether a name a product is about to be created with has no English (plan
+ * 0184).
+ *
+ * The bulk route refuses such a `createItem` with `NAME_EN_MISSING`. The one at
+ * a time route fills the gap itself, with one request to the chain for the one
+ * product. A file of a thousand rows cannot pay a thousand of those inside one
+ * call, and for every chain but one there is nobody to ask, so the file states
+ * both names. 100 products of the first catalog had no English name, and all
+ * of them came through the bulk route.
+ */
+export function lacksEnglish(name: LocalizedText): boolean {
+  return !name.en?.trim();
 }
 
 /**

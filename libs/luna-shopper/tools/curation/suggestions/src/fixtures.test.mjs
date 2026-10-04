@@ -153,6 +153,7 @@ test('a leaflet row carrying its brand and size in the name is a REVIEW', async 
       confidence: 0.99,
       item: {
         nameEs: 'Aceite de oliva Hacendado 1 L',
+        nameEn: 'Olive oil Hacendado 1 L',
         brand: 'Hacendado',
         unitSize: 1,
         defaultUnit: 'LITER',

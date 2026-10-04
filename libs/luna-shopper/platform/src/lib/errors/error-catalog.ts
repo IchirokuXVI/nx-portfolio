@@ -187,6 +187,10 @@ export const ERROR_CATALOG: Record<
     en: 'A product needs at least one category.',
     es: 'Un producto necesita al menos una categoría.',
   },
+  [ERROR_CODES.ITEM_EAN_INVALID]: {
+    en: 'That EAN is not a real barcode. Write the 8, 12, 13 or 14 digits printed under the bars, or leave it empty. A code that starts with 2 belongs to one shop and is not accepted.',
+    es: 'Ese EAN no es un código de barras real. Escribe los 8, 12, 13 o 14 dígitos impresos bajo las barras, o déjalo vacío. Un código que empieza por 2 es de una sola tienda y no se acepta.',
+  },
   [ERROR_CODES.CATEGORY_IN_USE]: {
     en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
     es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',

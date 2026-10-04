@@ -577,6 +577,7 @@ export type ProblemDetails = {
     | 'category_too_deep'
     | 'category_not_a_leaf'
     | 'item_needs_a_category'
+    | 'item_ean_invalid'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -3445,7 +3446,8 @@ export type EnumsBulkOperationErrorCode =
   | 'DUPLICATE_SUBJECT'
   | 'UNKNOWN_REFERENCE'
   | 'MALFORMED_OPERATION'
-  | 'ALREADY_TAKEN';
+  | 'ALREADY_TAKEN'
+  | 'NAME_EN_MISSING';
 
 /**
  * `enums.CommentTranscription` in the gateway's OpenAPI document.

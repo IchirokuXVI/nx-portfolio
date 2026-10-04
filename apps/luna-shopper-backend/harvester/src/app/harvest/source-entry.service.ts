@@ -53,7 +53,11 @@ import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { createdSize } from './source-entry-size';
-import { bindFields, SourceEntryPriceWriter } from './source-entry-write';
+import {
+  bindFields,
+  createdEan,
+  SourceEntryPriceWriter,
+} from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface EntryCursor {
@@ -356,7 +360,9 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const ean = req.ean === undefined ? entry.ean : req.ean;
+    // A real barcode or none (plan 0184). The row keeps what the chain
+    // printed; an in-store code or an invalid one never reaches the product.
+    const ean = createdEan(entry, req.ean);
 
     // EAN is unique in catalog, so a duplicate would be refused by the database
     // anyway. Asking first turns that into a sentence naming the existing item.

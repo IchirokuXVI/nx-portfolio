@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   ItemSourceMatch,
+  productGtin,
   SourceEntryStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { Not, Repository } from 'typeorm';
@@ -28,7 +29,15 @@ import { toItemPriceDetails } from './harvest.mappers';
  *
  * `name`, `brand` and `sizeFormat` are deliberately untouched. The item may be
  * renamed to anything at all and the next run that produces this key still
- * resolves through this row (plan 0086, D8).
+ * resolves through this row (plan 0086, D8). `ean` is untouched too: the row
+ * keeps what the chain printed, an in-store code included (plan 0184).
+ *
+ * **Always `MANUAL`, also when the product holds the row's own barcode.** Plan
+ * 0184 asked for `EAN` in that case, and the owner decided against it on
+ * 2026-10-04. `unbindSharedEans` in `source-ingest.ts` unbinds an `ACTIVE` row
+ * stamped `EAN` when a second row of the chain prints the same barcode, and it
+ * skips `MANUAL` rows, so `MANUAL` is the only thing that keeps a run from
+ * reopening a person's decision. The plan file records the alternatives.
  */
 export function bindFields(
   entry: SourceCatalogEntry,
@@ -42,6 +51,22 @@ export function bindFields(
   entry.confidence = 1;
   entry.decidedAt = now;
   return entry;
+}
+
+/**
+ * The EAN a product created from a queue row is given (plan 0184): a real
+ * barcode or none.
+ *
+ * The request's own EAN when it names one, else the row's, as every other
+ * field of a create falls back. Whichever it is goes through `readGtin`, and
+ * an in-store code (13 digits starting with 2) or an invalid code answers
+ * null, so the product is created with no EAN. The row is not changed.
+ */
+export function createdEan(
+  entry: Pick<SourceCatalogEntry, 'ean'>,
+  requested: string | null | undefined
+): string | null {
+  return productGtin(requested === undefined ? entry.ean : requested);
 }
 
 /**

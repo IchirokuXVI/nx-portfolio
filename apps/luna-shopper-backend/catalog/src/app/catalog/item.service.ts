@@ -44,6 +44,7 @@ import {
   getRequestContext,
   isUuid,
   NotFoundException,
+  requireProductEan,
   ValidationException,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
@@ -242,7 +243,9 @@ export class ItemService {
       name: req.name,
       imageUrl: req.imageUrl ?? null,
       sku: req.sku ?? null,
-      ean: req.ean ?? null,
+      // A real barcode or none (plan 0184): an in-store code, or a code with
+      // a wrong length or check digit, is refused with `item_ean_invalid`.
+      ean: requireProductEan(req.ean),
       unitSize: req.unitSize ?? null,
       packCount: req.packCount ?? null,
       defaultUnit: req.defaultUnit,
@@ -307,6 +310,10 @@ export class ItemService {
           'land while the second fails.'
       );
     }
+    // Every barcode of the batch is a real one or absent (plan 0184), checked
+    // before anything is read or written, so the first bad one refuses the
+    // whole request. The trimmed codes are what the drafts below store.
+    const eans = req.items.map((input) => requireProductEan(input.ean));
     this.refuseRepeatedEans(req.items);
 
     // Every group is resolved before the transaction opens, which is where the
@@ -325,13 +332,13 @@ export class ItemService {
     );
 
     const drafts: { draft: Item; leaves: Category[] }[] = [];
-    for (const input of req.items) {
+    for (const [index, input] of req.items.entries()) {
       const leaves = leavesOf(input.categoryIds ?? []);
       const draft = this.items.create({
         name: input.name,
         imageUrl: input.imageUrl ?? null,
         sku: input.sku ?? null,
-        ean: input.ean ?? null,
+        ean: eans[index],
         unitSize: input.unitSize ?? null,
         packCount: input.packCount ?? null,
         defaultUnit: input.defaultUnit,
@@ -1666,8 +1673,14 @@ export class ItemService {
     if (input.sku !== undefined) {
       row.sku = input.sku;
     }
-    if (input.ean !== undefined) {
-      row.ean = input.ean;
+    // Checked only when the write changes the barcode (plan 0184). A product
+    // that already holds an in-store or invalid code still saves: the rule is
+    // about a code being set, not about one that is already there. The back
+    // office sends only the fields that changed, so it never meets this. A
+    // client that sends the whole product back does, and refusing its
+    // unchanged EAN would lock the product against every other edit.
+    if (input.ean !== undefined && input.ean !== row.ean) {
+      row.ean = requireProductEan(input.ean);
     }
     if (input.unitSize !== undefined) {
       row.unitSize = input.unitSize;

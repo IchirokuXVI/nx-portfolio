@@ -70,6 +70,24 @@ test('the bulk create carries a pack count the decision stated, and only then (b
   );
 });
 
+test('both creates send both names (backend plan 0184)', () => {
+  const decided = { ...DECIDED_ITEM, nameEn: 'Coffee with milk capsules' };
+  const both = {
+    es: 'Café con leche en cápsulas',
+    en: 'Coffee with milk capsules',
+  };
+  assert.deepEqual(toBulkCreateItem(decided).name, both);
+  assert.deepEqual(toCreateItemBody(decided).name, both);
+});
+
+test('a decision recorded before both names were required is sent as it was decided', () => {
+  // The bulk route refuses that operation with `NAME_EN_MISSING`, which names
+  // the row a person has to finish. Nothing here invents an English name.
+  assert.deepEqual(toBulkCreateItem(DECIDED_ITEM).name, {
+    es: 'Café con leche en cápsulas',
+  });
+});
+
 test('the rehearsal create carries the count the real create will write', () => {
   // The decision's count wins, as it does on the bulk route.
   assert.equal(

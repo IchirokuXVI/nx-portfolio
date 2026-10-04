@@ -15,6 +15,10 @@ export * from './lib/brands/never-a-brand';
 // printed size through (plan 0177). Browser reachable, as the brand key is.
 export * from './lib/units/source-size';
 
+// The one barcode reader, shared by catalog, the harvester and the gateway
+// (plan 0184). Browser reachable, as the brand key is.
+export * from './lib/barcodes/gtin';
+
 // Enums
 export * from './lib/enums/account-role.enums';
 export * from './lib/enums/assistant.enums';

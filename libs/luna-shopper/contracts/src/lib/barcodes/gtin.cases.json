@@ -1,0 +1,19 @@
+[
+  ["4006381333931", { "kind": "GTIN", "gtin": "4006381333931" }],
+  ["96385074", { "kind": "GTIN", "gtin": "96385074" }],
+  ["036000291452", { "kind": "GTIN", "gtin": "036000291452" }],
+  ["10012345678902", { "kind": "GTIN", "gtin": "10012345678902" }],
+  ["  4006381333931  ", { "kind": "GTIN", "gtin": "4006381333931" }],
+  ["4006381333932", { "kind": "INVALID", "reason": "CHECK_DIGIT" }],
+  ["96385075", { "kind": "INVALID", "reason": "CHECK_DIGIT" }],
+  ["2204500000000", { "kind": "IN_STORE", "code": "2204500000000" }],
+  ["2000000000008", { "kind": "IN_STORE", "code": "2000000000008" }],
+  ["84100100012", { "kind": "INVALID", "reason": "LENGTH" }],
+  ["841001000123219", { "kind": "INVALID", "reason": "LENGTH" }],
+  ["4006381 333931", { "kind": "INVALID", "reason": "NOT_DIGITS" }],
+  ["4006381-333931", { "kind": "INVALID", "reason": "NOT_DIGITS" }],
+  ["84100A0001232", { "kind": "INVALID", "reason": "NOT_DIGITS" }],
+  ["", { "kind": "INVALID", "reason": "EMPTY" }],
+  ["   ", { "kind": "INVALID", "reason": "EMPTY" }],
+  [null, { "kind": "INVALID", "reason": "EMPTY" }]
+]

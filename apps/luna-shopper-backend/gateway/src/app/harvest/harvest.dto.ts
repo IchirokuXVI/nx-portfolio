@@ -400,7 +400,12 @@ export class CreateItemFromEntryDto {
   @MaxLength(120)
   brand?: string | null;
 
-  @ApiPropertyOptional({ maxLength: 32, nullable: true })
+  @ApiPropertyOptional({
+    maxLength: 32,
+    nullable: true,
+    description:
+      'Override the EAN the row printed. The product holds a real barcode or none (plan 0184): an in-store code (13 digits that start with 2) or an invalid code, from here or from the row, creates the product with no EAN. The row keeps what the chain printed.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(32)
@@ -525,7 +530,7 @@ export class SourceEntryDecisionDto {
   @ApiPropertyOptional({
     type: CreateItemFromEntryDto,
     description:
-      'createItem: the product to create. Every field is optional, because the row already holds a default for each.',
+      'createItem: the product to create. Every field is optional, because the row already holds a default for each, with one exception (plan 0184): the product needs an English name, and this route translates nothing, so `item.name.en` is stated here. A createItem that ends with no English name is refused with `NAME_EN_MISSING`.',
   })
   @IsOptional()
   @ValidateNested()

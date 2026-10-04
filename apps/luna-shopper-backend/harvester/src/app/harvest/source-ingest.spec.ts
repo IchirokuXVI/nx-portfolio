@@ -1458,7 +1458,9 @@ describe('SourceIngest, a partial observation (plan 0119)', () => {
  */
 describe('SourceIngest, an EAN that several rows of one chain share', () => {
   const OTHER_CHAIN = '55555555-5555-4555-8555-555555555555';
-  const DORADA = '2300000000017';
+  // A real barcode. It was an in-store code, which no longer reaches rung 2
+  // at all (plan 0184): the item index leaves those out of its EAN map.
+  const DORADA = '8436000000016';
   const dorada = {
     id: 'item-dorada',
     name: { es: 'Dorada', en: null },
