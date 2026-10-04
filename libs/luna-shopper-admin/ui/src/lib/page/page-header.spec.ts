@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, type Signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -6,7 +6,7 @@ import type { InfoContent } from '@portfolio/luna-shopper-admin/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Viewport } from '../viewport';
-import { PageHeader } from './page-header';
+import { PAGE_HEADING_LEVEL, PageHeader } from './page-header';
 import { PAGE_FRAME_TABS, type PageTab } from './page-tabs';
 
 const INFO: InfoContent = {
@@ -59,16 +59,26 @@ const TABS: readonly PageTab[] = [
   { path: '/catalog/items', label: 'items.many' },
 ];
 
-async function render(compact = false, tabs: readonly PageTab[] | null = null) {
+async function render(
+  compact = false,
+  tabs: readonly PageTab[] | null = null,
+  level: Signal<1 | 2> | null = null
+) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideRouter([]),
-      { provide: Viewport, useValue: { compact: signal(compact) } },
+      {
+        provide: Viewport,
+        useValue: { compact: signal(compact), split: signal(!compact) },
+      },
       ...(tabs === null
         ? []
         : [{ provide: PAGE_FRAME_TABS, useValue: signal(tabs) }]),
+      ...(level === null
+        ? []
+        : [{ provide: PAGE_HEADING_LEVEL, useValue: level }]),
     ],
   }).compileComponents();
 
@@ -259,6 +269,46 @@ describe('PageHeader', () => {
     expect(document.activeElement).toBe(one(fixture, '.page-overflow-toggle'));
 
     fixture.nativeElement.remove();
+  });
+});
+
+/**
+ * A page has one `h1` (admin plan 0042). A shop open beside its chain's shop
+ * list sits under the chain's header, so the pane that holds it says its
+ * header is the second level.
+ */
+describe('PageHeader, under another header', () => {
+  it('is the h1 where nothing says it sits under one', async () => {
+    const fixture = await render();
+
+    expect(one(fixture, 'h1.page-title')?.textContent?.trim()).toBe(
+      'Mercadona'
+    );
+    expect(one(fixture, 'h2')).toBeNull();
+  });
+
+  it('draws its title as an h2 when the pane answers 2', async () => {
+    const fixture = await render(false, null, signal<1 | 2>(2));
+
+    expect(one(fixture, 'h2.page-title')?.textContent?.trim()).toBe(
+      'Mercadona'
+    );
+    expect(one(fixture, 'h1')).toBeNull();
+  });
+
+  /**
+   * The level is a signal because the same shop is the whole page on a phone
+   * and a pane on a wide screen, and the window can be resized between them.
+   */
+  it('follows the level when it changes', async () => {
+    const level = signal<1 | 2>(2);
+    const fixture = await render(false, null, level);
+
+    level.set(1);
+    fixture.detectChanges();
+
+    expect(one(fixture, 'h1.page-title')).not.toBeNull();
+    expect(one(fixture, 'h2')).toBeNull();
   });
 });
 

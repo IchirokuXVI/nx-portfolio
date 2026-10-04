@@ -54,10 +54,24 @@ const WORKSPACE = join(APP, '..', '..', '..');
  */
 const MAY_BUILD = ['routes.ts', 'admin-section.ts', 'resource-registry.ts'];
 
-/** Every resource this app mounts, by the segment it calls itself. */
-const SEGMENTS = ADMIN_SECTIONS.flatMap((section) =>
-  (section.resources ?? []).map((descriptor) => descriptor.segment)
-);
+/**
+ * Every resource this app mounts, by the segment it calls itself.
+ *
+ * The ones a section holds and mounts itself are here as well (admin plan
+ * 0042): `chains`, `shops`, `scopes` and `products` are addresses like any
+ * other, and a link to a chain written by hand breaks the day the section
+ * moves just as a link to a product does. Once each, because `sections` is a
+ * segment and would otherwise be looked for twice under one test name.
+ */
+const SEGMENTS = [
+  ...new Set(
+    ADMIN_SECTIONS.flatMap((section) =>
+      [...(section.resources ?? []), ...(section.held ?? [])].map(
+        (descriptor) => descriptor.segment
+      )
+    )
+  ),
+];
 
 /** A path that opens with one of them, quoted or as the head of a link array. */
 function literalPath(segment: string): RegExp {
@@ -126,6 +140,18 @@ describe('a resource path is never written by hand', () => {
 
   it('knows which segments to look for', () => {
     expect(SEGMENTS.length).toBeGreaterThan(10);
+  });
+
+  it('looks for the segments a chain holds as well', () => {
+    expect(SEGMENTS).toEqual(
+      expect.arrayContaining([
+        'chains',
+        'shops',
+        'sections',
+        'scopes',
+        'products',
+      ])
+    );
   });
 
   it.each(SEGMENTS)('builds no link out of the %s segment', (segment) => {

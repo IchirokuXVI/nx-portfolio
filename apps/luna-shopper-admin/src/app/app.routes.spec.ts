@@ -11,11 +11,13 @@ import {
   SessionStore,
   type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { provideSections } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   UNKNOWN_ENVIRONMENT,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { appRoutes } from './app.routes';
+import { ADMIN_SECTIONS } from './sections';
 
 /**
  * The two branches and the guards that pair them (plan 0002, then 0004).
@@ -77,6 +79,10 @@ async function boot(signedIn: boolean) {
       ServerReachability,
       provideRouter(appRoutes),
       provideLocationMocks(),
+      // What `app.config.ts` provides. The redirects of the old chain
+      // addresses ask the registry where a chain is, and the registry reads
+      // the sections from here: without them every one lands on `/`.
+      provideSections(...ADMIN_SECTIONS),
       { provide: SESSION_SERVICE, useValue: service },
       {
         provide: DEPLOYMENT_SERVICE,
@@ -145,15 +151,35 @@ describe('appRoutes', () => {
    */
   it.each([
     ['/', 'the overview'],
+    // A chain holds its shops (admin plan 0042).
+    ['/chains', 'the chains'],
+    ['/chains/new', 'the form of a new chain'],
+    ['/chains/sm_mercadona/shops', 'the shops of a chain'],
+    ['/chains/sm_mercadona/shops/new', 'the form of a new shop'],
+    ['/chains/sm_mercadona/shops/loc_cordoba_centro/details', 'a shop'],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/sections',
+      'the order a shop walks its sections in',
+    ],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/products',
+      'the products in a shop',
+    ],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/products/new',
+      'the form of a new shop product',
+    ],
+    ['/chains/sm_mercadona/sections', 'the sections of a chain'],
+    ['/chains/sm_mercadona/sections/new', 'the form of a new section'],
+    ['/chains/sm_mercadona/scopes', 'the price scopes of a chain'],
+    ['/chains/sm_mercadona/scopes/new', 'the form of a new price scope'],
+    ['/chains/sm_mercadona/details', 'the form of a chain'],
     ['/catalog', 'the catalog dashboard'],
-    ['/catalog/supermarkets', 'the chains'],
-    ['/catalog/locations', 'the shops'],
-    ['/catalog/price-scopes', 'the price scopes'],
     ['/catalog/items', 'the products'],
+    ['/catalog/categories', 'the categories'],
     ['/catalog/product-groups', 'the product groups'],
     ['/catalog/prices', 'the prices'],
     ['/catalog/price-policies', 'the price policies'],
-    ['/catalog/location-items', 'the per shop rows'],
     ['/shoppers', 'the shoppers dashboard'],
     ['/shoppers/users', 'the users'],
     ['/shoppers/zones', 'the zones'],
@@ -177,6 +203,66 @@ describe('appRoutes', () => {
     await router.navigateByUrl(url);
 
     expect(router.url).toBe(url);
+  });
+
+  /** A chain and a shop each open on their first tab. */
+  it.each([
+    ['/chains/sm_mercadona', '/chains/sm_mercadona/shops'],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro',
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
+    ],
+  ])('opens %s on its first tab', async (url, tab) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(tab);
+  });
+
+  /**
+   * The addresses the five chain screens had under `/catalog` (admin plan
+   * 0042, target 9), against the app's own sections. Unlike the flat URLs
+   * below, these are redirects: a bookmark still lands where the rows are.
+   * `old-addresses.spec.ts` in the catalog library holds every case, and this
+   * is the proof that the app mounts them where the old screens were.
+   */
+  it.each([
+    ['/catalog/supermarkets', '/chains'],
+    ['/catalog/supermarkets/sm_mercadona', '/chains/sm_mercadona/shops'],
+    [
+      '/catalog/locations/loc_cordoba_centro',
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
+    ],
+    ['/catalog/locations/loc_nowhere', '/chains'],
+    ['/catalog/locations', '/chains'],
+    ['/catalog/sections', '/chains'],
+    ['/catalog/price-scopes', '/chains'],
+    ['/catalog/location-items', '/chains'],
+    ['/catalog/locations?supermarketId=sm_consum', '/chains/sm_consum/shops'],
+    ['/catalog/sections?supermarketId=sm_consum', '/chains/sm_consum/shops'],
+    [
+      '/catalog/price-scopes?supermarketId=sm_consum',
+      '/chains/sm_consum/shops',
+    ],
+    [
+      '/catalog/location-items?supermarketId=sm_consum',
+      '/chains/sm_consum/shops',
+    ],
+  ])('sends the old address %s to %s', async (old, now) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(old);
+
+    expect(router.url).toBe(now);
+  });
+
+  it('sends an old chain address from a signed out operator to the login screen', async () => {
+    const { router } = await boot(false);
+
+    await router.navigateByUrl('/catalog/supermarkets');
+
+    expect(router.url).toBe('/sign-in');
   });
 
   /**

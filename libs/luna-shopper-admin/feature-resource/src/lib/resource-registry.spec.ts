@@ -1,12 +1,27 @@
 import { inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
+  convertToParamMap,
+  type ActivatedRouteSnapshot,
+} from '@angular/router';
+import {
   ContentLocaleStore,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { provideResources, provideSections } from './admin-section';
-import { ResourceReferences, ResourceRegistry } from './resource-registry';
+import {
+  provideResources,
+  provideSections,
+  sectionLink,
+  sectionScreens,
+  type AdminSection,
+} from './admin-section';
+import {
+  parentsFromRoute,
+  ResourceReferences,
+  ResourceRegistry,
+} from './resource-registry';
+import { routeParam } from './resource-route-data';
 
 interface Scope {
   id: string;
@@ -210,5 +225,349 @@ describe('ResourceRegistry pathOf', () => {
         .all()
         .map((descriptor) => descriptor.name)
     ).toEqual(['price-scopes']);
+  });
+});
+
+/**
+ * A resource that lives under a row of another (admin plan 0042).
+ *
+ * Three levels, which is what the app has: a chain, its shops, and the products
+ * in one shop. The descriptors here are small copies of that shape, because a
+ * spec in this library cannot import the catalog, which is lazy.
+ */
+interface Row {
+  id: string;
+  name: string;
+}
+
+function resource(
+  name: string,
+  segment: string,
+  parent?: { resource: string; param: string; filter: string }
+) {
+  return defineResource<Row>({
+    name,
+    segment,
+    labels: { one: `${name}.one`, many: `${name}.many` },
+    title: (row) => row.name,
+    fields: [{ kind: 'text', name: 'name', label: `${name}.name` }],
+    list: { columns: ['name'], compact: ['name'] },
+    actions: { edit: true },
+    ...(parent === undefined ? {} : { parent }),
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+}
+
+const chains = resource('supermarkets', 'chains');
+const shops = resource('locations', 'shops', {
+  resource: 'supermarkets',
+  param: 'chainId',
+  filter: 'supermarketId',
+});
+const shopProducts = resource('location-items', 'products', {
+  resource: 'locations',
+  param: 'shopId',
+  filter: 'supermarketLocationId',
+});
+
+/** A parent the app did not mount, so nothing under it has an address. */
+const orphans = resource('orphans', 'orphans', {
+  resource: 'nowhere',
+  param: 'nowhereId',
+  filter: 'nowhereId',
+});
+
+const chainsSection: AdminSection = {
+  key: 'chains',
+  label: 'shell.sections.chains',
+  held: [chains, shops, shopProducts, orphans],
+  screens: [],
+};
+
+describe('ResourceRegistry with resources a section holds', () => {
+  let registry: ResourceRegistry;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        ContentLocaleStore,
+        provideSections(chainsSection, {
+          key: 'catalog',
+          label: 'c',
+          segment: 'catalog',
+          resources: [scopes],
+        }),
+      ],
+    });
+    registry = TestBed.inject(ResourceRegistry);
+  });
+
+  /**
+   * The route factory does not mount a held resource, and the registry still
+   * has to find it: a reference field pointing at a chain must resolve.
+   */
+  it('finds a held resource by name, beside the mounted ones', () => {
+    expect(registry.byName('supermarkets')).toBe(chains);
+    expect(registry.byName('location-items')).toBe(shopProducts);
+    expect(registry.all().map((descriptor) => descriptor.name)).toEqual([
+      'supermarkets',
+      'locations',
+      'location-items',
+      'orphans',
+      'price-scopes',
+    ]);
+  });
+
+  it('answers a held resource with no parent at its own segment', () => {
+    expect(registry.pathOf('supermarkets')).toEqual(['/', 'chains']);
+    expect(registry.rowPath('supermarkets', 'sm_1')).toEqual([
+      '/',
+      'chains',
+      'sm_1',
+    ]);
+  });
+
+  it('puts the section segment in front of a held resource', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ContentLocaleStore,
+        provideSections({ ...chainsSection, segment: 'stores' }),
+      ],
+    });
+
+    expect(TestBed.inject(ResourceRegistry).pathOf('supermarkets')).toEqual([
+      '/',
+      'stores',
+      'chains',
+    ]);
+  });
+
+  it('lists a parented resource under the row of its parent', () => {
+    expect(registry.pathOf('locations', { supermarketId: 'sm_1' })).toEqual([
+      '/',
+      'chains',
+      'sm_1',
+      'shops',
+    ]);
+    expect(
+      registry.rowPath('locations', 'loc_1', { supermarketId: 'sm_1' })
+    ).toEqual(['/', 'chains', 'sm_1', 'shops', 'loc_1']);
+  });
+
+  /**
+   * A list can fall back to the list above it, where the operator picks the
+   * chain. A row cannot, because the list above is not the row.
+   */
+  it('falls back to the list above when the parent is unknown, and gives a row no address', () => {
+    expect(registry.pathOf('locations')).toEqual(['/', 'chains']);
+    expect(registry.pathOf('locations', { supermarketId: '' })).toEqual([
+      '/',
+      'chains',
+    ]);
+    expect(registry.rowPath('locations', 'loc_1')).toBeNull();
+    expect(
+      registry.rowPath('locations', 'loc_1', { supermarketId: '' })
+    ).toBeNull();
+    // An id that is not a string is not an id.
+    expect(
+      registry.rowPath('locations', 'loc_1', { supermarketId: 7 })
+    ).toBeNull();
+  });
+
+  it('builds an address two levels deep', () => {
+    const known = { supermarketId: 'sm_1', supermarketLocationId: 'loc_1' };
+
+    expect(registry.pathOf('location-items', known)).toEqual([
+      '/',
+      'chains',
+      'sm_1',
+      'shops',
+      'loc_1',
+      'products',
+    ]);
+    expect(registry.rowPath('location-items', 'it_1:loc_1', known)).toEqual([
+      '/',
+      'chains',
+      'sm_1',
+      'shops',
+      'loc_1',
+      'products',
+      'it_1:loc_1',
+    ]);
+  });
+
+  /**
+   * The shop is known and its chain is not, so the shop has no address and
+   * neither has anything in it. The list falls back level by level, to the
+   * first list that does have one.
+   */
+  it('falls back through every level that is missing', () => {
+    const known = { supermarketLocationId: 'loc_1' };
+
+    expect(registry.pathOf('location-items', known)).toEqual(['/', 'chains']);
+    expect(registry.rowPath('location-items', 'x', known)).toBeNull();
+    expect(
+      registry.pathOf('location-items', { supermarketId: 'sm_1' })
+    ).toEqual(['/', 'chains', 'sm_1', 'shops']);
+  });
+
+  /** A row read off the gateway carries the ids, and is passed as it is. */
+  it('reads the parent out of a whole row', () => {
+    const row = {
+      id: 'loc_1',
+      supermarketId: 'sm_1',
+      address: 'Calle Feria 12',
+      priceScopeIds: ['ps_1'],
+    };
+
+    expect(registry.rowPath('locations', row.id, row)).toEqual([
+      '/',
+      'chains',
+      'sm_1',
+      'shops',
+      'loc_1',
+    ]);
+  });
+
+  it('has no address under a parent the app did not mount', () => {
+    expect(registry.pathOf('orphans', { nowhereId: 'n1' })).toBeNull();
+    expect(registry.pathOf('orphans')).toBeNull();
+    expect(registry.rowPath('orphans', 'o1', { nowhereId: 'n1' })).toBeNull();
+  });
+
+  it('builds a refusal link under the parent the caller knows', () => {
+    expect(
+      registry.linkFor({ resource: 'locations' }, 'loc_1', {
+        supermarketId: 'sm_1',
+      })
+    ).toEqual({
+      commands: ['/', 'chains', 'sm_1', 'shops', 'loc_1'],
+      labelKey: 'resource.error.openRow',
+    });
+    expect(
+      registry.linkFor(
+        { resource: 'locations', filter: 'priceScopeId', label: 'open' },
+        'ps_1',
+        { supermarketId: 'sm_1' }
+      )
+    ).toEqual({
+      commands: ['/', 'chains', 'sm_1', 'shops'],
+      queryParams: { priceScopeId: 'ps_1' },
+      labelKey: 'open',
+    });
+  });
+
+  /** A row whose parent nobody named gets no link, which is still an answer. */
+  it('builds no refusal link to a row whose parent is unknown', () => {
+    expect(registry.linkFor({ resource: 'locations' }, 'loc_1')).toBeNull();
+  });
+});
+
+/**
+ * A route snapshot as the router builds one under routes that have a
+ * component: each level holds only its own parameters.
+ */
+function snapshotOf(
+  ...levels: readonly Record<string, string>[]
+): ActivatedRouteSnapshot {
+  const path = levels.map((params) => ({
+    paramMap: convertToParamMap(params),
+  }));
+  const leaf = { ...path[path.length - 1], pathFromRoot: path };
+  path[path.length - 1] = leaf;
+  return leaf as unknown as ActivatedRouteSnapshot;
+}
+
+describe('the parents an address names', () => {
+  let registry: ResourceRegistry;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [ContentLocaleStore, provideSections(chainsSection)],
+    });
+    registry = TestBed.inject(ResourceRegistry);
+  });
+
+  it('reads a parameter from the closest route that holds it', () => {
+    const route = snapshotOf({ chainId: 'far' }, { chainId: 'near' }, {});
+
+    expect(routeParam(route, 'chainId')).toBe('near');
+    expect(routeParam(route, 'shopId')).toBeNull();
+  });
+
+  it('names every parent above a resource by its filter', () => {
+    const route = snapshotOf({}, { chainId: 'sm_1' }, { shopId: 'loc_1' }, {});
+
+    expect(parentsFromRoute(registry, shopProducts, route)).toEqual({
+      supermarketId: 'sm_1',
+      supermarketLocationId: 'loc_1',
+    });
+    expect(parentsFromRoute(registry, shops, route)).toEqual({
+      supermarketId: 'sm_1',
+    });
+  });
+
+  it('leaves out a parent the address does not name', () => {
+    const route = snapshotOf({}, { shopId: 'loc_1' });
+
+    expect(parentsFromRoute(registry, shopProducts, route)).toEqual({
+      supermarketLocationId: 'loc_1',
+    });
+    expect(parentsFromRoute(registry, chains, route)).toEqual({});
+  });
+
+  /** What it answers is what `pathOf` wants as `known`. */
+  it('feeds the registry the address of where the screen already is', () => {
+    const route = snapshotOf({ chainId: 'sm_1' }, { shopId: 'loc_1' });
+
+    expect(
+      registry.pathOf(
+        'location-items',
+        parentsFromRoute(registry, shopProducts, route)
+      )
+    ).toEqual(['/', 'chains', 'sm_1', 'shops', 'loc_1', 'products']);
+  });
+});
+
+/**
+ * Where the rail entry of a section points, for a section that mounts its own
+ * resources (admin plan 0042).
+ */
+describe('sectionLink for a section that holds its resources', () => {
+  it('opens on the held resource that has no parent', () => {
+    expect(sectionLink(chainsSection)).toBe('/chains');
+    expect(
+      sectionLink({ ...chainsSection, held: [shops, shopProducts, chains] })
+    ).toBe('/chains');
+  });
+
+  it('goes through the segment of a section that has one', () => {
+    expect(sectionLink({ ...chainsSection, segment: 'stores' })).toBe(
+      '/stores/chains'
+    );
+  });
+
+  it('has nowhere to point when every held resource is under a parent', () => {
+    expect(sectionLink({ ...chainsSection, held: [shops] })).toBeNull();
+  });
+
+  /** A held resource is a page or a tab, never an entry of the second row. */
+  it('draws no second row entry for a held resource', () => {
+    expect(sectionScreens(chainsSection)).toEqual([]);
+  });
+
+  it('still prefers a home, and then a screen of its own', () => {
+    class Home {}
+
+    expect(sectionLink({ ...chainsSection, home: Home })).toBe('/');
+    expect(
+      sectionLink({
+        ...chainsSection,
+        links: [{ path: '/runs', label: 'runs' }],
+      })
+    ).toBe('/runs');
   });
 });

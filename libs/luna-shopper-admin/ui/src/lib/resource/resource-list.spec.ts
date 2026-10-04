@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type {
   FieldDescriptor,
+  InfoContent,
   ResourceRowView,
 } from '@portfolio/luna-shopper-admin/models';
 import { ResourceList } from './resource-list';
@@ -62,7 +63,14 @@ async function render(
     hasMore: boolean;
     canCreate: boolean;
     canDelete: boolean;
+    canOpen: boolean;
     rows: readonly ResourceRowView[];
+    heading: 'page' | 'pane' | 'none';
+    headingLevel: 1 | 2;
+    createKey: string;
+    layout: 'auto' | 'rows';
+    currentId: string | null;
+    info: InfoContent | null;
   }> = {}
 ): Promise<ComponentFixture<ResourceList>> {
   TestBed.resetTestingModule();
@@ -280,5 +288,310 @@ describe('ResourceList controls', () => {
         element.textContent?.includes('resource.action.more')
       )
     ).toBe(true);
+  });
+});
+
+const INFO: InfoContent = {
+  title: 'shops.info.title',
+  points: ['shops.info.one'],
+};
+
+const texts = (fixture: ComponentFixture<ResourceList>, selector: string) =>
+  [...query(fixture, selector)].map(
+    (element) => element.textContent?.trim() ?? ''
+  );
+
+/**
+ * What the list draws above itself (admin plan 0042). A list is the whole
+ * page, a column beside the row that is open, or a tab of a page, and only the
+ * first of the three owns the page header.
+ */
+describe('ResourceList heading', () => {
+  it('draws the page header when it is the whole page', async () => {
+    const fixture = await render({ canCreate: true });
+
+    expect(query(fixture, 'lib-page-header')).toHaveLength(1);
+    expect(texts(fixture, 'lib-page-header h1')).toEqual(['shops.many']);
+    expect(query(fixture, '.pane-head')).toHaveLength(0);
+    expect(query(fixture, '.tools')).toHaveLength(0);
+    expect(texts(fixture, 'lib-page-header .page-actions button')).toEqual([
+      'resource.action.create',
+    ]);
+  });
+
+  /**
+   * The open row's page draws the page header, so the column only says what it
+   * lists. Under an open row that title is the second level.
+   */
+  it('draws a title of its own and no page header as a pane', async () => {
+    const fixture = await render({
+      heading: 'pane',
+      canCreate: true,
+      info: INFO,
+    });
+
+    expect(query(fixture, 'lib-page-header')).toHaveLength(0);
+    expect(texts(fixture, '.pane-head h2')).toEqual(['shops.many']);
+    expect(query(fixture, 'h1')).toHaveLength(0);
+    expect(query(fixture, '.pane-head lib-info-button')).toHaveLength(1);
+    expect(texts(fixture, '.pane-head [data-create]')).toEqual([
+      'resource.action.create',
+    ]);
+  });
+
+  /** With nothing open beside it the column is all the page has. */
+  it('makes the pane title the h1 while no row is open', async () => {
+    const fixture = await render({ heading: 'pane', headingLevel: 1 });
+
+    expect(texts(fixture, '.pane-head h1')).toEqual(['shops.many']);
+    expect(query(fixture, 'h2')).toHaveLength(0);
+  });
+
+  it('leaves the add button out of a pane that cannot create', async () => {
+    const fixture = await render({ heading: 'pane' });
+
+    expect(query(fixture, '[data-create]')).toHaveLength(0);
+    expect(query(fixture, '.pane-head lib-info-button')).toHaveLength(0);
+  });
+
+  /** A tab: the page above drew the header and the tab says what is listed. */
+  it('draws no heading at all as a tab, and still the add button', async () => {
+    const fixture = await render({ heading: 'none', canCreate: true });
+
+    expect(query(fixture, 'lib-page-header')).toHaveLength(0);
+    expect(query(fixture, '.pane-head')).toHaveLength(0);
+    expect(query(fixture, 'h1, h2')).toHaveLength(0);
+    expect(texts(fixture, '.tools [data-create]')).toEqual([
+      'resource.action.create',
+    ]);
+  });
+
+  it('keeps the info button on a tab', async () => {
+    const fixture = await render({ heading: 'none', info: INFO });
+
+    expect(query(fixture, '.tools lib-info-button')).toHaveLength(1);
+    expect(query(fixture, '[data-create]')).toHaveLength(0);
+  });
+
+  it('draws nothing above a tab that has neither', async () => {
+    const fixture = await render({ heading: 'none' });
+
+    expect(query(fixture, '.tools')).toHaveLength(0);
+    expect(query(fixture, 'table')).toHaveLength(1);
+  });
+
+  it('emits the create from each of the three', async () => {
+    for (const [heading, selector] of [
+      ['page', 'lib-page-header .page-actions button'],
+      ['pane', '.pane-head [data-create]'],
+      ['none', '.tools [data-create]'],
+    ] as const) {
+      const fixture = await render({ heading, canCreate: true });
+      let created = 0;
+      fixture.componentInstance.create.subscribe(() => (created += 1));
+
+      query(fixture, selector)[0].click();
+
+      expect(created).toBe(1);
+    }
+  });
+
+  /** "New" says too little where the resource has a better word: "Add a shop". */
+  it('says what the descriptor calls the add button, in all three', async () => {
+    for (const heading of ['page', 'pane', 'none'] as const) {
+      const fixture = await render({
+        heading,
+        canCreate: true,
+        createKey: 'catalog.shops.add',
+      });
+
+      expect(fixture.nativeElement.textContent).toContain('catalog.shops.add');
+      expect(fixture.nativeElement.textContent).not.toContain(
+        'resource.action.create'
+      );
+    }
+  });
+});
+
+const briefed: ResourceRowView[] = [
+  {
+    ...rows[0],
+    brief: { heading: 'Calle Feria 12', line: 'Sevilla 41004', trailing: '3' },
+    states: [
+      { label: 'catalog.shops.state.ownOrder', tone: 'good' },
+      { label: 'catalog.shops.state.guessed', tone: 'waiting' },
+    ],
+  },
+  {
+    ...rows[1],
+    brief: { heading: 'Avenida del Puerto 1', line: '', trailing: null },
+  },
+  // No brief at all: the row's title stands in for the heading.
+  { id: 'c', title: 'Dia', cells: {}, row: { id: 'c' } },
+];
+
+/**
+ * A column beside the open row (admin plan 0042): one line per row whatever
+ * the width, drawn from the row's `brief`.
+ */
+describe('ResourceList rows layout', () => {
+  it('draws one button per row and neither a table nor cards', async () => {
+    for (const compact of [false, true]) {
+      const fixture = await render({ layout: 'rows', rows: briefed, compact });
+
+      expect(query(fixture, '[data-row]')).toHaveLength(3);
+      expect(query(fixture, 'table')).toHaveLength(0);
+      expect(query(fixture, '.card')).toHaveLength(0);
+    }
+  });
+
+  it('heads a row with its brief heading, and with its title without one', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+
+    expect(texts(fixture, '.row-heading')).toEqual([
+      'Calle Feria 12',
+      'Avenida del Puerto 1',
+      'Dia',
+    ]);
+  });
+
+  it('draws the line and the states under the heading', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+    const first = query(fixture, '[data-row]')[0];
+
+    expect(first.querySelector('.row-line > span')?.textContent).toBe(
+      'Sevilla 41004'
+    );
+    expect(
+      [...first.querySelectorAll('.state-chip')].map((chip) => [
+        chip.textContent?.trim(),
+        chip.getAttribute('data-tone'),
+      ])
+    ).toEqual([
+      ['catalog.shops.state.ownOrder', 'good'],
+      ['catalog.shops.state.guessed', 'waiting'],
+    ]);
+  });
+
+  it('draws no second line for a row with nothing to say there', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+    const [, second, third] = [...query(fixture, '[data-row]')];
+
+    expect(second.querySelector('.row-line')).toBeNull();
+    expect(third.querySelector('.row-line')).toBeNull();
+  });
+
+  /** A number the gateway did not give is not drawn as a zero or a dash. */
+  it('draws the trailing number only where the row has one', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+    const [first, second, third] = [...query(fixture, '[data-row]')];
+
+    expect(first.querySelector('.row-trailing')?.textContent).toBe('3');
+    expect(second.querySelector('.row-trailing')).toBeNull();
+    expect(third.querySelector('.row-trailing')).toBeNull();
+  });
+
+  it('marks the open row as current, and no other', async () => {
+    const fixture = await render({
+      layout: 'rows',
+      rows: briefed,
+      currentId: 'b',
+    });
+    const buttons = [...query(fixture, '[data-row]')];
+
+    expect(
+      buttons.map((button) => button.getAttribute('aria-current'))
+    ).toEqual([null, 'true', null]);
+    expect(
+      buttons.map((button) => button.classList.contains('current'))
+    ).toEqual([false, true, false]);
+  });
+
+  it('marks none while nothing is open', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+
+    expect(query(fixture, '[aria-current]')).toHaveLength(0);
+  });
+
+  it('opens the row that was pressed', async () => {
+    const fixture = await render({ layout: 'rows', rows: briefed });
+    const opened: string[] = [];
+    fixture.componentInstance.open.subscribe((id) => opened.push(id));
+
+    query(fixture, '[data-row]')[1].click();
+
+    expect(opened).toEqual(['b']);
+  });
+
+  /** The open row's own page has the delete, so the column offers none. */
+  it('draws no delete on a row', async () => {
+    const fixture = await render({
+      layout: 'rows',
+      rows: briefed,
+      canDelete: true,
+    });
+
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'resource.action.delete'
+    );
+  });
+
+  it('still says the list is empty in place of the rows', async () => {
+    const fixture = await render({ layout: 'rows', rows: [], empty: true });
+
+    expect(query(fixture, '.rows')).toHaveLength(0);
+    expect(fixture.nativeElement.textContent).toContain('resource.list.empty');
+  });
+});
+
+/** The states of a row, beside its name in the table and on its card. */
+describe('ResourceList state chips', () => {
+  const stated: ResourceRowView[] = [
+    {
+      ...rows[0],
+      states: [
+        { label: 'catalog.scopes.state.default', tone: 'good' },
+        { label: 'catalog.shops.state.map', tone: 'neutral' },
+      ],
+    },
+    rows[1],
+  ];
+
+  it('draws them in the first cell of the table, beside the name', async () => {
+    const fixture = await render({ rows: stated });
+    const [first, second] = [...query(fixture, 'tbody tr')];
+
+    const chips = [...first.querySelectorAll('td:first-child .state-chip')];
+    expect(
+      chips.map((chip) => [
+        chip.textContent?.trim(),
+        chip.getAttribute('data-tone'),
+      ])
+    ).toEqual([
+      ['catalog.scopes.state.default', 'good'],
+      ['catalog.shops.state.map', 'neutral'],
+    ]);
+    expect(first.querySelectorAll('.state-chip')).toHaveLength(2);
+    expect(second.querySelectorAll('.state-chip')).toHaveLength(0);
+  });
+
+  it('draws them beside a name that does not open as well', async () => {
+    const fixture = await render({ rows: stated, canOpen: false });
+
+    expect(
+      query(fixture, 'tbody tr:first-child td:first-child .state-chip')
+    ).toHaveLength(2);
+  });
+
+  it('draws them on the card, and no empty line on a card without any', async () => {
+    const fixture = await render({ rows: stated, compact: true });
+    const [first, second] = [...query(fixture, '.card')];
+
+    expect(
+      [...first.querySelectorAll('.states .state-chip')].map((chip) =>
+        chip.textContent?.trim()
+      )
+    ).toEqual(['catalog.scopes.state.default', 'catalog.shops.state.map']);
+    expect(second.querySelector('.states')).toBeNull();
   });
 });

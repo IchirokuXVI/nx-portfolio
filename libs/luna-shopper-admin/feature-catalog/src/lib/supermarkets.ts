@@ -134,6 +134,19 @@ export const SUPERMARKETS = defineResource<Supermarket>({
     brief: { trailing: 'locationCount' },
   },
 
+  // A chain with no default scope is a gap somebody has to close, so the
+  // column says so on the row. The flat list flagged it in a column of its
+  // own, and the column of chains has no such column to flag it in.
+  rowStates: () => (row) =>
+    row.defaultPriceScopeId === null
+      ? [
+          {
+            label: 'catalog.supermarkets.noDefaultScope',
+            tone: 'waiting' as const,
+          },
+        ]
+      : [],
+
   sorts: [
     { value: 'name', label: 'catalog.supermarkets.sort.name' },
     { value: 'created', label: 'catalog.supermarkets.sort.created' },

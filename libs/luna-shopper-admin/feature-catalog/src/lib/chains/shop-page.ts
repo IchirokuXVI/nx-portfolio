@@ -459,7 +459,7 @@ export class ShopPage {
       {
         path: [...path, SHOP_SECTIONS_TAB],
         label: 'catalog.shops.tabs.sections',
-        count: () => shop.shop()?.sections.length ?? null,
+        count: () => shop.shop()?.sections?.length ?? null,
       },
       {
         path:
@@ -493,7 +493,7 @@ export class ShopPage {
     }
 
     const locales = this._content.order();
-    return row.priceScopeIds
+    return (row.priceScopeIds ?? [])
       .map((id): PricedByScope => {
         const scope = general.get(id);
         if (scope === undefined) {
@@ -592,7 +592,7 @@ export class ShopPage {
       return;
     }
     this.changeErrorKey.set(null);
-    this.draft.set(row.priceScopeIds);
+    this.draft.set(row.priceScopeIds ?? []);
     this.changing.set(true);
   }
 
