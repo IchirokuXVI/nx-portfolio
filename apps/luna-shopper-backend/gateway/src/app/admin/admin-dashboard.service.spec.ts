@@ -2,6 +2,7 @@ import {
   ADMIN_AUTH_PATTERNS,
   ADMIN_DASHBOARD_PATTERNS,
   type AdminActivityEntry,
+  BRAND_PATTERNS,
 } from '@portfolio/luna-shopper/contracts';
 import type { NatsClient } from '../messaging/nats-client';
 import {
@@ -81,9 +82,12 @@ const HARVEST = {
   runs: { byStatus: [], inWindow: 0 },
   running: null,
   recent: [],
-  queues: { entries: [], places: 0, shops: [] },
+  queues: { entries: [], places: 0, shops: [], brands: 3 },
   sources: { total: 1, enabled: 0 },
 };
+
+/** What catalog answers `brand.keys` with: every registered key. */
+const REGISTERED = { keys: ['hacendado', 'mahou'] };
 
 const ROSTER = {
   admins: [
@@ -116,6 +120,8 @@ function answerFor(subject: string): unknown {
       return HARVEST;
     case ADMIN_AUTH_PATTERNS.listAdmins:
       return ROSTER;
+    case BRAND_PATTERNS.keys:
+      return REGISTERED;
     default:
       throw new Error(`no fake answer for ${subject}`);
   }
@@ -148,6 +154,8 @@ describe('AdminDashboardService.dashboard', () => {
         ADMIN_DASHBOARD_PATTERNS.core,
         ADMIN_DASHBOARD_PATTERNS.harvest,
         ADMIN_DASHBOARD_PATTERNS.identity,
+        // The registry the harvester counts the suggested brands against.
+        BRAND_PATTERNS.keys,
       ].sort()
     );
   });
@@ -157,19 +165,96 @@ describe('AdminDashboardService.dashboard', () => {
 
     const body = await svc.dashboard(ADMIN);
 
-    const dashboardCalls = send.mock.calls.filter(
-      ([subject]) => subject !== ADMIN_AUTH_PATTERNS.listAdmins
+    const blocks: readonly string[] = Object.values(ADMIN_DASHBOARD_PATTERNS);
+    const dashboardCalls = send.mock.calls.filter(([subject]) =>
+      blocks.includes(subject as string)
     );
     expect(dashboardCalls).toHaveLength(4);
     for (const [, payload] of dashboardCalls) {
       // Every service verifies the signature itself, so the token has to reach
       // all four rather than being consumed by the gateway's own guard.
-      expect(payload).toEqual({
+      expect(payload).toMatchObject({
         userId: ADMIN.adminId,
         adminToken: ADMIN.token,
         window: body.window,
       });
     }
+  });
+
+  describe('queues.brands (admin plan 0044, section 2)', () => {
+    function harvestRequest(send: jest.Mock): Record<string, unknown> {
+      const call = send.mock.calls.find(
+        ([subject]) => subject === ADMIN_DASHBOARD_PATTERNS.harvest
+      );
+      return call?.[1] as Record<string, unknown>;
+    }
+
+    /**
+     * The rows are the harvester's and the registry is catalog's. The gateway
+     * carries the second to the first, as it does for the suggestions list.
+     */
+    it('sends the registered brand keys to the harvester, and answers its count', async () => {
+      const { svc, send } = build();
+
+      const body = await svc.dashboard(ADMIN);
+
+      expect(send).toHaveBeenCalledWith(BRAND_PATTERNS.keys, {
+        userId: ADMIN.adminId,
+      });
+      expect(harvestRequest(send)['registeredBrandKeys']).toEqual(
+        REGISTERED.keys
+      );
+      expect(body.harvest?.queues.brands).toBe(3);
+    });
+
+    it('sends the keys to the harvester alone', async () => {
+      const { svc, send } = build();
+
+      await svc.dashboard(ADMIN);
+
+      for (const subject of [
+        ADMIN_DASHBOARD_PATTERNS.identity,
+        ADMIN_DASHBOARD_PATTERNS.core,
+        ADMIN_DASHBOARD_PATTERNS.catalog,
+      ]) {
+        const call = send.mock.calls.find(([asked]) => asked === subject);
+        expect(call?.[1]).not.toHaveProperty('registeredBrandKeys');
+      }
+    });
+
+    /** An empty registry is an answer: every queued key is a suggestion. */
+    it('sends an empty registry as an empty list', async () => {
+      const { svc, send } = build((subject) =>
+        subject === BRAND_PATTERNS.keys ? { keys: [] } : answerFor(subject)
+      );
+
+      await svc.dashboard(ADMIN);
+
+      expect(harvestRequest(send)['registeredBrandKeys']).toEqual([]);
+    });
+
+    /**
+     * A registry that did not answer costs that one count. The harvester is
+     * still asked, without the keys, and answers `brands: null`.
+     */
+    it('still asks the harvester when the registry does not answer', async () => {
+      const { svc, send } = build((subject) => {
+        if (subject === BRAND_PATTERNS.keys) {
+          throw new Error('catalog is restarting');
+        }
+        if (subject === ADMIN_DASHBOARD_PATTERNS.harvest) {
+          return { ...HARVEST, queues: { ...HARVEST.queues, brands: null } };
+        }
+        return answerFor(subject);
+      });
+
+      const body = await svc.dashboard(ADMIN);
+
+      expect(harvestRequest(send)).not.toHaveProperty('registeredBrandKeys');
+      expect(body.harvest?.queues.brands).toBeNull();
+      expect(body.harvest?.queues.places).toBe(0);
+      expect(body.catalog).toEqual(CATALOG);
+    });
   });
 
   /** Section 1: a stopped service costs its own block and nothing else. */

@@ -24,6 +24,7 @@ import {
   sectionLink,
   sectionScreens,
   type AdminSection,
+  type SectionCounts,
 } from './admin-section';
 
 /**
@@ -88,6 +89,22 @@ export class AdminShellPage {
    */
   private readonly _url = signal(this._router.url);
 
+  /**
+   * Who counts the waiting work of each section that named a counter (admin
+   * plan 0044), by the section's key.
+   *
+   * Resolved here, once, because this is the one place that has both the list
+   * of sections and an injector. The shell is behind the sign in, so a counter
+   * that reads the gateway is never built for somebody with no session.
+   */
+  private readonly _counts = new Map<string, SectionCounts>(
+    this._sections.flatMap((section) =>
+      section.counts === undefined
+        ? []
+        : [[section.key, inject(section.counts)] as const]
+    )
+  );
+
   constructor() {
     const events = this._router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
@@ -120,7 +137,7 @@ export class AdminShellPage {
               icon: section.icon,
               exact:
                 section.segment === undefined && section.home !== undefined,
-              badge: () => sectionBadge(section),
+              badge: () => sectionBadge(this._screensOf(section)),
             },
           ];
     })
@@ -147,10 +164,29 @@ export class AdminShellPage {
       return [];
     }
 
-    const screens = sectionScreens(section);
+    const screens = this._screensOf(section);
 
     return section.home === undefined && screens.length === 1 ? [] : screens;
   });
+
+  /**
+   * A section's screens, each with its count.
+   *
+   * A link that states its own `badge` keeps it. Any other link of a section
+   * with a counter asks the counter, by its path.
+   */
+  private _screensOf(section: AdminSection): readonly ShellLink[] {
+    const counts = this._counts.get(section.key);
+    const screens = sectionScreens(section);
+
+    return counts === undefined
+      ? screens
+      : screens.map((screen) =>
+          screen.badge === undefined
+            ? { ...screen, badge: () => counts.countAt(screen.path) }
+            : screen
+        );
+  }
 
   /**
    * Which section the operator is in, as the path of its entry.
@@ -259,8 +295,8 @@ function inside(url: string, path: string): boolean {
  * It exists because work waiting behind a link an operator can no longer see is
  * the one way two rows make this app worse than one.
  */
-function sectionBadge(section: AdminSection): number | null {
-  const counts = sectionScreens(section)
+function sectionBadge(screens: readonly ShellLink[]): number | null {
+  const counts = screens
     .map((screen) => screen.badge?.() ?? null)
     .filter((count): count is number => count !== null);
 

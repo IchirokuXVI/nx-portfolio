@@ -1,5 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
@@ -13,6 +13,7 @@ import {
   SessionStorage,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { HarvestStatus } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   adminRoutes,
   provideSections,
@@ -30,7 +31,6 @@ import {
   type Brand,
   type SuggestionRegistered,
 } from './brands-gateway';
-import { brandsRoutes } from './routes';
 
 /**
  * The suggested brands screen, rendered (admin plan 0027, section 7).
@@ -95,25 +95,39 @@ const SUPERMARKETS = defineResource<Wire.CatalogSupermarketView>({
 });
 
 /**
- * The real section, minus its segment.
+ * A section holding the queue and the registered brands.
  *
- * The screens and the resource are the section's own, so `pathOf('brands')`
- * answers where this app mounted the registered list and the 409's link is built
- * from a real answer. Where the app hangs the section is asserted in
- * `shell-sections.spec.ts`, against the real sections.
+ * The app mounts this page inside the Review tab of the harvester (admin plan
+ * 0044), and this library cannot build that table: the harvester's library is
+ * the one it imports. So the queue is mounted here at an address of the
+ * spec's own, beside the real resource, so that `pathOf('brands')` answers and
+ * the 409's link is built from a real answer. Where the app hangs both is
+ * asserted in `shell-sections.spec.ts`, against the real sections.
  */
+const QUEUE_URL = '/suggested-brands';
+
 const SECTION: AdminSection = {
   key: 'brands',
   label: '',
   resources: [BRANDS, SUPERMARKETS],
-  screens: brandsRoutes(),
+  screens: [{ path: 'suggested-brands', component: BrandSuggestionsPage }],
 };
+
+/**
+ * The counts of the four queues, stood in for.
+ *
+ * The real one reads the dashboard and keeps reading it. What this page owes
+ * it is one call after a decision, which is what the stub records.
+ */
+let refresh: jest.Mock;
 
 const page = (fixture: ComponentFixture<TestHost>) =>
   fixture.debugElement.query(By.directive(BrandSuggestionsPage))
     .componentInstance as BrandSuggestionsPage;
 
-async function boot(before?: () => void) {
+async function boot(before?: () => void, url = QUEUE_URL) {
+  refresh = jest.fn();
+
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
@@ -126,6 +140,10 @@ async function boot(before?: () => void) {
       SessionStorage,
       SessionStore,
       DeploymentStore,
+      {
+        provide: HarvestStatus,
+        useValue: { refresh, waiting: signal(null), running: signal(null) },
+      },
     ],
   }).compileComponents();
 
@@ -134,7 +152,7 @@ async function boot(before?: () => void) {
   const fixture = TestBed.createComponent(TestHost);
   fixture.detectChanges();
 
-  await TestBed.inject(Router).navigateByUrl('/suggested-brands');
+  await TestBed.inject(Router).navigateByUrl(url);
   await settle(fixture);
 
   return fixture;
@@ -591,12 +609,125 @@ describe('BrandSuggestionsPage', () => {
     ] as HTMLAnchorElement[];
 
     expect(chips).toHaveLength(2);
+    // The products queue of Review, on the chain the four queues share
+    // (admin plan 0044).
     expect(chips[0].getAttribute('href')).toBe(
-      '/harvest/entries?supermarketId=sm_carrefour&brandKey=mahou'
+      '/harvest/review/products?chain=sm_carrefour&brandKey=mahou'
     );
     expect(chips[1].getAttribute('href')).toBe(
-      '/harvest/entries?supermarketId=sm_mercadona&brandKey=mahou'
+      '/harvest/review/products?chain=sm_mercadona&brandKey=mahou'
     );
+  });
+
+  /**
+   * Admin plan 0044, target 4: the Review page above this queue draws the
+   * header, so the queue draws none. What a row is stays behind an info
+   * button, beside the search.
+   */
+  it('draws no header of its own, and keeps its info beside the search', async () => {
+    const fixture = await boot();
+
+    expect(fixture.nativeElement.querySelector('lib-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')).toBeNull();
+
+    const find = fixture.nativeElement.querySelector('.find') as HTMLElement;
+    expect(find.querySelector('[data-search]')).not.toBeNull();
+    expect(find.querySelector('lib-info-button')).not.toBeNull();
+    expect(page(fixture).info.points).toEqual(['brands.suggested.info.what']);
+  });
+
+  describe('narrowed to the chain the four queues share', () => {
+    const using = (chain: string) =>
+      BRAND_SUGGESTION_SEED.filter((row) =>
+        row.chains.some((entry) => entry.supermarketId === chain)
+      ).map((row) => row.key);
+
+    it('draws every suggestion while no chain is chosen', async () => {
+      const fixture = await boot();
+
+      expect(page(fixture).chain()).toBe('');
+      expect(page(fixture).shown()).toHaveLength(BRAND_SUGGESTION_SEED.length);
+    });
+
+    it('draws only the suggestions that chain prints', async () => {
+      const fixture = await boot(undefined, `${QUEUE_URL}?chain=sm_consum`);
+      const expected = using('sm_consum');
+
+      // The fixture has to tell the two apart, or this proves nothing.
+      expect(expected.length).toBeGreaterThan(0);
+      expect(expected.length).toBeLessThan(BRAND_SUGGESTION_SEED.length);
+
+      expect(page(fixture).chain()).toBe('sm_consum');
+      expect(
+        brandRows(fixture).map((row) =>
+          row.querySelector('.key')?.textContent?.trim()
+        )
+      ).toEqual(expected);
+    });
+
+    /** The gateway has no chain filter for this read, so nothing more is asked. */
+    it('narrows the rows it holds, and asks the gateway nothing new', async () => {
+      const spies: jest.SpyInstance[] = [];
+      await boot(() => {
+        spies.push(
+          jest
+            .spyOn(TestBed.inject(BrandsGateway), 'suggestions')
+            .mockResolvedValue(answers(BRAND_SUGGESTION_SEED))
+        );
+      }, `${QUEUE_URL}?chain=sm_consum`);
+
+      expect(spies[0]).toHaveBeenCalledTimes(1);
+      expect(spies[0]).toHaveBeenLastCalledWith('');
+    });
+
+    /** Nothing matched the filter, which is not the same as an empty queue. */
+    it('says nothing matched when the chain prints none of them', async () => {
+      const fixture = await boot(undefined, `${QUEUE_URL}?chain=sm_nobody`);
+
+      expect(brandRows(fixture)).toHaveLength(0);
+      expect(text(fixture)).toContain('resource.list.noMatch');
+      expect(text(fixture)).not.toContain('brands.suggested.empty');
+    });
+  });
+
+  /**
+   * A registered brand leaves the queue, and the count on the rail is that
+   * queue's length (admin plan 0044, target 2).
+   */
+  it('reads the counts again once a brand is registered', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockResolvedValue(registered());
+    });
+    expect(refresh).not.toHaveBeenCalled();
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    expect(refresh).not.toHaveBeenCalled();
+
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads no count again when the register is refused', async () => {
+    const fixture = await boot(() => {
+      jest
+        .spyOn(TestBed.inject(BrandsGateway), 'registerSuggestion')
+        .mockRejectedValue(
+          new GatewayError({ code: 'conflict', status: 409, correlationId: '' })
+        );
+    });
+
+    registerButton(fixture, 'mahou')?.click();
+    await settle(fixture);
+    confirmButton(fixture).click();
+    await settle(fixture);
+
+    expect(page(fixture).openKey()).toBe('mahou');
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   /**

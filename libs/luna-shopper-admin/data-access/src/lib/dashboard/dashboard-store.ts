@@ -55,6 +55,15 @@ export class DashboardStore {
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
   private _watching = false;
+  /**
+   * How many are watching (admin plan 0044).
+   *
+   * The rail counts the harvester's waiting work on every screen, and the
+   * overview watches while it is open. With one flag, leaving the overview
+   * stopped the reads the rail still needed. So each `watch` is counted, and
+   * the reads stop when the last watcher does.
+   */
+  private _watchers = 0;
 
   /** The whole document, or `null` before a read has ever answered. */
   readonly document = this._dashboard.asReadonly();
@@ -119,6 +128,7 @@ export class DashboardStore {
 
   /** Start reading, and keep reading. Called once, by the screen that owns this. */
   watch(): void {
+    this._watchers += 1;
     if (this._watching) {
       return;
     }
@@ -129,8 +139,13 @@ export class DashboardStore {
 
   /** Stop reading. The screen's teardown calls this. */
   stop(): void {
-    this._watching = false;
+    this._watchers = Math.max(0, this._watchers - 1);
     this._followingRuns.set(false);
+    if (this._watchers > 0) {
+      // Somebody else still reads it. Only the faster cadence goes.
+      return;
+    }
+    this._watching = false;
     this._clearTimer();
     this._document.removeEventListener('visibilitychange', this._onVisibility);
   }

@@ -578,3 +578,74 @@ describe('adminRoutes with held resources', () => {
     );
   });
 });
+
+/**
+ * A section whose own address is no screen (admin plan 0044): the harvester
+ * has three tabs and opens on the first.
+ */
+describe('adminRoutes with a section that opens on one of its tabs', () => {
+  class Home {}
+
+  const review = { path: 'review', children: [] };
+  const branchOf = (section: AdminSection) =>
+    (adminRoutes([section])[0].children ?? []).find(
+      (route) => route.path === 'harvest'
+    );
+
+  const section: AdminSection = {
+    key: 'harvest',
+    label: 'shell.sections.harvest',
+    segment: 'harvest',
+    landing: 'review',
+    screens: [review],
+  };
+
+  it('redirects the section own address to that tab, after its screens', () => {
+    const children = branchOf(section)?.children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual(['review', '']);
+    expect(children[1]).toEqual({
+      path: '',
+      pathMatch: 'full',
+      redirectTo: 'review',
+    });
+  });
+
+  /**
+   * Relative, so it is resolved under the section's segment, and the query
+   * parameters of the address ride along.
+   */
+  it('redirects relative to the section', () => {
+    const redirect = (branchOf(section)?.children ?? []).find(
+      (route) => route.path === ''
+    );
+
+    expect(String(redirect?.redirectTo).startsWith('/')).toBe(false);
+  });
+
+  /** The home is declared first and would win, so no redirect is declared. */
+  it('declares no redirect beside a home', () => {
+    const children = branchOf({ ...section, home: Home })?.children ?? [];
+    const empty = children.filter((route) => route.path === '');
+
+    expect(empty).toHaveLength(1);
+    expect(empty[0].component).toBe(Home);
+    expect(empty[0].redirectTo).toBeUndefined();
+  });
+
+  it('declares none for a section that names no landing', () => {
+    const children =
+      branchOf({ ...section, landing: undefined })?.children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual(['review']);
+  });
+
+  /** A held resource is mounted by the section's own table, wherever it holds it. */
+  it('mounts no resource the section holds under a tab', () => {
+    const children =
+      branchOf({ ...section, held: [shops], heldUnder: 'setup' })?.children ??
+      [];
+
+    expect(children.map((route) => route.path)).toEqual(['review', '']);
+  });
+});

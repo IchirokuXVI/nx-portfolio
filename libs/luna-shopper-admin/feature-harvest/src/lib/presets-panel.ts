@@ -3,10 +3,11 @@ import {
   Component,
   computed,
   inject,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
@@ -14,16 +15,15 @@ import {
   type GatewayError,
   type HarvestRunPresetInput,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
-  ConfirmDialog,
-  HarvestNotice,
-  PageHeader,
-  ReferencePicker,
-} from '@portfolio/luna-shopper-admin/ui';
+  harvestRunPath,
+  spawnBlockReason,
+  type HarvestRun,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
+import { ConfirmDialog, HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
+import { ChainSelect } from './chain-select';
 import { formatInstant } from './format-instant';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 import { RunRequestForm } from './run-request-form';
 
@@ -47,9 +47,47 @@ interface RowRefusal {
   readonly detail: string;
 }
 
+/** Where the chain the panel was last on is kept, in this browser. */
+export const PRESETS_CHAIN_KEY = 'luna-shopper-admin.harvest.presets-chain';
+
+/** The chain the panel was last on, or `''`. Storage that refuses is no chain. */
+function rememberedChain(): string {
+  try {
+    return globalThis.localStorage?.getItem(PRESETS_CHAIN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberChain(supermarketId: string): void {
+  try {
+    if (supermarketId === '') {
+      globalThis.localStorage?.removeItem(PRESETS_CHAIN_KEY);
+    } else {
+      globalThis.localStorage?.setItem(PRESETS_CHAIN_KEY, supermarketId);
+    }
+  } catch {
+    // A browser that refuses storage starts on no chain next time, and that
+    // is the whole cost.
+  }
+}
+
 /**
- * The presets screen (admin plan 0030, section 3): a chain's saved runs, and
+ * The presets of a chain (admin plan 0030, section 3): its saved runs, and
  * the way to start, edit and delete one.
+ *
+ * **A panel of the Runs tab, and not a page** (admin plan 0044, target 5). It
+ * was a screen of its own at `/harvest/presets`. Starting a run and following
+ * it are one piece of work, so the presets sit beside the run in progress and
+ * the earlier runs. A start is told to the page through {@link started}, and
+ * the page reads its runs again.
+ *
+ * **The chain is remembered.** A person starts the same chain's presets day
+ * after day, so the panel opens on the chain it was last on, kept in this
+ * browser. A link that names a chain wins over the remembered one.
+ *
+ * Edit and delete show only while "Edit presets" is on: a row is a name, a
+ * line that says what it does, how its last run ended, and "Start".
  *
  * A preset is edited with {@link RunRequestForm}, the form a run is started
  * with, so a preset cannot hold a request the runs page could not have sent.
@@ -61,51 +99,40 @@ interface RowRefusal {
  * adds it when it hands `input` to the form, and strips it again when it saves.
  */
 @Component({
-  selector: 'lib-presets-page',
+  selector: 'lib-presets-panel',
   imports: [
-    PageHeader,
     FormsModule,
     RouterLink,
     RokuTranslatorPipe,
     ConfirmDialog,
     HarvestNotice,
-    ReferencePicker,
+    ChainSelect,
     RunRequestForm,
   ],
   template: `
-    <lib-page-header [heading]="'harvest.presets.heading' | rokuT" />
-
-    <section class="toolbar">
-      <div class="field">
-        <span>{{ 'harvest.presets.chain' | rokuT }}</span>
-        <lib-reference-picker
+    <div class="named">
+      <h2>{{ 'harvest.presets.title' | rokuT }}</h2>
+      <div class="chain">
+        <lib-chain-select
           (valueChange)="chooseChain($event)"
-          [controlId]="'presets-chain'"
-          [lookup]="references"
-          [resource]="'supermarkets'"
           [value]="supermarketId()"
+          controlId="presets-chain"
+          label="harvest.presets.chain"
+          noneKey="harvest.presets.noChain"
         />
       </div>
-      <button
-        (click)="openNew()"
-        [disabled]="supermarketId() === '' || editing() !== null"
-        class="primary"
-        type="button"
-      >
-        {{ 'harvest.presets.new' | rokuT }}
-      </button>
-    </section>
+    </div>
 
     @if (editing(); as open) {
       <section class="editor">
-        <h2>
+        <h3>
           {{
             (open.preset === null
               ? 'harvest.presets.newHeading'
               : 'harvest.presets.editHeading'
             ) | rokuT
           }}
-        </h2>
+        </h3>
         <label class="name">
           <span>{{ 'harvest.presets.name' | rokuT }}</span>
           <input
@@ -161,18 +188,19 @@ interface RowRefusal {
       <ul class="presets">
         @for (preset of presets(); track preset.id) {
           <li [class.highlighted]="preset.id === highlighted()">
-            <div class="head">
+            <div class="what">
               <span class="preset-name">{{ preset.name }}</span>
-              <span class="mode">
-                {{ 'harvest.mode.' + preset.input.mode | rokuT }}
+              <!-- One line: the kind of run, then what it is set to do. -->
+              <span class="summary">
+                <span class="mode">{{
+                  'harvest.mode.' + preset.input.mode | rokuT
+                }}</span>
+                @for (part of summaryOf(preset); track part.key) {
+                  <span>{{ part.key | rokuT: part.args ?? {} }}</span>
+                }
               </span>
             </div>
-            <p class="summary">
-              @for (part of summaryOf(preset); track part.key) {
-                <span>{{ part.key | rokuT: part.args ?? {} }}</span>
-              }
-            </p>
-            <p class="last">
+            <span class="last">
               @if (preset.lastRun; as last) {
                 <a [routerLink]="runLink(last.id)" class="last-run">
                   <span [class]="last.status" class="status">
@@ -183,13 +211,14 @@ interface RowRefusal {
               } @else {
                 {{ 'harvest.presets.neverRun' | rokuT }}
               }
-            </p>
+            </span>
             <div class="actions">
               <button
                 (click)="start(preset)"
                 [disabled]="busyId() !== null"
-                class="primary"
+                class="start"
                 type="button"
+                data-start
               >
                 {{
                   (startingId() === preset.id
@@ -198,21 +227,27 @@ interface RowRefusal {
                   ) | rokuT
                 }}
               </button>
-              <button
-                (click)="openEdit(preset)"
-                [disabled]="busyId() !== null || editing() !== null"
-                type="button"
-              >
-                {{ 'harvest.presets.edit' | rokuT }}
-              </button>
-              <button
-                (click)="pendingDelete.set(preset)"
-                [disabled]="busyId() !== null"
-                class="danger"
-                type="button"
-              >
-                {{ 'harvest.presets.delete.action' | rokuT }}
-              </button>
+              <!-- Edit and delete are for the day the presets are put in
+                   order, so they show only while "Edit presets" is on. -->
+              @if (editMode()) {
+                <button
+                  (click)="openEdit(preset)"
+                  [disabled]="busyId() !== null || editing() !== null"
+                  type="button"
+                  data-edit
+                >
+                  {{ 'harvest.presets.edit' | rokuT }}
+                </button>
+                <button
+                  (click)="pendingDelete.set(preset)"
+                  [disabled]="busyId() !== null"
+                  class="danger"
+                  type="button"
+                  data-delete
+                >
+                  {{ 'harvest.presets.delete.action' | rokuT }}
+                </button>
+              }
             </div>
             @if (refusalOf(preset.id); as refusal) {
               <div class="failure" role="alert">
@@ -232,6 +267,31 @@ interface RowRefusal {
         </button>
       }
     }
+
+    <div class="foot">
+      <button
+        (click)="openNew()"
+        [disabled]="supermarketId() === '' || editing() !== null"
+        class="link"
+        type="button"
+        data-new-preset
+      >
+        {{ 'harvest.presets.new' | rokuT }}
+      </button>
+      <button
+        (click)="editMode.set(!editMode())"
+        [attr.aria-pressed]="editMode()"
+        [disabled]="presets().length === 0"
+        class="link"
+        type="button"
+        data-edit-presets
+      >
+        {{
+          (editMode() ? 'harvest.presets.editDone' : 'harvest.presets.editAll')
+            | rokuT
+        }}
+      </button>
+    </div>
 
     @if (pendingDelete(); as target) {
       <lib-confirm-dialog
@@ -255,32 +315,44 @@ interface RowRefusal {
   styles: `
     :host {
       display: flex;
-      flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-4);
+      gap: var(--admin-space-3);
+      min-inline-size: 0;
+      padding: var(--admin-space-4);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
     }
 
     h2 {
-      font-size: 1rem;
-      font-weight: 700;
+      flex: none;
+      font-size: 0.9375rem;
+      font-weight: 600;
     }
 
-    .toolbar {
+    h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .named {
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-3);
-      align-items: flex-end;
+      align-items: center;
     }
 
-    .field,
+    .chain {
+      flex: 1;
+      min-inline-size: 12rem;
+    }
+
     label {
       display: flex;
-      flex: 1 1 16rem;
       flex-direction: column;
       gap: var(--admin-space-1);
     }
 
-    .field > span,
     label > span {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
@@ -291,27 +363,19 @@ interface RowRefusal {
       flex-direction: column;
       gap: var(--admin-space-3);
       align-items: flex-start;
-      padding: var(--admin-space-4);
+      padding: var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface);
     }
 
     .editor .name {
-      flex: 0 0 auto;
       inline-size: 100%;
       max-inline-size: 26rem;
     }
 
     button {
       cursor: pointer;
-    }
-
-    .primary {
-      border-color: transparent;
-      background: var(--admin-accent);
-      font-weight: 600;
-      color: var(--admin-accent-ink);
     }
 
     .danger {
@@ -327,74 +391,63 @@ interface RowRefusal {
     .failure {
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-danger);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-danger-wash);
       inline-size: 100%;
       font-size: 0.875rem;
     }
 
     .state {
-      padding: var(--admin-space-6);
+      padding: var(--admin-space-4);
       border: 1px dashed var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
+      font-size: 0.875rem;
       color: var(--admin-ink-muted);
     }
 
     .presets {
       display: flex;
       flex-direction: column;
-      gap: var(--admin-space-2);
       margin: 0;
       padding: 0;
       list-style: none;
     }
 
     .presets li {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: var(--admin-space-2) var(--admin-space-4);
-      align-items: center;
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
-
-    /* The preset a notice on the runs page linked to. */
-    .presets li.highlighted {
-      outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
-    }
-
-    .head {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
+      padding-block: var(--admin-space-2);
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    /* The preset a notice on this page named. */
+    .presets li.highlighted {
+      background: var(--admin-accent-wash);
+    }
+
+    .what {
+      display: flex;
+      flex: 1 1 12rem;
+      flex-direction: column;
+      min-inline-size: 0;
     }
 
     .preset-name {
-      font-weight: 700;
+      font-weight: 500;
+      overflow-wrap: anywhere;
     }
 
-    .mode,
     .summary,
     .last {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
-    .summary {
-      grid-column: 1;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0 var(--admin-space-3);
-    }
-
-    .last {
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
+    /* One line of words, each part closed by a comma but the last. */
+    .summary > span:not(:last-child)::after {
+      content: ', ';
     }
 
     .last-run {
@@ -405,15 +458,17 @@ interface RowRefusal {
     }
 
     .status {
-      padding: var(--admin-space-1) var(--admin-space-2);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface);
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
       font-size: 0.75rem;
-      text-transform: uppercase;
+      font-weight: 500;
+      color: var(--admin-neutral-on-wash);
     }
 
     .status.RUNNING,
-    .status.PENDING {
+    .status.PENDING,
+    .status.COMPLETED {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
     }
@@ -425,41 +480,58 @@ interface RowRefusal {
     }
 
     .actions {
-      grid-column: 2;
-      grid-row: 2;
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-2);
-      justify-content: flex-end;
     }
 
     .presets li .failure {
-      grid-column: 1 / -1;
+      flex-basis: 100%;
     }
 
-    /* One column on a phone: the actions go under the summary. */
-    @media (max-width: 40rem) {
-      .presets li {
-        grid-template-columns: minmax(0, 1fr);
-      }
+    .foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-4);
+    }
 
-      .last,
-      .actions {
-        grid-column: 1;
-        grid-row: auto;
-        justify-self: start;
-        justify-content: flex-start;
+    .link {
+      padding: 0;
+      border: none;
+      background: none;
+      font-size: 0.875rem;
+      color: var(--admin-accent);
+    }
+
+    .link:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    button:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
+    @media (max-width: 47.99rem) {
+      .link {
+        min-block-size: 2.75rem;
       }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PresetsPage {
+export class PresetsPanel {
   private readonly _service = inject(HARVEST_SERVICE);
-  private readonly _router = inject(Router);
+
+  /** A preset was started, and this is the run. */
+  readonly started = output<HarvestRun>();
+
+  /** Whether each row shows its edit and delete actions. */
+  readonly editMode = signal(false);
 
   readonly shell = inject(HarvestShell);
-  readonly references = inject(ResourceReferences);
 
   readonly supermarketId = signal('');
   readonly presets = signal<readonly Preset[]>([]);
@@ -514,13 +586,15 @@ export class PresetsPage {
   constructor() {
     const query = inject(ActivatedRoute).snapshot.queryParamMap;
     this.highlighted.set(query.get('preset') ?? '');
-    const chain = query.get('chain') ?? '';
+    // The chain a link named, else the one this browser was last on.
+    const chain = query.get('chain') ?? rememberedChain();
     if (chain !== '') {
       this.chooseChain(chain);
     }
   }
 
   chooseChain(supermarketId: string): void {
+    rememberChain(supermarketId);
     this.supermarketId.set(supermarketId);
     this.editing.set(null);
     this._refusals.set(new Map());
@@ -604,7 +678,7 @@ export class PresetsPage {
   }
 
   runLink(runId: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', runId];
+    return harvestRunPath(runId);
   }
 
   instant(value: string): string {
@@ -622,11 +696,14 @@ export class PresetsPage {
     this._setRefusal(preset.id, null);
     try {
       const run = await this._service.startPreset(preset.id);
-      await this._router.navigate(['/', HARVEST_SEGMENT, 'runs'], {
-        queryParams: { run: run.id },
-      });
+      this.started.emit(run);
+      // The row says how its last run ended, and that is this run now.
+      void this.load();
     } catch (error) {
       const failure = toGatewayError(error);
+      // A refusal that names a switch is what the state in the header of the
+      // Runs tab is read from, so it is told as a refused run form is.
+      this.shell.observeSpawnRefusal(spawnBlockReason(failure));
       const fields = Object.values(failure.fieldErrors).flat();
       const detail = fields.length > 0 ? fields.join(' ') : failure.detail;
       this._setRefusal(preset.id, {

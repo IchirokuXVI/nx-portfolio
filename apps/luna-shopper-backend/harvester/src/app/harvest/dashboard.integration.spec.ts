@@ -199,7 +199,8 @@ describeIntegration('the harvester’s dashboard block (real Postgres)', () => {
 
   async function newEntry(
     supermarketId: string,
-    status: SourceEntryStatus
+    status: SourceEntryStatus,
+    brandKey: string | null = null
   ): Promise<SourceCatalogEntry> {
     seq += 1;
     return entries.save(
@@ -209,6 +210,8 @@ describeIntegration('the harvester’s dashboard block (real Postgres)', () => {
         sourceKind: PriceSourceKind.OFFICIAL_API,
         name: `Product ${seq}`,
         status,
+        brand: brandKey,
+        brandKey,
       })
     );
   }
@@ -397,6 +400,56 @@ describeIntegration('the harvester’s dashboard block (real Postgres)', () => {
     // A run creates nothing in catalog, so every place it saw waits here until
     // somebody imports or rejects it.
     expect(block.queues.places).toBe(2);
+  });
+
+  /**
+   * Admin plan 0044, section 2. One per key, whatever the number of rows and
+   * chains that carry it: the Brands queue lists keys.
+   */
+  it('counts the brand keys that queued rows carry and no brand holds', async () => {
+    // Two chains and three rows carry one key, which is one suggestion.
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED, 'mahou');
+    await newEntry(CHAIN_B, SourceEntryStatus.UNRESOLVED, 'mahou');
+    await newEntry(CHAIN_B, SourceEntryStatus.CANDIDATE, 'mahou');
+    await newEntry(CHAIN_A, SourceEntryStatus.CANDIDATE, 'elpozo');
+    // Registered: catalog already holds it.
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED, 'hacendado');
+    // Already a product, and refused for good. Neither waits for anybody.
+    await newEntry(CHAIN_A, SourceEntryStatus.ACTIVE, 'bimbo');
+    await newEntry(CHAIN_A, SourceEntryStatus.REJECTED, 'junk');
+    // No brand at all: nothing to suggest.
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED);
+
+    const block = await dashboard.dashboard({
+      ...REQUEST,
+      registeredBrandKeys: ['hacendado'],
+    });
+
+    expect(block.queues.brands).toBe(2);
+  });
+
+  it('counts every queued key when no brand is registered yet', async () => {
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED, 'mahou');
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED, 'hacendado');
+
+    const block = await dashboard.dashboard({
+      ...REQUEST,
+      registeredBrandKeys: [],
+    });
+
+    expect(block.queues.brands).toBe(2);
+  });
+
+  /**
+   * The registry is catalog's. A request without it is a gateway that got no
+   * answer from catalog, and a count made anyway would name every brand.
+   */
+  it('answers no brand count when the request carries no registry', async () => {
+    await newEntry(CHAIN_A, SourceEntryStatus.UNRESOLVED, 'mahou');
+
+    const block = await dashboard.dashboard(REQUEST);
+
+    expect(block.queues.brands).toBeNull();
   });
 
   it('counts the chains it knows and how many may be fetched', async () => {

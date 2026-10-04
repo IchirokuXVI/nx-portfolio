@@ -8,6 +8,7 @@ export * from './lib/dashboard/activity-target';
 export * from './lib/dashboard/translate';
 export * from './lib/dashboard/week-delta';
 export * from './lib/deployment';
+export * from './lib/harvest/harvest-addresses';
 export * from './lib/harvest/harvest-document';
 export * from './lib/harvest/harvest-run';
 export * from './lib/harvest/harvest-switches';

@@ -248,8 +248,8 @@ describe('the run form, the modes it offers', () => {
     expect(fixture.componentInstance.uploadLink()).toEqual([
       '/',
       'harvest',
-      'imports',
-      'upload',
+      'runs',
+      'import',
     ]);
   });
 });

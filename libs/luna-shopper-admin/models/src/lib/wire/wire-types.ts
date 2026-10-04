@@ -1635,6 +1635,7 @@ export type AdminDashboardAdminHarvestDashboard = {
     entries: AdminDashboardAdminHarvestQueueEntry[];
     places: number;
     shops: AdminDashboardAdminHarvestShopQueue[];
+    brands: number | null;
   };
   sources: {
     total: number;

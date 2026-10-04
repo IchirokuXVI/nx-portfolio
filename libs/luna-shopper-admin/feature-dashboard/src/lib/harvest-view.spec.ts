@@ -1,9 +1,5 @@
 import type { Translate, Wire } from '@portfolio/luna-shopper-admin/models';
-import {
-  postalCodeCaption,
-  recentRunRows,
-  runsByStatusChart,
-} from './harvest-dashboard-view';
+import { postalCodeCaption, runsByStatusChart } from './harvest-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -20,7 +16,7 @@ function harvest(
     runs: { byStatus: [], inWindow: 0 },
     running: null,
     recent: [],
-    queues: { entries: [], places: 0, shops: [] },
+    queues: { entries: [], places: 0, shops: [], brands: 0 },
     sources: { total: 2, enabled: 1 },
     ...over,
   };
@@ -62,41 +58,6 @@ describe('runsByStatusChart', () => {
 
     expect(chart.series).toHaveLength(1);
     expect(chart.series[0].colour).toBe(1);
-  });
-});
-
-describe('recentRunRows', () => {
-  const run = (
-    over: Partial<Wire.HarvestHarvestRunView> = {}
-  ): Wire.HarvestHarvestRunView =>
-    ({
-      id: 'run-1',
-      mode: 'CATALOG_DISCOVERY',
-      status: 'COMPLETED',
-      requestedAt: '2026-09-03T09:00:00.000Z',
-      processed: 12,
-      failed: 0,
-      revertedAt: null,
-      revertedByUserId: null,
-      ...over,
-    }) as Wire.HarvestHarvestRunView;
-
-  /**
-   * The same `RunRow` the runs screen builds, so the two screens draw one row
-   * rather than two that drift.
-   */
-  it('formats its instants through the caller, which keeps Intl out of a template', () => {
-    const [row] = recentRunRows([run()], (value) => `at ${value ?? 'never'}`);
-
-    expect(row.id).toBe('run-1');
-    expect(row.requested).toBe('at 2026-09-03T09:00:00.000Z');
-    expect(row.reverted).toBe('at never');
-  });
-
-  it('carries no reason for a run that was not blocked', () => {
-    const [row] = recentRunRows([run()], () => '');
-
-    expect(row.reasonKey).toBeNull();
   });
 });
 

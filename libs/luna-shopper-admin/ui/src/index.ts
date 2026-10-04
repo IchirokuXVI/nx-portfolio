@@ -18,7 +18,6 @@ export * from './lib/harvest/harvest-notice';
 export * from './lib/harvest/queue-frame';
 export * from './lib/harvest/run-progress';
 export * from './lib/harvest/run-row';
-export * from './lib/harvest/switch-panel';
 export * from './lib/info/caution-line';
 export * from './lib/info/info-button';
 export * from './lib/info/info-panel';

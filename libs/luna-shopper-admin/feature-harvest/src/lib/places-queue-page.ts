@@ -5,8 +5,10 @@ import {
   effect,
   inject,
   signal,
+  untracked,
+  viewChild,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
@@ -20,6 +22,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
+  PLACES_GROUPED_VIEW,
   type InfoContent,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
@@ -27,13 +30,14 @@ import {
   ConfirmDialog,
   HarvestNotice,
   InfoButton,
-  PageHeader,
   QueueFrame,
   ReferencePicker,
+  type QueueExtraView,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { HarvestStatus } from './harvest-status';
+import { PlaceGroupsView } from './place-groups-view';
 import {
   fromOpenStreetMap,
   nearby,
@@ -49,6 +53,7 @@ import {
   type PendingBulk,
   type QueueBulkAct,
 } from './queue-bulk';
+import { ReviewChain } from './review-chain';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
 
@@ -102,23 +107,22 @@ const CATALOG_SHOPS_READ = 100;
 @Component({
   selector: 'lib-places-queue-page',
   imports: [
-    RouterLink,
     RokuTranslatorPipe,
     ConfirmDialog,
     QueueFrame,
     HarvestNotice,
     ReferencePicker,
-    PageHeader,
     InfoButton,
+    PlaceGroupsView,
   ],
   template: `
-    <lib-page-header [heading]="'harvest.places.heading' | rokuT" />
-
-    <nav class="views-link">
-      <a [routerLink]="groupsLink">{{
-        'harvest.places.groups.open' | rokuT
-      }}</a>
-    </nav>
+    <!-- A chain with no brand key cannot be told apart in what discovery
+         found, so the queue says that it shows every place. -->
+    @if (unnarrowed()) {
+      <p class="unnarrowed" role="status">
+        {{ 'harvest.places.chainHasNoKey' | rokuT }}
+      </p>
+    }
 
     <lib-queue-frame
       (clearSelection)="queue.clearSelection()"
@@ -132,8 +136,10 @@ const CATALOG_SHOPS_READ = 100;
       (stop)="queue.stopBulk()"
       [busy]="queue.busy()"
       [canLoadMore]="queue.canLoadMore()"
+      [currentId]="queue.current()?.id ?? null"
       [decided]="queue.decided()"
       [empty]="queue.empty()"
+      [extraViews]="extraViews"
       [errorKey]="errorKey()"
       [failed]="queue.failed()"
       [loading]="queue.loading()"
@@ -377,6 +383,12 @@ const CATALOG_SHOPS_READ = 100;
           {{ 'harvest.places.bulk.reject' | rokuT }}
         </button>
       </div>
+
+      <!-- The same places read by chain (admin plan 0034). A view of this
+           queue, built when it is first opened and not before. -->
+      @if (grouped()) {
+        <lib-place-groups queueExtra />
+      }
     </lib-queue-frame>
 
     @if (pending(); as bulk) {
@@ -399,14 +411,13 @@ const CATALOG_SHOPS_READ = 100;
       flex-direction: column;
     }
 
-    .views-link {
-      display: flex;
-      justify-content: flex-end;
-      margin-block: var(--admin-space-3) var(--admin-space-2);
-    }
-
-    .views-link a {
-      color: var(--admin-accent);
+    .unnarrowed {
+      margin-block-end: var(--admin-space-3);
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-waiting-wash);
+      font-size: 0.875rem;
+      color: var(--admin-waiting-on-wash);
     }
 
     h2 {
@@ -591,8 +602,7 @@ const CATALOG_SHOPS_READ = 100;
     }
 
     .matches button:focus-visible,
-    .quiet:focus-visible,
-    .views-link a:focus-visible {
+    .quiet:focus-visible {
       outline: 2px solid var(--admin-accent);
       outline-offset: 2px;
     }
@@ -674,8 +684,41 @@ export class PlacesQueuePage {
   readonly shell = inject(HarvestShell);
   readonly references = inject(ResourceReferences);
 
+  private readonly _review = inject(ReviewChain);
+  private readonly _status = inject(HarvestStatus);
+
   readonly chainLocales = CONTENT_LOCALES as readonly ChainLocale[];
-  readonly groupsLink = ['/', HARVEST_SEGMENT, 'places', 'groups'];
+
+  /** "Grouped by chain" is a view of this queue (admin plan 0044, target 4). */
+  readonly extraViews: readonly QueueExtraView[] = [
+    { id: PLACES_GROUPED_VIEW, labelKey: 'harvest.places.groups.view' },
+  ];
+
+  private readonly _frame = viewChild(QueueFrame);
+
+  /** Whether the grouped view is on screen, which is when it is built. */
+  readonly grouped = computed(
+    () => this._frame()?.extra()?.id === PLACES_GROUPED_VIEW
+  );
+
+  /**
+   * The brand key the queue is narrowed to, which is the chosen chain's own.
+   *
+   * A discovered place names a brand and never a chain, so the shared chain
+   * filter narrows this queue through the key the chain is known by. `''`
+   * with no chain chosen.
+   */
+  private readonly _brandKey = signal('');
+
+  /**
+   * Whether a chain is chosen and the queue could not be narrowed to it,
+   * because that chain has no brand key. The queue then shows every place and
+   * says so.
+   */
+  readonly unnarrowed = signal(false);
+
+  /** Bumped on every chain change, so that a slow answer for an old one is dropped. */
+  private _narrowing = 0;
 
   /**
    * The chain the picker holds, or `''`.
@@ -717,27 +760,44 @@ export class PlacesQueuePage {
   readonly report = signal<QueueReport | null>(null);
   readonly progressKey = signal('harvest.queue.bulk.progress');
 
-  readonly queue = new QueueStore<Place>(
-    async (cursor) => {
-      try {
-        // Only the undecided ones. An imported or rejected place is not a
-        // question any more, and a queue that offered it again would be asking
-        // an operator to answer their own earlier answer.
-        const page = await this._service.listPlaces({
-          status: 'NEW',
-          cursor,
-          country: this._country === '' ? undefined : this._country,
-          postalCode: this.postalCode === '' ? undefined : this.postalCode,
-        });
-        this.shell.observeReachable();
-        return page;
-      } catch (error) {
-        this.shell.observeFailure();
-        throw error;
-      }
-    },
-    (place) => place.id
-  );
+  /**
+   * The queue, behind a signal and read through a getter (admin plan 0044).
+   *
+   * The shared chain filter builds a **new** store, and a computed that had
+   * read the old one's signals would never hear about it.
+   */
+  private readonly _queue = signal(this._build());
+
+  get queue(): QueueStore<Place> {
+    return this._queue();
+  }
+
+  private _build(): QueueStore<Place> {
+    const brandKey = this._brandKey();
+
+    return new QueueStore<Place>(
+      async (cursor) => {
+        try {
+          // Only the undecided ones. An imported or rejected place is not a
+          // question any more, and a queue that offered it again would be
+          // asking an operator to answer their own earlier answer.
+          const page = await this._service.listPlaces({
+            status: 'NEW',
+            cursor,
+            country: this._country === '' ? undefined : this._country,
+            postalCode: this.postalCode === '' ? undefined : this.postalCode,
+            brandKey: brandKey === '' ? undefined : brandKey,
+          });
+          this.shell.observeReachable();
+          return page;
+        } catch (error) {
+          this.shell.observeFailure();
+          throw error;
+        }
+      },
+      (place) => place.id
+    );
+  }
 
   /**
    * The candidates the last import of a place answered with, by place.
@@ -828,7 +888,12 @@ export class PlacesQueuePage {
   }));
 
   constructor() {
-    void this.queue.load();
+    // The chain the four queues share. Each change builds the queue again,
+    // and the first read is this effect's first run.
+    effect(() => {
+      const chain = this._review.chain();
+      untracked(() => void this._narrow(chain));
+    });
 
     effect(() => {
       const place = this.queue.current();
@@ -877,12 +942,49 @@ export class PlacesQueuePage {
       })
     );
     if (this.queue.error() === null) {
-      this._reset();
+      this._decided();
     }
   }
 
   reject(): void {
-    void this.queue.decide((place) => this._service.rejectPlace(place.id));
+    const queue = this.queue;
+    void queue
+      .decide((place) => this._service.rejectPlace(place.id))
+      .then(() => {
+        // A refused reject took nothing out of the queue.
+        if (queue.error() === null) {
+          this._status.refresh();
+        }
+      });
+  }
+
+  /**
+   * Narrow the queue to the places of one chain, or widen it back.
+   *
+   * The chain's row holds the brand key that discovery files its places
+   * under. A chain with none cannot be asked for, so the queue stays whole
+   * and {@link unnarrowed} says so.
+   */
+  private async _narrow(chain: string): Promise<void> {
+    const turn = ++this._narrowing;
+    let brandKey = '';
+
+    if (chain !== '') {
+      const option = await this.references.resolve('supermarkets', chain);
+      if (turn !== this._narrowing) {
+        return;
+      }
+      const key = option?.row?.['externalBrandKey'];
+      brandKey = typeof key === 'string' ? key : '';
+    }
+
+    this.unnarrowed.set(chain !== '' && brandKey === '');
+    this._brandKey.set(brandKey);
+    this._reset();
+
+    const queue = this._build();
+    this._queue.set(queue);
+    await queue.load();
   }
 
   /** A row the operator wants to look at properly, rather than tick. */
@@ -969,7 +1071,7 @@ export class PlacesQueuePage {
           reasonOf: placeRefusalKey,
           // The picker resets after a bulk run for the same reason it resets
           // after a single decision.
-        }).then(() => this._reset()),
+        }).then(() => this._decided()),
     });
   }
 
@@ -1034,7 +1136,7 @@ export class PlacesQueuePage {
   private _settle(place: Place, body: Wire.ImportDiscoveredPlaceDto): void {
     const error = this.queue.error();
     if (error === null) {
-      this._reset();
+      this._decided();
       return;
     }
 
@@ -1054,6 +1156,15 @@ export class PlacesQueuePage {
       this._needsChain.set(true);
       this.startNewChain(place);
     }
+  }
+
+  /**
+   * A decision went through: clear the panel for the next place, and read the
+   * counts again so that the rail says what the queue holds.
+   */
+  private _decided(): void {
+    this._reset();
+    this._status.refresh();
   }
 
   private _reset(): void {
@@ -1146,6 +1257,7 @@ export class PlacesQueuePage {
     this.report.set(null);
     this.report.set(await runQueueBulk(this.queue, bulk));
     this.progressKey.set('harvest.queue.bulk.progress');
+    this._status.refresh();
   }
 }
 

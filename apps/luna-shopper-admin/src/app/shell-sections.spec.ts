@@ -22,16 +22,65 @@ describe('ADMIN_SECTIONS', () => {
    * The chains are second, after the overview (admin plan 0042, target 1),
    * and the products third (admin plan 0043, target 1). There is no Catalog
    * section: its ten screens are those two.
+   *
+   * The harvester is fourth (admin plan 0044; admin plan 0041, section 4).
+   * A phone shows the first four and "More", and the harvester is where work
+   * waits for a person, so it is one of the four.
    */
   it('is the six sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
       'chains',
       'products',
-      'shoppers',
       'harvest',
+      'shoppers',
       'admins',
     ]);
+  });
+
+  /**
+   * The harvester in three tabs (admin plan 0044, target 1). No home: its own
+   * address goes to Review, where a person has work. The brands and the postal
+   * codes are held under Setup and are no tab of the section.
+   */
+  it('opens the harvester on Review, with three tabs', () => {
+    const harvest = ADMIN_SECTIONS.find((section) => section.key === 'harvest');
+
+    expect(harvest).toBeDefined();
+    if (harvest === undefined) {
+      return;
+    }
+    expect(harvest.segment).toBe('harvest');
+    expect(harvest.home).toBeUndefined();
+    expect(harvest.landing).toBe('review');
+    // The entry in the rail is the segment, so it stays marked on every tab.
+    expect(sectionLink(harvest)).toBe('/harvest');
+    expect(sectionScreens(harvest)).toEqual([
+      { path: '/harvest/review', label: 'harvest.tab.review' },
+      { path: '/harvest/runs', label: 'harvest.tab.runs' },
+      { path: '/harvest/setup', label: 'harvest.tab.setup' },
+    ]);
+    expect(harvest.resources).toBeUndefined();
+    expect((harvest.held ?? []).map((descriptor) => descriptor.name)).toEqual([
+      'brands',
+      'postal-codes',
+    ]);
+    expect(harvest.heldUnder).toBe('setup');
+    // Somebody counts what waits behind Review, for the tab and for the rail.
+    expect(harvest.counts).toBeDefined();
+  });
+
+  /** The tab the section opens on is one of its tabs. */
+  it('opens every section that has a landing on one of its own links', () => {
+    for (const section of ADMIN_SECTIONS) {
+      if (section.landing === undefined) {
+        continue;
+      }
+      expect(section.home).toBeUndefined();
+      expect(sectionScreens(section).map((screen) => screen.path)).toContain(
+        `/${section.segment}/${section.landing}`
+      );
+    }
   });
 
   /**
@@ -49,9 +98,9 @@ describe('ADMIN_SECTIONS', () => {
   });
 
   /**
-   * Ten is the widest second row. Eight fit on one line at 1280 pixels, and the
-   * harvester's ten wrap onto a second line, which the row allows. A section
-   * that needs more than ten is two sections.
+   * Ten is the widest row of tabs. The harvester had ten in one flat row, and
+   * has three since admin plan 0044. A section that needs more than ten is
+   * two sections.
    */
   it('gives no section more than ten screens', () => {
     for (const section of ADMIN_SECTIONS) {
@@ -60,9 +109,10 @@ describe('ADMIN_SECTIONS', () => {
   });
 
   /**
-   * A home, a screen with a link, or a resource it holds and mounts itself:
-   * the chains have no home and no second row, and open on the list of chains.
-   * A section with none of the three would draw an entry that goes nowhere.
+   * A home, a tab it lands on, a screen with a link, or a resource it holds
+   * and mounts itself: the chains have no home and no second row, and open on
+   * the list of chains, and the harvester opens on Review. A section with none
+   * of these would draw an entry that goes nowhere.
    */
   it('gives every section somewhere to open', () => {
     for (const section of ADMIN_SECTIONS) {
@@ -262,9 +312,24 @@ describe('ADMIN_SECTIONS', () => {
     // `shopping-lists` is the baskets screen's segment, which is the gateway's
     // own name for a basket.
     expect(at('baskets')).toBe('shoppers/shopping-lists');
-    expect(at('postal-codes')).toBe('harvest/postal-codes');
-    // Beside the suggested brands, which are keys the harvested queue carries.
-    expect(at('brands')).toBe('harvest/brands');
+    // Parts of the harvester's Setup tab (admin plan 0044, target 6): set up
+    // once and then left alone, beside the chain sources.
+    expect(at('postal-codes')).toBe('harvest/setup/postal-codes');
+    expect(at('brands')).toBe('harvest/setup/brands');
+    expect(registry.rowPath('brands', 'br_1')).toEqual([
+      '/',
+      'harvest',
+      'setup',
+      'brands',
+      'br_1',
+    ]);
+    expect(registry.rowPath('postal-codes', '14001')).toEqual([
+      '/',
+      'harvest',
+      'setup',
+      'postal-codes',
+      '14001',
+    ]);
     // The one section that keeps the root, because it has one screen.
     expect(at('admins')).toBe('admins');
   });

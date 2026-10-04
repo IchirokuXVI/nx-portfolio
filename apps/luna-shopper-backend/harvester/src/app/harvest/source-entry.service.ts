@@ -66,6 +66,7 @@ import {
   SourceEntryPriceWriter,
   taughtEan,
 } from './source-entry-write';
+import { suggestedBrandRows } from './suggested-brand-rows';
 import { SupermarketSourceService } from './supermarket-source.service';
 
 interface EntryCursor {
@@ -559,9 +560,7 @@ export class SourceEntryService {
                      ) chain
                  )                                      AS "chains"
             FROM "source_catalog_entries" e
-           WHERE e."status" IN ('CANDIDATE', 'UNRESOLVED')
-             AND e."brandKey" IS NOT NULL
-             AND NOT (e."brandKey" = ANY(${registered}::text[]))
+           WHERE ${suggestedBrandRows(registered)}
              ${filters.length ? `AND ${filters.join(' AND ')}` : ''}
            GROUP BY e."brandKey"
         ) g

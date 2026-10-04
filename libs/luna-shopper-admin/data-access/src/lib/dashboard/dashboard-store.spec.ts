@@ -325,3 +325,140 @@ describe('DashboardStore', () => {
     store.stop();
   });
 });
+
+/**
+ * Admin plan 0044. The rail counts the harvester's waiting work on every
+ * screen, and the overview watches while it is open. Each `watch` is counted,
+ * so that the overview closing does not stop the reads the rail still needs.
+ */
+describe('DashboardStore with more than one watcher', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('reads once however many watch', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+
+    store.watch();
+    await settle();
+    store.watch();
+    await settle();
+
+    expect(service.calls).toBe(1);
+    store.stop();
+    store.stop();
+  });
+
+  it('keeps reading while one watcher is left', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+
+    store.watch();
+    store.watch();
+    await settle();
+    store.stop();
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS);
+    await settle();
+    expect(service.calls).toBe(2);
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS);
+    await settle();
+    expect(service.calls).toBe(3);
+    store.stop();
+  });
+
+  /** The tab coming back is still heard, which is the rail's read on focus. */
+  it('keeps listening for the tab while one watcher is left', async () => {
+    const service = reader([document_()]);
+    const { store, page } = build(service);
+
+    store.watch();
+    store.watch();
+    await settle();
+    store.stop();
+
+    page.change('hidden');
+    page.change('visible');
+    await settle();
+
+    expect(service.calls).toBe(2);
+    store.stop();
+  });
+
+  it('stops reading and listening when the last watcher stops', async () => {
+    const service = reader([document_()]);
+    const { store, page } = build(service);
+
+    store.watch();
+    store.watch();
+    await settle();
+    store.stop();
+    store.stop();
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS * 3);
+    await settle();
+    page.change('hidden');
+    page.change('visible');
+    await settle();
+
+    expect(service.calls).toBe(1);
+  });
+
+  /**
+   * The screen that followed the run is the one that left, so the faster
+   * cadence goes with it even though somebody else still reads.
+   */
+  it('drops the run cadence when a watcher stops, and keeps the slow one', async () => {
+    const service = reader([document_({ harvest: { running: RUNNING } })]);
+    const { store } = build(service);
+
+    store.watch();
+    store.watch();
+    store.followRuns(true);
+    await settle();
+    expect(store.interval()).toBe(RUN_POLL_INTERVAL_MS);
+
+    store.stop();
+
+    expect(store.interval()).toBe(DASHBOARD_POLL_INTERVAL_MS);
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS + RUN_POLL_INTERVAL_MS);
+    await settle();
+    expect(service.calls).toBeGreaterThanOrEqual(2);
+    store.stop();
+  });
+
+  /** A stop nobody paired with a watch must not leave the count below zero. */
+  it('does not count below zero', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+
+    store.stop();
+    store.stop();
+
+    // One watch is one watcher, so one stop is enough to stop it again.
+    store.watch();
+    await settle();
+    expect(service.calls).toBe(1);
+    store.stop();
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS * 2);
+    await settle();
+    expect(service.calls).toBe(1);
+  });
+
+  it('starts again, with a read, after everybody stopped', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+
+    store.watch();
+    await settle();
+    store.stop();
+
+    store.watch();
+    await settle();
+
+    expect(service.calls).toBe(2);
+    store.stop();
+  });
+});

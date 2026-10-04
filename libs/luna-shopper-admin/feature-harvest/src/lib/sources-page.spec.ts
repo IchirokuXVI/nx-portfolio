@@ -135,45 +135,147 @@ describe('the chain sources screen, in English', () => {
    * The assertion that would have caught it. A key on the screen is a key in the
    * text, and there is no other way this screen can be wrong about its strings.
    */
-  it('draws its heading and its lead as text, not as key names', async () => {
+  it('draws its columns as text, not as key names', async () => {
     const fixture = await render();
 
-    expect(text(fixture)).toContain('Chain sources');
+    // The Setup page above this part draws the header and names the part, so
+    // what this screen says first is its own columns (admin plan 0044).
+    expect(text(fixture)).toContain('Fetched as');
+    expect(text(fixture)).toContain('Last good run');
     expect(text(fixture)).not.toContain('harvest.sources.');
+    expect(fixture.nativeElement.querySelector('lib-page-header')).toBeNull();
   });
 
   it('names the two settings that decide how hard a chain is fetched', async () => {
     const fixture = await render();
 
     expect(text(fixture)).toContain('Workers');
-    expect(text(fixture)).toContain('Requests per second');
+    expect(text(fixture)).toContain('Requests a second');
     expect(text(fixture)).not.toContain('harvest.');
   });
 
-  it('says whether a chain may be fetched, in words', async () => {
-    const fixture = await render();
+  const switches = (
+    fixture: ComponentFixture<SourcesPage>,
+    name: 'enabled' | 'trusted'
+  ): HTMLButtonElement[] => [
+    ...(fixture.nativeElement.querySelectorAll(
+      `button.toggle[role="switch"][data-switch="${name}"]`
+    ) as NodeListOf<HTMLButtonElement>),
+  ];
 
-    // Mercadona is seeded on and DEZA off, so both labels are on the screen.
-    expect(text(fixture)).toContain('Enabled');
-    expect(text(fixture)).toContain('Disabled');
+  /**
+   * A switch says its state as `aria-checked`, so that color and the place of
+   * the knob are not the only signs, and it is named after its chain.
+   */
+  it('says whether a chain may be fetched, as the state of a switch', async () => {
+    const fixture = await render();
+    const sources = fixture.componentInstance.sources();
+
+    expect(text(fixture)).toContain('May be fetched');
+    // One switch per row, each saying what its row says. The seed holds a
+    // chain that is on and one that is off, so both states are on the screen.
+    expect(
+      switches(fixture, 'enabled').map((button) =>
+        button.getAttribute('aria-checked')
+      )
+    ).toEqual(sources.map((source) => String(source.enabled)));
+    expect(sources.some((source) => source.enabled)).toBe(true);
+    expect(sources.some((source) => !source.enabled)).toBe(true);
+    for (const button of switches(fixture, 'enabled')) {
+      expect(button.getAttribute('aria-label')).toContain('may be fetched');
+    }
+  });
+
+  it('turns a chain on and off from its switch', async () => {
+    const fixture = await render();
+    const before = fixture.componentInstance.sources()[0];
+
+    switches(fixture, 'enabled')[0].click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.sources()[0].enabled).toBe(
+      !before.enabled
+    );
+    expect(switches(fixture, 'enabled')[0].getAttribute('aria-checked')).toBe(
+      String(!before.enabled)
+    );
   });
 
   /**
    * The second switch, and the one that writes to the catalog (backend plan
    * 0107, section 3.1).
    *
-   * It carries a sentence rather than a bare label because it is the only
+   * What trusting a chain means is behind the column's info button and no
+   * longer a sentence on every row (admin plan 0044, target 6). It is the only
    * control in the harvester that lets a third party's data into the catalog
-   * with nobody looking first, and "Trusted" on its own says none of that.
+   * with nobody looking first, and the panel's last point says so.
    */
   it('says whether a chain is trusted, and what trusting it means', async () => {
     const fixture = await render();
+    const translate = TestBed.inject(RokuTranslatorService);
+    const info = fixture.componentInstance.trustedInfo;
 
     // Every seeded chain is untrusted, which is what a row says until somebody
     // decides otherwise.
-    expect(text(fixture)).toContain('Not trusted');
-    expect(text(fixture)).toContain('go straight into the catalog');
-    expect(text(fixture)).toContain('still waits in the places queue');
+    expect(
+      switches(fixture, 'trusted').map((button) =>
+        button.getAttribute('aria-checked')
+      )
+    ).toEqual(fixture.componentInstance.sources().map(() => 'false'));
+
+    const points = info.points.map((key) => translate.t(key));
+    expect(translate.t(info.title)).toBe('Trusted');
+    expect(points.join(' ')).toContain('with nobody looking first');
+    expect(points.join(' ')).toContain('still waits in the Places queue');
+    expect(points.join(' ')).toContain('without a review');
+  });
+
+  /** Target 6: each of the two switch columns has its own info button. */
+  it('gives each switch column an info button of its own', async () => {
+    const fixture = await render();
+    const translate = TestBed.inject(RokuTranslatorService);
+    const page = fixture.componentInstance;
+
+    expect(
+      fixture.nativeElement.querySelectorAll('.head-info lib-info-button')
+        .length
+    ).toBe(2);
+    for (const info of [page.enabledInfo, page.trustedInfo]) {
+      for (const key of [info.title, ...info.points]) {
+        // A key the catalogue does not hold comes back as itself.
+        expect(translate.t(key)).not.toBe(key);
+      }
+    }
+    expect(translate.t(page.enabledInfo.title)).toBe('May be fetched');
+  });
+
+  /** Target 6: "Change" opens the form in the row, with the caution. */
+  it('opens the form in the row, with the caution about asking too fast', async () => {
+    const fixture = await render();
+
+    expect(fixture.nativeElement.querySelector('lib-caution-line')).toBeNull();
+    const change: HTMLButtonElement =
+      fixture.nativeElement.querySelector('[data-change]');
+    expect(change.textContent).toContain('Change');
+
+    change.click();
+    fixture.detectChanges();
+
+    const open: HTMLElement =
+      fixture.nativeElement.querySelector('.sources li.open');
+    expect(open).not.toBeNull();
+    expect(open.querySelector('.edit select[name="adapterKey"]')).not.toBeNull();
+    expect(open.querySelector('lib-caution-line')).not.toBeNull();
+    expect(open.textContent).toContain('A chain blocks a crawl');
+    // The row that is open offers no second "Change", and deleting the source
+    // is an action of the form.
+    expect(open.querySelector('[data-change]')).toBeNull();
+    expect(open.querySelector('.edit .danger')).not.toBeNull();
+    // Every other row is closed, and holds no delete.
+    expect(
+      fixture.nativeElement.querySelectorAll('.sources li .danger').length
+    ).toBe(1);
   });
 
   it('turns the trust switch on without touching the fetching settings', async () => {
@@ -374,9 +476,16 @@ describe('the chain sources screen, and the adapters it offers', () => {
     const fixture = await render();
 
     expect(text(fixture)).toContain(
-      'OpenStreetMap: always asked for every postal code'
+      'OpenStreetMap is always asked for every postal code'
     );
     expect(fixture.nativeElement.querySelector('.always button')).toBeNull();
+    // One line under the list, and never a row of it.
+    const always: HTMLElement = fixture.nativeElement.querySelector('.always');
+    const table: HTMLElement = fixture.nativeElement.querySelector('.table');
+    expect(table.contains(always)).toBe(false);
+    expect(
+      table.compareDocumentPosition(always) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   /**

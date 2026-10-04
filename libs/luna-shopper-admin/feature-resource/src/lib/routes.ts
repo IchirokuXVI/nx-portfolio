@@ -283,6 +283,18 @@ function sectionBranch(section: AdminSection): Route {
               component: section.home,
             },
           ]),
+      // A section with no screen at its own address opens on one of its tabs
+      // (admin plan 0044). Never beside a home: the home is declared first and
+      // would win.
+      ...(section.landing === undefined || section.home !== undefined
+        ? []
+        : [
+            {
+              path: '',
+              pathMatch: 'full' as const,
+              redirectTo: section.landing,
+            },
+          ]),
     ],
   };
 }

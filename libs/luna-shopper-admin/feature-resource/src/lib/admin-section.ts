@@ -1,4 +1,9 @@
-import { InjectionToken, type Provider, type Type } from '@angular/core';
+import {
+  InjectionToken,
+  type Provider,
+  type ProviderToken,
+  type Type,
+} from '@angular/core';
 import type { Route } from '@angular/router';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
@@ -42,6 +47,16 @@ export interface AdminSection {
   readonly segment?: string;
   /** The screen at the section's own path. */
   readonly home?: Type<unknown>;
+  /**
+   * The screen the section's own address goes to, as a path under the segment
+   * (admin plan 0044).
+   *
+   * For a section whose own address is no screen: the harvester has three
+   * tabs and opens on the first, where a person has work. The section's entry
+   * in the rail then points at the segment, and stays marked on every tab.
+   * A section names this or a {@link home}, and never both.
+   */
+  readonly landing?: string;
   /** Resources mounted under the segment, in navigation order. */
   readonly resources?: readonly AnyResourceDescriptor[];
   /**
@@ -72,10 +87,40 @@ export interface AdminSection {
    * under it.
    */
   readonly heldTabs?: boolean;
+  /**
+   * A segment between the section's own and each resource it holds (admin
+   * plan 0044).
+   *
+   * The registered brands and the postal codes are parts of the harvester's
+   * Setup tab, so they are at `/harvest/setup/brands` and not at
+   * `/harvest/brands`. The registry answers with this segment in the path,
+   * and the section's own route table mounts them there.
+   */
+  readonly heldUnder?: string;
   /** Hand written screens under the segment. */
   readonly screens?: readonly Route[];
   /** Navigation entries for those hand written screens. */
   readonly links?: readonly ShellLink[];
+  /**
+   * Who counts the work that waits behind this section's links (admin plan
+   * 0044).
+   *
+   * A service, named and not built, because a count is read from the gateway
+   * and the list of sections is a constant written before any injector
+   * exists. The frame resolves it once and asks it for each link. A link that
+   * states a `badge` of its own keeps it.
+   */
+  readonly counts?: ProviderToken<SectionCounts>;
+}
+
+/** What counts the work waiting behind the links of one section. */
+export interface SectionCounts {
+  /**
+   * How much waits behind the link at this path, or `null` when that link has
+   * no count. Read inside a template, so a signal read here keeps the badge
+   * current.
+   */
+  countAt(path: string): number | null;
 }
 
 /**
@@ -131,7 +176,9 @@ export function provideResources(
  * `shell-sections.spec.ts` refuses and which therefore cannot reach a tab.
  */
 export function sectionLink(section: AdminSection): string | null {
-  if (section.home !== undefined) {
+  // A section that opens on one of its tabs is at its own segment (admin plan
+  // 0044). The entry in the rail then stays marked on every tab.
+  if (section.home !== undefined || section.landing !== undefined) {
     return section.segment === undefined ? '/' : `/${section.segment}`;
   }
 

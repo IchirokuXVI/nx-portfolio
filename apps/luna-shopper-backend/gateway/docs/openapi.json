@@ -31582,7 +31582,8 @@
             "required": [
               "entries",
               "places",
-              "shops"
+              "shops",
+              "brands"
             ],
             "properties": {
               "entries": {
@@ -31600,6 +31601,18 @@
                 "items": {
                   "$ref": "#/components/schemas/admin-dashboard.AdminHarvestShopQueue"
                 }
+              },
+              "brands": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The suggested brands: brand keys that queued source rows carry and no registered brand holds. Null when the brand registry did not answer."
               }
             }
           },

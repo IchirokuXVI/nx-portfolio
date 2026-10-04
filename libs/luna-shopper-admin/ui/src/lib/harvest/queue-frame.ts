@@ -12,9 +12,24 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { Viewport } from '../viewport';
 
 /** Which of the two renderings of the same rows is on screen. */
 export type QueueView = 'review' | 'list';
+
+/**
+ * A view that one queue adds beside the two every queue has (admin plan 0044).
+ *
+ * The Places queue reads the same rows grouped by chain. That is a view of the
+ * queue and not a page, so it is an entry of the same switch, and the queue
+ * projects what it draws as `queueExtra`.
+ */
+export interface QueueExtraView {
+  /** What the `view` query parameter holds while this view is on screen. */
+  readonly id: string;
+  /** A translation key for its entry in the switch. */
+  readonly labelKey: string;
+}
 
 /** The query parameter that carries it, so a reload and a link both keep it. */
 export const QUEUE_VIEW_PARAM = 'view';
@@ -86,6 +101,19 @@ export interface QueueReport {
  *
  * The view is a query parameter rather than storage, so a reload keeps it and a
  * link carries it, and each screen states the view it opens in.
+ *
+ * **On a wide screen, one at a time is a split** (admin plan 0044, target 4).
+ * At 72 rem and above the rows are a column 360 px wide at the left, and the
+ * row that is open is at the right. It is the same view and the same query
+ * parameter: the column is the queue the operator is walking, drawn beside the
+ * row instead of hidden behind it. The list view stays, for bulk work.
+ *
+ * **The action bar holds still.** It is fixed above the navigation bar on a
+ * phone and sticks to the bottom edge of the window on a wider screen, so the
+ * accept and reject buttons are where they were when the next row comes up,
+ * however tall that row is. Two quick presses then hit the same action twice
+ * and never two different ones. Accept is filled and reject is outlined, so
+ * the two differ in shape as well as in color.
  */
 @Component({
   selector: 'lib-queue-frame',
@@ -102,27 +130,55 @@ export interface QueueReport {
         }}
       </p>
 
-      <div class="views" role="group">
+      <div class="tools"><ng-content select="[queueTool]" /></div>
+
+      <div
+        [attr.aria-label]="'harvest.queue.view.label' | rokuT"
+        class="views"
+        role="group"
+      >
         <button
           (click)="show('review')"
-          [attr.aria-pressed]="view() === 'review'"
-          [class.on]="view() === 'review'"
+          [attr.aria-pressed]="extra() === null && view() === 'review'"
+          [class.on]="extra() === null && view() === 'review'"
           type="button"
+          data-view="review"
         >
           {{ 'harvest.queue.view.review' | rokuT }}
         </button>
         <button
           (click)="show('list')"
-          [attr.aria-pressed]="view() === 'list'"
-          [class.on]="view() === 'list'"
+          [attr.aria-pressed]="extra() === null && view() === 'list'"
+          [class.on]="extra() === null && view() === 'list'"
           type="button"
+          data-view="list"
         >
           {{ 'harvest.queue.view.list' | rokuT }}
         </button>
+        @for (option of extraViews(); track option.id) {
+          <button
+            (click)="show(option.id)"
+            [attr.aria-pressed]="extra()?.id === option.id"
+            [attr.data-view]="option.id"
+            [class.on]="extra()?.id === option.id"
+            type="button"
+          >
+            {{ option.labelKey | rokuT }}
+          </button>
+        }
       </div>
     </header>
 
-    @if (loading()) {
+    <!-- A view of the queue's own. It reads for itself, so it is drawn
+         whatever the rows are doing. Hidden and not removed while another
+         view is on screen, because projected content has one place. -->
+    <div [hidden]="extra() === null" class="extra">
+      <ng-content select="[queueExtra]" />
+    </div>
+
+    @if (extra() !== null) {
+      <!-- The queue's own view stands in for the rows. -->
+    } @else if (loading()) {
       <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (failed()) {
       <ng-content select="[queueFailure]" />
@@ -134,34 +190,105 @@ export interface QueueReport {
       }
 
       @if (view() === 'review') {
-        <div class="subject">
-          <ng-content />
-        </div>
-
-        <ng-content select="[queueContext]" />
-
-        <div class="actions">
-          <button
-            (click)="confirm.emit()"
-            [disabled]="busy()"
-            class="primary"
-            type="button"
-          >
-            {{ (busy() ? 'resource.action.working' : confirmKey()) | rokuT }}
-          </button>
-          @if (rejectKey(); as key) {
-            <button
-              (click)="reject.emit()"
-              [disabled]="busy()"
-              class="danger"
-              type="button"
+        <div [class.split]="split()" class="review">
+          @if (split()) {
+            <!-- The queue the operator is walking, beside the row that is
+                 open (admin plan 0044). A press opens that row. -->
+            <nav
+              [attr.aria-label]="'harvest.queue.column' | rokuT"
+              class="column"
             >
-              {{ key | rokuT }}
-            </button>
+              <ul>
+                @for (row of rows(); track row.id) {
+                  <li>
+                    <button
+                      (click)="openRow.emit(row.id)"
+                      [attr.aria-current]="
+                        row.id === currentId() ? 'true' : null
+                      "
+                      [class.open]="row.id === currentId()"
+                      [disabled]="busy()"
+                      class="line"
+                      type="button"
+                    >
+                      <ng-container
+                        [ngTemplateOutlet]="
+                          lineTemplate() ?? rowTemplate() ?? null
+                        "
+                        [ngTemplateOutletContext]="{ $implicit: row }"
+                      />
+                    </button>
+                  </li>
+                }
+              </ul>
+              @if (canLoadMore()) {
+                <button
+                  (click)="loadMore.emit()"
+                  [disabled]="loadingMore() || busy()"
+                  class="more"
+                  type="button"
+                >
+                  {{
+                    (loadingMore()
+                      ? 'resource.list.loading'
+                      : 'harvest.queue.loadMore'
+                    ) | rokuT: { loaded: rows().length }
+                  }}
+                </button>
+              }
+            </nav>
           }
-          <button (click)="skip.emit()" [disabled]="busy()" type="button">
-            {{ 'harvest.queue.skip' | rokuT }}
-          </button>
+
+          <div class="card">
+            <div class="subject">
+              <ng-content />
+            </div>
+
+            <ng-content select="[queueContext]" />
+
+            <div class="actions decide">
+              <button
+                (click)="confirm.emit()"
+                [disabled]="busy()"
+                class="primary"
+                type="button"
+                data-action="confirm"
+              >
+                {{
+                  (busy() ? 'resource.action.working' : confirmKey()) | rokuT
+                }}
+              </button>
+              <!-- What else can be done with the row, when the screen has
+                   more than yes, no and skip. On a phone these are links in
+                   the card and the bar holds the three. -->
+              <div class="other"><ng-content select="[queueAction]" /></div>
+              <span class="grow"></span>
+              <button
+                (click)="skip.emit()"
+                [disabled]="busy()"
+                class="skip"
+                type="button"
+                data-action="skip"
+              >
+                {{ 'harvest.queue.skip' | rokuT }}
+              </button>
+              @if (rejectKey(); as key) {
+                <button
+                  (click)="reject.emit()"
+                  [attr.aria-label]="key | rokuT"
+                  [disabled]="busy()"
+                  class="danger"
+                  type="button"
+                  data-action="reject"
+                >
+                  <span class="long">{{ key | rokuT }}</span>
+                  <span class="short">{{
+                    rejectShortKey() ?? key | rokuT
+                  }}</span>
+                </button>
+              }
+            </div>
+          </div>
         </div>
       } @else {
         @if (report(); as done) {
@@ -273,17 +400,111 @@ export interface QueueReport {
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-      /* Room for the action bar once it is fixed, so the last line of a long
-         item is not permanently underneath it. */
-      padding-block-end: 5rem;
+      min-inline-size: 0;
     }
 
     header {
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    .tally {
+      flex: 1;
+    }
+
+    .tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+    }
+
+    .tools:empty,
+    .other:empty {
+      display: none;
+    }
+
+    .extra {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-4);
+    }
+
+    .extra[hidden] {
+      display: none;
+    }
+
+    .review {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-inline-size: 0;
+    }
+
+    .card {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: var(--admin-space-4);
+      min-inline-size: 0;
+    }
+
+    /* At 72 rem and above: the queue at the left, 360 px wide, and the row
+       that is open at the right. */
+    .review.split {
+      display: grid;
+      grid-template-columns: 22.5rem minmax(0, 1fr);
+      gap: var(--admin-space-4);
+      align-items: stretch;
+    }
+
+    .column {
+      position: sticky;
+      inset-block-start: var(--admin-page-block);
+      display: flex;
+      flex-direction: column;
+      align-self: start;
+      max-block-size: calc(100dvh - 2 * var(--admin-page-block));
+      overflow-y: auto;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .column ul {
+      display: flex;
+      flex-direction: column;
+      list-style: none;
+    }
+
+    .column li + li {
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    .column .line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-1) var(--admin-space-2);
       align-items: baseline;
-      justify-content: space-between;
+      inline-size: 100%;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: none;
+      border-inline-start: 3px solid transparent;
+      border-radius: 0;
+      background: none;
+      text-align: start;
+    }
+
+    .column .line.open {
+      border-inline-start-color: var(--admin-accent);
+      background: var(--admin-accent-wash);
+      font-weight: 600;
+      color: var(--admin-accent-on-wash);
+    }
+
+    .column .more {
+      margin: var(--admin-space-2) var(--admin-space-3);
     }
 
     h3 {
@@ -298,9 +519,26 @@ export interface QueueReport {
       color: var(--admin-ink-muted);
     }
 
+    .views button {
+      border-radius: 0;
+    }
+
+    .views button:first-child {
+      border-start-start-radius: var(--admin-radius-control);
+      border-end-start-radius: var(--admin-radius-control);
+    }
+
+    .views button:last-child {
+      border-start-end-radius: var(--admin-radius-control);
+      border-end-end-radius: var(--admin-radius-control);
+    }
+
+    .views button + button {
+      margin-inline-start: -1px;
+    }
+
     .views {
       display: flex;
-      gap: var(--admin-space-1);
     }
 
     .views .on {
@@ -411,27 +649,59 @@ export interface QueueReport {
       font-variant-numeric: tabular-nums;
     }
 
+    /* The bar sticks to the bottom edge of the window, at the same distance
+       from it whether the row above is short or long. So the buttons are
+       where they were when the next row comes up. */
     .actions {
+      position: sticky;
+      z-index: 5;
+      inset-block-end: var(--admin-page-block);
       display: flex;
-      gap: var(--admin-space-3);
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
       margin-block-start: auto;
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface);
     }
 
     .actions button {
-      flex: 1;
-      min-block-size: 3rem;
-      font-size: var(--admin-field-size);
+      min-block-size: 2.5rem;
     }
 
+    .actions .grow {
+      flex: 1;
+    }
+
+    .actions .other {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+    }
+
+    /* Accept is filled. */
     .actions .primary {
-      flex: 2;
+      border-color: var(--admin-accent);
       background: var(--admin-accent);
+      font-weight: 600;
       color: var(--admin-accent-ink);
     }
 
+    /* Reject is outlined, so the two differ in shape as well as in color. */
     .actions .danger {
       border-color: var(--admin-danger);
+      background: var(--admin-surface-raised);
       color: var(--admin-danger-on-wash);
+    }
+
+    .actions .short {
+      display: none;
+    }
+
+    .actions.selection button {
+      flex: 1;
     }
 
     button {
@@ -460,14 +730,63 @@ export interface QueueReport {
        selection bar takes the same rule and the same place: an operator who has
        learned where the buttons are does not have to learn it twice. */
     @media (max-width: 47.99rem) {
+      /* Room for the bar, so that the last field of a card can be scrolled
+         above it. The page already reserves the navigation bar under it. */
+      :host {
+        padding-block-end: 4.5rem;
+      }
+
+      /* Above the navigation bar, which is fixed at the bottom edge, and
+         never under it: the bar starts where the navigation ends. */
       .actions {
         position: fixed;
         z-index: 20;
-        inset-block-end: 0;
+        inset-block-end: var(--admin-bar);
         inset-inline: 0;
-        padding: var(--admin-space-3);
+        flex-wrap: nowrap;
+        margin: 0;
+        padding: var(--admin-space-2) var(--admin-space-3);
+        border: none;
         border-block-start: 1px solid var(--admin-border);
+        border-radius: 0;
         background: var(--admin-surface-raised);
+      }
+
+      .actions button {
+        min-block-size: 2.75rem;
+        font-size: var(--admin-field-size);
+      }
+
+      /* Reject, Skip, then the accept action, which takes the room that is
+         left. The other actions are links in the card. */
+      .actions.decide .danger {
+        order: 1;
+      }
+
+      .actions.decide .skip {
+        order: 2;
+      }
+
+      .actions.decide .primary {
+        flex: 1;
+        order: 3;
+        min-inline-size: 0;
+      }
+
+      .actions.decide .other,
+      .actions.decide .grow,
+      .actions .long {
+        display: none;
+      }
+
+      .actions .short {
+        display: inline;
+      }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .column {
+        scroll-behavior: smooth;
       }
     }
   `,
@@ -493,6 +812,13 @@ export class QueueFrame {
    */
   readonly rejectKey = input<string | null>(null);
 
+  /**
+   * A shorter name for "no", for the bar on a phone, where three buttons share
+   * one row. The long name stays the accessible name. Absent, the long name is
+   * drawn.
+   */
+  readonly rejectShortKey = input<string | null>(null);
+
   readonly loading = input.required<boolean>();
   /** Nothing is drawable. The projected `queueFailure` block explains why. */
   readonly failed = input.required<boolean>();
@@ -512,6 +838,10 @@ export class QueueFrame {
 
   /** The rows the list view draws, in the order they are to be drawn. */
   readonly rows = input<readonly QueueRowRef[]>([]);
+  /** The row that is open, which the column of a split marks. */
+  readonly currentId = input<string | null>(null);
+  /** The views this queue adds beside the two every queue has. */
+  readonly extraViews = input<readonly QueueExtraView[]>([]);
   readonly selected = input<ReadonlySet<string>>(new Set<string>());
   readonly selectedCount = input(0);
   readonly canLoadMore = input(false);
@@ -570,14 +900,34 @@ export class QueueFrame {
    * would need `rxjs-interop`, which this workspace forbids anywhere a remote
    * could load a second copy of it.
    */
-  private readonly _view = signal<QueueView | null>(
-    asView(this._route.snapshot.queryParamMap.get(QUEUE_VIEW_PARAM))
+  private readonly _view = signal<string | null>(
+    this._route.snapshot.queryParamMap.get(QUEUE_VIEW_PARAM)
   );
 
   /** The URL's answer where it has one, and the screen's habit where it does not. */
-  readonly view = computed<QueueView>(() => this._view() ?? this.defaultView());
+  readonly view = computed<QueueView>(
+    () => asView(this._view()) ?? this.defaultView()
+  );
 
-  show(view: QueueView): void {
+  /** The queue's own view that is on screen, or `null` for one of the two. */
+  readonly extra = computed<QueueExtraView | null>(
+    () => this.extraViews().find((option) => option.id === this._view()) ?? null
+  );
+
+  /**
+   * Whether one at a time is drawn as a split: the queue beside the open row.
+   * At 72 rem and above, which is the width the frame's third state starts at.
+   */
+  readonly split = inject(Viewport).split;
+
+  /**
+   * How one line of the column of a split is drawn. A queue that names none
+   * gets its list row there, wrapped to the column's width.
+   */
+  readonly lineTemplate =
+    contentChild<TemplateRef<{ $implicit: QueueRowRef }>>('queueLine');
+
+  show(view: string): void {
     this._view.set(view);
     // Merged and replacing: the chain and the filters live on the same query
     // string, and a toggle is not a place anybody wants the back button to

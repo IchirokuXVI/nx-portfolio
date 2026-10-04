@@ -17,16 +17,21 @@ import {
   ChainNames,
   formatInstant,
   formatSince,
-  HARVEST_SEGMENT,
+  HarvestStatus,
+  ReviewChain,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   gatewayErrorKey,
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { InfoContent } from '@portfolio/luna-shopper-admin/models';
 import {
-  PageHeader,
+  harvestReviewPath,
+  REVIEW_CHAIN_PARAM,
+  type InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  InfoButton,
   ReferencePicker,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
@@ -106,31 +111,31 @@ const SEARCH_DELAY_MS = 250;
 @Component({
   selector: 'lib-brand-suggestions-page',
   imports: [
-    PageHeader,
+    InfoButton,
     NgTemplateOutlet,
     RokuTranslatorPipe,
     ReferencePicker,
     RouterLink,
   ],
   template: `
-    <lib-page-header
-      [heading]="'brands.suggested.heading' | rokuT"
-      [info]="info"
-    />
-
-    <label class="search">
-      <span>{{ 'brands.suggested.search' | rokuT }}</span>
-      <input
-        (input)="onSearch($event)"
-        [value]="query()"
-        autocapitalize="none"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck="false"
-        type="search"
-        data-search
-      />
-    </label>
+    <!-- The Review page above this queue draws the header (admin plan 0044).
+         What a row is stays behind an info button, beside the search. -->
+    <div class="find">
+      <label class="search">
+        <span>{{ 'brands.suggested.search' | rokuT }}</span>
+        <input
+          (input)="onSearch($event)"
+          [value]="query()"
+          autocapitalize="none"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          type="search"
+          data-search
+        />
+      </label>
+      <lib-info-button [info]="info" align="start" />
+    </div>
 
     <!-- Selecting several (admin plan 0035, section 1). A tick only marks a
          row: the review below is the one place a batch is sent from. -->
@@ -357,11 +362,13 @@ const SEARCH_DELAY_MS = 250;
           {{ 'resource.action.retry' | rokuT }}
         </button>
       </p>
-    } @else if (rows().length === 0) {
+    } @else if (shown().length === 0) {
       <p class="state">
         {{
-          (query() === '' ? 'brands.suggested.empty' : 'resource.list.noMatch')
-            | rokuT
+          (query() === '' && chain() === ''
+            ? 'brands.suggested.empty'
+            : 'resource.list.noMatch'
+          ) | rokuT
         }}
       </p>
     } @else if (compact()) {
@@ -369,7 +376,7 @@ const SEARCH_DELAY_MS = 250;
            chips, then the action. A four column table at that width is
            unreadable however it scrolls. -->
       <ul class="cards">
-        @for (row of rows(); track row.key) {
+        @for (row of shown(); track row.key) {
           <li>
             <article [class.picked]="isPicked(row.key)">
               @if (selecting()) {
@@ -410,10 +417,7 @@ const SEARCH_DELAY_MS = 250;
                 @for (chain of row.chains; track chain.supermarketId) {
                   <li>
                     <a
-                      [queryParams]="{
-                        supermarketId: chain.supermarketId,
-                        brandKey: row.key,
-                      }"
+                      [queryParams]="entriesParams(chain.supermarketId, row.key)"
                       [routerLink]="entriesLink"
                       class="chip"
                     >
@@ -485,7 +489,7 @@ const SEARCH_DELAY_MS = 250;
             </tr>
           </thead>
           <tbody>
-            @for (row of rows(); track row.key) {
+            @for (row of shown(); track row.key) {
               <tr [class.picked]="isPicked(row.key)">
                 @if (selecting()) {
                   <td class="pick-cell">
@@ -525,10 +529,9 @@ const SEARCH_DELAY_MS = 250;
                     @for (chain of row.chains; track chain.supermarketId) {
                       <li>
                         <a
-                          [queryParams]="{
-                            supermarketId: chain.supermarketId,
-                            brandKey: row.key,
-                          }"
+                          [queryParams]="
+                            entriesParams(chain.supermarketId, row.key)
+                          "
                           [routerLink]="entriesLink"
                           class="chip"
                         >
@@ -729,7 +732,12 @@ const SEARCH_DELAY_MS = 250;
       font-size: 1rem;
     }
 
-    .lead,
+    .find {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: flex-end;
+    }
+
     .state,
     .muted {
       color: var(--admin-ink-muted);
@@ -1177,13 +1185,47 @@ export class BrandSuggestionsPage implements OnDestroy {
   /**
    * Where a chain chip goes: the source products queue, filtered.
    *
-   * `HARVEST_SEGMENT` and a plain segment, because the entries queue is a hand
-   * written screen rather than a resource, and `ResourceRegistry.pathOf` only
-   * answers for resources. No status on the link: the queue's own default is
+   * The address is the Review tab's own, because the queue is a hand written
+   * screen rather than a resource, and `ResourceRegistry.pathOf` only answers
+   * for resources. No status on the link: the queue's own default is
    * `CANDIDATE` and `UNRESOLVED`, which is exactly what the chip counted, so the
    * list it opens holds the number it showed.
    */
-  readonly entriesLink: readonly string[] = ['/', HARVEST_SEGMENT, 'entries'];
+  readonly entriesLink = harvestReviewPath('products');
+
+  /** The chain and the brand a chip opens the source products on. */
+  entriesParams(
+    supermarketId: string,
+    key: string
+  ): Readonly<Record<string, string>> {
+    return { [REVIEW_CHAIN_PARAM]: supermarketId, brandKey: key };
+  }
+
+  private readonly _review = inject(ReviewChain);
+  private readonly _status = inject(HarvestStatus);
+
+  /** The chain the four queues are narrowed to, or `''`. */
+  readonly chain = this._review.chain;
+
+  /**
+   * The rows on screen: every suggestion, or the ones the chosen chain uses
+   * (admin plan 0044, target 4).
+   *
+   * Narrowed here and not by the gateway. A suggestion names every chain that
+   * prints it, so the rows already hold the answer, and the read has no chain
+   * filter to ask with. The rows that are loaded are narrowed, and "Load more"
+   * brings more of them.
+   */
+  readonly shown = computed<readonly BrandSuggestion[]>(() => {
+    const chain = this.chain();
+    const rows = this.rows();
+
+    return chain === ''
+      ? rows
+      : rows.filter((row) =>
+          row.chains.some((entry) => entry.supermarketId === chain)
+        );
+  });
 
   /**
    * The key this label would make, live.
@@ -1412,6 +1454,8 @@ export class BrandSuggestionsPage implements OnDestroy {
       const next = this._keyAfter(open);
 
       this.rows.set(remaining);
+      // A registered brand leaves the queue, so the counts are read again.
+      this._status.refresh();
       this.openKey.set(null);
       this.done.set({
         label: registered.brand.label,
@@ -1563,6 +1607,7 @@ export class BrandSuggestionsPage implements OnDestroy {
       );
 
       this.rows.set(this.rows().filter((row) => !held.has(row.key)));
+      this._status.refresh();
       const kept = new Map(this.picked());
       for (const key of held) {
         kept.delete(key);

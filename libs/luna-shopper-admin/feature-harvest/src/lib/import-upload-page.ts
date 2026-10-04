@@ -30,6 +30,9 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   harvestFailures,
+  harvestReviewPath,
+  harvestRunPath,
+  harvestRunsPath,
   hintNotice,
   importConflict,
   OFFICIAL_SOURCE_KINDS,
@@ -37,6 +40,7 @@ import {
   PREVIEW_PAGE,
   previewMatches,
   previewWindow,
+  REVIEW_CHAIN_PARAM,
   spawnBlockReason,
   type HarvestDocumentRead,
   type HarvestDocumentRejection,
@@ -50,8 +54,8 @@ import {
   PageHeader,
   ReferencePicker,
 } from '@portfolio/luna-shopper-admin/ui';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { ImportHandoff } from './import-handoff';
 
 /** How many scopes the preview names before it counts the rest. */
 const SCOPES_NAMED = 4;
@@ -154,7 +158,11 @@ export interface PreviewTally {
     ReferencePicker,
   ],
   template: `
+    <!-- A page under the Runs tab, with its way back to it (admin plan
+         0044, target 5). -->
     <lib-page-header
+      [backLabel]="'harvest.run.back' | rokuT"
+      [backLink]="runsLink"
       [heading]="'harvest.imports.heading' | rokuT"
       [info]="info"
     />
@@ -169,6 +177,13 @@ export interface PreviewTally {
           type="file"
         />
       </label>
+      <!-- A file handed over by the Runs tab cannot be put in the input, so
+           the page names the file it holds. -->
+      @if (fileName(); as name) {
+        <p class="held" data-file-name>
+          {{ 'harvest.imports.holds' | rokuT: { name } }}
+        </p>
+      }
 
       @if (rejection(); as reason) {
         <p class="failure" role="alert">
@@ -716,6 +731,17 @@ export class ImportUploadPage implements OnDestroy {
 
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _translate = inject(RokuTranslatorService);
+
+  constructor() {
+    // The file the Runs tab was given, read as if it had been chosen here
+    // (admin plan 0044, target 5). After every field is set up, so the read
+    // finds the signals it writes.
+    const handed = inject(ImportHandoff).take();
+    if (handed !== null) {
+      queueMicrotask(() => void this.readFile(handed));
+    }
+  }
+
   /**
    * The scopes of one chain, read for their `kind`.
    *
@@ -1004,8 +1030,18 @@ export class ImportUploadPage implements OnDestroy {
    * chose a chain and then dropped a file keeps their chain, and the notice says
    * what the file wanted instead.
    */
-  async chooseFile(event: Event): Promise<void> {
-    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
+  chooseFile(event: Event): Promise<void> {
+    return this.readFile(
+      (event.target as HTMLInputElement).files?.[0] ?? null
+    );
+  }
+
+  /**
+   * Read one file: the one chosen here, or the one the Runs tab handed over
+   * (admin plan 0044, target 5).
+   */
+  async readFile(file: File | null): Promise<void> {
+    this.fileName.set(file?.name ?? '');
 
     this.read.set(null);
     this.rejection.set(null);
@@ -1275,17 +1311,28 @@ export class ImportUploadPage implements OnDestroy {
    * component is rendered directly in its spec.
    */
   runLink(runId: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', runId];
+    return harvestRunPath(runId);
   }
 
   /** Where the rows now are, with the chain already chosen. */
   queueLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'entries'];
+    return harvestReviewPath('products');
   }
 
   queueParams(): Record<string, string> {
-    return { supermarketId: this.supermarketId() };
+    return { [REVIEW_CHAIN_PARAM]: this.supermarketId() };
   }
+
+  /** The Runs tab, which this page is under. */
+  readonly runsLink = harvestRunsPath();
+
+  /**
+   * The name of the file that was read, when it came from the Runs tab.
+   *
+   * A file input cannot be given a file, so a file handed over leaves the
+   * input saying "no file chosen". This line says which file the page holds.
+   */
+  readonly fileName = signal('');
 
   /**
    * One hint that names a row of the directory.
