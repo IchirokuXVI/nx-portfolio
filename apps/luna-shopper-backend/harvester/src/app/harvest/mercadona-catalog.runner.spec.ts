@@ -276,6 +276,95 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     });
   });
 
+  describe('the size and the unit it is in (plan 0177)', () => {
+    /** One walk whose two details state the given size blocks. */
+    async function sizesOf(
+      blocks: Record<string, Record<string, unknown>>
+    ): Promise<Record<string, [number | null, string | null]>> {
+      const { fetchImpl } = stubFetch({
+        detailFor: (id, warehouse) => {
+          const detail = detailed(id, warehouse, null);
+          return {
+            ...detail,
+            price_instructions: {
+              ...detail.price_instructions,
+              ...blocks[id],
+            },
+          };
+        },
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+      await runner.run(context, report, walking('4661'), source());
+      restore();
+      restore = undefined;
+      return Object.fromEntries(
+        report.products.map((product) => [
+          product.externalId,
+          [product.unitSize, product.sizeUnit],
+        ])
+      );
+    }
+
+    // Mercadona prints the unit alone, and never a centilitre: `kg`, `l`, `ud`
+    // and `m` are the four values of the whole assortment.
+    it('states the litre and the kilogram of the detail it read', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'l', unit_size: 1.5 },
+          '7012': { size_format: 'kg', unit_size: 0.4636 },
+        })
+      ).toEqual({ '4241': [1.5, 'LITER'], '7012': [0.4636, 'KILOGRAM'] });
+    });
+
+    it('states the unit of a product sized by count, and none for metres', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'ud', unit_size: 12 },
+          // Foil and cling film: the catalog has no unit for a length, so the
+          // number is kept and nothing claims to know what it counts.
+          '7012': { size_format: 'm', unit_size: 30 },
+        })
+      ).toEqual({ '4241': [12, 'UNIT'], '7012': [30, null] });
+    });
+
+    it('states no unit beside no size', async () => {
+      expect(
+        await sizesOf({
+          '4241': { size_format: 'kg', unit_size: null },
+          '7012': { size_format: 'l', unit_size: null },
+        })
+      ).toEqual({ '4241': [null, null], '7012': [null, null] });
+    });
+
+    it('reads the unit from the detail, whatever the listing printed', async () => {
+      // The number is the detail's, so the unit has to be the detail's too:
+      // the listing here still says `l`.
+      const { fetchImpl } = stubFetch({
+        detailFor: (id, warehouse) => {
+          const detail = detailed(id, warehouse, null);
+          return {
+            ...detail,
+            price_instructions: {
+              ...detail.price_instructions,
+              size_format: 'kg',
+              unit_size: 0.5,
+            },
+          };
+        },
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+      await runner.run(context, report, walking('4661'), source());
+
+      expect(report.products[0]).toMatchObject({
+        unitSize: 0.5,
+        sizeUnit: 'KILOGRAM',
+        sizeFormat: 'l',
+      });
+    });
+  });
+
   it('declares each warehouse as a LOCAL_AREA scope before any price names it', async () => {
     const { fetchImpl } = stubFetch({});
     restore = withFetch(fetchImpl);

@@ -411,6 +411,54 @@ describe('SourceEntryBatchService', () => {
         expect.objectContaining({ packCount: null }),
       ]);
     });
+
+    describe('the unit of a created product (plan 0177)', () => {
+      const wine = {
+        unitSize: 750,
+        sizeUnit: UnitOfMeasure.MILLILITER,
+        sizeFormat: '75 cl',
+      };
+
+      it('takes the unit the row states its size in, not a guess from the text', async () => {
+        // The text maps to no unit, and the size is already millilitres.
+        const createItems = await created({ name: { es: 'Vino' } }, wine);
+        expect(createItems).toHaveBeenCalledWith([
+          expect.objectContaining({
+            unitSize: 750,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+          }),
+        ]);
+      });
+
+      it('takes the unit the operation names over the row', async () => {
+        const createItems = await created(
+          { name: { es: 'Vino' }, defaultUnit: UnitOfMeasure.LITER },
+          wine
+        );
+        expect(createItems).toHaveBeenCalledWith([
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.LITER }),
+        ]);
+      });
+
+      it('falls back to the printed text for a row with no unit, then to UNIT', async () => {
+        expect(
+          await created(
+            { name: { es: 'Queso' } },
+            { unitSize: 0.5, sizeUnit: null, sizeFormat: 'kg' }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.KILOGRAM }),
+        ]);
+        expect(
+          await created(
+            { name: { es: 'Vino' } },
+            { unitSize: null, sizeUnit: null, sizeFormat: '75 cl' }
+          )
+        ).toHaveBeenCalledWith([
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.UNIT }),
+        ]);
+      });
+    });
   });
 
   describe('the categories a created product gets (plan 0166, section 7)', () => {

@@ -943,9 +943,13 @@ export async function decide({
     // The slot's own ids for the slugs, because the catalog create route takes
     // ids (backend plan 0166). The recorded item keeps them for a resume.
     item = withCategoryIds(proposal.item, await rehearsal.listCategories());
-    const created = await rehearsal.createItem(
-      toCreateItemBody(item, entry.packCount ?? null)
-    );
+    // The row's own count goes onto the recorded item (backend plan 0177), so
+    // a resume that rebuilds the rehearsal from the record alone writes the
+    // same product this write does. Only a count the row read is recorded.
+    if (entry.packCount !== null && entry.packCount !== undefined) {
+      item = { ...item, rowPackCount: entry.packCount };
+    }
+    const created = await rehearsal.createItem(toCreateItemBody(item));
     rehearsalItemId = created?.id ?? null;
   } catch (error) {
     issues.push(

@@ -464,6 +464,70 @@ describe('SourceEntryService', () => {
       });
     });
 
+    describe('the unit of a created item (plan 0177)', () => {
+      const unitOf = async (
+        row: Partial<SourceCatalogEntry>,
+        req: { defaultUnit?: UnitOfMeasure } = {}
+      ) => {
+        const { service, createItem } = build({ row: entry(row) });
+        await service.createItem({ userId: ADMIN, entryId: 'e-1', ...req });
+        return createItem;
+      };
+
+      it('takes the unit the row states its size in, not a guess from the text', async () => {
+        // A DEZA row: the text maps to no unit, and the size is millilitres.
+        const createItem = await unitOf({
+          unitSize: 750,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+          sizeFormat: '75 cl',
+        });
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({
+            unitSize: 750,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+          })
+        );
+      });
+
+      it('takes the row unit over the text even when the text maps to one', async () => {
+        const createItem = await unitOf({
+          unitSize: 1980,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+          sizeFormat: 'l',
+        });
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.MILLILITER })
+        );
+      });
+
+      it('takes the unit the operator names over the row', async () => {
+        const createItem = await unitOf(
+          {
+            unitSize: 750,
+            sizeUnit: UnitOfMeasure.MILLILITER,
+            sizeFormat: '75 cl',
+          },
+          { defaultUnit: UnitOfMeasure.LITER }
+        );
+        expect(createItem).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.LITER })
+        );
+      });
+
+      it('falls back to the printed text for a row with no unit, then to UNIT', async () => {
+        expect(
+          await unitOf({ unitSize: 0.5, sizeUnit: null, sizeFormat: 'kg' })
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.KILOGRAM })
+        );
+        expect(
+          await unitOf({ unitSize: null, sizeUnit: null, sizeFormat: '75 cl' })
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultUnit: UnitOfMeasure.UNIT })
+        );
+      });
+    });
+
     it('takes the operator overrides over the row defaults', async () => {
       const { service, createItem } = build();
 

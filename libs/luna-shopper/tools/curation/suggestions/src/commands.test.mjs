@@ -15,7 +15,7 @@ import {
   sameCandidates,
   start,
 } from './commands.mjs';
-import { makeGateway } from './gateway.mjs';
+import { makeGateway, toCreateItemBody } from './gateway.mjs';
 import { categoryVocabulary } from './rules.mjs';
 import { readJsonl } from './run-dir.mjs';
 import {
@@ -614,7 +614,20 @@ test('a CREATE carries a pack count through the rehearsal and into the bulk oper
   );
 
   const [, first, second] = readJsonl(join(dir, 'decisions.jsonl'));
+
+  // A resume rebuilds the rehearsal products from the recorded item alone,
+  // with no row beside it (`cli/src/run-files.mjs`). The record therefore
+  // carries the row's count, and the rebuilt product is the one the walk made.
+  assert.equal(first.item.rowPackCount, 16);
+  assert.equal('packCount' in first.item, false);
+  assert.equal(toCreateItemBody(first.item).packCount, 16);
+  assert.equal('rowPackCount' in second.item, false);
+  assert.equal(toCreateItemBody(second.item).packCount, 6);
+
   const operations = buildOperations([first, second]);
+  // The row's count is the rehearsal's business only: the bulk route reads
+  // the row for itself, and the key never reaches the main catalog.
+  assert.equal('rowPackCount' in operations[0].item, false);
   // Absent on the first, so the bulk route takes the row's own 16.
   assert.equal('packCount' in operations[0].item, false);
   assert.equal(operations[1].item.packCount, 6);

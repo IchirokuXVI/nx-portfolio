@@ -186,9 +186,17 @@ export function withCategoryIds(item, rows) {
  * rehearsal create knows no row, so the caller passes it: the product a later
  * entry of the same run is compared against then carries the count the real
  * create will write.
+ *
+ * **A recorded item carries that count itself, as `rowPackCount`.** A resume
+ * recreates the rehearsal products from `decisions.jsonl` alone
+ * (`cli/src/run-files.mjs` calls this with the recorded item and nothing
+ * else), and the row is not in that file. Without the count on the record a
+ * resumed product had none, and a later `16 ud` row was refused against it.
+ * `toBulkCreateItem` never reads the key, so it never reaches the main
+ * catalog: there the route reads the row for itself.
  */
 export function toCreateItemBody(item, rowPackCount = null) {
-  const packCount = item.packCount ?? rowPackCount ?? null;
+  const packCount = item.packCount ?? rowPackCount ?? item.rowPackCount ?? null;
   return {
     name: item.nameEn
       ? { es: item.nameEs, en: item.nameEn }

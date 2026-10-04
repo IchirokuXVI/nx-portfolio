@@ -560,8 +560,11 @@ function itemFrom(
     // Resolved from slugs by `checkCategories`, through one read of the tree
     // for the whole file (plan 0166, section 7).
     categoryIds,
+    // The unit the row states its size in comes before the guess from the
+    // printed text (plan 0177), as on the per row route.
     defaultUnit:
       (item.defaultUnit as UnitOfMeasure | undefined) ??
+      entry.sizeUnit ??
       mapSizeFormat(entry.sizeFormat) ??
       UnitOfMeasure.UNIT,
   };

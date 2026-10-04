@@ -423,8 +423,12 @@ export class SourceEntryService {
       imageUrl: null,
       sku: null,
       categoryIds,
+      // The unit the row states its size in comes before the guess from the
+      // printed text (plan 0177): `75 cl` is held as 750 `MILLILITER`, and the
+      // text alone maps to nothing, which made the product 750 units.
       defaultUnit:
         (req.defaultUnit as UnitOfMeasure | undefined) ??
+        entry.sizeUnit ??
         mapSizeFormat(entry.sizeFormat) ??
         UnitOfMeasure.UNIT,
     });
