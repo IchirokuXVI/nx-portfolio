@@ -209,6 +209,72 @@ describe('CarrefourCatalogRunner', () => {
     });
   });
 
+  it('reports a centilitre as millilitres and a dimension as no pack (plans 0177, 0183)', async () => {
+    const states = {
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [link('cat1', 'Bebidas')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 4 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 4,
+        cards: [
+          card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €'),
+          card('p3', 'Cerveza MAHOU 6x33 cl', '4,20 €'),
+          card('p4', 'Funda nórdica CARREFOUR 140x200 cm', '19,90 €', {
+            measure_unit: 'm',
+          }),
+          card('p5', 'Agua CARREFOUR 1,5 l.', '0,39 €'),
+        ],
+      }),
+    };
+
+    await new TestRunner(states).run(
+      context(),
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
+
+    const byId = new Map(
+      report.products.map((product) => [product.externalId, product])
+    );
+    // The catalog holds no centilitre. The printed text and the id are the
+    // row's key and stay exactly as the chain wrote them.
+    expect(byId.get('p2')).toMatchObject({
+      externalId: 'p2',
+      name: 'Cola CARREFOUR',
+      sizeFormat: '33 cl.',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+      prices: [
+        // Verbatim: what the card printed, in what the card measures in.
+        expect.objectContaining({
+          price: 0.35,
+          unitPrice: 0.35,
+          unitPriceLabel: '€/l',
+        }),
+      ],
+    });
+    expect(byId.get('p3')).toMatchObject({
+      sizeFormat: '6x33 cl',
+      packCount: 6,
+    });
+    // The two sides of one cover, and not a pack of 140.
+    expect(byId.get('p4')).toMatchObject({
+      name: 'Funda nórdica CARREFOUR',
+      sizeFormat: '140x200 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+    expect(byId.get('p5')).toMatchObject({
+      sizeFormat: '1,5 l.',
+      unitSize: 1.5,
+      sizeUnit: 'LITER',
+    });
+  });
+
   it('writes an entry and no price row for a card that printed no price', async () => {
     // Some products are priced by weight and print no figure. Writing a zero
     // there is a lie about a real product (plan 0090, section 12).

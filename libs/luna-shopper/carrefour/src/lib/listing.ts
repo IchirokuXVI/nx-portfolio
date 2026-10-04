@@ -19,8 +19,11 @@
  */
 
 import {
+  measuresContent,
   packCountOf,
+  sourceSizeOf,
   UnitOfMeasure,
+  type SourceSize,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { priceToCents, unitPriceLabel } from './price';
@@ -137,14 +140,16 @@ export interface SplitCardName {
   /** The trailing size, exactly as printed, or null. */
   sizeFormat: string | null;
   /**
-   * The size as a number in the card's `measure_unit`, or null. A length is
-   * null too: it is a dimension and not a size (plan 0183).
+   * The size as a number in {@link sizeUnit}, or null. A length is null too:
+   * it is a dimension and not a size (plan 0183).
    */
   unitSize: number | null;
   /**
-   * The catalog unit {@link unitSize} is in (plan 0177): `LITER`, `KILOGRAM`
-   * or `UNIT`, the three families a card measures in. Null when there is no
-   * size.
+   * The catalog unit {@link unitSize} is in (plan 0177). A weight is in
+   * `KILOGRAM` and a count in `UNIT`, the unit the card measures in. A volume
+   * is in the unit the name printed: `LITER` for litres, and `MILLILITER` for
+   * `ml`, `cc`, `cl` and `dl`, because the catalog holds no centilitre. Null
+   * when there is no size.
    */
   sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
@@ -196,20 +201,58 @@ export function splitCardName(
   // A length is a dimension and not a size (plan 0183): `30 m.` is how long
   // the roll is, and the catalog has no unit to hold it in. The printed text
   // still moves across, because it is half of the row's key.
-  const unitSize =
-    BASE_UNIT[unit.base] === undefined
-      ? null
-      : sizeAsNumber(match[3] ?? match[4], match[5], unit.factor);
+  const size = statedSize(
+    unit,
+    match[6],
+    quantityOf(match[3] ?? match[4], match[5])
+  );
   return {
     name,
     // Verbatim, trailing full stop and all, because that is what the chain
     // printed and the matcher is the thing allowed to normalize it.
     sizeFormat: trimmed.slice(start).trim(),
-    unitSize,
-    // The number is in the family's base unit, so the family names the unit
-    // and a centilitre needs no word of its own: `50 cl.` is 0.5 `LITER`.
-    sizeUnit: unitSize === null ? null : BASE_UNIT[unit.base],
-    packCount: packCountIn(match[3] ?? match[4], match[5]),
+    unitSize: size.unitSize,
+    sizeUnit: size.sizeUnit,
+    packCount: packCountIn(match[3] ?? match[4], match[5], match[6]),
+  };
+}
+
+/**
+ * The number a size states and the catalog unit it is in (plan 0177).
+ *
+ * **A volume is written in the unit the name printed**, through the one
+ * conversion every adapter shares: `1,5 l.` is 1.5 `LITER`, `200 ml` is 200
+ * `MILLILITER`, and `33 cl.` is 330 `MILLILITER`, because the catalog holds no
+ * centilitre. It used to be 0.33 `LITER`, the same bottle in a unit no other
+ * source writes it in.
+ *
+ * A weight and a count stay in the unit the card measures in: `500 g` is 0.5
+ * `KILOGRAM`.
+ *
+ * **The check against `measure_unit` is about the family and not the number**,
+ * so it does not move: {@link splitCardName} has already refused a word from
+ * another family before this runs. Comparing a volume with the card's price
+ * per litre is still one step, because `sizeUnit` says which of the two units
+ * the number is in.
+ */
+function statedSize(
+  unit: { base: string; factor: number },
+  word: string,
+  quantity: number | null
+): SourceSize {
+  const none: SourceSize = { unitSize: null, sizeUnit: null };
+  if (quantity === null || BASE_UNIT[unit.base] === undefined) {
+    return none;
+  }
+  if (unit.base === 'l') {
+    const size = sourceSizeOf(quantity, word);
+    return size.sizeUnit === null ? none : size;
+  }
+  // Four decimals is what `source_catalog_entries.unitSize` stores, so rounding
+  // here is the same rounding the column would do, done where it can be read.
+  return {
+    unitSize: Math.round(quantity * unit.factor * 10000) / 10000,
+    sizeUnit: BASE_UNIT[unit.base],
   };
 }
 
@@ -247,12 +290,21 @@ const COUNT_TIMES_QUANTITY = /^(\d+)\s*x\s*\d+(?:[.,]\d+)?$/i;
  * packs and neither number alone is the count. A bonus pack, `28+16 lavados`,
  * is null too: it is a sum and not a count. Proved by the names in
  * `listing.spec.ts`, which are real names from the crawl.
+ *
+ * **The `N` of `NxQ` is a count only when the unit measures what is inside**
+ * (plan 0183): a weight, a volume or a count. `6x33 cl` is six cans. `140x200
+ * cm` is the two sides of one sheet, so a length states no pack. The pack
+ * phrase is not touched by that: `pack de 2 rollos de 30 m.` names two rolls
+ * in words.
  */
 function packCountIn(
   phraseCount: string | undefined,
-  quantity: string
+  quantity: string,
+  word: string
 ): number | null {
-  const multiplied = COUNT_TIMES_QUANTITY.exec(quantity.trim());
+  const multiplied = measuresContent(word)
+    ? COUNT_TIMES_QUANTITY.exec(quantity.trim())
+    : null;
   if (phraseCount !== undefined) {
     return multiplied ? null : packCountOf(phraseCount);
   }
@@ -260,17 +312,17 @@ function packCountIn(
 }
 
 /**
- * The size as a number, or null when it cannot be stated without inventing.
+ * The quantity as a number in the unit the name printed, or null when it
+ * cannot be stated without inventing.
  *
- * A plain quantity converts, and a pack multiplies its count by it. A quantity
- * joined by `x` or `+` does **not**: `3x187` is three of something and `28+16`
+ * A plain quantity is read, and a pack multiplies its count by it. A quantity
+ * joined by `x` or `+` is **not**: `3x187` is three of something and `28+16`
  * is a bonus pack, the chain prints both for the same field, and guessing which
  * arithmetic it meant writes a number nobody checked.
  */
-function sizeAsNumber(
+function quantityOf(
   packCount: string | undefined,
-  quantity: string,
-  factor: number
+  quantity: string
 ): number | null {
   if (/[x+]/i.test(quantity)) {
     return null;
@@ -283,9 +335,7 @@ function sizeAsNumber(
   if (!Number.isFinite(pack) || pack <= 0) {
     return null;
   }
-  // Four decimals is what `source_catalog_entries.unitSize` stores, so rounding
-  // here is the same rounding the column would do, done where it can be read.
-  return Math.round(pack * value * factor * 10000) / 10000;
+  return pack * value;
 }
 
 /**
