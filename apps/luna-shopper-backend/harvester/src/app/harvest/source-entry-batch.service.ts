@@ -27,9 +27,14 @@ import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName, lacksEnglish } from './source-entry-name';
 import { createdSize } from './source-entry-size';
 import {
+  barcodesOf,
   bindFields,
+  chainEanCounts,
   createdEan,
+  eanHeldDetail,
+  sharesEanInChain,
   SourceEntryPriceWriter,
+  taughtEan,
 } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -79,6 +84,13 @@ const QUEUED: readonly SourceEntryStatus[] = [
  * per row and shop for a thousand rows is longer than the route's timeout. A
  * failure leaves every bind standing and names the rows in `priceSkips`, with
  * a reason that says it was the availability.
+ *
+ * **The barcodes follow the availability, under the same rule** (plan 0185).
+ * An accepted row whose real EAN no product holds gives it to its product, in
+ * one call for the whole file. Whether another product holds a row's barcode
+ * is decided in step 1, where it refuses the file before anything is written.
+ * What is left for step 4 is the write itself, and a barcode that could not be
+ * written is named in `priceSkips` with a reason that says it was the barcode.
  *
  * ## A failed step 3 leaves orphans, and says so
  *
@@ -147,12 +159,11 @@ export class SourceEntryBatchService {
       return refusedAt('VALIDATE', runId, checked, null);
     }
     const creates = operations.filter(isCreate);
-    const rows =
-      creates.length > 0
-        ? await this.entries.find({
-            where: { id: In(creates.map((operation) => operation.entryId)) },
-          })
-        : [];
+    // Every row the file names. A create reads its row for the product's
+    // defaults, and an accept reads it for the barcode it prints (plan 0185).
+    const rows = await this.entries.find({
+      where: { id: In(operations.map((operation) => operation.entryId)) },
+    });
     const byId = new Map(rows.map((row) => [row.id, row]));
     // What each chain prints its own text in, so a row accepted with no name
     // of its own files the printed string under the right language (plan
@@ -169,6 +180,15 @@ export class SourceEntryBatchService {
     const taken = await this.checkEans(operations, byId);
     if (taken.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, taken, null);
+    }
+    // The barcode each accepted row prints (plan 0185): refused here when
+    // another product holds it, and remembered for step 4 when nobody does.
+    const { outcomes: held, teach } = await this.checkBarcodes(
+      operations,
+      byId
+    );
+    if (held.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, held, null);
     }
     const { outcomes: unplaced, idsOf } = await this.checkCategories(
       operations,
@@ -321,6 +341,49 @@ export class SourceEntryBatchService {
       );
     }
 
+    // The barcodes the accepted rows teach their products (plan 0185). Last,
+    // and under the rule of this step: every bind stands, and a barcode that
+    // could not be written is named with a reason that says so.
+    if (teach.size > 0) {
+      const pairs = [...teach].map(([index, ean]) => ({
+        entryId: outcomes[index].entryId,
+        itemId: outcomes[index].itemId ?? '',
+        ean,
+      }));
+      const skip = (pair: (typeof pairs)[number], why: string) =>
+        priceSkips.push({
+          entryId: pair.entryId,
+          itemId: pair.itemId,
+          reason: `Barcode ${pair.ean}: ${why}`,
+        });
+      try {
+        const { refused } = await this.catalog.teachItemEans(
+          pairs.map(({ itemId, ean }) => ({ itemId, ean }))
+        );
+        for (const refusal of refused) {
+          for (const pair of pairs) {
+            if (pair.itemId === refusal.itemId && pair.ean === refusal.ean) {
+              skip(
+                pair,
+                refusal.reason === 'HELD' && refusal.heldBy
+                  ? eanHeldDetail(pair.ean, refusal.heldBy, pair.itemId)
+                  : `it could not be added to the product (${refusal.reason}).`
+              );
+            }
+          }
+        }
+      } catch (error) {
+        const message = describeError(error).message;
+        for (const pair of pairs) {
+          skip(pair, message);
+        }
+        this.logger.warn(
+          `Bound ${pairs.length} entries but could not add their barcodes: ` +
+            message
+        );
+      }
+    }
+
     return {
       runId: req.runId ?? null,
       applied: true,
@@ -430,10 +493,12 @@ export class SourceEntryBatchService {
     const { items } = await this.catalog.findItemsByEans([
       ...new Set(eanOf.values()),
     ]);
+    // Keyed by every barcode of each product (plan 0185): the lookup finds a
+    // product by any of them, so the one asked about may not be its first.
     const holders = new Map<string, string>();
     for (const item of items) {
-      if (item.ean) {
-        holders.set(item.ean, item.id);
+      for (const held of barcodesOf(item)) {
+        holders.set(held, item.id);
       }
     }
     for (const [index, ean] of eanOf) {
@@ -448,6 +513,131 @@ export class SourceEntryBatchService {
       }
     }
     return outcomes;
+  }
+
+  /**
+   * The barcode every `accept` teaches its product, and the accepts that are
+   * refused because another product holds the row's barcode (plan 0185).
+   *
+   * **Part of validation, so a refusal writes nothing.** The file applies
+   * completely or not at all, and the one barcode conflict a person has to
+   * settle must stop it here, with the row, the barcode and the product that
+   * holds it, like a taken barcode on a create ({@link checkEans}).
+   *
+   * Three cases for an accepted row that prints a real barcode:
+   *
+   * - The product it is accepted onto holds the barcode: nothing to do.
+   * - Another product holds it, in catalog or by a create of this same file:
+   *   refused with `EAN_HELD`.
+   * - Nobody holds it: remembered, and written in step 4.
+   *
+   * Two accepts of one file that give one barcode to two products are the
+   * second case for the later of the two. A row with an in-store code, an
+   * invalid code or no code teaches nothing and is never refused here.
+   *
+   * **Neither is a row whose EAN another row of its chain prints.** That
+   * barcode names no single product (plan 0155), so the row is left out of
+   * all three cases: it is bound, and nothing is taught or refused for it. Two
+   * such sibling rows accepted onto two products in one file both land.
+   * "Shared" is the ingest's own count, read in one query for the whole file.
+   *
+   * One round trip to catalog for the whole file, outside any transaction, for
+   * the reasons {@link checkEans} gives.
+   */
+  private async checkBarcodes(
+    operations: readonly SourceEntryDecisionOperation[],
+    rows: ReadonlyMap<string, SourceCatalogEntry>
+  ): Promise<{
+    outcomes: SourceEntryDecisionOutcome[];
+    /** Operation index to the barcode its row teaches. */
+    teach: Map<number, string>;
+  }> {
+    const outcomes = blank(operations);
+    const teach = new Map<number, string>();
+
+    // Who this file gives each barcode to: `id:<item>` or `ref:<create>`.
+    const claims = new Map<string, string>();
+    for (const operation of operations) {
+      if (!isCreate(operation)) {
+        continue;
+      }
+      const entry = rows.get(operation.entryId);
+      const ean = entry ? createdEan(entry, operation.item.ean) : null;
+      if (ean && !claims.has(ean)) {
+        claims.set(ean, `ref:${operation.ref}`);
+      }
+    }
+
+    const accepted = operations
+      .filter((operation) => !isCreate(operation))
+      .map((operation) => rows.get(operation.entryId))
+      .filter(
+        (entry): entry is SourceCatalogEntry =>
+          entry !== undefined && taughtEan(entry) !== null
+      );
+    const shared = await chainEanCounts(this.entries, accepted);
+
+    const accepts: { index: number; ean: string; target: string }[] = [];
+    for (const [index, operation] of operations.entries()) {
+      if (isCreate(operation)) {
+        continue;
+      }
+      const entry = rows.get(operation.entryId);
+      const ean =
+        entry && !sharesEanInChain(entry, shared) ? taughtEan(entry) : null;
+      if (ean) {
+        accepts.push({
+          index,
+          ean,
+          target: operation.itemId
+            ? `id:${operation.itemId}`
+            : `ref:${operation.itemRef}`,
+        });
+      }
+    }
+    if (accepts.length === 0) {
+      return { outcomes, teach };
+    }
+
+    const { items } = await this.catalog.findItemsByEans([
+      ...new Set(accepts.map((accept) => accept.ean)),
+    ]);
+    const holders = new Map<string, string>();
+    for (const item of items) {
+      for (const held of barcodesOf(item)) {
+        holders.set(held, item.id);
+      }
+    }
+
+    for (const accept of accepts) {
+      const holder = holders.get(accept.ean);
+      if (holder !== undefined) {
+        if (accept.target !== `id:${holder}`) {
+          fail(
+            outcomes[accept.index],
+            BulkOperationErrorCode.EAN_HELD,
+            eanHeldDetail(accept.ean, holder, null)
+          );
+        }
+        continue;
+      }
+      const claimed = claims.get(accept.ean);
+      if (claimed === undefined) {
+        claims.set(accept.ean, accept.target);
+        teach.set(accept.index, accept.ean);
+      } else if (claimed !== accept.target) {
+        fail(
+          outcomes[accept.index],
+          BulkOperationErrorCode.EAN_HELD,
+          `The row prints the barcode ${accept.ean}, and another operation ` +
+            'of this file gives that barcode to another product. A barcode ' +
+            'names one product.'
+        );
+      }
+      // Claimed by the same target: the product this row is accepted onto is
+      // created with the barcode, or an earlier accept already teaches it.
+    }
+    return { outcomes, teach };
   }
 
   /**

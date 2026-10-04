@@ -109,6 +109,24 @@ function item(id: string): ItemView {
   } as unknown as ItemView;
 }
 
+/** What the chain EAN count query answers over these rows. */
+function chainEanRows(
+  rows: readonly SourceCatalogEntry[],
+  eans: readonly string[]
+): { supermarketId: string; ean: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.ean && eans.includes(row.ean)) {
+      const key = `${row.supermarketId}|${row.ean}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return [...counts].map(([key, count]) => {
+    const [supermarketId, ean] = key.split('|');
+    return { supermarketId, ean, count };
+  });
+}
+
 /** The ids an `In(...)` criterion names, whichever way TypeORM wrapped them. */
 function idsOf(where: unknown): string[] {
   const id = (where as { id?: FindOperator<string> | string })?.id;
@@ -133,6 +151,10 @@ function build(
     createItems?: jest.Mock;
     /** Barcodes catalog already holds, and the product holding each. */
     takenEans?: Record<string, string>;
+    /** Barcodes another product took between the check and the write. */
+    teachHeldBy?: Record<string, string>;
+    /** Fail the barcode write, which is a step four skip of those rows. */
+    failTeach?: boolean;
     /** The chain's adapter, which decides what language its printed name is in. */
     adapterKey?: string | null;
   } = {}
@@ -166,6 +188,11 @@ function build(
         .map((id) => byId.get(id))
         .filter(Boolean)
     ),
+    // How many rows of each chain print each EAN (plan 0185), counted over
+    // the rows the test holds, as the real query counts the table.
+    query: jest.fn(async (_sql: string, [eans]: [string[]]) =>
+      chainEanRows(rows, eans)
+    ),
   } as unknown as Repository<SourceCatalogEntry>;
 
   const createItems =
@@ -186,11 +213,30 @@ function build(
     }),
   }));
   const categoryTree = jest.fn(async () => fakeCategoryTree());
+  // Plan 0185: the barcodes the accepted rows give their products, in one
+  // call. It answers what catalog would for barcodes nobody holds, unless a
+  // test names the ones it refuses or makes the call fail.
+  const teachItemEans = jest.fn(
+    async (pairs: { itemId: string; ean: string }[]) => {
+      if (options.failTeach) {
+        throw new Error('catalog is away');
+      }
+      const refused = pairs
+        .filter((pair) => options.teachHeldBy?.[pair.ean])
+        .map((pair) => ({
+          ...pair,
+          reason: 'HELD' as const,
+          heldBy: options.teachHeldBy?.[pair.ean] as string,
+        }));
+      return { added: pairs.length - refused.length, refused };
+    }
+  );
   const catalog = {
     createItems,
     categoryTree,
     deleteItem,
     findItemsByEans,
+    teachItemEans,
   } as unknown as CatalogClient;
 
   const write = jest.fn(async (row: SourceCatalogEntry) => {
@@ -254,6 +300,7 @@ function build(
     categoryTree,
     deleteItem,
     findItemsByEans,
+    teachItemEans,
     write,
     manager,
     admin,
@@ -1495,7 +1542,7 @@ describe('SourceEntryBatchService', () => {
    */
   describe('what a bound row says matched it (plan 0184)', () => {
     it('stamps MANUAL on an accept, also when the product holds the row’s own real barcode', async () => {
-      const { service, saved, findItemsByEans } = build({
+      const { service, saved, teachItemEans } = build({
         rows: [entry({ ean: '8480000123459' })],
         takenEans: { '8480000123459': 'item-held' },
       });
@@ -1514,9 +1561,10 @@ describe('SourceEntryBatchService', () => {
       expect(result.applied).toBe(true);
       expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
       expect(saved[0].confidence).toBe(1);
-      // Nothing asks catalog who holds the barcode: the stamp does not
-      // depend on it.
-      expect(findItemsByEans).not.toHaveBeenCalled();
+      // The stamp does not depend on who holds the barcode. The file does
+      // ask catalog who holds it since plan 0185, and the product that
+      // already holds it is taught nothing.
+      expect(teachItemEans).not.toHaveBeenCalled();
     });
 
     it('stamps MANUAL on an accept onto a product with no EAN, and for a row with an in-store code', async () => {

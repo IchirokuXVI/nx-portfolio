@@ -448,6 +448,9 @@ export async function collectCandidates({
   return {
     candidates: candidates.slice(0, CANDIDATE_LIMIT * 2),
     eanMatch: eanCandidate,
+    // The same product as a catalog row, for the LINK check that asks whether
+    // another product holds the entry's barcode (backend plan 0185).
+    eanOwner: mainEan ?? (runEan && refByItemId.has(runEan.id) ? runEan : null),
     itemsById,
     runItems,
   };
@@ -848,6 +851,8 @@ export async function decide({
       createdRefs: state.createdRefs,
     }));
   const { candidates, itemsById, runItems } = collected;
+  // The product that holds the entry's own real barcode, in either catalog.
+  const rowEanOwner = collected.eanOwner ?? null;
 
   // What the model was shown, as the ids and refs it could name (plan 0006).
   // The handout when a `next` handed this row out, which the staleness check
@@ -890,6 +895,7 @@ export async function decide({
       linkTarget,
       linkTargetShown,
       eanOwner,
+      rowEanOwner,
       brands,
       supermarkets: state.supermarkets ?? [],
       categories: vocabulary.categories,

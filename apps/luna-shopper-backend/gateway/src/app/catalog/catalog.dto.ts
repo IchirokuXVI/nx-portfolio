@@ -1803,6 +1803,24 @@ export class RegisterBrandsDto {
 }
 
 /**
+ * One more barcode for a product (plan 0185).
+ *
+ * One field. It is refused with `item_ean_invalid` unless it is a real
+ * barcode, by the same function the product create uses.
+ */
+export class AddItemEanDto {
+  @ApiProperty({
+    maxLength: 32,
+    description:
+      'A barcode to add to the product (plan 0185): 8, 12, 13 or 14 digits with a valid check digit. A 13 digit in-store code that starts with 2 is refused with `item_ean_invalid`, and a barcode another product holds with `item_ean_held`.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(32)
+  ean!: string;
+}
+
+/**
  * A printed name that also names this brand (plan 0178).
  *
  * One field, and it is the printed text rather than a key: the service keys it

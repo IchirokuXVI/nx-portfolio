@@ -57,6 +57,7 @@ import {
   type GetItemsResult,
   type GetSupermarketItemRequest,
   type GetSupermarketLocationItemRequest,
+  type ItemEanRequest,
   type ItemIdRequest,
   type ItemPage,
   type ItemPriceIdRequest,
@@ -121,6 +122,8 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type TeachItemEansRequest,
+  type TeachItemEansResult,
   type UpdateBrandRequest,
   type UpdateBrandResult,
   type UpdateItemRequest,
@@ -385,6 +388,29 @@ export class CatalogController {
     @Payload() req: FindItemsByEansRequest
   ): Promise<FindItemsByEansResult> {
     return this.items.findByEans(req);
+  }
+
+  /** One more barcode for a product (plan 0185). */
+  @MessagePattern(ITEM_PATTERNS.addEan)
+  addItemEan(@Payload() req: ItemEanRequest): Promise<ItemView> {
+    return this.items.addEan(req);
+  }
+
+  /** One barcode off a product (plan 0185). */
+  @MessagePattern(ITEM_PATTERNS.removeEan)
+  removeItemEan(@Payload() req: ItemEanRequest): Promise<ItemView> {
+    return this.items.removeEan(req);
+  }
+
+  /**
+   * The barcodes bound queue rows printed, given to their products in one
+   * transaction (plan 0185). What the harvester calls after a bind.
+   */
+  @MessagePattern(ITEM_PATTERNS.teachEans)
+  teachItemEans(
+    @Payload() req: TeachItemEansRequest
+  ): Promise<TeachItemEansResult> {
+    return this.items.teachEans(req);
   }
 
   /**

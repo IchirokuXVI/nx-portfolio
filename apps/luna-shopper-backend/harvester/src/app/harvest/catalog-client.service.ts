@@ -23,6 +23,7 @@ import {
   type FillPackCountsResult,
   type FindItemByEanResult,
   type FindItemsByEansResult,
+  type ItemEanPair,
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
@@ -40,6 +41,7 @@ import {
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
+  type TeachItemEansResult,
   type UpdateSupermarketLocationRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -387,6 +389,21 @@ export class CatalogClient {
    */
   fillPackCounts(entries: PackCountFill[]): Promise<FillPackCountsResult> {
     return this.send(ITEM_PATTERNS.fillPackCounts, {
+      userId: this.actor(),
+      entries,
+    });
+  }
+
+  /**
+   * Give products the barcodes their bound rows printed (plan 0185), in one
+   * round trip and one catalog transaction.
+   *
+   * A pair catalog could not write is named in `refused` and does not fail the
+   * call: the binds it follows have landed, so the caller reports it beside
+   * them the way it reports a price that would not write.
+   */
+  teachItemEans(entries: ItemEanPair[]): Promise<TeachItemEansResult> {
+    return this.send(ITEM_PATTERNS.teachEans, {
       userId: this.actor(),
       entries,
     });

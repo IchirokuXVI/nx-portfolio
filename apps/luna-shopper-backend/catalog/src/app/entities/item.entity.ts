@@ -34,6 +34,12 @@ export class Item extends BaseEntity {
    * instead of walking the tree and stopping. Unique when present, null when the
    * source has none: coverage was 40 of 40 on a random sample, but a novelty
    * product genuinely has no barcode.
+   *
+   * **The product's first barcode, and not its only one** (plan 0185). Every
+   * barcode of a product is a row of `item_eans`, this one included, and this
+   * column is the one a product page shows. The two exceptions are old data:
+   * an in-store code and an invalid code (plan 0184) stay here and are in no
+   * row of that table.
    */
   @Column({ type: 'varchar', nullable: true })
   ean!: string | null;

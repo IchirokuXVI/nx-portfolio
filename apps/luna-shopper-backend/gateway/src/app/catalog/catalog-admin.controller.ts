@@ -105,6 +105,7 @@ import {
 } from './catalog-admin.dto';
 import {
   AddBrandHomonymDto,
+  AddItemEanDto,
   AddItemPriceDto,
   ApplyProductGroupAssignmentsDto,
   CreateBrandDto,
@@ -741,6 +742,56 @@ export class AdminCatalogItemsController {
     return this.nats.send(ITEM_PATTERNS.delete, {
       ...adminCredential(admin),
       itemId: id,
+    });
+  }
+
+  /**
+   * Give a product one more barcode (plan 0185).
+   *
+   * A maker prints a new barcode when it changes a factory, a supplier or a
+   * label, and the product on the shelf is the same. The product is then found
+   * by any of its barcodes, and the next harvest run binds a row that prints
+   * the new one by itself.
+   *
+   * **A real barcode, refused here** with `item_ean_invalid` before anything
+   * crosses the broker, as on the create. A barcode another product holds
+   * answers 409 `item_ean_held` and names that product in `details`. One the
+   * product already holds changes nothing. Answers the product, with every
+   * barcode it now holds in `eans`.
+   */
+  @Post(':id/eans')
+  @ApiContractResponse(ITEM_PATTERNS.addEan, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, eanHeld: true })
+  addEan(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AddItemEanDto
+  ): Promise<ItemView> {
+    return this.nats.send<ItemView>(ITEM_PATTERNS.addEan, {
+      ...adminCredential(admin),
+      itemId: id,
+      ean: requireProductEan(dto.ean),
+    });
+  }
+
+  /**
+   * Take one barcode off a product (plan 0185).
+   *
+   * The barcode travels in the path, and one the product does not hold answers
+   * 404. When it was the product's first barcode, the oldest of the rest
+   * becomes the first. Answers the product as it now is.
+   */
+  @Delete(':id/eans/:ean')
+  @ApiContractResponse(ITEM_PATTERNS.removeEan)
+  removeEan(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Param('ean') ean: string
+  ): Promise<ItemView> {
+    return this.nats.send<ItemView>(ITEM_PATTERNS.removeEan, {
+      ...adminCredential(admin),
+      itemId: id,
+      ean,
     });
   }
 }

@@ -3,6 +3,7 @@ import type { Brand, Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { fakeCategories } from './category.testing';
+import { fakeItemEans } from './item-ean.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -50,7 +51,8 @@ function build() {
     {} as unknown as PlatformAdminService,
     fakeAudit([]).service,
     {} as unknown as CatalogEventsPublisher,
-    fakeCategories().service
+    fakeCategories().service,
+    fakeItemEans().store
   );
   return { service, query, qb };
 }

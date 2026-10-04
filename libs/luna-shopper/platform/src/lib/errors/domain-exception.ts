@@ -436,6 +436,21 @@ export class ItemEanInvalidException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The key the product that holds the barcode travels under (plan 0185). */
+export const ITEM_EAN_HOLDER_DETAIL = 'heldBy';
+
+/**
+ * A barcode was given to a product while another product holds it (plan 0185).
+ *
+ * The details are public: the barcode under {@link ITEM_EAN_DETAIL} and the id
+ * of the product that holds it under {@link ITEM_EAN_HOLDER_DETAIL}. Only an
+ * admin reaches a route that raises it, and the id is what the admin needs.
+ */
+export class ItemEanHeldException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EAN_HELD;
+  override readonly exposesDetails = true;
+}
+
 /**
  * A category with children or products cannot be deleted (plan 0166, rule R4).
  * No details: the category is the one the client asked to delete, and the back

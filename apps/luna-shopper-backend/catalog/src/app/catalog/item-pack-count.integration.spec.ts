@@ -19,6 +19,7 @@ import {
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -95,7 +96,8 @@ describeIntegration('the pack count (real Postgres)', () => {
       admin,
       audit,
       events,
-      new CategoryService(dataSource.getRepository(Category), admin, audit)
+      new CategoryService(dataSource.getRepository(Category), admin, audit),
+      itemEanStoreOf(dataSource)
     );
   }, 120_000);
 

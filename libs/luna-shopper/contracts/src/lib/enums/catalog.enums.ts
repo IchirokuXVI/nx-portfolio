@@ -134,6 +134,12 @@ export enum BulkOperationErrorCode {
    * route translates nothing, so the file states both names.
    */
   NAME_EN_MISSING = 'NAME_EN_MISSING',
+  /**
+   * An `accept` of a row whose real barcode another product holds (plan 0185).
+   * A barcode names one product, so the row belongs to the product that holds
+   * it, or the barcode sits on the wrong product. A person settles which.
+   */
+  EAN_HELD = 'EAN_HELD',
 }
 
 /**

@@ -1,3 +1,5 @@
+> **PR:** [#617](https://github.com/IchirokuXVI/nx-portfolio/pull/617)
+
 # 0185: a product has more than one barcode
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03.
@@ -78,16 +80,20 @@ Do NOT touch: `source_catalog_entries.ean`, velista, the admin app, backlog plan
 
 ### Acceptance criteria
 
-- [ ] An integration spec on real Postgres: after the migration every product with an EAN
-      has one row in `item_eans`.
-- [ ] `findByEan` finds a product by its second barcode.
-- [ ] A harvester spec: accepting a row with a new real EAN onto a product adds the
+- [x] An integration spec on real Postgres: after the migration every product with an EAN
+      has one row in `item_eans`. Built for every product with a **real** barcode. See
+      "The copy takes real barcodes only" below.
+- [x] `findByEan` finds a product by its second barcode.
+- [x] A harvester spec: accepting a row with a new real EAN onto a product adds the
       barcode, and a later ingest of a row with that EAN binds it with `matchedBy: EAN`.
-- [ ] A harvester spec: accepting a row whose EAN another product holds is refused with
-      the named code, and nothing is written.
-- [ ] A curation spec: a LINK with a different EAN, the same brand and the same format
+      The later ingest is the first sight of a row. See "A queued row is not matched
+      again" below.
+- [x] A harvester spec: accepting a row whose EAN another product holds is refused with
+      the named code, and nothing is written. The codes are `item_ean_held` on the one row
+      route and `EAN_HELD` on the bulk route.
+- [x] A curation spec: a LINK with a different EAN, the same brand and the same format
       passes. A LINK onto a product while another product holds the row's EAN is refused.
-- [ ] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
+- [x] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
 
 ### Action boundaries
 
@@ -97,3 +103,87 @@ Proceed with code, the migration and specs. Stop and ask before dropping or chan
 ### Progress evidence
 
 Report each criterion with its spec output.
+
+## What was built, and what the owner must decide
+
+Every target state is built. The points below are the decisions the builder made, and the
+consequences that only the owner can settle.
+
+### The copy takes real barcodes only
+
+The first acceptance criterion says that every product with an EAN has one row. The
+constraints say that an in-store code is never a row of `item_eans`. Both cannot hold for
+the 211 products that carry an in-store code. The constraint wins.
+
+- If `items.ean` is a real barcode, the migration copies it. A real barcode is digits
+  only, 8, 12, 13 or 14 of them, not 13 digits that start with 2, with a valid check digit.
+- A product with an in-store code or an invalid code gets no row. Its `items.ean` stays
+  exactly as it was. The migration deletes nothing and rewrites nothing.
+- The exact rule in the spec is `productGtin(ean) === ean`. A code stored with spaces
+  around it is not copied, because the row must equal the column.
+- A check constraint on the table refuses an in-store code, whatever writes to it.
+
+**For the owner:** the 211 in-store codes and the 11 invalid codes are still on
+`items.ean`. Plan `0186` is the place to clear them.
+
+### What `ean` means on a write
+
+`items.ean` is the first barcode. The builder chose these rules, and the plan does not
+state them:
+
+- An update of `ean` to a barcode that the product does not hold replaces the first
+  barcode. The old first barcode leaves the product. The further barcodes stay.
+- An update of `ean` to a barcode that the product already holds is a reorder. That
+  barcode becomes the first. The old first barcode stays a barcode of the product.
+- An update that clears `ean` promotes the oldest further barcode. So `items.ean` is null
+  only for a product with no barcode.
+- A removal of the first barcode promotes the oldest further barcode in the same way.
+- A product with no first barcode takes the first barcode that it is given.
+- `findByEan` and the batch lookup read `item_eans` only. An old in-store code finds
+  nothing there. The admin search still finds a product by an old code on `items.ean`.
+- `catalog_audit` keys on a uuid, so a further barcode is not a row of the trail. A change
+  of `items.ean` is still recorded.
+
+### A queued row is not matched again
+
+The match index maps every barcode of a product. When a run sees a row for the first
+time, it binds the row with `matchedBy: EAN`. When a row learns a new EAN, the run does
+the same. A row that is already in the queue with its EAN is only touched. So a
+`CANDIDATE` row of another chain that already prints the taught barcode stays in the queue.
+A person must decide it.
+
+**For the owner:** to bind those rows too, `touch` in `source-ingest.ts` must match an
+undecided row again. That file is outside the scope of this plan.
+
+### An EAN that a chain prints on several rows
+
+Plan `0155` found chains that print one EAN on several products, for example five cuts of
+one fish. Such a barcode names no single product. So a row whose EAN another row of its own
+chain prints behaves as it did before this plan:
+
+- The accept binds the row as `MANUAL` and writes its prices and its availability.
+- The accept does not teach the barcode to the product.
+- The accept is not refused, also when another product holds the barcode.
+- On the bulk route, two sibling rows that are accepted onto two products in one file
+  both land.
+
+"Shared" is the ingest's own count, the one `ChainEanIndex` keeps: more than one row of
+the chain carries the EAN. Every row of the chain counts, whatever its status and its
+source kind. A row of another chain with the same EAN is not shared. It still teaches,
+and it is still refused when another product holds its barcode.
+
+**The owner can change this rule.** The session that directed the build decided it on
+2026-10-04, after a review found that the first build refused the second cut.
+
+### Two barcodes of one product in one chain
+
+`unbindSharedEans` is unchanged. Two rows of one chain with two barcodes of one product do
+not share an EAN, so both stay bound. If both rows state a price for the same scope in one
+run, the existing rule for two rows of one product applies: no price is sent, and the run
+counts a conflict. Rows that are sold in different scopes are not affected.
+
+### A create does not teach
+
+Only an `accept` teaches a barcode. A `createItem` writes the EAN that the operation or
+the row gives, as before. If the operation names another EAN, the row's own barcode is not
+added to the new product.

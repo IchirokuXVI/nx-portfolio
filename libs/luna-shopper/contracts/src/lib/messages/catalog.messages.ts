@@ -187,6 +187,24 @@ export const ITEM_PATTERNS = {
    */
   findByEans: 'item.findByEans',
   /**
+   * Give a product one more barcode (plan 0185). Refused with `item_ean_held`
+   * when another product holds it, and with `item_ean_invalid` when it is not
+   * a real barcode. A barcode the product already holds changes nothing.
+   */
+  addEan: 'item.ean.add',
+  /**
+   * Take one barcode off a product (plan 0185). When it was the product's
+   * first barcode, the oldest of the rest becomes the first.
+   */
+  removeEan: 'item.ean.remove',
+  /**
+   * {@link ITEM_PATTERNS.addEan} for many products in one round trip and one
+   * transaction (plan 0185). What a queue decision calls after it bound a row
+   * whose barcode its product did not hold. A barcode another product holds
+   * is not written and is named in the answer. It does not fail the call.
+   */
+  teachEans: 'item.ean.teach',
+  /**
    * Several products in one transaction, all or nothing (plan 0100).
    *
    * The step `sourceEntry.applyDecisions` needs: a decisions file that creates
@@ -1205,8 +1223,22 @@ export interface ItemView {
    * The only identifier that joins a product across chains, and the reason
    * catalog discovery pays one detail request per product (plan 0038, section
    * 2.5). Unique when present.
+   *
+   * The product's **first** barcode, the one a product page shows (plan 0185).
+   * It is also the first entry of {@link eans}, unless it is one of the old
+   * in-store or invalid codes plan 0184 counted, which are in no list.
    */
   ean: string | null;
+  /**
+   * Every barcode of the product (plan 0185), {@link ean} first and the rest
+   * in the order they were added. Empty for a product with none.
+   *
+   * A maker prints a new barcode when it changes a factory, a supplier or a
+   * label, and the product on the shelf is the same. Each entry is a real
+   * barcode (`readGtin`): an in-store code is never one of them. A barcode
+   * names one product, so no two products share an entry.
+   */
+  eans: string[];
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   unitSize: number | null;
   /**
@@ -2133,6 +2165,45 @@ export interface FindItemsByEansRequest {
  */
 export interface FindItemsByEansResult {
   items: ItemView[];
+}
+
+/** One barcode of one product (plan 0185). */
+export interface ItemEanRequest extends AdminCredential {
+  itemId: string;
+  ean: string;
+}
+
+/** A product and a barcode a bound queue row printed for it (plan 0185). */
+export interface ItemEanPair {
+  itemId: string;
+  ean: string;
+}
+
+/**
+ * Teach products the barcodes their bound rows printed (plan 0185). Capped at
+ * {@link BULK_DECISION_MAX_OPERATIONS}, the most rows one decisions file binds.
+ */
+export interface TeachItemEansRequest extends AdminCredential {
+  entries: ItemEanPair[];
+}
+
+/** A barcode that was not written, and why. */
+export interface ItemEanRefusal extends ItemEanPair {
+  /**
+   * `HELD`: another product holds the barcode, named in `heldBy`.
+   * `INVALID`: not a real barcode, an in-store code included.
+   * `NOT_FOUND`: the product does not exist.
+   */
+  reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
+  /** The product that holds the barcode, for `HELD`. Null otherwise. */
+  heldBy: string | null;
+}
+
+export interface TeachItemEansResult {
+  /** How many barcodes were written. One a product already held is not counted. */
+  added: number;
+  /** Every pair that was not written. Empty when all of them were. */
+  refused: ItemEanRefusal[];
 }
 
 export interface ItemIdRequest extends AdminCredential {

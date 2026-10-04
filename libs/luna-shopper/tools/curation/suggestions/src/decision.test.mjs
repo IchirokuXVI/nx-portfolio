@@ -1510,3 +1510,142 @@ test('a CREATE keeps a real barcode and drops an in-store or invalid one', () =>
     assert.equal(eanOf(ean), null, JSON.stringify(ean));
   }
 });
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+/** Whole milk as Mercadona prints it from a second factory. */
+const MILK_ROW = {
+  ...ENTRY,
+  brand: 'Hacendado',
+  ean: '8402001047251',
+  unitSize: 1,
+  sizeUnit: 'LITER',
+};
+
+/** The catalog product, created from the first factory's barcode. */
+const MILK_PRODUCT = {
+  id: 'i1',
+  brand: 'Hacendado',
+  ean: '8402001002083',
+  eans: ['8402001002083'],
+  unitSize: 1000,
+  defaultUnit: 'MILLILITER',
+};
+
+function secondBarcodeIssues(overrides = {}) {
+  return validateDecision({
+    decision: linkDecision(),
+    entry: MILK_ROW,
+    supermarket: MERCADONA,
+    linkTarget: MILK_PRODUCT,
+    brands: BRANDS,
+    supermarkets: SUPERMARKETS,
+    categories: CATEGORIES,
+    units: UNITS,
+    ...overrides,
+  });
+}
+
+test('a LINK with a different EAN, the same brand and the same format passes', () => {
+  // The case the plan was written about: the same brand, the same name, the
+  // same size, another barcode. It used to be an EAN_CONFLICT, and the row
+  // stayed in the queue for ever.
+  assert.deepEqual(secondBarcodeIssues(), []);
+});
+
+test('a LINK onto a product while another product holds the row’s EAN is refused', () => {
+  const issues = secondBarcodeIssues({ rowEanOwner: { id: 'i9' } });
+  assert.deepEqual(codes(issues), ['EAN_CONFLICT']);
+  assert.match(issues[0].detail, /8402001047251/);
+  assert.match(issues[0].detail, /item i9 holds it, not i1/);
+
+  // Also when the target holds no barcode at all: the barcode still names
+  // another product.
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({
+        linkTarget: { ...MILK_PRODUCT, ean: null, eans: [] },
+        rowEanOwner: { id: 'i9' },
+      })
+    ),
+    ['EAN_CONFLICT']
+  );
+});
+
+test('a LINK onto the product that holds the row’s EAN passes, whichever of its barcodes it is', () => {
+  const holder = {
+    ...MILK_PRODUCT,
+    eans: ['8402001002083', '8402001047251'],
+  };
+  assert.deepEqual(
+    secondBarcodeIssues({ linkTarget: holder, rowEanOwner: { id: 'i1' } }),
+    []
+  );
+  // The barcode is its second one, so `ean` alone would have said "different".
+  assert.notEqual(holder.ean, MILK_ROW.ean);
+});
+
+test('a different EAN is still a conflict when the brand is not the same', () => {
+  // Another brand, an entry with no brand, and a target with none. A chain
+  // can leave the brand off a product whose name states one, so "both have
+  // none" does not say the two are one brand.
+  for (const [entry, linkTarget] of [
+    [{ ...MILK_ROW, brand: 'Carbonell' }, MILK_PRODUCT],
+    [{ ...MILK_ROW, brand: null }, MILK_PRODUCT],
+    [MILK_ROW, { ...MILK_PRODUCT, brand: null }],
+    [
+      { ...MILK_ROW, brand: null },
+      { ...MILK_PRODUCT, brand: null },
+    ],
+  ]) {
+    const issues = secondBarcodeIssues({ entry, linkTarget });
+    assert.deepEqual(codes(issues), ['EAN_CONFLICT'], String(entry.brand));
+    assert.match(issues[0].detail, /does not show the same brand\./);
+  }
+});
+
+test('a different EAN is still a conflict when the format is not known to be the same', () => {
+  // A size missing on either side is "not known", and a person looks.
+  const sizeless = secondBarcodeIssues({
+    entry: { ...MILK_ROW, unitSize: null },
+  });
+  assert.deepEqual(codes(sizeless), ['EAN_CONFLICT']);
+  assert.match(sizeless[0].detail, /does not show the same format\./);
+
+  // Another size is two issues, as it always was: the format, and the barcode
+  // that nothing now explains.
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({ entry: { ...MILK_ROW, unitSize: 1.5 } })
+    ).sort(),
+    ['EAN_CONFLICT', 'FORMAT_MISMATCH']
+  );
+});
+
+test('a registered spelling of the target’s brand is the same brand', () => {
+  // The chain prints `Hacendado +Proteínas`, which a person linked to
+  // `Hacendado`: one brand, so a second barcode is allowed.
+  assert.deepEqual(
+    secondBarcodeIssues({
+      entry: { ...MILK_ROW, brand: 'Hacendado +Proteínas' },
+    }),
+    []
+  );
+});
+
+test('a product from a gateway that lists no eans is read by its one ean', () => {
+  const old = { ...MILK_PRODUCT };
+  delete old.eans;
+  assert.deepEqual(secondBarcodeIssues({ linkTarget: old }), []);
+  assert.deepEqual(
+    codes(
+      secondBarcodeIssues({
+        entry: { ...MILK_ROW, brand: null },
+        linkTarget: old,
+      })
+    ),
+    ['EAN_CONFLICT']
+  );
+});

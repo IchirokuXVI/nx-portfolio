@@ -24,6 +24,7 @@ import type { CatalogEventsPublisher } from '../events/catalog-events.publisher'
 import { BrandService } from './brand.service';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -104,7 +105,8 @@ describeIntegration(
         admin,
         audit,
         events,
-        new CategoryService(dataSource.getRepository(Category), admin, audit)
+        new CategoryService(dataSource.getRepository(Category), admin, audit),
+        itemEanStoreOf(dataSource)
       );
     }, 180_000);
 

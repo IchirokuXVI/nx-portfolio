@@ -7,6 +7,7 @@ import type { Item, ProductGroup, SupermarketItem } from '../entities';
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { fakeCategories } from './category.testing';
+import { fakeItemEans } from './item-ean.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -47,7 +48,8 @@ function build(
     // Plan 0070. Neither read here moves a product's group, so it is never
     // called; the constructor still needs it.
     {} as unknown as CatalogEventsPublisher,
-    fakeCategories().service
+    fakeCategories().service,
+    fakeItemEans().store
   );
   return { service, prices };
 }

@@ -41,7 +41,15 @@ export function makeCatalog(items = []) {
       }
       return rows
         .map((row) => {
-          const haystack = [row.name?.es, row.name?.en, row.brand, row.ean]
+          // Every barcode of the row (backend plan 0185), as the real search
+          // finds a product by any of them.
+          const haystack = [
+            row.name?.es,
+            row.name?.en,
+            row.brand,
+            row.ean,
+            ...(row.eans ?? []),
+          ]
             .filter(Boolean)
             .join(' ')
             .toLowerCase();
@@ -61,6 +69,7 @@ export function makeCatalog(items = []) {
         name: body.name,
         brand: body.brand ?? null,
         ean: body.ean ?? null,
+        eans: body.ean ? [body.ean] : [],
         unitSize: body.unitSize ?? null,
         packCount: body.packCount ?? null,
         categoryIds: body.categoryIds,

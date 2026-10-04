@@ -126,3 +126,27 @@ test('getItem answers null for a 404 and throws every other failure', async () =
   const found = makeGateway(recordingSession(() => ({ id: 'i1' })));
   assert.deepEqual(await found.getItem('i1'), { id: 'i1' });
 });
+
+test('findByEan answers the product that holds the barcode, as its first or as any other (backend plan 0185)', async () => {
+  const milk = {
+    id: 'i1',
+    ean: '8402001002083',
+    eans: ['8402001002083', '8402001047251'],
+  };
+  // The search also answers a text hit that merely scored well.
+  const session = recordingSession(() => ({
+    items: [
+      { id: 'i-text', ean: '4006381333931', eans: ['4006381333931'] },
+      milk,
+    ],
+  }));
+  const gateway = makeGateway(session);
+
+  assert.equal((await gateway.findByEan('8402001047251')).id, 'i1');
+  assert.equal((await gateway.findByEan('8402001002083')).id, 'i1');
+  assert.equal(await gateway.findByEan('96385074'), null);
+  // No barcode asks nothing.
+  const asked = session.calls.length;
+  assert.equal(await gateway.findByEan(null), null);
+  assert.equal(session.calls.length, asked);
+});

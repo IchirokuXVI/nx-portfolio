@@ -2205,3 +2205,88 @@ test('a real barcode is still looked up, trimmed, in both catalogs', async () =>
   assert.deepEqual(rehearsal.asked, ['4006381333931']);
   assert.equal(collected.eanMatch.itemId, 'i-scale');
 });
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+/** Whole milk from a second factory: the same product, another barcode. */
+const SECOND_BARCODE_ROW = entry('e1', 'Leche entera', {
+  brand: 'Hacendado',
+  ean: '8402001047251',
+  unitSize: 1,
+  sizeUnit: 'LITER',
+  sizeFormat: '1 L',
+});
+
+const MILK_IN_CATALOG = {
+  id: 'i1',
+  name: { es: 'Leche entera', en: 'Whole milk' },
+  brand: 'Hacendado',
+  ean: '8402001002083',
+  eans: ['8402001002083'],
+  unitSize: 1000,
+  defaultUnit: 'MILLILITER',
+};
+
+test('a LINK onto a product with another barcode, the same brand and the same format is recorded as a LINK', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [SECOND_BARCODE_ROW],
+    catalogItems: [MILK_IN_CATALOG],
+  });
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  // Nobody holds the row's barcode, and the packet shows every barcode the
+  // candidate does hold.
+  assert.equal(row.eanMatch, null);
+  assert.deepEqual(row.candidates[0].eans, ['8402001002083']);
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'LINK');
+  assert.equal(answer.decision.itemId, 'i1');
+  assert.deepEqual(codesOf(answer.issues), []);
+});
+
+test('a LINK is a REVIEW when another catalog product holds the row’s barcode, as any of its barcodes', async () => {
+  const dir = runDir();
+  const w = world({
+    entries: [SECOND_BARCODE_ROW],
+    catalogItems: [
+      MILK_IN_CATALOG,
+      // It holds the row's barcode as its second one.
+      {
+        id: 'i2',
+        name: { es: 'Leche entera sin lactosa', en: 'Lactose free milk' },
+        brand: 'Hacendado',
+        ean: '4006381333931',
+        eans: ['4006381333931', '8402001047251'],
+        unitSize: 1000,
+        defaultUnit: 'MILLILITER',
+      },
+    ],
+  });
+  await startIn(dir, w);
+  const row = await next({ runDir: dir, gateways: w.gateways });
+  assert.equal(row.eanMatch.itemId, 'i2');
+
+  const answer = await decide({
+    runDir: dir,
+    entryId: 'e1',
+    input: { decision: 'LINK', itemId: 'i1', confidence: 0.99 },
+    gateways: w.gateways,
+    vocabularies: VOCABULARIES,
+  });
+
+  assert.equal(answer.decision.decision, 'REVIEW');
+  assert.equal(answer.decision.proposedDecision, 'LINK');
+  assert.deepEqual(codesOf(answer.issues), ['EAN_CONFLICT']);
+  assert.match(answer.issues[0].detail, /item i2 holds it, not i1/);
+});

@@ -8,6 +8,7 @@ import {
   REASONING_MAX,
   SEARCH_TEXT_MAX,
   UNIT_BASES,
+  barcodesOf,
   brandKey,
   buildDecisionSchema,
   buildSystemPrompt,
@@ -1022,4 +1023,46 @@ test('the prompt says nameEn is always written and that a name never says pack',
   // The old permission to answer null is gone.
   assert.doesNotMatch(template, /else null\.\n- `item\.brand`/);
   assert.doesNotMatch(template, /when you are confident of the translation/);
+});
+
+// ---------------------------------------------------------------------------
+// A product has more than one barcode (backend plan 0185)
+// ---------------------------------------------------------------------------
+
+test('barcodesOf lists every barcode of a product, the first one leading', () => {
+  assert.deepEqual(
+    barcodesOf({ ean: '8402001002083', eans: ['8402001002083', '96385074'] }),
+    ['8402001002083', '96385074']
+  );
+  // A view that lists no `eans` answers the one barcode it has.
+  assert.deepEqual(barcodesOf({ ean: '96385074' }), ['96385074']);
+  assert.deepEqual(barcodesOf({ ean: null, eans: [] }), []);
+  assert.deepEqual(barcodesOf(null), []);
+  // An old in-store code on `ean` that is in no list is still a code the
+  // product carries, so a row printing it is not told the product lacks it.
+  assert.deepEqual(barcodesOf({ ean: '2204500000000', eans: ['96385074'] }), [
+    '96385074',
+    '2204500000000',
+  ]);
+});
+
+test('the prompt says a product can hold several barcodes, and what EAN_CONFLICT now means', () => {
+  const template = loadPromptTemplate();
+  assert.match(
+    template,
+    /A candidate's `eans` lists every barcode the product holds/
+  );
+  assert.match(
+    template,
+    /A different\s+barcode alone does not make a second product/
+  );
+  assert.match(
+    template,
+    /`EAN_CONFLICT`: a `LINK` onto a product while another product holds the entry's barcode/
+  );
+  // The old rule, that a different barcode is a conflict by itself, is gone.
+  assert.doesNotMatch(
+    template,
+    /a `LINK` onto a product carrying a different barcode/
+  );
 });

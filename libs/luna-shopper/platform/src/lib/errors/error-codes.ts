@@ -287,6 +287,17 @@ export const ERROR_CODES = {
    */
   ITEM_EAN_INVALID: 'item_ean_invalid',
   /**
+   * A barcode was given to a product while another product holds it (plan
+   * 0185). A product has several barcodes, and a barcode names one product.
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because it is the one
+   * conflict a queue decision can meet that a person has to settle: the row
+   * prints a barcode the catalog already knows as another product, so either
+   * the row belongs to that product or the barcode sits on the wrong one. The
+   * barcode and the product that holds it travel in `details`.
+   */
+  ITEM_EAN_HELD: 'item_ean_held',
+  /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
    * something.
@@ -493,6 +504,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 400 for the same reason: what is wrong is a value in the body, a number
   // that is not a barcode (plan 0184).
   [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
+  // 409: the barcode is a real one, and another product holds it (plan 0185).
+  [ERROR_CODES.ITEM_EAN_HELD]: HttpStatus.CONFLICT,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

@@ -119,6 +119,16 @@ survivor):
 The merged row keeps its name, brand, size and categories as they were. It is a record of
 what the product was called.
 
+**Plan `0185` changes steps 1 and 4: a merge can move every barcode.** A product now
+holds several barcodes. Each one is a row of `item_eans`, and `items.ean` is the first of
+them. So a merge moves every barcode row of the merged product to the survivor. It does
+not refuse two different EANs. The survivor keeps its own first barcode. If the survivor
+has no barcode, the first barcode of the merged product becomes its first. The merge still
+sets `items.ean` of the merged row to null, because `uq_items_ean` holds one row per EAN.
+An old in-store code or invalid code on the merged row is in no row of `item_eans`, so it
+does not move. When this plan is picked up, this move replaces the acceptance criterion
+of section 5 that refuses two different EANs.
+
 ## 2. What a read answers
 
 - **A list or a search** (`search`, `searchOffers`, the product group reads, the admin

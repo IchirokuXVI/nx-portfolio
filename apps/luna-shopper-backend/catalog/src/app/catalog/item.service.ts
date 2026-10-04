@@ -10,6 +10,7 @@ import {
   PACK_COUNT_MIN,
   packCountOf,
   PRODUCT_GROUP_MEMBERS_MAX,
+  readGtin,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
@@ -22,6 +23,8 @@ import {
   type FindItemsByEansResult,
   type GetItemsRequest,
   type GetItemsResult,
+  type ItemEanRefusal,
+  type ItemEanRequest,
   type ItemIdRequest,
   type ItemOfferView,
   type ItemOrder,
@@ -31,6 +34,8 @@ import {
   type ProductGroupOfferView,
   type SearchItemsRequest,
   type SearchOffersRequest,
+  type TeachItemEansRequest,
+  type TeachItemEansResult,
   type UpdateItemInput,
   type UpdateItemRequest,
   type UpdateItemsRequest,
@@ -43,6 +48,9 @@ import {
   encodeCursor,
   getRequestContext,
   isUuid,
+  ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
   NotFoundException,
   requireProductEan,
   ValidationException,
@@ -62,7 +70,10 @@ import {
   type Category,
 } from '../entities';
 import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
-import { CatalogAuditService } from './catalog-audit.service';
+import {
+  CatalogAuditService,
+  type AuditedWrite,
+} from './catalog-audit.service';
 import {
   decodeCursorForLocale,
   displayName,
@@ -71,11 +82,8 @@ import {
   toItemView,
   toProductGroupView,
 } from './catalog.mappers';
-import {
-  CategoryService,
-  toCategoryOnItem,
-  type CategoryOnItem,
-} from './category.service';
+import { CategoryService, toCategoryOnItem } from './category.service';
+import { ItemEanStore } from './item-ean.store';
 import {
   PlatformAdminService,
   type CatalogActor,
@@ -222,7 +230,10 @@ export class ItemService {
     // The leaves a write names, and the categories every read answers with
     // (plan 0166). Last, so the specs that build this positionally keep their
     // earlier arguments where they were.
-    private readonly categories: CategoryService
+    private readonly categories: CategoryService,
+    // Every barcode of every product (plan 0185). `items.ean` is the first
+    // one, and this is where the rest live.
+    private readonly eans: ItemEanStore
   ) {}
 
   /**
@@ -266,6 +277,13 @@ export class ItemService {
         // In the same transaction as the product, so there is never a product
         // with no category to read.
         await this.categories.setItemCategories(tx.manager, row.id, leaves);
+        // And its first barcode is a row of `item_eans` from the start (plan
+        // 0185). A barcode another product holds as one of its further
+        // barcodes fails here, on the primary key, as a duplicate
+        // `items.ean` fails on its index.
+        if (row.ean) {
+          await this.eans.insert(tx.manager, row.id, row.ean);
+        }
         return row;
       });
     } catch (error) {
@@ -274,7 +292,7 @@ export class ItemService {
     if (saved.productGroupId !== null) {
       this.events.itemGroupChanged(saved.id, null, saved.productGroupId);
     }
-    return toItemView(saved, leaves.map(toCategoryOnItem));
+    return toItemView(saved, leaves.map(toCategoryOnItem), firstEanOf(saved));
   }
 
   /**
@@ -355,6 +373,9 @@ export class ItemService {
         for (const { draft, leaves } of drafts) {
           const row = await tx.create(Item, draft);
           await this.categories.setItemCategories(tx.manager, row.id, leaves);
+          if (row.ean) {
+            await this.eans.insert(tx.manager, row.id, row.ean);
+          }
           rows.push({ row, leaves });
         }
         return rows;
@@ -370,7 +391,7 @@ export class ItemService {
     }
     return {
       items: saved.map(({ row, leaves }) =>
-        toItemView(row, leaves.map(toCategoryOnItem))
+        toItemView(row, leaves.map(toCategoryOnItem), firstEanOf(row))
       ),
     };
   }
@@ -459,7 +480,135 @@ export class ItemService {
 
   async get(req: ItemIdRequest): Promise<ItemView> {
     const row = await this.load(req.itemId);
-    return toItemView(row, (await this.categoriesOf([row])).get(row.id) ?? []);
+    return (await this.viewer([row]))(row);
+  }
+
+  /**
+   * Give a product one more barcode (plan 0185).
+   *
+   * The barcode is a real one or the request is refused with
+   * `item_ean_invalid`, as on every other write. A barcode another product
+   * holds is refused with `item_ean_held`, naming that product. A barcode this
+   * product already holds changes nothing and answers the product as it is.
+   *
+   * A product with no first barcode takes this one as its first, so
+   * `items.ean` is never empty while the product holds a barcode.
+   */
+  async addEan(req: ItemEanRequest): Promise<ItemView> {
+    const actor = await this.admin.requireAdmin(req);
+    const ean = this.requireEan(req.ean);
+    const row = await this.load(req.itemId);
+    let heldBy: string | null;
+    try {
+      heldBy = await this.audit.write(
+        actor,
+        async (tx) => (await this.giveEan(tx, row, ean)).heldBy
+      );
+    } catch (error) {
+      // Two writers gave two products the barcode at once, and this one lost
+      // on the primary key.
+      throw asEanConflict(error, EAN_TAKEN_ON_UPDATE);
+    }
+    if (heldBy !== null) {
+      throw eanHeld(ean, heldBy);
+    }
+    return (await this.viewer([row]))(row);
+  }
+
+  /**
+   * Take one barcode off a product (plan 0185). A barcode the product does not
+   * hold is a 404.
+   *
+   * When it was the product's first barcode, the oldest of the rest becomes
+   * the first, and a product left with none has a null `ean`.
+   */
+  async removeEan(req: ItemEanRequest): Promise<ItemView> {
+    const actor = await this.admin.requireAdmin(req);
+    const ean = req.ean.trim();
+    const row = await this.load(req.itemId);
+    await this.audit.write(actor, async (tx) => {
+      if (!(await this.eans.remove(tx.manager, row.id, ean))) {
+        throw new NotFoundException(
+          `Item ${row.id} does not hold the barcode ${ean}.`
+        );
+      }
+      if (row.ean === ean) {
+        const before = { ...row };
+        row.ean = await this.oldestEan(tx, row.id);
+        await tx.update(Item, before, row);
+      }
+    });
+    return (await this.viewer([row]))(row);
+  }
+
+  /**
+   * Teach products the barcodes their bound rows printed (plan 0185), in one
+   * transaction.
+   *
+   * What a queue decision calls after it bound a row whose barcode its product
+   * did not hold. **A pair that cannot be written is named in the answer and
+   * does not fail the call**: the bind it follows has already landed, and one
+   * barcode another product took in the meantime must not cost the rest of a
+   * file theirs. Asking first is the caller's job, and the refusal that stops
+   * a decision is made there, before anything is written.
+   */
+  async teachEans(req: TeachItemEansRequest): Promise<TeachItemEansResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.entries.length > BULK_DECISION_MAX_OPERATIONS) {
+      throw new ValidationException(
+        `A barcode batch carries at most ${BULK_DECISION_MAX_OPERATIONS} ` +
+          `pairs, and this one carries ${req.entries.length}.`
+      );
+    }
+    const refused: ItemEanRefusal[] = [];
+    const pairs: { itemId: string; ean: string }[] = [];
+    for (const entry of req.entries) {
+      const reading = readGtin(entry.ean);
+      if (reading.kind !== 'GTIN' || !isUuid(entry.itemId)) {
+        refused.push({
+          itemId: entry.itemId,
+          ean: entry.ean,
+          reason: reading.kind !== 'GTIN' ? 'INVALID' : 'NOT_FOUND',
+          heldBy: null,
+        });
+      } else {
+        pairs.push({ itemId: entry.itemId, ean: reading.gtin });
+      }
+    }
+    if (pairs.length === 0) {
+      return { added: 0, refused };
+    }
+    const rows = new Map(
+      (
+        await this.items.find({
+          where: { id: In([...new Set(pairs.map((pair) => pair.itemId))]) },
+        })
+      ).map((row) => [row.id, row])
+    );
+
+    let added = 0;
+    try {
+      added = await this.audit.write(actor, async (tx) => {
+        let written = 0;
+        for (const pair of pairs) {
+          const row = rows.get(pair.itemId);
+          if (!row) {
+            refused.push({ ...pair, reason: 'NOT_FOUND', heldBy: null });
+            continue;
+          }
+          const given = await this.giveEan(tx, row, pair.ean);
+          if (given.heldBy !== null) {
+            refused.push({ ...pair, reason: 'HELD', heldBy: given.heldBy });
+          } else if (given.added) {
+            written += 1;
+          }
+        }
+        return written;
+      });
+    } catch (error) {
+      throw asEanConflict(error, EAN_TAKEN_IN_UPDATE_BATCH);
+    }
+    return { added, refused };
   }
 
   /**
@@ -565,9 +714,7 @@ export class ItemService {
       return { items: [] };
     }
     const rows = await this.items.find({ where: { id: In(ids) } });
-    const categories = await this.categoriesOf(rows);
-    const view = (row: Item, offer?: ItemOfferView) =>
-      toItemView(row, categories.get(row.id) ?? [], offer);
+    const view = await this.viewer(rows);
     const scopeIds = req.priceScopeIds ?? [];
     if (scopeIds.length === 0) {
       // An arrow rather than a bare reference: `map` passes the index as the
@@ -606,15 +753,22 @@ export class ItemService {
    * finds nothing, and finding nothing is a normal answer rather than a 404. It
    * is step 2 of the matching ladder, and it is what stops a promoted discovery
    * entry creating a duplicate of a product catalog already holds.
+   *
+   * **Any barcode of the product finds it** (plan 0185): the lookup reads
+   * `item_eans`, where the first barcode is a row like the rest. An in-store
+   * or invalid code that an old product still carries on `items.ean` is in no
+   * row, so it finds nothing, which is the rule plan 0184 set for every
+   * caller: such a code joins nothing.
    */
   async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
-    const row = await this.items.findOne({ where: { ean: req.ean } });
+    const itemId = (await this.eans.holdersOf([req.ean])).get(req.ean);
+    const row = itemId
+      ? await this.items.findOne({ where: { id: itemId } })
+      : null;
     if (!row) {
       return { item: null };
     }
-    return {
-      item: toItemView(row, (await this.categoriesOf([row])).get(row.id) ?? []),
-    };
+    return { item: (await this.viewer([row]))(row) };
   }
 
   /**
@@ -638,11 +792,16 @@ export class ItemService {
     if (eans.length === 0) {
       return { items: [] };
     }
-    const rows = await this.items.find({ where: { ean: In(eans) } });
-    const categories = await this.categoriesOf(rows);
-    return {
-      items: rows.map((row) => toItemView(row, categories.get(row.id) ?? [])),
-    };
+    // Through `item_eans` (plan 0185), so a product is found by any of its
+    // barcodes. Two of them in one request find one product, answered once:
+    // the caller reads `eans` on the view to see which barcodes it holds.
+    const itemIds = [...new Set((await this.eans.holdersOf(eans)).values())];
+    if (itemIds.length === 0) {
+      return { items: [] };
+    }
+    const rows = await this.items.find({ where: { id: In(itemIds) } });
+    const view = await this.viewer(rows);
+    return { items: rows.map((row) => view(row)) };
   }
 
   /**
@@ -696,7 +855,7 @@ export class ItemService {
         : this.nextCursor(order, locale, cursor, limit, last);
 
     const pageIds = page.map((row) => row.id);
-    const categories = await this.categoriesOf(page);
+    const view = await this.viewer(page);
     const scopeIds = req.priceScopeIds ?? [];
     if (req.offers === 'all' && scopeIds.length > 0) {
       // Plan 0161, section 1: what `getMany` answers for `all`, for the same
@@ -707,7 +866,7 @@ export class ItemService {
         items: page.map((row) => {
           const offers = perItem.get(row.id) ?? [];
           return {
-            ...toItemView(row, categories.get(row.id) ?? []),
+            ...view(row),
             bestOffer: offers[0] ?? null,
             offers,
           };
@@ -717,9 +876,7 @@ export class ItemService {
     }
     const offers = await this.offersFor(pageIds, req.priceScopeIds);
     return {
-      items: page.map((row) =>
-        toItemView(row, categories.get(row.id) ?? [], offers.get(row.id))
-      ),
+      items: page.map((row) => view(row, offers.get(row.id))),
       nextCursor,
     };
   }
@@ -906,14 +1063,14 @@ export class ItemService {
         : Promise.resolve(undefined),
     ]);
     const byId = new Map(members.map((item) => [item.id, item]));
-    const categories = await this.categoriesOf(members);
+    const view = await this.viewer(members);
 
     return {
       items: page.map((row) =>
         this.toOfferView(row, byId, membership.get(row.id) ?? [], {
           offers,
           members: ranked ? (ranked.get(row.id) ?? []) : undefined,
-          categories,
+          view,
         })
       ),
       nextCursor: hasMore
@@ -1085,11 +1242,14 @@ export class ItemService {
       offers?: Map<string, ItemOfferView[]>;
       /** The ranked members, when `members` was asked for. */
       members?: RankedMemberRow[];
-      /** Every member's categories, loaded for the page in one query. */
-      categories?: ReadonlyMap<string, CategoryOnItem[]>;
-    } = {}
+      /**
+       * A member as a view, with its categories and barcodes, both loaded for
+       * the page in one query each.
+       */
+      view: ItemViewer;
+    }
   ): ProductGroupOfferView {
-    const categoriesOf = (item: Item) => extra.categories?.get(item.id) ?? [];
+    const toView = extra.view;
     const group = toProductGroupView({
       id: row.id,
       name: row.name,
@@ -1111,7 +1271,7 @@ export class ItemService {
             group,
             cheapestItem: extra.offers
               ? {
-                  ...toItemView(member, categoriesOf(member), offer),
+                  ...toView(member, offer),
                   // The group's own offer leads the array, so `bestOffer` is
                   // its first entry without being changed (plan 0161, section
                   // 1). The lateral ranks one product's rows by unit price
@@ -1125,7 +1285,7 @@ export class ItemService {
                     ),
                   ],
                 }
-              : toItemView(member, categoriesOf(member), offer),
+              : toView(member, offer),
             offer,
             itemIds,
           };
@@ -1145,10 +1305,9 @@ export class ItemService {
         // `members[0]` is `cheapestItem` exactly: the same product by the
         // ranking, and the same offer even where two of its scopes tie.
         offer && item.id === offer.itemId && ranked.length === 0
-          ? toItemView(item, categoriesOf(item), offer)
-          : toItemView(
+          ? toView(item, offer)
+          : toView(
               item,
-              categoriesOf(item),
               entry.offerScopeId
                 ? rawOfferView(item.id, entry.offerScopeId, entry)
                 : undefined
@@ -1266,8 +1425,12 @@ export class ItemService {
     // one product, so the row carrying it is not merely the most relevant
     // answer, it is the answer, and it has to beat a text hit that scored above
     // the zero an all digit query earns from `ts_rank`.
+    //
+    // Any barcode of the product (plan 0185). The first test keeps an old
+    // in-store code on `items.ean` findable by the person who pastes it, and
+    // the second reads `item_eans` once for the whole statement.
     const barcode =
-      term.ean === null ? 'false' : `i."ean" = ${p.bind(term.ean)}`;
+      term.ean === null ? 'false' : barcodeMatchSql(p.bind(term.ean));
     // The same test as a ranking key, with the two things SQL three valued logic
     // does to it spelled out.
     //
@@ -1417,7 +1580,7 @@ export class ItemService {
         : '';
       qb.andWhere(
         `(
-          ${term.ean === null ? 'false' : 'i."ean" = :ean'}
+          ${term.ean === null ? 'false' : barcodeMatchSql(':ean')}
           OR (
             (
               i."search_es" @@ to_tsquery('spanish', "catalog_norm"(:tsquery))
@@ -1561,11 +1724,116 @@ export class ItemService {
     });
   }
 
-  /** The categories of these products, for a read, in one query. */
-  private categoriesOf(
-    rows: readonly Pick<Item, 'id'>[]
-  ): Promise<Map<string, CategoryOnItem[]>> {
-    return this.categories.categoriesOf(rows.map((row) => row.id));
+  /**
+   * What turns these products into views: their categories and their
+   * barcodes, each read in one query for all of them. Every read and every
+   * write answer goes through it, so no view leaves without either.
+   */
+  private async viewer(rows: readonly Item[]): Promise<ItemViewer> {
+    const ids = rows.map((row) => row.id);
+    const [categories, eans] = await Promise.all([
+      this.categories.categoriesOf(ids),
+      this.eans.eansOf(ids),
+    ]);
+    return (row, offer) =>
+      toItemView(
+        row,
+        categories.get(row.id) ?? [],
+        orderedEans(row.ean, eans.get(row.id) ?? []),
+        offer
+      );
+  }
+
+  /** The barcode a request names, trimmed, or a refusal. Never null. */
+  private requireEan(ean: string): string {
+    const code = requireProductEan(ean);
+    if (code === null) {
+      throw new ValidationException('A barcode is required.');
+    }
+    return code;
+  }
+
+  /**
+   * Give `row` the barcode, inside the caller's transaction (plan 0185).
+   *
+   * Three answers: written, already this product's (nothing to do), or held by
+   * another product, which is named and not written. A product with no first
+   * barcode takes this one as its first.
+   */
+  private async giveEan(
+    tx: AuditedWrite,
+    row: Item,
+    ean: string
+  ): Promise<{ added: boolean; heldBy: string | null }> {
+    const holder = await this.eans.holder(tx.manager, ean);
+    if (holder === row.id) {
+      return { added: false, heldBy: null };
+    }
+    if (holder !== null) {
+      return { added: false, heldBy: holder };
+    }
+    await this.eans.insert(tx.manager, row.id, ean);
+    if (row.ean === null) {
+      const before = { ...row };
+      row.ean = ean;
+      await tx.update(Item, before, row);
+    }
+    return { added: true, heldBy: null };
+  }
+
+  /** The barcode a product has held longest, or null for a product with none. */
+  private async oldestEan(
+    tx: AuditedWrite,
+    itemId: string
+  ): Promise<string | null> {
+    return (
+      (await this.eans.eansOf([itemId], tx.manager)).get(itemId)?.[0] ?? null
+    );
+  }
+
+  /**
+   * Keep `item_eans` in step with an edit that changed `items.ean` (plan
+   * 0185), inside the edit's own transaction and before the product is saved.
+   *
+   * The `ean` field of an update is the product's **first** barcode. Three
+   * cases:
+   *
+   * - **A barcode the product already holds** is a reorder. It becomes the
+   *   first, and the old first barcode stays one of the product's barcodes.
+   * - **A barcode the product does not hold** replaces the first one: the old
+   *   first barcode is taken off the product and the new one is given to it.
+   *   The product's further barcodes are not touched.
+   * - **Null** takes the first barcode off and promotes the oldest of the
+   *   rest, so `items.ean` is never empty while the product holds a barcode.
+   */
+  private async moveFirstEan(
+    tx: AuditedWrite,
+    before: Item,
+    row: Item,
+    eanTaken: string
+  ): Promise<void> {
+    if (row.ean === before.ean) {
+      return;
+    }
+    const holder =
+      row.ean === null ? null : await this.eans.holder(tx.manager, row.ean);
+    if (holder === row.id) {
+      // A reorder: nothing leaves the product.
+      return;
+    }
+    if (holder !== null) {
+      // One of another product's barcodes. `uq_items_ean` cannot see it when
+      // it is not that product's `items.ean`.
+      throw new ConflictException(eanTaken);
+    }
+    if (before.ean) {
+      await this.eans.remove(tx.manager, row.id, before.ean);
+    }
+    if (row.ean === null) {
+      row.ean = await this.oldestEan(tx, row.id);
+      return;
+    }
+    await this.eans.insert(tx.manager, row.id, row.ean);
   }
 
   /**
@@ -1619,6 +1887,7 @@ export class ItemService {
       saved = await this.audit.write(actor, async (tx) => {
         const written: Item[] = [];
         for (const edit of edits) {
+          await this.moveFirstEan(tx, edit.before, edit.row, eanTaken);
           written.push(await tx.update(Item, edit.before, edit.row));
           if (edit.leaves !== null) {
             await this.categories.setItemCategories(
@@ -1641,16 +1910,22 @@ export class ItemService {
       }
     }
     // The products whose set did not change answer with the set they hold.
-    const held = await this.categoriesOf(
-      saved.filter((_, index) => edits[index].leaves === null)
-    );
+    const [held, eans] = await Promise.all([
+      this.categories.categoriesOf(
+        saved
+          .filter((_, index) => edits[index].leaves === null)
+          .map((row) => row.id)
+      ),
+      this.eans.eansOf(saved.map((row) => row.id)),
+    ]);
     return saved.map((row, index) => {
       const leaves = edits[index].leaves;
       return toItemView(
         row,
         leaves === null
           ? (held.get(row.id) ?? [])
-          : leaves.map(toCategoryOnItem)
+          : leaves.map(toCategoryOnItem),
+        orderedEans(row.ean, eans.get(row.id) ?? [])
       );
     });
   }
@@ -1858,6 +2133,52 @@ export class ItemService {
     }
     return displayName(row.name, locale);
   }
+}
+
+/** A product as a view, with what the page's two lookups found for it. */
+type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
+
+/**
+ * A product's barcodes in the order a view lists them (plan 0185): the first
+ * barcode, then the rest, oldest first.
+ *
+ * `held` is the product's rows of `item_eans`. `items.ean` leads when it is
+ * one of them, which it always is unless it is an old in-store or invalid
+ * code. Such a code is in no row, so it is not in the list either.
+ */
+function orderedEans(first: string | null, held: readonly string[]): string[] {
+  return first !== null && held.includes(first)
+    ? [first, ...held.filter((ean) => ean !== first)]
+    : [...held];
+}
+
+/** The barcodes of a product that was just created: its first one, or none. */
+function firstEanOf(row: Pick<Item, 'ean'>): string[] {
+  return row.ean ? [row.ean] : [];
+}
+
+/**
+ * Whether the product aliased `i` carries the barcode `placeholder` names, as
+ * its first barcode or as any other (plan 0185).
+ *
+ * The scalar subquery runs once for the statement and is one primary key
+ * lookup. It answers NULL when no product holds the barcode, so the whole test
+ * is NULL for every row whose own `ean` does not match, which the ranked
+ * branch's `NULLS LAST` already expects.
+ */
+function barcodeMatchSql(placeholder: string): string {
+  return `(i."ean" = ${placeholder} OR i."id" = (
+          SELECT ie."itemId" FROM "item_eans" ie WHERE ie."ean" = ${placeholder}
+        ))`;
+}
+
+/** The refusal of a barcode another product holds (plan 0185). */
+function eanHeld(ean: string, heldBy: string): ItemEanHeldException {
+  return new ItemEanHeldException(
+    `Product ${heldBy} already holds the barcode ${ean}. A barcode names ` +
+      'one product, so take it off that product first.',
+    { details: { [ITEM_EAN_DETAIL]: ean, [ITEM_EAN_HOLDER_DETAIL]: heldBy } }
+  );
 }
 
 const PG_UNIQUE_VIOLATION = '23505';
