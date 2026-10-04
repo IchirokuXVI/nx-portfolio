@@ -32,6 +32,22 @@ here.
 
 ## What production must do before it serves this state
 
+Release task `0003-restore-the-first-catalog` copies this state into a cluster
+(k8s plan 0012, `k8s/catalog-import/README.md`). It enforces three of the five
+conditions below, and the other two stay with a person:
+
+| Condition | Who holds it |
+| --- | --- |
+| 1. Run the same code | The task. It refuses unless the live `migrations` tables hold the same names as the dumps. |
+| 2. Turn the four harvest sources off | The task. It turns every `supermarket_sources` row off before the swap and reads the result back after it. The route named below is no longer needed for this. |
+| 3. Check what references catalog ids | The task. It refuses to lose a chain, price scope, shop, brand or product group that the cluster holds, unless `expected-losses.txt` accepts the row. It then clears every reference in core that points at nothing. |
+| 4. Know the actor ids in the audit trail | A person. The task changes nothing here. |
+| 5. Prices age | A person. The task changes no price, so a restore after 2026-10-08 carries Deza leaflet prices that the read side already treats as expired. |
+
+The numbers in this document are those of the dumps of 2026-10-03. The owner
+went on editing slot 1 after that day, so the dumps that ship are taken again,
+and `k8s/catalog-import/first-catalog.manifest` then states what they hold.
+
 1. **Run the same code.** The catalog database holds 26 migrations, the last one
    `DiaCategoryTree1758500000000` (plan 0173, PR #597). The harvester database holds 17,
    the last one `DiscoveredPlaceFootprint1757900000000` (plan 0176). Production's release
