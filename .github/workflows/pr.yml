@@ -61,6 +61,19 @@ jobs:
       - name: The leaflet finder's own tests
         run: node --test tools/leaflets/find-leaflets.test.mjs
 
+      # A release task runs by itself on a deploy and may delete data, so each one
+      # states a window per environment, the production release it belongs to and
+      # a check.sh (k8s plan 0011, section 4). The first step proves that the
+      # check can fail, and the second runs it on the tasks in this checkout. It
+      # is plain node with no Nx project, so `nx affected` never sees it. The 14
+      # day cap on a window is measured from the commit that last changed the
+      # task.env, which is why this job needs the full history it already has.
+      - name: The release task check's own tests
+        run: node --test k8s/release-tasks/check-tasks.test.mjs
+
+      - name: Every release task states when it can run
+        run: node k8s/release-tasks/check-tasks.mjs
+
       # `manifest-check` joins lint and test here (k8s plan 0009). It is the one
       # target in this job that is not free: it depends on `prune`, so an affected
       # Luna Shopper service is built and its lockfile pruned before the check
