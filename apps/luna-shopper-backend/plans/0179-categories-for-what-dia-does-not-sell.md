@@ -1,3 +1,5 @@
+> **PR:** [#612](https://github.com/IchirokuXVI/nx-portfolio/pull/612)
+
 # 0179: categories for what DIA does not sell
 
 > Found by the curation of the October 2026 harvest on local slot 1. The evidence is in the

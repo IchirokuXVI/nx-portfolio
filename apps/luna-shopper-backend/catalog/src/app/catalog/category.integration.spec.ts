@@ -138,14 +138,15 @@ describeIntegration('the category tree (real Postgres)', () => {
   describe('the tree', () => {
     it('answers roots then children, each by position', async () => {
       const { categories: rows } = await categories.tree({ userId: 'any' });
-      expect(rows).toHaveLength(29 + 246);
-      const roots = rows.slice(0, 29);
+      // DIA's tree (plan 0173) and what DIA does not sell (plan 0179).
+      expect(rows).toHaveLength(29 + 4 + 246 + 30);
+      const roots = rows.slice(0, 29 + 4);
       expect(roots.every((row) => row.parentId === null)).toBe(true);
       expect(roots.map((row) => row.position)).toEqual(
         roots.map((_, index) => index)
       );
       // The children follow grouped under their roots, in the roots' order.
-      const parents = rows.slice(29).map((row) => row.parentId);
+      const parents = rows.slice(29 + 4).map((row) => row.parentId);
       const firstSeen = [...new Set(parents)];
       expect(firstSeen).toEqual(roots.map((row) => row.id));
     });
@@ -265,7 +266,8 @@ describeIntegration('the category tree (real Postgres)', () => {
       expect(created).toMatchObject({
         id: categoryId('birds'),
         parentId: leaf('pets'),
-        position: 6,
+        // After DIA's six children and the four plan 0179 added.
+        position: 6 + 4,
         itemCount: 0,
       });
 
