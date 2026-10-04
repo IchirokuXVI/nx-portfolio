@@ -176,6 +176,20 @@ describe('the zones with a join request, over HTTP', () => {
       await nest.close();
     }
   });
+
+  // The pipe converts every text but the empty one to true before a transform
+  // runs, so the word has to be read from the request itself.
+  it('reads false as the filter being off', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/zones?hasPending=false`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['hasPending']).toBe(false);
+    } finally {
+      await nest.close();
+    }
+  });
 });
 
 /**

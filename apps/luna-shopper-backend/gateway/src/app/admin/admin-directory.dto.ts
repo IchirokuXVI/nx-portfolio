@@ -42,6 +42,29 @@ const asBoolean = ({ value }: { value: unknown }) => {
 };
 
 /**
+ * A query string boolean, read from the text the address carried.
+ *
+ * The pipe converts a value to the declared type before a transform sees it,
+ * and every text but the empty one converts to true. So `value` is already
+ * `true` for `?flag=false`, and {@link asBoolean} cannot tell the two apart.
+ * This reads the request's own text instead, which is the only place the word
+ * `false` still exists (admin plan 0045, section 2).
+ */
+const asFlag = ({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}) => {
+  const raw = obj[key];
+  if (raw === '' || raw === 'true' || raw === true) {
+    return true;
+  }
+  return raw === 'false' || raw === false ? false : raw;
+};
+
+/**
  * The filters on the user directory (plan 0074, section 2).
  *
  * Every one of them is optional and they compose with AND, so no combination is
@@ -170,7 +193,7 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
       'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.',
   })
   @IsOptional()
-  @Transform(asBoolean)
+  @Transform(asFlag)
   @IsBoolean()
   hasPending?: boolean;
 
