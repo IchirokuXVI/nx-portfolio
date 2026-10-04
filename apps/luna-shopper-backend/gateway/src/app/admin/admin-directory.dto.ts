@@ -160,6 +160,20 @@ export class ListAdminZonesQueryDto extends PageQueryDto {
   @IsUuidOrNone()
   ownerUserId?: string;
 
+  /**
+   * The zones where a join request waits (admin plan 0045, section 2). The
+   * Zones tab of the back office offers it, and the tile that counts the
+   * requests opens the tab with it on.
+   */
+  @ApiPropertyOptional({
+    description:
+      'True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  hasPending?: boolean;
+
   @ApiPropertyOptional({ format: 'date-time' })
   @IsOptional()
   @IsISO8601()

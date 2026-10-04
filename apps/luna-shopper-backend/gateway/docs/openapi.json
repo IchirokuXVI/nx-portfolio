@@ -1743,6 +1743,15 @@
             }
           },
           {
+            "name": "hasPending",
+            "required": false,
+            "in": "query",
+            "description": "True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "createdAfter",
             "required": false,
             "in": "query",
@@ -30975,6 +30984,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -31017,6 +31030,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
@@ -31147,6 +31161,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -31175,6 +31193,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
