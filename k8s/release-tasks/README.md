@@ -314,6 +314,16 @@ empty catalog and harvester databases (k8s plan 0012).
   most `source_catalog_entries` that the restore replaces. `check.sh` refuses
   above either one. It also refuses a cluster with no backup Secret, because
   the restore downloads the two dumps with those credentials.
+- **Its `check.sh` refuses a cluster with no catalog or no harvester database
+  pod.** The other tasks pass there, because they have nothing to delete. This
+  task has something to put there, so such a cluster is a question for a
+  person. A first install never reaches `check.sh`: the runner records the task
+  as skipped before it asks. `post.sh` exits 1 in the same case, so the runner
+  never writes `done` for a restore that did not happen.
+- **A refusal inside `post.sh` leaves the task at `pre-done`**, and a task at
+  `pre-done` always finishes. Every later deploy then runs `post.sh` again,
+  whatever the window and the release say. `k8s/catalog-import/README.md` says
+  how a person stops that.
 - **It has a `post.sh` and no `pre.sh`.** The restore compares the migrations
   of the dumps with the migrations that this release ran, so it runs after
   `helm upgrade`.

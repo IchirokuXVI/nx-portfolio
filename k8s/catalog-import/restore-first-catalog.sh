@@ -36,7 +36,12 @@
 # comment moves with the rename. A run that finds it on the live catalog leaves
 # both databases alone. With --apply it still runs the core cleanup, which keeps
 # every id that catalog holds and so changes nothing a second time. That closes
-# a run that was cut between the swap and the cleanup.
+# a run that was cut between the swap and the cleanup. It also reads the result
+# back (step 10), and refuses when the counts are no longer those of the manifest.
+#
+# The checks of steps 1 and 4 run twice: before the download, and again after
+# the writers are stopped, because the restore takes minutes and the services
+# write in the meantime. A refusal the second time is still before the swap.
 #
 # Environment:
 #   MAX_ITEMS_REPLACED           the most products the live catalog may hold
@@ -103,6 +108,16 @@ refuse() {
   exit 1
 }
 
+# Whether the cluster holds an object: 0 when it does, 1 when the API server
+# answers "not found". Any other failure is a refusal, because a cluster that
+# cannot be asked must not read as a cluster where the object is absent.
+kube_has() {
+  local err
+  if err="$(kubectl -n "$NAMESPACE" get "$@" -o name 2>&1 > /dev/null)"; then return 0; fi
+  case "$err" in *NotFound* | *'not found'*) return 1 ;; esac
+  refuse "cannot look up $*: $err"
+}
+
 # ---------------------------------------------------------------------------
 # How each database is reached
 # ---------------------------------------------------------------------------
@@ -120,8 +135,8 @@ else
     [ -z "${!name:-}" ] || refuse "$name is set and CATALOG_PSQL is not. Name all three for a rehearsal, or none"
   done
   for db in catalog harvester; do
-    kubectl -n "$NAMESPACE" get pod "luna-shopper-backend-${db}-db-0" > /dev/null 2>&1 \
-      || refuse "pod/luna-shopper-backend-${db}-db-0 was not found. This restore replaces catalog and harvester together"
+    kube_has pod "luna-shopper-backend-${db}-db-0" \
+      || refuse "pod/luna-shopper-backend-${db}-db-0 does not exist. This restore replaces catalog and harvester together"
   done
   CATALOG_PSQL="kubectl -n $NAMESPACE exec -i luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d luna_catalog"
   HARVESTER_PSQL="kubectl -n $NAMESPACE exec -i luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d luna_harvester"
@@ -148,7 +163,9 @@ sql() {
 # One value. A docker or kubectl on Windows can leave a carriage return on it.
 ask() {
   local answer
-  answer="$(echo "$3" | sql "$1" "$2")"
+  # Stated, because errexit is off inside a function called before `||`, and a
+  # failed query must not come back as an empty answer.
+  answer="$(echo "$3" | sql "$1" "$2")" || return 1
   printf '%s' "$answer" | tr -d '\r'
 }
 
@@ -167,8 +184,39 @@ comment_of() {
   ask "$1" postgres "SELECT coalesce(shobj_description(oid, 'pg_database'), '') FROM pg_database WHERE datname = '$2';"
 }
 
+# 0 when the instance holds the database, 1 when it does not. An instance that
+# cannot be read, or an answer that is neither 0 nor 1, is a refusal: a failed
+# psql or kubectl must not read as "does not exist".
 database_exists() {
-  [ "$(ask "$1" postgres "SELECT count(*) FROM pg_database WHERE datname = '$2';")" = 1 ]
+  local found
+  found="$(ask "$1" postgres "SELECT count(*) FROM pg_database WHERE datname = '$2';")" \
+    || refuse "cannot read the databases of the $1 instance, so nothing can be said about $2. Nothing was changed by this check"
+  case "$found" in
+    1) return 0 ;;
+    0) return 1 ;;
+    *) refuse "cannot tell whether $2 exists: the $1 instance answered '$found'" ;;
+  esac
+}
+
+# What the live database of one instance is, read from the instance and not
+# from the exit code of a command: `restored` when it carries the comment of
+# this restore, `old` when it exists without it, `unknown` when that cannot be
+# read. It never refuses, because it is asked when something already failed.
+state_of() {
+  local comment found
+  if ! comment="$(comment_of "$1" "luna_$1" 2> /dev/null)"; then
+    echo unknown
+    return 0
+  fi
+  if [ "$comment" = "$MARKER" ]; then
+    echo restored
+    return 0
+  fi
+  if ! found="$(ask "$1" postgres "SELECT count(*) FROM pg_database WHERE datname = 'luna_$1';" 2> /dev/null)"; then
+    echo unknown
+    return 0
+  fi
+  if [ "$found" = 1 ]; then echo old; else echo unknown; fi
 }
 
 cleanup_core() {
@@ -246,28 +294,42 @@ check_counts() {
   [ "$wrong" -eq 0 ]
 }
 
+read_back() {
+  local enabled
+  echo
+  echo "step 10: read the result back from the live databases"
+  check_counts luna_catalog luna_harvester \
+    || refuse "the live databases do not hold the counts of the manifest. Something wrote to them after the restore, or they are not the restore of this manifest. No database was changed by this check"
+  enabled="$(count harvester luna_harvester 'supermarket_sources WHERE enabled')"
+  printf '  %-48s %8s\n' 'supermarket_sources that are on' "$enabled"
+  [ "$enabled" -eq 0 ] || refuse "$enabled supermarket_sources row(s) are on in the live harvester"
+}
+
 echo "restore the first catalog: $MODE$([ "$REHEARSAL" = false ] || echo ', rehearsal (no cluster)')"
 
 # ---------------------------------------------------------------------------
 # An earlier run
 # ---------------------------------------------------------------------------
 
+# database_exists refuses by itself when the instance cannot be read, so what is
+# refused here is an instance that answered and holds no such database.
 database_exists catalog luna_catalog \
-  || refuse "the catalog instance holds no database named luna_catalog. A run was cut in the middle of a swap, and a person must look at it (README.md, 'A run that was cut')"
+  || refuse "the catalog instance answered, and it holds no database named luna_catalog. A run was cut in the middle of a swap, and a person must look at it (README.md, 'A run that was cut')"
 database_exists harvester luna_harvester \
-  || refuse "the harvester instance holds no database named luna_harvester. A run was cut in the middle of a swap, and a person must look at it (README.md, 'A run that was cut')"
+  || refuse "the harvester instance answered, and it holds no database named luna_harvester. A run was cut in the middle of a swap, and a person must look at it (README.md, 'A run that was cut')"
 
 catalog_comment="$(comment_of catalog luna_catalog)"
 harvester_comment="$(comment_of harvester luna_harvester)"
 if [ "$catalog_comment" = "$MARKER" ]; then
   [ "$harvester_comment" = "$MARKER" ] \
-    || refuse "luna_catalog carries the comment of this restore and luna_harvester does not. The two were swapped apart, and a person must look at it (README.md, 'A run that was cut')"
+    || refuse "luna_catalog carries the comment of this restore and luna_harvester does not. The pair is split, and a person must look at it (README.md, 'A split pair')"
   echo "already restored: luna_catalog and luna_harvester carry the comment of this restore, so both are left alone"
   if [ "$MODE" = apply ]; then cleanup_core; fi
+  read_back
   exit 0
 fi
 [ "$harvester_comment" != "$MARKER" ] \
-  || refuse "luna_harvester carries the comment of this restore and luna_catalog does not. The two were swapped apart, and a person must look at it (README.md, 'A run that was cut')"
+  || refuse "luna_harvester carries the comment of this restore and luna_catalog does not. The pair is split, and a person must look at it (README.md, 'A split pair')"
 
 # ---------------------------------------------------------------------------
 # Step 1
@@ -281,14 +343,46 @@ for db in catalog harvester; do
     || refuse "luna_${db}${OLD_SUFFIX} already exists. It is the database an earlier restore replaced, and this script never deletes one"
 done
 
-live_items="$(count catalog luna_catalog items)"
-live_entries="$(count harvester luna_harvester source_catalog_entries)"
-printf '  %-48s %8s   at most %s\n' 'items' "$live_items" "$MAX_ITEMS_REPLACED"
-printf '  %-48s %8s   at most %s\n' 'source_catalog_entries' "$live_entries" "$MAX_SOURCE_ENTRIES_REPLACED"
-[ "$live_items" -le "$MAX_ITEMS_REPLACED" ] \
-  || refuse "the live catalog holds $live_items products and the ceiling is $MAX_ITEMS_REPLACED. This restore replaces a catalog, it does not merge into one (backend backlog plan 0019)"
-[ "$live_entries" -le "$MAX_SOURCE_ENTRIES_REPLACED" ] \
-  || refuse "the live harvester holds $live_entries source_catalog_entries and the ceiling is $MAX_SOURCE_ENTRIES_REPLACED. A higher ceiling is the owner's statement that those rows are to be replaced"
+check_ceilings() {
+  local live_items live_entries
+  live_items="$(count catalog luna_catalog items)"
+  live_entries="$(count harvester luna_harvester source_catalog_entries)"
+  printf '  %-48s %8s   at most %s\n' 'items' "$live_items" "$MAX_ITEMS_REPLACED"
+  printf '  %-48s %8s   at most %s\n' 'source_catalog_entries' "$live_entries" "$MAX_SOURCE_ENTRIES_REPLACED"
+  [ "$live_items" -le "$MAX_ITEMS_REPLACED" ] \
+    || refuse "the live catalog holds $live_items products and the ceiling is $MAX_ITEMS_REPLACED. This restore replaces a catalog, it does not merge into one (backend backlog plan 0019)"
+  [ "$live_entries" -le "$MAX_SOURCE_ENTRIES_REPLACED" ] \
+    || refuse "the live harvester holds $live_entries source_catalog_entries and the ceiling is $MAX_SOURCE_ENTRIES_REPLACED. A higher ceiling is the owner's statement that those rows are to be replaced"
+}
+check_ceilings
+
+# The replica count of a Deployment, or nothing when the cluster has no such
+# Deployment. A count that cannot be read is a refusal.
+replicas_of() {
+  local found
+  kube_has "deployment/$1" || return 0
+  found="$(kubectl -n "$NAMESPACE" get "deployment/$1" -o jsonpath='{.spec.replicas}')"
+  case "$found" in '' | *[!0-9]*) refuse "cannot read the replica count of deployment/$1: the cluster answered '$found'" ;; esac
+  printf '%s' "$found"
+}
+
+# A writer that is already at zero is what a run that was killed while the
+# services were down leaves behind. Its real count is not known any more, and
+# restoring a recorded 0 would leave the service down for good. So the run
+# refuses, before it downloads anything, and a person scales the service.
+WRITERS='luna-shopper-backend-catalog luna-shopper-backend-harvester'
+if [ "$REHEARSAL" = false ]; then
+  for deploy in $WRITERS; do
+    replicas="$(replicas_of "$deploy")"
+    if [ -z "$replicas" ]; then
+      echo "  $deploy: no such Deployment"
+    elif [ "$replicas" -eq 0 ]; then
+      refuse "deployment/$deploy has 0 replicas, so the count to bring it back to is not known. An earlier run was probably killed while the services were down. Scale it to the count in values.yaml, then run again"
+    else
+      printf '  %-48s %8s replica(s)\n' "$deploy" "$replicas"
+    fi
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # Step 2
@@ -347,17 +441,32 @@ start_writers() {
   WRITERS_STOPPED=false
 }
 
+# The services are scaled before anything is printed, with errexit off and
+# SIGPIPE ignored: when the SSH session that carried the output is gone, a
+# message must not be what stops the services from coming back.
 on_exit() {
-  local status=$?
+  local status=$? deploy started=true
+  trap '' PIPE
+  set +e
   rm -rf "$TMP"
   if [ "$WRITERS_STOPPED" = true ]; then
     WRITERS_STOPPED=false
-    echo "starting the two services again, because the run stopped while they were down" >&2
-    start_writers >&2 || echo "could not start them. Scale them by hand: kubectl -n $NAMESPACE scale deployment/<name> --replicas=<n>" >&2
+    for deploy in "${!REPLICAS[@]}"; do
+      kubectl -n "$NAMESPACE" scale "deployment/$deploy" --replicas="${REPLICAS[$deploy]}" > /dev/null 2>&1 || started=false
+    done
+    if [ "$started" = true ]; then
+      echo "the two services were started again, because the run stopped while they were down" >&2
+    else
+      echo "the run stopped while the two services were down, and they could not be started. Scale them by hand: kubectl -n $NAMESPACE scale deployment/<name> --replicas=<n>" >&2
+    fi
   fi
   exit "$status"
 }
 trap on_exit EXIT
+
+# A line of progress that a closed pipe cannot turn into the end of the run.
+# Used from the moment the writers are stopped until they are started again.
+note() { echo "$@" 2> /dev/null || true; }
 
 check_counts "$CATALOG_SCRATCH" "$HARVESTER_SCRATCH" \
   || refuse "the scratch databases do not hold the counts of the manifest. The dumps are not the documented state, and the live databases are unchanged"
@@ -405,49 +514,57 @@ brands|label
 product_groups|name'
 
 # An accepted loss is a line `<table> <id> <reason>` of expected-losses.txt.
+# The reason must hold a letter, and must not be the placeholder this script
+# prints: a line that ends in `#` or in `<why ...>` accepts nothing.
 accepted_reason() {
   [ -f "$EXPECTED_LOSSES" ] || return 0
   tr -d '\r' < "$EXPECTED_LOSSES" | awk -v table="$1" -v id="$2" '
     /^[[:space:]]*#/ { next }
-    $1 == table && $2 == id && NF >= 3 && $3 !~ /^</ {
-      $1 = ""; $2 = ""; sub(/^ +/, ""); print; exit
+    $1 == table && $2 == id && NF >= 3 {
+      $1 = ""; $2 = ""; sub(/^ +/, "")
+      if ($0 ~ /[[:alpha:]]/ && $0 !~ /^</) { print; exit }
     }'
 }
 
-: > "$TMP/unaccepted"
-lost=0
-while IFS='|' read -r table label; do
-  echo "SELECT id::text FROM public.\"$table\" ORDER BY id;" \
-    | sql catalog "$CATALOG_SCRATCH" | tr -d '\r' | sed '/^$/d' > "$TMP/$table.scratch.ids"
-  echo "SELECT id::text || ' ' || replace(coalesce(\"$label\"::text, ''), chr(10), ' ') FROM public.\"$table\" ORDER BY id;" \
-    | sql catalog luna_catalog | tr -d '\r' | sed '/^$/d' > "$TMP/$table.live.rows"
-  awk 'NR == FNR { kept[$1] = 1; next } !($1 in kept)' \
-    "$TMP/$table.scratch.ids" "$TMP/$table.live.rows" > "$TMP/$table.lost"
-  printf '  %-48s %8s live, %s of them not in the dump\n' "$table" \
-    "$(wc -l < "$TMP/$table.live.rows" | tr -d ' ')" "$(wc -l < "$TMP/$table.lost" | tr -d ' ')"
-  while read -r id name; do
-    lost=$((lost + 1))
-    reason="$(accepted_reason "$table" "$id")"
-    if [ -n "$reason" ]; then
-      echo "    $table $id ($name): accepted, $reason"
-    else
-      echo "    $table $id ($name): NOT ACCEPTED"
-      echo "$table $id <why losing \"$name\" is intended>" >> "$TMP/unaccepted"
-    fi
-  done < "$TMP/$table.lost"
-done <<< "$KEPT_TABLES"
+check_losses() {
+  local table label id name reason lost=0
+  : > "$TMP/unaccepted"
+  while IFS='|' read -r table label; do
+    echo "SELECT id::text FROM public.\"$table\" ORDER BY id;" \
+      | sql catalog "$CATALOG_SCRATCH" | tr -d '\r' | sed '/^$/d' > "$TMP/$table.scratch.ids"
+    echo "SELECT id::text || ' ' || replace(coalesce(\"$label\"::text, ''), chr(10), ' ') FROM public.\"$table\" ORDER BY id;" \
+      | sql catalog luna_catalog | tr -d '\r' | sed '/^$/d' > "$TMP/$table.live.rows"
+    # Keyed on the file and not on NR == FNR: with an empty first file that
+    # test stays true for the second one, and every live row then reads as kept.
+    awk 'FILENAME == ARGV[1] { kept[$1] = 1; next } !($1 in kept)' \
+      "$TMP/$table.scratch.ids" "$TMP/$table.live.rows" > "$TMP/$table.lost"
+    printf '  %-48s %8s live, %s of them not in the dump\n' "$table" \
+      "$(wc -l < "$TMP/$table.live.rows" | tr -d ' ')" "$(wc -l < "$TMP/$table.lost" | tr -d ' ')"
+    while read -r id name; do
+      lost=$((lost + 1))
+      reason="$(accepted_reason "$table" "$id")"
+      if [ -n "$reason" ]; then
+        echo "    $table $id ($name): accepted, $reason"
+      else
+        echo "    $table $id ($name): NOT ACCEPTED"
+        echo "$table $id <why losing \"$name\" is intended>" >> "$TMP/unaccepted"
+      fi
+    done < "$TMP/$table.lost"
+  done <<< "$KEPT_TABLES"
 
-if [ -s "$TMP/unaccepted" ]; then
-  {
-    echo
-    echo "The live catalog holds $(wc -l < "$TMP/unaccepted" | tr -d ' ') row(s) that the dump does not hold and that"
-    echo "$EXPECTED_LOSSES does not accept. To accept one, add its line with a reason:"
-    echo
-    sed 's/^/  /' "$TMP/unaccepted"
-  } >&2
-  refuse "the restore would lose rows that nobody accepted. The live databases are unchanged"
-fi
-[ "$lost" -gt 0 ] || echo "  no row of the live catalog is missing from the dump"
+  if [ -s "$TMP/unaccepted" ]; then
+    {
+      echo
+      echo "The live catalog holds $(wc -l < "$TMP/unaccepted" | tr -d ' ') row(s) that the dump does not hold and that"
+      echo "$EXPECTED_LOSSES does not accept. To accept one, add its line with a reason:"
+      echo
+      sed 's/^/  /' "$TMP/unaccepted"
+    } >&2
+    refuse "the restore would lose rows that nobody accepted. The live databases are unchanged"
+  fi
+  [ "$lost" -gt 0 ] || echo "  no row of the live catalog is missing from the dump"
+}
+check_losses
 
 # The harvester has no such list: its rows are replaced as a whole, against the
 # ceiling of step 1. What goes and what comes is printed, so that it is seen.
@@ -514,18 +631,25 @@ echo "  both carry the comment '$MARKER'"
 echo
 echo "step 6: stop the writers"
 
+# From here until the services run again, a closed pipe (an SSH session that
+# went away) must not kill the run at whatever line it happens to be on. With
+# SIGPIPE ignored, a write to a closed pipe is an error that the script sees.
+trap '' PIPE
+
 if [ "$REHEARSAL" = true ]; then
   echo "  rehearsal: there is no Deployment to scale, and the caller stopped whatever writes"
 else
-  for deploy in luna-shopper-backend-catalog luna-shopper-backend-harvester; do
-    if ! kubectl -n "$NAMESPACE" get "deployment/$deploy" > /dev/null 2>&1; then
+  for deploy in $WRITERS; do
+    replicas="$(replicas_of "$deploy")"
+    if [ -z "$replicas" ]; then
       echo "  $deploy: no such Deployment, so nothing to stop"
       continue
     fi
-    replicas="$(kubectl -n "$NAMESPACE" get "deployment/$deploy" -o jsonpath='{.spec.replicas}')"
-    REPLICAS[$deploy]="${replicas:-1}"
+    [ "$replicas" -gt 0 ] \
+      || refuse "deployment/$deploy went to 0 replicas while this run was restoring, so the count to bring it back to is not known. The live databases are unchanged"
+    REPLICAS[$deploy]="$replicas"
     WRITERS_STOPPED=true
-    echo "  $deploy: ${REPLICAS[$deploy]} replica(s), stopping"
+    echo "  $deploy: $replicas replica(s), stopping"
     kubectl -n "$NAMESPACE" scale "deployment/$deploy" --replicas=0 > /dev/null
     if kubectl -n "$NAMESPACE" get pods -l "app=$deploy" -o name | grep . > /dev/null; then
       kubectl -n "$NAMESPACE" wait --for=delete pod -l "app=$deploy" --timeout=3m > /dev/null
@@ -533,12 +657,20 @@ else
   done
 fi
 
+# Steps 1 and 4 read the live databases while the services still wrote, and the
+# restore took minutes. Now that nothing writes, both are asked again. A refusal
+# here starts the services again and is still before the swap.
+echo "  the ceilings of step 1 again, now that nothing writes:"
+check_ceilings
+echo "  the losses of step 4 again, now that nothing writes:"
+check_losses
+
 # ---------------------------------------------------------------------------
 # Step 7
 # ---------------------------------------------------------------------------
 
-echo
-echo "step 7: swap by rename"
+note
+note "step 7: swap by rename"
 
 # Both renames in one transaction, so a database is never left without the live
 # name. A session that is still closing makes the rename fail for a moment, so
@@ -557,27 +689,58 @@ COMMIT;" | sql "$db" postgres; then
   return 1
 }
 
-rename_pair catalog luna_catalog "luna_catalog${OLD_SUFFIX}" "$CATALOG_SCRATCH" luna_catalog \
-  || refuse "the catalog swap failed. No database was renamed, and the live databases are unchanged"
-echo "  luna_catalog is the restored database, and the old one is luna_catalog${OLD_SUFFIX}"
-
-if ! rename_pair harvester luna_harvester "luna_harvester${OLD_SUFFIX}" "$HARVESTER_SCRATCH" luna_harvester; then
-  # Two databases share no transaction, so this is the one place where the
-  # script undoes its own work.
-  echo "  the harvester swap failed, so the catalog is renamed back" >&2
-  if rename_pair catalog luna_catalog "$CATALOG_SCRATCH" "luna_catalog${OLD_SUFFIX}" luna_catalog; then
-    refuse "the harvester swap failed. The catalog is back under its old name, and both live databases are what they were"
-  fi
+# A rename that reports a failure may still have happened: a connection that
+# drops after COMMIT answers an error for a swap that is in the database. So a
+# failed rename_pair is never believed. The live database is read, and what it
+# is decides what is said and done.
+#
+# The pair is split when one live database is the restored one and the other is
+# the old one, or when either cannot be read. The services are then NOT started:
+# an old harvester beside a restored catalog would run its own sources, which
+# are on, against products it does not know. A person finishes or undoes the
+# swap (README.md, "A split pair").
+split_pair() {
+  WRITERS_STOPPED=false
   {
     echo
-    echo "THE CATALOG COULD NOT BE RENAMED BACK. luna_catalog is the restored database and"
-    echo "luna_harvester is the old one. Against the database postgres of the catalog instance, type:"
-    echo "  ALTER DATABASE luna_catalog RENAME TO \"$CATALOG_SCRATCH\";"
-    echo "  ALTER DATABASE \"luna_catalog${OLD_SUFFIX}\" RENAME TO luna_catalog;"
-  } >&2
+    echo "THE PAIR IS SPLIT: $*"
+    echo "  luna_catalog is: $(state_of catalog)    luna_harvester is: $(state_of harvester)"
+    echo "  (restored: carries the comment of this restore. old: does not. unknown: could not be read.)"
+    if [ "${#REPLICAS[@]}" -gt 0 ]; then
+      echo "The two services are left at 0 replicas on purpose. Their counts were:"
+      for deploy in "${!REPLICAS[@]}"; do echo "  $deploy ${REPLICAS[$deploy]}"; done
+    fi
+    echo "Read $HERE/README.md, 'A split pair', before anything else."
+  } >&2 || true
   exit 1
+}
+
+if ! rename_pair catalog luna_catalog "luna_catalog${OLD_SUFFIX}" "$CATALOG_SCRATCH" luna_catalog; then
+  case "$(state_of catalog)" in
+    old) refuse "the catalog swap failed, and luna_catalog was read back as the old database. No database was renamed" ;;
+    restored) note "  the catalog rename answered an error, and luna_catalog was read back as the restored database, so the swap happened" ;;
+    *) split_pair "the catalog swap answered an error and luna_catalog cannot be read, so nobody knows whether it happened" ;;
+  esac
 fi
-echo "  luna_harvester is the restored database, and the old one is luna_harvester${OLD_SUFFIX}"
+note "  luna_catalog is the restored database, and the old one is luna_catalog${OLD_SUFFIX}"
+
+if ! rename_pair harvester luna_harvester "luna_harvester${OLD_SUFFIX}" "$HARVESTER_SCRATCH" luna_harvester; then
+  case "$(state_of harvester)" in
+    restored) note "  the harvester rename answered an error, and luna_harvester was read back as the restored database, so the swap happened" ;;
+    old)
+      # Two databases share no transaction, so this is the one place where the
+      # script undoes its own work.
+      note "  the harvester swap failed and luna_harvester was read back as the old database, so the catalog is renamed back"
+      rename_pair catalog luna_catalog "$CATALOG_SCRATCH" "luna_catalog${OLD_SUFFIX}" luna_catalog || true
+      case "$(state_of catalog)" in
+        old) refuse "the harvester swap failed. luna_catalog was read back as the old database again, and both live databases are what they were" ;;
+        *) split_pair "the harvester swap failed and the catalog could not be renamed back" ;;
+      esac
+      ;;
+    *) split_pair "the harvester swap answered an error and luna_harvester cannot be read, so nobody knows whether it happened" ;;
+  esac
+fi
+note "  luna_harvester is the restored database, and the old one is luna_harvester${OLD_SUFFIX}"
 
 # ---------------------------------------------------------------------------
 # Step 8
@@ -601,13 +764,7 @@ fi
 
 cleanup_core
 
-echo
-echo "step 10: read the result back from the live databases"
-check_counts luna_catalog luna_harvester \
-  || refuse "the live databases do not hold the counts of the manifest after the swap. Something wrote to them. The old databases are still there under ${OLD_SUFFIX}"
-enabled="$(count harvester luna_harvester 'supermarket_sources WHERE enabled')"
-printf '  %-48s %8s\n' 'supermarket_sources that are on' "$enabled"
-[ "$enabled" -eq 0 ] || refuse "$enabled supermarket_sources row(s) are on after the swap"
+read_back
 
 echo
 echo "applied. The databases this restore replaced are luna_catalog${OLD_SUFFIX} and"

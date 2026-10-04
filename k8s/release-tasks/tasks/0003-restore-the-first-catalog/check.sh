@@ -7,13 +7,22 @@
 #
 # It exits 0 when the data is what the task was written for, and prints the
 # reason and exits 1 when it is not. It passes where there is nothing to change:
-# no catalog database pod, or a live catalog that already carries the comment
-# this restore leaves on the databases it swaps in.
+# a live catalog and a live harvester that both carry the comment this restore
+# leaves on the databases it swaps in.
 #
 # It refuses in every other case, and it refuses what it cannot read: a ceiling
 # that is not a number, a pod that cannot be looked up, a query that fails. It
-# also refuses a cluster with no backup Secret, because the restore downloads
-# the two dumps with the credentials that Secret holds.
+# also refuses:
+#
+#   - a cluster with no catalog or no harvester database pod. The other tasks
+#     pass there, because they have nothing to delete. This one has something
+#     to put there, so a cluster that cannot take it is a question for a
+#     person. A first install never reaches this file: the runner records the
+#     task as skipped before it asks
+#   - a split pair: one of the two databases carries the comment and the other
+#     does not (k8s/catalog-import/README.md, "A split pair")
+#   - a cluster with no backup Secret, because the restore downloads the two
+#     dumps with the credentials that Secret holds
 #
 # Environment overrides:
 #   NAMESPACE       kubernetes namespace (default: nx-portfolio)
@@ -102,8 +111,12 @@ fi
 HARVESTER_PSQL="${HARVESTER_PSQL:-}"
 
 if [ -z "$CATALOG_PSQL" ]; then
-  echo "$NUMBER has nothing to change: there is no catalog database pod"
-  exit 0
+  echo "$NUMBER restores a catalog, and this cluster has no catalog database pod to restore it into"
+  exit 1
+fi
+if [ -z "$HARVESTER_PSQL" ]; then
+  echo "$NUMBER restores catalog and harvester together, and there is no harvester database"
+  exit 1
 fi
 
 # -X ignores any psqlrc, -A -t prints the bare value.
@@ -117,16 +130,23 @@ ask() {
   printf '%s' "$answer" | tr -d '\r'
 }
 
-if ! comment="$(ask "$CATALOG_PSQL" "SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = current_database();")"; then exit 1; fi
-if [ "$comment" = "$MARKER" ]; then
-  echo "$NUMBER already ran here: the live catalog carries its comment, so it restores nothing"
-  exit 0
-fi
-
-if [ -z "$HARVESTER_PSQL" ]; then
-  echo "$NUMBER restores catalog and harvester together, and there is no harvester database"
-  exit 1
-fi
+COMMENT_SQL="SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = current_database();"
+if ! catalog_comment="$(ask "$CATALOG_PSQL" "$COMMENT_SQL")"; then exit 1; fi
+if ! harvester_comment="$(ask "$HARVESTER_PSQL" "$COMMENT_SQL")"; then exit 1; fi
+case "$([ "$catalog_comment" = "$MARKER" ] && echo y || echo n)$([ "$harvester_comment" = "$MARKER" ] && echo y || echo n)" in
+  yy)
+    echo "$NUMBER already ran here: the live catalog and the live harvester carry its comment, so it restores nothing"
+    exit 0
+    ;;
+  yn)
+    echo "$NUMBER found a split pair: the live catalog carries its comment and the live harvester does not. A person must look at it (k8s/catalog-import/README.md, 'A split pair')"
+    exit 1
+    ;;
+  ny)
+    echo "$NUMBER found a split pair: the live harvester carries its comment and the live catalog does not. A person must look at it (k8s/catalog-import/README.md, 'A split pair')"
+    exit 1
+    ;;
+esac
 
 if [ "$CLUSTER" = true ]; then
   if ! kubectl -n "$NAMESPACE" get secret "$BACKUP_SECRET" -o name > /dev/null 2> "$ERR"; then

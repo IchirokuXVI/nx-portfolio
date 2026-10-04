@@ -88,10 +88,14 @@ the search documents), so nothing is computed again.
    turned off, and both databases get the comment that marks this restore.
 6. **The writers are stopped.** The replica counts of
    `luna-shopper-backend-catalog` and `luna-shopper-backend-harvester` are
-   recorded, and both are scaled to zero.
+   recorded, and both are scaled to zero. The checks of steps 1 and 4 then run
+   a second time. The restore takes minutes and the services write in the
+   meantime, so the first answers are old by now. A refusal here starts the
+   services again, and it is still before the swap.
 7. **The swap, by rename**, catalog first. Both renames of one database run in
    one transaction. If the harvester swap fails, the script renames the catalog
-   back before it exits.
+   back before it exits. It never believes the exit code of a rename. It reads
+   the comment of the live database, and that decides what it says and does.
 8. **The writers are started** at the recorded replica counts.
 9. **Core is cleared.**
 10. **The result is read back** from the live databases.
@@ -99,6 +103,11 @@ the search documents), so nothing is computed again.
 A dry run does steps 1 to 4 and stops. It leaves the two scratch databases in
 place, so that a person can read them. Every check runs before the first write
 to a live database.
+
+Step 1 also refuses a writer that is already at 0 replicas. A run that was
+killed while the services were down leaves them there. The script then cannot
+know the count to bring them back to, and a recorded 0 keeps a service down for
+good. Scale the deployment to the count in `values.yaml`, then run again.
 
 The migrations are compared in the order of their timestamps and not in the
 order they ran. Two databases that ran the same migrations in different batches
@@ -151,7 +160,10 @@ no dump either, so take one of catalog, harvester and core first
 
 Safe to run again. A run that finds the comment of this restore on the live
 catalog leaves both databases alone. With `--apply` it still runs the core
-cleanup, which changes nothing a second time.
+cleanup, which changes nothing a second time. It then reads the result back, as
+step 10 does. So a second run refuses after somebody changed a count of the
+manifest or turned a source on. That refusal changes nothing. It means that the
+catalog moved on, and that this task has no more work in this cluster.
 
 ## A run that was cut
 
@@ -163,14 +175,84 @@ cleanup, which changes nothing a second time.
   deploy scales both back.
 - **After step 7**, both databases are the restored ones, and the next run
   finds the comment and only clears core.
-- **The script refuses a pair it cannot explain**: one database with the
-  comment and the other without it, or an instance with no database under the
-  live name. Read `pg_database` on both instances before anything else:
+- **The script refuses a pair it cannot explain**: a split pair (the next
+  section), or an instance that answers and holds no database under the live
+  name. An instance that does not answer is a different refusal, and it says
+  so.
 
-  ```sh
-  kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- \
-    psql -U luna_catalog -d postgres -c "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database"
-  ```
+### A refusal inside `post.sh` repeats on every deploy
+
+The runner writes `pre-done` for the task before `helm upgrade`, and `post.sh`
+runs after it. A refusal of the script inside `post.sh` (a checksum, a count, a
+migration, a loss nobody accepted, a ceiling) fails that deploy and leaves the
+task at `pre-done`.
+
+A task at `pre-done` always finishes (k8s plan 0011). So every later deploy
+runs `post.sh` again, with no window and no release in the way. This is true
+after the window closed, and in production it is true for every later version.
+The restore then happens at the first deploy where the refusal is gone, for
+example after somebody uploads the right file.
+
+To stop it, a person sets the ledger key by hand. The task then never runs in
+this cluster again:
+
+```sh
+kubectl -n nx-portfolio patch configmap release-tasks --type merge \
+  -p '{"data":{"0003-restore-the-first-catalog":"expired 2026-10-20T10:00:00Z by-hand"}}'
+```
+
+To let it run, fix what it refused and deploy again.
+
+## A split pair
+
+The pair is split when one live database is the restored one and the other is
+the old one. Two databases share no transaction, so a failure between the two
+swaps can leave it. The script tries to rename the catalog back. If that fails
+too, it prints `THE PAIR IS SPLIT` and what it read from each instance.
+
+**The script leaves both services at 0 replicas then, on purpose.** An old
+harvester beside a restored catalog runs its own sources, and production's old
+harvester had four of them on. `check.sh` and the script both refuse a split
+pair, so no deploy changes it. A person does these steps:
+
+1. Read both instances. The comment tells the restored database from the old
+   one.
+
+   ```sh
+   kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- \
+     psql -U luna_catalog -d postgres -c "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database"
+   kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
+     psql -U luna_harvester -d postgres -c "SELECT datname, shobj_description(oid, 'pg_database') FROM pg_database"
+   ```
+
+2. Choose one direction, and make both instances agree.
+   - **Go back.** Rename the restored database away and the old one back, on
+     the instance that was swapped. For the catalog:
+
+     ```sh
+     kubectl -n nx-portfolio exec luna-shopper-backend-catalog-db-0 -- psql -U luna_catalog -d postgres \
+       -c 'ALTER DATABASE luna_catalog RENAME TO luna_catalog_restore' \
+       -c 'ALTER DATABASE luna_catalog_before_first_catalog RENAME TO luna_catalog'
+     ```
+
+   - **Go forward.** Swap the other instance by hand. The scratch database
+     already holds the comment and has every source off. For the harvester:
+
+     ```sh
+     kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- psql -U luna_harvester -d postgres \
+       -c 'ALTER DATABASE luna_harvester RENAME TO luna_harvester_before_first_catalog' \
+       -c 'ALTER DATABASE luna_harvester_restore RENAME TO luna_harvester'
+     ```
+
+3. Scale both services to the counts that the script printed.
+
+   ```sh
+   kubectl -n nx-portfolio scale deploy/luna-shopper-backend-catalog deploy/luna-shopper-backend-harvester --replicas=1
+   ```
+
+4. Run the script again with `--apply`. After "go forward" it finds the
+   comment on both, clears core and reads the result back. After "go back" it
+   starts from step 1.
 
 ## How to revert
 
@@ -266,16 +348,22 @@ On 2026-10-04, against Postgres 16 containers and a local S3 server. The two
 dumps were only read: copies of them were uploaded. No cluster and no Luna slot
 that holds data was touched.
 
-| Case                                                   | Result                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The committed manifest against the dumps of 2026-10-03 | Both checksums and all eight counts matched. Step 3 then refused, because the databases held the 29 and 20 migrations of `dev` and the dumps hold 26 and 17.                                                                                                                                  |
-| Dry run on empty migrated databases                    | The input was copies of the dumps after the migrations of `dev` ran over them. A manifest described those copies. It restored both, printed every count and exited 0. No live database changed.                                                                                               |
-| `--apply`                                              | `luna_catalog` held 19,791 products, the old database was `luna_catalog_before_first_catalog`, and all four `supermarket_sources` rows were off.                                                                                                                                              |
-| Second `--apply`                                       | It printed "already restored", left both databases alone, and the core cleanup changed 0 rows.                                                                                                                                                                                                |
-| One product, ceiling 0                                 | Refused at step 1, before any download. With a ceiling of 1 it passed step 1.                                                                                                                                                                                                                 |
-| One wrong count in the manifest                        | Refused at step 3. The live databases were unchanged.                                                                                                                                                                                                                                         |
-| A wrong SHA-256                                        | Refused by `restore-database.sh`. No scratch database was created.                                                                                                                                                                                                                            |
-| One more migration in the live database                | Refused at step 3, with the name.                                                                                                                                                                                                                                                             |
-| A live brand that the dump does not hold               | Refused at step 4, with the id. With the id in the accepted losses, it passed.                                                                                                                                                                                                                |
-| A harvester swap that fails                            | The catalog was renamed back, and both live databases were what they were.                                                                                                                                                                                                                    |
-| The deploy path                                        | The runner of plan 0011 ran the task from a copy of `k8s/` with an armed `task.env`. A stand in for `kubectl` mapped the pods onto the containers. Check, pre and post passed, both services were scaled to zero and back, and a second run with the ledger removed left the databases alone. |
+| Case                                                                                                | Result                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The committed manifest against the dumps of 2026-10-03                                              | Both checksums and all eight counts matched. Step 3 then refused, because the databases held the 29 and 20 migrations of `dev` and the dumps hold 26 and 17.                                                                                                                                  |
+| Dry run on empty migrated databases                                                                 | The input was copies of the dumps after the migrations of `dev` ran over them. A manifest described those copies. It restored both, printed every count and exited 0. No live database changed.                                                                                               |
+| `--apply`                                                                                           | `luna_catalog` held 19,791 products, the old database was `luna_catalog_before_first_catalog`, and all four `supermarket_sources` rows were off.                                                                                                                                              |
+| Second `--apply`                                                                                    | It printed "already restored", left both databases alone, and the core cleanup changed 0 rows.                                                                                                                                                                                                |
+| One product, ceiling 0                                                                              | Refused at step 1, before any download. With a ceiling of 1 it passed step 1.                                                                                                                                                                                                                 |
+| One wrong count in the manifest                                                                     | Refused at step 3. The live databases were unchanged.                                                                                                                                                                                                                                         |
+| A wrong SHA-256                                                                                     | Refused by `restore-database.sh`. No scratch database was created.                                                                                                                                                                                                                            |
+| One more migration in the live database                                                             | Refused at step 3, with the name.                                                                                                                                                                                                                                                             |
+| A live brand that the dump does not hold                                                            | Refused at step 4, with the id. With the id in the accepted losses, it passed.                                                                                                                                                                                                                |
+| A harvester swap that fails                                                                         | The catalog was renamed back, and both live databases were what they were.                                                                                                                                                                                                                    |
+| A live row in a table that is empty in the dump                                                     | Refused at step 4, with the id. A reason of only `#` accepted nothing.                                                                                                                                                                                                                        |
+| An instance that cannot be reached                                                                  | Refused as unreadable, and not as "a run was cut".                                                                                                                                                                                                                                            |
+| A brand written to the live catalog during the restore                                              | Refused by the second pass of step 4, after the writers stopped and before the swap.                                                                                                                                                                                                          |
+| A catalog swap that happens and answers an error                                                    | Read back as restored, and the run went on to the end.                                                                                                                                                                                                                                        |
+| A harvester swap that fails, and a catalog that cannot be renamed back                              | `THE PAIR IS SPLIT`. Both services stayed at 0 replicas. `check.sh` and the next run both refused the pair.                                                                                                                                                                                   |
+| `kubectl` that cannot reach the cluster, a database pod that does not exist, a writer at 0 replicas | `post.sh` exited 1 each time, and nothing was scaled.                                                                                                                                                                                                                                         |
+| The deploy path                                                                                     | The runner of plan 0011 ran the task from a copy of `k8s/` with an armed `task.env`. A stand in for `kubectl` mapped the pods onto the containers. Check, pre and post passed, both services were scaled to zero and back, and a second run with the ledger removed left the databases alone. |

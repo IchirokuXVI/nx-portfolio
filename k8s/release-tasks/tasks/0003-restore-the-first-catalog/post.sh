@@ -48,16 +48,17 @@ if [ -n "${CATALOG_PSQL:-}" ]; then
   exit 0
 fi
 
-if ! kubectl -n "$NAMESPACE" get pod luna-shopper-backend-catalog-db-0 > /dev/null 2>&1; then
-  echo "  no catalog database pod, so nothing to restore"
-  exit 0
-fi
-
+# No lookup of the database pod here. The script refuses a pod that does not
+# exist and a pod that cannot be looked up, and a refusal is what this hook must
+# pass on: the runner writes `done` after an exit 0, and `done` is final. A
+# cluster that could not take the restore must never be recorded as restored.
 bash "$K8S_DIR/catalog-import/restore-first-catalog.sh" --apply
 
 for deploy in luna-shopper-backend-catalog luna-shopper-backend-harvester; do
-  if ! kubectl -n "$NAMESPACE" get "deployment/$deploy" > /dev/null 2>&1; then
-    continue
+  if ! err="$(kubectl -n "$NAMESPACE" get "deployment/$deploy" -o name 2>&1 > /dev/null)"; then
+    case "$err" in *NotFound* | *'not found'*) continue ;; esac
+    echo "  cannot look up deployment/$deploy: $err" >&2
+    exit 1
   fi
   replicas="$(kubectl -n "$NAMESPACE" get "deployment/$deploy" -o jsonpath='{.spec.replicas}')"
   if [ "${replicas:-0}" -eq 0 ]; then
