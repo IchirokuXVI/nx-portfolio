@@ -410,8 +410,13 @@ it did not derive from the slot, so a hand edit survives both. Everything it
 writes is git ignored, so it never shows up in a diff or a commit.
 
 There is no PowerShell twin. Git Bash is the supported shell on Windows, and the
-script already handles Windows itself, through `taskkill //F //T` and
-`netstat -ano`.
+script already handles Windows itself, through `netstat -ano` and the process
+list PowerShell reads.
+
+`--down` and `--restart` stop the whole process tree that `npx nx run` started.
+That tree includes the watcher, which starts a service again after a rebuild.
+The script does not use `taskkill //T`. Windows can give the pid of a dead
+parent to a new process, and `taskkill //T` then stops an unrelated program.
 
 ## The front end slots are a separate numbering
 
