@@ -139,6 +139,11 @@ function build(
     readyClaims?: Record<string, unknown>[];
     /** The product catalog says holds the barcode it is asked about. */
     eanHolder?: ItemView | null;
+    /** What catalog answers when it cannot write the barcode it is taught. */
+    teachRefusal?: {
+      reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
+      heldBy: string | null;
+    };
   } = {}
 ) {
   const row = options.row ?? entry();
@@ -172,6 +177,23 @@ function build(
   const findItemByEan = jest.fn(async (_ean: string) => ({
     item: options.eanHolder ?? null,
   }));
+  // Plan 0185: the barcode a bound row gives its product. It answers what
+  // catalog would for a barcode nobody holds, unless a test says otherwise.
+  const teachItemEans = jest.fn(
+    async (entries: { itemId: string; ean: string }[]) =>
+      options.teachRefusal
+        ? {
+            added: 0,
+            refused: entries.map((pair) => ({
+              ...pair,
+              ...(options.teachRefusal as {
+                reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
+                heldBy: string | null;
+              }),
+            })),
+          }
+        : { added: entries.length, refused: [] }
+  );
   const categoryTree = jest.fn(async () => fakeCategoryTree());
   const setAvailability = jest.fn(
     async (
@@ -193,6 +215,7 @@ function build(
     createItem,
     categoryTree,
     findItemByEan,
+    teachItemEans,
     getSupermarket: jest.fn(async () => ({
       id: CHAIN,
       defaultPriceScopeId:
@@ -268,6 +291,7 @@ function build(
     addPrices,
     createItem,
     findItemByEan,
+    teachItemEans,
     categoryTree,
     fetchEnglish,
     setAvailability,
@@ -309,7 +333,7 @@ describe('SourceEntryService', () => {
       const EAN = '8480000123459';
 
       it('stamps MANUAL, also when the product holds the row’s own real barcode', async () => {
-        const { service, findItemByEan } = build({
+        const { service, teachItemEans } = build({
           row: entry({ ean: EAN }),
           eanHolder: { ...item('item-1'), ean: EAN } as ItemView,
         });
@@ -323,9 +347,10 @@ describe('SourceEntryService', () => {
         expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);
         expect(result.entry.confidence).toBe(1);
         expect(result.entry.status).toBe(SourceEntryStatus.ACTIVE);
-        // An accept asks catalog nothing about the barcode: the stamp does
-        // not depend on who holds it.
-        expect(findItemByEan).not.toHaveBeenCalled();
+        // The stamp does not depend on who holds the barcode. An accept
+        // does ask catalog who holds it since plan 0185, and the product
+        // that already holds it is taught nothing.
+        expect(teachItemEans).not.toHaveBeenCalled();
       });
 
       it.each([

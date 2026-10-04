@@ -139,6 +139,7 @@ const item = (id: string, offer: ItemView['bestOffer']): ItemView => ({
   imageUrl: null,
   sku: null,
   ean: null,
+  eans: [],
   unitSize: 1,
   categories: [
     {

@@ -29,6 +29,7 @@ import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
 import { EffectivePriceService } from './effective-price.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemPriceService } from './item-price.service';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
@@ -129,7 +130,8 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       admin,
       audit,
       events,
-      new CategoryService(dataSource.getRepository(Category), admin, audit)
+      new CategoryService(dataSource.getRepository(Category), admin, audit),
+      itemEanStoreOf(dataSource)
     );
     const effective = new EffectivePriceService();
     scopes = new PriceScopeService(

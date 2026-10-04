@@ -7,7 +7,9 @@ import {
   createValidationPipe,
   GlobalExceptionFilter,
   ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
   ITEM_EAN_REASON_DETAIL,
+  ItemEanHeldException,
   ItemEanInvalidException,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
@@ -243,6 +245,128 @@ describe('the EAN of a product write, over HTTP (plan 0184)', () => {
         ean: '2204500000000',
         sku: 'X-1',
       });
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+/**
+ * A product's further barcodes, over real HTTP (plan 0185).
+ *
+ * The add refuses a code that is not a real barcode before anything crosses
+ * the broker, as the create does. Whether another product holds the barcode is
+ * catalog's to say, and the gateway answers that refusal with its own status
+ * and code.
+ */
+describe('the barcodes of a product, over HTTP (plan 0185)', () => {
+  const OTHER_ITEM = '33333333-3333-4333-8333-333333333333';
+  const eans = `/v1/admin/catalog/items/${ITEM_ID}/eans`;
+
+  it('adds a barcode: sends it on trimmed, and answers 201', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await post(origin, eans, { ean: ' 8402001047251 ' });
+
+      expect(res.status).toBe(201);
+      expect(sent).toEqual([
+        {
+          subject: ITEM_PATTERNS.addEan,
+          payload: expect.objectContaining({
+            itemId: ITEM_ID,
+            ean: '8402001047251',
+          }),
+        },
+      ]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it.each([
+    ['an in-store code', '2204500000000', 'IN_STORE'],
+    ['an 11 digit code', '84100100012', 'LENGTH'],
+    ['a wrong check digit', '4006381333932', 'CHECK_DIGIT'],
+  ])(
+    'refuses %s with 400 item_ean_invalid, and sends nothing',
+    async (_what, ean, reason) => {
+      const { nest, sent, origin } = await boot();
+      try {
+        const res = await post(origin, eans, { ean });
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          code: 'item_ean_invalid',
+          details: {
+            [ITEM_EAN_DETAIL]: ean,
+            [ITEM_EAN_REASON_DETAIL]: reason,
+          },
+        });
+        expect(sent).toEqual([]);
+      } finally {
+        await nest.close();
+      }
+    }
+  );
+
+  it('refuses a body with no barcode as a validation failure', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await post(origin, eans, {});
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: 'validation_failed' });
+      expect(sent).toEqual([]);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('answers 409 item_ean_held, naming the holder, when another product holds the barcode', async () => {
+    const { nest, origin } = await boot({
+      [ITEM_PATTERNS.addEan]: () => {
+        throw new ItemEanHeldException('Another product holds it.', {
+          details: {
+            [ITEM_EAN_DETAIL]: '8402001047251',
+            [ITEM_EAN_HOLDER_DETAIL]: OTHER_ITEM,
+          },
+        });
+      },
+    });
+    try {
+      const res = await post(origin, eans, { ean: '8402001047251' });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        status: 409,
+        code: 'item_ean_held',
+        details: {
+          [ITEM_EAN_DETAIL]: '8402001047251',
+          [ITEM_EAN_HOLDER_DETAIL]: OTHER_ITEM,
+        },
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('removes a barcode named in the path', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}${eans}/8402001047251`, {
+        method: 'DELETE',
+      });
+
+      expect(res.status).toBe(200);
+      expect(sent).toEqual([
+        {
+          subject: ITEM_PATTERNS.removeEan,
+          payload: expect.objectContaining({
+            itemId: ITEM_ID,
+            ean: '8402001047251',
+          }),
+        },
+      ]);
     } finally {
       await nest.close();
     }

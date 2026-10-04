@@ -351,3 +351,21 @@ test('a candidate names its categories by slug, in the order it holds them', () 
   ]);
   assert.deepEqual(toCandidate({ id: 'i2', name: {} }).categorySlugs, []);
 });
+
+test('a candidate lists every barcode of its product (backend plan 0185)', () => {
+  const candidate = toCandidate({
+    id: 'i1',
+    name: { es: 'Leche entera' },
+    ean: '8402001002083',
+    eans: ['8402001002083', '8402001047251'],
+  });
+  assert.equal(candidate.ean, '8402001002083');
+  assert.deepEqual(candidate.eans, ['8402001002083', '8402001047251']);
+
+  // A product with none, and one from a gateway that lists no `eans` yet.
+  assert.deepEqual(toCandidate({ id: 'i2', name: { es: 'Pan' } }).eans, []);
+  assert.deepEqual(
+    toCandidate({ id: 'i3', name: { es: 'Pan' }, ean: '96385074' }).eans,
+    ['96385074']
+  );
+});

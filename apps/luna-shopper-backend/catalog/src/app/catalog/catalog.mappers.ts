@@ -226,6 +226,9 @@ export function toProductGroupView(row: ProductGroup): ProductGroupView {
 export function toItemView(
   row: Item,
   categories: ItemView['categories'],
+  // Every barcode of the product, the first one leading (plan 0185). Handed
+  // in like the categories, because they are rows of another table.
+  eans: ItemView['eans'],
   bestOffer?: ItemOfferView
 ): ItemView {
   const view: ItemView = {
@@ -235,6 +238,7 @@ export function toItemView(
     imageUrl: row.imageUrl,
     sku: row.sku,
     ean: row.ean,
+    eans,
     unitSize: toNumber(row.unitSize),
     packCount: row.packCount ?? null,
     categories,

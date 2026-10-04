@@ -7,6 +7,9 @@ import {
   CategoryNotFoundException,
   ConflictException,
   ForbiddenException,
+  ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
   ItemEanInvalidException,
   ItemNeedsACategoryException,
   NotFoundException,
@@ -26,6 +29,7 @@ import {
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { fakeAudit } from './catalog-audit.testing';
 import { fakeCategories } from './category.testing';
+import { fakeItemEans } from './item-ean.testing';
 import { ItemService } from './item.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { ProductGroupService } from './product-group.service';
@@ -70,6 +74,8 @@ function build(overrides: {
   brands?: Brand[];
   /** Which ids are roots or unknown to the category double (plan 0166). */
   categories?: Parameters<typeof fakeCategories>[0];
+  /** Rows of `item_eans` the spec did not write through the service. */
+  eans?: Parameters<typeof fakeItemEans>[0];
 }) {
   const admin = makeAdmin();
   // The lookup answers the whole registry rather than narrowing it the way the
@@ -97,6 +103,8 @@ function build(overrides: {
   ]);
   // Plan 0166: the leaves a write names, and what every read answers.
   const categories = fakeCategories(overrides.categories);
+  // Plan 0185: every barcode of every product, as one map.
+  const eans = fakeItemEans(overrides.eans);
   const service = new ItemService(
     overrides.items as Repository<Item>,
     {} as Repository<ProductGroup>,
@@ -106,9 +114,10 @@ function build(overrides: {
     admin,
     audit.service,
     events,
-    categories.service
+    categories.service,
+    eans.store
   );
-  return { service, admin, groups, events, audit, brands, categories };
+  return { service, admin, groups, events, audit, brands, categories, eans };
 }
 
 describe('ItemService', () => {
@@ -214,9 +223,18 @@ describe('ItemService', () => {
     expect(position).toBeGreaterThan(0);
     // Bound, never interpolated, like every other value in this query.
     expect(values[position - 1]).toBe('8480000181077');
+    // Any barcode of the product, not only its first (plan 0185): the same
+    // placeholder is looked up in `item_eans`.
+    expect(sql).toContain(
+      `SELECT ie."itemId" FROM "item_eans" ie WHERE ie."ean" = $${position}`
+    );
     // First key of the ordering, so the scanned product cannot be pushed under a
     // text hit that happened to score above the zero this query earns.
-    expect(sql).toContain(`ORDER BY (i."ean" = $${position}) DESC`);
+    expect(sql).toMatch(
+      new RegExp(
+        `ORDER BY \\(\\(i\\."ean" = \\$${position} OR i\\."id" = \\([^)]*\\)\\)\\) DESC NULLS LAST`
+      )
+    );
   });
 
   it('leaves the ean test out when the query is words', async () => {
@@ -735,14 +753,382 @@ describe('ItemService', () => {
     });
 
     it('lets an update replace an in-store code with a real barcode, or clear it', async () => {
-      const { service } = build({ items: holding(IN_STORE) });
-
+      // Two catalogs, because `holding` answers the same row on every read: a
+      // second edit through the first one would start from the in-store code
+      // again while the barcode rows remember the first edit.
+      const replacing = build({ items: holding(IN_STORE) });
       expect(
-        (await service.update({ userId: ADMIN, itemId: 'i1', ean: REAL })).ean
+        (
+          await replacing.service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            ean: REAL,
+          })
+        ).ean
       ).toBe(REAL);
+
+      const clearing = build({ items: holding(IN_STORE) });
       expect(
-        (await service.update({ userId: ADMIN, itemId: 'i1', ean: null })).ean
+        (
+          await clearing.service.update({
+            userId: ADMIN,
+            itemId: 'i1',
+            ean: null,
+          })
+        ).ean
       ).toBeNull();
+    });
+  });
+
+  /**
+   * Plan 0185. A product holds several barcodes, `items.ean` is the first of
+   * them, and a barcode names one product. What the database itself holds,
+   * the primary key and the cascade, is in `item-eans.integration.spec.ts`.
+   */
+  describe('more than one barcode (plan 0185)', () => {
+    const FIRST = '8402001002083';
+    const SECOND = '8402001047251';
+    const THIRD = '4006381333931';
+    const IN_STORE = '2204500000000';
+
+    /** A catalog that remembers what it was told, unlike the fixtures above. */
+    function remembering(rows: Partial<Item>[]) {
+      const held = new Map<string, Item>(
+        rows.map((row) => [
+          row.id as string,
+          {
+            name: { en: 'Whole milk', es: 'Leche entera' },
+            brand: null,
+            imageUrl: null,
+            sku: null,
+            ean: null,
+            unitSize: 1000,
+            packCount: null,
+            defaultUnit: UnitOfMeasure.MILLILITER,
+            productGroupId: null,
+            ...row,
+          } as Item,
+        ])
+      );
+      return {
+        create: jest.fn((x) => x),
+        save: jest.fn(async (x: Item) => {
+          const row = { ...x, id: x.id ?? `new-${held.size + 1}` } as Item;
+          held.set(row.id, row);
+          return row;
+        }),
+        findOne: jest.fn(async (options: { where: { id: string } }) => {
+          const row = held.get(options.where.id);
+          return row ? { ...row } : null;
+        }),
+        // `In(...)` is not read: the service indexes what comes back by id.
+        find: jest.fn(async () =>
+          [...held.values()].map((row) => ({ ...row }))
+        ),
+      } as unknown as Repository<Item>;
+    }
+
+    const milkInput = (ean: string | null) => ({
+      name: { en: 'Whole milk', es: 'Leche entera' },
+      categoryIds: ['milk'],
+      defaultUnit: UnitOfMeasure.MILLILITER,
+      ean,
+    });
+    const milk = (ean: string | null) => ({
+      userId: ADMIN,
+      ...milkInput(ean),
+    });
+
+    it('writes the first barcode of a created product as a row, and answers it in eans', async () => {
+      const { service, eans } = build({ items: remembering([]) });
+
+      const created = await service.create(milk(FIRST));
+      expect(created.ean).toBe(FIRST);
+      expect(created.eans).toEqual([FIRST]);
+      expect(eans.rows.get(FIRST)).toBe(created.id);
+
+      const bare = await service.create(milk(null));
+      expect(bare.eans).toEqual([]);
+
+      const many = await service.createMany({
+        userId: ADMIN,
+        items: [milkInput(SECOND), milkInput(null)],
+      });
+      expect(many.items.map((item) => item.eans)).toEqual([[SECOND], []]);
+      expect(eans.rows.get(SECOND)).toBe(many.items[0].id);
+    });
+
+    it('refuses a create whose barcode is one of another product’s further barcodes', async () => {
+      // `uq_items_ean` cannot see this one: it is not that product's first.
+      const { service } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+        ],
+      });
+
+      await expect(service.create(milk(SECOND))).rejects.toBeInstanceOf(
+        ConflictException
+      );
+    });
+
+    it('adds a barcode beside the first one, and finds the product by either', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [[FIRST, 'i1']],
+      });
+
+      await expect(
+        service.addEan({ userId: 'intruder', itemId: 'i1', ean: SECOND })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: ` ${SECOND} `,
+      });
+      expect(view.ean).toBe(FIRST);
+      expect(view.eans).toEqual([FIRST, SECOND]);
+      expect(eans.rows.get(SECOND)).toBe('i1');
+
+      // The acceptance criterion: `findByEan` finds it by its second barcode.
+      const bySecond = await service.findByEan({ userId: ADMIN, ean: SECOND });
+      expect(bySecond.item?.id).toBe('i1');
+      expect(bySecond.item?.eans).toEqual([FIRST, SECOND]);
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: FIRST })).item?.id
+      ).toBe('i1');
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: THIRD })).item
+      ).toBeNull();
+
+      // Both barcodes in one batch lookup answer the one product once.
+      const both = await service.findByEans({
+        userId: ADMIN,
+        eans: [FIRST, SECOND, THIRD],
+      });
+      expect(both.items.map((item) => item.id)).toEqual(['i1']);
+
+      // Adding it again changes nothing and refuses nothing.
+      const again = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(again.eans).toEqual([FIRST, SECOND]);
+    });
+
+    it('makes an added barcode the first one of a product that had none', async () => {
+      const { service, audit } = build({
+        items: remembering([{ id: 'i1', ean: null }]),
+      });
+
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(view.ean).toBe(SECOND);
+      expect(view.eans).toEqual([SECOND]);
+      // The first barcode is a column of the product, so the trail has it.
+      expect(audit.recorded).toEqual([
+        expect.objectContaining({
+          action: 'UPDATE',
+          entityId: 'i1',
+          before: { ean: null },
+          after: { ean: SECOND },
+        }),
+      ]);
+    });
+
+    it('never takes an in-store code as a barcode, and leaves one that is already the first where it is', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: IN_STORE }]),
+      });
+
+      await expect(
+        service.addEan({ userId: ADMIN, itemId: 'i1', ean: IN_STORE })
+      ).rejects.toBeInstanceOf(ItemEanInvalidException);
+      expect(eans.rows.size).toBe(0);
+
+      // A real barcode beside it: `items.ean` keeps the old code, which is in
+      // no row and so in no list.
+      const view = await service.addEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: FIRST,
+      });
+      expect(view.ean).toBe(IN_STORE);
+      expect(view.eans).toEqual([FIRST]);
+      // And the old code finds nothing: it joins nothing (plan 0184).
+      expect(
+        (await service.findByEan({ userId: ADMIN, ean: IN_STORE })).item
+      ).toBeNull();
+    });
+
+    it('refuses a barcode another product holds with item_ean_held, naming the holder', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: 'i1', ean: FIRST },
+          { id: 'i2', ean: SECOND },
+        ]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i2'],
+        ],
+      });
+
+      const refusal = await service
+        .addEan({ userId: ADMIN, itemId: 'i1', ean: SECOND })
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(ItemEanHeldException);
+      expect((refusal as ItemEanHeldException).code).toBe('item_ean_held');
+      expect((refusal as ItemEanHeldException).details).toEqual({
+        [ITEM_EAN_DETAIL]: SECOND,
+        [ITEM_EAN_HOLDER_DETAIL]: 'i2',
+      });
+      expect(eans.rows.get(SECOND)).toBe('i2');
+    });
+
+    it('removes a barcode, and promotes the oldest of the rest when the first one goes', async () => {
+      const { service, eans } = build({
+        items: remembering([{ id: 'i1', ean: FIRST }]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+          [THIRD, 'i1'],
+        ],
+      });
+
+      // One it does not hold is a 404, and nothing moves.
+      await expect(
+        service.removeEan({ userId: ADMIN, itemId: 'i1', ean: '96385074' })
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const withoutThird = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: THIRD,
+      });
+      expect(withoutThird.ean).toBe(FIRST);
+      expect(withoutThird.eans).toEqual([FIRST, SECOND]);
+
+      const withoutFirst = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: FIRST,
+      });
+      expect(withoutFirst.ean).toBe(SECOND);
+      expect(withoutFirst.eans).toEqual([SECOND]);
+
+      const bare = await service.removeEan({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(bare.ean).toBeNull();
+      expect(bare.eans).toEqual([]);
+      expect(eans.rows.size).toBe(0);
+    });
+
+    it('treats the ean of an update as the first barcode: it replaces that one and keeps the rest', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: 'i1', ean: FIRST },
+          { id: 'i2', ean: null },
+        ]),
+        eans: [
+          [FIRST, 'i1'],
+          [SECOND, 'i1'],
+        ],
+      });
+
+      // A new first barcode: the old first one is taken off the product.
+      const replaced = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: THIRD,
+      });
+      expect(replaced.ean).toBe(THIRD);
+      expect(replaced.eans).toEqual([THIRD, SECOND]);
+      expect(eans.rows.has(FIRST)).toBe(false);
+
+      // One of its own further barcodes becomes the first, and stays one row.
+      const promoted = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: SECOND,
+      });
+      expect(promoted.ean).toBe(SECOND);
+      expect(promoted.eans).toEqual([SECOND]);
+
+      // Another product's further barcode is a conflict `uq_items_ean` cannot
+      // see, and it is refused all the same.
+      await service.addEan({ userId: ADMIN, itemId: 'i1', ean: FIRST });
+      await expect(
+        service.update({ userId: ADMIN, itemId: 'i2', ean: FIRST })
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // Clearing the first barcode promotes the oldest of the rest.
+      const cleared = await service.update({
+        userId: ADMIN,
+        itemId: 'i1',
+        ean: null,
+      });
+      expect(cleared.ean).toBe(FIRST);
+      expect(cleared.eans).toEqual([FIRST]);
+      // And the barcode it gave up is free for the other product.
+      const taken = await service.update({
+        userId: ADMIN,
+        itemId: 'i2',
+        ean: SECOND,
+      });
+      expect(taken.eans).toEqual([SECOND]);
+    });
+
+    it('teaches a batch of barcodes, and names the ones it could not write', async () => {
+      const { service, eans } = build({
+        items: remembering([
+          { id: '11111111-1111-4111-8111-111111111111', ean: FIRST },
+          { id: '22222222-2222-4222-8222-222222222222', ean: null },
+        ]),
+        eans: [[FIRST, '11111111-1111-4111-8111-111111111111']],
+      });
+      const one = '11111111-1111-4111-8111-111111111111';
+      const two = '22222222-2222-4222-8222-222222222222';
+      const gone = '99999999-9999-4999-8999-999999999999';
+
+      await expect(
+        service.teachEans({ userId: 'intruder', entries: [] })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      const result = await service.teachEans({
+        userId: ADMIN,
+        entries: [
+          { itemId: one, ean: SECOND },
+          // Already this product's: nothing to do, and not a refusal.
+          { itemId: one, ean: FIRST },
+          // Held by the first product.
+          { itemId: two, ean: FIRST },
+          { itemId: two, ean: IN_STORE },
+          { itemId: gone, ean: THIRD },
+          { itemId: two, ean: THIRD },
+        ],
+      });
+
+      expect(result.added).toBe(2);
+      expect(result.refused).toEqual([
+        { itemId: two, ean: IN_STORE, reason: 'INVALID', heldBy: null },
+        { itemId: two, ean: FIRST, reason: 'HELD', heldBy: one },
+        { itemId: gone, ean: THIRD, reason: 'NOT_FOUND', heldBy: null },
+      ]);
+      expect(eans.rows.get(SECOND)).toBe(one);
+      // The product with no first barcode took the one it was taught.
+      expect(eans.rows.get(THIRD)).toBe(two);
+      expect((await service.get({ userId: ADMIN, itemId: two })).ean).toBe(
+        THIRD
+      );
     });
   });
 

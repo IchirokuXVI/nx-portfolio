@@ -4,6 +4,7 @@ import {
   ItemSourceMatch,
   productGtin,
   SourceEntryStatus,
+  type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import { Not, Repository } from 'typeorm';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
@@ -67,6 +68,41 @@ export function createdEan(
   requested: string | null | undefined
 ): string | null {
   return productGtin(requested === undefined ? entry.ean : requested);
+}
+
+/**
+ * The barcode a bound row can teach its product (plan 0185): the row's own
+ * EAN when it is a real barcode, else null.
+ *
+ * An in-store code and an invalid code teach nothing, because a product never
+ * holds one (plan 0184). The row keeps what the chain printed either way.
+ */
+export function taughtEan(
+  entry: Pick<SourceCatalogEntry, 'ean'>
+): string | null {
+  return productGtin(entry.ean);
+}
+
+/**
+ * Every barcode a catalog product holds (plan 0185): `eans`, and `ean` beside
+ * it for an answer from a catalog that does not list them yet.
+ */
+export function barcodesOf(item: Pick<ItemView, 'ean' | 'eans'>): string[] {
+  return [...new Set([...(item.eans ?? []), ...(item.ean ? [item.ean] : [])])];
+}
+
+/** The sentence a decision is refused with when another product holds the row's barcode. */
+export function eanHeldDetail(
+  ean: string,
+  heldBy: string,
+  itemId: string | null
+): string {
+  return (
+    `The row prints the barcode ${ean}, and the catalog holds it on product ` +
+    `${heldBy}${itemId ? `, not on ${itemId}` : ''}. A barcode names one ` +
+    'product: accept the row onto that product, or take the barcode off it ' +
+    'first.'
+  );
 }
 
 /**

@@ -101,6 +101,13 @@ export class ItemMatchIndex {
       if (item.ean && readGtin(item.ean).kind !== 'IN_STORE') {
         this.byEan.set(item.ean, item);
       }
+      // Every other barcode of the product too (plan 0185). A maker prints a
+      // new one when it changes a factory or a label, so a row that prints
+      // the second barcode is the same product and binds by itself on rung 2.
+      // Catalog never lists an in-store code here.
+      for (const ean of item.eans ?? []) {
+        this.byEan.set(ean, item);
+      }
       // The Spanish name, because what a Spanish chain states is Spanish (plan
       // 0038, section 6.2). An English only item (plan 0079) lands in a bucket a
       // Spanish observation rarely hits, which is right: a name match is a

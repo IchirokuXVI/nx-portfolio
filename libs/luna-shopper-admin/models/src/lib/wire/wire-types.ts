@@ -54,6 +54,13 @@ export type AddCommentDto = {
 };
 
 /**
+ * `AddItemEanDto` in the gateway's OpenAPI document.
+ */
+export type AddItemEanDto = {
+  ean: string;
+};
+
+/**
  * `AddItemPriceDto` in the gateway's OpenAPI document.
  */
 export type AddItemPriceDto = {
@@ -578,6 +585,7 @@ export type ProblemDetails = {
     | 'category_not_a_leaf'
     | 'item_needs_a_category'
     | 'item_ean_invalid'
+    | 'item_ean_held'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -2054,6 +2062,7 @@ export type BasketBasketProductView = {
   imageUrl: string | null;
   sku: string | null;
   ean: string | null;
+  eans: string[];
   unitSize: number | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
@@ -2610,6 +2619,7 @@ export type CatalogItemView = {
   imageUrl: string | null;
   sku: string | null;
   ean: string | null;
+  eans: string[];
   unitSize: number | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
@@ -3447,7 +3457,8 @@ export type EnumsBulkOperationErrorCode =
   | 'UNKNOWN_REFERENCE'
   | 'MALFORMED_OPERATION'
   | 'ALREADY_TAKEN'
-  | 'NAME_EN_MISSING';
+  | 'NAME_EN_MISSING'
+  | 'EAN_HELD';
 
 /**
  * `enums.CommentTranscription` in the gateway's OpenAPI document.

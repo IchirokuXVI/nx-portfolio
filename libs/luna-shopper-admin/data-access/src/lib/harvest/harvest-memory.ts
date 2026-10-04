@@ -516,13 +516,17 @@ export class HarvestMemory implements HarvestServiceI {
     const es = input.name?.es ?? entry.name;
     const en = input.name?.en;
 
+    // The barcode the product is created with, and the list a product answers
+    // every barcode it holds in (backend plan 0185): this one, or none.
+    const ean = input.ean ?? entry.ean;
     const item: Wire.CatalogItemView = {
       id: `item-${this._nextId++}`,
       name: en === undefined || en === '' ? { es } : { es, en },
       brand: input.brand ?? entry.brand,
       imageUrl: null,
       sku: entry.externalId,
-      ean: input.ean ?? entry.ean,
+      ean,
+      eans: ean ? [ean] : [],
       unitSize: input.unitSize ?? entry.unitSize,
       packCount:
         input.packCount === undefined ? entry.packCount : input.packCount,

@@ -24,6 +24,7 @@ function item(overrides: Partial<ItemView> = {}): ItemView {
     imageUrl: null,
     sku: null,
     ean: null,
+    eans: [],
     unitSize: 1,
     packCount: null,
     categories: [
@@ -75,6 +76,49 @@ describe('the catalog item index, rungs 2 and 3 (plan 0086, section 4)', () => {
         unitSize: null,
       })
     ).toBeNull();
+  });
+
+  /**
+   * Plan 0185. A maker prints a new barcode on the same product, so a product
+   * holds several, and a row that prints any of them is that product.
+   */
+  it('maps every barcode of a product to it, the first one and the rest alike', () => {
+    const index = new ItemMatchIndex([
+      item({
+        id: 'item-milk',
+        ean: '8402001002083',
+        eans: ['8402001002083', '8402001047251'],
+      }),
+      // A product whose first barcode is an old in-store code and which was
+      // given a real one beside it: only the real one binds.
+      item({
+        id: 'item-cheese',
+        name: { en: 'Cheese', es: 'Queso' },
+        ean: '2204500000000',
+        eans: ['4006381333931'],
+      }),
+    ]);
+    const byEan = (ean: string) =>
+      index.match({
+        name: 'Something else entirely',
+        brand: null,
+        ean,
+        unitSize: null,
+      });
+
+    for (const ean of ['8402001002083', '8402001047251']) {
+      expect(byEan(ean)).toEqual({
+        itemId: 'item-milk',
+        matchedBy: ItemSourceMatch.EAN,
+        status: SourceEntryStatus.ACTIVE,
+        confidence: 1,
+      });
+    }
+    expect(byEan('4006381333931')).toMatchObject({
+      itemId: 'item-cheese',
+      matchedBy: ItemSourceMatch.EAN,
+    });
+    expect(byEan('2204500000000')).toBeNull();
   });
 
   it('still proposes a product that holds an in-store code by its name', () => {

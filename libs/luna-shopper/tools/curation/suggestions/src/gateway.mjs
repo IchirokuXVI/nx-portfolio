@@ -7,7 +7,7 @@
  * only which paths, which query parameters and how a page is walked.
  */
 
-import { capSearchText } from './rules.mjs';
+import { barcodesOf, capSearchText } from './rules.mjs';
 
 /** The gateway's own cap. Asking for more is a 400. */
 const PAGE_SIZE = 100;
@@ -125,13 +125,17 @@ export function makeGateway(session) {
      * what the back office uses, and it matches a whole barcode exactly and
      * ranks that row first. The answer is filtered on equality here, so a text
      * hit that merely scored well is not mistaken for the barcode's owner.
+     *
+     * **Any barcode of the product** (backend plan 0185): the search finds a
+     * product by every barcode it holds, and the owner is the product that
+     * lists this one, as its first barcode or as any other.
      */
     async findByEan(ean) {
       if (!ean) {
         return null;
       }
       const items = await this.searchItems(ean, 5);
-      return items.find((item) => item.ean === ean) ?? null;
+      return items.find((item) => barcodesOf(item).includes(ean)) ?? null;
     },
 
     /**

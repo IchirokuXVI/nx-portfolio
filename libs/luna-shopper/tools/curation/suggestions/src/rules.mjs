@@ -153,6 +153,19 @@ export function productGtin(text) {
   return reading.kind === 'GTIN' ? reading.gtin : null;
 }
 
+/**
+ * Every barcode a catalog product holds (backend plan 0185).
+ *
+ * A maker prints a new barcode when it changes a factory, a supplier or a
+ * label, so a product holds several, and the item view lists them in `eans`,
+ * the first one leading. A view from a gateway that predates that plan carries
+ * `ean` alone, and answers the one barcode it has.
+ */
+export function barcodesOf(item) {
+  const held = Array.isArray(item?.eans) ? item.eans.filter(Boolean) : [];
+  return item?.ean && !held.includes(item.ean) ? [...held, item.ean] : held;
+}
+
 /** True when the normalized brand appears as a run of tokens inside the name. */
 export function carriesBrand(name, brand) {
   const brandKey = normalizeName(brand);

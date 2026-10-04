@@ -8,6 +8,7 @@
  */
 
 import {
+  barcodesOf,
   brandKey,
   canonicalBrand,
   carriesBrand,
@@ -357,6 +358,86 @@ export function sameFormat(entry, linkTarget) {
 }
 
 /**
+ * Whether the entry and the link target are one brand (backend plan 0185).
+ *
+ * The target's brand, through a link if a person made one, against every
+ * registered brand the entry's printed brand names. When the registry holds
+ * none of those, the two printed texts are compared by key.
+ *
+ * **An entry or a target with no brand agrees with nothing.** A chain can
+ * leave `entry.brand` null on a product whose name states one, so "both have
+ * none" does not say the two are the same brand.
+ */
+export function sameBrand(entry, linkTarget, brands) {
+  const targetKey =
+    findCanonicalBrand(brands, linkTarget?.brand)?.key ??
+    brandKey(linkTarget?.brand);
+  if (!targetKey) {
+    return false;
+  }
+  const sources = sourceBrands(brands, entry).map((source) => source.brand.key);
+  if (sources.length > 0) {
+    return sources.includes(targetKey);
+  }
+  return brandKey(entry?.brand) === targetKey;
+}
+
+/**
+ * The barcode conflict of a LINK, or null (backend plan 0185).
+ *
+ * A maker prints a new barcode when it changes a factory, a supplier or a
+ * label, and the product on the shelf is the same. So a barcode that differs
+ * from the target's is no longer a conflict by itself. Two things are:
+ *
+ * - **Another product holds the entry's barcode.** A barcode names one
+ *   product, so the entry belongs to that product or the barcode sits on the
+ *   wrong one. The backend refuses this accept too, with `EAN_HELD`.
+ * - **The target holds other barcodes, and the brand or the format is not
+ *   known to be the same.** Then nothing says the two barcodes are one
+ *   product, and a person looks. A missing size on either side is "not known".
+ *
+ * A target that holds the entry's barcode is the ordinary case and passes. So
+ * does a target with no barcode at all, as it always did.
+ */
+function linkEanConflict({ entry, linkTarget, rowEanOwner, brands }) {
+  const printed = isString(entry.ean) ? entry.ean.trim() : null;
+  if (!printed) {
+    return null;
+  }
+  const held = barcodesOf(linkTarget);
+  if (held.includes(printed)) {
+    return null;
+  }
+  if (rowEanOwner && rowEanOwner.id !== linkTarget.id) {
+    return issue(
+      'EAN_CONFLICT',
+      `The entry states EAN ${printed}, and catalog item ${rowEanOwner.id} holds it, not ${linkTarget.id}. A barcode names one product: link onto that item instead.`
+    );
+  }
+  if (held.length === 0) {
+    return null;
+  }
+  const brandAgrees = sameBrand(entry, linkTarget, brands);
+  const formatAgrees =
+    entry.unitSize !== null &&
+    entry.unitSize !== undefined &&
+    linkTarget.unitSize !== null &&
+    linkTarget.unitSize !== undefined &&
+    sameFormat(entry, linkTarget);
+  if (brandAgrees && formatAgrees) {
+    return null;
+  }
+  const missing = [
+    ...(brandAgrees ? [] : ['the same brand']),
+    ...(formatAgrees ? [] : ['the same format']),
+  ].join(' and ');
+  return issue(
+    'EAN_CONFLICT',
+    `The entry states EAN ${printed} and item ${linkTarget.id} carries ${held.join(', ')}. A second barcode of one product needs the same brand and the same format, and this pair does not show ${missing}.`
+  );
+}
+
+/**
  * Every check the library makes for itself, whatever the model's confidence was.
  *
  * A decision that fails any of them is demoted to REVIEW with the named issue,
@@ -371,6 +452,9 @@ export function validateDecision({
   // (plan 0006). Only `decide` knows, because only it holds the handout.
   linkTargetShown = true,
   eanOwner = null,
+  // The catalog product that holds the entry's own barcode, or null (backend
+  // plan 0185). Read on a LINK: a barcode another product holds is a conflict.
+  rowEanOwner = null,
   brands = new Map(),
   supermarkets = [],
   categories = [],
@@ -515,13 +599,14 @@ export function validateDecision({
         )
       );
     } else {
-      if (entry.ean && linkTarget.ean && entry.ean !== linkTarget.ean) {
-        issues.push(
-          issue(
-            'EAN_CONFLICT',
-            `The entry states EAN ${entry.ean} and item ${linkTarget.id} carries ${linkTarget.ean}.`
-          )
-        );
+      const conflict = linkEanConflict({
+        entry,
+        linkTarget,
+        rowEanOwner,
+        brands,
+      });
+      if (conflict) {
+        issues.push(conflict);
       }
       if (
         entry.unitSize !== null &&

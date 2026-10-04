@@ -9,7 +9,12 @@
  * until `apply`.
  */
 
-import { chainName, chainNamesById, sourceBrands } from './rules.mjs';
+import {
+  barcodesOf,
+  chainName,
+  chainNamesById,
+  sourceBrands,
+} from './rules.mjs';
 
 /** An `extra` bag can hold a leaflet's whole page text; the model needs a taste. */
 const MAX_EXTRA_CHARS = 2000;
@@ -48,6 +53,10 @@ export function toCandidate(
     // box sized `16 ud` and the same box sized 160 g be read as one format.
     packCount: item.packCount ?? null,
     ean: item.ean ?? null,
+    // Every barcode the product holds (backend plan 0185), `ean` first. A
+    // maker prints a new barcode on the same product, so a candidate whose
+    // `ean` differs from the entry's can still be the entry's product.
+    eans: barcodesOf(item),
     // An item answers its categories as rows now (backend plan 0166), and the
     // slugs are the words the model names a category by.
     categorySlugs: (item.categories ?? [])

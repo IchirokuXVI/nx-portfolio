@@ -137,7 +137,14 @@ box of capsules by count, `16 ud`. Another chain sizes the same box by weight, 1
 the pack count joins the two sizes. A candidate of 160 g with `packCount` 16 is the same
 box as an entry of 16 units. A candidate of 160 g with no `packCount` is not.
 
-`eanMatch` is the catalog product carrying the entry's own barcode, or null.
+A candidate's `eans` lists every barcode the product holds, and `ean` is the first of them.
+A maker prints a new barcode when it changes a factory, a supplier or a label, and the
+product on the shelf is the same. So a candidate with another barcode can still be the
+entry's product. When the brand and the format are the same, `LINK` onto it. A different
+barcode alone does not make a second product, and it does not make a `CREATE`.
+
+`eanMatch` is the catalog product that holds the entry's own barcode, as any of its
+barcodes, or null.
 
 ## How to name a candidate
 
@@ -215,8 +222,9 @@ send it:
 - `FORMAT_MISMATCH`: a `LINK` onto a product of another format. The tool compares sizes in
   grams, millilitres or units. 420 g and 0.42 kg are one format. 1 L and 1.5 L are two.
 - `SHARED_EAN`: any answer on an entry with an `entry.sharedEan` list.
-- `EAN_CONFLICT`: a `LINK` onto a product carrying a different barcode, or a `CREATE` whose
-  `item.ean` a catalog product already holds.
+- `EAN_CONFLICT`: a `LINK` onto a product while another product holds the entry's barcode.
+  Also a `LINK` onto a product with other barcodes when the brand or the format is not the
+  same. Also a `CREATE` whose `item.ean` a catalog product already holds.
 - `NAME_CARRIES_BRAND` and `NAME_CARRIES_SIZE`: rules 2 and 3, checked on `nameEs` and
   `nameEn` alike. A `nameEs` that ends in the word `pack` is `NAME_CARRIES_SIZE` too.
 - `NAME_EN_MISSING`: a `CREATE` with no `item.nameEn`.

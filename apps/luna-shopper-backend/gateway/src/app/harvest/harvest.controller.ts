@@ -555,12 +555,17 @@ export class AdminHarvestEntriesController {
    * an eighteen minute walk would have to run it again to get them. The answer
    * says how many went, and zero is a normal answer for a source that prints
    * none.
+   *
+   * **Accepting a row teaches its barcode** (plan 0185). A row whose real EAN
+   * no product holds gives that EAN to the product it is accepted onto, as one
+   * more of its barcodes. When another product holds it, the accept answers
+   * 409 `item_ean_held`, names that product in `details`, and writes nothing.
    */
   @Post(':id/accept')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, eanHeld: true })
   accept(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -611,6 +616,12 @@ export class AdminHarvestEntriesController {
    * document carries one message for a thousand rows. What does answer 400 is
    * what the request got wrong before any row was looked at: an empty file, or
    * one over the cap.
+   *
+   * An `accept` of a row whose real EAN another product holds is refused on its
+   * own operation with `EAN_HELD` (plan 0185), at `VALIDATE`, so nothing of the
+   * file lands. An accepted row whose EAN no product holds gives it to its
+   * product after the binds, and a barcode that could not be written is named
+   * in `priceSkips` with a reason that starts with `Barcode`.
    *
    * There is no bulk reject, and there will not be one: junk is a person's call,
    * and a wrong reject hides a row from the queue that nobody looks at again.

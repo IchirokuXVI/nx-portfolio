@@ -153,6 +153,11 @@ export const CATALOG_SCHEMA_IDS = {
   findItemByEanResult: schemaId('catalog/FindItemByEanResult'),
   findItemsByEansRequest: schemaId('msg/item.findByEans/request'),
   findItemsByEansResult: schemaId('catalog/FindItemsByEansResult'),
+  itemEanRequest: schemaId('msg/item.ean/request'),
+  itemEanPair: schemaId('catalog/ItemEanPair'),
+  itemEanRefusal: schemaId('catalog/ItemEanRefusal'),
+  teachItemEansRequest: schemaId('msg/item.ean.teach/request'),
+  teachItemEansResult: schemaId('catalog/TeachItemEansResult'),
   // Plan 0162: the harvester fills the pack counts a run saw.
   packCountFill: schemaId('catalog/PackCountFill'),
   fillPackCountsRequest: schemaId('msg/item.fillPackCounts/request'),
@@ -575,6 +580,8 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   imageUrl: nullableString(),
   sku: nullableString(),
   ean: nullableString(),
+  // Plan 0185: every barcode of the product, `ean` first. Empty for none.
+  eans: array(nonEmptyString()),
   unitSize: numberOrNull(),
   packCount: packCountOrNull(),
   // Plan 0166: position order and never empty, so a reader always has a first.
@@ -602,6 +609,7 @@ export const itemViewRequired: string[] = [
   'imageUrl',
   'sku',
   'ean',
+  'eans',
   'unitSize',
   'packCount',
   'categories',
@@ -1636,6 +1644,50 @@ const findItemsByEansResult = object(
   CATALOG_SCHEMA_IDS.findItemsByEansResult,
   { items: array(ref(CATALOG_SCHEMA_IDS.itemView)) },
   ['items']
+);
+/** One barcode of one product (plan 0185). */
+const itemEanRequest = object(
+  CATALOG_SCHEMA_IDS.itemEanRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    ean: nonEmptyString(),
+  },
+  ['userId', 'itemId', 'ean']
+);
+const itemEanPair = object(
+  CATALOG_SCHEMA_IDS.itemEanPair,
+  { itemId: nonEmptyString(), ean: nonEmptyString() },
+  ['itemId', 'ean']
+);
+const itemEanRefusal = object(
+  CATALOG_SCHEMA_IDS.itemEanRefusal,
+  {
+    itemId: nonEmptyString(),
+    ean: nonEmptyString(),
+    reason: { type: 'string', enum: ['HELD', 'INVALID', 'NOT_FOUND'] },
+    heldBy: nullableString(),
+  },
+  ['itemId', 'ean', 'reason', 'heldBy']
+);
+const teachItemEansRequest = object(
+  CATALOG_SCHEMA_IDS.teachItemEansRequest,
+  {
+    ...adminCredentialProperties,
+    entries: {
+      ...array(ref(CATALOG_SCHEMA_IDS.itemEanPair)),
+      maxItems: BULK_DECISION_MAX_OPERATIONS,
+    },
+  },
+  ['userId', 'entries']
+);
+const teachItemEansResult = object(
+  CATALOG_SCHEMA_IDS.teachItemEansResult,
+  {
+    added: integer({ minimum: 0 }),
+    refused: array(ref(CATALOG_SCHEMA_IDS.itemEanRefusal)),
+  },
+  ['added', 'refused']
 );
 /** One product and the count a run read for it (plan 0162, section 3). */
 const packCountFill = object(
@@ -2925,6 +2977,11 @@ export const catalogSchemas: JsonSchema[] = [
   findItemByEanResult,
   findItemsByEansRequest,
   findItemsByEansResult,
+  itemEanRequest,
+  itemEanPair,
+  itemEanRefusal,
+  teachItemEansRequest,
+  teachItemEansResult,
   packCountFill,
   fillPackCountsRequest,
   fillPackCountsResult,
@@ -3082,6 +3139,18 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.findByEans]: {
     request: CATALOG_SCHEMA_IDS.findItemsByEansRequest,
     response: CATALOG_SCHEMA_IDS.findItemsByEansResult,
+  },
+  [ITEM_PATTERNS.addEan]: {
+    request: CATALOG_SCHEMA_IDS.itemEanRequest,
+    response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.removeEan]: {
+    request: CATALOG_SCHEMA_IDS.itemEanRequest,
+    response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.teachEans]: {
+    request: CATALOG_SCHEMA_IDS.teachItemEansRequest,
+    response: CATALOG_SCHEMA_IDS.teachItemEansResult,
   },
   [ITEM_PATTERNS.createMany]: {
     request: CATALOG_SCHEMA_IDS.createItemsRequest,

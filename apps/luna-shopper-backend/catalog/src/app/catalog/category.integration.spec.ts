@@ -27,6 +27,7 @@ import {
 import type { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import { CatalogAuditService } from './catalog-audit.service';
 import { CategoryService } from './category.service';
+import { itemEanStoreOf } from './item-ean.store';
 import { ItemService } from './item.service';
 import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
@@ -106,7 +107,8 @@ describeIntegration('the category tree (real Postgres)', () => {
       admin,
       audit,
       events,
-      categories
+      categories,
+      itemEanStoreOf(dataSource)
     );
   }, 180_000);
 

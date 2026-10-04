@@ -36,6 +36,9 @@ import {
   decodeCursor,
   describeError,
   encodeCursor,
+  ITEM_EAN_DETAIL,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
@@ -56,7 +59,9 @@ import { createdSize } from './source-entry-size';
 import {
   bindFields,
   createdEan,
+  eanHeldDetail,
   SourceEntryPriceWriter,
+  taughtEan,
 } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
 
@@ -323,14 +328,32 @@ export class SourceEntryService {
     return counts;
   }
 
-  /** Bind a queued row to a product the catalog already holds, then the prices. */
+  /**
+   * Bind a queued row to a product the catalog already holds, then the prices.
+   *
+   * **Accepting a row teaches its barcode** (plan 0185). A maker prints a new
+   * barcode on the same product, so a row whose real EAN no product holds
+   * gives that EAN to the product it is accepted onto, and the next run binds
+   * the row's siblings by themselves. When **another** product holds it, the
+   * accept is refused with `item_ean_held` before anything is written: either
+   * the row belongs to that product, or the barcode sits on the wrong one, and
+   * a person settles which.
+   *
+   * The barcode is written last, after the prices and the availability, and
+   * under the rule they follow on this route: the bind stands, and a write
+   * that fails is the error the request answers with.
+   */
   async accept(
     req: AcceptSourceEntryRequest
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
+    const teach = await this.barcodeToTeach(entry, req.itemId);
     const bound = await this.bind(entry, req.itemId);
     const pricesWritten = await this.writeRowPrices(bound);
+    if (teach !== null) {
+      await this.teachBarcode(req.itemId, teach);
+    }
     return {
       entry: toSourceCatalogEntryView(bound),
       pricesWritten,
@@ -780,6 +803,64 @@ export class SourceEntryService {
     const saved = await this.entries.save(bindFields(entry, itemId));
     saved.prices = entry.prices ?? [];
     return saved;
+  }
+
+  /**
+   * The barcode accepting this row onto `itemId` will give the product, or
+   * null when there is nothing to give (plan 0185).
+   *
+   * Null for a row with no real barcode, and for one whose barcode the product
+   * already holds. Refuses with `item_ean_held` when another product holds it.
+   * Asked before the bind, so a refusal writes nothing.
+   */
+  private async barcodeToTeach(
+    entry: SourceCatalogEntry,
+    itemId: string
+  ): Promise<string | null> {
+    const ean = taughtEan(entry);
+    if (ean === null) {
+      return null;
+    }
+    const { item } = await this.catalog.findItemByEan(ean);
+    if (item === null) {
+      return ean;
+    }
+    if (item.id === itemId) {
+      return null;
+    }
+    throw new ItemEanHeldException(eanHeldDetail(ean, item.id, itemId), {
+      details: { [ITEM_EAN_DETAIL]: ean, [ITEM_EAN_HOLDER_DETAIL]: item.id },
+    });
+  }
+
+  /**
+   * Give the product the barcode its accepted row printed (plan 0185).
+   *
+   * The check before the bind already found nobody holding it, so a refusal
+   * here is another write that took it in between, and it is answered as the
+   * conflict it is. The bind stands either way.
+   */
+  private async teachBarcode(itemId: string, ean: string): Promise<void> {
+    const { refused } = await this.catalog.teachItemEans([{ itemId, ean }]);
+    const [refusal] = refused;
+    if (!refusal) {
+      return;
+    }
+    if (refusal.reason === 'HELD' && refusal.heldBy) {
+      throw new ItemEanHeldException(
+        eanHeldDetail(ean, refusal.heldBy, itemId),
+        {
+          details: {
+            [ITEM_EAN_DETAIL]: ean,
+            [ITEM_EAN_HOLDER_DETAIL]: refusal.heldBy,
+          },
+        }
+      );
+    }
+    throw new ConflictException(
+      `The row is bound to ${itemId}, but its barcode ${ean} could not be ` +
+        `added to the product (${refusal.reason}).`
+    );
   }
 
   /**
