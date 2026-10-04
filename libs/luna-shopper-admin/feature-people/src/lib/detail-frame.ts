@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { PageHeader } from '@portfolio/luna-shopper-admin/ui';
 
 /** One line of a definition list: a keyed label, and a value already formatted. */
 export interface DetailFact {
@@ -29,15 +30,14 @@ export interface DetailFact {
  */
 @Component({
   selector: 'lib-detail-frame',
-  imports: [RokuTranslatorPipe],
+  imports: [PageHeader, RokuTranslatorPipe],
   template: `
-    <header>
-      <button (click)="back.emit()" class="back" type="button">
-        {{ 'people.detail.back' | rokuT }}
-      </button>
-      <h1>{{ heading() }}</h1>
-      <p class="kind">{{ kindKey() | rokuT }}</p>
-    </header>
+    <lib-page-header
+      (back)="back.emit()"
+      [backLabel]="'people.detail.back' | rokuT"
+      [heading]="heading()"
+      [subtitle]="kindKey() | rokuT"
+    />
 
     @if (loading()) {
       <p class="state" role="status">{{ 'people.detail.loading' | rokuT }}</p>
@@ -60,33 +60,6 @@ export interface DetailFact {
       gap: var(--admin-space-4);
     }
 
-    header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    .kind {
-      color: var(--admin-ink-muted);
-    }
-
-    .back {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
-      cursor: pointer;
-    }
-
     .state {
       padding: var(--admin-space-6);
       border: 1px dashed var(--admin-border);
@@ -106,10 +79,10 @@ export interface DetailFact {
     }
 
     .state.error button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

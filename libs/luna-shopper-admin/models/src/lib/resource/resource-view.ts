@@ -1,3 +1,4 @@
+import type { ScopeMarkView } from './info-content';
 import { localizedTextValue, missingLocales } from './localized-text';
 import { formatMoney } from './money';
 import { idOf, type ResourceDescriptor } from './resource-descriptor';
@@ -34,6 +35,11 @@ export interface ResourceCell {
    * from {@link ReferenceField.unsetFlag}.
    */
   readonly flag?: true;
+  /**
+   * The scope mark drawn before the value (admin plan 0041, section 10). Set
+   * only from `FieldBase.scope`.
+   */
+  readonly scope?: ScopeMarkView;
   /**
    * What to interpolate into {@link key}, for a word that carries a number.
    *
@@ -118,6 +124,18 @@ const EMPTY: ResourceCell = { text: '', key: EMPTY_VALUE_KEY };
 
 /** One field of one row, as a cell. */
 export function toCell<T extends ResourceRow>(
+  field: FieldDescriptor<T>,
+  row: T,
+  options: RenderOptions
+): ResourceCell {
+  const cell = valueCell(field, row, options);
+  const scope = field.scope?.(row);
+
+  return scope === undefined ? cell : { ...cell, scope };
+}
+
+/** The value alone, before any mark the field puts in front of it. */
+function valueCell<T extends ResourceRow>(
   field: FieldDescriptor<T>,
   row: T,
   options: RenderOptions

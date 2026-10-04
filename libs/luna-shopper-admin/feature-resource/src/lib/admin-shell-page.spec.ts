@@ -122,6 +122,9 @@ async function render(
   }).compileComponents();
 
   await TestBed.inject(Router).navigateByUrl(url);
+  // The app asks which deployment answered before it draws anything, and the
+  // frame writes the name it was told.
+  await TestBed.inject(DeploymentStore).load();
 
   const fixture = TestBed.createComponent(AdminShellPage);
   fixture.detectChanges();
@@ -170,7 +173,7 @@ describe('AdminShellPage sections', () => {
   });
 });
 
-/** The second row: the screens inside whichever section the URL is in. */
+/** The tabs of a page: the screens inside whichever section the URL is in. */
 describe('AdminShellPage screens', () => {
   it('is the current section resources, by their descriptor labels', async () => {
     const fixture = await render('/catalog');
@@ -231,7 +234,7 @@ describe('AdminShellPage screens', () => {
     expect(fixture.componentInstance.screens()).toEqual([]);
   });
 
-  /** Both rows are still drawn, so the operator can leave. */
+  /** The rail is still drawn, so the operator can leave. */
   it('still draws the sections for a URL that matches nothing', async () => {
     const fixture = await render('/nowhere');
     const hrefs = [...fixture.nativeElement.querySelectorAll('nav a')].map(
@@ -307,105 +310,204 @@ describe('AdminShellPage badges', () => {
 });
 
 /**
- * On a phone the menu is the sections, with the current one's screens indented
- * under it. A menu that opens twenty three links has not solved anything.
+ * On a phone the navigation is a bar at the bottom: the first four sections
+ * and "More", which opens a sheet with the rest (admin plan 0041, section 2).
  */
 describe('AdminShellPage when compact', () => {
-  it('expands the current section and no other', async () => {
-    const fixture = await render('/catalog', SECTIONS, true);
-    const toggle = fixture.nativeElement.querySelector(
-      'button.toggle'
+  const FIVE: readonly AdminSection[] = [
+    ...SECTIONS.slice(0, 3),
+    {
+      key: 'shoppers',
+      label: 'shell.sections.shoppers',
+      segment: 'shoppers',
+      home: CatalogHome,
+    },
+    SECTIONS[3],
+  ];
+
+  const more = (fixture: { nativeElement: HTMLElement }) =>
+    fixture.nativeElement.querySelector(
+      'nav.bar [data-menu="more"]'
     ) as HTMLButtonElement;
-    toggle.click();
-    fixture.detectChanges();
-    // `routerLinkActive` settles in a content hook, which runs after the
-    // bindings of the pass that created it, so the indented list appears on the
-    // next one.
+
+  it('draws the bar and no rail', async () => {
+    const fixture = await render('/catalog', SECTIONS, true);
+
+    expect(fixture.nativeElement.querySelector('nav.rail')).toBeNull();
+    expect(fixture.nativeElement.querySelector('nav.bar')).not.toBeNull();
+  });
+
+  it('shows the first four sections and keeps the rest behind More', async () => {
+    const fixture = await render('/catalog', FIVE, true);
+    const hrefs = [...fixture.nativeElement.querySelectorAll('nav.bar a')].map(
+      (node) => (node as Element).getAttribute('href')
+    );
+
+    expect(hrefs).toEqual(['/', '/catalog', '/harvest', '/shoppers']);
+    expect(more(fixture)).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.sheet')).toBeNull();
+  });
+
+  it('opens a sheet with the other sections, the language and the way out', async () => {
+    const fixture = await render('/catalog', FIVE, true);
+    await fixture.whenStable();
+
+    more(fixture).click();
     fixture.detectChanges();
 
-    const inside = [
-      ...fixture.nativeElement.querySelectorAll('ul.inside'),
-    ] as HTMLElement[];
+    const sheet = fixture.nativeElement.querySelector('.sheet') as HTMLElement;
 
-    expect(inside).toHaveLength(1);
+    expect(sheet.getAttribute('role')).toBe('dialog');
     expect(
-      [...inside[0].querySelectorAll('a')].map((a) => a.getAttribute('href'))
-    ).toEqual(['/catalog/shops', '/catalog/items']);
+      [...sheet.querySelectorAll('a')].map((a) => a.getAttribute('href'))
+    ).toEqual(['/admins']);
+    expect(sheet.textContent).toContain('shell.contentLanguage');
+    expect(sheet.textContent).toContain('shell.signOut');
+    // The name of the deployment, so that the colour of the bar is never the
+    // only sign of which one this is.
+    expect(sheet.textContent).toContain('environment.short.development');
   });
 
-  /** Following either level closes the menu, so it does not cover the page. */
-  it('closes on following a screen', async () => {
-    const fixture = await render('/catalog', SECTIONS, true);
-    const toggle = fixture.nativeElement.querySelector(
-      'button.toggle'
+  /** Following a section closes the sheet, so it does not cover the page. */
+  it('closes on following a section', async () => {
+    const fixture = await render('/catalog', FIVE, true);
+
+    more(fixture).click();
+    fixture.detectChanges();
+    (
+      fixture.nativeElement.querySelector('.sheet a') as HTMLAnchorElement
+    ).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.sheet')).toBeNull();
+  });
+
+  it('closes on Escape and gives the focus back to More', async () => {
+    const fixture = await render('/catalog', FIVE, true);
+    document.body.append(fixture.nativeElement);
+
+    more(fixture).click();
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.sheet')).toBeNull();
+    expect(document.activeElement).toBe(more(fixture));
+
+    fixture.nativeElement.remove();
+  });
+
+  /** "More" is the current entry while the operator is in a section behind it. */
+  it('marks More while the current section is one it holds', async () => {
+    const inside = await render('/admins', FIVE, true);
+    expect(more(inside).classList.contains('current')).toBe(true);
+
+    const outside = await render('/catalog', FIVE, true);
+    expect(more(outside).classList.contains('current')).toBe(false);
+  });
+});
+
+/**
+ * The frame on a wide screen: a rail, and nothing above the page (admin plan
+ * 0041, section 1).
+ */
+describe('AdminShellPage on a wide screen', () => {
+  it('draws the rail and no bar', async () => {
+    const fixture = await render('/catalog');
+
+    expect(fixture.nativeElement.querySelector('nav.rail')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('nav.bar')).toBeNull();
+  });
+
+  it('writes the name of the deployment in the rail', async () => {
+    const fixture = await render('/catalog');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      fixture.nativeElement.querySelector('nav.rail .deployment').textContent
+    ).toContain('environment.short.development');
+  });
+
+  it('keeps the way out behind the account button', async () => {
+    const fixture = await render('/catalog');
+    const account = fixture.nativeElement.querySelector(
+      '[data-menu="account"]'
     ) as HTMLButtonElement;
-    toggle.click();
-    fixture.detectChanges();
-    fixture.detectChanges();
 
-    const link = fixture.nativeElement.querySelector(
-      'ul.inside a'
-    ) as HTMLAnchorElement;
-    link.click();
+    expect(fixture.nativeElement.querySelector('.menu')).toBeNull();
+
+    account.click();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('#shell-nav')).toBeNull();
-  });
-
-  /** There is no second row on a phone: the screens live inside the menu. */
-  it('draws no second row of its own', async () => {
-    const fixture = await render('/catalog', SECTIONS, true);
-
-    expect(fixture.nativeElement.querySelector('.second')).toBeNull();
+    expect(account.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      fixture.nativeElement.querySelector('.menu').textContent
+    ).toContain('shell.signOut');
   });
 });
 
 /**
  * The content language control (admin plan 0026, section 7).
  *
- * In the header beside the operator's name, because it is a property of who is
- * reading and not of what is on screen. It offers the **content** locales and
- * never `APP_AVAILABLE_LOCALES`, which is the interface's list and is one entry
+ * In the rail beside the account, because it is a property of who is reading
+ * and not of what is on screen. It offers the **content** locales and never
+ * `APP_AVAILABLE_LOCALES`, which is the interface's list and is one entry
  * long: conflating the two is exactly what the plan exists to avoid.
  */
 describe('AdminShellPage content language', () => {
-  const control = (fixture: { nativeElement: HTMLElement }) =>
+  const button = (fixture: { nativeElement: HTMLElement }) =>
     fixture.nativeElement.querySelector(
-      '.identity select'
-    ) as HTMLSelectElement | null;
+      '[data-menu="language"]'
+    ) as HTMLButtonElement;
+
+  const options = (fixture: { nativeElement: HTMLElement }) =>
+    [
+      ...fixture.nativeElement.querySelectorAll('.menu button'),
+    ] as HTMLButtonElement[];
 
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
-  it('offers one option per content locale, beside the operator', async () => {
+  it('offers one option per content locale, beside the account', async () => {
     const fixture = await render('/');
-    const select = control(fixture);
 
-    expect(select).not.toBeNull();
+    button(fixture).click();
+    fixture.detectChanges();
+
     expect(
-      [...(select?.options ?? [])].map((option) => option.value)
-    ).toEqual([...CONTENT_LOCALES]);
+      options(fixture).map((option) => option.textContent?.trim())
+    ).toEqual(CONTENT_LOCALES.map((locale) => `shell.language.${locale}`));
   });
 
   it('shows the language the operator is reading in', async () => {
     const fixture = await render('/');
 
-    expect(control(fixture)?.value).toBe(CONTENT_LOCALES[0]);
+    expect(button(fixture).textContent?.trim()).toBe(
+      CONTENT_LOCALES[0].toUpperCase()
+    );
+
+    button(fixture).click();
+    fixture.detectChanges();
+
+    expect(
+      options(fixture).map((option) => option.getAttribute('aria-pressed'))
+    ).toEqual(['true', 'false']);
   });
 
   it('records a choice, so every reader and the next tab pick it up', async () => {
     const fixture = await render('/');
-    const select = control(fixture);
 
-    if (select === null) {
-      throw new Error('there is no content language control');
-    }
-    select.value = 'es';
-    select.dispatchEvent(new Event('change'));
+    button(fixture).click();
+    fixture.detectChanges();
+    options(fixture)[1].click();
     fixture.detectChanges();
 
     expect(TestBed.inject(ContentLocaleStore).locale()).toBe('es');
     expect(TestBed.inject(ContentLocaleStore).order()).toEqual(['es', 'en']);
+    // Choosing closes the menu, and the button now says the new language.
+    expect(options(fixture)).toEqual([]);
+    expect(button(fixture).textContent?.trim()).toBe('ES');
   });
 
   /**
@@ -414,9 +516,10 @@ describe('AdminShellPage content language', () => {
    */
   it('leaves the interface locale alone', async () => {
     const fixture = await render('/');
-    const select = control(fixture);
 
-    select?.dispatchEvent(new Event('change'));
+    button(fixture).click();
+    fixture.detectChanges();
+    options(fixture)[1].click();
     fixture.detectChanges();
 
     expect(APP_AVAILABLE_LOCALES).toEqual(['en']);

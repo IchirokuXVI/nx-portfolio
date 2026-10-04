@@ -36,6 +36,13 @@ import {
   ZONES,
 } from '@portfolio/luna-shopper-admin/feature-people';
 import type { AdminSection } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  DashboardIcon,
+  InboxIcon,
+  PeopleIcon,
+  ShieldIcon,
+  StoreIcon,
+} from '@portfolio/shared/ui';
 
 /**
  * The segment the catalog owns, for the rare screen that builds an absolute URL
@@ -119,11 +126,13 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // holds is what is true of the whole system rather than of one part of it.
     key: 'overview',
     label: 'shell.sections.overview',
+    icon: DashboardIcon,
     home: DashboardPage,
   },
   {
     key: 'catalog',
     label: 'shell.sections.catalog',
+    icon: StoreIcon,
     segment: CATALOG_SEGMENT,
     home: CatalogDashboard,
     resources: [
@@ -145,6 +154,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
   {
     key: 'shoppers',
     label: 'shell.sections.shoppers',
+    icon: PeopleIcon,
     segment: SHOPPERS_SEGMENT,
     home: PeopleDashboard,
     resources: [USERS, ZONES, MEMBERSHIPS, LISTS, LIST_LINES, BASKETS],
@@ -154,6 +164,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // reasons, and this plan makes the reason general rather than particular.
     key: 'harvest',
     label: 'shell.sections.harvest',
+    icon: InboxIcon,
     segment: HARVEST_SEGMENT,
     home: HarvestDashboard,
     // The brands are here rather than in the catalog, although a registered
@@ -173,6 +184,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // operator and the list, which is `0004`'s argument and it holds here too.
     key: 'admins',
     label: 'shell.sections.admins',
+    icon: ShieldIcon,
     resources: [ADMINS],
   },
 ];

@@ -97,8 +97,8 @@ const SPARK_HEIGHT = 40;
     }
 
     .tile.attention {
-      border-color: var(--admin-status-attention);
-      background: var(--admin-status-attention-wash);
+      border-color: var(--admin-waiting-on-wash);
+      background: var(--admin-waiting-wash);
     }
 
     a.tile:hover,

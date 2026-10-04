@@ -22,6 +22,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import {
   HarvestNotice,
+  PageHeader,
   RunRowView,
   SwitchPanel,
   type RunRow,
@@ -95,6 +96,7 @@ type RunPreset =
 @Component({
   selector: 'lib-runs-page',
   imports: [
+    PageHeader,
     FormsModule,
     RouterLink,
     RokuTranslatorPipe,
@@ -104,9 +106,7 @@ type RunPreset =
     SwitchPanel,
   ],
   template: `
-    <header>
-      <h1>{{ 'harvest.runs.heading' | rokuT }}</h1>
-    </header>
+    <lib-page-header [heading]="'harvest.runs.heading' | rokuT" />
 
     <lib-switch-panel [switches]="shell.switches()" />
 
@@ -305,11 +305,6 @@ type RunPreset =
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     h2 {

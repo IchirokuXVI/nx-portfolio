@@ -9,10 +9,12 @@ import type {
   EnumOption,
   FieldDescriptor,
   FilterDescriptor,
+  InfoContent,
   NamedAction,
   ResourceRow,
   ResourceRowView,
 } from '@portfolio/luna-shopper-admin/models';
+import { PageHeader } from '../page/page-header';
 import type { ReferenceLookup } from './reference-lookup';
 import { ResourceCellView } from './resource-cell';
 import { ResourceFilters, type FilterChange } from './resource-filters';
@@ -48,20 +50,20 @@ export interface RowAction {
  */
 @Component({
   selector: 'lib-resource-list',
-  imports: [RokuTranslatorPipe, ResourceCellView, ResourceFilters],
+  imports: [RokuTranslatorPipe, ResourceCellView, ResourceFilters, PageHeader],
   template: `
-    <header class="head">
-      <h1>{{ titleKey() | rokuT }}</h1>
+    <lib-page-header [heading]="titleKey() | rokuT" [info]="info()">
       @if (canCreate()) {
-        <button (click)="create.emit()" class="primary" type="button">
+        <button
+          (click)="create.emit()"
+          class="primary"
+          pageAction
+          type="button"
+        >
           {{ 'resource.action.create' | rokuT }}
         </button>
       }
-    </header>
-
-    @if (noteKey(); as note) {
-      <p class="note">{{ note | rokuT }}</p>
-    }
+    </lib-page-header>
 
     @for (notice of noticeKeys(); track notice) {
       <p class="notice" role="status">{{ notice | rokuT }}</p>
@@ -286,19 +288,6 @@ export interface RowAction {
       gap: var(--admin-space-4);
     }
 
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     .state {
       display: flex;
       flex-direction: column;
@@ -382,23 +371,15 @@ export interface RowAction {
       text-align: end;
     }
 
-    .note {
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink-muted);
-    }
-
-    /* A notice is something that is true today rather than always, so it is not
-       muted the way a permanent explanation is. A tinted box takes the wash and
+    /* A notice is something that is true today rather than always, so it is on
+       the page and not behind the info button. A tinted box takes the wash and
        the wash's ink, which is the rule the tokens file states. */
     .notice {
       padding: var(--admin-space-3);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
 
     .title.plain {
@@ -424,11 +405,26 @@ export interface RowAction {
       justify-content: flex-end;
     }
 
+    /* In the table the actions stay a cell. As a flex box the cell took the
+       height of its buttons and not of its row, so its line sat above or below
+       the line of the cells beside it once a row and a button stopped being
+       the same height. */
+    td.row-actions {
+      display: table-cell;
+      text-align: end;
+      vertical-align: middle;
+    }
+
+    td.row-actions button {
+      margin-block: 0.125rem;
+      margin-inline-start: var(--admin-space-2);
+    }
+
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);
@@ -550,12 +546,12 @@ export class ResourceList {
    * is worse than a plain name, and a keyboard reaches it first.
    */
   readonly canOpen = input(true);
-  /** A sentence above the list, as a key. For a screen whose shape needs explaining. */
-  readonly noteKey = input<string | null>(null);
+  /** What the info button in the header says. No button without it. */
+  readonly info = input<InfoContent | null>(null);
   /**
-   * Sentences that are true right now, as keys, under the note.
+   * Sentences that are true right now, as keys, above the rows.
    *
-   * The note explains the screen and never changes. These say what the screen
+   * The info button explains the screen and never changes. These say what the screen
    * has just found out: that nothing is draining the queue it is showing, or
    * that a column could not be filled in. Empty is the ordinary case.
    */

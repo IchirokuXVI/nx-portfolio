@@ -36,7 +36,10 @@ export const ADMINS = defineResource<Admin>({
   segment: 'admins',
   labels: { one: 'people.admins.one', many: 'people.admins.many' },
   idField: 'adminId',
-  note: 'people.admins.note',
+  info: {
+    title: 'people.admins.many',
+    points: ['people.admins.info.readOnly', 'people.admins.info.add'],
+  },
 
   title: (row) => row.username,
 

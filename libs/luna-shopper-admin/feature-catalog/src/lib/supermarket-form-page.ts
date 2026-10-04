@@ -11,7 +11,11 @@ import {
   RESOURCE_ID_PARAM,
   ResourceFormPage,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  PageHeader,
+  ResourceForm,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ChainSections } from './chain-sections';
 
 /** The chain screen's two tabs. */
@@ -31,8 +35,24 @@ export type ChainTab = 'details' | 'sections';
  */
 @Component({
   selector: 'lib-supermarket-form-page',
-  imports: [ResourceForm, ConfirmDialog, ChainSections, RokuTranslatorPipe],
+  imports: [
+    PageHeader,
+    ResourceForm,
+    ConfirmDialog,
+    ChainSections,
+    RokuTranslatorPipe,
+  ],
   template: `
+    <!-- At the top of the page and in every state, so that the title, the way
+         back and the tabs do not arrive a moment after the page. -->
+    <lib-page-header
+      (back)="leave()"
+      [backDisabled]="store.busy()"
+      [backLabel]="'resource.action.back' | rokuT"
+      [heading]="titleKey() | rokuT: titleArgs()"
+      [subtitle]="subtitle()"
+    />
+
     @if (supermarketId() !== null) {
       <div
         [attr.aria-label]="'catalog.chainTabs.label' | rokuT"
@@ -83,15 +103,16 @@ export type ChainTab = 'details' | 'sections';
           (save)="submit()"
           (valueChange)="change($event)"
           [busy]="store.busy()"
+          [cautionKey]="descriptor.caution ?? null"
           [context]="context()"
           [draft]="store.draft()"
           [errorKey]="bannerKey()"
           [errorLink]="bannerLink()"
           [fields]="descriptor.fields"
+          [header]="false"
           [lookup]="references"
           [messages]="messages()"
           [mode]="mode"
-          [noteKey]="descriptor.formNote ?? null"
           [readonlyCells]="readonlyCells()"
           [strayErrors]="store.strayErrors()"
           [subtitle]="subtitle()"
@@ -139,8 +160,8 @@ export type ChainTab = 'details' | 'sections';
     }
 
     .tabs button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: none;
       border-block-end: 2px solid transparent;
       margin-block-end: -1px;

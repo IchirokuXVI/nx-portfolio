@@ -234,9 +234,9 @@ export function moveId(
 
     .notice {
       padding: var(--admin-space-3);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
+      background: var(--admin-waiting-wash);
       color: var(--admin-ink);
     }
 
@@ -287,7 +287,7 @@ export function moveId(
       display: flex;
       gap: var(--admin-space-2);
       align-items: center;
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       cursor: pointer;
     }
 
@@ -309,10 +309,10 @@ export function moveId(
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

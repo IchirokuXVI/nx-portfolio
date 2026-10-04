@@ -106,7 +106,7 @@ export const LISTS = defineResource<List>({
     compact: ['zoneName', 'lineCount'],
   },
 
-  formNote: 'people.broadcast',
+  caution: 'people.broadcast',
 
   actions: { edit: true, delete: true },
 

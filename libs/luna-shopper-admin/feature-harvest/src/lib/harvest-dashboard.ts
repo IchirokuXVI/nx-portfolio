@@ -21,6 +21,7 @@ import { runProgress } from '@portfolio/luna-shopper-admin/models';
 import {
   BarChart,
   BlockNotice,
+  PageHeader,
   RunProgressView,
   RunRowView,
   StatTile,
@@ -59,6 +60,7 @@ import { HARVEST_SEGMENT } from './harvest-paths';
 @Component({
   selector: 'lib-harvest-dashboard',
   imports: [
+    PageHeader,
     RouterLink,
     RokuTranslatorPipe,
     BarChart,
@@ -68,7 +70,7 @@ import { HARVEST_SEGMENT } from './harvest-paths';
     StatTile,
   ],
   template: `
-    <h1>{{ 'shell.sections.harvest' | rokuT }}</h1>
+    <lib-page-header [heading]="'shell.sections.harvest' | rokuT" />
 
     @if (document(); as doc) {
       @if (doc.harvest; as harvest) {
@@ -149,11 +151,6 @@ import { HARVEST_SEGMENT } from './harvest-paths';
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     h2 {

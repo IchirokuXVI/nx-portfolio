@@ -111,8 +111,6 @@ export const SECTIONS = defineResource<Section>({
     compact: ['slug', 'categoryIds', 'locationCount'],
   },
 
-  note: 'catalog.sections.note',
-
   filters: [
     {
       kind: 'search',

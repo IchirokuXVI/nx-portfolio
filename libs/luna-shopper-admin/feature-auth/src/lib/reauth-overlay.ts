@@ -184,11 +184,11 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
       /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
          smaller, which on a phone leaves the operator scrolled sideways. */
       font: inherit;
-      font-size: 1rem;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      font-size: var(--admin-field-size);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       color: var(--admin-ink);
     }
@@ -210,9 +210,9 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
 
     button {
       margin-block-start: var(--admin-space-4);
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border: 1px solid transparent;
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-accent);
       font: inherit;
       font-weight: 600;

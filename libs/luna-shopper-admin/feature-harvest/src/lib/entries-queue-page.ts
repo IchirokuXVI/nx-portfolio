@@ -36,6 +36,7 @@ import {
 import {
   ConfirmDialog,
   HarvestNotice,
+  PageHeader,
   QueueFrame,
   ReferencePicker,
   ReferencesControl,
@@ -133,8 +134,11 @@ const BRAND_SEARCH_DELAY_MS = 250;
     ReferencesControl,
     ConfirmDialog,
     DecisionsFilePanel,
+    PageHeader,
   ],
   template: `
+    <lib-page-header [heading]="'harvest.entries.heading' | rokuT" />
+
     <!-- A curation run's decisions file, applied from here (admin plan 0035,
          section 3). The panel reads and reviews it; only its own button sends. -->
     @if (decisionsOpen()) {

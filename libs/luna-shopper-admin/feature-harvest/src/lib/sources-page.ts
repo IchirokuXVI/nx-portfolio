@@ -18,8 +18,10 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
+  CautionLine,
   ConfirmDialog,
   HarvestNotice,
+  PageHeader,
   ReferencePicker,
 } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
@@ -113,6 +115,8 @@ function configTextOf(
 @Component({
   selector: 'lib-sources-page',
   imports: [
+    PageHeader,
+    CautionLine,
     FormsModule,
     RokuTranslatorPipe,
     ConfirmDialog,
@@ -120,11 +124,7 @@ function configTextOf(
     ReferencePicker,
   ],
   template: `
-    <header>
-      <h1>{{ 'harvest.sources.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'harvest.sources.lead' | rokuT }}</p>
-    </header>
-
+    <lib-page-header [heading]="'harvest.sources.heading' | rokuT" />
     <!-- Read only, and not a row: OpenStreetMap is asked by the postal code
          queue for every code, so there is nothing about it to switch or
          configure here (backend plan 0153). -->
@@ -291,6 +291,9 @@ function configTextOf(
               </dl>
 
               @if (editing() === source.supermarketId) {
+                <!-- Beside the two settings it warns about, and only while
+                     they can be changed (admin plan 0041, section 3). -->
+                <lib-caution-line [text]="'harvest.sources.caution' | rokuT" />
                 <div class="edit">
                   <label>
                     <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
@@ -387,12 +390,6 @@ function configTextOf(
       gap: var(--admin-space-4);
     }
 
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
-    .lead,
     .state {
       color: var(--admin-ink-muted);
     }
@@ -536,12 +533,12 @@ function configTextOf(
     /* The global control rule covers button, input and select, and a textarea
        is none of the three, so it wears the same clothes here. */
     textarea {
-      padding: var(--admin-space-2) var(--admin-space-3);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font-family: monospace;
-      font-size: 1rem;
+      font-size: var(--admin-field-size);
       color: var(--admin-ink);
       resize: vertical;
     }

@@ -177,7 +177,7 @@ export const ZONES = defineResource<Zone>({
     },
   ],
 
-  formNote: 'people.broadcast',
+  caution: 'people.broadcast',
 
   actions: {
     edit: true,

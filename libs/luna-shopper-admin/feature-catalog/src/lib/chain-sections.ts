@@ -69,7 +69,6 @@ export function panelErrorKey(error: unknown): string {
           >
         }
       </div>
-      <p class="muted">{{ 'catalog.chainSections.says' | rokuT }}</p>
 
       @if (loading() && sections().length === 0) {
         <p class="muted" role="status">
@@ -283,7 +282,7 @@ export function panelErrorKey(error: unknown): string {
       min-block-size: 2.25rem;
       padding: var(--admin-space-1) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

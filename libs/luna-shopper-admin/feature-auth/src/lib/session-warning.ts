@@ -66,10 +66,10 @@ import { SessionLifecycle } from '@portfolio/luna-shopper-admin/data-access';
     }
 
     button {
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       padding: 0 var(--admin-space-4);
       border: 1px solid transparent;
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-accent);
       font: inherit;
       font-weight: 600;

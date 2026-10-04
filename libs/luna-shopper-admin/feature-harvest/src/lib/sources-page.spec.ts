@@ -20,7 +20,7 @@ import { ChainNames } from './chain-names';
 import {
   applyControlBase,
   controlBaseProperties,
-  controlBaseRule,
+  controlBaseStylesheet,
 } from './control-base.testing';
 import { SourcesPage } from './sources-page';
 
@@ -426,10 +426,11 @@ describe('the chain sources screen, and its controls', () => {
   /**
    * The screen writes no control styles at all, which is the point: it gets them
    * from the app's stylesheet, and this is the test that the stylesheet is where
-   * they come from. `min-block-size` is the declaration that survives the trip,
-   * so it is the one that proves the rule reached the element: it carries a
-   * literal, unlike the five that carry a token, and it is not a longhand behind
-   * a shorthand, unlike `font-size`.
+   * they come from. `min-block-size` is the declaration that proves the rule
+   * reached the element. It carries the control height token since admin plan
+   * 0041 (36 px beside a pointer, 44 px under a thumb), and jsdom hands a
+   * `var()` back as it was written, which is exactly what a rule that reached
+   * the element looks like here.
    */
   it('draws a select an operator can hit, at the size the pickers are', async () => {
     const fixture = await render();
@@ -445,7 +446,7 @@ describe('the chain sources screen, and its controls', () => {
       fixture.nativeElement.querySelector('select');
     expect(select).not.toBeNull();
     expect(getComputedStyle(select).getPropertyValue('min-block-size')).toBe(
-      '2.75rem'
+      'var(--admin-control)'
     );
   });
 
@@ -459,20 +460,18 @@ describe('the chain sources screen, and its controls', () => {
 
     expect(button).not.toBeNull();
     expect(getComputedStyle(button).getPropertyValue('min-block-size')).toBe(
-      '2.75rem'
+      'var(--admin-control)'
     );
   });
 
   /**
-   * The other seven, read out of the file rather than off the element.
+   * The other six, read out of the file rather than off the element.
    *
-   * Five carry a token and jsdom leaves a `var()` unresolved. `font-size` is the
-   * sixth, and it is worse than unresolved: jsdom lets the `font` shorthand
-   * before it win, so a computed style says `medium` for a rule a browser reads
-   * as `1rem`. Asserting the order is the honest version of that check, and the
-   * order is the whole point of the pair: `font: inherit` takes the app's face,
-   * then `font-size` puts it back at 1rem so iOS Safari does not zoom the
-   * viewport on focus.
+   * `font: inherit` takes the app's face and its size. A field then takes the
+   * field size from a rule of its own, which is a token that is 14 px beside a
+   * pointer and 1rem on a phone, so that iOS Safari does not zoom the viewport
+   * on focus (admin plan 0041, section 9). The order is the point of the pair,
+   * so the field rule is asserted to come after the base.
    */
   it('takes the whole base, not the one a spec can measure', () => {
     expect(controlBaseProperties()).toEqual([
@@ -482,11 +481,17 @@ describe('the chain sources screen, and its controls', () => {
       'border-radius',
       'background',
       'font',
-      'font-size',
       'color',
     ]);
 
-    expect(controlBaseRule().body).toContain('font-size: 1rem');
+    const sheet = controlBaseStylesheet();
+    const field =
+      /\ninput,\s*select,\s*textarea \{\s*font-size: var\(--admin-field-size\);/.exec(
+        sheet
+      );
+
+    expect(field).not.toBeNull();
+    expect(field?.index ?? -1).toBeGreaterThan(sheet.indexOf('font: inherit'));
   });
 
   /**

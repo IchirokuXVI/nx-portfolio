@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
+import type {
+  HarvestSwitch,
+  InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
+import { InfoButton } from '../info/info-button';
 
 /**
  * The switches, shown and not editable (plan 0006, section 3).
@@ -26,11 +30,15 @@ import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
  */
 @Component({
   selector: 'lib-switch-panel',
-  imports: [RokuTranslatorPipe],
+  imports: [RokuTranslatorPipe, InfoButton],
   template: `
     <section>
-      <h2>{{ 'harvest.switch.heading' | rokuT }}</h2>
-      <p class="lead">{{ 'harvest.switch.lead' | rokuT }}</p>
+      <!-- When a run may start, behind an info button beside the title
+           (admin plan 0041, section 3). -->
+      <div class="named">
+        <h2>{{ 'harvest.switch.heading' | rokuT }}</h2>
+        <lib-info-button [info]="info" align="start" />
+      </div>
 
       <ul>
         @for (item of switches(); track item.name) {
@@ -66,8 +74,10 @@ import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
       font-weight: 700;
     }
 
-    .lead {
-      color: var(--admin-ink-muted);
+    .named {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
     }
 
     ul {
@@ -128,4 +138,10 @@ import type { HarvestSwitch } from '@portfolio/luna-shopper-admin/models';
 })
 export class SwitchPanel {
   readonly switches = input.required<readonly HarvestSwitch[]>();
+
+  /** What the info button says. */
+  readonly info: InfoContent = {
+    title: 'harvest.switch.heading',
+    points: ['harvest.switch.info.both', 'harvest.switch.info.chain'],
+  };
 }

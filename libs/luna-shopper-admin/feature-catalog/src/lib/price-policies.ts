@@ -82,8 +82,15 @@ export const PRICE_POLICIES = defineResource<PricePolicy>({
     compact: ['priority', 'maxAgeDays', 'enabled'],
   },
 
-  note: 'catalog.pricePolicies.note',
-  formNote: 'catalog.pricePolicies.formNote',
+  info: {
+    title: 'catalog.pricePolicies.many',
+    points: [
+      'catalog.pricePolicies.info.wins',
+      'catalog.pricePolicies.info.age',
+      'catalog.pricePolicies.info.off',
+    ],
+  },
+  caution: 'catalog.pricePolicies.caution',
 
   // Six rows, seeded by the migration. Nothing creates a seventh and nothing
   // deletes one: a kind with no policy would be a kind no read could rank.

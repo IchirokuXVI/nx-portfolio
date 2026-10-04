@@ -114,8 +114,6 @@ export const LOCATION_ITEMS = defineResource<LocationItem>({
     compact: ['positionInStore', 'available'],
   },
 
-  note: 'catalog.locationItems.note',
-
   filters: [
     {
       kind: 'reference',

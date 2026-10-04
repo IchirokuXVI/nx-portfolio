@@ -143,9 +143,9 @@ import {
 
     button {
       margin-block-start: var(--admin-space-4);
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border: 1px solid transparent;
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-accent);
       font: inherit;
       font-weight: 600;

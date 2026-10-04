@@ -270,8 +270,8 @@ function text(value: unknown): string {
 
     .chip.shared {
       margin-inline-start: var(--admin-space-2);
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

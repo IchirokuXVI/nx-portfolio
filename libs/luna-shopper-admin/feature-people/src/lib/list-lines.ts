@@ -141,8 +141,11 @@ export const LIST_LINES = defineResource<ListLine>({
     compact: ['listName', 'approvalStatus'],
   },
 
-  note: 'people.lines.note',
-  formNote: 'people.broadcast',
+  info: {
+    title: 'people.lines.many',
+    points: ['people.lines.info.noAdd', 'people.lines.info.correct'],
+  },
+  caution: 'people.broadcast',
 
   filters: [
     {

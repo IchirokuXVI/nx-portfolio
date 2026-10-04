@@ -487,10 +487,24 @@ describe('the admins table', () => {
     );
   });
 
-  it('says in place how an admin is managed instead', async () => {
+  /**
+   * Behind the info button since admin plan 0041: the list opens on its rows,
+   * and how an admin is added is one press away rather than a paragraph above
+   * them.
+   */
+  it('says behind the info button how an admin is managed instead', async () => {
     const fixture = await boot('/admins');
+    const info: HTMLButtonElement = fixture.nativeElement.querySelector(
+      'lib-info-button button'
+    );
 
-    expect(text(fixture)).toContain('people.admins.note');
+    expect(text(fixture)).not.toContain('people.admins.info.add');
+
+    info.click();
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('people.admins.info.readOnly');
+    expect(text(fixture)).toContain('people.admins.info.add');
   });
 
   it('answers the detail address with the not found page', async () => {

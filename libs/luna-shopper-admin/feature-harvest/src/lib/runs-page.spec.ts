@@ -422,7 +422,7 @@ describe('the runs screen, and its controls', () => {
 
     expect(select).not.toBeNull();
     expect(getComputedStyle(select).getPropertyValue('min-block-size')).toBe(
-      '2.75rem'
+      'var(--admin-control)'
     );
   });
 
@@ -440,7 +440,7 @@ describe('the runs screen, and its controls', () => {
 
     expect(start).not.toBeNull();
     expect(getComputedStyle(start).getPropertyValue('min-block-size')).toBe(
-      '2.75rem'
+      'var(--admin-control)'
     );
     expect(controlBaseProperties()).toContain('padding');
     expect(controlBaseProperties()).toContain('border-radius');

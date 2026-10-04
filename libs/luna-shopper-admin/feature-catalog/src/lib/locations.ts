@@ -242,8 +242,6 @@ export const LOCATIONS = defineResource<Location>({
     compact: ['city', 'postalCode', 'postalCodeSource'],
   },
 
-  note: 'catalog.locations.note',
-
   filters: [
     /**
      * The term a reference picker over shops types into (admin plan 0011,

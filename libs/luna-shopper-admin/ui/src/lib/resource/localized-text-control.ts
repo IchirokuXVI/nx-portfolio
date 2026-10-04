@@ -81,11 +81,11 @@ import {
          smaller, which on a phone leaves the operator scrolled sideways. */
       flex: 1;
       font: inherit;
-      font-size: 1rem;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      font-size: var(--admin-field-size);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       color: var(--admin-ink);
     }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
+import { ScopeMark } from '../page/scope-mark';
 
 /**
  * One value, drawn.
@@ -15,8 +16,17 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
  */
 @Component({
   selector: 'lib-resource-cell',
-  imports: [RokuTranslatorPipe, RouterLink],
+  imports: [RokuTranslatorPipe, RouterLink, ScopeMark],
   template: `
+    <!-- How specific the price scope is, before its name (admin plan 0041,
+         section 10). Where the cell's own word is the kind, the mark is not
+         named again for a screen reader. -->
+    @if (cell().scope; as scope) {
+      <lib-scope-mark
+        [label]="cell().key === scope.label ? '' : (scope.label | rokuT)"
+        [level]="scope.level"
+      />
+    }
     @if (cell().key; as key) {
       <span [class.flag]="cell().flag === true" class="word">{{
         key | rokuT: cell().args ?? {}
@@ -59,6 +69,10 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
       overflow-wrap: anywhere;
     }
 
+    lib-scope-mark {
+      margin-inline-end: 0.375rem;
+    }
+
     .word {
       color: var(--admin-ink-muted);
     }
@@ -69,11 +83,11 @@ import type { ResourceCell } from '@portfolio/luna-shopper-admin/models';
     .word.flag {
       display: inline-block;
       padding: 0 0.5em;
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: 999px;
-      background: var(--admin-status-attention-wash);
+      background: var(--admin-waiting-wash);
       font-size: 0.8em;
-      color: var(--admin-status-attention-on-wash);
+      color: var(--admin-waiting-on-wash);
       white-space: nowrap;
     }
 

@@ -17,7 +17,11 @@ import {
   parseMoney,
   type FieldMessage,
 } from '@portfolio/luna-shopper-admin/models';
-import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  PageHeader,
+  ResourceForm,
+} from '@portfolio/luna-shopper-admin/ui';
 import { PRICE_SCOPE_KIND_OPTIONS } from './catalog-enums';
 import {
   itemSource,
@@ -71,8 +75,24 @@ const COUNT_PAGE_SIZE = 100;
  */
 @Component({
   selector: 'lib-price-form-page',
-  imports: [ResourceForm, ConfirmDialog, PriceScopeNotice, RokuTranslatorPipe],
+  imports: [
+    PageHeader,
+    ResourceForm,
+    ConfirmDialog,
+    PriceScopeNotice,
+    RokuTranslatorPipe,
+  ],
   template: `
+    <!-- At the top of the page and in every state, so that the title, the way
+         back and the tabs do not arrive a moment after the page. -->
+    <lib-page-header
+      (back)="leave()"
+      [backDisabled]="store.busy()"
+      [backLabel]="'resource.action.back' | rokuT"
+      [heading]="titleKey() | rokuT: titleArgs()"
+      [subtitle]="subtitle()"
+    />
+
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
@@ -116,6 +136,7 @@ const COUNT_PAGE_SIZE = 100;
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [fields]="descriptor.fields"
+        [header]="false"
         [lookup]="references"
         [messages]="priceMessages()"
         [mode]="mode"

@@ -92,12 +92,16 @@ describe('SwitchPanel', () => {
 
   /**
    * The point of the panel. It shows both and changes neither: they are
-   * deployment configuration, not application state.
+   * deployment configuration, not application state. The one button is the
+   * info button beside the title, which explains and changes nothing either.
    */
-  it('offers no control of any kind', async () => {
+  it('offers no control that changes anything', async () => {
     const panel = (await render()).nativeElement;
 
-    expect(panel.querySelectorAll('button')).toHaveLength(0);
+    expect(
+      panel.querySelectorAll('button:not(lib-info-button button)')
+    ).toHaveLength(0);
+    expect(panel.querySelectorAll('lib-info-button')).toHaveLength(1);
     expect(panel.querySelectorAll('input')).toHaveLength(0);
     expect(panel.querySelectorAll('select')).toHaveLength(0);
     expect(panel.querySelectorAll('a')).toHaveLength(0);

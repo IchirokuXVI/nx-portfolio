@@ -83,7 +83,7 @@ export interface RunRow {
       align-items: baseline;
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       text-decoration: none;
       color: inherit;

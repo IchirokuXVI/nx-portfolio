@@ -66,8 +66,8 @@ const BACKGROUND = /background:\s*var\(\s*(--admin-[a-z0-9-]+)\s*\)/;
  * remembers this file.
  */
 function inkedFamilies(): readonly string[] {
-  // A set, because the accent declares its ink four times: once resting and
-  // once inside each of the three deployment blocks.
+  // A set, because the navigation declares its ink four times: once resting
+  // and once inside each of the three deployment blocks.
   const families = new Set(
     [...TOKENS.matchAll(/--admin-([a-z0-9-]+)-ink:/g)].map((found) => found[1])
   );
@@ -163,7 +163,17 @@ describe('an ink goes on its own colour', () => {
   it('finds the tokens the rule is about', () => {
     // The families are read out of the stylesheet, so a rename there would
     // quietly leave this spec checking nothing at all.
-    expect([...inkedFamilies()].sort()).toEqual(['accent', 'danger']);
+    //
+    // The two navigation families are admin plan 0041's: an entry at rest is
+    // `--admin-nav-ink` on `--admin-nav`, and the current entry is
+    // `--admin-nav-current-ink` on `--admin-nav-current`. Neither ink is a
+    // foreground for the page.
+    expect([...inkedFamilies()].sort()).toEqual([
+      'accent',
+      'danger',
+      'nav',
+      'nav-current',
+    ]);
   });
 
   it('is followed everywhere in the app', () => {

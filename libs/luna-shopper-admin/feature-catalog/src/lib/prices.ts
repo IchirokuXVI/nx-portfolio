@@ -242,7 +242,10 @@ export const PRICES = defineResource<Price>({
     compact: ['price', 'sourceKind', 'observedAt', 'stale'],
   },
 
-  note: 'catalog.prices.note',
+  info: {
+    title: 'catalog.prices.many',
+    points: ['catalog.prices.info.row', 'catalog.prices.info.open'],
+  },
 
   filters: [
     {

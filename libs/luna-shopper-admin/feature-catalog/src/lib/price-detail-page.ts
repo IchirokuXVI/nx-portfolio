@@ -24,7 +24,7 @@ import {
   compositeParts,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
+import { ConfirmDialog, PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { PRICE_SOURCE_KIND_OPTIONS } from './catalog-enums';
 import { itemPriceSource, PRICE_KEY, priceSource } from './catalog-sources';
 
@@ -70,22 +70,20 @@ export interface PriceHistoryRow {
  */
 @Component({
   selector: 'lib-price-detail-page',
-  imports: [ConfirmDialog, RokuTranslatorPipe],
+  imports: [PageHeader, ConfirmDialog, RokuTranslatorPipe],
   template: `
-    <header>
-      <button (click)="back()" class="back" type="button">
-        {{ 'catalog.prices.history.back' | rokuT }}
-      </button>
-      <h1>{{ itemId }}</h1>
-      <p class="kind">
-        {{ 'catalog.prices.history.scope' | rokuT }} {{ priceScopeId }}
-      </p>
+    <lib-page-header
+      (back)="back()"
+      [backLabel]="'catalog.prices.history.back' | rokuT"
+      [heading]="itemId"
+      [subtitle]="('catalog.prices.history.scope' | rokuT) + ' ' + priceScopeId"
+    >
       <!-- The same product at every other scope, with why each price is the
            one shown (admin plan 0033). -->
-      <button (click)="everyScope()" class="every" type="button">
+      <button (click)="everyScope()" class="every" pageAction type="button">
         {{ 'catalog.prices.byItem.open' | rokuT }}
       </button>
-    </header>
+    </lib-page-header>
 
     @if (loading()) {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
@@ -226,31 +224,17 @@ export interface PriceHistoryRow {
       gap: var(--admin-space-4);
     }
 
-    header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
     h2 {
       font-size: 1rem;
       font-weight: 700;
     }
 
-    .kind,
     .muted {
       color: var(--admin-ink-muted);
     }
 
-    .back,
     .every {
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
     }
 
     section {

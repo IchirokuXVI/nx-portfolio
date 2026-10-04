@@ -1,4 +1,5 @@
 import type { Signal, Type } from '@angular/core';
+import type { InfoContent } from './info-content';
 import type {
   EnumOption,
   FieldDescriptor,
@@ -333,33 +334,28 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   readonly fields: readonly FieldDescriptor<T>[];
   readonly list: ListPresentation<T>;
   /**
-   * A translation key for a sentence above the list.
+   * What the info button on the list says (admin plan 0041, section 3).
    *
-   * For a screen whose shape needs explaining rather than a screen that is
-   * short of a feature. The admin table is the case it exists for: an operator
-   * looking for the button that adds one finds a sentence naming the server
-   * command instead of an empty toolbar (plan 0007, section 2).
+   * How to use the screen: what a row is, what the main action does, where the
+   * result goes. It replaced a paragraph above the list, which an operator read
+   * once and scrolled past every day after.
    */
-  readonly note?: string;
+  readonly info?: InfoContent;
   /**
-   * A translation key for a sentence on the **form**, above the fields.
+   * A translation key for one line on the **form**, beside a warning mark.
    *
-   * Separate from {@link note}, because the two screens have different things
-   * to say: the lines list says there is no way to add one, and the line form
-   * says that saving is seen immediately by everybody in the zone. A resource
-   * needing both would otherwise have to choose.
-   *
-   * It exists for plan 0009, section 7. Every write to a zone, a membership, a
-   * list or a line emits the realtime event a member's own edit emits, so a
-   * change lands under somebody's thumb while they are shopping. The alternative
-   * to saying so was a confirmation on every edit, which is a click people stop
-   * reading.
+   * For an effect that is large or cannot be taken back, which is why it stays
+   * on the screen and is not behind the info button: it must be seen before the
+   * action. Every write to a zone, a membership, a list or a line is seen at
+   * once by the people in the zone (plan 0009, section 7), and saving a price
+   * rule works out every shown price again. The alternative was a confirmation
+   * on every edit, which is a click people stop reading.
    */
-  readonly formNote?: string;
+  readonly caution?: string;
   /**
    * Sentences the list has to say **right now**, as translation keys.
    *
-   * {@link note} is what a resource always says, so it is a constant. This is
+   * {@link info} is what a resource always says, so it is a constant. This is
    * what one says sometimes, so it is a signal and it is built in an injection
    * context the way {@link gateway} is: a resource that only has something to
    * say when a service answered a certain way has to read that service.

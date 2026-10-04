@@ -22,8 +22,14 @@ import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
 export interface AdminSection {
   /** This section's own name, for a spec and for tracking. */
   readonly key: string;
-  /** A translation key for the tab. */
+  /** A translation key for the entry in the rail and the bar. */
   readonly label: string;
+  /**
+   * The icon above that label: an icon component from `libs/shared/ui` (admin
+   * plan 0041). The app names it beside the label, for the reason it names the
+   * label: it is the app that decides what a section is called.
+   */
+  readonly icon?: Type<unknown>;
   /**
    * The URL segment this section owns, absent for a section with one screen.
    *

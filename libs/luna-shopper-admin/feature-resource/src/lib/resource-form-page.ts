@@ -28,6 +28,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
+  PageHeader,
   ResourceForm,
   type FieldChange,
 } from '@portfolio/luna-shopper-admin/ui';
@@ -71,8 +72,18 @@ const STRING_FIELD_KINDS: readonly string[] = [
  */
 @Component({
   selector: 'lib-resource-form-page',
-  imports: [ResourceForm, ConfirmDialog, RokuTranslatorPipe],
+  imports: [ResourceForm, ConfirmDialog, RokuTranslatorPipe, PageHeader],
   template: `
+    <!-- At the top of the page and in every state, so that the title, the way
+         back and the tabs do not arrive a moment after the page. -->
+    <lib-page-header
+      (back)="leave()"
+      [backDisabled]="store.busy()"
+      [backLabel]="'resource.action.back' | rokuT"
+      [heading]="titleKey() | rokuT: titleArgs()"
+      [subtitle]="subtitle()"
+    />
+
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
@@ -83,15 +94,16 @@ const STRING_FIELD_KINDS: readonly string[] = [
         (save)="submit()"
         (valueChange)="change($event)"
         [busy]="store.busy()"
+        [cautionKey]="descriptor.caution ?? null"
         [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
         [fields]="descriptor.fields"
+        [header]="false"
         [lookup]="references"
         [messages]="messages()"
         [mode]="mode"
-        [noteKey]="descriptor.formNote ?? null"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
         [subtitle]="subtitle()"
@@ -115,6 +127,7 @@ const STRING_FIELD_KINDS: readonly string[] = [
       display: flex;
       flex: 1;
       flex-direction: column;
+      gap: var(--admin-space-4);
     }
 
     .state {

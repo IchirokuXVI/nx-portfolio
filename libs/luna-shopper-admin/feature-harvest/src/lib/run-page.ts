@@ -25,6 +25,7 @@ import {
 import {
   ConfirmDialog,
   HarvestNotice,
+  PageHeader,
   RunProgressView,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
@@ -55,6 +56,7 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 @Component({
   selector: 'lib-run-page',
   imports: [
+    PageHeader,
     RouterLink,
     RokuTranslatorPipe,
     ConfirmDialog,
@@ -63,27 +65,37 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
     RunPricesTab,
   ],
   template: `
-    <p class="back">
-      <a routerLink="..">{{ 'harvest.run.back' | rokuT }}</a>
-    </p>
+    <!-- Drawn in every state, so that the way back and the tabs do not appear
+         only once the run has loaded. Until then the title is the screen this
+         one was opened from. -->
+    <lib-page-header
+      [backLabel]="'harvest.run.back' | rokuT"
+      [heading]="
+        watch.run()
+          ? ('harvest.mode.' + watch.run()?.mode | rokuT)
+          : ('harvest.runs.heading' | rokuT)
+      "
+      backLink=".."
+    >
+      @if (watch.run(); as run) {
+        <p [class]="run.status" class="status" pageChip>
+          {{ 'harvest.status.' + run.status | rokuT }}
+        </p>
+      }
+      <!-- Beside the status and never instead of it: a revert takes back what
+           the run wrote and does not change how the run ended. -->
+      @if (watch.run()?.revertedAt) {
+        <p class="reverted" pageChip>
+          {{ 'harvest.run.reverted.chip' | rokuT }}
+        </p>
+      }
+    </lib-page-header>
 
     @if (watch.loading()) {
       <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
     } @else if (watch.failed()) {
       <lib-harvest-notice (retry)="watch.refresh()" [absent]="shell.absent()" />
     } @else if (watch.run(); as run) {
-      <header>
-        <h1>{{ 'harvest.mode.' + run.mode | rokuT }}</h1>
-        <p [class]="run.status" class="status">
-          {{ 'harvest.status.' + run.status | rokuT }}
-        </p>
-        <!-- Beside the status and never instead of it: a revert takes back what
-             the run wrote and does not change how the run ended. -->
-        @if (run.revertedAt !== null) {
-          <p class="reverted">{{ 'harvest.run.reverted.chip' | rokuT }}</p>
-        }
-      </header>
-
       <!-- Two views of one run (admin plan 0033): what it did, counted, and
            the price rows it left in the catalog, listed. -->
       <div
@@ -360,18 +372,6 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
       align-items: flex-start;
     }
 
-    header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     lib-run-progress {
       inline-size: 100%;
     }
@@ -385,7 +385,7 @@ import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
 
     .tabs button {
       margin-block-end: -1px;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 0;
       border-block-end: 2px solid transparent;
       border-radius: 0;

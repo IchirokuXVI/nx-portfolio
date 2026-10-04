@@ -8,7 +8,7 @@ import {
   type FieldMessage,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { PRICE_SCOPE_KIND_OPTIONS } from './catalog-enums';
+import { PRICE_SCOPE_KIND_OPTIONS, priceScopeMark } from './catalog-enums';
 import { priceScopeSource } from './catalog-sources';
 
 /** A set of shops that share one price, as the gateway describes it. */
@@ -122,6 +122,7 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
       label: 'catalog.priceScopes.kind',
       help: 'catalog.priceScopes.kindHelp',
       options: PRICE_SCOPE_KIND_OPTIONS,
+      scope: (row) => priceScopeMark(row.kind),
       required: true,
     },
     {

@@ -500,9 +500,9 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     a.primary {
       display: inline-flex;
       align-items: center;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border-radius: var(--admin-radius);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
+      border-radius: var(--admin-radius-control);
       text-decoration: none;
     }
 

@@ -107,7 +107,10 @@ export const BASKETS = defineResource<Basket>({
   },
 
   // Why there is nothing to press here, where an operator would look for it.
-  note: 'people.baskets.note',
+  info: {
+    title: 'people.baskets.many',
+    points: ['people.baskets.info.record', 'people.baskets.info.correct'],
+  },
 
   filters: [
     {

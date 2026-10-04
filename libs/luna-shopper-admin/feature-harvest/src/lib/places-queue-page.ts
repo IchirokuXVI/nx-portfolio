@@ -20,11 +20,14 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
+  type InfoContent,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
+  InfoButton,
+  PageHeader,
   QueueFrame,
   ReferencePicker,
   type QueueReport,
@@ -105,8 +108,12 @@ const CATALOG_SHOPS_READ = 100;
     QueueFrame,
     HarvestNotice,
     ReferencePicker,
+    PageHeader,
+    InfoButton,
   ],
   template: `
+    <lib-page-header [heading]="'harvest.places.heading' | rokuT" />
+
     <nav class="views-link">
       <a [routerLink]="groupsLink">{{
         'harvest.places.groups.open' | rokuT
@@ -151,8 +158,12 @@ const CATALOG_SHOPS_READ = 100;
       />
 
       @if (queue.current(); as place) {
-        <h2>{{ place.name ?? place.externalRef }}</h2>
-        <p class="why">{{ 'harvest.places.why' | rokuT }}</p>
+        <!-- What to do with the card, behind an info button beside its name
+             (admin plan 0041, section 3). -->
+        <div class="named">
+          <h2>{{ place.name ?? place.externalRef }}</h2>
+          <lib-info-button [info]="info" align="start" />
+        </div>
 
         <dl>
           @for (line of lines(); track line.key) {
@@ -391,7 +402,7 @@ const CATALOG_SHOPS_READ = 100;
     .views-link {
       display: flex;
       justify-content: flex-end;
-      margin-block-end: var(--admin-space-2);
+      margin-block: var(--admin-space-3) var(--admin-space-2);
     }
 
     .views-link a {
@@ -410,9 +421,11 @@ const CATALOG_SHOPS_READ = 100;
       color: var(--admin-ink-muted);
     }
 
-    .why {
-      margin-block: var(--admin-space-2);
-      color: var(--admin-ink-muted);
+    .named {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      margin-block-end: var(--admin-space-2);
     }
 
     dl {
@@ -480,7 +493,7 @@ const CATALOG_SHOPS_READ = 100;
 
     .quiet {
       align-self: flex-start;
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border: 1px dashed var(--admin-border);
       background: transparent;
       color: var(--admin-accent);
@@ -496,15 +509,15 @@ const CATALOG_SHOPS_READ = 100;
       gap: var(--admin-space-3);
       margin-block: var(--admin-space-3);
       padding: var(--admin-space-4);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
+      background: var(--admin-waiting-wash);
     }
 
     .matches h3,
     .matches .lead {
       margin: 0;
-      color: var(--admin-status-attention-on-wash);
+      color: var(--admin-waiting-on-wash);
     }
 
     .matches ul {
@@ -554,7 +567,7 @@ const CATALOG_SHOPS_READ = 100;
     }
 
     .matches .primary {
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border-color: var(--admin-accent);
       background: var(--admin-accent);
       color: var(--admin-accent-ink);
@@ -563,7 +576,7 @@ const CATALOG_SHOPS_READ = 100;
 
     .matches .force {
       align-self: flex-start;
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       background: var(--admin-surface-raised);
       cursor: pointer;
     }
@@ -624,12 +637,12 @@ const CATALOG_SHOPS_READ = 100;
     .bulk button {
       flex: 1;
       min-block-size: 3rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
-      font-size: 1rem;
+      font-size: var(--admin-field-size);
       color: var(--admin-ink);
       cursor: pointer;
     }
@@ -647,6 +660,12 @@ const CATALOG_SHOPS_READ = 100;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PlacesQueuePage {
+  /** What the info button on the card says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'harvest.places.info.title',
+    points: ['harvest.places.info.found', 'harvest.places.info.decide'],
+  };
+
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _route = inject(ActivatedRoute);
   private readonly _registry = inject(ResourceRegistry);

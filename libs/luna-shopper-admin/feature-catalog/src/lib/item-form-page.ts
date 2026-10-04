@@ -11,7 +11,11 @@ import {
   ResourceFormPage,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  PageHeader,
+  ResourceForm,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ItemSectionsPanel } from './item-sections-panel';
 import { ItemSourceEntries } from './item-source-entries';
 
@@ -33,6 +37,7 @@ import { ItemSourceEntries } from './item-source-entries';
 @Component({
   selector: 'lib-item-form-page',
   imports: [
+    PageHeader,
     ResourceForm,
     ConfirmDialog,
     ItemSourceEntries,
@@ -41,6 +46,16 @@ import { ItemSourceEntries } from './item-source-entries';
     RokuTranslatorPipe,
   ],
   template: `
+    <!-- At the top of the page and in every state, so that the title, the way
+         back and the tabs do not arrive a moment after the page. -->
+    <lib-page-header
+      (back)="leave()"
+      [backDisabled]="store.busy()"
+      [backLabel]="'resource.action.back' | rokuT"
+      [heading]="titleKey() | rokuT: titleArgs()"
+      [subtitle]="subtitle()"
+    />
+
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
@@ -51,15 +66,16 @@ import { ItemSourceEntries } from './item-source-entries';
         (save)="submit()"
         (valueChange)="change($event)"
         [busy]="store.busy()"
+        [cautionKey]="descriptor.caution ?? null"
         [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
         [fields]="descriptor.fields"
+        [header]="false"
         [lookup]="references"
         [messages]="messages()"
         [mode]="mode"
-        [noteKey]="descriptor.formNote ?? null"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
         [subtitle]="subtitle()"

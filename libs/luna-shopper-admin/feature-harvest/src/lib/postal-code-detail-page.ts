@@ -17,6 +17,7 @@ import {
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import { PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant, formatSince } from './format-instant';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { DEFAULT_POSTAL_CODE_COUNTRY } from './postal-code-queue-gateway';
@@ -56,15 +57,14 @@ interface NearCode {
  */
 @Component({
   selector: 'lib-postal-code-detail-page',
-  imports: [RokuTranslatorPipe, RouterLink],
+  imports: [PageHeader, RokuTranslatorPipe, RouterLink],
   template: `
-    <header>
-      <button (click)="back()" class="back" type="button">
-        {{ 'harvest.postalCodes.detail.back' | rokuT }}
-      </button>
-      <h1>{{ postalCode }}</h1>
-      <p class="kind">{{ row()?.placeName ?? '' }}</p>
-    </header>
+    <lib-page-header
+      (back)="back()"
+      [backLabel]="'harvest.postalCodes.detail.back' | rokuT"
+      [heading]="postalCode"
+      [subtitle]="row()?.placeName ?? null"
+    />
 
     <!-- 1. The row itself. -->
     <section class="panel">
@@ -301,19 +301,6 @@ interface NearCode {
       gap: var(--admin-space-4);
     }
 
-    header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
-    }
-
-    h1 {
-      font-family: monospace;
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h2 {
       font-size: 1rem;
       font-weight: 700;
@@ -322,21 +309,6 @@ interface NearCode {
     h3 {
       font-size: 0.875rem;
       font-weight: 700;
-    }
-
-    .kind {
-      color: var(--admin-ink-muted);
-    }
-
-    .back {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
-      cursor: pointer;
     }
 
     .panel {

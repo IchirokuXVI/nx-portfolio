@@ -42,10 +42,12 @@ import {
   type HarvestDocumentRejection,
   type HintResult,
   type ImportConflictNotice,
+  type InfoContent,
   type OfficialSourceKind,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   HarvestNotice,
+  PageHeader,
   ReferencePicker,
 } from '@portfolio/luna-shopper-admin/ui';
 import { HARVEST_SEGMENT } from './harvest-paths';
@@ -144,12 +146,18 @@ export interface PreviewTally {
  */
 @Component({
   selector: 'lib-import-upload-page',
-  imports: [RouterLink, RokuTranslatorPipe, HarvestNotice, ReferencePicker],
+  imports: [
+    PageHeader,
+    RouterLink,
+    RokuTranslatorPipe,
+    HarvestNotice,
+    ReferencePicker,
+  ],
   template: `
-    <header>
-      <h1>{{ 'harvest.imports.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'harvest.imports.lead' | rokuT }}</p>
-    </header>
+    <lib-page-header
+      [heading]="'harvest.imports.heading' | rokuT"
+      [info]="info"
+    />
 
     <section class="drop">
       <label>
@@ -495,17 +503,11 @@ export interface PreviewTally {
       gap: var(--admin-space-4);
     }
 
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h2 {
       font-size: 1rem;
       font-weight: 700;
     }
 
-    .lead,
     .hint,
     .attribution,
     .brand,
@@ -708,6 +710,13 @@ export interface PreviewTally {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ImportUploadPage implements OnDestroy {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'harvest.imports.heading',
+    points: ['harvest.imports.info.drop'],
+    caution: 'harvest.imports.info.caution',
+  };
+
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _translate = inject(RokuTranslatorService);
   /**

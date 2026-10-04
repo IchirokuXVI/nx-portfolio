@@ -207,7 +207,7 @@ describe('the translation catalogue', () => {
   it('holds the twelve the chain sources screen needs', () => {
     const keys = [
       'harvest.sources.heading',
-      'harvest.sources.lead',
+      'harvest.sources.caution',
       'harvest.sources.empty',
       'harvest.sources.edit',
       'harvest.sources.enabled',

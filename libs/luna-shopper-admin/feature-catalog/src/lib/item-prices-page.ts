@@ -23,11 +23,14 @@ import {
 import {
   compositeIdOf,
   localizedTextValue,
+  type ScopeLevel,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { PageHeader, ScopeMark } from '@portfolio/luna-shopper-admin/ui';
 import {
   PRICE_SCOPE_KIND_OPTIONS,
   PRICE_SOURCE_KIND_OPTIONS,
+  priceScopeMark,
 } from './catalog-enums';
 import type { ItemScopePrices } from './catalog-seed';
 import {
@@ -82,6 +85,8 @@ export interface ScopePricesView {
   readonly supermarketId: string;
   readonly name: string;
   readonly kindLabel: string;
+  /** How many bars the scope mark fills, absent for a kind this app does not know. */
+  readonly kindLevel: ScopeLevel | undefined;
   readonly rows: readonly ScopePriceRow[];
   readonly shownBecause: ShownBecause | null;
   /** When an `ADMIN` row's protection ends, as words, or `''`. */
@@ -113,17 +118,15 @@ export interface ScopePricesView {
  */
 @Component({
   selector: 'lib-item-prices-page',
-  imports: [RouterLink, RokuTranslatorPipe],
+  imports: [PageHeader, ScopeMark, RouterLink, RokuTranslatorPipe],
   template: `
-    <header>
-      @if (itemLink(); as link) {
-        <a [routerLink]="link" class="back">{{
-          'catalog.prices.byItem.back' | rokuT
-        }}</a>
-      }
-      <h1>{{ heading() }}</h1>
-      <p class="muted">{{ 'catalog.prices.byItem.lead' | rokuT }}</p>
-    </header>
+    <lib-page-header
+      [backLabel]="
+        itemLink() === null ? null : ('catalog.prices.byItem.back' | rokuT)
+      "
+      [backLink]="itemLink()"
+      [heading]="heading()"
+    />
 
     @if (loading() && scopes().length === 0) {
       <p class="state" role="status">{{ 'resource.list.loading' | rokuT }}</p>
@@ -142,7 +145,14 @@ export interface ScopePricesView {
           <li>
             <div class="scope-head">
               <h2>{{ scope.name }}</h2>
-              <span class="muted">{{ scope.kindLabel }}</span>
+              <span class="muted kind">
+                <!-- How far this price reaches, before the word that says
+                     so (admin plan 0041, section 10). -->
+                @if (scope.kindLevel; as level) {
+                  <lib-scope-mark [level]="level" />
+                }
+                {{ scope.kindLabel }}
+              </span>
               <span class="muted">{{ chainName(scope.supermarketId) }}</span>
               @if (scope.stale) {
                 <span class="chip attention">{{
@@ -233,17 +243,6 @@ export interface ScopePricesView {
       align-items: flex-start;
     }
 
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
     h2 {
       font-size: 1rem;
       font-weight: 700;
@@ -253,7 +252,6 @@ export interface ScopePricesView {
       color: var(--admin-ink-muted);
     }
 
-    .back,
     .history {
       color: var(--admin-accent);
     }
@@ -355,8 +353,8 @@ export interface ScopePricesView {
     }
 
     .chip.attention {
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -414,6 +412,7 @@ export class ItemPricesPage {
         supermarketId: scope.supermarketId,
         name: this._scopeName(scope),
         kindLabel: this._label(PRICE_SCOPE_KIND_OPTIONS, scope.scopeKind),
+        kindLevel: priceScopeMark(scope.scopeKind)?.level,
         rows: rows.map((row) => ({
           id: row.id,
           kindLabel: this._label(PRICE_SOURCE_KIND_OPTIONS, row.sourceKind),

@@ -476,8 +476,11 @@ describe('the admins descriptor', () => {
     expect(hasDetailScreen(ADMINS)).toBe(false);
   });
 
-  it('says in place how an admin is actually managed', () => {
-    expect(ADMINS.note).toBe('people.admins.note');
+  it('says behind the info button how an admin is actually managed', () => {
+    expect(ADMINS.info).toEqual({
+      title: 'people.admins.many',
+      points: ['people.admins.info.readOnly', 'people.admins.info.add'],
+    });
   });
 
   /** The one collection under `/v1/admin/**` that answers `{ admins }`. */
@@ -605,7 +608,7 @@ describe('the membership descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(MEMBERSHIPS.formNote).toBe('people.broadcast');
+    expect(MEMBERSHIPS.caution).toBe('people.broadcast');
   });
 });
 
@@ -642,9 +645,12 @@ describe('the list line descriptor', () => {
    * is no route that creates one. The list says so where the control would be,
    * rather than offering a button the gateway refuses.
    */
-  it('offers no way to add a line, and says why in place', () => {
+  it('offers no way to add a line, and says who adds one', () => {
     expect(LIST_LINES.actions?.create).toBeUndefined();
-    expect(LIST_LINES.note).toBe('people.lines.note');
+    expect(LIST_LINES.info?.points).toEqual([
+      'people.lines.info.noAdd',
+      'people.lines.info.correct',
+    ]);
   });
 
   it('locks the approval and offers the two acts that move it', () => {
@@ -671,7 +677,7 @@ describe('the list line descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(LIST_LINES.formNote).toBe('people.broadcast');
+    expect(LIST_LINES.caution).toBe('people.broadcast');
   });
 });
 
@@ -681,9 +687,12 @@ describe('what plan 0009 deliberately left read only', () => {
    * and settlements written against them, so a changed content or quantity
    * contradicts rows already on disk, inside one person's private document.
    */
-  it('says on the basket screen why there is nothing to press', () => {
+  it('says on the basket screen that there is nothing to press', () => {
     expect(BASKETS.actions).toBeUndefined();
-    expect(BASKETS.note).toBe('people.baskets.note');
+    expect(BASKETS.info?.points).toEqual([
+      'people.baskets.info.record',
+      'people.baskets.info.correct',
+    ]);
   });
 
   /**
@@ -692,7 +701,7 @@ describe('what plan 0009 deliberately left read only', () => {
    */
   it('leaves the admin table exactly as plan 0007 left it', () => {
     expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.note).toBe('people.admins.note');
+    expect(ADMINS.info?.points).toContain('people.admins.info.add');
   });
 });
 
@@ -708,7 +717,7 @@ describe('what plan 0009 deliberately left read only', () => {
 describe('an edit that is seen by whoever is holding the app', () => {
   it('warns on exactly the four resources that broadcast', () => {
     const warned = ALL.filter(
-      (descriptor) => descriptor.formNote === 'people.broadcast'
+      (descriptor) => descriptor.caution === 'people.broadcast'
     ).map((descriptor) => descriptor.name);
 
     expect(warned).toEqual(['zones', 'memberships', 'lists', 'list-lines']);

@@ -16,10 +16,11 @@ import {
   gatewayErrorKey,
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { InfoContent, Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
+  PageHeader,
   QueueFrame,
   ReferencePicker,
   type QueueReport,
@@ -98,9 +99,13 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     HarvestNotice,
     QueueFrame,
     ReferencePicker,
+    PageHeader,
   ],
   template: `
-    <p class="lead">{{ 'harvest.shops.lead' | rokuT }}</p>
+    <lib-page-header
+      [heading]="'harvest.shops.heading' | rokuT"
+      [info]="info"
+    />
 
     <div class="filters">
       <div class="field">
@@ -382,7 +387,6 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
       gap: var(--admin-space-4);
     }
 
-    .lead,
     .state,
     .none {
       color: var(--admin-ink-muted);
@@ -547,7 +551,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     }
 
     .map {
-      min-block-size: 2.75rem;
+      min-block-size: var(--admin-control);
       border-color: var(--admin-accent);
       background: var(--admin-accent);
       color: var(--admin-accent-ink);
@@ -566,7 +570,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     .bulk button {
       flex: 1;
       min-block-size: 3rem;
-      font-size: 1rem;
+      font-size: var(--admin-field-size);
     }
 
     button {
@@ -587,6 +591,16 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ShopsQueuePage {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'harvest.shops.heading',
+    points: [
+      'harvest.shops.info.row',
+      'harvest.shops.info.map',
+      'harvest.shops.info.unmapped',
+    ],
+  };
+
   private readonly _service = inject(HARVEST_SERVICE);
 
   readonly shell = inject(HarvestShell);

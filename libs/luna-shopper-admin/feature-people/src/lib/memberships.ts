@@ -148,7 +148,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
     compact: ['zoneName', 'role'],
   },
 
-  formNote: 'people.broadcast',
+  caution: 'people.broadcast',
 
   filters: [
     {

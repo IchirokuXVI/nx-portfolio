@@ -91,8 +91,10 @@ export interface QueueReport {
   selector: 'lib-queue-frame',
   imports: [NgTemplateOutlet, RokuTranslatorPipe],
   template: `
-    <header>
-      <h1>{{ titleKey() | rokuT }}</h1>
+    <!-- The page that holds this frame draws the title, in the page header
+         (admin plan 0041). What is left here is the row about the queue
+         itself, named after it for a screen reader. -->
+    <header [attr.aria-label]="titleKey() | rokuT">
       <p class="tally">
         {{
           'harvest.queue.tally'
@@ -284,11 +286,6 @@ export interface QueueReport {
       justify-content: space-between;
     }
 
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h3 {
       font-size: 0.875rem;
       letter-spacing: 0.04em;
@@ -423,7 +420,7 @@ export interface QueueReport {
     .actions button {
       flex: 1;
       min-block-size: 3rem;
-      font-size: 1rem;
+      font-size: var(--admin-field-size);
     }
 
     .actions .primary {
@@ -438,9 +435,9 @@ export interface QueueReport {
     }
 
     button {
-      padding: var(--admin-space-2) var(--admin-space-3);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);
@@ -480,6 +477,7 @@ export class QueueFrame {
   private readonly _router = inject(Router);
   private readonly _route = inject(ActivatedRoute);
 
+  /** What the queue is called, as the name of the row above it. */
   readonly titleKey = input.required<string>();
   /** What to say when the queue is genuinely finished. */
   readonly emptyKey = input.required<string>();

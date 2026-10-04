@@ -25,7 +25,11 @@ import {
   gatewayErrorKey,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { StatTile, Viewport } from '@portfolio/luna-shopper-admin/ui';
+import {
+  PageHeader,
+  StatTile,
+  Viewport,
+} from '@portfolio/luna-shopper-admin/ui';
 import {
   activityRows,
   loginFailureRows,
@@ -64,22 +68,20 @@ import {
  */
 @Component({
   selector: 'lib-dashboard-page',
-  imports: [RouterLink, RokuTranslatorPipe, StatTile],
+  imports: [PageHeader, RouterLink, RokuTranslatorPipe, StatTile],
   template: `
-    <header class="head">
-      <div class="titles">
-        <h1>{{ 'dashboard.heading' | rokuT }}</h1>
-        @if (measured(); as taken) {
-          <p [title]="taken.exact" class="taken">
-            {{ 'dashboard.measuredAt' | rokuT: { when: taken.since } }}
-          </p>
-        }
-      </div>
+    <lib-page-header [heading]="'dashboard.heading' | rokuT">
+      @if (measured(); as taken) {
+        <p [title]="taken.exact" class="taken" pageChip>
+          {{ 'dashboard.measuredAt' | rokuT: { when: taken.since } }}
+        </p>
+      }
 
       <button
         (click)="refresh()"
         [disabled]="store.loading()"
         class="refresh"
+        pageAction
         type="button"
       >
         {{
@@ -87,7 +89,7 @@ import {
             | rokuT
         }}
       </button>
-    </header>
+    </lib-page-header>
 
     <!-- A failed re-read is a line beside the timestamp, not a page. The
          numbers below were true when the timestamp says they were. -->
@@ -263,19 +265,6 @@ import {
       gap: var(--admin-space-6);
     }
 
-    .head {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: flex-start;
-      justify-content: space-between;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h2 {
       font-size: 1.125rem;
       font-weight: 700;
@@ -387,10 +376,10 @@ import {
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

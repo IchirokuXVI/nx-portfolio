@@ -16,6 +16,12 @@
     "staging": "Staging",
     "development": "Development",
     "unknown": "Unknown",
+    "short": {
+      "production": "PRODUCTION",
+      "staging": "STAGING",
+      "development": "LOCAL",
+      "unknown": "UNKNOWN"
+    },
     "checking": "Checking which environment answered…",
     "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does."
   },
@@ -61,10 +67,12 @@
     "stopped": "Automatic checking has stopped. Use the button when you think the server is back."
   },
   "shell": {
-    "menu": "Menu",
     "navigation": "Sections",
+    "more": "More",
     "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out",
+    "account": "Account: {{name}}",
+    "signedInAs": "Signed in as {{name}}",
     "screens": "Screens in this section",
     "contentLanguage": "Read the catalog in",
     "language": {
@@ -78,6 +86,13 @@
       "harvest": "Harvester",
       "admins": "Admins"
     }
+  },
+  "page": {
+    "moreActions": "More actions"
+  },
+  "info": {
+    "about": "About {{subject}}",
+    "close": "Close"
   },
   "notFound": {
     "heading": "There is no such screen",
@@ -97,7 +112,7 @@
       "empty": "There is nothing here yet.",
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
       "actions": "Actions",
-      "blocked": "Choose {{filters}} first. There is nothing to read until you do."
+      "blocked": "Choose {{filters}} to see the rows."
     },
     "filter": {
       "any": "Any"
@@ -137,6 +152,7 @@
       "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
+      "back": "Back",
       "delete": "Delete",
       "retry": "Try again",
       "more": "Load more",
@@ -246,7 +262,6 @@
       "externalRef": "Source reference",
       "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
       "externalProvider": "Source",
-      "note": "Shops are read one chain at a time, because the gateway has no route that lists them all. Choose a chain to begin.",
       "filter": {
         "query": "Label, address or town contains",
         "supermarketId": "Chain",
@@ -268,7 +283,6 @@
       "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then only the products pinned to it are in it.",
       "locationCount": "Shops",
       "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
-      "note": "Sections are read one chain at a time. Choose a chain to begin, or open the chain and use its Sections tab.",
       "filter": {
         "query": "Name or slug contains",
         "supermarketId": "Chain"
@@ -281,7 +295,6 @@
     },
     "chainSections": {
       "heading": "Sections of this chain",
-      "says": "The chain's own aisles, in the order a shop with no list of its own walks them, and the categories each one holds.",
       "add": "Add a section",
       "empty": "This chain has no sections yet. Its shops show products under their own categories.",
       "actions": "Actions",
@@ -463,7 +476,6 @@
       },
       "addItems": {
         "heading": "Add items",
-        "lead": "Find products, tick them, and move them into this group after a review.",
         "open": "Add items",
         "search": "Search products",
         "showingUngrouped": "Showing products in no group. Type to search every product.",
@@ -527,7 +539,10 @@
       "observedAtHelp": "When the shown price was last observed by its source.",
       "stale": "Out of date",
       "staleHelp": "Nothing currently eligible prices this product, so the newest price anybody gave is shown and flagged. Set by the server from the price policies.",
-      "note": "The price a shopper sees, chosen among every price a source gave. A price belongs to a price scope, not to a shop. Open a row to see the prices behind it, add one, or remove one.",
+      "info": {
+        "row": "One row is the price a shopper sees at one scope.",
+        "open": "Open a row to see every price behind it, add one, or remove one."
+      },
       "filter": {
         "itemId": "Product",
         "priceScopeId": "Price scope",
@@ -580,7 +595,6 @@
       "byItem": {
         "open": "Every scope for this product",
         "back": "Back to the product",
-        "lead": "Every scope that prices this product, the rows each one weighed, and why the shown price is the one shown.",
         "empty": "No scope prices this product.",
         "stale": "Shown on sufferance",
         "nothingShown": "No row is shown at this scope.",
@@ -607,8 +621,12 @@
       "maxAgeDaysHelp": "How old a price of this source may be before it stops being eligible. Empty means it never ages out. Typed in prices have none on purpose: for a chain with no automated source they are the only truth.",
       "enabled": "Enabled",
       "enabledHelp": "Off removes this source from every read at once.",
-      "note": "How each source competes for the price a shopper sees. Six rows, one per source.",
-      "formNote": "Saving works out the shown price again for every product in the catalog, inside this request."
+      "info": {
+        "wins": "One rule for each kind of source. When two sources price the same product, the higher rule wins.",
+        "age": "A price older than the limit of its rule is out of date. A newer price from a lower rule then replaces it.",
+        "off": "Turn a rule off to ignore every price from that kind of source."
+      },
+      "caution": "Saving a rule works out the shown price of every product again. Expect a short wait."
     },
     "locationItems": {
       "one": "shop row",
@@ -620,7 +638,6 @@
       "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
       "available": "Available in this shop",
       "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
-      "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
       "filter": {
         "supermarketLocationId": "Shop"
       }
@@ -696,7 +713,6 @@
       },
       "spellings": {
         "heading": "How chains spell it",
-        "says": "Every spelling the harvester has seen for this key, chain by chain. A spelling that differs only by case or by an accent is listed too: that is what the key is holding together.",
         "chain": "Chain",
         "spelling": "Spelling",
         "products": "Products",
@@ -706,7 +722,9 @@
     },
     "suggested": {
       "heading": "Suggested brands",
-      "lead": "Brand keys the queue carries that no registered brand holds, the most repeated first.",
+      "info": {
+        "what": "Brand names that sources use and that no registered brand holds. The most used come first."
+      },
       "search": "Search",
       "brand": "Brand",
       "products": "Products",
@@ -836,7 +854,10 @@
     },
     "switch": {
       "heading": "What is allowed to happen",
-      "lead": "Two separate decisions, neither of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to. Whether a chain may be fetched is a third decision, and it is on the chain sources screen.",
+      "info": {
+        "both": "A run starts only when the service is on and runs are allowed. Both are set at deploy time.",
+        "chain": "Whether one chain may be fetched is a switch on the Chain sources screen."
+      },
       "state": {
         "on": "On",
         "off": "Off",
@@ -1101,7 +1122,11 @@
       "empty": "Every discovered place has been decided.",
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
-      "why": "Discovery did not match this to a shop in the catalog by itself, so it is offered to a person rather than created. Any shop of the chain the catalog holds nearby is listed with it.",
+      "info": {
+        "title": "What to do with this place",
+        "found": "Discovery found this place and could not match it to a shop.",
+        "decide": "Add it to the catalog, link it to a shop we have, or reject it."
+      },
       "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
@@ -1138,7 +1163,6 @@
       "groups": {
         "open": "See them grouped by chain",
         "heading": "Discovered places by chain",
-        "lead": "Every place discovery found, grouped by the chain it belongs to. A place with no Wikidata identifier is grouped by the brand it prints, then by its name.",
         "back": "Back to the queue",
         "empty": "Discovery has found no places yet.",
         "noBrand": "No brand",
@@ -1325,7 +1349,10 @@
     },
     "imports": {
       "heading": "Import a file",
-      "lead": "Drop the JSON a producer made: a leaflet extractor, a person typing a chain's prices, or the export of a walk that ran on another machine. Nothing here changes the document, because an edited file has a different digest and the digest is what stops the same file being imported twice.",
+      "info": {
+        "drop": "Drop the JSON that a leaflet extractor, a person or an exported run made.",
+        "caution": "The same file is refused the second time, so do not edit a file to import it again."
+      },
       "file": "The document",
       "rejected": {
         "not-json": "That file is not JSON. Check that it is the producer's output and not the PDF.",
@@ -1400,7 +1427,11 @@
     },
     "shops": {
       "heading": "Source shops",
-      "lead": "Every shop a source names, and the shop of ours it points at. A run writes no availability for a shop nobody has mapped: it counts it and finishes.",
+      "info": {
+        "row": "One row is a shop that a source names.",
+        "map": "Map it to one of our shops, or ignore it.",
+        "unmapped": "A run writes nothing for a shop that is not mapped."
+      },
       "chain": "Chain",
       "chooseChain": "Choose a chain. A source's shops are only ever read one chain at a time, so there is nothing to show until you do.",
       "empty": "No shop of this chain is in this state.",
@@ -1460,7 +1491,7 @@
     },
     "sources": {
       "heading": "Chain sources",
-      "lead": "One row per chain: which adapter fetches it, how hard, and whether it may be fetched at all. Workers and requests per second are the two settings that decide whether a crawl gets us blocked by a chain's storefront, so raise them one step at a time and watch what the failures count does.",
+      "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
       "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
       "edit": "Change how it is fetched",
       "new": "Add a chain source",
@@ -1542,7 +1573,10 @@
       },
       "add": {
         "heading": "Add postal codes",
-        "lead": "Codes you add are looked at by the harvester, which finds the shops in them. A code that is not in the national table is refused, one code at a time, so you can see which one was wrong.",
+        "info": {
+          "looks": "The harvester looks for shops in each code you add.",
+          "refused": "A code that is not in the national table is refused, and the others are still added."
+        },
         "country": "Country",
         "codes": "Postal codes",
         "codesHelp": "One or many. Separate them with spaces, commas or new lines. Repeats are dropped.",
@@ -1827,7 +1861,10 @@
         "ownerUserId": "Belonging to this person",
         "zoneId": "With lines from this zone"
       },
-      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from.",
+      "info": {
+        "record": "One row is a record of what somebody took to the shop. Nothing here can be changed.",
+        "correct": "To correct a line, change the list that the shopping list came from."
+      },
       "settlement": {
         "none": "Not settled yet.",
         "outcome": {
@@ -1849,9 +1886,12 @@
       "displayName": "Display name",
       "disabledAt": "Disabled",
       "lastLoginAt": "Last signed in",
-      "note": "Admins are read only here, on purpose. There is no route that creates, changes or removes one, so adding an admin means running \"npx nx run luna-shopper-backend-auth:admin:create\" on the server, or \"node admin-cli.js create <username>\" inside the auth pod."
+      "info": {
+        "readOnly": "This list is read only. An admin is added on the server, not here.",
+        "add": "To add one, run \"npx nx run luna-shopper-backend-auth:admin:create\" where the auth service runs."
+      }
     },
-    "broadcast": "Saving this is seen straight away by everybody in the zone. Somebody with the app open watches it change under their thumb, with nothing on their screen to say an operator did it.",
+    "broadcast": "Everybody in the zone sees this change at once, with nothing to say that an operator made it.",
     "field": {
       "idHelp": "The identifier this row is addressed by. It is generated when the row is created and nothing changes it.",
       "createdAtHelp": "When the row was created. It records what happened and is never rewritten."
@@ -1918,7 +1958,10 @@
       "createdByUserId": "Written by",
       "createdByUserIdHelp": "Fixed here. It records who wrote the line, and an operator did not.",
       "createdAt": "Written",
-      "note": "There is no way to add a line here, on purpose. Every line records who wrote it, that column cannot be empty, and an operator is not a member of the household. Somebody in the zone adds a line; an operator corrects one.",
+      "info": {
+        "noAdd": "A line is added by somebody in the zone, in the app. You cannot add one here.",
+        "correct": "Open a line to correct it."
+      },
       "filter": {
         "listId": "On this list"
       },

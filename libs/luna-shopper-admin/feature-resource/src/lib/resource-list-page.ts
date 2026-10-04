@@ -97,13 +97,13 @@ interface PendingAction extends RowAction {
       [filters]="descriptor.filters ?? []"
       [filterValues]="store.filters()"
       [hasMore]="store.hasMore()"
+      [info]="descriptor.info ?? null"
       [loading]="store.status() === 'loading'"
       [loadingMore]="store.loadingMore()"
       [lookup]="references"
       [moreFailed]="moreFailed()"
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
-      [noteKey]="descriptor.note ?? null"
       [noticeKeys]="notices()"
       [order]="store.order()"
       [rows]="rows()"
@@ -206,10 +206,10 @@ interface PendingAction extends RowAction {
 
     .refusal > button {
       margin-inline-start: auto;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);
@@ -235,10 +235,10 @@ interface PendingAction extends RowAction {
     }
 
     .bulk > button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);

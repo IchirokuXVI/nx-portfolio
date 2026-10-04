@@ -224,7 +224,11 @@ describe('supermarkets through the generic machinery', () => {
     const fixture = await boot('/supermarkets-of-mars');
 
     expect(text(fixture)).toContain('notFound.heading');
-    expect(text(fixture)).toContain('shell.signOut');
+    // The rail is still there: the way to the account, and through it the
+    // way out, is one of its two buttons (admin plan 0041).
+    expect(
+      fixture.nativeElement.querySelector('[data-menu="account"]')
+    ).not.toBeNull();
   });
 
   it('opens one chain on a form built from the descriptor', async () => {

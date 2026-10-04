@@ -14,6 +14,7 @@ import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource
 import {
   BarChart,
   BlockNotice,
+  PageHeader,
   StatTile,
 } from '@portfolio/luna-shopper-admin/ui';
 import { catalogTiles, pricesWrittenChart } from './catalog-dashboard-view';
@@ -39,9 +40,9 @@ import { catalogTiles, pricesWrittenChart } from './catalog-dashboard-view';
  */
 @Component({
   selector: 'lib-catalog-dashboard',
-  imports: [RokuTranslatorPipe, BarChart, BlockNotice, StatTile],
+  imports: [PageHeader, RokuTranslatorPipe, BarChart, BlockNotice, StatTile],
   template: `
-    <h1>{{ 'shell.sections.catalog' | rokuT }}</h1>
+    <lib-page-header [heading]="'shell.sections.catalog' | rokuT" />
 
     @if (document(); as doc) {
       @if (doc.catalog === null) {
@@ -80,11 +81,6 @@ import { catalogTiles, pricesWrittenChart } from './catalog-dashboard-view';
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     .tiles {

@@ -5,7 +5,6 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
@@ -13,7 +12,7 @@ import {
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
-import { HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
+import { HarvestNotice, PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
@@ -37,13 +36,13 @@ const SAMPLE_SIZE = 3;
  */
 @Component({
   selector: 'lib-place-groups-page',
-  imports: [RouterLink, RokuTranslatorPipe, HarvestNotice],
+  imports: [PageHeader, RokuTranslatorPipe, HarvestNotice],
   template: `
-    <header>
-      <h1>{{ 'harvest.places.groups.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'harvest.places.groups.lead' | rokuT }}</p>
-      <a [routerLink]="queueLink">{{ 'harvest.places.groups.back' | rokuT }}</a>
-    </header>
+    <lib-page-header
+      [backLabel]="'harvest.places.groups.back' | rokuT"
+      [backLink]="queueLink"
+      [heading]="'harvest.places.groups.heading' | rokuT"
+    />
 
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
@@ -103,23 +102,6 @@ const SAMPLE_SIZE = 3;
       gap: var(--admin-space-4);
     }
 
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-2);
-    }
-
-    header a {
-      align-self: flex-start;
-      color: var(--admin-accent);
-    }
-
-    header a:focus-visible {
-      outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
-    }
-
-    .lead,
     .state,
     .chain,
     .sample,
@@ -127,7 +109,6 @@ const SAMPLE_SIZE = 3;
       color: var(--admin-ink-muted);
     }
 
-    .lead,
     .chain,
     .sample {
       margin: 0;

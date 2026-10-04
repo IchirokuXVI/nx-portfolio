@@ -219,7 +219,7 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
   ];
 
   async function renderZone(
-    noteKey: string | null
+    cautionKey: string | null
   ): Promise<ComponentFixture<ResourceForm>> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -237,7 +237,7 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
     fixture.componentRef.setInput('readonlyCells', {
       joinCode: { text: 'K4TCH2N9' },
     });
-    fixture.componentRef.setInput('noteKey', noteKey);
+    fixture.componentRef.setInput('cautionKey', cautionKey);
     fixture.detectChanges();
     return fixture;
   }
@@ -249,16 +249,16 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
    */
   it('says above the fields what saving does beyond writing the row', async () => {
     const fixture = await renderZone('people.broadcast');
-    const note = query(fixture, '.note');
+    const caution = query(fixture, '.caution');
 
-    expect(note).toHaveLength(1);
-    expect(note[0].textContent).toContain('people.broadcast');
+    expect(caution).toHaveLength(1);
+    expect(caution[0].textContent).toContain('people.broadcast');
   });
 
-  it('says nothing where the resource named no note', async () => {
+  it('says nothing where the resource named no caution', async () => {
     const fixture = await renderZone(null);
 
-    expect(query(fixture, '.note')).toHaveLength(0);
+    expect(query(fixture, '.caution')).toHaveLength(0);
   });
 
   /**

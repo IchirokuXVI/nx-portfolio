@@ -14,6 +14,7 @@ import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource
 import {
   BlockNotice,
   LineChart,
+  PageHeader,
   StatTile,
 } from '@portfolio/luna-shopper-admin/ui';
 import {
@@ -39,9 +40,9 @@ import {
  */
 @Component({
   selector: 'lib-people-dashboard',
-  imports: [RokuTranslatorPipe, BlockNotice, LineChart, StatTile],
+  imports: [PageHeader, RokuTranslatorPipe, BlockNotice, LineChart, StatTile],
   template: `
-    <h1>{{ 'shell.sections.shoppers' | rokuT }}</h1>
+    <lib-page-header [heading]="'shell.sections.shoppers' | rokuT" />
 
     @if (document(); as doc) {
       @if (doc.identity === null) {
@@ -98,11 +99,6 @@ import {
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     .tiles {

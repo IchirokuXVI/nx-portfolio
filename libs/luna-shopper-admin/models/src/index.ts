@@ -15,6 +15,7 @@ export * from './lib/harvest/run-warnings';
 export * from './lib/harvest/source-enums';
 export * from './lib/reachability-policy';
 export * from './lib/resource/composite-id';
+export * from './lib/resource/info-content';
 export * from './lib/resource/localized-text';
 export * from './lib/resource/money';
 export * from './lib/resource/reference-none';

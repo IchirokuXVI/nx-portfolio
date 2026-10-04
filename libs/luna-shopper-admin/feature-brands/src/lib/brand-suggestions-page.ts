@@ -24,7 +24,12 @@ import {
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ReferencePicker, Viewport } from '@portfolio/luna-shopper-admin/ui';
+import type { InfoContent } from '@portfolio/luna-shopper-admin/models';
+import {
+  PageHeader,
+  ReferencePicker,
+  Viewport,
+} from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { capitalizeBrand } from './brand-capitalization';
 import { BRAND_BATCH_MAX } from './brand-sources';
@@ -100,12 +105,18 @@ const SEARCH_DELAY_MS = 250;
  */
 @Component({
   selector: 'lib-brand-suggestions-page',
-  imports: [NgTemplateOutlet, RokuTranslatorPipe, ReferencePicker, RouterLink],
+  imports: [
+    PageHeader,
+    NgTemplateOutlet,
+    RokuTranslatorPipe,
+    ReferencePicker,
+    RouterLink,
+  ],
   template: `
-    <header>
-      <h1>{{ 'brands.suggested.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'brands.suggested.lead' | rokuT }}</p>
-    </header>
+    <lib-page-header
+      [heading]="'brands.suggested.heading' | rokuT"
+      [info]="info"
+    />
 
     <label class="search">
       <span>{{ 'brands.suggested.search' | rokuT }}</span>
@@ -711,17 +722,6 @@ const SEARCH_DELAY_MS = 250;
       align-items: flex-start;
     }
 
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h2 {
       display: flex;
       flex-direction: column;
@@ -930,10 +930,10 @@ const SEARCH_DELAY_MS = 250;
 
     .warn-line {
       padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
 
     .batch-result li {
@@ -1064,10 +1064,10 @@ const SEARCH_DELAY_MS = 250;
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       color: var(--admin-ink);
@@ -1086,15 +1086,15 @@ const SEARCH_DELAY_MS = 250;
     }
 
     input {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
          smaller, which on a phone leaves the operator scrolled sideways. */
       font: inherit;
-      font-size: 1rem;
+      font-size: var(--admin-field-size);
       color: var(--admin-ink);
     }
 
@@ -1116,6 +1116,12 @@ const SEARCH_DELAY_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BrandSuggestionsPage implements OnDestroy {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'brands.suggested.heading',
+    points: ['brands.suggested.info.what'],
+  };
+
   private readonly _brands = inject(BrandsGateway);
   private readonly _registry = inject(ResourceRegistry);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);

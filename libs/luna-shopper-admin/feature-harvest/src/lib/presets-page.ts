@@ -19,6 +19,7 @@ import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
+  PageHeader,
   ReferencePicker,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
@@ -62,6 +63,7 @@ interface RowRefusal {
 @Component({
   selector: 'lib-presets-page',
   imports: [
+    PageHeader,
     FormsModule,
     RouterLink,
     RokuTranslatorPipe,
@@ -71,9 +73,7 @@ interface RowRefusal {
     RunRequestForm,
   ],
   template: `
-    <header>
-      <h1>{{ 'harvest.presets.heading' | rokuT }}</h1>
-    </header>
+    <lib-page-header [heading]="'harvest.presets.heading' | rokuT" />
 
     <section class="toolbar">
       <div class="field">
@@ -258,11 +258,6 @@ interface RowRefusal {
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     h2 {

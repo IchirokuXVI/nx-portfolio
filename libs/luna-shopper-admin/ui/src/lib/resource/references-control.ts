@@ -136,7 +136,7 @@ import { ReferencePicker } from './reference-picker';
       min-block-size: 2rem;
       padding: 0 var(--admin-space-2);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
       font-size: 0.875rem;
