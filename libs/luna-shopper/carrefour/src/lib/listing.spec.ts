@@ -17,11 +17,29 @@ describe('splitCardName', () => {
   });
 
   it('states the unit the number is in, for each family a card measures in (plan 0177)', () => {
-    // The number is in the family's base unit, so a centilitre is a hundredth
-    // of a litre here and the unit says so.
+    // The catalog holds no centilitre, so a centilitre is written as ten
+    // millilitres, as every other adapter writes one. It was 0.33 `LITER`.
     expect(
       splitCardName('Cerveza Mahou clásica lata 33 cl.', 'l')
-    ).toMatchObject({ unitSize: 0.33, sizeUnit: 'LITER' });
+    ).toMatchObject({
+      name: 'Cerveza Mahou clásica lata',
+      // The printed text is half of the row's key and does not move.
+      sizeFormat: '33 cl.',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(splitCardName('Vino tinto CARREFOUR 75 cl.', 'l')).toMatchObject({
+      sizeFormat: '75 cl.',
+      unitSize: 750,
+      sizeUnit: 'MILLILITER',
+    });
+    // A volume is in the unit the name printed: millilitres stay millilitres
+    // and litres stay litres.
+    expect(splitCardName('Zumo DON SIMON 200 ml', 'l')).toMatchObject({
+      sizeFormat: '200 ml',
+      unitSize: 200,
+      sizeUnit: 'MILLILITER',
+    });
     expect(splitCardName('Agua mineral Bezoya 1,5 l.', 'l')).toMatchObject({
       unitSize: 1.5,
       sizeUnit: 'LITER',
@@ -50,13 +68,75 @@ describe('splitCardName', () => {
     });
   });
 
-  it('converts the size into the unit the card measures in', () => {
+  it('writes a centilitre as millilitres, pack phrase included (plan 0177)', () => {
     expect(
       splitCardName('Cerveza Mahou clásica lata 50 cl.', 'l')
     ).toMatchObject({
       name: 'Cerveza Mahou clásica lata',
       sizeFormat: '50 cl.',
-      unitSize: 0.5,
+      unitSize: 500,
+      sizeUnit: 'MILLILITER',
+    });
+    // Six cans of 33 cl is 1980 ml, which is what the shopper carries out.
+    expect(
+      splitCardName('Cerveza Mahou clásica pack de 6 latas de 33 cl.', 'l')
+    ).toEqual({
+      name: 'Cerveza Mahou clásica',
+      sizeFormat: 'pack de 6 latas de 33 cl.',
+      unitSize: 1980,
+      sizeUnit: 'MILLILITER',
+      packCount: 6,
+    });
+  });
+
+  it('writes a decilitre and a cubic centimetre as millilitres too', () => {
+    // Both were fractions of a litre, as the centilitre was.
+    expect(
+      splitCardName('Nata para cocinar CARREFOUR 2 dl', 'l')
+    ).toMatchObject({
+      sizeFormat: '2 dl',
+      unitSize: 200,
+      sizeUnit: 'MILLILITER',
+    });
+    expect(splitCardName('Jarabe CARREFOUR 150 cc', 'l')).toMatchObject({
+      sizeFormat: '150 cc',
+      unitSize: 150,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
+  it('reads the unit whatever case the chain printed it in', () => {
+    expect(
+      splitCardName('Cerveza Mahou clásica lata 33 CL', 'l')
+    ).toMatchObject({
+      name: 'Cerveza Mahou clásica lata',
+      sizeFormat: '33 CL',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+    });
+  });
+
+  it('still checks the unit of the name against what the card measures in', () => {
+    // The check is on the family, and a centilitre is still a volume: it is
+    // read on a card priced per litre and refused on one priced per unit.
+    expect(
+      splitCardName('Cerveza Mahou clásica lata 33 cl.', 'ud')
+    ).toMatchObject({
+      name: 'Cerveza Mahou clásica lata 33 cl.',
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+    });
+  });
+
+  it('leaves a weight and a count in the unit the card measures in', () => {
+    expect(splitCardName('Café molido 250 g', 'kg')).toMatchObject({
+      unitSize: 0.25,
+      sizeUnit: 'KILOGRAM',
+    });
+    expect(splitCardName('Papel higiénico 12 rollos', 'ud')).toMatchObject({
+      unitSize: 12,
+      sizeUnit: 'UNIT',
     });
   });
 
@@ -208,6 +288,77 @@ describe('the pack count (plan 0162, section 1)', () => {
   it('reads the N of NxQ', () => {
     expect(splitCardName('Zumo DON SIMON 3x200 ml', 'l').packCount).toBe(3);
     expect(splitCardName('Zumo DON SIMON 4 x 1,5 l', 'l').packCount).toBe(4);
+  });
+
+  it('reads the N of NxQ printed in centilitres', () => {
+    expect(splitCardName('Cerveza MAHOU 6x33 cl', 'l')).toEqual({
+      name: 'Cerveza MAHOU',
+      sizeFormat: '6x33 cl',
+      // This reader never multiplies an `NxQ`, in any unit: the count is read
+      // and the size is left for the printed text to state.
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 6,
+    });
+  });
+
+  it('uses the count of the pack phrase when the NxQ beside it is a dimension (plan 0183)', () => {
+    // Both answered null before: the phrase and the `140x` each looked like a
+    // count, and a name that states two is a pack of packs. A length is not a
+    // count, so the phrase is now the only one and it is read.
+    expect(splitCardName('Mantel 2 unidades de 140x200 cm', 'm')).toEqual({
+      name: 'Mantel',
+      sizeFormat: '2 unidades de 140x200 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 2,
+    });
+    expect(
+      splitCardName('Mantel CARREFOUR pack de 2 unidades de 140x200 cm', 'm')
+    ).toEqual({
+      name: 'Mantel CARREFOUR',
+      sizeFormat: 'pack de 2 unidades de 140x200 cm',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 2,
+    });
+  });
+
+  it('states no count for a dimension (plan 0183)', () => {
+    // The two sides of one sheet. A count needs a unit that measures what is
+    // inside, and this read a pack of 140.
+    for (const measureUnit of ['m', null]) {
+      expect(
+        splitCardName('Funda nórdica CARREFOUR 140x200 cm', measureUnit)
+      ).toEqual({
+        name: 'Funda nórdica CARREFOUR',
+        // Still split off and still verbatim: it is half of the row's key.
+        sizeFormat: '140x200 cm',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    }
+    expect(
+      splitCardName('Papel de horno CARREFOUR 2 x 30 m', 'm').packCount
+    ).toBeNull();
+    expect(
+      splitCardName('Bolsas de congelación 60 x 40 mm', 'm').packCount
+    ).toBeNull();
+  });
+
+  it('keeps the count a pack phrase states in words, whatever the unit', () => {
+    expect(
+      splitCardName(
+        'Papel de aluminio CARREFOUR pack de 2 rollos de 30 m.',
+        'm'
+      )
+    ).toMatchObject({
+      sizeFormat: 'pack de 2 rollos de 30 m.',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: 2,
+    });
   });
 
   it('states no count for a container phrase with no number', () => {

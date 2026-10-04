@@ -63,7 +63,11 @@ export interface CarrefourProduct {
   /** The trailing size, **verbatim**, or null when the card printed none. */
   sizeFormat: string | null;
   /**
-   * {@link sizeFormat} as a number in {@link measureUnit}, or null.
+   * {@link sizeFormat} as a number in {@link sizeUnit}, or null.
+   *
+   * A weight and a count are in the unit {@link measureUnit} names. A volume
+   * is in the unit the name printed, so `33 cl.` is 330 `MILLILITER` on a card
+   * that measures in `l` (plan 0177).
    *
    * Derived from the size the card printed and only when the unit it printed
    * belongs to the same family as `measure_unit`, which is what makes the split
