@@ -321,6 +321,53 @@ describeIntegration('per shop availability (real Postgres)', () => {
     expect(await offer()).toEqual({ updated: 0 });
     expect(await flagOf(soldNowhere)).toBe(false);
 
+    // A row that got there first wins, and a product catalog does not hold
+    // creates nothing. Neither fails the other products of the batch.
+    const [taken, fresh, deleted] = (
+      await items.save(
+        ['Taken', 'Fresh', 'Deleted'].map((name) =>
+          items.create({
+            name: { en: name, es: name },
+            defaultUnit: UnitOfMeasure.UNIT,
+          })
+        )
+      )
+    ).map((item) => item.id);
+    await scopeRows.save(
+      scopeRows.create({
+        itemId: taken,
+        priceScopeId: scopeId,
+        available: false,
+        priceSourceKind: null,
+      })
+    );
+    await items.delete({ id: deleted });
+    expect(
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: scopeId,
+        entries: [taken, deleted, fresh, 'not-a-uuid'].map((itemId) => ({
+          itemId,
+          available: true,
+        })),
+        onlyIfMissing: true,
+      })
+    ).toEqual({ updated: 1 });
+    expect(await flagOf(taken)).toBe(false);
+    expect(await flagOf(fresh)).toBe(true);
+    expect(await flagOf(deleted)).toBeUndefined();
+    // The row that was created is in the trail, as a create.
+    const freshRow = await scopeRows.findOneByOrFail({
+      itemId: fresh,
+      priceScopeId: scopeId,
+    });
+    const [trail]: { action: string }[] = await dataSource.query(
+      `SELECT "action"::text AS "action" FROM "catalog_audit"
+          WHERE "entityId" = $1`,
+      [freshRow.id]
+    );
+    expect(trail?.action).toBe('CREATE');
+
     // Without the option the same message is the plain write it always was.
     expect(
       await scopeItems.setAvailability({

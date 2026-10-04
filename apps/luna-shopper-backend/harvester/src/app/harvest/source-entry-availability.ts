@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import {
   SourceEntryAvailability,
@@ -101,6 +102,14 @@ export interface AvailabilitySent {
   pricelessOffers: number;
 }
 
+/** What the offers with no price of one run came to. */
+export interface PricelessOffersSent {
+  /** Rows catalog created. A product that already had a row counts nothing. */
+  written: number;
+  /** Products whose call to catalog failed, so nothing is known about them. */
+  failed: number;
+}
+
 /** The claims one run stated, by what became of them. */
 export interface RunClaimCounts {
   /** Every claim of the run that the table holds. */
@@ -148,6 +157,8 @@ const OFFER_BATCH = 500;
 
 @Injectable()
 export class SourceEntryAvailabilityWriter {
+  private readonly logger = new Logger(SourceEntryAvailabilityWriter.name);
+
   constructor(
     @InjectRepository(SourceEntryAvailability)
     private readonly claims: Repository<SourceEntryAvailability>,
@@ -297,11 +308,17 @@ export class SourceEntryAvailabilityWriter {
    *
    * One query for the chain, then {@link offerWithNoPrice}. Answers the offers
    * catalog created, which is zero on every run after the first.
+   *
+   * **A call that fails is counted and does not fail the run.** The offer is
+   * the last write of a run, after every price and every claim has landed,
+   * and the next run sends it again. So a batch catalog refused is named in
+   * the answer, the batches after it are still sent, and what was written is
+   * kept. The query itself still throws: it is the harvester's own database.
    */
   async writePricelessOffersForRun(
     runId: string,
     supermarketId: string
-  ): Promise<number> {
+  ): Promise<PricelessOffersSent> {
     const rows: { itemId: string }[] = await this.claims.query(
       `
       SELECT DISTINCT e."itemId"::text AS "itemId"
@@ -319,10 +336,17 @@ export class SourceEntryAvailabilityWriter {
       `,
       [supermarketId, runId, new Date()]
     );
-    return this.offerWithNoPrice(
+    const sent = await this.offerWithNoPrice(
       supermarketId,
       rows.map((row) => row.itemId)
     );
+    if (sent.error !== null) {
+      this.logger.warn(
+        `Run ${runId}: ${sent.failed} product(s) could not be offered with ` +
+          `no price: ${describeError(sent.error).message}`
+      );
+    }
+    return { written: sent.written, failed: sent.failed };
   }
 
   /**
@@ -344,8 +368,16 @@ export class SourceEntryAvailabilityWriter {
     }
 
     let offers = 0;
+    let failure: unknown = null;
     for (const [supermarketId, items] of byChain) {
-      offers += await this.offerWithNoPrice(supermarketId, [...items]);
+      const sent = await this.offerWithNoPrice(supermarketId, [...items]);
+      offers += sent.written;
+      failure ??= sent.error;
+    }
+    // A bind answers with the write that failed, as it does for a price and
+    // for a claim. Every batch was still tried first.
+    if (failure !== null) {
+      throw failure;
     }
     return offers;
   }
@@ -355,31 +387,46 @@ export class SourceEntryAvailabilityWriter {
    *
    * A chain with no default scope gets none: there is no scope to say it in.
    * Sent with `onlyIfMissing`, so catalog creates the row of a product that
-   * has none and changes no row that exists. Answers the rows it created.
+   * has none and changes no row that exists.
+   *
+   * **It never throws, and a failed batch does not stop the ones after it.**
+   * It answers the rows catalog created, the products whose call failed, and
+   * the first error. What to do with a failure is the caller's: a bind
+   * answers with it, and the end of a run counts it.
    */
   private async offerWithNoPrice(
     supermarketId: string,
     itemIds: readonly string[]
-  ): Promise<number> {
+  ): Promise<PricelessOffersSent & { error: unknown }> {
+    const sent = { written: 0, failed: 0, error: null as unknown };
     if (itemIds.length === 0) {
-      return 0;
+      return sent;
     }
-    const chain = await this.catalog.getSupermarket(supermarketId);
-    if (!chain.defaultPriceScopeId) {
-      return 0;
+    let scopeId: string | null;
+    try {
+      const chain = await this.catalog.getSupermarket(supermarketId);
+      scopeId = chain.defaultPriceScopeId ?? null;
+    } catch (error) {
+      return { written: 0, failed: itemIds.length, error };
     }
-    let offers = 0;
+    if (!scopeId) {
+      return sent;
+    }
     for (let i = 0; i < itemIds.length; i += OFFER_BATCH) {
-      const { updated } = await this.catalog.setAvailability(
-        chain.defaultPriceScopeId,
-        itemIds
-          .slice(i, i + OFFER_BATCH)
-          .map((itemId) => ({ itemId, available: true })),
-        { onlyIfMissing: true }
-      );
-      offers += updated;
+      const batch = itemIds.slice(i, i + OFFER_BATCH);
+      try {
+        const { updated } = await this.catalog.setAvailability(
+          scopeId,
+          batch.map((itemId) => ({ itemId, available: true })),
+          { onlyIfMissing: true }
+        );
+        sent.written += updated;
+      } catch (error) {
+        sent.failed += batch.length;
+        sent.error ??= error;
+      }
     }
-    return offers;
+    return sent;
   }
 
   /**

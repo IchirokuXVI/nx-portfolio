@@ -16,6 +16,7 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
 } from '@portfolio/luna-shopper/platform';
 import { In, Repository } from 'typeorm';
@@ -28,7 +29,10 @@ import {
 import { CatalogAuditService } from './catalog-audit.service';
 import { toSupermarketItemView } from './catalog.mappers';
 import { LocationScopeService } from './location-scopes';
-import { PlatformAdminService } from './platform-admin.service';
+import {
+  PlatformAdminService,
+  type CatalogActor,
+} from './platform-admin.service';
 
 interface SupermarketItemCursor {
   value: string;
@@ -77,7 +81,8 @@ export class SupermarketItemService {
    * the end of every run. The flag of a row that exists is derived from the
    * shops of the scope (`SupermarketLocationItemService`), so a plain write of
    * `true` would flip a derived `false` back on every run. With the option a
-   * row that exists is left alone and counts for nothing.
+   * row that exists is left alone and counts for nothing. That path is
+   * {@link createMissing}, which is one statement and not a read then a write.
    */
   async setAvailability(
     req: SetSupermarketItemAvailabilityRequest
@@ -89,6 +94,9 @@ export class SupermarketItemService {
     }
 
     const wanted = new Map(req.entries.map((e) => [e.itemId, e.available]));
+    if (req.onlyIfMissing === true) {
+      return this.createMissing(actor, req.priceScopeId, wanted);
+    }
     const itemIds = [...wanted.keys()];
     const existing = await this.supermarketItems.find({
       where: itemIds.map((itemId) => ({
@@ -113,7 +121,7 @@ export class SupermarketItemService {
         );
         continue;
       }
-      if (req.onlyIfMissing === true || held.available === available) {
+      if (held.available === available) {
         continue;
       }
       const before = { ...held };
@@ -135,6 +143,58 @@ export class SupermarketItemService {
       }
     });
     return { updated: fresh.length + changed.length };
+  }
+
+  /**
+   * Create the row of every product the scope has none for, and change no row
+   * that exists (plan 0182, `onlyIfMissing`).
+   *
+   * **One `INSERT ... ON CONFLICT DO NOTHING`, and not a read then a write.**
+   * A bind and the shop derivation insert the same row at the same moment the
+   * end of a run offers it. A read that found no row followed by an insert
+   * then breaks `uq_supermarket_item_scope`, and one such row failed a batch
+   * of five hundred. Here the row that got there first simply wins.
+   *
+   * **A product catalog does not hold is left out, and fails nothing.** The
+   * insert selects from `items`, so a product deleted since the harvester
+   * bound its row creates no row and breaks no foreign key for the others. An
+   * id that is not a uuid is dropped before the statement for the same
+   * reason: the cast would fail the whole batch.
+   *
+   * Answers the rows it created, each recorded in the trail as a create.
+   */
+  private async createMissing(
+    actor: CatalogActor,
+    priceScopeId: string,
+    wanted: ReadonlyMap<string, boolean>
+  ): Promise<SetSupermarketItemAvailabilityResult> {
+    const itemIds = [...wanted.keys()].filter(isUuid);
+    if (itemIds.length === 0) {
+      return { updated: 0 };
+    }
+    return this.audit.write(actor, async (tx) => {
+      const inserted: { id: string }[] = await tx.manager.query(
+        `
+        INSERT INTO "supermarket_items" ("itemId", "priceScopeId", "available")
+        SELECT i."id", $1::uuid, w."available"
+          FROM unnest($2::uuid[], $3::boolean[]) AS w("itemId", "available")
+          JOIN "items" i ON i."id" = w."itemId"
+        ON CONFLICT ("itemId", "priceScopeId") DO NOTHING
+        RETURNING "id"
+        `,
+        [priceScopeId, itemIds, itemIds.map((itemId) => wanted.get(itemId))]
+      );
+      if (inserted.length === 0) {
+        return { updated: 0 };
+      }
+      const rows = await tx.manager.find(SupermarketItem, {
+        where: { id: In(inserted.map((row) => row.id)) },
+      });
+      for (const row of rows) {
+        await tx.recordCreate(SupermarketItem, row);
+      }
+      return { updated: rows.length };
+    });
   }
 
   /** Read one item's price in a scope (plan 0012, section 3): open. */

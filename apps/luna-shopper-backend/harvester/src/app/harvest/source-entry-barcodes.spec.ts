@@ -1155,6 +1155,29 @@ describe('a create teaches and refuses like an accept (plan 0185)', () => {
       ]);
     });
 
+    it('teaches the row’s barcode to a product a create makes with an explicit null EAN', async () => {
+      const catalog = fakeCatalog([]);
+      const { service } = bulkRoute(catalog, [queued()]);
+
+      const result = await service.applyDecisions({
+        userId: ADMIN,
+        operations: [create('e-1', 'milk-2', null)],
+      });
+
+      expect(result.applied).toBe(true);
+      expect(result.priceSkips).toEqual([]);
+      const created = result.results[0].itemId as string;
+      // The product is created with no EAN, as the file asked.
+      expect(catalog.createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: null }),
+      ]);
+      // Then the barcode its row prints is added to it.
+      expect(catalog.teachItemEans).toHaveBeenCalledWith([
+        { itemId: created, ean: ROW_EAN },
+      ]);
+      expect(catalog.products[0].eans).toEqual([ROW_EAN]);
+    });
+
     it('refuses the whole file at VALIDATE with EAN_HELD when another product holds the row’s barcode, and writes nothing', async () => {
       const catalog = fakeCatalog([
         milk('item-milk', [PRODUCT_EAN]),
@@ -1504,6 +1527,77 @@ describe('a waiting row is matched again after a barcode is taught (plan 0185)',
       status: SourceEntryStatus.UNRESOLVED,
       itemId: null,
     });
+  });
+
+  it('unbinds the row again when a second row of the chain prints the same EAN, as it does a first sight bind', async () => {
+    const catalog = fakeCatalog([milk('item-milk', [PRODUCT_EAN, ROW_EAN])]);
+    const row = waiting();
+
+    // The run binds the waiting row by its barcode.
+    await ingestAgain(catalog, [row], [full(row)]);
+    expect(row).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.EAN,
+      itemId: 'item-milk',
+    });
+    catalog.addPrices.mockClear();
+
+    // A later run finds a second row of the chain that prints the EAN. The
+    // barcode names no single product any more (plan 0155), so
+    // `unbindSharedEans` sends the first row back to the queue.
+    const { outcomes } = await ingestAgain(
+      catalog,
+      [row],
+      [
+        full(row),
+        full(row, { externalId: 'other-milk-2', name: 'Leche entera 6 x 1 l' }),
+      ]
+    );
+
+    expect(row).toMatchObject({
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.SHARED_EAN,
+      // The product stays on the row as the proposal.
+      itemId: 'item-milk',
+      decidedAt: null,
+    });
+    expect(outcomes.map((outcome) => outcome.itemId)).toEqual([null, null]);
+    // Neither row publishes a price.
+    expect(catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  it('binds a SHARED_EAN proposal once its sibling stops printing the EAN', async () => {
+    // What the rule does today. The row was queued because two rows of the
+    // chain printed its EAN. The sibling prints another one now, so one row
+    // carries the barcode and a product holds it: the row is a waiting row
+    // like any other, and the run binds it.
+    const catalog = fakeCatalog([milk('item-milk', [PRODUCT_EAN, ROW_EAN])]);
+    const row = waiting({
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.SHARED_EAN,
+      confidence: 0.6,
+      itemId: 'item-milk',
+    });
+    const sibling = waiting({
+      id: 'w-2',
+      externalId: 'other-milk-2',
+      ean: '4006381333931',
+    });
+
+    const { outcomes, saved } = await ingestAgain(
+      catalog,
+      [row, sibling],
+      [full(row)]
+    );
+
+    expect(outcomes[0]).toMatchObject({ rung: 2, itemId: 'item-milk' });
+    expect(saved[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.EAN,
+      confidence: 1,
+      itemId: 'item-milk',
+    });
+    expect(sibling.status).toBe(SourceEntryStatus.UNRESOLVED);
   });
 
   it('never binds by a name: a waiting row whose barcode nobody holds stays in the queue', async () => {

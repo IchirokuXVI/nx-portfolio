@@ -163,6 +163,12 @@ export interface RunReportResult {
    * which wrote them.
    */
   pricelessOffersWritten: number;
+  /**
+   * Products this run could not offer, because the call to catalog that
+   * carried them failed. The run does not fail for it: every price and claim
+   * has landed by then, and the next run offers them again.
+   */
+  pricelessOffersFailed: number;
   /** Availability rows a person had typed, which the run left alone. */
   conflicts: Record<string, unknown>[];
   /** Every scope that received at least one price read at it (plan 0118). */
@@ -241,6 +247,7 @@ export class RunReportSink implements RunReport {
     claimsWaitingForBinding: 0,
     claimsWaitingForShop: 0,
     pricelessOffersWritten: 0,
+    pricelessOffersFailed: 0,
     conflicts: [],
     pricedScopes: [],
     pricesCopied: {},
@@ -557,6 +564,12 @@ export class RunReportSink implements RunReport {
    * availability writes, so a row they created is one this leaves alone. The
    * offer never changes a row that exists, so a run that follows one which
    * wrote them reads and writes nothing.
+   *
+   * **A call to catalog that fails here does not fail the run**, unlike the
+   * two availability writes above it, which reject the drain. Those state
+   * what this run read and nothing sends them again. The offer is sent again
+   * by every run, so the products of a failed call are counted and the rest
+   * is kept.
    */
   private async writePricelessOffers(): Promise<void> {
     const supermarketId = this.input.supermarketId;
@@ -564,11 +577,12 @@ export class RunReportSink implements RunReport {
       // No chain, or a run that reported no product: it saw no row.
       return;
     }
-    this.result.pricelessOffersWritten =
-      await this.deps.availability.writePricelessOffersForRun(
-        this.context.runId,
-        supermarketId
-      );
+    const sent = await this.deps.availability.writePricelessOffersForRun(
+      this.context.runId,
+      supermarketId
+    );
+    this.result.pricelessOffersWritten = sent.written;
+    this.result.pricelessOffersFailed = sent.failed;
   }
 
   /**

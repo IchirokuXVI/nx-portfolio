@@ -161,7 +161,12 @@ holds. The rule is `bindWaitingByEan` in `source-ingest.ts`:
 - A waiting row is `CANDIDATE` or `UNRESOLVED`, with no decision date.
 - If a product holds the row's real barcode, and no other row of the chain prints that
   EAN, the row is bound `ACTIVE` with `matchedBy: EAN`. This is the bind of a first
-  sight. The prices of the run and the stored availability follow.
+  sight.
+- What the run publishes for that row is what this run read: the prices that this run
+  stated for the row, and the shop claims that this run stated. This is not what an
+  accept does. An accept also writes every open price that the row holds from earlier
+  runs, and every stored claim. A price of another scope that only an earlier run read
+  reaches catalog when a later run reads that scope again.
 - A row that a person decided is never touched. That is `ACTIVE` with `MANUAL`, and
   `REJECTED`.
 - An in-store code and an invalid code bind nothing.

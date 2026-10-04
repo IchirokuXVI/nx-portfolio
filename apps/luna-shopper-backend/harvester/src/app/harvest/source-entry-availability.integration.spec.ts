@@ -161,6 +161,8 @@ describeIntegration(
      * many it created, which is what the real service does.
      */
     let scopeRows: Set<string>;
+    /** Products whose offer catalog refuses, with every product sent beside them. */
+    let refusedOffers: Set<string>;
     /** The chain's default scope, which a test can take away. */
     let defaultScope: string | null;
     /** What catalog holds, which is what the ladder can propose. */
@@ -219,6 +221,9 @@ describeIntegration(
         ) => {
           const onlyIfMissing = options.onlyIfMissing === true;
           scopeWrites.push({ priceScopeId, entries: sent, onlyIfMissing });
+          if (sent.some(({ itemId }) => refusedOffers.has(itemId))) {
+            throw new Error('catalog is away');
+          }
           let updated = 0;
           for (const { itemId } of sent) {
             const key = `${priceScopeId}|${itemId}`;
@@ -284,6 +289,7 @@ describeIntegration(
       locationWrites = [];
       scopeWrites = [];
       scopeRows = new Set();
+      refusedOffers = new Set();
       defaultScope = DEFAULT_SCOPE;
       catalogItems = [];
       await clean();
@@ -545,6 +551,7 @@ describeIntegration(
           },
         ]);
         expect(written.pricelessOffersWritten).toBe(2);
+        expect(written.pricelessOffersFailed).toBe(0);
       }, 120_000);
 
       it('writes none again on the run after: the rows exist, and nothing is counted', async () => {
@@ -609,6 +616,26 @@ describeIntegration(
           [{ itemId: ITEM_BREAD, available: true }],
         ]);
         expect(written.pricelessOffersWritten).toBe(1);
+      }, 120_000);
+
+      it('completes the run when catalog refuses the offer, and counts the products it could not offer', async () => {
+        await run(RUN_1, FIRST_LISTING);
+        await bindSilently('pan', ITEM_BREAD);
+        await bindSilently('croissants', ITEM_CROISSANT);
+        refusedOffers = new Set([ITEM_CROISSANT]);
+
+        // The drain does not reject: everything else the run wrote stands.
+        const written = await run(RUN_2, FIRST_LISTING);
+
+        expect(written.pricelessOffersWritten).toBe(0);
+        expect(written.pricelessOffersFailed).toBe(2);
+        expect(written.claimsStored).toBe(9);
+
+        // The next run offers them again, and this time they land.
+        refusedOffers = new Set();
+        const next = await run(RUN_3, FIRST_LISTING);
+        expect(next.pricelessOffersWritten).toBe(2);
+        expect(next.pricelessOffersFailed).toBe(0);
       }, 120_000);
 
       it('writes no offer for a chain that has no default scope', async () => {
