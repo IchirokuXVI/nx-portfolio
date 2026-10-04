@@ -1,3 +1,5 @@
+> **PR:** [#617](https://github.com/IchirokuXVI/nx-portfolio/pull/617)
+
 # 0185: a product has more than one barcode
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03.
