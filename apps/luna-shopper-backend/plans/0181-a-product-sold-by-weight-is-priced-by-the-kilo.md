@@ -1,3 +1,5 @@
+> **PR:** [#611](https://github.com/IchirokuXVI/nx-portfolio/pull/611)
+
 # 0181: a product sold by weight is priced by the kilo
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03, after the curation
