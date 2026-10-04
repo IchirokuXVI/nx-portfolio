@@ -1,5 +1,6 @@
 import { matchesBasketRow } from './basket-search';
 import type {
+  BasketElsewhere,
   BasketListRef,
   BasketPriceScope,
   BasketProduct,
@@ -10,7 +11,7 @@ import type {
   BasketShelfMark,
   BasketShop,
 } from './basket-view';
-import { basketRowPick, basketShelfMark } from './basket-view';
+import { basketElsewhere, basketRowPick, basketShelfMark } from './basket-view';
 import { catalogName } from './catalog-browse';
 import type { BasketRowState } from './enums';
 import { categoryName, type ProductCategory } from './product-category';
@@ -260,6 +261,18 @@ export interface BasketViewRow {
    * null, so nothing about the page changes until somebody asks for it.
    */
   readonly usual: Pick<BasketRowUsual, 'bought' | 'of'> | null;
+  /**
+   * What was bought through another basket, or null (velista `0131`).
+   *
+   * **The entry's under a list heading** and the row's everywhere else, like the
+   * numbers and the state the row draws, so a household whose share somebody else
+   * bought says so under its own heading and the household beside it does not.
+   *
+   * It never moves a row. A row closed from elsewhere stays where the order put
+   * it, exactly as a row this basket bought does, and its section counts it as
+   * done because the server wrote `DONE` on it.
+   */
+  readonly elsewhere: BasketElsewhere | null;
 }
 
 /**
@@ -1073,6 +1086,7 @@ function byList(
         priceMark: prices?.marks.get(row.rowKey) ?? null,
         shelf: prices?.shelves.get(row.rowKey) ?? null,
         usual: usualNote(row, notes.usual),
+        elsewhere: basketElsewhere(entry),
       };
 
       const listId = entry.listId;
@@ -1156,6 +1170,7 @@ function rowsOf(
     priceMark: prices?.marks.get(row.rowKey) ?? null,
     shelf: prices?.shelves.get(row.rowKey) ?? null,
     usual: usualNote(row, notes.usual),
+    elsewhere: basketElsewhere(row),
   }));
 }
 

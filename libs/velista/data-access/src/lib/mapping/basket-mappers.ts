@@ -188,6 +188,9 @@ function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
     listId: str(raw['listId']),
     left,
     bought,
+    // Zero when absent, which is a gateway without backend `0188` behind it, and
+    // zero when it is not a number (velista `0131`). Zero draws nothing.
+    boughtElsewhere: atLeastZero(raw['boughtElsewhere']),
     // Not on the wire: the entry view carries `left` and `bought` and backend
     // `0130` section 4 defines the sum. It is stated once here rather than at the
     // reel that needs a ceiling, which is the one arithmetic this file does and
@@ -252,6 +255,9 @@ export function toBasketRow(raw: unknown): BasketRow | null {
     // same arithmetic backend `0130` section 4 defines it by. Never `bought`
     // plus something this client worked out.
     asked: 'asked' in raw ? atLeastZero(raw['asked']) : bought + left,
+    // Read and never summed from the entries here (velista `0131`). Missing or
+    // malformed is zero, which draws the row exactly as it was before.
+    boughtElsewhere: atLeastZero(raw['boughtElsewhere']),
     state,
     note,
     // Null exactly when the note is, which the server promises and this enforces:

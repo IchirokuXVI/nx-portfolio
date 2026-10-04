@@ -36,6 +36,7 @@ function row(): BasketRow {
     left: 1,
     bought: 0,
     asked: 1,
+    boughtElsewhere: 0,
     state: 'WANTED',
     note: null,
     noteAt: null,

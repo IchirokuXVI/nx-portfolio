@@ -35,6 +35,7 @@ function entry(over: Partial<BasketRowEntry> = {}): BasketRowEntry {
     left: 2,
     bought: 1,
     asked: 3,
+    boughtElsewhere: 0,
     state: 'PARTLY',
     awaitingApproval: false,
     demandEditable: true,
@@ -51,6 +52,10 @@ function row(entries: readonly BasketRowEntry[]): BasketRow {
     left,
     bought,
     asked: left + bought,
+    boughtElsewhere: entries.reduce(
+      (sum, held) => sum + held.boughtElsewhere,
+      0
+    ),
     state: 'PARTLY',
     note: null,
     noteAt: null,
@@ -290,5 +295,63 @@ describe('RowEntries: each reel sends its own output', () => {
 
     expect(allocated).toHaveBeenCalledWith({ lineId: 'zl-1', from: 1, to: 2 });
     expect(demanded).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Velista `0131`: an entry somebody bought through another basket.
+ *
+ * The "got" reel buys when it is raised and reverts when it is lowered. This
+ * basket has no purchase here to take back, so the reel is not drawn. What the
+ * list asks for is a different write, and it stays where the server allows it.
+ */
+describe('RowEntries: bought on another basket (velista 0131)', () => {
+  const closed = (over: Partial<BasketRowEntry> = {}) =>
+    entry({
+      left: 0,
+      bought: 0,
+      asked: 0,
+      boughtElsewhere: 2,
+      state: 'DONE',
+      ...over,
+    });
+
+  const gotReels = (fixture: Fixture) => [
+    ...html(fixture).querySelectorAll<HTMLElement>('.got-reel'),
+  ];
+
+  it('offers no revert: the got number is plain text', async () => {
+    const fixture = await render(row([closed()]));
+
+    expect(gotReels(fixture)).toHaveLength(0);
+  });
+
+  it('reads both plain numbers from boughtElsewhere', async () => {
+    const fixture = await render(row([closed({ demandEditable: false })]));
+
+    const numbers = [...html(fixture).querySelectorAll('.row-number')].map(
+      (held) => held.lastChild?.textContent?.trim()
+    );
+    expect(numbers).toEqual(['2', '2']);
+  });
+
+  it('draws the quantity control where demandEditable is true', async () => {
+    const fixture = await render(row([closed({ demandEditable: true })]));
+
+    expect(askReels(fixture)).toHaveLength(1);
+  });
+
+  it('draws no quantity control where demandEditable is false', async () => {
+    const fixture = await render(row([closed({ demandEditable: false })]));
+
+    expect(askReels(fixture)).toHaveLength(0);
+  });
+
+  it('keeps the got reel on an entry with something left', async () => {
+    const fixture = await render(
+      row([entry({ left: 1, bought: 0, asked: 1, boughtElsewhere: 1 })])
+    );
+
+    expect(gotReels(fixture)).toHaveLength(1);
   });
 });

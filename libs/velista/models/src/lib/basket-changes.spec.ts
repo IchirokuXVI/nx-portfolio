@@ -39,6 +39,7 @@ function row(state: BasketRowState, rowKey = 'zl-1'): BasketRow {
     left: 1,
     bought: 0,
     asked: 1,
+    boughtElsewhere: 0,
     state,
     note: null,
     noteAt: null,

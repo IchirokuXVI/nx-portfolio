@@ -1268,6 +1268,9 @@
       "none": "{{name}} says they had none",
       "you": "you"
     },
+    "elsewhere": {
+      "caption": "Bought on another basket"
+    },
     "from": {
       "one": "from {{first}}",
       "two": "from {{first}} and {{second}}",

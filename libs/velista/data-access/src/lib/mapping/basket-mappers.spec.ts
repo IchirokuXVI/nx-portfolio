@@ -506,3 +506,70 @@ describe('toBasketMergeRequired', () => {
     expect(toBasketMergeRequired({ otherContent: 'milk' })).toBeNull();
   });
 });
+
+/**
+ * Velista `0131`: a row somebody bought through another basket.
+ *
+ * Backend `0188` keeps the row and says how many were bought elsewhere. Before
+ * this build read the field, such a row arrived as a done row saying "0 of 0".
+ */
+describe('toBasketRow: bought on another basket (velista 0131)', () => {
+  const ELSEWHERE = {
+    ...ROW,
+    left: 0,
+    bought: 0,
+    asked: 0,
+    boughtElsewhere: 2,
+    state: 'DONE',
+    note: 'BOUGHT_ON_ANOTHER_BASKET',
+    noteAt: '2026-10-04T10:00:00.000Z',
+    entries: [
+      { ...ENTRY, left: 0, bought: 0, boughtElsewhere: 2, state: 'DONE' },
+    ],
+  };
+
+  it('reads the count on the row and on each entry', () => {
+    const row = toBasketRow(ELSEWHERE);
+
+    expect(row?.boughtElsewhere).toBe(2);
+    expect(row?.entries[0].boughtElsewhere).toBe(2);
+    // This basket's own numbers keep their meaning beside it.
+    expect(row?.bought).toBe(0);
+    expect(row?.state).toBe('DONE');
+  });
+
+  it('maps the note, and keeps the moment behind it', () => {
+    const row = toBasketRow(ELSEWHERE);
+
+    expect(row?.note).toBe('BOUGHT_ON_ANOTHER_BASKET');
+    expect(row?.noteAt).toEqual(new Date('2026-10-04T10:00:00.000Z'));
+  });
+
+  /** A gateway without backend `0188` behind it sends no such field. */
+  it('reads a missing field as zero', () => {
+    const row = toBasketRow(ROW);
+
+    expect(row?.boughtElsewhere).toBe(0);
+    expect(row?.entries[0].boughtElsewhere).toBe(0);
+  });
+
+  it.each(['2', null, Number.NaN, {}, -1])(
+    'reads a malformed field (%p) as zero',
+    (malformed) => {
+      const row = toBasketRow({
+        ...ELSEWHERE,
+        boughtElsewhere: malformed,
+        entries: [{ ...ELSEWHERE.entries[0], boughtElsewhere: malformed }],
+      });
+
+      expect(row?.boughtElsewhere).toBe(0);
+      expect(row?.entries[0].boughtElsewhere).toBe(0);
+    }
+  );
+
+  it('carries the count through a basket read', () => {
+    const basket = toBasket({ ...BASKET, rows: [ELSEWHERE] });
+
+    expect(basket?.rows[0].boughtElsewhere).toBe(2);
+  });
+});

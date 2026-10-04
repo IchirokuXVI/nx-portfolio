@@ -21,6 +21,7 @@ function row(
     left: 1,
     bought: 0,
     asked: 2,
+    boughtElsewhere: 0,
     state,
     note: null,
     noteAt: null,

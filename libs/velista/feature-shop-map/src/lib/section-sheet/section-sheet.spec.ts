@@ -16,6 +16,7 @@ function row(rowKey: string, state: BasketRow['state'], asked = 1): BasketRow {
     left: 1,
     bought: 0,
     asked,
+    boughtElsewhere: 0,
     state,
     note: null,
     noteAt: null,

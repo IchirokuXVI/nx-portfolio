@@ -111,6 +111,16 @@
       }
 
       <!--
+        Somebody bought it through another basket (velista 0131), in the words the
+        row underneath uses. On a row closed that way this is all that happened,
+        and nothing here takes it back: the settle targets are off because nothing
+        is left, and the "got" number below is plain text.
+      -->
+      @if (boughtElsewhere(); as said) {
+        <p class="happened">{{ said }}</p>
+      }
+
+      <!--
         Which one is in the trolley (velista 0092, section 5).
 
         The pane behind this used to **split** the row between products. It asks

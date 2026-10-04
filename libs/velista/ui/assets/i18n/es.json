@@ -1268,6 +1268,9 @@
       "none": "{{name}} dice que no había",
       "you": "tú"
     },
+    "elsewhere": {
+      "caption": "Comprado en otra cesta"
+    },
     "from": {
       "one": "de {{first}}",
       "two": "de {{first}} y {{second}}",

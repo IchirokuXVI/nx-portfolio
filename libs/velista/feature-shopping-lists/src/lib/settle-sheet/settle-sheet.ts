@@ -29,6 +29,7 @@ import {
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
+  basketElsewhere,
   inLocale,
   LINE_CONTENT_MAX_LENGTH,
   shownOffer,
@@ -53,7 +54,11 @@ import {
   correlationIdOf,
   type BasketOperation,
 } from '../basket-error-copy';
-import { participantName, touchedCaption } from '../basket-labels';
+import {
+  elsewhereCaption,
+  participantName,
+  touchedCaption,
+} from '../basket-labels';
 import { basketPath, settleSheetPath } from '../basket-paths';
 import { RowEntries } from '../row-entries/row-entries';
 import { SettleProduct, type SettleProductView } from './settle-product';
@@ -464,6 +469,25 @@ export class SettleSheet {
           this._locale(),
           this._store.me()?.id ?? null,
           this._session.username()
+        );
+  });
+
+  /**
+   * "Bought on another basket", or null (velista `0131`).
+   *
+   * The sentence the row underneath draws, from the same function, so the sheet
+   * and the row cannot disagree. On a row closed that way it is the whole answer
+   * to "what happened": this basket bought nothing, so {@link whatHappened} is
+   * null, and the sheet offers no way to take the purchase back.
+   */
+  protected readonly boughtElsewhere = computed<string | null>(() => {
+    const row = this.row();
+    return row === null
+      ? null
+      : elsewhereCaption(
+          basketElsewhere(row),
+          this._translator,
+          this._locale()
         );
   });
 
