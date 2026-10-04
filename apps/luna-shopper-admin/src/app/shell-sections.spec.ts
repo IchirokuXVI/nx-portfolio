@@ -175,6 +175,41 @@ describe('ADMIN_SECTIONS', () => {
     ]);
   });
 
+  /**
+   * The shoppers open on People, and the two lists that have no parent are
+   * the tabs of the section (admin plan 0045, target 1). The other five are
+   * held as well, each under a zone or a person, and are no tab.
+   */
+  it('opens the shoppers on People, with two tabs', () => {
+    const shoppers = ADMIN_SECTIONS.find(
+      (section) => section.key === 'shoppers'
+    );
+
+    expect(shoppers).toBeDefined();
+    if (shoppers === undefined) {
+      return;
+    }
+    expect(sectionLink(shoppers)).toBe('/shoppers');
+    expect(shoppers.home).toBeUndefined();
+    expect(shoppers.landing).toBe('people');
+    expect(shoppers.resources).toBeUndefined();
+    expect(sectionScreens(shoppers)).toEqual([
+      { path: '/shoppers/people', label: 'people.users.many' },
+      { path: '/shoppers/zones', label: 'people.zones.many' },
+    ]);
+    expect((shoppers.held ?? []).map((descriptor) => descriptor.name)).toEqual([
+      'users',
+      'zones',
+      'memberships',
+      'lists',
+      'list-lines',
+      'baskets',
+      'zone-baskets',
+    ]);
+    // Somebody counts the join requests, for the Zones tab and for the rail.
+    expect(shoppers.counts).toBeDefined();
+  });
+
   /** The Catalog section is gone, and nothing is mounted under its segment. */
   it('has no catalog section', () => {
     expect(ADMIN_SECTIONS.map((section) => section.segment)).not.toContain(
@@ -304,14 +339,52 @@ describe('ADMIN_SECTIONS', () => {
     // tab. With no product named, it is the products.
     expect(at('prices', { itemId: 'i1' })).toBe('products/i1/prices');
     expect(at('prices')).toBe('products');
-    expect(at('users')).toBe('shoppers/users');
+    // A zone holds its members and its lists (admin plan 0045): the people
+    // and the zones are the two tabs, and everything else is under one row of
+    // one of them.
+    const zone = { zoneId: 'z1' };
+    const list = { ...zone, listId: 'l1' };
+    const owner = { ownerUserId: 'u1' };
+    expect(at('users')).toBe('shoppers/people');
     expect(at('zones')).toBe('shoppers/zones');
-    expect(at('memberships')).toBe('shoppers/memberships');
-    expect(at('lists')).toBe('shoppers/lists');
-    expect(at('list-lines')).toBe('shoppers/list-lines');
-    // `shopping-lists` is the baskets screen's segment, which is the gateway's
-    // own name for a basket.
-    expect(at('baskets')).toBe('shoppers/shopping-lists');
+    expect(at('memberships', zone)).toBe('shoppers/zones/z1/members');
+    expect(at('lists', zone)).toBe('shoppers/zones/z1/lists');
+    expect(at('list-lines', list)).toBe('shoppers/zones/z1/lists/l1/lines');
+    // `shopping-lists` is the baskets' segment, which is the gateway's own
+    // name for a basket. A basket belongs to a person, and a zone has a tab
+    // of the ones drawn from it.
+    expect(at('baskets', owner)).toBe('shoppers/people/u1/shopping-lists');
+    expect(at('zone-baskets', zone)).toBe('shoppers/zones/z1/shopping-lists');
+    // With no parent named, each answers the closest list that has an
+    // address, so a tile that counts every list still leads somewhere.
+    expect(at('memberships')).toBe('shoppers/zones');
+    expect(at('lists')).toBe('shoppers/zones');
+    expect(at('list-lines')).toBe('shoppers/zones');
+    expect(at('list-lines', { listId: 'l1' })).toBe('shoppers/zones');
+    expect(at('baskets')).toBe('shoppers/people');
+    expect(registry.rowPath('users', 'u1')).toEqual([
+      '/',
+      'shoppers',
+      'people',
+      'u1',
+    ]);
+    expect(registry.rowPath('lists', 'l1', zone)).toEqual([
+      '/',
+      'shoppers',
+      'zones',
+      'z1',
+      'lists',
+      'l1',
+    ]);
+    expect(registry.rowPath('lists', 'l1')).toBeNull();
+    expect(registry.rowPath('baskets', 'b1', owner)).toEqual([
+      '/',
+      'shoppers',
+      'people',
+      'u1',
+      'shopping-lists',
+      'b1',
+    ]);
     // Parts of the harvester's Setup tab (admin plan 0044, target 6): set up
     // once and then left alone, beside the chain sources.
     expect(at('postal-codes')).toBe('harvest/setup/postal-codes');

@@ -235,7 +235,7 @@ export interface RowAction {
                     }
                     @for (state of row.states ?? []; track state.label) {
                       <span [attr.data-tone]="state.tone" class="state-chip">{{
-                        state.label | rokuT
+                        state.label | rokuT: state.args
                       }}</span>
                     }
                   </span>
@@ -277,7 +277,7 @@ export interface RowAction {
               <p class="states">
                 @for (state of row.states ?? []; track state.label) {
                   <span [attr.data-tone]="state.tone" class="state-chip">{{
-                    state.label | rokuT
+                    state.label | rokuT: state.args
                   }}</span>
                 }
               </p>
@@ -383,7 +383,7 @@ export interface RowAction {
                         <span
                           [attr.data-tone]="state.tone"
                           class="state-chip beside"
-                          >{{ state.label | rokuT }}</span
+                          >{{ state.label | rokuT: state.args }}</span
                         >
                       }
                     }

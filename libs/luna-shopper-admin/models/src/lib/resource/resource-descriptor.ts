@@ -3,6 +3,7 @@ import type { InfoContent } from './info-content';
 import type {
   EnumOption,
   FieldDescriptor,
+  FieldMessage,
   FieldName,
   FilterValue,
   ResourceRow,
@@ -105,6 +106,15 @@ export interface BriefPresentation<T extends ResourceRow = ResourceRow> {
   heading?(row: T, locales: readonly string[]): string;
   /** The fields of the second line, in order, drawn without their labels. */
   readonly line?: readonly FieldName<T>[];
+  /**
+   * The second line as one sentence, in place of {@link line} (admin plan
+   * 0045).
+   *
+   * For a row whose values need words around them: "Owner marta. Members 4,
+   * lists 3" says who and how many, and "marta 4 3" says nothing. A message
+   * and not a string, because a pure function cannot translate.
+   */
+  sentence?(row: T): FieldMessage;
   /** A count at the end of the row, such as the shops a chain holds. */
   readonly trailing?: FieldName<T>;
 }
@@ -113,6 +123,11 @@ export interface BriefPresentation<T extends ResourceRow = ResourceRow> {
 export interface RowState {
   /** A translation key. */
   readonly label: string;
+  /**
+   * What to put into the label, for a state that carries a number (admin plan
+   * 0045): "2 requests" on a zone.
+   */
+  readonly args?: Readonly<Record<string, string | number>>;
   /**
    * `good` is the accent wash, `waiting` is the amber one that means a person
    * must decide, and `neutral` is grey.

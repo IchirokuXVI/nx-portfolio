@@ -3,12 +3,21 @@ import {
   ADMIN_LISTS_PATH,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { ListDetailPage } from './list-detail-page';
+import {
+  defineResource,
+  type InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
 import { LIST_SEED, type ListRow } from './people-seed';
+import { ZONE_CAUTION, ZONE_PARAM } from './shopper-params';
 
 /** A standing list inside a zone, as the back office reads one. */
 export type List = ListRow;
+
+/** What the info button of a list says (admin plan 0045, target 7). */
+export const LIST_INFO: InfoContent = {
+  title: 'people.lists.info.title',
+  points: ['people.lists.info.corrects', 'people.lists.info.adds'],
+};
 
 /**
  * The standing lists (plan 0007, section 2, widened by plan 0009, section 4.1).
@@ -29,19 +38,22 @@ export type List = ListRow;
  * something the backend does, and who wrote a list is a fact rather than a
  * setting.
  *
- * **Its lines are on the detail screen and on their own screen.** Reading what a
- * household wrote down is a deliberate click, not something that happens while
- * browsing zones, which is why the zone screen shows list names and counts and
- * this one shows contents.
+ * **The lists are a tab of their zone** (admin plan 0045), so the zone is read
+ * from the address and is no filter. Lists by who made them is dropped: that
+ * filter has no screen in this design.
+ *
+ * **Its lines are on the list's own page.** Reading what a household wrote
+ * down is a deliberate click, not something that happens while browsing zones,
+ * which is why the tab shows list names and counts and the page shows
+ * contents. `shoppersRoutes` mounts that page.
  */
 export const LISTS = defineResource<List>({
   name: 'lists',
   segment: 'lists',
+  parent: { resource: 'zones', param: ZONE_PARAM, filter: 'zoneId' },
   labels: { one: 'people.lists.one', many: 'people.lists.many' },
 
   title: (row) => row.name,
-
-  detail: ListDetailPage,
 
   fields: [
     {
@@ -102,28 +114,15 @@ export const LISTS = defineResource<List>({
   ],
 
   list: {
-    columns: ['name', 'zoneName', 'lineCount', 'sharedWithZone', 'createdAt'],
-    compact: ['zoneName', 'lineCount'],
+    // No zone column: the tab is the zone's.
+    columns: ['name', 'lineCount', 'sharedWithZone', 'createdAt'],
+    compact: ['lineCount', 'sharedWithZone'],
   },
 
-  caution: 'people.broadcast',
+  info: LIST_INFO,
+  caution: ZONE_CAUTION,
 
   actions: { edit: true, delete: true },
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'zoneId',
-      label: 'people.lists.filter.zoneId',
-      resource: 'zones',
-    },
-    {
-      kind: 'reference',
-      param: 'createdByUserId',
-      label: 'people.lists.filter.createdByUserId',
-      resource: 'users',
-    },
-  ],
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<List>({

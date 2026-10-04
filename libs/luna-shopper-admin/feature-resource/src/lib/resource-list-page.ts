@@ -712,12 +712,26 @@ export class ResourceListPage {
     const trailing =
       brief?.trailing === undefined ? '' : textOf(brief.trailing);
 
+    // One sentence where the descriptor wrote one (admin plan 0045), and the
+    // named fields side by side otherwise.
+    const sentence = brief?.sentence?.(row);
+
     return {
       heading: brief?.heading?.(row, this._content.order()) || title,
-      line: (brief?.line ?? [])
-        .map(textOf)
-        .filter((text) => text !== '')
-        .join(' '),
+      line:
+        sentence !== undefined
+          ? sentence.kind === 'text'
+            ? sentence.text
+            : this._translator.t(
+                sentence.key,
+                undefined,
+                undefined,
+                sentence.args
+              )
+          : (brief?.line ?? [])
+              .map(textOf)
+              .filter((text) => text !== '')
+              .join(' '),
       trailing: trailing === '' ? null : trailing,
     };
   }

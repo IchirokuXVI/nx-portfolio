@@ -12,6 +12,7 @@ import {
   defineResource,
 } from '@portfolio/luna-shopper-admin/models';
 import { LIST_LINE_SEED, type ListLineRow } from './people-seed';
+import { LIST_PARAM, ZONE_CAUTION } from './shopper-params';
 
 /** One thing written on a standing list, as the back office reads it. */
 export type ListLine = ListLineRow;
@@ -21,7 +22,7 @@ const QUANTITY_MIN = 0;
 const QUANTITY_MAX = 100000;
 
 /** How far a line can get, which is the whole of `LineApprovalStatus`. */
-export const LINE_APPROVAL_OPTIONS = [
+const LINE_APPROVAL_OPTIONS = [
   { value: 'PENDING', label: 'people.lists.approval.PENDING' },
   { value: 'APPROVED', label: 'people.lists.approval.APPROVED' },
   { value: 'REJECTED', label: 'people.lists.approval.REJECTED' },
@@ -30,14 +31,14 @@ export const LINE_APPROVAL_OPTIONS = [
 /**
  * One line at a time (plan 0009, section 4.2).
  *
- * The list detail screen still draws every line, because reading what a
- * household wrote down is what that screen is for. This is the other question:
- * correct **this** line's wording or its quantity.
+ * The page of a list draws every line, because reading what a household wrote
+ * down is what that page is for, and it draws the named actions declared here.
+ * This descriptor's form is the other question: correct **this** line's
+ * wording or its quantity.
  *
- * The list is a filter and not a question: opening this screen with none
- * chosen lists every list's lines, grouped by the list they are on, because the
- * list is the thing somebody hunting for what one person wrote does not know
- * yet (plan 0017).
+ * **The list is the address** (admin plan 0045): a line sits at
+ * `/shoppers/zones/{zoneId}/lists/{listId}/lines/{id}`, so the list is read
+ * from the route and is no filter.
  *
  * What is deliberately missing, and why:
  *
@@ -59,7 +60,8 @@ export const LINE_APPROVAL_OPTIONS = [
  */
 export const LIST_LINES = defineResource<ListLine>({
   name: 'list-lines',
-  segment: 'list-lines',
+  segment: 'lines',
+  parent: { resource: 'lists', param: LIST_PARAM, filter: 'listId' },
   labels: { one: 'people.lines.one', many: 'people.lines.many' },
 
   // The pair, because a line's own id addresses nothing on its own: every route
@@ -141,20 +143,7 @@ export const LIST_LINES = defineResource<ListLine>({
     compact: ['listName', 'approvalStatus'],
   },
 
-  info: {
-    title: 'people.lines.many',
-    points: ['people.lines.info.noAdd', 'people.lines.info.correct'],
-  },
-  caution: 'people.broadcast',
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'listId',
-      label: 'people.lines.filter.listId',
-      resource: 'lists',
-    },
-  ],
+  caution: ZONE_CAUTION,
 
   actions: {
     edit: true,

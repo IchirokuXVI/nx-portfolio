@@ -1822,14 +1822,28 @@
     }
   },
   "people": {
-    "detail": {
-      "back": "Back to the list",
-      "loading": "Loading…",
-      "actions": "Actions"
+    "shoppers": {
+      "info": {
+        "title": "Shoppers",
+        "zone": "A zone is a household. It holds its members and its lists.",
+        "person": "A person is in one or more zones and owns their shopping lists."
+      }
     },
+    "zoneCaution": "Everybody in the zone sees a change here at once.",
     "users": {
       "one": "person",
       "many": "People",
+      "back": "Back to people",
+      "choose": "Choose a person to see their account.",
+      "state": {
+        "guest": "Guest",
+        "unconfirmed": "Email not confirmed"
+      },
+      "tabs": {
+        "details": "Details",
+        "zones": "Zones",
+        "baskets": "Shopping lists"
+      },
       "userId": "Identifier",
       "username": "Username",
       "displayName": "Display name",
@@ -1839,13 +1853,12 @@
       "providers": "Sign in methods",
       "createdAt": "Signed up",
       "updatedAt": "Last changed",
-      "zones": "Zones",
       "noZones": "This person is not in any zone.",
-      "zonesUnavailable": "The zones could not be read. The account above is still what the server sent.",
+      "zonesUnavailable": "The zones could not be read.",
       "kind": {
         "label": "Kind",
         "REGISTERED": "Registered",
-        "TEMPORARY": "Temporary"
+        "TEMPORARY": "Guest"
       },
       "filter": {
         "username": "Username contains",
@@ -1906,7 +1919,7 @@
         "guestRefused": "A guest account holds no roles, so the server refused. Set them once the account has registered.",
         "saved": "Saved. The account sees the change at its next token refresh, within 15 minutes."
       },
-      "rolesHelp": "Set on the account’s page, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
+      "rolesHelp": "Set on the Details tab of the person, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
     },
     "zones": {
       "one": "zone",
@@ -1920,11 +1933,32 @@
       "markedForDeletionAt": "Marked for deletion",
       "createdAt": "Created",
       "updatedAt": "Last changed",
-      "members": "Members",
+      "back": "Back to zones",
+      "choose": "Choose a zone to see its members and its lists.",
+      "edit": "Edit zone",
+      "ownedBy": "Owner {{name}}",
+      "noOwner": "No owner",
+      "summary_one": "Owner {{owner}}, {{count}} member",
+      "summary_other": "Owner {{owner}}, {{count}} members",
+      "summaryNoOwner_one": "No owner, {{count}} member",
+      "summaryNoOwner_other": "No owner, {{count}} members",
+      "pendingCount": "Requests waiting",
       "noMembers": "This zone has no members.",
-      "lists": "Lists",
-      "noLists": "This zone has no lists.",
-      "lineCount": "{{count}} lines",
+      "noConfig": "This zone has set nothing.",
+      "tabs": {
+        "members": "Members",
+        "lists": "Lists",
+        "baskets": "Shopping lists",
+        "details": "Details"
+      },
+      "state": {
+        "requests_one": "{{count}} request",
+        "requests_other": "{{count}} requests"
+      },
+      "brief": {
+        "owned": "Owner {{owner}}. Members {{members}}, lists {{lists}}",
+        "noOwner": "No owner. Members {{members}}, lists {{lists}}"
+      },
       "status": {
         "label": "State",
         "ACTIVE": "Active",
@@ -1942,6 +1976,8 @@
         "BANNED": "Banned"
       },
       "filter": {
+        "hasPending": "Requests",
+        "waiting": "Requests waiting",
         "userId": "Zones this person is in",
         "ownerUserId": "Owned by",
         "createdAfter": "Created on or after",
@@ -1950,12 +1986,8 @@
       "action": {
         "regenerateJoinCode": "New join code",
         "deleteZone": "Delete zone",
-        "transferOwnership": "Make owner",
-        "kickMember": "Remove",
-        "banMember": "Ban",
         "markForDeletion": "Mark for deletion",
-        "restore": "Restore",
-        "openMembership": "Open"
+        "restore": "Restore"
       },
       "confirm": {
         "regenerateJoinCode": {
@@ -1968,35 +2000,21 @@
           "body": "{{name}} is deleted, with its lists, its lines and everything settled inside it. Every member loses it from their app. There is no undo.",
           "confirm": "Delete the zone"
         },
-        "transferOwnership": {
-          "heading": "Hand the zone over?",
-          "body": "{{member}} becomes the owner of {{name}}. Whoever owns it now becomes an admin instead.",
-          "confirm": "Make them the owner"
-        },
-        "kickMember": {
-          "heading": "Remove this member?",
-          "body": "{{member}} loses {{name}} from their app. They can join again with the code, so ban them instead if that is not what you want.",
-          "confirm": "Remove them"
-        },
-        "banMember": {
-          "heading": "Ban this member?",
-          "body": "{{member}} loses {{name}} and cannot rejoin with the code. What they already wrote on the zone's lists stays.",
-          "confirm": "Ban them"
-        },
         "markForDeletion": {
           "heading": "Mark this zone for deletion?",
           "body": "{{name}} is put in the queue the reaper works through, and is removed for good once the grace period is up. Restoring it before then undoes this.",
           "confirm": "Mark it"
         }
       },
-      "config": "Settings",
-      "configHelp": "The zone’s own settings, as a JSON object. It is replaced whole rather than merged, which is what saving does for the zone’s owner too.",
-      "ownerHelp": "Fixed here. Handing the zone to somebody is “Make owner” on one of the member rows, because it is two role changes and this column in one transaction. A zone with no owner is an ordinary state, and that action is what rescues it.",
+      "config": "Configuration",
+      "configHelp": "The zone’s own configuration, as a JSON object. It is replaced whole rather than merged, which is what saving does for the zone’s owner too.",
+      "ownerHelp": "Fixed here. Handing the zone to somebody is “Make owner” in a member’s menu on the Members tab, because it is two role changes and this value in one transaction. A zone with no owner is an ordinary state, and that action is what rescues it.",
       "joinCodeHelp": "Fixed here. It is unique and random on purpose, so it is minted rather than typed: “New join code” replaces it and invalidates every invitation already handed out.",
-      "statusHelp": "Fixed here. It is written together with “Marked for deletion” in one transaction, and the two actions below are how it moves. Writing one of the pair alone leaves a zone the reaper either never removes or removes anyway.",
+      "statusHelp": "Fixed here. It is written together with “Marked for deletion” in one transaction, and “Mark for deletion” and “Restore” on the zone’s page are how it moves. Writing one of the pair alone leaves a zone the reaper either never removes or removes anyway.",
       "markedForDeletionAtHelp": "Fixed here, and the other half of the pair above. “Mark for deletion” sets both and “Restore” clears both.",
-      "memberCountHelp": "Counted from the membership below. Add or remove a member to change it.",
-      "listCountHelp": "Counted from the lists below. Add or remove a list to change it."
+      "memberCountHelp": "Counted from the members who are in the zone. Add or remove a member to change it.",
+      "listCountHelp": "Counted from the lists of the zone. Add or remove a list to change it.",
+      "pendingCountHelp": "Counted from the people who asked to join and wait for an answer. Approve or reject a request on the Members tab to change it."
     },
     "lists": {
       "one": "list",
@@ -2004,7 +2022,16 @@
       "id": "Identifier",
       "name": "Name",
       "zone": "Zone",
-      "zoneId": "Zone identifier",
+      "back": "Back to the lists of {{zone}}",
+      "edit": "Edit list",
+      "delete": "Delete list",
+      "settings": "Settings",
+      "quantity": "Quantity {{count}}",
+      "info": {
+        "title": "Lists",
+        "corrects": "An operator corrects a line.",
+        "adds": "Only a member of the zone adds one."
+      },
       "createdByUserId": "Created by",
       "lineCount": "Lines",
       "sharedWithZone": "Shared with the zone",
@@ -2018,18 +2045,11 @@
         "APPROVED": "Approved",
         "REJECTED": "Rejected"
       },
-      "filter": {
-        "zoneId": "In this zone",
-        "createdByUserId": "Created by this person"
-      },
       "zoneHelp": "Fixed here. A list belongs to the zone it was made in, and nothing moves one between zones.",
       "createdByUserIdHelp": "Fixed here. It records who made the list, which is a fact about what happened rather than a setting.",
-      "lineCountHelp": "Counted from the lines below. Add or delete a line to change it.",
+      "lineCountHelp": "Counted from the lines of the list. A member adds a line, and deleting one here lowers it.",
       "autoApproveLinesHelp": "Whether a line added from now on counts straight away. It governs new lines only, so turning it on approves nothing that is already waiting.",
-      "sharedWithZoneHelp": "Turning this on gives every approved member of the zone the right to read this list, write on it and decide its lines. Turning it off takes that right from nobody. It governs who arrives next, so switching it off does not close the list: to shut somebody out, remove them from the zone.",
-      "action": {
-        "openLine": "Open"
-      }
+      "sharedWithZoneHelp": "Turning this on gives every approved member of the zone the right to read this list, write on it and decide its lines. Turning it off takes that right from nobody. It governs who arrives next, so switching it off does not close the list: to shut somebody out, remove them from the zone."
     },
     "baskets": {
       "one": "shopping list",
@@ -2037,13 +2057,15 @@
       "id": "Identifier",
       "name": "Name",
       "ownerUserId": "Owner",
-      "zoneIds": "Zones it draws from",
+      "zoneIds": "Draws from the zone",
       "lineCount": "Rows",
       "generatedAt": "Generated",
       "updatedAt": "Last changed",
+      "back": "Back to the shopping lists",
       "lines": "Rows",
-      "noLines": "This basket is showing no rows.",
+      "noLines": "This shopping list shows no rows.",
       "bought": "{{bought}} of {{asked}} bought",
+      "left": "{{count}} left",
       "kind": {
         "label": "Kind",
         "LIVE": "Always there",
@@ -2060,8 +2082,9 @@
         "zoneId": "With lines from this zone"
       },
       "info": {
-        "record": "One row is a record of what somebody took to the shop. Nothing here can be changed.",
-        "correct": "To correct a line, change the list that the shopping list came from."
+        "title": "Shopping lists",
+        "record": "A shopping list is the record of one trip, so it is read only.",
+        "correct": "To correct something, change the list it came from."
       },
       "settlement": {
         "none": "Not settled yet.",
@@ -2089,45 +2112,55 @@
         "add": "To add one, run \"npx nx run luna-shopper-backend-auth:admin:create\" where the auth service runs."
       }
     },
-    "broadcast": "Everybody in the zone sees this change at once, with nothing to say that an operator made it.",
     "field": {
       "idHelp": "The identifier this row is addressed by. It is generated when the row is created and nothing changes it.",
       "createdAtHelp": "When the row was created. It records what happened and is never rewritten."
     },
     "memberships": {
       "one": "membership",
-      "many": "Memberships",
+      "many": "Members",
+      "menu": "Actions for {{name}}",
+      "openPerson": "Open this person",
+      "change": "Change role or name",
+      "asked": "Asked to join on {{when}}",
+      "since": "In the zone since {{when}}",
+      "joined": "Joined on {{when}}",
       "membershipId": "Identifier",
       "zoneId": "Zone identifier",
       "zoneIdHelp": "Fixed here. A membership is one person in one zone; somebody joining a second zone gets a second membership.",
       "zoneName": "Zone",
-      "zoneNameHelp": "The household this membership is in. It is on the row, so this list reads with no zone chosen and every row still says which one it belongs to.",
+      "zoneNameHelp": "The household this membership is in.",
       "userId": "Person",
       "userIdHelp": "Fixed here. It says whose membership this is, and nothing transfers one between accounts.",
       "username": "Name in this zone",
       "usernameHelp": "What this person is called inside this zone alone. Their global handle is on their account and is not touched by this.",
       "role": "Role",
-      "roleHelp": "Owner is deliberately not offered. Handing the zone over is “Make owner” on the zone screen, because it is two role changes and a column in one transaction.",
+      "roleHelp": "Owner is deliberately not offered. Handing the zone over is “Make owner” in the member’s menu on the Members tab, because it is two role changes and the zone’s owner in one transaction.",
       "status": "State",
-      "statusHelp": "Fixed here. The four actions beside this row are how it moves, because each of them does more than write this value: letting somebody in announces it to the zone, banning keeps the row so the ban survives, and refusing removes it.",
+      "statusHelp": "Fixed here. The actions on the Members tab of the zone are how it moves, because each of them does more than write this value: approving somebody announces it to the zone, banning keeps the row so the ban survives, and rejecting removes it.",
       "createdAt": "Joined",
-      "filter": {
-        "zoneId": "In this zone"
-      },
       "action": {
-        "approve": "Let them in",
-        "reject": "Refuse"
+        "approve": "Approve",
+        "reject": "Reject",
+        "transfer": "Make owner",
+        "kick": "Remove from the zone",
+        "ban": "Ban from the zone"
       },
       "confirm": {
+        "transfer": {
+          "heading": "Hand the zone over?",
+          "body": "{{name}} becomes the owner of the zone. Whoever owns it now becomes an admin instead.",
+          "confirm": "Make them the owner"
+        },
         "approve": {
           "heading": "Let this person in?",
           "body": "{{name}} becomes a member of the zone and can read and write its lists straight away. The zone is told, so everybody with the app open sees them arrive.",
           "confirm": "Let them in"
         },
         "reject": {
-          "heading": "Refuse this request?",
-          "body": "{{name}} stops waiting and the request is removed. They can ask again with the join code, so ban them instead if that is not what you want.",
-          "confirm": "Refuse it"
+          "heading": "Reject this request?",
+          "body": "{{name}} stops waiting and the request is removed. They can ask again with the join code.",
+          "confirm": "Reject it"
         },
         "kick": {
           "heading": "Remove this member?",
@@ -2143,26 +2176,19 @@
     },
     "lines": {
       "one": "line",
-      "many": "List lines",
+      "many": "Lines",
       "id": "Identifier",
       "listId": "List identifier",
       "listIdHelp": "Fixed here. A line belongs to the list it was written on, and nothing moves one between lists.",
       "listName": "List",
-      "listNameHelp": "The list this line was written on. It is on the row, so this list reads with no list chosen and every row still says which one it is from.",
+      "listNameHelp": "The list this line was written on.",
       "content": "What it says",
       "quantity": "How many",
       "approvalStatus": "Approval",
-      "approvalStatusHelp": "Fixed here. The two actions beside this row are how it moves, because each is a service call that tells the zone. Correcting the wording above leaves an approved line approved.",
+      "approvalStatusHelp": "Fixed here. “Approve” and “Reject” beside the line on its list’s page are how it moves, because each tells the zone. Correcting the wording above leaves an approved line approved.",
       "createdByUserId": "Written by",
       "createdByUserIdHelp": "Fixed here. It records who wrote the line, and an operator did not.",
       "createdAt": "Written",
-      "info": {
-        "noAdd": "A line is added by somebody in the zone, in the app. You cannot add one here.",
-        "correct": "Open a line to correct it."
-      },
-      "filter": {
-        "listId": "On this list"
-      },
       "action": {
         "approve": "Approve",
         "reject": "Reject"
@@ -2268,12 +2294,13 @@
       }
     },
     "shoppers": {
-      "users": "Users",
+      "heading": "Shoppers",
+      "users": "People",
       "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
       "zones": "Zones",
       "zonesCaption": "{{active}} active of {{total}}",
       "lists": "Lists",
-      "baskets": "Baskets",
+      "baskets": "Shopping lists",
       "basketsCaption": "{{open}} being shopped, {{finished}} finished, {{live}} always there",
       "signUps": "Sign ups",
       "signUpsTitle": "Sign ups per day",

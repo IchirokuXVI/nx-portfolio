@@ -12,6 +12,7 @@ import {
   defineResource,
 } from '@portfolio/luna-shopper-admin/models';
 import { MEMBERSHIP_SEED, type MembershipRow } from './people-seed';
+import { ZONE_CAUTION, ZONE_PARAM } from './shopper-params';
 
 /** One person's place in one household, as the back office reads it. */
 export type Membership = MembershipRow;
@@ -25,7 +26,7 @@ export type Membership = MembershipRow;
  * outcome is a refusal, and the operator would learn to ignore refusals.
  * Handing a zone over is the action on the zone's own screen.
  */
-export const MEMBERSHIP_ROLE_OPTIONS = [
+const MEMBERSHIP_ROLE_OPTIONS = [
   { value: 'ADMIN', label: 'people.zones.role.ADMIN' },
   { value: 'MEMBER', label: 'people.zones.role.MEMBER' },
 ] as const;
@@ -33,16 +34,16 @@ export const MEMBERSHIP_ROLE_OPTIONS = [
 /**
  * One membership at a time (plan 0009, section 3.2).
  *
- * The zone detail screen still draws the whole membership, because seeing it at
- * once is what a zone detail is for. This is the other question: change **this**
- * person's role, or the name they go by in this household.
+ * The Members tab of a zone draws the whole membership, because seeing it at
+ * once is what that tab is for, and it draws the named actions declared here.
+ * This descriptor's form is the other question: change **this** person's role,
+ * or the name they go by in this household.
  *
  * Three things about it are the gateway's shape rather than choices.
  *
- * - **The zone is a filter and not a question.** Opening this screen with none
- *   chosen lists every household's memberships, which is what somebody looking
- *   for one person's places needs: the zone is the thing they do not know yet
- *   (plan 0017).
+ * - **The zone is the address** (admin plan 0045). The members are a tab of
+ *   their zone, so the zone is read from the route and is no filter. A
+ *   person's places in every zone are the Zones tab of that person.
  * - **The member URL is nested and the collection is not.** There is no flat
  *   route to one membership, so the row is addressed by the pair
  *   `(zoneId, membershipId)`, and the row carries its own `zoneId` so a page
@@ -56,7 +57,10 @@ export const MEMBERSHIP_ROLE_OPTIONS = [
  */
 export const MEMBERSHIPS = defineResource<Membership>({
   name: 'memberships',
-  segment: 'memberships',
+  // A tab of the zone the members are in (admin plan 0045), at
+  // `/shoppers/zones/{zoneId}/members`.
+  segment: 'members',
+  parent: { resource: 'zones', param: ZONE_PARAM, filter: 'zoneId' },
   labels: { one: 'people.memberships.one', many: 'people.memberships.many' },
   idField: 'membershipId',
 
@@ -148,16 +152,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
     compact: ['zoneName', 'role'],
   },
 
-  caution: 'people.broadcast',
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'zoneId',
-      label: 'people.memberships.filter.zoneId',
-      resource: 'zones',
-    },
-  ],
+  caution: ZONE_CAUTION,
 
   // No create: joining a zone is done with a join code by the person joining.
   // No delete: removing somebody is kick or ban, and the two are different
@@ -191,10 +186,25 @@ export const MEMBERSHIPS = defineResource<Membership>({
           run: (row) => directory.rejectMember(row.zoneId, row.membershipId),
         },
         {
+          // Two role changes and the zone's owner, in one transaction. The
+          // owner is already the owner, and the zone goes to somebody who is
+          // in it.
+          name: 'transfer-ownership',
+          label: 'people.memberships.action.transfer',
+          available: (row) => row.role !== 'OWNER' && row.status === 'APPROVED',
+          confirm: {
+            heading: 'people.memberships.confirm.transfer.heading',
+            body: 'people.memberships.confirm.transfer.body',
+            confirm: 'people.memberships.confirm.transfer.confirm',
+          },
+          run: (row) =>
+            directory.transferOwnership(row.zoneId, row.membershipId),
+        },
+        {
           // Core refuses both against an owner, so neither is offered against
           // one. An owner leaves by handing the zone on first.
           name: 'kick-member',
-          label: 'people.zones.action.kickMember',
+          label: 'people.memberships.action.kick',
           available: (row) => row.role !== 'OWNER' && row.status !== 'KICKED',
           confirm: {
             heading: 'people.memberships.confirm.kick.heading',
@@ -205,7 +215,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
         },
         {
           name: 'ban-member',
-          label: 'people.zones.action.banMember',
+          label: 'people.memberships.action.ban',
           available: (row) => row.role !== 'OWNER' && row.status !== 'BANNED',
           confirm: {
             heading: 'people.memberships.confirm.ban.heading',

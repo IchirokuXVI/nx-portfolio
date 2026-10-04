@@ -6,20 +6,24 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
 import { USER_SEED, type UserRow } from './people-seed';
-import { UserDetailPage } from './user-detail-page';
 import { rolesCell, USER_ROLE_OPTIONS } from './user-roles';
 
 /** A person using velista, as the back office reads one. */
 export type User = UserRow;
 
 /** The two kinds of account, which is the whole of `UserKind`. */
-export const USER_KIND_OPTIONS = [
+const USER_KIND_OPTIONS = [
   { value: 'REGISTERED', label: 'people.users.kind.REGISTERED' },
   { value: 'TEMPORARY', label: 'people.users.kind.TEMPORARY' },
 ] as const;
 
 /**
  * The people (plan 0007, section 2, widened by plan 0009, section 2).
+ *
+ * **A person is a page** (admin plan 0045): the People tab of Shoppers lists
+ * them, and one of them opens beside the list with its details, its zones and
+ * its shopping lists as tabs. `shoppersRoutes` mounts all of it, which is why
+ * this names no detail component.
  *
  * **Two editable fields and two named actions.** `0007` made this screen read
  * only, on the grounds that the invariants around a user live in services
@@ -51,13 +55,11 @@ export const USER_KIND_OPTIONS = [
  */
 export const USERS = defineResource<User>({
   name: 'users',
-  segment: 'users',
+  segment: 'people',
   labels: { one: 'people.users.one', many: 'people.users.many' },
   idField: 'userId',
 
   title: (row) => row.username,
-
-  detail: UserDetailPage,
 
   fields: [
     {
@@ -139,7 +141,23 @@ export const USERS = defineResource<User>({
     // address, and whether this is a real account or a temporary one. The
     // roles are the third, because they are what this account may do.
     compact: ['email', 'kind', 'roles'],
+    // Beside the open person the row is the handle and the address under it.
+    brief: { line: ['email'] },
   },
+
+  /**
+   * What a row says beside the handle: a guest, and an address nobody has
+   * confirmed. The second is on the waiting wash, because it is the one an
+   * operator can do something about.
+   */
+  rowStates: () => (row) => [
+    ...(row.kind === 'TEMPORARY'
+      ? [{ label: 'people.users.state.guest', tone: 'neutral' as const }]
+      : []),
+    ...(isUnconfirmed(row)
+      ? [{ label: 'people.users.state.unconfirmed', tone: 'waiting' as const }]
+      : []),
+  ],
 
   filters: [
     {
@@ -196,8 +214,7 @@ export const USERS = defineResource<User>({
           // no address and one that is already confirmed, and a button that is
           // always there and sometimes refuses teaches an operator to ignore
           // the refusal.
-          available: (row) =>
-            row.email !== null && row.emailVerifiedAt === null,
+          available: isUnconfirmed,
           confirm: {
             heading: 'people.users.confirm.resendVerification.heading',
             body: 'people.users.confirm.resendVerification.body',
@@ -234,3 +251,8 @@ export const USERS = defineResource<User>({
       },
     }),
 });
+
+/** Whether an account has an address that nobody confirmed. */
+export function isUnconfirmed(row: User): boolean {
+  return row.email !== null && row.emailVerifiedAt === null;
+}

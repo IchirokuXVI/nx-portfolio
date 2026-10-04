@@ -3,11 +3,7 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import {
-  peopleTiles,
-  signUpsChart,
-  zonesAndListsChart,
-} from './people-dashboard-view';
+import { peopleTiles, signUpsChart, zonesAndListsChart } from './shoppers-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
