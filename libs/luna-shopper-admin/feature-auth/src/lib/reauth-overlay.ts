@@ -17,6 +17,7 @@ import {
   SIGN_IN_PATH,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { SignInFailure } from '@portfolio/luna-shopper-admin/models';
+import { EntryCard } from '@portfolio/luna-shopper-admin/ui';
 import { signInMessage } from './sign-in-copy';
 
 /** Everything inside the overlay that a Tab can reach. */
@@ -74,59 +75,65 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
  */
 @Component({
   selector: 'lib-reauth-overlay',
-  imports: [FormsModule, RokuTranslatorPipe],
+  imports: [FormsModule, RokuTranslatorPipe, EntryCard],
   template: `
-    <form (ngSubmit)="submit()" novalidate>
-      <h2 id="reauth-heading">{{ 'session.reauth.heading' | rokuT }}</h2>
-      <p>
-        {{
-          (passwordless()
-            ? 'session.reauth.bodyPasswordless'
-            : 'session.reauth.body'
-          ) | rokuT: { name: username() }
-        }}
-      </p>
+    <lib-entry-card
+      [heading]="'session.reauth.heading' | rokuT"
+      headingId="reauth-heading"
+    >
+      <form (ngSubmit)="submit()" novalidate>
+        <p>
+          {{
+            (passwordless()
+              ? 'session.reauth.bodyPasswordless'
+              : 'session.reauth.body'
+            ) | rokuT: { name: username() }
+          }}
+        </p>
 
-      @if (!passwordless()) {
-        <label for="reauth-password">{{
-          'session.reauth.password' | rokuT
-        }}</label>
-        <input
-          [(ngModel)]="password"
+        @if (!passwordless()) {
+          <label for="reauth-password">{{
+            'session.reauth.password' | rokuT
+          }}</label>
+          <input
+            [(ngModel)]="password"
+            [disabled]="busy()"
+            #passwordField
+            autocomplete="current-password"
+            id="reauth-password"
+            name="password"
+            required
+            type="password"
+          />
+        }
+
+        @if (message(); as copy) {
+          <p class="entry-error" role="alert">
+            {{ copy.key | rokuT: copy.args }}
+          </p>
+        }
+
+        <button [disabled]="busy() || !ready()" type="submit">
+          {{
+            (busy() ? 'session.reauth.submitting' : 'session.reauth.submit')
+              | rokuT
+          }}
+        </button>
+
+        <!-- The one way out, and the one path in this design that loses work.
+             Deliberately a secondary control and deliberately present: an
+             operator who cannot remember the password must not be stuck in
+             front of an overlay with no exit. -->
+        <button
+          (click)="signOut()"
           [disabled]="busy()"
-          #passwordField
-          autocomplete="current-password"
-          id="reauth-password"
-          name="password"
-          required
-          type="password"
-        />
-      }
-
-      @if (message(); as copy) {
-        <p class="error" role="alert">{{ copy.key | rokuT: copy.args }}</p>
-      }
-
-      <button [disabled]="busy() || !ready()" type="submit">
-        {{
-          (busy() ? 'session.reauth.submitting' : 'session.reauth.submit')
-            | rokuT
-        }}
-      </button>
-
-      <!-- The one way out, and the one path in this design that loses work.
-           Deliberately a secondary control and deliberately present: an operator
-           who cannot remember the password must not be stuck in front of an
-           overlay with no exit. -->
-      <button
-        (click)="signOut()"
-        [disabled]="busy()"
-        class="quiet"
-        type="button"
-      >
-        {{ 'session.reauth.signOut' | rokuT }}
-      </button>
-    </form>
+          class="entry-quiet"
+          type="button"
+        >
+          {{ 'session.reauth.signOut' | rokuT }}
+        </button>
+      </form>
+    </lib-entry-card>
   `,
   host: {
     '(keydown)': 'onKeydown($event)',
@@ -149,88 +156,6 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
       /* The covered page keeps its scroll position; the overlay is what scrolls
          if a software keyboard leaves it taller than the viewport. */
       overflow-y: auto;
-    }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-2);
-      inline-size: 100%;
-      max-inline-size: 22rem;
-      padding: var(--admin-space-6);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
-
-    h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    p {
-      font-size: 0.875rem;
-      color: var(--admin-ink-muted);
-    }
-
-    label {
-      margin-block-start: var(--admin-space-2);
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--admin-ink-muted);
-    }
-
-    input {
-      /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
-         smaller, which on a phone leaves the operator scrolled sideways. */
-      font: inherit;
-      font-size: var(--admin-field-size);
-      min-block-size: var(--admin-control);
-      padding: var(--admin-control-pad) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink);
-    }
-
-    input:focus-visible,
-    button:focus-visible {
-      outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
-    }
-
-    .error {
-      margin-block-start: var(--admin-space-3);
-      padding: var(--admin-space-3);
-      border-radius: var(--admin-radius);
-      background: var(--admin-accent-wash);
-      font-size: 0.875rem;
-      color: var(--admin-ink);
-    }
-
-    button {
-      margin-block-start: var(--admin-space-4);
-      min-block-size: var(--admin-control);
-      border: 1px solid transparent;
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-accent);
-      font: inherit;
-      font-weight: 600;
-      color: var(--admin-accent-ink);
-      cursor: pointer;
-    }
-
-    button.quiet {
-      margin-block-start: var(--admin-space-2);
-      border-color: var(--admin-border);
-      background: var(--admin-surface-raised);
-      font-weight: 500;
-      color: var(--admin-ink-muted);
-    }
-
-    button:disabled {
-      opacity: 0.55;
-      cursor: default;
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,

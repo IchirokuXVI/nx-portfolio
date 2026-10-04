@@ -19,7 +19,9 @@ import {
   POSTAL_CODES,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
-  ADMINS,
+  ADMIN_ACCOUNTS_TAB,
+  ADMINS_SEGMENT,
+  adminsRoutes,
   oldShopperAddresses,
   SHOPPER_RESOURCES,
   shoppersRoutes,
@@ -78,7 +80,8 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * cannot carry the same word as one of its members without an operator having
  * to learn which is which. Not *Accounts*, because an account is the auth idea
  * and Auth is the next section along. **Admins** for that one by the same
- * rule, and because the section is the admin account table and nothing else.
+ * rule, and because the section is about the admin accounts and nothing else:
+ * who they are, and who failed to sign in as one.
  *
  * ## Order
  *
@@ -88,8 +91,8 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * rules (admin plan 0043); then the harvester, which produces most of the
  * catalog and is where work waits for a person (admin plan 0044); then the
  * people and what they share, which is read far more often than it is
- * touched; then the admin table, which is opened to answer one question and
- * never to change anything. A phone shows the first four and "More".
+ * touched; then the admins, which is opened to answer who has access and who
+ * was refused it, and never to change anything. A phone shows the first four and "More".
  *
  * **There is no Catalog section any more.** It held ten screens. Five went to
  * the chains and five are the products, and its dashboard is a block of the
@@ -202,13 +205,22 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     counts: ShoppersStatus,
   },
   {
-    // **A section with one screen has no segment**, so the admins list stays at
-    // `/admins` rather than moving to `/admins/admins`, and the tab points
-    // straight at it. A dashboard summarising one list is a click between the
-    // operator and the list, which is `0004`'s argument and it holds here too.
+    // Who can open this back office, and who tried to (admin plan 0046).
+    //
+    // **No home.** The section's own address goes to Accounts. Its two tabs
+    // are hand written and are drawn by the section's own page, so the frame
+    // is told about no screen here: the count on "Failed sign ins" is not
+    // work that waits for a decision, and the frame would add it to the rail
+    // as such.
+    //
+    // **No resource either.** An admin is read and never created, changed or
+    // removed from here, and its rows do not open, so nothing in the app
+    // needs the registry to say where one is.
     key: 'admins',
     label: 'shell.sections.admins',
     icon: ShieldIcon,
-    resources: [ADMINS],
+    segment: ADMINS_SEGMENT,
+    landing: ADMIN_ACCOUNTS_TAB,
+    screens: adminsRoutes(),
   },
 ];

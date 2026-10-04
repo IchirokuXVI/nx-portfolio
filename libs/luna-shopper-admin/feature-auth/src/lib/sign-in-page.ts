@@ -13,7 +13,7 @@ import {
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { SignInFailure } from '@portfolio/luna-shopper-admin/models';
-import { EnvironmentBadge } from '@portfolio/luna-shopper-admin/ui';
+import { EntryCard } from '@portfolio/luna-shopper-admin/ui';
 import { signInMessage } from './sign-in-copy';
 
 /**
@@ -34,61 +34,68 @@ import { signInMessage } from './sign-in-copy';
  * tabs through `localStorage` (plan 0013), is not the operator's choice to make
  * and is not presented as one.
  *
- * The environment badge is on this screen and not only behind it, which is the
+ * The deployment is named on this screen and not only behind it, which is the
  * point of `0001`'s unauthenticated read: an operator should know which database
  * they are signing in to *before* they type a production password into a
- * staging tab, or the reverse.
+ * staging tab, or the reverse. The card says the name above the form, and the
+ * band above the card shows the color the rail takes once the operator is in
+ * (admin plan 0046, target 8).
  */
 @Component({
   selector: 'lib-sign-in-page',
-  imports: [FormsModule, RokuTranslatorPipe, EnvironmentBadge],
+  imports: [FormsModule, RokuTranslatorPipe, EntryCard],
   template: `
     <!-- The color of the deployment, at the top edge of the page (admin plan
          0041, section 7): the same color the rail takes once the operator is
          in. It is decoration for a reader that cannot see it, because the
-         badge in the form says the name of the deployment in words. -->
+         card says the name of the deployment in words. -->
     <div aria-hidden="true" class="band"></div>
 
     <main>
-      <form (ngSubmit)="submit()" #form="ngForm" novalidate>
-        <header>
-          <h1>{{ 'signIn.heading' | rokuT }}</h1>
-          <lib-environment-badge [deployment]="deployment()" />
-        </header>
+      <lib-entry-card
+        [deployment]="deployment()"
+        [heading]="'signIn.heading' | rokuT"
+        [level]="1"
+        headingId="sign-in-heading"
+        showDeployment
+      >
+        <form (ngSubmit)="submit()" #form="ngForm" novalidate>
+          <label for="username">{{ 'signIn.username' | rokuT }}</label>
+          <input
+            [(ngModel)]="username"
+            [disabled]="busy()"
+            autocapitalize="none"
+            autocomplete="username"
+            autocorrect="off"
+            id="username"
+            name="username"
+            required
+            spellcheck="false"
+            type="text"
+          />
 
-        <label for="username">{{ 'signIn.username' | rokuT }}</label>
-        <input
-          [(ngModel)]="username"
-          [disabled]="busy()"
-          autocapitalize="none"
-          autocomplete="username"
-          autocorrect="off"
-          id="username"
-          name="username"
-          required
-          spellcheck="false"
-          type="text"
-        />
+          <label for="password">{{ 'signIn.password' | rokuT }}</label>
+          <input
+            [(ngModel)]="password"
+            [disabled]="busy()"
+            autocomplete="current-password"
+            id="password"
+            name="password"
+            required
+            type="password"
+          />
 
-        <label for="password">{{ 'signIn.password' | rokuT }}</label>
-        <input
-          [(ngModel)]="password"
-          [disabled]="busy()"
-          autocomplete="current-password"
-          id="password"
-          name="password"
-          required
-          type="password"
-        />
+          @if (message(); as copy) {
+            <p class="entry-error" role="alert">
+              {{ copy.key | rokuT: copy.args }}
+            </p>
+          }
 
-        @if (message(); as copy) {
-          <p class="error" role="alert">{{ copy.key | rokuT: copy.args }}</p>
-        }
-
-        <button [disabled]="busy() || !complete()" type="submit">
-          {{ (busy() ? 'signIn.submitting' : 'signIn.submit') | rokuT }}
-        </button>
-      </form>
+          <button [disabled]="busy() || !complete()" type="submit">
+            {{ (busy() ? 'signIn.submitting' : 'signIn.submit') | rokuT }}
+          </button>
+        </form>
+      </lib-entry-card>
     </main>
   `,
   styles: `
@@ -115,83 +122,6 @@ import { signInMessage } from './sign-in-copy';
       min-block-size: 100%;
       padding: var(--admin-space-8) var(--admin-space-4);
     }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-2);
-      inline-size: 100%;
-      max-inline-size: 22rem;
-      padding: var(--admin-space-6);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-    }
-
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      margin-block-end: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    label {
-      margin-block-start: var(--admin-space-2);
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: var(--admin-ink-muted);
-    }
-
-    input {
-      /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
-         smaller, which on a phone leaves the operator scrolled sideways. */
-      font: inherit;
-      font-size: var(--admin-field-size);
-      /* A comfortable touch target on a phone, and unremarkable on a desktop. */
-      min-block-size: var(--admin-control);
-      padding: var(--admin-control-pad) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink);
-    }
-
-    input:focus-visible,
-    button:focus-visible {
-      outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
-    }
-
-    .error {
-      margin-block-start: var(--admin-space-3);
-      padding: var(--admin-space-3);
-      border-radius: var(--admin-radius);
-      background: var(--admin-accent-wash);
-      font-size: 0.875rem;
-      color: var(--admin-ink);
-    }
-
-    button {
-      margin-block-start: var(--admin-space-4);
-      min-block-size: var(--admin-control);
-      border: 1px solid transparent;
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-accent);
-      font: inherit;
-      font-weight: 600;
-      color: var(--admin-accent-ink);
-      cursor: pointer;
-    }
-
-    button:disabled {
-      opacity: 0.55;
-      cursor: default;
-    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -209,7 +139,7 @@ export class SignInPage {
   /** The last refusal, or `null`. Cleared the moment another attempt starts. */
   readonly failure = signal<SignInFailure | null>(null);
 
-  /** Which environment is being signed in to, for the badge. */
+  /** Which deployment is being signed in to, for the card. */
   readonly deployment = this._deployments.deployment;
 
   /**

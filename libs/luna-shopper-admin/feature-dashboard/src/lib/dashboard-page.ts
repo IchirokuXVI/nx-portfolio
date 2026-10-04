@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -5,6 +6,7 @@ import {
   DestroyRef,
   effect,
   inject,
+  signal,
   untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -22,6 +24,10 @@ import {
   formatSince,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
+  ADMIN_FAILED_SIGN_INS_TAB,
+  adminsPath,
+} from '@portfolio/luna-shopper-admin/feature-people';
+import {
   gatewayErrorKey,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -29,71 +35,65 @@ import {
   BarChart,
   LineChart,
   PageHeader,
-  StatTile,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
-import { catalogTiles, pricesWrittenChart } from './catalog-view';
-import { runsByStatusChart } from './harvest-view';
-import {
-  peopleTiles,
-  signUpsChart,
-  zonesAndListsChart,
-} from './shoppers-view';
+import { ChevronLeftIcon } from '@portfolio/shared/ui';
+import { catalogStats, pricesWrittenChart } from './catalog-view';
 import {
   activityRows,
-  loginFailureRows,
   postalCodeWaitingTile,
   waitingTiles,
+  type StatView,
 } from './dashboard-view';
+import { harvestStats } from './harvest-view';
+import { shopperStats, signUpsChart } from './shoppers-view';
+
+/** How many rows of the feed a phone shows before "Show all". */
+export const FEED_ROWS_ON_A_PHONE = 5;
 
 /**
- * The screen the app opens to (admin plan 0016, narrowed by admin plan 0022).
+ * The screen the app opens to (admin plan 0016, in its final layout by admin
+ * plan 0046).
  *
  * `0004` refused a landing page because an operator opens this tool to change a
  * specific thing and a page in front of that is a click between them and it.
  * That is an argument against an empty landing page and it stands. This one
  * answers, on arrival, what the operator came to find out.
  *
- * **The catalog's numbers are a block of this page** (admin plan 0043, target
- * 8). They were the dashboard of a Catalog section, and that section is the
- * Chains and the Products sections now, each of which opens on its list. So
- * how much catalog there is, and how much of it is being priced, is read here.
+ * **Three parts, in the order they are asked about.** What waits for a person
+ * is the row at the top: every queue in the app in one place, which is the
+ * reason to open the app at all. Under it, the numbers of each area, one panel
+ * each, where a number is a way into its list. Beside them, what changed: the
+ * three audit trails as one feed.
  *
- * **The shoppers' numbers are a block of this page too** (admin plan 0045,
- * section 1). They were the dashboard of the Shoppers section, which opens on
- * its People tab now. Admin plan 0046 gives every block its final layout, and
- * until then this one is drawn as that dashboard drew it.
+ * **The numbers are here because nowhere else holds them.** Each area had a
+ * dashboard of its own, and each of those sections opens on its list now
+ * (admin plans 0042 to 0045).
  *
- * **Three other things, and each is a question about the whole tool rather
- * than about one part of it.** Work waiting is every queue in the app in one place, which
- * is the reason to open the app at all. Failed sign ins are a fact about the
- * tool itself. Recent activity crosses all three audit trails by definition. A
- * count of users is none of those: it is the first line of the shoppers
- * dashboard, and it was here only because there was nowhere else for it.
+ * **Failed sign ins are a tab of Admins.** The table was a block of this page.
+ * The tile that counts the last 24 hours stays in the row at the top, because
+ * the value in it is that somebody sees it without going to look, and it opens
+ * that tab.
  *
- * **The sign ins stay here and do not move to the admins section.** They are two
- * numbers that are nearly always zero, and the value in them is that somebody
- * sees them without going to look. A screen an operator opens once a month is
- * not that place. This is the one asymmetry in the split and it is on purpose.
+ * **One read.** There is no request per panel and none per chart: the store
+ * holds the whole document, and a block that did not answer arrives as `null`
+ * in it. The panel of that block then says so and offers to ask again, and
+ * the rest of the page is still true.
  *
- * **One read.** There is no per block request and no per chart request: the
- * store holds the whole document and a block that did not answer arrives as
- * `null` in it. The section dashboards read the same document, so opening one of
- * them costs no request at all.
- *
- * **`harvesterDeployed` is deliberately not consulted.** That helper says
- * production and staging do not run the harvester, and both do now, so the
- * document is the only thing that knows whether the block is missing.
+ * **On a phone a numbers panel is a row that opens**, and the feed comes
+ * before the numbers: what waits and what changed are read on a phone, and
+ * the totals are looked up.
  */
 @Component({
   selector: 'lib-dashboard-page',
   imports: [
+    NgTemplateOutlet,
     PageHeader,
     RouterLink,
     RokuTranslatorPipe,
-    StatTile,
     BarChart,
     LineChart,
+    ChevronLeftIcon,
   ],
   template: `
     <lib-page-header [heading]="'dashboard.heading' | rokuT">
@@ -106,19 +106,16 @@ import {
       <button
         (click)="refresh()"
         [disabled]="store.loading()"
-        class="refresh"
+        class="button"
         pageAction
         type="button"
       >
-        {{
-          (store.loading() ? 'dashboard.refreshing' : 'dashboard.refresh')
-            | rokuT
-        }}
+        {{ 'dashboard.refresh' | rokuT }}
       </button>
     </lib-page-header>
 
-    <!-- A failed re-read is a line beside the timestamp, not a page. The
-         numbers below were true when the timestamp says they were. -->
+    <!-- A refresh that failed is one line, not a page. The numbers below were
+         true when the header says they were read. -->
     @if (staleKey(); as key) {
       <p class="stale" role="status">
         {{ 'dashboard.stale' | rokuT }} {{ key | rokuT }}
@@ -129,264 +126,306 @@ import {
       <div class="failed" role="alert">
         <h2>{{ 'dashboard.error.heading' | rokuT }}</h2>
         <p>{{ errorKey() | rokuT }}</p>
-        <button (click)="refresh()" type="button">
+        <button (click)="refresh()" class="button" type="button">
           {{ 'dashboard.error.retry' | rokuT }}
         </button>
       </div>
     } @else if (document(); as doc) {
-      <section class="block">
-        <h2>{{ 'dashboard.waiting.heading' | rokuT }}</h2>
+      <section aria-labelledby="overview-waiting" class="waiting">
+        <h2 id="overview-waiting">{{ 'dashboard.waiting.heading' | rokuT }}</h2>
 
-        <!-- Which services did not answer, so a short row of tiles is not read
-             as "nothing is waiting". The retry beside it is on the section
-             dashboard that block belongs to, once (section 5). -->
-        @if (missing().length > 0) {
-          <ul class="missing">
-            @for (block of missing(); track block) {
-              <li>{{ 'dashboard.down.' + block | rokuT }}</li>
-            }
-          </ul>
-        }
-
-        @if (waiting().length > 0) {
-          <!-- The tile is the grid item, so the grid stretches every one to
-               the row and equal boxes look like equal cards (admin plan 0024,
-               section 2). The caption and the query parameters ride on the
-               tile's own inputs, which is what let the wrappers go. -->
-          <div class="tiles">
-            @for (tile of waiting(); track tile.key) {
-              <lib-stat-tile
-                [caption]="tile.caption ?? undefined"
-                [label]="tile.label"
-                [link]="tile.link ?? undefined"
-                [queryParams]="tile.query ?? undefined"
-                [tone]="tile.tone"
-                [value]="tile.value"
-              />
-            }
-          </div>
-        } @else if (missing().length === 0) {
-          <p class="state">{{ 'dashboard.waiting.clear' | rokuT }}</p>
-        }
+        <!-- A list, so that a screen reader says how many tiles there are.
+             Every tile is a link to where its work is done. -->
+        <ul class="tiles">
+          @for (tile of waiting(); track tile.key) {
+            <li>
+              @if (tile.link; as link) {
+                <a
+                  [attr.data-tile]="tile.key"
+                  [class.wait]="tile.value > 0"
+                  [queryParams]="tile.query"
+                  [routerLink]="link"
+                  class="tile"
+                >
+                  <ng-container
+                    [ngTemplateOutlet]="tileBody"
+                    [ngTemplateOutletContext]="{ $implicit: tile }"
+                  />
+                </a>
+              } @else {
+                <div
+                  [attr.data-tile]="tile.key"
+                  [class.wait]="tile.value > 0"
+                  class="tile"
+                >
+                  <ng-container
+                    [ngTemplateOutlet]="tileBody"
+                    [ngTemplateOutletContext]="{ $implicit: tile }"
+                  />
+                </div>
+              }
+            </li>
+          }
+        </ul>
       </section>
 
-      <!-- How much catalog there is, and how much of it is being priced. Skipped
-           entirely when catalog did not answer, which the row above already
-           says. -->
-      @if (doc.catalog !== null) {
-        <section class="block" data-catalog-block>
-          <h2>{{ 'dashboard.catalog.heading' | rokuT }}</h2>
-
-          <div class="tiles">
-            @for (tile of catalog(); track tile.key) {
-              <lib-stat-tile
-                [caption]="tile.caption ?? undefined"
-                [label]="tile.label"
-                [link]="tile.link ?? undefined"
-                [tone]="tile.tone"
-                [value]="tile.value"
-              />
-            }
+      <div class="columns">
+        @if (compact()) {
+          <ng-container [ngTemplateOutlet]="feed" />
+          <div class="numbers">
+            <details class="panel" data-catalog-block>
+              <summary>
+                {{ 'dashboard.catalog.numbers' | rokuT }}
+                <span aria-hidden="true" class="chevron">
+                  <lib-chevron-left-icon />
+                </span>
+              </summary>
+              <div class="panel-body">
+                <ng-container [ngTemplateOutlet]="catalogBody" />
+              </div>
+            </details>
+            <details class="panel" data-shoppers-block>
+              <summary>
+                {{ 'dashboard.shoppers.numbers' | rokuT }}
+                <span aria-hidden="true" class="chevron">
+                  <lib-chevron-left-icon />
+                </span>
+              </summary>
+              <div class="panel-body">
+                <ng-container [ngTemplateOutlet]="shoppersBody" />
+              </div>
+            </details>
+            <details class="panel" data-harvest-block>
+              <summary>
+                {{ 'dashboard.harvest.numbers' | rokuT }}
+                <span aria-hidden="true" class="chevron">
+                  <lib-chevron-left-icon />
+                </span>
+              </summary>
+              <div class="panel-body">
+                <ng-container [ngTemplateOutlet]="harvestBody" />
+              </div>
+            </details>
           </div>
+        } @else {
+          <div class="numbers">
+            <section
+              aria-labelledby="overview-catalog"
+              class="panel panel-body"
+              data-catalog-block
+            >
+              <h2 id="overview-catalog">
+                {{ 'dashboard.catalog.heading' | rokuT }}
+              </h2>
+              <ng-container [ngTemplateOutlet]="catalogBody" />
+            </section>
+            <section
+              aria-labelledby="overview-shoppers"
+              class="panel panel-body"
+              data-shoppers-block
+            >
+              <h2 id="overview-shoppers">
+                {{ 'dashboard.shoppers.heading' | rokuT }}
+              </h2>
+              <ng-container [ngTemplateOutlet]="shoppersBody" />
+            </section>
+            <section
+              aria-labelledby="overview-harvest"
+              class="panel panel-body"
+              data-harvest-block
+            >
+              <h2 id="overview-harvest">
+                {{ 'dashboard.harvest.heading' | rokuT }}
+              </h2>
+              <ng-container [ngTemplateOutlet]="harvestBody" />
+            </section>
+          </div>
+          <ng-container [ngTemplateOutlet]="feed" />
+        }
+      </div>
 
+      <ng-template #catalogBody>
+        @if (doc.catalog === null) {
+          <ng-container
+            [ngTemplateOutlet]="down"
+            [ngTemplateOutletContext]="{ $implicit: 'catalog' }"
+          />
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="stats"
+            [ngTemplateOutletContext]="{ $implicit: catalog() }"
+          />
           <lib-bar-chart
             [bars]="pricesWritten().bars"
+            [height]="170"
             [series]="pricesWritten().series"
-            [title]="text('dashboard.catalog.pricesWritten')"
+            [title]="text('dashboard.catalog.pricesWritten', { count: days() })"
           />
-        </section>
-      }
+        }
+      </ng-template>
 
-      <!-- The harvester's runs by how they ended. It was the chart of the
-           harvester's own dashboard, which is the Runs tab now (admin plan
-           0044, target 7). Skipped when the harvester did not answer. -->
-      @if (doc.harvest !== null) {
-        <section class="block" data-harvest-block>
-          <h2>{{ 'dashboard.harvest.heading' | rokuT }}</h2>
-
-          <lib-bar-chart
-            [bars]="runsByStatus().bars"
-            [series]="runsByStatus().series"
-            [title]="text('dashboard.harvest.byStatusTitle')"
+      <ng-template #shoppersBody>
+        <ng-container
+          [ngTemplateOutlet]="stats"
+          [ngTemplateOutletContext]="{ $implicit: shoppers() }"
+        />
+        @if (doc.identity === null) {
+          <ng-container
+            [ngTemplateOutlet]="down"
+            [ngTemplateOutletContext]="{ $implicit: 'identity' }"
           />
-        </section>
-      }
+        }
+        @if (doc.core === null) {
+          <ng-container
+            [ngTemplateOutlet]="down"
+            [ngTemplateOutletContext]="{ $implicit: 'core' }"
+          />
+        }
+        @if (signUps(); as series) {
+          <lib-line-chart
+            [height]="150"
+            [series]="series"
+            [title]="text('dashboard.shoppers.signUpsTitle', { count: days() })"
+          />
+        }
+      </ng-template>
 
-      <!-- Who uses velista and what they have made together. It was the
-           dashboard of the Shoppers section, which opens on its People tab now
-           (admin plan 0045). People come from auth and the rest from core, so
-           each half is skipped by itself when its service did not answer. -->
-      @if (shoppers().length > 0) {
-        <section class="block" data-shoppers-block>
-          <h2>{{ 'dashboard.shoppers.heading' | rokuT }}</h2>
+      <ng-template #harvestBody>
+        @if (doc.harvest === null) {
+          <ng-container
+            [ngTemplateOutlet]="down"
+            [ngTemplateOutletContext]="{ $implicit: 'harvest' }"
+          />
+        } @else {
+          <ng-container
+            [ngTemplateOutlet]="stats"
+            [ngTemplateOutletContext]="{ $implicit: harvest() }"
+          />
+        }
+      </ng-template>
 
-          <div class="tiles">
-            @for (tile of shoppers(); track tile.key) {
-              <lib-stat-tile
-                [caption]="tile.caption ?? undefined"
-                [delta]="tile.delta ?? undefined"
-                [label]="tile.label"
-                [link]="tile.link ?? undefined"
-                [tone]="tile.tone"
-                [trend]="tile.trend ?? undefined"
-                [value]="tile.value"
-              />
-            }
-          </div>
+      <ng-template #feed>
+        <section aria-labelledby="overview-feed" class="panel feed">
+          <h2 id="overview-feed">{{ 'dashboard.activity.heading' | rokuT }}</h2>
 
-          @if (signUps(); as series) {
-            <lib-line-chart
-              [series]="series"
-              [title]="text('dashboard.shoppers.signUpsTitle')"
-            />
-          }
-          @if (zonesAndLists(); as series) {
-            <lib-line-chart
-              [series]="series"
-              [title]="text('dashboard.shoppers.zonesAndLists')"
-            />
-          }
-        </section>
-      }
-
-      <!-- Skipped entirely when auth did not answer, which the row above already
-           says. -->
-      @if (doc.identity; as identity) {
-        <section class="block">
-          <h2>{{ 'dashboard.signIns.heading' | rokuT }}</h2>
-
-          <div class="tiles">
-            <lib-stat-tile
-              [label]="text('dashboard.signIns.last24h')"
-              [tone]="
-                identity.loginFailures.last24h > 0 ? 'attention' : 'quiet'
-              "
-              [value]="identity.loginFailures.last24h"
-            />
-            <lib-stat-tile
-              [label]="text('dashboard.signIns.last7d')"
-              [value]="identity.loginFailures.last7d"
-            />
-          </div>
-
-          @if (failures().length === 0) {
-            <p class="state">{{ 'dashboard.signIns.none' | rokuT }}</p>
-          } @else if (compact()) {
-            <ul class="cards">
-              @for (row of failures(); track row.key) {
+          @if (activity().length === 0) {
+            <p class="none">{{ 'dashboard.activity.none' | rokuT }}</p>
+          } @else {
+            <ul>
+              @for (row of shownActivity(); track row.key) {
                 <li>
-                  <p class="strong">{{ row.username }}</p>
-                  <p>{{ row.when }}</p>
-                  <p>{{ row.ip }}</p>
+                  @if (row.link; as link) {
+                    <a [routerLink]="link" class="change" data-change>
+                      <span [title]="row.at" class="when">{{ row.when }}</span>
+                      <span class="line">{{ row.line }}</span>
+                    </a>
+                  } @else {
+                    <p class="change" data-change>
+                      <span [title]="row.at" class="when">{{ row.when }}</span>
+                      <span class="line">{{ row.line }}</span>
+                    </p>
+                  }
                 </li>
               }
             </ul>
-          } @else {
-            <div class="scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">{{ 'dashboard.signIns.when' | rokuT }}</th>
-                    <th scope="col">
-                      {{ 'dashboard.signIns.username' | rokuT }}
-                    </th>
-                    <th scope="col">{{ 'dashboard.signIns.ip' | rokuT }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of failures(); track row.key) {
-                    <tr>
-                      <td>{{ row.when }}</td>
-                      <td>{{ row.username }}</td>
-                      <td>{{ row.ip }}</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+
+            @if (compact() && activity().length > feedRows) {
+              <button
+                (click)="allChanges.set(!allChanges())"
+                [attr.aria-expanded]="allChanges()"
+                class="button all"
+                type="button"
+              >
+                {{
+                  (allChanges()
+                    ? 'dashboard.activity.fewer'
+                    : 'dashboard.activity.all'
+                  ) | rokuT
+                }}
+              </button>
+            }
           }
         </section>
-      }
-
-      <section class="block">
-        <h2>{{ 'dashboard.activity.heading' | rokuT }}</h2>
-
-        @if (activity().length === 0) {
-          <p class="state">{{ 'dashboard.activity.none' | rokuT }}</p>
-        } @else if (compact()) {
-          <ul class="cards">
-            @for (row of activity(); track row.key) {
-              <li>
-                <p class="strong">
-                  @if (row.link; as link) {
-                    <a [routerLink]="link">{{ row.what }}</a>
-                  } @else {
-                    {{ row.what }}
-                  }
-                </p>
-                <p>{{ row.who }}</p>
-                <p [title]="row.at">{{ row.when }}</p>
-              </li>
-            }
-          </ul>
-        } @else {
-          <div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">{{ 'dashboard.activity.when' | rokuT }}</th>
-                  <th scope="col">{{ 'dashboard.activity.who' | rokuT }}</th>
-                  <th scope="col">{{ 'dashboard.activity.what' | rokuT }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of activity(); track row.key) {
-                  <tr>
-                    <td [title]="row.at">{{ row.when }}</td>
-                    <td>{{ row.who }}</td>
-                    <td>
-                      @if (row.link; as link) {
-                        <a [routerLink]="link">{{ row.what }}</a>
-                      } @else {
-                        {{ row.what }}
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-      </section>
+      </ng-template>
     } @else {
-      <p class="state">{{ 'dashboard.loading' | rokuT }}</p>
+      <p class="reading" role="status">{{ 'dashboard.loading' | rokuT }}</p>
     }
+
+    <ng-template #tileBody let-tile>
+      <span class="tile-value">{{ number(tile.value) }}</span>
+      <span class="tile-label">{{ tile.label }}</span>
+      @if (tile.caption; as caption) {
+        <span class="tile-caption">{{ caption }}</span>
+      }
+    </ng-template>
+
+    <!-- The numbers of one panel. A definition list: each number is the
+         value of the term under it, and the link is on the number. -->
+    <ng-template #stats let-list>
+      @if (list.length > 0) {
+        <dl class="stats">
+          @for (stat of list; track stat.key) {
+            <div [attr.data-stat]="stat.key" class="stat">
+              <dt>{{ stat.label }}</dt>
+              <dd [class.danger]="stat.danger">
+                @if (stat.link; as link) {
+                  <a [routerLink]="link">{{ statText(stat) }}</a>
+                } @else {
+                  {{ statText(stat) }}
+                }
+              </dd>
+            </div>
+          }
+        </dl>
+      }
+    </ng-template>
+
+    <!-- A service that did not answer: its panel says so, and offers to ask
+         again. Everything else on the page is still true. -->
+    <ng-template #down let-block>
+      <p [attr.data-down]="block" class="down" role="status">
+        <span>{{ 'dashboard.down.' + block | rokuT }}</span>
+        <button (click)="refresh()" class="button" type="button">
+          {{ 'dashboard.down.retry' | rokuT }}
+        </button>
+      </p>
+    </ng-template>
   `,
   styles: `
     :host {
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-6);
+      gap: var(--admin-space-4);
+      min-inline-size: 0;
     }
 
     h2 {
-      font-size: 1.125rem;
-      font-weight: 700;
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    ul {
+      list-style: none;
     }
 
     .taken,
-    .state {
+    .reading {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
-    .stale {
-      padding: var(--admin-space-3);
+    .stale,
+    .failed,
+    .down {
       border: 1px solid var(--admin-danger);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-danger-wash);
       color: var(--admin-danger-on-wash);
+    }
+
+    .stale {
+      padding: var(--admin-space-2) var(--admin-space-3);
     }
 
     .failed {
@@ -395,106 +434,285 @@ import {
       gap: var(--admin-space-3);
       align-items: flex-start;
       padding: var(--admin-space-6);
-      border: 1px solid var(--admin-danger);
       border-radius: var(--admin-radius);
-      background: var(--admin-danger-wash);
     }
 
-    .block {
+    .down {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--admin-space-2) var(--admin-space-3);
+    }
+
+    .waiting {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+    }
+
+    /* One row on a wide screen, however many tiles there are, and two columns
+       on a phone. The tile is stretched by its cell, so the row is one height
+       and equal boxes look like equal tiles. */
+    .tiles {
+      display: grid;
+      grid-auto-columns: minmax(0, 1fr);
+      grid-auto-flow: column;
+      gap: var(--admin-space-3);
+    }
+
+    .tiles > li {
+      display: flex;
+      min-inline-size: 0;
+    }
+
+    .tile {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 0.125rem;
+      min-inline-size: 0;
+      padding: var(--admin-space-3) 0.875rem;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      text-decoration: none;
+      color: var(--admin-ink);
+    }
+
+    /* Something waits here for a person. Amber on the page means this and
+       only this, and the number says the same thing in a figure. */
+    .tile.wait {
+      border-color: var(--admin-waiting-on-wash);
+      background: var(--admin-waiting-wash);
+    }
+
+    .tile.wait .tile-value {
+      color: var(--admin-waiting-on-wash);
+    }
+
+    .tile-value {
+      font-size: 1.625rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      line-height: 1.15;
+    }
+
+    .tile-caption {
+      overflow-wrap: anywhere;
+      font-size: 0.78125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .tile.wait .tile-caption {
+      color: var(--admin-waiting-on-wash);
+    }
+
+    a.tile:hover {
+      border-color: var(--admin-ink-muted);
+    }
+
+    .columns {
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-4);
     }
 
-    /* Two columns on a phone, three when there is room, four on a wide screen.
-       auto-fit rather than a breakpoint, because the tiles wrap on their own
-       content and the page has nothing to say about where that happens. */
-    .tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-      gap: var(--admin-space-3);
-    }
-
-    .state {
-      padding: var(--admin-space-4);
-      border: 1px dashed var(--admin-border);
-      border-radius: var(--admin-radius);
-    }
-
-    .missing {
+    .numbers {
       display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      list-style: none;
-      font-size: 0.8125rem;
-      color: var(--admin-danger-on-wash);
-    }
-
-    /* A table wider than the page scrolls inside its own box, so the page never
-       scrolls sideways. */
-    .scroll {
-      overflow-x: auto;
-    }
-
-    table {
-      inline-size: 100%;
-      border-collapse: collapse;
-    }
-
-    th,
-    td {
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border-block-end: 1px solid var(--admin-border);
-      text-align: start;
-    }
-
-    th {
-      font-size: 0.75rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--admin-ink-muted);
-    }
-
-    .cards {
-      display: flex;
+      flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-2);
-      list-style: none;
+      gap: var(--admin-space-3);
+      min-inline-size: 0;
     }
 
-    .cards li {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-      padding: var(--admin-space-3);
+    .panel {
       border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
+    }
+
+    .panel-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+      padding: 0.875rem;
+    }
+
+    /* The numbers of a panel in one row, which wraps where it has to. */
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-3) 1.75rem;
+    }
+
+    /* The term comes first in the document, which is the order a definition
+       list has, and is drawn under its number. */
+    .stat {
+      display: flex;
+      flex-direction: column-reverse;
+    }
+
+    .stat dt {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
-    .cards .strong {
-      font-size: 0.9375rem;
-      font-weight: 700;
+    .stat dd {
+      font-size: 1.125rem;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+    }
+
+    .stat dd.danger,
+    .stat dd.danger a {
+      color: var(--admin-danger);
+    }
+
+    .stat a {
+      text-decoration: none;
       color: var(--admin-ink);
     }
 
-    button {
+    .stat a:hover {
+      text-decoration: underline;
+    }
+
+    .feed {
+      overflow: hidden;
+    }
+
+    .feed h2 {
+      padding: 0.625rem 0.875rem;
+    }
+
+    .none {
+      padding: 0 0.875rem 0.875rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .change {
+      display: flex;
+      gap: 0.625rem;
+      align-items: baseline;
+      min-block-size: 2.75rem;
+      padding: 0.625rem 0.875rem;
+      border-block-start: 1px solid var(--admin-border);
+      text-decoration: none;
+      color: var(--admin-ink);
+    }
+
+    a.change:hover .line {
+      text-decoration: underline;
+    }
+
+    .when {
+      flex: none;
+      inline-size: 6.5rem;
+      font-size: 0.78125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    .line {
+      flex: 1;
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .button {
       min-block-size: var(--admin-control);
       padding: var(--admin-control-pad) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
+      border: 1px solid var(--admin-border-strong);
       border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       font: inherit;
+      font-weight: 500;
       color: var(--admin-ink);
       cursor: pointer;
     }
 
+    .button:disabled {
+      color: var(--admin-ink-muted);
+      cursor: default;
+    }
+
+    .all {
+      inline-size: 100%;
+      border-color: var(--admin-surface-raised);
+      border-block-start-color: var(--admin-border);
+      border-radius: 0;
+    }
+
     a:focus-visible,
-    button:focus-visible {
+    button:focus-visible,
+    summary:focus-visible {
       outline: 2px solid var(--admin-accent);
-      outline-offset: 2px;
+      outline-offset: -2px;
+    }
+
+    /* A panel that opens, on a phone: the row is its name, and the numbers
+       are under it once it is open. */
+    summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-block-size: 3rem;
+      padding-inline: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* The one chevron the icons hold points back. Turned, it points on while
+       the row is closed and down while it is open. */
+    .chevron {
+      flex: none;
+      inline-size: 1rem;
+      block-size: 1rem;
+      color: var(--admin-ink-muted);
+      rotate: 180deg;
+    }
+
+    details[open] .chevron {
+      rotate: 270deg;
+    }
+
+    details[open] > summary {
+      border-block-end: 1px solid var(--admin-border);
+    }
+
+    /* The numbers and the feed side by side, once there is room for both. */
+    @media (min-width: 72rem) {
+      .columns {
+        flex-direction: row;
+        align-items: flex-start;
+      }
+
+      .feed {
+        flex: none;
+        inline-size: 27.5rem;
+      }
+    }
+
+    @media (max-width: 47.99rem) {
+      .tiles {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.625rem;
+      }
+
+      .when {
+        inline-size: 5.5rem;
+      }
+    }
+
+    /* Between a phone and a wide screen seven tiles in one row are too narrow
+       to read, so the row wraps to as many as fit. */
+    @media (min-width: 48rem) and (max-width: 71.99rem) {
+      .tiles {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -509,6 +727,12 @@ export class DashboardPage {
   readonly store = inject(DashboardStore);
   readonly document = this.store.document;
   readonly compact = this._viewport.compact;
+
+  /** How many rows of the feed a phone shows before it is asked for all. */
+  readonly feedRows = FEED_ROWS_ON_A_PHONE;
+
+  /** Whether a phone shows the whole feed. A wide screen always does. */
+  readonly allChanges = signal(false);
 
   constructor() {
     this.store.watch();
@@ -532,7 +756,7 @@ export class DashboardPage {
   }
 
   /**
-   * When the numbers were taken, in both forms.
+   * When the numbers were read, in both forms.
    *
    * "Two minutes ago" is what an operator reads, and the clock time is on the
    * `title` for the one who wants to know exactly. `Date.now()` is read inside
@@ -553,7 +777,7 @@ export class DashboardPage {
   });
 
   /**
-   * The failure to show beside the timestamp, when there is a document as well.
+   * The failure to show under the header, when there is a document as well.
    *
    * A failure with nothing to keep is the page's error state instead, so the two
    * are never both drawn.
@@ -570,45 +794,53 @@ export class DashboardPage {
     () => gatewayErrorKey(this.store.failed()) ?? 'resource.error.unknown'
   );
 
-  /** Which blocks did not answer, in the order the document names them. */
-  readonly missing = computed(() => {
-    const document = this.document();
-    if (document === null) {
-      return [];
+  /**
+   * How many days the gateway's window holds, both ends counted.
+   *
+   * The gateway chooses the window and this page has no control for it (admin
+   * plan 0046, section 2). The length is written beside what it bounds: the
+   * runs, and the two charts.
+   */
+  readonly days = computed(() => {
+    const window = this.document()?.window;
+    if (window === undefined) {
+      return 0;
     }
 
-    return (['identity', 'core', 'catalog', 'harvest'] as const).filter(
-      (block) => document[block] === null
-    );
+    const from = Date.parse(`${window.from}T00:00:00Z`);
+    const to = Date.parse(`${window.to}T00:00:00Z`);
+
+    return Number.isNaN(from) || Number.isNaN(to)
+      ? 0
+      : Math.round((to - from) / 86_400_000) + 1;
   });
 
   /**
    * Everything waiting for a person, from the document plus one call beside it.
    *
-   * The postal code tile is not in the document (admin plan 0021, section 6) and
-   * arrives on its own, so a dashboard whose harvest block is null still shows
-   * it and a summary that did not answer costs one tile rather than the row.
+   * The postal code tile is not in the document (admin plan 0021, section 6)
+   * and arrives by itself, so a summary that did not answer costs one tile
+   * rather than the row.
    */
   readonly waiting = computed(() => {
     const document = this.document();
-    const tiles =
-      document === null
-        ? []
-        : waitingTiles(
-            document,
-            this._text,
-            (id) => this.chainName(id),
-            this._pathOf
-          );
+    if (document === null) {
+      return [];
+    }
 
-    const postalCodes = postalCodeWaitingTile(
-      this._postalCodes.summary(),
+    return waitingTiles(
+      document,
+      postalCodeWaitingTile(
+        this._postalCodes.summary(),
+        this._text,
+        (value) => formatSince(value, Date.now(), this._translate.locale()),
+        this._pathOf
+      ),
       this._text,
-      (value) => formatSince(value, Date.now(), this._translate.locale()),
-      this._pathOf
+      (id) => this.chainName(id),
+      this._pathOf,
+      adminsPath(ADMIN_FAILED_SIGN_INS_TAB)
     );
-
-    return postalCodes === null ? tiles : [...tiles, postalCodes];
   });
 
   /** The catalog's counts, each a way into the list it counts. */
@@ -616,7 +848,7 @@ export class DashboardPage {
     const catalog = this.document()?.catalog ?? null;
     return catalog === null
       ? []
-      : catalogTiles(catalog, this._text, this._pathOf);
+      : catalogStats(catalog, this._text, this._pathOf);
   });
 
   /** Prices written per day, one stacked series per kind of source. */
@@ -632,7 +864,12 @@ export class DashboardPage {
     const document = this.document();
     return document === null
       ? []
-      : peopleTiles(document.identity, document.core, this._text, this._pathOf);
+      : shopperStats(
+          document.identity,
+          document.core,
+          this._text,
+          this._pathOf
+        );
   });
 
   /** Registered sign ups per day, or `null` when auth did not answer. */
@@ -641,27 +878,12 @@ export class DashboardPage {
     return identity === null ? null : signUpsChart(identity, this._text);
   });
 
-  /** Zones and lists made per day, or `null` when core did not answer. */
-  readonly zonesAndLists = computed(() => {
-    const core = this.document()?.core ?? null;
-    return core === null ? null : zonesAndListsChart(core, this._text);
-  });
-
-  /** The harvester's runs by status, over all time. */
-  readonly runsByStatus = computed(() => {
+  /** What the harvester did and what it may do. */
+  readonly harvest = computed(() => {
     const harvest = this.document()?.harvest ?? null;
     return harvest === null
-      ? { bars: [], series: [] }
-      : runsByStatusChart(harvest, this._text);
-  });
-
-  readonly failures = computed(() => {
-    const identity = this.document()?.identity ?? null;
-    return identity === null
       ? []
-      : loginFailureRows(identity, this._text, (value) =>
-          formatInstant(value, this._translate.locale())
-        );
+      : harvestStats(harvest, this.days(), this._text);
   });
 
   readonly activity = computed(() => {
@@ -681,9 +903,31 @@ export class DashboardPage {
     );
   });
 
+  /** The rows of the feed that are drawn: the first few on a phone, until asked. */
+  readonly shownActivity = computed(() =>
+    this.compact() && !this.allChanges()
+      ? this.activity().slice(0, FEED_ROWS_ON_A_PHONE)
+      : this.activity()
+  );
+
   /** A key as a sentence, for a component input that takes words not keys. */
-  text(key: string): string {
-    return this._text(key);
+  text(key: string, values?: Record<string, unknown>): string {
+    return this._text(key, values);
+  }
+
+  /** A count as the reader's locale writes it. */
+  number(value: number): string {
+    return new Intl.NumberFormat(this._translate.locale()).format(value);
+  }
+
+  /** A number of a panel as words: "48,210", or "0 of 4". */
+  statText(stat: StatView): string {
+    return stat.of === null
+      ? this.number(stat.value)
+      : this._text('dashboard.partOf', {
+          part: this.number(stat.value),
+          whole: this.number(stat.of),
+        });
   }
 
   /** The chain's name, or its id where the reference could not name it. */

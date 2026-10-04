@@ -9,7 +9,6 @@ import {
   CONTENT_LOCALES,
   draftFor,
   fieldOf,
-  hasDetailScreen,
   idOf,
   toInput,
   toRowView,
@@ -17,7 +16,6 @@ import {
   type ResourceGateway,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { ADMINS, toAdminPage } from './admins';
 import { BASKETS, ZONE_BASKETS } from './baskets';
 import { LIST_LINES } from './list-lines';
 import { LISTS } from './lists';
@@ -51,7 +49,6 @@ const ALL: readonly AnyResourceDescriptor[] = [
   LISTS,
   LIST_LINES,
   BASKETS,
-  ADMINS,
 ];
 
 /** The five plan 0009 made editable, and the two it deliberately did not. */
@@ -63,7 +60,7 @@ const EDITABLE: readonly AnyResourceDescriptor[] = [
   LIST_LINES,
 ];
 
-const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS, ADMINS];
+const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS];
 
 const RENDER = { locale: 'en', contentLocales: CONTENT_LOCALES };
 
@@ -497,43 +494,6 @@ describe('the list and shopping list descriptors', () => {
   });
 });
 
-describe('the admins descriptor', () => {
-  /**
-   * Plan 0071, section 6 and plan 0007, section 2: an admin can be seen and
-   * cannot be created, edited or deleted from here, ever. There is no detail
-   * screen either, so `resourceRoutes` declares one route and the list draws
-   * its rows as text.
-   */
-  it('can be read and can never be written', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.detail).toBeUndefined();
-    expect(hasDetailScreen(ADMINS)).toBe(false);
-  });
-
-  it('says behind the info button how an admin is actually managed', () => {
-    expect(ADMINS.info).toEqual({
-      title: 'people.admins.many',
-      points: ['people.admins.info.readOnly', 'people.admins.info.add'],
-    });
-  });
-
-  /** The one collection under `/v1/admin/**` that answers `{ admins }`. */
-  it('reads a page out of the shape that route really answers with', () => {
-    const page = toAdminPage({ admins: ADMIN_SEED });
-
-    expect(page.items).toHaveLength(ADMIN_SEED.length);
-    expect(page.nextCursor).toBeNull();
-  });
-
-  it('answers an empty page for a body it cannot read', () => {
-    expect(toAdminPage(null)).toEqual({ items: [], nextCursor: null });
-    expect(toAdminPage({ items: ADMIN_SEED })).toEqual({
-      items: [],
-      nextCursor: null,
-    });
-  });
-});
-
 /**
  * The two collections plan 0009 adds, and plan 0017 opened.
  *
@@ -753,15 +713,6 @@ describe('what plan 0009 deliberately left read only', () => {
       'people.baskets.info.record',
       'people.baskets.info.correct',
     ]);
-  });
-
-  /**
-   * Plan 0071, section 6, permanently: a back office that can create back
-   * office accounts is one where a single compromised session is forever.
-   */
-  it('leaves the admin table exactly as plan 0007 left it', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.info?.points).toContain('people.admins.info.add');
   });
 });
 

@@ -1,5 +1,9 @@
 import type { Translate, Wire } from '@portfolio/luna-shopper-admin/models';
-import { postalCodeCaption, runsByStatusChart } from './harvest-view';
+import {
+  harvestStats,
+  postalCodeCaption,
+  runsByStatusChart,
+} from './harvest-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -89,5 +93,76 @@ describe('postalCodeCaption', () => {
 
     expect(caption).toContain('dashboard.waiting.postalCodesFailed');
     expect(caption).toContain('dashboard.waiting.postalCodesOldest');
+  });
+});
+
+describe('harvestStats', () => {
+  /**
+   * Admin plan 0046, target 2: the runs in the window, the run in flight, the
+   * runs that failed, and how many chains may be fetched.
+   */
+  it('is the four numbers the harvester counted', () => {
+    const stats = harvestStats(
+      harvest({
+        runs: {
+          byStatus: [
+            { status: 'COMPLETED', count: 34 },
+            { status: 'FAILED', count: 6 },
+          ],
+          inWindow: 14,
+        },
+        sources: { total: 4, enabled: 1 },
+      }),
+      30,
+      translate
+    );
+
+    expect(stats.map((stat) => [stat.key, stat.value, stat.of])).toEqual([
+      ['inWindow', 14, null],
+      ['running', 0, null],
+      ['failed', 6, null],
+      ['sources', 1, 4],
+    ]);
+    // The window is the gateway's, and its length is written beside the count.
+    expect(stats[0].label).toBe('dashboard.harvest.inWindow(count=30)');
+  });
+
+  /** Red on the page means danger, so a count of failures is red only above zero. */
+  it('marks the failed runs only when there are some', () => {
+    const failed = (count: number) =>
+      harvestStats(
+        harvest({
+          runs: { byStatus: [{ status: 'FAILED', count }], inWindow: 0 },
+        }),
+        30,
+        translate
+      ).find((stat) => stat.key === 'failed');
+
+    expect(failed(2)?.danger).toBe(true);
+    expect(failed(0)?.danger).toBe(false);
+  });
+
+  /** The document names the run in flight or names nothing. A finished one is none. */
+  it('counts one run in flight, and none once it ended', () => {
+    const running = (status: Wire.EnumsHarvestRunStatus) =>
+      harvestStats(
+        harvest({
+          running: { status } as Wire.HarvestHarvestRunView,
+        }),
+        30,
+        translate
+      ).find((stat) => stat.key === 'running')?.value;
+
+    expect(running('RUNNING')).toBe(1);
+    expect(running('PENDING')).toBe(1);
+    expect(running('COMPLETED')).toBe(0);
+  });
+
+  /** The runs are the Runs tab, and the switches of the chains are in Setup. */
+  it('opens the Runs tab, and Setup for the chains', () => {
+    const stats = harvestStats(harvest(), 30, translate);
+
+    expect(stats[0].link).toEqual(['/', 'harvest', 'runs']);
+    expect(stats[3].link).toEqual(['/', 'harvest', 'setup', 'sources']);
   });
 });

@@ -3,7 +3,7 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { catalogTiles, pricesWrittenChart } from './catalog-view';
+import { catalogStats, pricesWrittenChart } from './catalog-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -41,49 +41,54 @@ function catalog(
   };
 }
 
-describe('catalogTiles', () => {
-  it('is five tiles, the last of which opens the products', () => {
-    const tiles = catalogTiles(catalog(), translate, pathOf);
+describe('catalogStats', () => {
+  /** Admin plan 0046, target 2: chains, shops, products, groups, priced. */
+  it('is five numbers, the last of which is the priced products', () => {
+    const stats = catalogStats(catalog(), translate, pathOf);
 
-    expect(tiles.map((tile) => tile.key)).toEqual([
-      'supermarkets',
-      'locations',
-      'items',
-      'productGroups',
-      'supermarketItems',
+    expect(stats.map((stat) => [stat.key, stat.value])).toEqual([
+      ['supermarkets', 3],
+      ['locations', 40],
+      ['items', 500],
+      ['productGroups', 20],
+      ['priced', 800],
     ]);
     // A price has no screen of its own (admin plan 0043).
-    expect(tiles[4].link).toEqual(['/', 'catalog', 'items']);
-    expect(tiles[4].value).toBe(900);
+    expect(stats[4].link).toEqual(['/', 'catalog', 'items']);
+    expect(stats.every((stat) => stat.of === null && !stat.danger)).toBe(true);
   });
 
   /**
-   * A tile knows which resource it opens and knows nothing about which section
-   * holds it, which is what let fourteen screens move without touching this.
+   * A number knows which resource it opens and knows nothing about which
+   * section holds it, which is what let fourteen screens move without touching
+   * this.
    */
   it('opens every one of them through the section that mounted it', () => {
-    const tiles = catalogTiles(catalog(), translate, pathOf);
+    const stats = catalogStats(catalog(), translate, (name) => [
+      '/',
+      `resolved:${name}`,
+    ]);
 
-    expect(tiles.map((tile) => tile.link?.[1])).toEqual([
-      'catalog',
-      'catalog',
-      'catalog',
-      'catalog',
-      'catalog',
+    expect(stats.map((stat) => stat.link?.[1])).toEqual([
+      'resolved:supermarkets',
+      'resolved:locations',
+      'resolved:items',
+      'resolved:product-groups',
+      'resolved:items',
     ]);
   });
 
-  it('draws an unlinked tile where the screen is not mounted', () => {
-    const tiles = catalogTiles(catalog(), translate, nothing);
+  it('draws a number with no link where the screen is not mounted', () => {
+    const stats = catalogStats(catalog(), translate, nothing);
 
-    expect(tiles.map((tile) => tile.link)).toEqual([
+    expect(stats.map((stat) => stat.link)).toEqual([
       null,
       null,
       null,
       null,
       null,
     ]);
-    expect(tiles[2].value).toBe(500);
+    expect(stats[2].value).toBe(500);
   });
 });
 

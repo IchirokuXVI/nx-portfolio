@@ -1,23 +1,19 @@
-import {
-  weekDelta,
-  type PathOf,
-  type Translate,
-  type Wire,
+import type {
+  PathOf,
+  Translate,
+  Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import type { ChartSeries, TileView } from '@portfolio/luna-shopper-admin/ui';
+import type { ChartSeries } from '@portfolio/luna-shopper-admin/ui';
+import type { StatView } from './dashboard-view';
 
 /**
  * The people the product has, as the overview draws them.
  *
  * Admin plan 0022 moved the three functions to `feature-people`, for a
  * dashboard of the Shoppers section. That section opens on its People tab now
- * (admin plan 0045), so the tiles and the two charts are a block of the
- * overview again, and the functions are back beside the page that draws them.
- *
- * A list and a shopping list have no screen of their own any more: a list is
- * under its zone and a shopping list under its owner. So their two tiles lead
- * to the Zones tab and to the People tab, which is where `pathOf` says the
- * closest list is.
+ * (admin plan 0045), so the numbers and the chart of sign ups are a panel of
+ * the overview (admin plan 0046), and the functions are beside the page that
+ * draws them.
  */
 
 /** Registered sign ups per day, as one line. */
@@ -63,87 +59,60 @@ function toPoints(
 }
 
 /**
- * The people tiles: who is here, and what they have made.
+ * Who is here and what they have made (admin plan 0046, target 2): people,
+ * zones, lists, and the shopping lists that are being shopped now.
  *
- * Users carries the seven day delta and the sparkline, because it is the one
- * number on this screen whose direction is the question. The other three are
- * totals with a caption breaking them down.
+ * People come from auth and the three others from core, so each half is left
+ * out by itself when its service did not answer, and the panel says which.
+ *
+ * A list and a shopping list have no screen of their own: a list is under its
+ * zone and a shopping list under its owner. So those two numbers lead to
+ * wherever the registry says the closest list is.
  */
-export function peopleTiles(
+export function shopperStats(
   identity: Wire.AdminDashboardAdminIdentityDashboard | null,
   core: Wire.AdminDashboardAdminCoreDashboard | null,
   translate: Translate,
   pathOf: PathOf
-): TileView[] {
-  const tiles: TileView[] = [];
+): StatView[] {
+  const stats: StatView[] = [];
 
   if (identity !== null) {
-    tiles.push({
-      key: 'users',
-      label: translate('dashboard.shoppers.users'),
-      value: identity.users.total,
-      caption: translate('dashboard.shoppers.usersCaption', {
-        registered: identity.users.registered,
-        temporary: identity.users.temporary,
-        verified: identity.users.verified,
-      }),
-      delta: {
-        value: weekDelta(identity.signUps),
-        caption: translate('dashboard.shoppers.inLast7Days'),
-      },
-      trend: identity.signUps.map((point) => point.count),
-      link: pathOf('users'),
-      query: null,
-      tone: 'quiet',
-    });
-  }
-
-  if (core !== null) {
-    tiles.push(
-      {
-        key: 'zones',
-        label: translate('dashboard.shoppers.zones'),
-        value: core.zones.total,
-        caption: translate('dashboard.shoppers.zonesCaption', {
-          active: core.zones.active,
-          total: core.zones.total,
-        }),
-        delta: null,
-        trend: null,
-        link: pathOf('zones'),
-        query: null,
-        tone: 'quiet',
-      },
-      {
-        key: 'lists',
-        label: translate('dashboard.shoppers.lists'),
-        value: core.lists.total,
-        caption: null,
-        delta: null,
-        trend: null,
-        link: pathOf('lists'),
-        query: null,
-        tone: 'quiet',
-      },
-      {
-        key: 'baskets',
-        label: translate('dashboard.shoppers.baskets'),
-        value: core.baskets.total,
-        caption: translate('dashboard.shoppers.basketsCaption', {
-          open: core.baskets.open,
-          finished: core.baskets.finished,
-          live: core.baskets.live,
-        }),
-        delta: null,
-        trend: null,
-        // By name, and never by its segment. A shopping list is under its
-        // owner, so this answers with the people.
-        link: pathOf('baskets'),
-        query: null,
-        tone: 'quiet',
-      }
+    stats.push(
+      stat('users', 'dashboard.shoppers.users', identity.users.total, 'users')
     );
   }
 
-  return tiles;
+  if (core !== null) {
+    stats.push(
+      stat('zones', 'dashboard.shoppers.zones', core.zones.total, 'zones'),
+      stat('lists', 'dashboard.shoppers.lists', core.lists.total, 'lists'),
+      // By name, and never by its segment. A shopping list is under its
+      // owner, so this answers with the people.
+      stat(
+        'beingShopped',
+        'dashboard.shoppers.beingShopped',
+        core.baskets.open,
+        'baskets'
+      )
+    );
+  }
+
+  return stats;
+
+  function stat(
+    key: string,
+    label: string,
+    value: number,
+    resource: string
+  ): StatView {
+    return {
+      key,
+      label: translate(label),
+      value,
+      of: null,
+      link: pathOf(resource),
+      danger: false,
+    };
+  }
 }

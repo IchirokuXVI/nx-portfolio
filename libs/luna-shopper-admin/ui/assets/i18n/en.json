@@ -12,10 +12,6 @@
   },
   "environment": {
     "label": "Environment",
-    "production": "Production",
-    "staging": "Staging",
-    "development": "Development",
-    "unknown": "Unknown",
     "short": {
       "production": "PRODUCTION",
       "staging": "STAGING",
@@ -93,7 +89,9 @@
   },
   "info": {
     "about": "About {{subject}}",
-    "close": "Close"
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "notFound": {
     "heading": "There is no such screen",
@@ -2103,13 +2101,36 @@
     "admins": {
       "one": "admin",
       "many": "Admins",
-      "username": "Username",
-      "displayName": "Display name",
-      "disabledAt": "Disabled",
-      "lastLoginAt": "Last signed in",
+      "name": "Name",
+      "username": "Sign in name",
+      "lastLoginAt": "Last sign in",
+      "never": "Never",
+      "you": "(you)",
+      "state": {
+        "label": "State",
+        "active": "Active",
+        "off": "Turned off"
+      },
+      "tabs": {
+        "accounts": "Accounts",
+        "failed": "Failed sign ins",
+        "failedCount": "{{count}} in 24 h"
+      },
+      "accounts": {
+        "none": "No admin account was found.",
+        "retry": "Try again"
+      },
+      "failed": {
+        "last24h": "Failed, last 24 hours",
+        "last7d": "Failed, last 7 days",
+        "when": "When",
+        "ip": "From",
+        "noIp": "not recorded",
+        "none": "No failed sign in has been recorded."
+      },
       "info": {
         "readOnly": "This list is read only. An admin is added on the server, not here.",
-        "add": "To add one, run \"npx nx run luna-shopper-backend-auth:admin:create\" where the auth service runs."
+        "add": "To add one, run this where the auth service runs:"
       }
     },
     "field": {
@@ -2209,10 +2230,9 @@
   },
   "dashboard": {
     "heading": "Overview",
-    "measuredAt": "Taken {{when}}",
+    "measuredAt": "Read {{when}}",
     "refresh": "Refresh",
-    "refreshing": "Refreshing…",
-    "stale": "The last refresh did not answer, so these numbers are older than the time above.",
+    "stale": "The last refresh failed, so these numbers are older than the time shown.",
     "loading": "Reading the numbers…",
     "error": {
       "heading": "The dashboard could not be read",
@@ -2227,50 +2247,44 @@
       "retry": "Try again"
     },
     "waiting": {
-      "heading": "Work waiting",
-      "joinRequests": "Join requests waiting",
-      "entries": "Products to decide, {{chain}}",
-      "shops": "Shops to map, {{chain}}",
+      "heading": "Waiting for you",
+      "joinRequests": "Join requests",
+      "entries": "Products to decide",
+      "shops": "Shops to map",
       "places": "Places found",
-      "stalePrices": "Stale prices",
+      "stalePrices": "Prices out of date",
       "loginFailures": "Failed admin sign ins, last 24 hours",
-      "clear": "Nothing is waiting for a decision.",
       "postalCodes": "Postal codes waiting",
       "postalCodesFailed": "{{count}} failed",
-      "postalCodesOldest": "oldest queued {{since}}"
+      "postalCodesOldest": "oldest queued {{since}}",
+      "moreChains": "{{chains}} and {{count}} more"
     },
     "harvest": {
       "heading": "Harvest",
       "byStatus": "Runs",
-      "byStatusTitle": "Runs by status"
+      "byStatusTitle": "Runs by status",
+      "numbers": "Harvest numbers",
+      "inWindow_one": "Runs in {{count}} day",
+      "inWindow_other": "Runs in {{count}} days",
+      "running": "Running",
+      "failed": "Failed, all time",
+      "sources": "Chains that may be fetched"
     },
     "catalog": {
       "heading": "Catalog",
       "supermarkets": "Chains",
       "locations": "Shops",
       "items": "Products",
-      "productGroups": "Product groups",
-      "supermarketItems": "Priced products",
-      "supermarketItemsCaption": "{{priced}} priced, {{stale}} stale, {{unavailable}} unavailable",
-      "pricesWritten": "Prices written per day"
-    },
-    "signIns": {
-      "heading": "Admin sign ins",
-      "last24h": "Failed, last 24 hours",
-      "last7d": "Failed, last 7 days",
-      "when": "When",
-      "username": "Username",
-      "ip": "From",
-      "noIp": "not recorded",
-      "none": "No failed sign in has been recorded."
+      "productGroups": "Groups",
+      "numbers": "Catalog numbers",
+      "priced": "Priced",
+      "pricesWritten_one": "Prices written each day, last {{count}} day",
+      "pricesWritten_other": "Prices written each day, last {{count}} days"
     },
     "activity": {
-      "heading": "Recent activity",
-      "when": "When",
-      "who": "Who",
-      "what": "What",
+      "heading": "What changed",
       "none": "Nothing has changed.",
-      "service": "harvester",
+      "service": "The harvester",
       "entry": "{{action}} {{entity}}",
       "action": {
         "CREATE": "created",
@@ -2291,23 +2305,25 @@
         "product_groups": "a product group",
         "price_scopes": "a price scope",
         "price_policies": "a price policy"
-      }
+      },
+      "line": "{{who}} {{what}}",
+      "all": "Show all",
+      "fewer": "Show fewer"
     },
     "shoppers": {
       "heading": "Shoppers",
       "users": "People",
-      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
       "zones": "Zones",
-      "zonesCaption": "{{active}} active of {{total}}",
       "lists": "Lists",
-      "baskets": "Shopping lists",
-      "basketsCaption": "{{open}} being shopped, {{finished}} finished, {{live}} always there",
       "signUps": "Sign ups",
-      "signUpsTitle": "Sign ups per day",
       "zonesSeries": "Zones",
       "listsSeries": "Lists",
       "zonesAndLists": "Zones and lists created per day",
-      "inLast7Days": "in the last 7 days"
-    }
+      "numbers": "Shopper numbers",
+      "beingShopped": "Being shopped",
+      "signUpsTitle_one": "Sign ups each day, last {{count}} day",
+      "signUpsTitle_other": "Sign ups each day, last {{count}} days"
+    },
+    "partOf": "{{part}} of {{whole}}"
   }
 }

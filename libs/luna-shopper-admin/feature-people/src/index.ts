@@ -2,7 +2,17 @@
 // descriptors, its section's route table and the counter of its rail entry.
 // The option lists of the descriptors and the pieces a page is built from are
 // its own (admin plan 0045, section 1).
-export { ADMINS, toAdminPage, type Admin } from './lib/admins';
+export {
+  ADMINS_INFO,
+  ADMINS_SEGMENT,
+  ADMIN_ACCOUNTS_TAB,
+  ADMIN_FAILED_SIGN_INS_TAB,
+  adminsPath,
+  toAdminPage,
+  type Admin,
+  type AdminsTab,
+} from './lib/admins';
+export { adminsRoutes } from './lib/admins-routes';
 export {
   basketSettlements,
   toBasketSettlement,
