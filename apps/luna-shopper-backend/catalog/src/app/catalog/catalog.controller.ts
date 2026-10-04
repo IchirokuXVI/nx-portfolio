@@ -24,9 +24,13 @@ import {
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsRequest,
   type ApplyProductGroupAssignmentsResult,
+  type BrandHomonymRequest,
+  type BrandHomonymsView,
   type BrandIdRequest,
   type BrandKeysRequest,
   type BrandKeysResult,
+  type BrandMatchesRequest,
+  type BrandMatchesResult,
   type BrandPage,
   type BrandView,
   type CountLocationsByPostalCodeRequest,
@@ -511,6 +515,30 @@ export class CatalogController {
     @Payload() req: RegisterBrandsRequest
   ): Promise<RegisterBrandsResult> {
     return this.brands.registerMany(req);
+  }
+
+  /** Say that a printed key also names this brand (plan 0178). */
+  @MessagePattern(BRAND_PATTERNS.addHomonym)
+  addBrandHomonym(
+    @Payload() req: BrandHomonymRequest
+  ): Promise<BrandHomonymsView> {
+    return this.brands.addHomonym(req);
+  }
+
+  /** Take that pointer back. No brand and no product changes. */
+  @MessagePattern(BRAND_PATTERNS.removeHomonym)
+  removeBrandHomonym(
+    @Payload() req: BrandHomonymRequest
+  ): Promise<BrandHomonymsView> {
+    return this.brands.removeHomonym(req);
+  }
+
+  /** Every brand each printed key names, the key's own brand first. */
+  @MessagePattern(BRAND_PATTERNS.matches)
+  brandMatches(
+    @Payload() req: BrandMatchesRequest
+  ): Promise<BrandMatchesResult> {
+    return this.brands.matches(req);
   }
   @MessagePattern(PRODUCT_GROUP_PATTERNS.list)
   listProductGroups(

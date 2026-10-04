@@ -30,6 +30,7 @@ import {
   SUPERMARKET_PATTERNS,
   type AdminSupermarketItemPage,
   type ApplyProductGroupAssignmentsResult,
+  type BrandHomonymsView,
   type BrandKeysResult,
   type BrandPage,
   type BrandSpellingsResult,
@@ -102,6 +103,7 @@ import {
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
 import {
+  AddBrandHomonymDto,
   AddItemPriceDto,
   ApplyProductGroupAssignmentsDto,
   CreateBrandDto,
@@ -1142,6 +1144,55 @@ export class AdminCatalogBrandsController {
     return this.nats.send<DeleteBrandResult>(BRAND_PATTERNS.delete, {
       ...adminCredential(admin),
       brandId: id,
+    });
+  }
+
+  /**
+   * Say that a printed name also names this brand (plan 0178).
+   *
+   * One name can belong to two businesses, and the key is unique, so the second
+   * brand gets a pointer from that printed key rather than a key of its own.
+   * The key's own brand stays the first answer, no product moves, and the queue
+   * then answers both brands for a row printing that name. Answers 400
+   * `brand_homonym_is_own_key` for the brand's own key, and the brand's whole
+   * list of homonyms otherwise. Adding one that is already there changes
+   * nothing.
+   */
+  @Post(':id/homonyms')
+  @ApiContractResponse(BRAND_PATTERNS.addHomonym, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  addHomonym(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: AddBrandHomonymDto
+  ): Promise<BrandHomonymsView> {
+    return this.nats.send<BrandHomonymsView>(BRAND_PATTERNS.addHomonym, {
+      ...adminCredential(admin),
+      brandId: id,
+      printedKey: dto.printedKey,
+    });
+  }
+
+  /**
+   * Take a homonym back (plan 0178).
+   *
+   * Only the pointer goes: the brand, the key's own brand and every product
+   * stay as they were. The printed key travels in the path, keyed the same way
+   * as on the way in, and one this brand does not hold answers 404.
+   */
+  @Delete(':id/homonyms/:printedKey')
+  @ApiContractResponse(BRAND_PATTERNS.removeHomonym)
+  removeHomonym(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Param('printedKey') printedKey: string
+  ): Promise<BrandHomonymsView> {
+    return this.nats.send<BrandHomonymsView>(BRAND_PATTERNS.removeHomonym, {
+      ...adminCredential(admin),
+      brandId: id,
+      printedKey,
     });
   }
 }

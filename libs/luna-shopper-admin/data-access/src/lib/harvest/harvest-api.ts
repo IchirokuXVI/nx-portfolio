@@ -181,7 +181,7 @@ export class HarvestApi implements HarvestServiceI {
    * decisions below are addressed by the row's own id, which is unique and which
    * an operator acting on a row has, so none of them names the chain twice.
    */
-  listEntries(query: EntryQuery): Promise<Wire.HarvestSourceCatalogEntryPage> {
+  listEntries(query: EntryQuery): Promise<Wire.HarvestQueuedSourceEntryPage> {
     return this._send('get', `${ROOT}/entries`, { params: toParams(query) });
   }
 

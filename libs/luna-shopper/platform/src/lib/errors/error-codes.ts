@@ -223,6 +223,15 @@ export const ERROR_CODES = {
    */
   BRAND_NOT_LINKED: 'brand_not_linked',
   /**
+   * A brand was given its own key as a homonym (plan 0178).
+   *
+   * A homonym says that a printed key also names this brand, beside the brand
+   * that holds the key. A brand's own key already names it, so the row would
+   * say nothing, and it would make the brand answer twice for one printed
+   * name.
+   */
+  BRAND_HOMONYM_IS_OWN_KEY: 'brand_homonym_is_own_key',
+  /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
    *
@@ -452,6 +461,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 again: the request is well formed and the caller may make it, and what
   // refuses it is that this brand is not a spelling of anything.
   [ERROR_CODES.BRAND_NOT_LINKED]: HttpStatus.CONFLICT,
+  // 400, because what is wrong is a value in the body: the printed key is the
+  // brand's own key (plan 0178).
+  [ERROR_CODES.BRAND_HOMONYM_IS_OWN_KEY]: HttpStatus.BAD_REQUEST,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).

@@ -1,3 +1,4 @@
+import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
 import { categoryPathOf, resolveCategory } from './categories';
 import {
   asString,
@@ -373,13 +374,22 @@ function pickPath(fromPage: string[], fromRow: string[]): string[] {
   return fromPage.length > 0 ? fromPage : fromRow;
 }
 
-/** `-` is how the index prints "no brand", and it is not a brand. */
+/**
+ * `-` is how the index prints "no brand", and it is not a brand.
+ *
+ * Neither is a season (plan 0178). The chain writes `HALLOWEEN` in the brand
+ * field of a seasonal product, and a word `NEVER_A_BRAND` lists reads as no
+ * brand at all rather than as one the curation gate would hold the row to.
+ */
 function brandOf(raw: string | null): string | null {
   if (!raw) {
     return null;
   }
   const trimmed = raw.trim();
-  return trimmed === '' || trimmed === '-' ? null : trimmed;
+  if (trimmed === '' || trimmed === '-' || isNeverABrand(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 function firstString(values: readonly Json[]): string | null {

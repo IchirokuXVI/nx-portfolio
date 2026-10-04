@@ -9,12 +9,7 @@
  * until `apply`.
  */
 
-import {
-  canonicalBrand,
-  chainName,
-  chainNamesById,
-  findBrand,
-} from './rules.mjs';
+import { chainName, chainNamesById, sourceBrands } from './rules.mjs';
 
 /** An `extra` bag can hold a leaflet's whole page text; the model needs a taste. */
 const MAX_EXTRA_CHARS = 2000;
@@ -63,38 +58,40 @@ export function toCandidate(
 }
 
 /**
- * The registered brand this entry's own printed brand names, or null.
+ * Every registered brand this entry's own printed brand names, the key's own
+ * brand first. Empty when it names none.
  *
  * The registry is read by the library and never by the model: what the packet
- * carries is the one brand this row resolved to, with the chain that owns it
- * when it is a private label. An unregistered spelling answers null, which is
- * the same answer a row with no brand at all gets, and the prompt says what to
- * do with either.
+ * carries is the brands this row resolved to, each with the chain that owns it
+ * when it is a private label. An unregistered spelling answers the empty list,
+ * which is the same answer a row with no brand at all gets, and the prompt says
+ * what to do with either.
  *
  * Candidates are not annotated. A `LINK` takes the candidate's brand as it is,
  * because that brand is already a catalog product's brand and nothing here
  * would be deciding anything new about it.
  *
  * **A linked spelling resolves to the brand it spells** (plan 0005). `label` is
- * always the brand to write, so the existing rule "write `brandMatch.label`"
- * gets `Deborah` out of a chain printing `DEBORAH 48H` on the first attempt,
- * and `printedAs` names the spelling the chain printed so the model knows what
- * the name has to keep. It is null when the printed brand is not a link.
+ * always the brand to write, so a chain printing `DEBORAH 48H` gets `Deborah`
+ * on the first attempt, and `printedAs` names the spelling the chain printed so
+ * the model knows what the name has to keep. It is null when the printed brand
+ * is not a link.
+ *
+ * **A printed brand is a reading, not a verdict** (backend plan 0178). The list
+ * used to be one brand, `brandMatch`, and a `CREATE` had to write it. Some
+ * names belong to two businesses, so the list can now hold several and the
+ * model chooses between them by what the product is. One brand is still the
+ * ordinary case, and then there is nothing to choose.
  */
-export function brandMatchFor({ entry, brands, supermarkets }) {
-  const registered = findBrand(brands, entry?.brand);
-  if (!registered) {
-    return null;
-  }
-  const canonical = canonicalBrand(brands, registered);
-  const owner = canonical.privateLabelSupermarketId;
-  return {
-    label: canonical.label,
-    privateLabelOf: owner
-      ? (chainNamesById(supermarkets).get(owner) ?? null)
+export function brandMatchesFor({ entry, brands, supermarkets }) {
+  const chains = chainNamesById(supermarkets);
+  return sourceBrands(brands, entry).map(({ brand, printedAs }) => ({
+    label: brand.label,
+    privateLabelOf: brand.privateLabelSupermarketId
+      ? (chains.get(brand.privateLabelSupermarketId) ?? null)
       : null,
-    printedAs: canonical === registered ? null : registered.label,
-  };
+    printedAs,
+  }));
 }
 
 /** What the model is asked about: the entry as observed, plus the pre-pass. */
@@ -134,7 +131,7 @@ export function buildEntryPacket({
       status: entry.status ?? null,
       chainName: supermarket ? chainName(supermarket) : null,
       chainRegistered: Boolean(supermarket),
-      brandMatch: brandMatchFor({ entry, brands, supermarkets }),
+      brandMatches: brandMatchesFor({ entry, brands, supermarkets }),
       proposedItemId: entry.itemId ?? null,
       extra: trimExtra(entry.extra ?? null),
     },

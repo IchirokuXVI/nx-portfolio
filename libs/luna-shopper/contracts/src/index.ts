@@ -8,6 +8,8 @@ export * from './lib/pagination';
 // The one brand key function, shared by catalog, the harvester and the gateway
 // (plan 0115, section 2). Browser reachable: it names no `process`.
 export * from './lib/brands/brand-key';
+// The printed words that are never a brand (plan 0178). Browser reachable too.
+export * from './lib/brands/never-a-brand';
 
 // The unit a source's size is in, and the one conversion every adapter reads a
 // printed size through (plan 0177). Browser reachable, as the brand key is.

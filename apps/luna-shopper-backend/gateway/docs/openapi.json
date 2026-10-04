@@ -19205,6 +19205,204 @@
         ]
       }
     },
+    "/v1/admin/catalog/brands/{id}/homonyms": {
+      "post": {
+        "operationId": "AdminCatalogBrandsController_addHomonym_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddBrandHomonymDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `brand.addHomonym` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.BrandHomonymsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/brands/{id}/homonyms/{printedKey}": {
+      "delete": {
+        "operationId": "AdminCatalogBrandsController_removeHomonym_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "printedKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The `brand.removeHomonym` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.BrandHomonymsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
     "/v1/admin/catalog/brand-suggestions": {
       "get": {
         "operationId": "AdminCatalogBrandSuggestionsController_list_v1",
@@ -24918,11 +25116,11 @@
         ],
         "responses": {
           "200": {
-            "description": "The `sourceEntry.list` contract response.",
+            "description": "The queue, newest observation first, each row with every registered brand its printed brand names. Composed: the rows are the harvester’s, and the brands are read from catalog’s registry for the keys the page prints.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/harvest.SourceCatalogEntryPage"
+                  "$ref": "#/components/schemas/harvest.QueuedSourceEntryPage"
                 }
               }
             }
@@ -28568,6 +28766,19 @@
             "description": "The brand this one is really a spelling of, or null to unlink it. The products follow either way: linking moves them onto that brand, unlinking brings back the ones carrying this brand’s own key."
           }
         }
+      },
+      "AddBrandHomonymDto": {
+        "type": "object",
+        "properties": {
+          "printedKey": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "The printed name, or its key. It is keyed before it is stored, a text with no letter or digit is refused, and so is the brand’s own key."
+          }
+        },
+        "required": [
+          "printedKey"
+        ]
       },
       "AvailabilityEntryDto": {
         "type": "object",
@@ -33403,6 +33614,68 @@
           "walk",
           "entry",
           "replayed"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.BrandHomonymsView": {
+        "type": "object",
+        "properties": {
+          "brandId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "printedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The printed keys that also name this brand, sorted. Never its own key."
+          }
+        },
+        "required": [
+          "brandId",
+          "printedKeys"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.BrandMatchView": {
+        "type": "object",
+        "properties": {
+          "brandId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "description": "That brand’s own key, which differs from the printed key for a homonym."
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The brand to write."
+          },
+          "privateLabelSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "printedAs": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The registered spelling the printed key names, when the registry holds it as a spelling of `label`. Null when the two are the same brand, and on a homonym."
+          }
+        },
+        "required": [
+          "brandId",
+          "key",
+          "label",
+          "privateLabelSupermarketId",
+          "printedAs"
         ],
         "additionalProperties": false
       },
@@ -38616,7 +38889,7 @@
         ],
         "additionalProperties": false
       },
-      "harvest.SourceCatalogEntryPage": {
+      "harvest.QueuedSourceEntryPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
         "additionalProperties": false,
@@ -38628,7 +38901,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/harvest.SourceCatalogEntryView"
+              "$ref": "#/components/schemas/harvest.QueuedSourceEntryView"
             }
           },
           "nextCursor": {
@@ -38638,6 +38911,205 @@
             ]
           }
         }
+      },
+      "harvest.QueuedSourceEntryView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceKind": {
+            "$ref": "#/components/schemas/enums.PriceSourceKind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "brand": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ean": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unitSize": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "sizeUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "GRAM",
+                  "KILOGRAM",
+                  "MILLILITER",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "soldByWeight": {
+            "type": "boolean"
+          },
+          "sizeFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "packCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 2,
+            "maximum": 1000
+          },
+          "categoryPath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "timesSeen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidateEntryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.SourceEntryStatus"
+          },
+          "matchedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.ItemSourceMatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "decidedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
+            }
+          },
+          "brandMatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.BrandMatchView"
+            },
+            "description": "Every registered brand the row’s printed brand names, the key’s own brand first and then each brand a homonym points that key at. Empty when the row prints no brand or nothing registered answers to it. Several brands is an ordinary answer: which one made the product is read from the product."
+          }
+        },
+        "required": [
+          "id",
+          "supermarketId",
+          "externalId",
+          "sourceKind",
+          "name",
+          "brand",
+          "ean",
+          "unitSize",
+          "sizeUnit",
+          "soldByWeight",
+          "sizeFormat",
+          "packCount",
+          "categoryPath",
+          "url",
+          "extra",
+          "timesSeen",
+          "firstSeenAt",
+          "lastSeenAt",
+          "firstRunId",
+          "lastRunId",
+          "itemId",
+          "candidateEntryId",
+          "status",
+          "matchedBy",
+          "confidence",
+          "decidedAt",
+          "prices",
+          "brandMatches"
+        ],
+        "additionalProperties": false
       },
       "harvest.SourceCatalogEntryView": {
         "type": "object",
@@ -40515,6 +40987,7 @@
               "brand_link_owns_no_chain",
               "brand_link_keeps_key",
               "brand_not_linked",
+              "brand_homonym_is_own_key",
               "place_already_imported",
               "place_matches_location",
               "scope_not_found",

@@ -39,6 +39,19 @@ describe('parseProductPage', () => {
     });
   });
 
+  it('reads a printed word that is never a brand as no brand (plan 0178)', () => {
+    const pagePrinting = (brand: string) =>
+      parseProductPage(
+        '<script type="application/ld+json">{"@type": "Product", ' +
+          `"name": "queso azul, 200 g", "sku": "7", "brand": {"name": "${brand}"}, ` +
+          `"offers": {"price": "2.5"}}</script>`
+      );
+
+    expect(pagePrinting('D.O.P.')?.brand).toBeNull();
+    expect(pagePrinting('IGP')?.brand).toBeNull();
+    expect(pagePrinting('DOÑA ANA')?.brand).toBe('DOÑA ANA');
+  });
+
   it('answers null for a page with no product JSON-LD, and does not throw', () => {
     expect(parseProductPage(fixture('home.html'))).toBeNull();
     expect(

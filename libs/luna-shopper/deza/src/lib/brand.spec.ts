@@ -35,4 +35,27 @@ describe('extractBrand', () => {
       'EXTREM'
     );
   });
+
+  describe('a run that is never a brand (plan 0178)', () => {
+    it('reads the wine the plan names as PRIMA, not as its appellation', () => {
+      expect(extractBrand('Vino tinto D.O Toro PRIMA crianza')).toBe('PRIMA');
+    });
+
+    it.each<[string, string | null]>([
+      ['Vino tinto D.O. Rioja FAUSTINO VII', 'FAUSTINO VII'],
+      ['Queso curado D.O.P. Manchego GARCIA BAQUERO', 'GARCIA BAQUERO'],
+      ['Vino blanco VINO DE LA TIERRA de Castilla EMINA', 'EMINA'],
+      ['Turrón blando IGP Jijona ANTIU XIXONA', 'ANTIU XIXONA'],
+      // Nothing but the appellation is shouted, so nothing is claimed.
+      ['Vino tinto D.O. Ribera del Duero crianza', null],
+      ['Surtido NAVIDAD 400 g', null],
+    ])('reads %s as %s', (name, brand) => {
+      expect(extractBrand(name)).toBe(brand);
+    });
+
+    it('keeps a run that only starts with a listed word', () => {
+      // The run is not made only of listed words, so it is still a candidate.
+      expect(extractBrand('Vino tinto D.O RIOJA crianza')).toBe('D.O RIOJA');
+    });
+  });
 });

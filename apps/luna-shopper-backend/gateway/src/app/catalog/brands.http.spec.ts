@@ -7,6 +7,7 @@ import {
 import {
   BRAND_KEY_HOLDER_DETAIL,
   BRAND_LINK_BLOCKER_DETAIL,
+  BrandHomonymIsOwnKeyException,
   BrandKeyTakenException,
   BrandLabelEmptyException,
   BrandLinkKeepsKeyException,
@@ -572,6 +573,154 @@ describe('the brand routes, over HTTP', () => {
     } finally {
       await nest.close();
     }
+  });
+
+  describe('homonyms (plan 0178)', () => {
+    it('adds a printed key to a brand and answers the brand’s whole list', async () => {
+      const { nest, sent, origin } = await boot({
+        [BRAND_PATTERNS.addHomonym]: {
+          brandId: BRAND.id,
+          printedKeys: ['poseidon'],
+        },
+      });
+      try {
+        const res = await fetch(
+          `${origin}/v1/admin/catalog/brands/${BRAND.id}/homonyms`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ printedKey: 'Poseidón' }),
+          }
+        );
+
+        expect(res.status).toBe(201);
+        expect(await res.json()).toEqual({
+          brandId: BRAND.id,
+          printedKeys: ['poseidon'],
+        });
+        expect(sent).toEqual([
+          {
+            subject: BRAND_PATTERNS.addHomonym,
+            // The printed text as it was typed: catalog keys it, with the one
+            // function every brand is keyed with.
+            payload: {
+              userId: 'admin-1',
+              adminToken: 'operator-token',
+              brandId: BRAND.id,
+              printedKey: 'Poseidón',
+            },
+          },
+        ]);
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('refuses a body with no printed key, and one carrying a field it does not take', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        for (const body of [
+          {},
+          { printedKey: '' },
+          { printedKey: 'x', key: 'y' },
+        ]) {
+          const res = await fetch(
+            `${origin}/v1/admin/catalog/brands/${BRAND.id}/homonyms`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify(body),
+            }
+          );
+          expect(res.status).toBe(400);
+        }
+        expect(sent).toHaveLength(0);
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('answers 400 brand_homonym_is_own_key for the brand’s own key', async () => {
+      const { nest, origin } = await boot({
+        [BRAND_PATTERNS.addHomonym]: () => {
+          throw new BrandHomonymIsOwnKeyException(
+            'That printed key is already this brand’s own key.'
+          );
+        },
+      });
+      try {
+        const res = await fetch(
+          `${origin}/v1/admin/catalog/brands/${BRAND.id}/homonyms`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ printedKey: 'Mahou' }),
+          }
+        );
+
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          code: 'brand_homonym_is_own_key',
+        });
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('removes a homonym named in the path', async () => {
+      const { nest, sent, origin } = await boot({
+        [BRAND_PATTERNS.removeHomonym]: { brandId: BRAND.id, printedKeys: [] },
+      });
+      try {
+        const res = await fetch(
+          `${origin}/v1/admin/catalog/brands/${BRAND.id}/homonyms/poseidon`,
+          { method: 'DELETE' }
+        );
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          brandId: BRAND.id,
+          printedKeys: [],
+        });
+        expect(sent).toEqual([
+          {
+            subject: BRAND_PATTERNS.removeHomonym,
+            payload: {
+              userId: 'admin-1',
+              adminToken: 'operator-token',
+              brandId: BRAND.id,
+              printedKey: 'poseidon',
+            },
+          },
+        ]);
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('refuses a brand id that is not a uuid on both routes, and sends nothing', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        const add = await fetch(
+          `${origin}/v1/admin/catalog/brands/poseidon/homonyms`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ printedKey: 'Poseidón' }),
+          }
+        );
+        const remove = await fetch(
+          `${origin}/v1/admin/catalog/brands/poseidon/homonyms/poseidon`,
+          { method: 'DELETE' }
+        );
+
+        expect(add.status).toBe(400);
+        expect(remove.status).toBe(400);
+        expect(sent).toHaveLength(0);
+      } finally {
+        await nest.close();
+      }
+    });
   });
 
   it('asks the harvester for the spellings of the brand and of its links', async () => {
