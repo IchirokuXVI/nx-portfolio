@@ -1,5 +1,7 @@
 > **PR:** [#624](https://github.com/IchirokuXVI/nx-portfolio/pull/624)
-> Built without three things the gateway does not serve: a shop search by postal code (target 4), the "Own section order" state on a shop row (target 4), and price scopes ordered most general first (target 7).
+> Three things were left out, because the gateway does not serve them.
+> Target 4: a shop search by postal code, and the "Own section order" state on a shop row.
+> Target 7: price scopes ordered most general first.
 
 # 0042 A chain holds its shops
 
