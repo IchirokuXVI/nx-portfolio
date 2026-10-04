@@ -262,3 +262,143 @@ describe('AppShell, the room it takes', () => {
     expect(source).not.toContain('max-inline-size');
   });
 });
+
+/**
+ * The "More" sheet is modal: it covers the page behind a scrim, so the focus
+ * moves into it and Tab stays in it until it closes.
+ */
+describe('AppShell, the focus in the More sheet', () => {
+  const openSheet = async (fixture: ComponentFixture<AppShell>) => {
+    document.body.append(fixture.nativeElement);
+    all(fixture, '[data-menu="more"]')[0].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return all(fixture, '.sheet')[0];
+  };
+
+  const tab = (target: Element, shiftKey = false) => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  it('says it is modal and takes the focus when it opens', async () => {
+    const fixture = await render({ compact: true });
+    const sheet = await openSheet(fixture);
+
+    expect(sheet.getAttribute('aria-modal')).toBe('true');
+    expect(document.activeElement).toBe(sheet);
+
+    fixture.nativeElement.remove();
+  });
+
+  it('wraps Tab from its last control to its first, and back', async () => {
+    const fixture = await render({ compact: true });
+    const sheet = await openSheet(fixture);
+    const stops = [...sheet.querySelectorAll<HTMLElement>('a[href], button')];
+    const first = stops[0];
+    const last = stops[stops.length - 1];
+
+    last.focus();
+    expect(tab(last).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(first);
+
+    expect(tab(first, true).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(last);
+
+    // In the middle Tab is the browser's own.
+    stops[1].focus();
+    expect(tab(stops[1]).defaultPrevented).toBe(false);
+
+    fixture.nativeElement.remove();
+  });
+});
+
+/**
+ * A menu closes on a press elsewhere, and the focus stays where that press put
+ * it. Only Escape, and a choice made inside the menu, give it back to the
+ * button that opened the menu.
+ */
+describe('AppShell, where the focus goes when a menu closes', () => {
+  it('leaves the focus on what was pressed', async () => {
+    const fixture = await render();
+    const elsewhere = document.createElement('button');
+    document.body.append(fixture.nativeElement, elsewhere);
+
+    all(fixture, '[data-menu="account"]')[0].click();
+    fixture.detectChanges();
+    elsewhere.focus();
+    elsewhere.click();
+    fixture.detectChanges();
+
+    expect(all(fixture, '.menu')).toEqual([]);
+    expect(document.activeElement).toBe(elsewhere);
+
+    fixture.nativeElement.remove();
+    elsewhere.remove();
+  });
+
+  it('gives the focus back to the button on Escape', async () => {
+    const fixture = await render();
+    document.body.append(fixture.nativeElement);
+
+    all(fixture, '[data-menu="account"]')[0].click();
+    fixture.detectChanges();
+    all(fixture, '.menu button')[0].focus();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+
+    expect(all(fixture, '.menu')).toEqual([]);
+    expect(document.activeElement).toBe(
+      all(fixture, '[data-menu="account"]')[0]
+    );
+
+    fixture.nativeElement.remove();
+  });
+
+  it('gives the focus back to the button when a language is chosen', async () => {
+    const fixture = await render();
+    document.body.append(fixture.nativeElement);
+
+    all(fixture, '[data-menu="language"]')[0].click();
+    fixture.detectChanges();
+    all(fixture, '.menu button')[1].click();
+    fixture.detectChanges();
+
+    expect(document.activeElement).toBe(
+      all(fixture, '[data-menu="language"]')[0]
+    );
+
+    fixture.nativeElement.remove();
+  });
+});
+
+/** What plan 0041 says about the look of the two, read out of the source. */
+describe('AppShell, the sheet and the menus as the plan draws them', () => {
+  const source = readFileSync(join(__dirname, 'app-shell.ts'), 'utf8');
+
+  /** A 120 ms fade on the sheets, and no motion on the menus of the rail. */
+  it('fades the sheet and its scrim, and nothing else', () => {
+    const animated = [
+      ...source.matchAll(/((?:[.\w-]+,\s*)*[.\w-]+) \{\s*animation: ([^;]+);/g),
+    ].map((found) => [found[1].replace(/\s+/g, ' '), found[2]]);
+
+    expect(animated).toEqual([['.scrim, .sheet', 'appear 120ms ease-out']]);
+  });
+
+  /** Dark text on the near white, in the sheet as in the rail (section 2). */
+  it('writes the deployment in the sheet as it does in the rail', () => {
+    const base = /\n {4}\.deployment \{([^}]*)\}/.exec(source)?.[1] ?? '';
+    const inSheet =
+      /\n {4}\.sheet-head \.deployment \{([^}]*)\}/.exec(source)?.[1] ?? '';
+
+    expect(base).toContain('background: var(--admin-count);');
+    expect(base).toContain('color: var(--admin-ink);');
+    expect(inSheet).not.toMatch(/background|color:/);
+  });
+});

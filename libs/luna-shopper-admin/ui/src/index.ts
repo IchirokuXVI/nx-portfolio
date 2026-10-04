@@ -11,6 +11,7 @@ export * from './lib/confirm-dialog';
 export * from './lib/dashboard/block-notice';
 export * from './lib/dashboard/tile-view';
 export * from './lib/environment/environment-badge';
+export * from './lib/focus-trap';
 export * from './lib/harvest/harvest-notice';
 export * from './lib/harvest/queue-frame';
 export * from './lib/harvest/run-progress';

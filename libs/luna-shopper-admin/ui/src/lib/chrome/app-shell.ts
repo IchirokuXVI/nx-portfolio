@@ -1,19 +1,23 @@
 import { NgComponentOutlet } from '@angular/common';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   ElementRef,
   inject,
+  Injector,
   input,
   output,
   signal,
+  viewChild,
   type Type,
 } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { Deployment } from '@portfolio/luna-shopper-admin/models';
 import { MenuIcon } from '@portfolio/shared/ui';
+import { keepTabInside } from '../focus-trap';
 import { PAGE_FRAME_TABS, type PageTab } from '../page/page-tabs';
 
 /** One entry in the navigation: a section, or a screen inside one. */
@@ -254,9 +258,13 @@ export const BAR_SECTIONS = 4;
              document listener of this component already closes on. -->
         <div class="scrim"></div>
         <section
+          (keydown)="keepInside($event)"
           [attr.aria-label]="'shell.more' | rokuT"
+          #sheet
+          aria-modal="true"
           class="sheet"
           role="dialog"
+          tabindex="-1"
         >
           <p class="sheet-head">
             @if (deployment() !== undefined) {
@@ -315,7 +323,7 @@ export const BAR_SECTIONS = 4;
   `,
   host: {
     '(document:click)': 'pressed($event)',
-    '(document:keydown.escape)': 'closeMenu()',
+    '(document:keydown.escape)': 'closeMenu(true)',
   },
   styles: `
     :host {
@@ -559,10 +567,18 @@ export const BAR_SECTIONS = 4;
       padding-block-end: var(--admin-space-3);
     }
 
+    /* The same label as in the rail: dark text on the near white (plan 0041,
+       section 2). The sheet is the near white too, so here it gets a line
+       round it to stay a label. */
     .sheet-head .deployment {
-      background: var(--admin-nav-current);
+      border: 1px solid var(--admin-border-strong);
       font-size: 0.6875rem;
-      color: var(--admin-nav-current-ink);
+    }
+
+    /* The sheet takes the focus when it opens. It is not a control, so it
+       draws no ring. */
+    .sheet:focus {
+      outline: none;
     }
 
     .who {
@@ -621,8 +637,9 @@ export const BAR_SECTIONS = 4;
       white-space: nowrap;
     }
 
+    /* The sheet fades, as every sheet does. The two menus of the rail do not:
+       the plan names no motion for them. */
     @media (prefers-reduced-motion: no-preference) {
-      .menu,
       .scrim,
       .sheet {
         animation: appear 120ms ease-out;
@@ -639,6 +656,8 @@ export const BAR_SECTIONS = 4;
 })
 export class AppShell {
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _injector = inject(Injector);
+  private readonly _sheet = viewChild<ElementRef<HTMLElement>>('sheet');
 
   /**
    * The sections, in the order they are drawn.
@@ -745,15 +764,35 @@ export class AppShell {
 
   toggleMenu(name: 'language' | 'account' | 'more'): void {
     this.menu.update((open) => (open === name ? null : name));
+
+    if (this.menu() === 'more') {
+      // The sheet is modal: the focus moves into it when it opens, and
+      // `keepInside` holds Tab there until it closes.
+      afterNextRender(() => this._sheet()?.nativeElement.focus(), {
+        injector: this._injector,
+      });
+    }
+  }
+
+  /** Tab stays inside the "More" sheet while it is open. */
+  keepInside(event: KeyboardEvent): void {
+    const sheet = this._sheet()?.nativeElement;
+
+    if (sheet !== undefined) {
+      keepTabInside(event, sheet);
+    }
   }
 
   /**
    * Close whichever menu is open.
    *
-   * The focus goes back to the button that opened it, unless the operator
-   * followed a link, where the focus belongs to the page they went to.
+   * `refocus` gives the focus back to the button that opened it. That is right
+   * for Escape and for a choice made inside the menu, whose own button has
+   * just been taken off the screen. It is wrong for a link that was followed,
+   * where the focus belongs to the page, and for a press somewhere else, where
+   * it belongs to whatever was pressed.
    */
-  closeMenu(refocus = true): void {
+  closeMenu(refocus = false): void {
     const open = this.menu();
     if (open === null) {
       return;
@@ -770,7 +809,7 @@ export class AppShell {
 
   chooseContent(locale: string): void {
     this.chooseContentLocale.emit(locale);
-    this.closeMenu();
+    this.closeMenu(true);
   }
 
   leave(): void {

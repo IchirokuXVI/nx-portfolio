@@ -43,6 +43,12 @@ import { signInMessage } from './sign-in-copy';
   selector: 'lib-sign-in-page',
   imports: [FormsModule, RokuTranslatorPipe, EnvironmentBadge],
   template: `
+    <!-- The color of the deployment, at the top edge of the page (admin plan
+         0041, section 7): the same color the rail takes once the operator is
+         in. It is decoration for a reader that cannot see it, because the
+         badge in the form says the name of the deployment in words. -->
+    <div aria-hidden="true" class="band"></div>
+
     <main>
       <form (ngSubmit)="submit()" #form="ngForm" novalidate>
         <header>
@@ -89,6 +95,14 @@ import { signInMessage } from './sign-in-copy';
     :host {
       display: block;
       flex: 1;
+    }
+
+    /* 8 px, in the navigation color. Before the deployment is known, and when
+       it cannot be established, that token is the dark green grey that says
+       nothing, so the band never shows a color the API did not name. */
+    .band {
+      block-size: 0.5rem;
+      background: var(--admin-nav);
     }
 
     main {

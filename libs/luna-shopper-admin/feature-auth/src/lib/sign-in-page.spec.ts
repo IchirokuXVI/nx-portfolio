@@ -17,6 +17,8 @@ import {
   type AdminMe,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SignInPage } from './sign-in-page';
 
 /**
@@ -191,6 +193,45 @@ describe('SignInPage', () => {
       fixture.detectChanges();
 
       expect(text(fixture, '.name')).toBe('environment.staging');
+    });
+
+    /**
+     * Admin plan 0041, section 7: the page shows the color of the deployment
+     * as a band 8 px high at its top edge, which is the color the rail takes
+     * once the operator is in. Read out of the source, because a spec here
+     * loads no component styles.
+     */
+    it('draws a band in the deployment color at its top edge', async () => {
+      const { fixture } = await render({ session });
+      const host: HTMLElement = fixture.nativeElement;
+      const band = host.querySelector('.band');
+      const source = readFileSync(join(__dirname, 'sign-in-page.ts'), 'utf8');
+
+      expect(band).not.toBeNull();
+      expect(host.firstElementChild).toBe(band);
+      expect(source).toMatch(
+        /\.band \{\s*block-size: 0\.5rem;\s*background: var\(--admin-nav\);/
+      );
+    });
+
+    /**
+     * Color is never the only sign: the band is hidden from a screen reader
+     * and the name of the deployment is in the form, in words.
+     */
+    it('says the deployment in words beside the band', async () => {
+      const { fixture } = await render({ session });
+      TestBed.inject(DeploymentStore).load();
+      await drain();
+      fixture.detectChanges();
+
+      const host: HTMLElement = fixture.nativeElement;
+
+      expect(host.querySelector('.band')?.getAttribute('aria-hidden')).toBe(
+        'true'
+      );
+      expect(host.querySelector('form')?.textContent).toContain(
+        'environment.staging'
+      );
     });
   });
 

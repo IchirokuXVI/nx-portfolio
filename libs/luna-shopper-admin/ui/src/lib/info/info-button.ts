@@ -48,6 +48,7 @@ let nextId = 0;
       <lib-info-panel
         (closed)="close()"
         [align]="align()"
+        [anchor]="trigger"
         [headingId]="headingId"
         [info]="info()"
         [sheet]="compact()"
@@ -57,6 +58,7 @@ let nextId = 0;
   host: {
     '(document:click)': 'pressed($event)',
     '(document:keydown.escape)': 'close()',
+    '(focusout)': 'left($event)',
   },
   styles: `
     :host {
@@ -150,6 +152,30 @@ export class InfoButton {
 
     this.open.set(false);
     this._trigger().nativeElement.focus();
+  }
+
+  /**
+   * The focus left the button and its panel, on a wide screen.
+   *
+   * The panel there is not modal: Tab walks out of it and on down the page,
+   * and a panel left open behind the focus would cover what the operator is
+   * now working on. So it closes, and the focus stays where it went. The sheet
+   * on a phone keeps Tab inside itself, and is not closed by this.
+   *
+   * A focus that went nowhere (a press on plain text, another window) is left
+   * to the press handler below, which knows where the press landed.
+   */
+  left(event: FocusEvent): void {
+    const next = event.relatedTarget;
+
+    if (
+      this.open() &&
+      !this.compact() &&
+      next instanceof Node &&
+      !this._host.nativeElement.contains(next)
+    ) {
+      this.open.set(false);
+    }
   }
 
   /**
