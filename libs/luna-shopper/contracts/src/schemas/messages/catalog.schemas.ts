@@ -1879,7 +1879,7 @@ const deleteBrandResult = object(
     id: nonEmptyString(),
     movedItems: integer({
       description:
-        'Products that went back to unbranded, keeping the text this spelling was printed as.',
+        'Products that went back to unbranded, keeping the text this spelling was printed as. Always zero for a brand that was not a spelling.',
     }),
   },
   ['id', 'movedItems']

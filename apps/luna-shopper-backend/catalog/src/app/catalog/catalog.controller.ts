@@ -505,10 +505,12 @@ export class CatalogController {
   }
 
   /**
-   * Remove a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * The only brand a person may delete: its products go back to unbranded and
-   * its key returns to the suggestions list. Every other brand is refused.
+   * A spelling goes, its products go back to unbranded and its key returns to
+   * the suggestions list. Any other brand goes only when nothing points at it,
+   * and is refused with `brand_in_use` while a product holds it or a spelling
+   * is linked to it.
    */
   @MessagePattern(BRAND_PATTERNS.delete)
   deleteBrand(@Payload() req: DeleteBrandRequest): Promise<DeleteBrandResult> {

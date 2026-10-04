@@ -334,14 +334,31 @@ export class BrandLinkKeepsKeyException extends DomainException {
 }
 
 /**
- * A brand that is nobody's spelling cannot be deleted (plan 0124).
+ * A brand cannot be deleted while something points at it (the follow up of
+ * plan 0178).
  *
- * No details: the brand is the one the client asked about, and what it does
- * next is either link it to the brand it spells, or leave it alone.
+ * It publishes its details, because the number is what the back office says
+ * next: how many products hold the brand, under {@link BRAND_IN_USE_ITEMS_DETAIL},
+ * and how many spellings are linked to it, under
+ * {@link BRAND_IN_USE_LINKS_DETAIL}. Both are always present, and at least one
+ * is above zero. Nothing was written when this is thrown.
  */
-export class BrandNotLinkedException extends DomainException {
-  readonly code = ERROR_CODES.BRAND_NOT_LINKED;
+export class BrandInUseException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_IN_USE;
+  override readonly exposesDetails = true;
 }
+
+/**
+ * The `details` key a {@link BrandInUseException} counts the products that
+ * hold the brand under. The same word a brand view counts them with.
+ */
+export const BRAND_IN_USE_ITEMS_DETAIL = 'itemCount';
+
+/**
+ * The `details` key a {@link BrandInUseException} counts the spellings linked
+ * to the brand under. The same word a brand view counts them with.
+ */
+export const BRAND_IN_USE_LINKS_DETAIL = 'linkCount';
 
 /**
  * A homonym's printed key is the brand's own key (plan 0178).

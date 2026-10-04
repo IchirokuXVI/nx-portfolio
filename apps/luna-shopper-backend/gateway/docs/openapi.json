@@ -34292,7 +34292,7 @@
           },
           "movedItems": {
             "type": "integer",
-            "description": "Products that went back to unbranded, keeping the text this spelling was printed as."
+            "description": "Products that went back to unbranded, keeping the text this spelling was printed as. Always zero for a brand that was not a spelling."
           }
         },
         "required": [
@@ -41238,6 +41238,7 @@
               "brand_link_keeps_key",
               "brand_not_linked",
               "brand_homonym_is_own_key",
+              "brand_in_use",
               "place_already_imported",
               "place_matches_location",
               "scope_not_found",

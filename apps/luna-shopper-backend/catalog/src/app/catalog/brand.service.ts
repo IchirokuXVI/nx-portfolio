@@ -28,16 +28,18 @@ import {
   type UpdateBrandResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BRAND_IN_USE_ITEMS_DETAIL,
+  BRAND_IN_USE_LINKS_DETAIL,
   BRAND_KEY_HOLDER_DETAIL,
   BRAND_LINK_BLOCKER_DETAIL,
   BrandHomonymIsOwnKeyException,
+  BrandInUseException,
   BrandKeyTakenException,
   BrandLabelEmptyException,
   BrandLinkKeepsKeyException,
   BrandLinkOwnsNoChainException,
   BrandLinkTooDeepException,
   BrandLinkToSelfException,
-  BrandNotLinkedException,
   clampPageSize,
   decodeCursor,
   DomainException,
@@ -139,9 +141,11 @@ type BrandCursor = {
  *   be created under, and the curator chooses between the brands from the
  *   product.
  *
- * Nothing here creates a row on its own: a person creates every one. The only
- * row a person may delete is a spelling linked to another brand; every other
- * brand still cannot be removed, as section 9 of plan 0115 says.
+ * Nothing here creates a row on its own: a person creates every one. A person
+ * may delete two kinds of row: a spelling linked to another brand, whose
+ * products go back to unbranded, and a brand that nothing points at. A brand
+ * that a product holds, or that a spelling is linked to, is refused: section 9
+ * of plan 0115 still holds for it, because its products have nowhere to go.
  */
 @Injectable()
 export class BrandService {
@@ -523,20 +527,20 @@ export class BrandService {
   }
 
   /**
-   * Remove a spelling, and put its products back where it found them.
+   * Delete a brand: a spelling, or a brand that nothing points at.
    *
-   * **Only a brand that is a spelling of another may go** (plan 0124). Its
-   * products are the ones carrying its key on its canonical brand, and deleting
-   * it hands them back the state they were in before it was registered:
-   * unbranded, still printed with the text this spelling names. So its key
-   * returns to the suggestions list of its own accord, because `brand.keys`
-   * stops answering it, and registering the same spelling again picks the same
-   * products up through {@link linkUnlinkedItems}. Every other brand still
-   * cannot be removed, by section 9 of plan 0115, because its products have
-   * nowhere to go.
+   * **A spelling of another brand** goes and puts its products back where it
+   * found them (plan 0124). Its products are the ones carrying its key on its
+   * canonical brand, and deleting it hands them back the state they were in
+   * before it was registered: unbranded, still printed with the text this
+   * spelling names. So its key returns to the suggestions list of its own
+   * accord, because `brand.keys` stops answering it, and registering the same
+   * spelling again picks the same products up through
+   * {@link linkUnlinkedItems}. One `DELETE` row in the trail and none per
+   * product, the rule plan 0115 set for every bulk move here.
    *
-   * One `DELETE` row in the trail and none per product, the rule plan 0115 set
-   * for every bulk move here.
+   * **Every other brand** goes through {@link removeUnlinked}, which deletes it
+   * only when nothing points at it.
    */
   async remove(req: DeleteBrandRequest): Promise<DeleteBrandResult> {
     const actor = await this.admin.requireAdmin(req);
@@ -549,9 +553,7 @@ export class BrandService {
         throw new NotFoundException('Brand not found');
       }
       if (row.canonicalBrandId === null) {
-        throw new BrandNotLinkedException(
-          'Only a brand that is a spelling of another brand can be deleted.'
-        );
+        return this.removeUnlinked(tx, row);
       }
       const canonical = await this.canonicalOf(tx.manager, row);
       const moved = await tx.manager
@@ -566,6 +568,69 @@ export class BrandService {
       await tx.delete(Brand, row);
       return { id: req.brandId, movedItems: moved.affected ?? 0 };
     });
+  }
+
+  /**
+   * Delete a brand that is nobody's spelling, if nothing points at it (the
+   * follow up of plan 0178).
+   *
+   * This is how a registry row that was never a brand leaves, such as `D.O.`,
+   * which means Denominación de Origen. **It is safe by refusal, never by
+   * cascade onto products.** Three things in catalog point at a brand, and the
+   * schema decides each:
+   *
+   * - `items.brandId`, which the foreign key would set to null. That would
+   *   unbrand every product the brand holds without a person deciding it, so a
+   *   brand that a product holds is refused.
+   * - `brands.canonicalBrandId`, which the foreign key would also set to null.
+   *   That would turn every spelling into a brand of its own while its products
+   *   still sit on a row that is gone, so a brand that a spelling is linked to
+   *   is refused.
+   * - `brand_homonyms.brandId`, which cascades. A homonym says only that a
+   *   printed key also names this brand, so it means nothing without the brand
+   *   and it goes with it. Each one is deleted here, through the trail, rather
+   *   than left to the cascade, so the trail says which printed keys stopped
+   *   naming a brand.
+   *
+   * No item is read for writing and none is written: `movedItems` is always
+   * zero. The key leaves the registry with the row, so `brand.keys` stops
+   * answering it and no CREATE has to be written under it.
+   *
+   * **The caller holds the row lock**, and the counts are read under it. A
+   * write that would point a spelling at this brand locks this row first, and a
+   * write that sets an item's `brandId` takes the foreign key's share lock on
+   * it, so both wait for this transaction. After the commit they find no brand,
+   * which is why the counts cannot go stale between the read and the delete.
+   */
+  private async removeUnlinked(
+    tx: AuditedWrite,
+    row: Brand
+  ): Promise<DeleteBrandResult> {
+    const id = row.id;
+    const itemCount = await tx.manager.count(Item, { where: { brandId: id } });
+    const linkCount = await tx.manager.count(Brand, {
+      where: { canonicalBrandId: id },
+    });
+    if (itemCount > 0 || linkCount > 0) {
+      throw new BrandInUseException(
+        'A brand that products hold, or that spellings are linked to, cannot be deleted.',
+        {
+          details: {
+            [BRAND_IN_USE_ITEMS_DETAIL]: itemCount,
+            [BRAND_IN_USE_LINKS_DETAIL]: linkCount,
+          },
+        }
+      );
+    }
+    const homonyms = await tx.manager.find(BrandHomonym, {
+      where: { brandId: id },
+      order: { printedKey: 'ASC' },
+    });
+    for (const homonym of homonyms) {
+      await tx.delete(BrandHomonym, homonym);
+    }
+    await tx.delete(Brand, row);
+    return { id, movedItems: 0 };
   }
 
   async get(req: BrandIdRequest): Promise<BrandView> {

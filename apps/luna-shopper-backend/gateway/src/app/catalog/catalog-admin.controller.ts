@@ -1012,9 +1012,10 @@ export class AdminCatalogCategoriesController {
  * the brands the catalog holds because there was no such list. These routes are
  * the list, plus the one read that says how each chain spells a brand.
  *
- * **The only brand that can be deleted is a spelling of another** (plan 0124).
- * Everything else still cannot be removed, by section 9 of plan 0115, because
- * its products have nowhere to go.
+ * **A brand can be deleted when it is a spelling of another** (plan 0124), **or
+ * when nothing points at it** (the follow up of plan 0178). A brand that a
+ * product holds still cannot be removed, by section 9 of plan 0115, because its
+ * products have nowhere to go.
  *
  * There is no `key` anywhere in a request body: the key is made from the label,
  * and editing the label is the only thing that changes it.
@@ -1197,14 +1198,20 @@ export class AdminCatalogBrandsController {
   }
 
   /**
-   * Remove a spelling (plan 0124).
+   * Delete a brand (plan 0124, and the follow up of plan 0178).
    *
-   * **The only brand that can be deleted is one linked to another**, and every
-   * other brand answers 409 `brand_not_linked`. Deleting a spelling puts its
-   * products back where it found them, unbranded and still carrying the text
-   * the chain printed, so the key returns to the suggestions list on its own and
+   * **A brand linked to another is a spelling.** Deleting it puts its products
+   * back where it found them, unbranded and still carrying the text the chain
+   * printed, so the key returns to the suggestions list on its own and
    * registering it again picks the same products up. `movedItems` is how many
    * went back.
+   *
+   * **Any other brand is deleted only when nothing points at it**, which is how
+   * a registry row that was never a brand leaves. Its homonyms go with it and
+   * `movedItems` is zero. While a product holds it or a spelling is linked to
+   * it, the answer is 409 `brand_in_use`, with `itemCount` and `linkCount` in
+   * `details`, and nothing is written: the delete never unbrands a product and
+   * never moves one. Move the products and the spellings first.
    */
   @Delete(':id')
   @ApiContractResponse(BRAND_PATTERNS.delete)
