@@ -3,6 +3,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
+  type ItemView,
   type SupermarketLocationView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -73,6 +74,7 @@ const ITEM_BREAD = '01820000-0000-4000-8000-0000000000b1';
 
 const RUN_1 = '01820000-0000-4000-8000-0000000000c1';
 const RUN_2 = '01820000-0000-4000-8000-0000000000c2';
+const RUN_3 = '01820000-0000-4000-8000-0000000000c3';
 
 const ADMIN = '01820000-0000-4000-8000-0000000000d1';
 
@@ -109,6 +111,16 @@ const SECOND_LISTING: FakeProduct[] = [
   { description: 'Magdalenas ALTEZA 500 g', section: 'W051', shops: ['Z1'] },
 ];
 
+/**
+ * The chain reworded the bread. Its row is keyed on the printed name, so this
+ * is a new row, and the popup of the new one names C1 only.
+ */
+const REWORDED_LISTING: FakeProduct[] = [
+  { description: 'Molde de pan ALTEZA 450 g', section: 'W051', shops: ['C1'] },
+  { description: 'Croissants ALTEZA 360 g', section: 'W051', shops: ['T1'] },
+  { description: 'Magdalenas ALTEZA 500 g', section: 'W051', shops: ['Z1'] },
+];
+
 interface LocationWrite {
   supermarketLocationId: string;
   entries: { itemId: string; available: boolean }[];
@@ -141,6 +153,8 @@ describeIntegration(
     let scopeWrites: ScopeWrite[];
     /** The chain's default scope, which a test can take away. */
     let defaultScope: string | null;
+    /** What catalog holds, which is what the ladder can propose. */
+    let catalogItems: ItemView[];
 
     let listing: FakeListing | undefined;
 
@@ -167,9 +181,9 @@ describeIntegration(
         }) as unknown as SupermarketLocationView;
 
       catalog = {
-        // An empty catalog: no row of the run resolves to a product, which is
-        // what the first run of a chain looks like.
-        searchItems: async () => ({ items: [], nextCursor: null }),
+        // Empty unless a test fills it: no row of the run resolves to a
+        // product, which is what the first run of a chain looks like.
+        searchItems: async () => ({ items: catalogItems, nextCursor: null }),
         findItemByEan: async () => ({ item: null }),
         fillPackCounts: async () => ({ written: 0 }),
         addPrices: async () => ({ inserted: 0, confirmed: 0 }),
@@ -248,6 +262,7 @@ describeIntegration(
       locationWrites = [];
       scopeWrites = [];
       defaultScope = DEFAULT_SCOPE;
+      catalogItems = [];
       await clean();
     });
 
@@ -561,6 +576,132 @@ describeIntegration(
         [LOC_C1]: [{ itemId: ITEM_BREAD, available: true }],
       });
     }, 120_000);
+
+    it('lets the newest run speak, over a row the chain stopped listing', async () => {
+      // Run 1: the bread is at T1, and its row is bound.
+      await run(RUN_1, FIRST_LISTING);
+      const old = await rowOf('pan');
+      await accept(old, ITEM_BREAD);
+
+      // Run 2: the chain reworded the listing. A DEZA row is keyed on the
+      // printed name, so this is a new row, and the old one is never seen
+      // again: its claim for T1 stays `true` in the table for ever.
+      await run(RUN_2, REWORDED_LISTING);
+      const reworded = await rowOf('molde');
+      expect(reworded.id).not.toBe(old.id);
+      expect((await stored())['pan@T1']).toEqual({
+        available: true,
+        runId: RUN_1,
+      });
+      expect((await stored())['molde@T1']).toEqual({
+        available: false,
+        runId: RUN_2,
+      });
+      locationWrites = [];
+
+      // The same product, as a person says. The popup no longer names T1.
+      await accept(reworded, ITEM_BREAD);
+
+      // What run 2 said, and not "true if any row ever said true".
+      expect(locationWrites).toEqual([
+        {
+          supermarketLocationId: LOC_T1,
+          entries: [{ itemId: ITEM_BREAD, available: false }],
+          runId: RUN_2,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        },
+      ]);
+
+      // And the end of the next run says the same, as that run.
+      locationWrites = [];
+      await run(RUN_3, REWORDED_LISTING);
+      expect(locationWrites).toEqual([
+        {
+          supermarketLocationId: LOC_T1,
+          entries: [{ itemId: ITEM_BREAD, available: false }],
+          runId: RUN_3,
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        },
+      ]);
+    }, 120_000);
+
+    describe('a row a match proposed and nobody accepted', () => {
+      /**
+       * A first run only reads how the bread is parsed, and its rows are
+       * thrown away. Then catalog holds a product with that name, brand and
+       * size, so the ladder of the run that counts proposes it on first sight:
+       * the row is a `CANDIDATE` carrying that product's id.
+       */
+      async function proposed(): Promise<{
+        row: SourceCatalogEntry;
+        written: RunReportResult;
+      }> {
+        await run(RUN_1, FIRST_LISTING);
+        const seen = await rowOf('pan');
+        catalogItems = [
+          {
+            id: ITEM_BREAD,
+            name: { es: seen.name },
+            brand: seen.brand,
+            ean: null,
+            unitSize: seen.unitSize === null ? null : Number(seen.unitSize),
+          } as unknown as ItemView,
+        ];
+        await clean();
+        locationWrites = [];
+        scopeWrites = [];
+        const written = await run(RUN_2, FIRST_LISTING);
+        const row = await rowOf('pan');
+        // The precondition, or nothing below proves anything.
+        expect(row.status).toBe(SourceEntryStatus.CANDIDATE);
+        expect(row.itemId).toBe(ITEM_BREAD);
+        return { row, written };
+      }
+
+      it('sends nothing at the end of the run, and counts as waiting for a binding', async () => {
+        const { written } = await proposed();
+
+        // T1 is mapped and the row names a product, and still nothing goes:
+        // no automated match binds a printed name to a product.
+        expect(locationWrites).toEqual([]);
+        expect(scopeWrites).toEqual([]);
+        expect(written).toMatchObject({
+          claimsStored: 9,
+          claimsWritten: 0,
+          claimsWaiting: 9,
+          claimsWaitingForBinding: 9,
+          claimsWaitingForShop: 0,
+          shopsWritten: 0,
+        });
+      }, 120_000);
+
+      it('sends nothing when a shop is mapped', async () => {
+        await proposed();
+
+        await locations.map({
+          userId: ADMIN,
+          sourceLocationId: (await shopOf('C1')).id,
+          supermarketLocationId: LOC_C1,
+        });
+
+        expect(locationWrites).toEqual([]);
+      }, 120_000);
+
+      it('sends its claims when a person accepts it', async () => {
+        const { row } = await proposed();
+
+        await accept(row, ITEM_BREAD);
+
+        expect(locationWrites).toEqual([
+          {
+            supermarketLocationId: LOC_T1,
+            entries: [{ itemId: ITEM_BREAD, available: true }],
+            runId: RUN_2,
+            sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          },
+        ]);
+      }, 120_000);
+    });
 
     it('deletes a claim with its row, and with its shop', async () => {
       await run(RUN_1, FIRST_LISTING);

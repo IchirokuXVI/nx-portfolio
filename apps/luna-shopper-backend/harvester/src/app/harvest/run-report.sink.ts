@@ -143,7 +143,7 @@ export interface RunReportResult {
    */
   claimsStored: number;
   /**
-   * Of those, the claims whose row names a product and whose shop names a
+   * Of those, the claims whose row is bound to a product and whose shop names a
    * location, which is what reached catalog. Not {@link availabilityWritten}:
    * that one counts the rows catalog changed, and a claim catalog already held
    * changes nothing.
@@ -151,7 +151,7 @@ export interface RunReportResult {
   claimsWritten: number;
   /** Of those, the claims still waiting, which is the next two added up. */
   claimsWaiting: number;
-  /** Claims whose row no product is bound to yet. */
+  /** Claims whose row is not bound yet, a `CANDIDATE` proposal included. */
   claimsWaitingForBinding: number;
   /** Claims whose row is bound and whose shop no location is mapped to yet. */
   claimsWaitingForShop: number;

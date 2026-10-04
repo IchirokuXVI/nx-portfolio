@@ -30,22 +30,32 @@ import { openPrices } from './source-entry-write';
  * - **A run ends**: {@link writeForRun}.
  *
  * All three read the table through {@link send}, so what "ready" means is
- * stated once: the row names a product and the shop names a location.
+ * stated once: the row is bound to a product and the shop names a location.
  *
- * **A row that names a product, whatever its status.** A `CANDIDATE` row
- * carries the product a fuzzy match proposed, and its claims are sent, which is
- * what a run did before this table existed (plan 0085): DEZA publishes no EAN,
- * so an `ACTIVE` row there is only ever one a person accepted, and reading
- * `ACTIVE` alone would silence every run until the queue was drained. A price
- * is different, and stays `ACTIVE` only.
+ * **Bound means `ACTIVE`, and {@link BOUND} is the one place that says so.** A
+ * `CANDIDATE` row carries the product a fuzzy match proposed, and its claims
+ * are **not** sent: no automated match binds a printed name to a product, and
+ * catalog turns a shop's claim into an available offer, so a match nobody
+ * accepted would show a product as sold by the chain with nothing to take it
+ * back. Its claims wait in the table as "waiting for a binding" and are sent
+ * when a person accepts the row. Before this table existed a run sent them
+ * (plan 0085), because a claim not sent at the end of the run was lost. It is
+ * not lost any more.
  *
- * ## Two rows of one product
+ * ## Two rows of one product, and a row the chain stopped listing
  *
  * A chain can list one product twice, and both rows can be bound to it. The
  * product is stocked at a shop when **either** row says so: the false would be
  * a claim the source never made about the product. So the answer is worked out
- * per product and shop over every row bound to the product, never per row, and
+ * per product and shop over the rows bound to the product, never per row, and
  * binding a second row cannot overwrite what the first one said.
+ *
+ * **Only the claims of the newest run that spoke about the product at that
+ * shop are read.** A claim is a fact about one run, and a later run replaces
+ * it. A row the chain stopped listing keeps its last claim for ever, because
+ * no run upserts it again: a reworded DEZA listing is a new row, since the row
+ * is keyed on the printed name. Reading every claim would let the old row's
+ * true outvote what the newest run said, for good.
  *
  * ## It never deletes
  *
@@ -76,11 +86,11 @@ export interface AvailabilitySent {
 export interface RunClaimCounts {
   /** Every claim of the run that the table holds. */
   stored: number;
-  /** Claims whose row names a product and whose shop names a location. */
+  /** Claims whose row is bound (`ACTIVE`) and whose shop names a location. */
   written: number;
-  /** Claims whose row names no product yet. */
+  /** Claims whose row is not bound yet, a `CANDIDATE` proposal included. */
   waitingForBinding: number;
-  /** Claims whose row names a product and whose shop is not mapped. */
+  /** Claims whose row is bound and whose shop is not mapped. */
   waitingForShop: number;
 }
 
@@ -94,6 +104,15 @@ interface ReadyClaim {
   observedAt: Date;
   runId: string | null;
 }
+
+/**
+ * What makes a row bound, for a claim to be sent: a person, or the EAN rung,
+ * decided which product it is. Over `source_catalog_entries` aliased `e`.
+ *
+ * One predicate, used by the send and by the counts, so that changing what
+ * "bound" means is changing this line.
+ */
+const BOUND = `(e."status" = 'ACTIVE' AND e."itemId" IS NOT NULL)`;
 
 /** How many claims one upsert carries. */
 const STORE_CHUNK = 5000;
@@ -202,15 +221,16 @@ export class SourceEntryAvailabilityWriter {
   /**
    * What a run stated, for the rows and shops that are ready as it ends.
    *
-   * A product is sent when this run stated a claim about it at that shop. The
-   * value is still worked out over every row bound to the product, so a row an
-   * earlier run saw at the shop is not contradicted by this run's other row.
+   * A product is sent for a shop when this run is the newest one that stated a
+   * claim about it there, which at the end of a run is every pair the run
+   * named. The value is what this run's rows said, and a row only an earlier
+   * run saw has no say.
    */
   writeForRun(runId: string, supermarketId: string): Promise<AvailabilitySent> {
     return this.send(
       `e."supermarketId" = $1::uuid`,
       [supermarketId, runId],
-      `HAVING bool_or(a."runId" = $2::uuid)`
+      `AND r."newestRunId" = $2::uuid`
     );
   }
 
@@ -221,14 +241,14 @@ export class SourceEntryAvailabilityWriter {
         `
         SELECT count(*)::int AS "stored",
                count(*) FILTER (
-                 WHERE e."itemId" IS NOT NULL
+                 WHERE ${BOUND}
                    AND l."supermarketLocationId" IS NOT NULL
                )::int AS "written",
                count(*) FILTER (
-                 WHERE e."itemId" IS NULL
+                 WHERE NOT ${BOUND}
                )::int AS "waitingForBinding",
                count(*) FILTER (
-                 WHERE e."itemId" IS NOT NULL
+                 WHERE ${BOUND}
                    AND l."supermarketLocationId" IS NULL
                )::int AS "waitingForShop"
           FROM "source_entry_availability" a
@@ -281,33 +301,55 @@ export class SourceEntryAvailabilityWriter {
    * Read the claims that are ready and send them, one call per catalog
    * location, source kind and run.
    *
-   * `where` narrows which products and shops are read. The two conditions that
-   * make a claim ready are here and nowhere else.
+   * `where` narrows which products and shops are read, over the aliases `a`,
+   * `e` and `l`. `newest` narrows further by the newest run of a pair, over
+   * `r`. The two conditions that make a claim ready are here and nowhere else.
+   *
+   * Of the ready claims of one product at one catalog location, only those of
+   * the newest run are kept, and the product is stocked when any of those says
+   * so. Every claim of one run carries one `observedAt`, so the newest claim
+   * names the newest run.
    */
   private async send(
     where: string,
     parameters: unknown[],
-    having = ''
+    newest = ''
   ): Promise<AvailabilitySent> {
     const ready: ReadyClaim[] = await this.claims.query(
       `
-      SELECT l."supermarketLocationId"::text AS "supermarketLocationId",
-             min(l."externalId")             AS "shopCode",
-             e."itemId"::text                AS "itemId",
-             e."sourceKind"::text            AS "sourceKind",
-             bool_or(a."available")          AS "available",
-             max(a."observedAt")             AS "observedAt",
-             (array_agg(a."runId" ORDER BY a."observedAt" DESC, a."id" ASC))[1]::text
-                                             AS "runId"
-        FROM "source_entry_availability" a
-        JOIN "source_catalog_entries" e ON e."id" = a."entryId"
-        JOIN "source_locations" l ON l."id" = a."sourceLocationId"
-       WHERE e."itemId" IS NOT NULL
-         AND l."supermarketLocationId" IS NOT NULL
-         AND ${where}
-       GROUP BY l."supermarketLocationId", e."itemId", e."sourceKind"
-       ${having}
-       ORDER BY l."supermarketLocationId", e."sourceKind", e."itemId"
+      WITH r AS (
+        SELECT l."supermarketLocationId" AS "supermarketLocationId",
+               l."externalId"            AS "shopCode",
+               e."itemId"                AS "itemId",
+               e."sourceKind"            AS "sourceKind",
+               a."available"             AS "available",
+               a."observedAt"            AS "observedAt",
+               a."runId"                 AS "runId",
+               first_value(a."runId") OVER (
+                 PARTITION BY l."supermarketLocationId", e."itemId",
+                              e."sourceKind"
+                 ORDER BY a."observedAt" DESC, a."id" ASC
+               )                         AS "newestRunId"
+          FROM "source_entry_availability" a
+          JOIN "source_catalog_entries" e ON e."id" = a."entryId"
+          JOIN "source_locations" l ON l."id" = a."sourceLocationId"
+         WHERE ${BOUND}
+           AND l."supermarketLocationId" IS NOT NULL
+           AND ${where}
+      )
+      SELECT r."supermarketLocationId"::text AS "supermarketLocationId",
+             min(r."shopCode")               AS "shopCode",
+             r."itemId"::text                AS "itemId",
+             r."sourceKind"::text            AS "sourceKind",
+             bool_or(r."available")          AS "available",
+             max(r."observedAt")             AS "observedAt",
+             r."newestRunId"::text           AS "runId"
+        FROM r
+       WHERE r."runId" IS NOT DISTINCT FROM r."newestRunId"
+         ${newest}
+       GROUP BY r."supermarketLocationId", r."itemId", r."sourceKind",
+                r."newestRunId"
+       ORDER BY r."supermarketLocationId", r."sourceKind", r."itemId"
       `,
       parameters
     );
