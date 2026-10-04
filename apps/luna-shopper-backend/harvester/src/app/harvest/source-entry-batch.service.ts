@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   BULK_DECISION_MAX_OPERATIONS,
   BulkOperationErrorCode,
-  productGtin,
   SourceEntryStatus,
   type ApplySourceEntryDecisionsRequest,
   type ApplySourceEntryDecisionsResult,
@@ -30,7 +29,6 @@ import { createdSize } from './source-entry-size';
 import {
   bindFields,
   createdEan,
-  matchOf,
   SourceEntryPriceWriter,
 } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -149,15 +147,13 @@ export class SourceEntryBatchService {
       return refusedAt('VALIDATE', runId, checked, null);
     }
     const creates = operations.filter(isCreate);
-    // Every named row, as it stands outside the lock: the creates read their
-    // defaults from it, and every operation reads the barcode it printed.
-    const allRows = await this.entries.find({
-      where: { id: In(operations.map((operation) => operation.entryId)) },
-    });
-    const byId = new Map(allRows.map((row) => [row.id, row]));
-    const rows = creates
-      .map((operation) => byId.get(operation.entryId))
-      .filter((row): row is SourceCatalogEntry => row !== undefined);
+    const rows =
+      creates.length > 0
+        ? await this.entries.find({
+            where: { id: In(creates.map((operation) => operation.entryId)) },
+          })
+        : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
     // What each chain prints its own text in, so a row accepted with no name
     // of its own files the printed string under the right language (plan
     // 0111, section 7), and how its category is read (plan 0174, section 7).
@@ -182,10 +178,6 @@ export class SourceEntryBatchService {
     if (unplaced.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, unplaced, null);
     }
-    // The barcode of every product an accept names, read before anything is
-    // written (plan 0184). It is a round trip to catalog, so it cannot wait
-    // for the transaction that binds the rows.
-    const eanOfItem = await this.eansOfAcceptedItems(operations, byId);
 
     // --- Step 2: create every product ---------------------------------------
     let created: ItemView[] = [];
@@ -234,8 +226,6 @@ export class SourceEntryBatchService {
     const byRef = new Map<string, string>();
     creates.forEach((operation, index) => {
       byRef.set(operation.ref, created[index].id);
-      // What catalog stored, which is what a bind is compared against.
-      eanOfItem.set(created[index].id, created[index].ean ?? null);
     });
 
     // --- Step 3: bind every row ---------------------------------------------
@@ -255,12 +245,7 @@ export class SourceEntryBatchService {
               : (operation.itemId ??
                 (byRef.get(operation.itemRef as string) as string));
           const row = rows.get(operation.entryId) as SourceCatalogEntry;
-          // `EAN` when the product holds the row's own real barcode, `MANUAL`
-          // otherwise (plan 0184).
-          await manager.save(
-            SourceCatalogEntry,
-            bindFields(row, itemId, now, matchOf(row, eanOfItem.get(itemId)))
-          );
+          await manager.save(SourceCatalogEntry, bindFields(row, itemId, now));
           outcomes[index].itemId = itemId;
           outcomes[index].applied = true;
         }
@@ -463,41 +448,6 @@ export class SourceEntryBatchService {
       }
     }
     return outcomes;
-  }
-
-  /**
-   * The barcode of every product an `accept` names by id, keyed by that id
-   * (plan 0184), so the bind can say whether the barcode is what matched.
-   *
-   * Asked the way {@link checkEans} asks: who holds the barcodes these rows
-   * print, in **one** round trip for the whole file. A barcode is unique in
-   * catalog, so the product an accept names either is that holder or does not
-   * carry the row's barcode at all, and then it is not in the answer and the
-   * bind says `MANUAL`. A row with no real barcode asks nothing.
-   */
-  private async eansOfAcceptedItems(
-    operations: readonly SourceEntryDecisionOperation[],
-    rows: ReadonlyMap<string, SourceCatalogEntry>
-  ): Promise<Map<string, string | null>> {
-    const printed = new Set<string>();
-    for (const operation of operations) {
-      if (operation.op !== 'accept' || !operation.itemId) {
-        continue;
-      }
-      const gtin = productGtin(rows.get(operation.entryId)?.ean);
-      if (gtin !== null) {
-        printed.add(gtin);
-      }
-    }
-    const eanOfItem = new Map<string, string | null>();
-    if (printed.size === 0) {
-      return eanOfItem;
-    }
-    const { items } = await this.catalog.findItemsByEans([...printed]);
-    for (const item of items) {
-      eanOfItem.set(item.id, item.ean ?? null);
-    }
-    return eanOfItem;
   }
 
   /**

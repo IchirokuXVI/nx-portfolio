@@ -99,7 +99,7 @@ unique index, velista.
       is refused with the named code, as chosen. Chosen: refused, with `NAME_EN_MISSING`.
 - [x] A harvester spec: a create from a row whose EAN starts with 2 writes a product with a
       null EAN, and the row keeps its code.
-- [x] A harvester spec: accepting a row onto a product with the same real EAN stamps
+- [ ] A harvester spec: accepting a row onto a product with the same real EAN stamps
       `EAN`. Accepting onto a product with no EAN stamps `MANUAL`.
 - [x] A gateway spec: item create with an 11 digit EAN answers 400 with the named code.
       The code is `item_ean_invalid`.
@@ -114,3 +114,36 @@ English, and before adding a model call to the bulk route.
 ### Progress evidence
 
 Report each criterion with its spec output.
+
+## Target state 7 was not built
+
+**The decision.** On 2026-10-04 the owner decided that a decision keeps `MANUAL`, as before
+this plan. `accept`, `createItem` and the bulk route stamp `MANUAL` on every row they bind,
+also when the product holds the row's own real barcode. Target state 7 and its acceptance
+criterion are not built. Everything else in this plan is built.
+
+**Why.** `unbindSharedEans` (plan 0155, `source-ingest.ts`) unbinds every `ACTIVE` row
+stamped `EAN` whose barcode a second row of the same chain prints. It skips `MANUAL` rows.
+So a decision stamped `EAN` is reopened by the next run: the row goes back to `CANDIDATE`
+and its prices stop. Accepting it again stamps `EAN` again, and the next run reopens it
+again.
+
+No column separates a person's decision from a bind the ingest made:
+
+- The ingest's own EAN bind also sets `decidedAt`. It does so in `touch`, for a row that
+  learns an EAN (`row.decidedAt = seenAt`), and in `create`, for a new row that matches by
+  EAN (`draft.decidedAt = seenAt`).
+- `confidence` is 1 for both.
+- Nothing records who bound a row.
+
+**The alternatives, if this must change later.**
+
+1. Add a column on `source_catalog_entries` that says a person decided, with its
+   migration. The unbind then skips those rows, and a decision can be stamped `EAN`
+   safely. Take this option if `matchedBy` must say what matched.
+2. Stamp `EAN` only when no other row of the chain prints the barcode. A later row with
+   the same barcode still reopens the decision.
+3. Change the rule of the unbind in some other way.
+
+**What stays true today.** Every bound row that a person decided says `MANUAL`. The 21,751
+rows of the audit keep reading that way.

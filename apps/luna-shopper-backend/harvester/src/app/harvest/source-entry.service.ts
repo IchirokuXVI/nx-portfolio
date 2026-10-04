@@ -8,7 +8,6 @@ import {
   HarvestRunStatus,
   ItemSourceMatch,
   PriceSourceKind,
-  productGtin,
   SourceEntryStatus,
   type AcceptSourceEntryRequest,
   type BrandSpellingsRequest,
@@ -57,7 +56,6 @@ import { createdSize } from './source-entry-size';
 import {
   bindFields,
   createdEan,
-  matchOf,
   SourceEntryPriceWriter,
 } from './source-entry-write';
 import { SupermarketSourceService } from './supermarket-source.service';
@@ -331,11 +329,7 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
-    const bound = await this.bind(
-      entry,
-      req.itemId,
-      await this.matchOnAccept(entry, req.itemId)
-    );
+    const bound = await this.bind(entry, req.itemId);
     const pricesWritten = await this.writeRowPrices(bound);
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -438,9 +432,7 @@ export class SourceEntryService {
       defaultUnit: size.unit,
     });
 
-    // The product was created with the row's own barcode when it has a real
-    // one, and then the barcode is what joins the two (plan 0184).
-    const bound = await this.bind(entry, item.id, matchOf(entry, item.ean));
+    const bound = await this.bind(entry, item.id);
     const pricesWritten = await this.writeRowPrices(bound);
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -774,7 +766,7 @@ export class SourceEntryService {
   }
 
   /**
-   * ACTIVE and bound: a decision was made, so the confidence is 1.
+   * ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1.
    *
    * The fields it sets are {@link bindFields}, shared with the bulk replay of
    * plan 0100 so that what "accepting a row" means to the database is stated
@@ -783,35 +775,11 @@ export class SourceEntryService {
    */
   private async bind(
     entry: SourceCatalogEntry,
-    itemId: string,
-    matchedBy: ItemSourceMatch
+    itemId: string
   ): Promise<SourceCatalogEntry> {
-    const saved = await this.entries.save(
-      bindFields(entry, itemId, new Date(), matchedBy)
-    );
+    const saved = await this.entries.save(bindFields(entry, itemId));
     saved.prices = entry.prices ?? [];
     return saved;
-  }
-
-  /**
-   * What matched the row to the product an accept names (plan 0184): `EAN`
-   * when the product holds the row's own real barcode, `MANUAL` otherwise.
-   *
-   * A barcode is unique in catalog, so asking who holds the row's barcode
-   * answers it in one read. A row with no real barcode asks nothing.
-   */
-  private async matchOnAccept(
-    entry: SourceCatalogEntry,
-    itemId: string
-  ): Promise<ItemSourceMatch> {
-    const printed = productGtin(entry.ean);
-    if (printed === null) {
-      return ItemSourceMatch.MANUAL;
-    }
-    const { item } = await this.catalog.findItemByEan(printed);
-    return item?.id === itemId
-      ? matchOf(entry, item.ean)
-      : ItemSourceMatch.MANUAL;
   }
 
   /**

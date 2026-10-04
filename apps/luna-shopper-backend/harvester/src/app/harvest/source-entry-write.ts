@@ -21,7 +21,7 @@ import { toItemPriceDetails } from './harvest.mappers';
  */
 
 /**
- * ACTIVE and bound: a decision was made, so the confidence is 1.
+ * ACTIVE, bound, and MANUAL: a person decided, so the confidence is 1.
  *
  * Mutates and returns the row rather than saving it, because the caller decides
  * whether the save goes through a repository or through the entity manager of a
@@ -32,45 +32,25 @@ import { toItemPriceDetails } from './harvest.mappers';
  * resolves through this row (plan 0086, D8). `ean` is untouched too: the row
  * keeps what the chain printed, an in-store code included (plan 0184).
  *
- * **`matchedBy` says what matched** (plan 0184), and the caller states it,
- * through {@link matchOf}. It was `MANUAL` on every decision, so 21,751 bound
- * rows said a person matched them although most were bound to the product that
- * carries their own barcode.
+ * **Always `MANUAL`, also when the product holds the row's own barcode.** Plan
+ * 0184 asked for `EAN` in that case, and the owner decided against it on
+ * 2026-10-04. `unbindSharedEans` in `source-ingest.ts` unbinds an `ACTIVE` row
+ * stamped `EAN` when a second row of the chain prints the same barcode, and it
+ * skips `MANUAL` rows, so `MANUAL` is the only thing that keeps a run from
+ * reopening a person's decision. The plan file records the alternatives.
  */
 export function bindFields(
   entry: SourceCatalogEntry,
   itemId: string,
-  now: Date = new Date(),
-  matchedBy: ItemSourceMatch = ItemSourceMatch.MANUAL
+  now: Date = new Date()
 ): SourceCatalogEntry {
   entry.itemId = itemId;
   entry.candidateEntryId = null;
   entry.status = SourceEntryStatus.ACTIVE;
-  entry.matchedBy = matchedBy;
+  entry.matchedBy = ItemSourceMatch.MANUAL;
   entry.confidence = 1;
   entry.decidedAt = now;
   return entry;
-}
-
-/**
- * What matched a row to the product a decision binds it to (plan 0184).
- *
- * `EAN` when the row prints a real barcode and the product holds the same
- * one. That is the match the ingest would have made itself: its index of
- * products is built once per run, so a row harvested before its product
- * existed is never matched by a run, and the decision is what binds it.
- *
- * `MANUAL` for everything else: a row with no barcode, a row with an in-store
- * or invalid code, and a product with no barcode or another one.
- */
-export function matchOf(
-  entry: Pick<SourceCatalogEntry, 'ean'>,
-  itemEan: string | null | undefined
-): ItemSourceMatch {
-  const printed = productGtin(entry.ean);
-  return printed !== null && printed === productGtin(itemEan)
-    ? ItemSourceMatch.EAN
-    : ItemSourceMatch.MANUAL;
 }
 
 /**

@@ -1487,9 +1487,14 @@ describe('SourceEntryBatchService', () => {
     });
   });
 
-  /** Plan 0184: `matchedBy` says what matched. */
+  /**
+   * Every decision is `MANUAL` (plan 0184, Target state 7, which was not
+   * built). `unbindSharedEans` reopens an `ACTIVE` row stamped `EAN` when a
+   * second row of the chain prints the same barcode, and it skips `MANUAL`
+   * rows, so the stamp is what keeps a run from undoing a person's decision.
+   */
   describe('what a bound row says matched it (plan 0184)', () => {
-    it('stamps EAN when the product holds the row’s own real barcode', async () => {
+    it('stamps MANUAL on an accept, also when the product holds the row’s own real barcode', async () => {
       const { service, saved, findItemsByEans } = build({
         rows: [entry({ ean: '8480000123459' })],
         takenEans: { '8480000123459': 'item-held' },
@@ -1507,17 +1512,19 @@ describe('SourceEntryBatchService', () => {
       );
 
       expect(result.applied).toBe(true);
-      expect(findItemsByEans).toHaveBeenCalledWith(['8480000123459']);
-      expect(saved[0].matchedBy).toBe(ItemSourceMatch.EAN);
+      expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
       expect(saved[0].confidence).toBe(1);
+      // Nothing asks catalog who holds the barcode: the stamp does not
+      // depend on it.
+      expect(findItemsByEans).not.toHaveBeenCalled();
     });
 
-    it('stamps MANUAL when the product holds no EAN', async () => {
-      // Catalog answers no holder for the row's barcode, so the product the
-      // accept names does not carry it.
-      const { service, saved } = build({
-        rows: [entry({ ean: '8480000123459' })],
-      });
+    it('stamps MANUAL on an accept onto a product with no EAN, and for a row with an in-store code', async () => {
+      const rows = [
+        entry({ ean: '8480000123459' }),
+        entry({ id: 'e-2', externalId: '4242', ean: '2204500000000' }),
+      ];
+      const { service, saved } = build({ rows });
 
       await service.applyDecisions(
         request([
@@ -1527,53 +1534,22 @@ describe('SourceEntryBatchService', () => {
             itemId: 'item-with-no-ean',
             expect: expectFresh,
           },
-        ])
-      );
-
-      expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
-    });
-
-    it('stamps MANUAL when another product holds the row’s barcode', async () => {
-      const { service, saved } = build({
-        rows: [entry({ ean: '8480000123459' })],
-        takenEans: { '8480000123459': 'item-held' },
-      });
-
-      await service.applyDecisions(
-        request([
           {
             op: 'accept',
-            entryId: 'e-1',
-            itemId: 'another-item',
+            entryId: 'e-2',
+            itemId: 'item-with-no-ean',
             expect: expectFresh,
           },
         ])
       );
 
-      expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
+      expect(saved.map((row) => row.matchedBy)).toEqual([
+        ItemSourceMatch.MANUAL,
+        ItemSourceMatch.MANUAL,
+      ]);
     });
 
-    it('stamps MANUAL for a row with an in-store code, and asks catalog nothing', async () => {
-      const { service, saved, findItemsByEans } = build({
-        rows: [entry({ ean: '2204500000000' })],
-      });
-
-      await service.applyDecisions(
-        request([
-          {
-            op: 'accept',
-            entryId: 'e-1',
-            itemId: 'item-held',
-            expect: expectFresh,
-          },
-        ])
-      );
-
-      expect(saved[0].matchedBy).toBe(ItemSourceMatch.MANUAL);
-      expect(findItemsByEans).not.toHaveBeenCalled();
-    });
-
-    it('stamps EAN on a created product’s own row and on a second row with the same barcode', async () => {
+    it('stamps MANUAL on a created product’s own row and on a second row with the same barcode', async () => {
       const rows = [
         entry({ ean: '8480000123459' }),
         entry({ id: 'e-2', externalId: '4242', ean: '8480000123459' }),
@@ -1612,9 +1588,12 @@ describe('SourceEntryBatchService', () => {
         ])
       );
 
+      expect(createItems).toHaveBeenCalledWith([
+        expect.objectContaining({ ean: '8480000123459' }),
+      ]);
       expect(saved.map((row) => row.matchedBy)).toEqual([
-        ItemSourceMatch.EAN,
-        ItemSourceMatch.EAN,
+        ItemSourceMatch.MANUAL,
+        ItemSourceMatch.MANUAL,
         ItemSourceMatch.MANUAL,
       ]);
     });
