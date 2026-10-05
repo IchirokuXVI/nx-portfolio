@@ -1,23 +1,16 @@
 import type { Route } from '@angular/router';
 import {
-  RESOURCE_DESCRIPTOR,
-  RESOURCE_FORM_MODE,
-  RESOURCE_ID_FROM,
-  ResourceFormPage,
   recordEditRedirect,
   recordRoute,
   resourceSplitRoute,
   resourceTabRoute,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
-import { BasketPage } from './basket-page';
 import { BASKETS, ZONE_BASKETS } from './baskets';
 import { LIST_LINES } from './list-lines';
-import { ListPage } from './list-page';
 import { LISTS } from './lists';
 import { MEMBERSHIPS } from './memberships';
 import {
-  BASKET_PARAM,
   EDIT_SEGMENT,
   LIST_PARAM,
   PERSON_PARAM,
@@ -56,7 +49,7 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /shoppers/people/{userId}/details                tab: the account, read or changed
  * /shoppers/people/{userId}/zones                  tab: the zones it is in
  * /shoppers/people/{userId}/shopping-lists         tab: what it owns
- * /shoppers/people/{userId}/shopping-lists/{id}    one shopping list
+ * /shoppers/people/{userId}/shopping-lists/{id}    one shopping list, read only
  * /shoppers/people/{userId}/edit                   goes to its details, as a form
  * /shoppers/zones                                  tab: the zones
  * /shoppers/zones/{zoneId}                         goes to its members
@@ -64,7 +57,7 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /shoppers/zones/{zoneId}/members/{id}            one member, read first
  * /shoppers/zones/{zoneId}/lists                   tab: its lists
  * /shoppers/zones/{zoneId}/lists/{listId}          one list, and its lines
- * /shoppers/zones/{zoneId}/lists/{listId}/edit     the list's form
+ * /shoppers/zones/{zoneId}/lists/{listId}/edit     goes to the list, as a form
  * /shoppers/zones/{zoneId}/lists/{listId}/lines       goes to the list
  * /shoppers/zones/{zoneId}/lists/{listId}/lines/{id}   one line, read first
  * /shoppers/zones/{zoneId}/shopping-lists          tab: drawn from the zone
@@ -84,6 +77,12 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * whole, because a row of each opens a page that belongs with it. The old
  * address of the form of each, `edit`, leads to Details with its form open.
  *
+ * ## So are a list and a shopping list
+ *
+ * Each is `RecordPage` with no tabs (admin plan 0058): one section, its lines
+ * as a panel, and the Record block. The old address of the form of a list,
+ * `edit`, leads to the list with its form open. A shopping list only reads.
+ *
  * ## Why a page of a row is beside the tab and not inside it
  *
  * The page of a member, of a list and of a shopping list has its own header
@@ -95,8 +94,8 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * ## Why the page of a row is at the empty path under its parameter
  *
  * The parameter route has no component, so a route under it inherits the
- * parameter. The page and the forms beside it are then all children of the one
- * route that names the row.
+ * parameter. The page and the routes beside it are then all children of the
+ * one route that names the row.
  *
  * ## Nothing here makes a row
  *
@@ -128,10 +127,10 @@ export function shoppersRoutes(): Route[] {
                   tabs: { [BASKETS.name]: resourceTabRoute(BASKETS) },
                 }),
                 recordEditRedirect(EDIT_SEGMENT),
-                {
-                  path: `${BASKETS.segment}/:${BASKET_PARAM}`,
-                  component: BasketPage,
-                },
+                // One shopping list, on the record page (admin plan 0058).
+                // Its way back is one segment up, which is the tab that
+                // lists what the person owns.
+                recordRoute(BASKETS, { path: `${BASKETS.segment}/:id` }),
               ],
             },
           ],
@@ -162,8 +161,8 @@ export function shoppersRoutes(): Route[] {
                 {
                   path: `${LISTS.segment}/:${LIST_PARAM}`,
                   children: [
-                    { path: '', pathMatch: 'full', component: ListPage },
-                    formOf(LISTS, LIST_PARAM),
+                    recordRoute(LISTS, { path: '', idFrom: LIST_PARAM }),
+                    recordEditRedirect(EDIT_SEGMENT),
                     {
                       // The lines are drawn on the list's own page, so their
                       // segment alone is no screen. A line's page goes back
@@ -191,20 +190,4 @@ export function shoppersRoutes(): Route[] {
       ],
     },
   ];
-}
-
-/**
- * The form of a list, beside its page: `edit` under the list's own address,
- * reading its id from the page's parameter. Plan 0058 moves the list.
- */
-function formOf(descriptor: AnyResourceDescriptor, param: string): Route {
-  return {
-    path: EDIT_SEGMENT,
-    component: ResourceFormPage,
-    data: {
-      [RESOURCE_DESCRIPTOR]: descriptor,
-      [RESOURCE_FORM_MODE]: 'edit',
-      [RESOURCE_ID_FROM]: param,
-    },
-  };
 }

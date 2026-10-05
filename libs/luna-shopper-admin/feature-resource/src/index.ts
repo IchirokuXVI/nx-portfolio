@@ -21,9 +21,7 @@ export { ResourceReferences, ResourceRegistry } from './lib/resource-registry';
 export {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
-  RESOURCE_ID_FROM,
   RESOURCE_LIST_EMBED,
-  routeParam,
 } from './lib/resource-route-data';
 export {
   adminRoutes,

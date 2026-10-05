@@ -57,8 +57,6 @@ const STILL_USES_THE_OLD_FORM: readonly string[] = [
   'libs/luna-shopper-admin/feature-resource/src/lib/resource-form-page.ts',
   // The route factory, for a resource that names a `detail` or an `editor`.
   'libs/luna-shopper-admin/feature-resource/src/lib/routes.ts',
-  // The `edit` routes of the zone, the person and the list (plans 0057, 0058).
-  'libs/luna-shopper-admin/feature-people/src/lib/shoppers-routes.ts',
   // The price form and the price rule form (plan 0060).
   'libs/luna-shopper-admin/feature-catalog/src/lib/price-form-page.ts',
   'libs/luna-shopper-admin/feature-catalog/src/lib/products/price-rules-page.ts',

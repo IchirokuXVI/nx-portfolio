@@ -387,7 +387,7 @@ export class RecordStore<T extends ResourceRow> {
           : await this._gateway.update(this._id, input);
 
       if (mode === 'edit') {
-        this._row.set(saved);
+        await this._readSaved(saved);
         this._mode.set('read');
         this._startDraft(null, true);
         this._savedAt.set(new Date());
@@ -428,6 +428,39 @@ export class RecordStore<T extends ResourceRow> {
       return false;
     } finally {
       this._busy.set(false);
+    }
+  }
+
+  /**
+   * The row after a save: what a read answers, and not what the write did.
+   *
+   * A write can answer less than a read. The answer of a changed list has no
+   * lines, no count and no zone name, and a page that kept it as the row
+   * would say the list is empty. So the record is read again, and the answer
+   * of the write is the row only when that read fails or finds nothing: the
+   * save went through either way, and a failed read must not call it refused.
+   *
+   * The read takes a number like any other. A read that started before the
+   * write cannot win over it, and a read that started after it is newer and
+   * keeps the row.
+   */
+  private async _readSaved(saved: T): Promise<void> {
+    if (this._id === null) {
+      return;
+    }
+    const read = ++this._reads;
+
+    let row: T = saved;
+    try {
+      row =
+        (await readRecordById(this._descriptor, this._gateway, this._id)) ??
+        saved;
+    } catch {
+      // The answer of the write stays.
+    }
+
+    if (read === this._reads) {
+      this._row.set(row);
     }
   }
 

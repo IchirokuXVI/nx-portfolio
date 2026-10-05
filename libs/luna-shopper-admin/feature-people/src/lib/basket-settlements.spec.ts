@@ -7,7 +7,7 @@ import {
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { BasketPage } from './basket-page';
+import { BasketLinesPanel } from './basket-lines-panel';
 import { basketSettlements, toBasketSettlement } from './basket-settlements';
 import {
   bootShoppers,
@@ -95,9 +95,10 @@ async function boot(
   return fixture;
 }
 
-function page(fixture: ComponentFixture<ShoppersTestHost>): BasketPage {
-  return fixture.debugElement.query(By.directive(BasketPage))
-    .componentInstance as BasketPage;
+/** The panel of the record page that draws the rows and their settlements. */
+function page(fixture: ComponentFixture<ShoppersTestHost>): BasketLinesPanel {
+  return fixture.debugElement.query(By.directive(BasketLinesPanel))
+    .componentInstance as BasketLinesPanel;
 }
 
 const text = textOf;
@@ -110,11 +111,13 @@ describe('a basket row’s settlements', () => {
     expect(bought.outcome).toBe('BOUGHT');
     expect(bought.quantity).toBe(1);
     expect(bought.paid).toContain('1.29');
-    // The shop is not a resource this spec mounts, so its id stands, and
-    // there is nowhere for a link to go.
-    expect(bought.shop).toBe('loc_cordoba_centro');
+    // The shop is not a resource this spec mounts, so nothing read it. The
+    // panel says so, draws no id, and there is nowhere for a link to go.
+    expect(bought.shop).toBe('');
+    expect(bought.shopSaid).toBe('people.baskets.settlement.shopUnread');
     expect(bought.shopPath).toBeNull();
     expect(find(fixture, '[data-shop]')?.tagName).toBe('SPAN');
+    expect(text(fixture)).not.toContain('loc_cordoba_centro');
     // The person is, and is named.
     expect(bought.by).toBe('rosa');
     expect(bought.byParticipant).toBe(false);
@@ -148,17 +151,59 @@ describe('a basket row’s settlements', () => {
     const fixture = await boot(SATURDAY, [
       {
         provide: ResourceReferences,
+        // Neither answer throws for a row it cannot read. The record page
+        // around the panel asks it too.
         useValue: {
-          resolve: async () => {
-            throw new Error('down');
-          },
+          resolve: async () => null,
+          read: async () => ({ state: 'failed' }),
         },
       },
     ]);
 
     const [bought] = page(fixture).settlementsOf('line-bread');
-    expect(bought.by).toBe('11111111-1111-4111-8111-111111111111');
+    expect(page(fixture).settlementsOf('line-bread')).toHaveLength(2);
     expect(bought.paid).toContain('1.29');
+    // A read that failed has not said anybody is gone, and an id is no name.
+    expect(bought.by).toBe('');
+    expect(bought.bySaid).toBe('people.baskets.settlement.byUnread');
+    expect(bought.shopSaid).toBe('people.baskets.settlement.shopUnread');
+    expect(text(fixture)).not.toContain('people.baskets.settlement.byGone');
+    expect(text(fixture)).not.toContain('11111111-1111-4111-8111-111111111111');
+    expect(text(fixture)).not.toContain('loc_cordoba_centro');
+  });
+
+  it('says a person and a shop are gone only when the read answers so', async () => {
+    const fixture = await boot(SATURDAY, [
+      {
+        provide: ResourceReferences,
+        useValue: {
+          resolve: async () => null,
+          read: async () => ({ state: 'gone' }),
+        },
+      },
+    ]);
+
+    const [bought] = page(fixture).settlementsOf('line-bread');
+    expect(bought.bySaid).toBe('people.baskets.settlement.byGone');
+    expect(bought.shopSaid).toBe('people.baskets.settlement.shopGone');
+    expect(text(fixture)).toContain('people.baskets.settlement.byGone');
+    expect(text(fixture)).toContain('people.baskets.settlement.shopGone');
+  });
+
+  it('says a name is being read until the read answers', async () => {
+    const fixture = await boot(SATURDAY, [
+      {
+        provide: ResourceReferences,
+        useValue: {
+          resolve: async () => null,
+          read: () => new Promise(() => undefined),
+        },
+      },
+    ]);
+
+    const [bought] = page(fixture).settlementsOf('line-bread');
+    expect(bought.bySaid).toBe('resource.reference.resolving');
+    expect(bought.shopSaid).toBe('resource.reference.resolving');
   });
 
   /**

@@ -606,6 +606,10 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
  *
  * The route factory and the list read the same answer, so a row that opens
  * always has somewhere to go and a row with nowhere to go is not a button.
+ *
+ * A descriptor that states a `record` block has a record page, also when
+ * nothing of the row can be changed: a shopping list only reads (admin plan
+ * 0058).
  */
 export function hasDetailScreen<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>
@@ -613,6 +617,7 @@ export function hasDetailScreen<T extends ResourceRow>(
   return (
     descriptor.detail !== undefined ||
     descriptor.editor !== undefined ||
+    descriptor.record !== undefined ||
     descriptor.actions?.edit === true
   );
 }

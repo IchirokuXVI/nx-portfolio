@@ -1,3 +1,5 @@
+> **PR:** [#644](https://github.com/IchirokuXVI/nx-portfolio/pull/644)
+
 # 0058 A list and a shopping list on the record page
 
 > Seventh plan of the record page series (`0052` to `0060`). Needs `0057` (the zone and the

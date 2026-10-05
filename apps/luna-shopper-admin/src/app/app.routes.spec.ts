@@ -242,10 +242,6 @@ describe('appRoutes', () => {
     [`/shoppers/zones/${KITCHEN}/lists`, 'the lists of a zone'],
     [`/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`, 'a list'],
     [
-      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/edit`,
-      'the form of a list',
-    ],
-    [
       `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines/l-kitchen-weekly~line-milk`,
       'the form of a line',
     ],
@@ -309,6 +305,11 @@ describe('appRoutes', () => {
     [
       `/shoppers/zones/${KITCHEN}/edit`,
       `/shoppers/zones/${KITCHEN}/members?edit=1`,
+    ],
+    // A list has no tabs (admin plan 0058), so the record is the address.
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/edit`,
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly?edit=1`,
     ],
   ])(
     'sends the old address %s to the record, with its form open',

@@ -49,10 +49,12 @@ import {
   FieldRow,
   FieldValue,
   LockedValue,
+  NAME_UNREAD,
   RecordId,
   RecordSection,
   SaveBar,
   Viewport,
+  type ReferenceName,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
 import { RecordChildren } from './record-children';
@@ -75,7 +77,7 @@ const FIRST_CONTROL = ['input', 'select', 'textarea', 'button', '[tabindex]']
   .join(', ');
 
 const NO_MESSAGES: readonly FieldMessage[] = [];
-const NO_NAMES: Readonly<Record<string, string | null>> = {};
+const NO_NAMES: Readonly<Record<string, ReferenceName>> = {};
 const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
 const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
 
@@ -263,6 +265,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                           <span class="by" data-by>
                             {{ 'record.facts.by' | rokuT }}
                             <lib-field-value
+                              [links]="form ? noLinks : linksOf(by)"
                               [names]="namesOf(by)"
                               [value]="valueOf(by)"
                             />
@@ -286,6 +289,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                           <span class="by" data-by>
                             {{ 'record.facts.by' | rokuT }}
                             <lib-field-value
+                              [links]="form ? noLinks : linksOf(by)"
                               [names]="namesOf(by)"
                               [value]="valueOf(by)"
                             />
@@ -642,9 +646,10 @@ export class RecordView {
 
   /**
    * The names the lookup answered, by resource and ID. `null` is a record
-   * that is gone, and an absent entry is still being read.
+   * that is gone, `NAME_UNREAD` is a read that failed, and an absent entry is
+   * still being read.
    */
-  private readonly _resolved = signal<Readonly<Record<string, string | null>>>(
+  private readonly _resolved = signal<Readonly<Record<string, ReferenceName>>>(
     {}
   );
   /**
@@ -659,9 +664,9 @@ export class RecordView {
   /** The names of the references of one field, by ID. */
   private readonly _names = computed(() => {
     const resolved = this._resolved();
-    const names: Record<string, Readonly<Record<string, string | null>>> = {};
+    const names: Record<string, Readonly<Record<string, ReferenceName>>> = {};
     for (const [name, value] of Object.entries(this._values())) {
-      const held: Record<string, string | null> = {};
+      const held: Record<string, ReferenceName> = {};
       for (const id of referenceIds(value)) {
         const key = referenceKey(value, id);
         if (key in resolved) {
@@ -895,12 +900,19 @@ export class RecordView {
             continue;
           }
           this._asked.add(key);
-          void this.references.resolve(resourceOf(value), id).then((found) => {
+          void this.references.read(resourceOf(value), id).then((read) => {
+            // "Gone" is what a 404 says. A read that failed says nothing
+            // about the record, so the value does not either.
             this._resolved.update((names) => ({
               ...names,
-              [key]: found?.title ?? null,
+              [key]:
+                read.state === 'found'
+                  ? read.option.title
+                  : read.state === 'gone'
+                    ? null
+                    : NAME_UNREAD,
             }));
-            const row = found?.row;
+            const row = read.state === 'found' ? read.option.row : undefined;
             if (row !== undefined) {
               this._rows.update((rows) => ({ ...rows, [key]: row }));
             }
@@ -950,7 +962,7 @@ export class RecordView {
     );
   }
 
-  namesOf(field: FieldDescriptor): Readonly<Record<string, string | null>> {
+  namesOf(field: FieldDescriptor): Readonly<Record<string, ReferenceName>> {
     return this._names()[field.name] ?? NO_NAMES;
   }
 

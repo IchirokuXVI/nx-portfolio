@@ -3,10 +3,12 @@ import {
   ADMIN_LISTS_PATH,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   defineResource,
   type InfoContent,
 } from '@portfolio/luna-shopper-admin/models';
+import { LIST_LINES_PANEL, ListLinesPanel } from './list-lines-panel';
 import { LIST_SEED, type ListRow } from './people-seed';
 import { ZONE_CAUTION, ZONE_PARAM } from './shopper-params';
 
@@ -46,6 +48,9 @@ export const LIST_INFO: InfoContent = {
  * down is a deliberate click, not something that happens while browsing zones,
  * which is why the tab shows list names and counts and the page shows
  * contents. `shoppersRoutes` mounts that page.
+ *
+ * **The page is the record page** (admin plan 0058): one section, the lines
+ * as a panel of their own, and a Record block that says who made the list.
  */
 export const LISTS = defineResource<List>({
   name: 'lists',
@@ -109,6 +114,15 @@ export const LISTS = defineResource<List>({
       name: 'createdAt',
       label: 'people.lists.createdAt',
       help: 'people.field.createdAtHelp',
+      time: true,
+      editable: false,
+    },
+    {
+      kind: 'date',
+      name: 'updatedAt',
+      label: 'people.lists.updatedAt',
+      help: 'people.field.updatedAtHelp',
+      time: true,
       editable: false,
     },
   ],
@@ -122,11 +136,61 @@ export const LISTS = defineResource<List>({
   info: LIST_INFO,
   caution: ZONE_CAUTION,
 
+  /**
+   * The page of a list (admin plan 0058, section 2.1).
+   *
+   * The lines are a part and not a list of another resource, because each
+   * row has buttons, and a list tab holds none. Their count is beside the
+   * heading of the panel and in no section.
+   *
+   * The zone is the parent, so the way back names it. It is also a row of
+   * the Record block, because every field is drawn somewhere, and a field
+   * that no section and no fact names would get a section of its own.
+   */
+  record: {
+    sections: [
+      {
+        title: 'people.lists.section.list',
+        fields: ['name', 'autoApproveLines', 'sharedWithZone'],
+      },
+    ],
+    children: [
+      {
+        as: 'panel',
+        name: LIST_LINES_PANEL,
+        label: 'people.lists.record.lines',
+        component: ListLinesPanel,
+        count: 'lineCount',
+      },
+    ],
+    facts: {
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      also: ['zoneName'],
+    },
+  },
+
   actions: { edit: true, delete: true },
 
-  gateway: () =>
-    inject(RESOURCE_GATEWAYS).for<List>({
+  gateway: () => {
+    const changes = inject(ResourceChanges);
+    const lists = inject(RESOURCE_GATEWAYS).for<List>({
       path: ADMIN_LISTS_PATH,
       seed: LIST_SEED,
-    }),
+    });
+
+    return {
+      list: (query) => lists.list(query),
+      read: (id, shown) => lists.read(id, shown),
+      create: (input) => lists.create(input),
+      update: (id, input) => lists.update(id, input),
+      remove: async (id) => {
+        await lists.remove(id);
+        // The zone counts its lists, and one of them is gone. The column of
+        // zones beside the page says that count.
+        changes.wrote('zones');
+      },
+    };
+  },
 });
