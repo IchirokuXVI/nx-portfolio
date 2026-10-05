@@ -10,6 +10,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -429,7 +430,17 @@ export class ReferencePicker implements OnDestroy {
         this.resolving.set(false);
         return;
       }
+      // The name of the value before this one must not stand in the field
+      // while the read for this one is out.
+      this.chosen.set(null);
       void this._resolve(id, request);
+    });
+
+    // A field that is switched off while its list is open closes it.
+    effect(() => {
+      if (this.disabled() && untracked(this.open)) {
+        this.close();
+      }
     });
   }
 
@@ -497,6 +508,12 @@ export class ReferencePicker implements OnDestroy {
     this.editing.set(true);
     this.open.set(true);
     this.active.set(-1);
+    // A search that is still out answers a text the field no longer holds.
+    // Its answer is dropped, and the rows it would replace are hidden until
+    // the search for this text lands: Enter on a stale row picks the wrong
+    // record.
+    this._pending++;
+    this.searching.set(true);
 
     this._clearTimer();
     this._timer = setTimeout(() => void this._search(term), SEARCH_DELAY_MS);
@@ -515,10 +532,15 @@ export class ReferencePicker implements OnDestroy {
         return;
       }
       case 'Enter': {
-        const row = this.open() ? this.rows()[this.active()] : undefined;
+        if (!this.open()) {
+          return;
+        }
+        // An open list owns Enter, with or without an active option.
+        // Otherwise Enter during a search would submit the form the field is
+        // in.
+        event.preventDefault();
+        const row = this.rows()[this.active()];
         if (row !== undefined) {
-          // Otherwise Enter would also submit the form the field is in.
-          event.preventDefault();
           this.pick(row);
         }
         return;
