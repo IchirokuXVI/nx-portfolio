@@ -22,7 +22,6 @@ export {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
-  RESOURCE_ID_PARAM,
   RESOURCE_LIST_EMBED,
   routeParam,
 } from './lib/resource-route-data';

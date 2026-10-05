@@ -9,13 +9,27 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { itemSource, priceSource } from './catalog-sources';
-import { ItemFormPage } from './item-form-page';
+import { ProductCounts } from './products/product-context';
 import {
   productListGateway,
   type ScopePriced,
 } from './products/product-list-gateway';
+import { ProductPricesTab } from './products/product-prices-tab';
+import { ProductSourcesTab, ProductWhereTab } from './products/product-tabs';
 import { SetCategoriesPanel } from './set-categories-panel';
 import { SetGroupPanel } from './set-group-panel';
+
+/**
+ * The Prices tab of a product: its prices by chain and scope. The name of the
+ * part, the key of its count, and the segment the `prices` resource is at.
+ */
+export const PRODUCT_PRICES_TAB = 'prices';
+
+/** The "Where it is" tab: the product in each chain's shops. */
+export const PRODUCT_WHERE_TAB = 'where';
+
+/** The Sources tab: the chain rows that name the product. */
+export const PRODUCT_SOURCES_TAB = 'sources';
 
 /**
  * A product, as the gateway describes it, plus the ids of its categories.
@@ -100,9 +114,6 @@ export const ITEMS = defineResource<Item>({
 
   title: (row, locales) => localizedTextValue(row.name, locales),
 
-  // The form of a new product, and the Details tab of one that exists.
-  editor: ItemFormPage,
-
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.items.id', editable: false },
     {
@@ -114,6 +125,9 @@ export const ITEMS = defineResource<Item>({
       maxLength: 200,
     },
     {
+      // Text, and not a picker over the registered brands: the gateway reads
+      // and writes the brand of a product as text, and works out the
+      // registered brand by itself (admin plan 0055, section 3).
       kind: 'text',
       name: 'brand',
       label: 'catalog.items.brand',
@@ -125,6 +139,7 @@ export const ITEMS = defineResource<Item>({
       name: 'ean',
       label: 'catalog.items.ean',
       help: 'catalog.items.eanHelp',
+      format: 'code',
       nullable: true,
       maxLength: 32,
     },
@@ -132,6 +147,7 @@ export const ITEMS = defineResource<Item>({
       kind: 'text',
       name: 'sku',
       label: 'catalog.items.sku',
+      format: 'code',
       nullable: true,
       maxLength: 120,
     },
@@ -157,6 +173,8 @@ export const ITEMS = defineResource<Item>({
       label: 'catalog.items.defaultUnit',
       options: UNIT_OF_MEASURE_OPTIONS,
       required: true,
+      // What most of the catalog is sold by, so a new product starts there.
+      initial: 'UNIT',
     },
     {
       kind: 'number',
@@ -183,7 +201,8 @@ export const ITEMS = defineResource<Item>({
       kind: 'text',
       name: 'imageUrl',
       label: 'catalog.items.imageUrl',
-      format: 'url',
+      // Its address, with the picture beside it.
+      format: 'image',
       nullable: true,
       maxLength: 500,
     },
@@ -252,6 +271,49 @@ export const ITEMS = defineResource<Item>({
         panel: SetCategoriesPanel,
       },
     ],
+  },
+
+  // What the record page draws (admin plan 0055, section 2.1). Details is
+  // the first tab, and the three that follow are parts of the product's own
+  // library. The page of a new product has no tabs.
+  record: {
+    sections: [
+      {
+        title: 'catalog.items.section.name',
+        fields: ['name', 'brand', 'ean', 'sku'],
+      },
+      {
+        title: 'catalog.items.section.where',
+        fields: ['categoryIds', 'productGroupId'],
+      },
+      {
+        title: 'catalog.items.section.sold',
+        fields: ['defaultUnit', 'unitSize', 'imageUrl'],
+      },
+    ],
+    children: [
+      {
+        as: 'tab',
+        name: PRODUCT_PRICES_TAB,
+        label: 'catalog.products.tabs.prices',
+        component: ProductPricesTab,
+      },
+      {
+        as: 'tab',
+        name: PRODUCT_WHERE_TAB,
+        label: 'catalog.products.tabs.where',
+        component: ProductWhereTab,
+      },
+      {
+        as: 'tab',
+        name: PRODUCT_SOURCES_TAB,
+        label: 'catalog.products.tabs.sources',
+        component: ProductSourcesTab,
+      },
+    ],
+    // No field of a product holds either count: the scopes that price it and
+    // the chain rows that name it are each another read.
+    counts: () => inject(ProductCounts).of,
   },
 
   // What the server refuses about a product's categories is said under them.

@@ -15,15 +15,16 @@ import {
 import {
   adminRoutes,
   provideSections,
+  RecordPage,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { itemSource } from './catalog-sources';
+import { GroupAddItemsPanel } from './product-group-add-items';
 import {
   ProductGroupAssignments,
   toGroupAssignmentAnswer,
 } from './product-group-assignments';
-import { ProductGroupDetailPage } from './product-group-detail-page';
 import {
   PRODUCT_RESOURCES,
   PRODUCTS_SEGMENT,
@@ -33,6 +34,7 @@ import { SetGroupPanel } from './set-group-panel';
 
 /**
  * Moving many products into a group, rendered (admin plan 0035, section 2).
+ * "Add items" is a panel of the group's record page (admin plan 0055).
  *
  * Both ways in run against the in memory gateway, which is the default behind
  * `RESOURCE_GATEWAYS`, so a move really moves a row of the item table and the
@@ -131,11 +133,12 @@ describe('Add items on a product group', () => {
   it('opens on the ungrouped products, and a tick sends nothing', async () => {
     const { fixture, assign } = await boot('/products/groups/pg_olive_oil');
 
-    // The generic form is still the top of the screen.
+    // The record page is the screen, and "Add items" is a panel inside it.
+    expect(fixture.debugElement.query(By.directive(RecordPage))).not.toBeNull();
     expect(
-      fixture.debugElement.query(By.directive(ProductGroupDetailPage))
+      q(fixture, 'lib-record-view lib-group-add-items-panel')
     ).not.toBeNull();
-    expect(q(fixture, 'lib-resource-form-page')).not.toBeNull();
+    expect(q(fixture, 'lib-resource-form-page')).toBeNull();
 
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);
@@ -224,9 +227,8 @@ describe('Add items, when one search overtakes another', () => {
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);
 
-    const page = fixture.debugElement.query(
-      By.directive(ProductGroupDetailPage)
-    ).componentInstance as ProductGroupDetailPage;
+    const page = fixture.debugElement.query(By.directive(GroupAddItemsPanel))
+      .componentInstance as GroupAddItemsPanel;
     const items = page['_items'];
     const found = await itemsNow();
     let answer: () => void = () => undefined;
@@ -415,5 +417,42 @@ describe('toGroupAssignmentAnswer', () => {
       applied: false,
       error: null,
     });
+  });
+});
+
+describe('a product group, on the record page', () => {
+  it('opens reading, with its fields in one section and no tab', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+
+    expect(page.store().mode()).toBe('read');
+    expect(page.tabs()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain(
+      'catalog.productGroups.section.name'
+    );
+  });
+
+  /** The products list, narrowed to the group. */
+  it('links to its products', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    const link = all(fixture, 'lib-record-children a').find((a) =>
+      a.textContent?.includes('catalog.productGroups.products')
+    );
+
+    expect(link?.getAttribute('href')).toBe(
+      '/products?productGroupId=pg_olive_oil'
+    );
+  });
+
+  /** The address the old form of a group had. */
+  it('opens the form of the group from its old address', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil/edit');
+    await settle(fixture);
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+
+    expect(TestBed.inject(Router).url).toBe('/products/groups/pg_olive_oil');
+    expect(page.store().mode()).toBe('edit');
   });
 });

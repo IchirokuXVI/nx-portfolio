@@ -1,17 +1,18 @@
-import { inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  inject,
+  Injectable,
+  signal,
+  type Signal,
+} from '@angular/core';
 import {
   HARVEST_SERVICE,
   RESOURCE_GATEWAYS,
   toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
-import {
-  gatewayErrorKey,
-  ResourceChanges,
-  ResourceRegistry,
-} from '@portfolio/luna-shopper-admin/feature-resource';
+import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { ItemScopePrices } from '../catalog-seed';
 import { itemScopePricesSource } from '../catalog-sources';
-import type { Item } from '../items';
 
 /** How many scopes one page of a product's prices asks for. */
 const SCOPE_PAGE_SIZE = 50;
@@ -51,29 +52,35 @@ export function holdsOwnPrice(scope: ItemScopePrices): boolean {
  */
 const SOURCE_COUNT_PAGE = 50;
 
+/** What the tabs of a product count, by the name of the tab. */
+export type ProductTabCounts = Readonly<{
+  prices: number | null;
+  sources: number | null;
+}>;
+
 /**
- * The product a page is about, held once for the page and every tab under it
- * (admin plan 0043, target 3).
+ * What a product's page counts beside its tabs, and the price scopes its
+ * Prices tab draws (admin plan 0055, section 2.2).
  *
- * Provided by `ProductPage`, so it lives as long as a product is open. The
- * header and the summary read the product from it, the Prices tab reads the
- * scopes from it, and the tabs read their counts from it. Without it each of
- * them would read for itself, and after a write they would disagree.
+ * The product itself is the record page's: its row, its delete and its
+ * heading. What no field of the row holds is here, read once for the page and
+ * the tab alike. Without it the header and the tab would each read the
+ * scopes, and after a write they would disagree.
+ *
+ * `providedIn: 'root'`, because the page asks for it while it is built and
+ * the tab is a route under the page. It holds one product, the one that is
+ * open: {@link of} is the page opening a product, and everything read for
+ * the one before is dropped.
  *
  * **A count is shown only when the gateway gave it.** The scopes are counted
  * when the first page is the last. The source rows the same.
  */
-@Injectable()
-export class ProductContext {
-  private readonly _registry = inject(ResourceRegistry);
+@Injectable({ providedIn: 'root' })
+export class ProductCounts {
   private readonly _gateways = inject(RESOURCE_GATEWAYS);
   private readonly _harvest = inject(HARVEST_SERVICE);
-  private readonly _changes = inject(ResourceChanges);
 
   private readonly _id = signal<string | null>(null);
-  private readonly _product = signal<Item | null>(null);
-  private readonly _status = signal<'loading' | 'ready' | 'error'>('loading');
-  private readonly _errorKey = signal<string | null>(null);
 
   private readonly _scopes = signal<readonly ItemScopePrices[]>([]);
   private readonly _scopesStatus = signal<'loading' | 'ready' | 'error'>(
@@ -86,11 +93,8 @@ export class ProductContext {
   /** So that an answer for a product the page has left is dropped. */
   private _generation = 0;
 
+  /** The product that is open, or `null` before the first. */
   readonly id = this._id.asReadonly();
-  readonly product = this._product.asReadonly();
-  readonly status = this._status.asReadonly();
-  /** Why the product could not be read, as a key. */
-  readonly errorKey = this._errorKey.asReadonly();
 
   /** The product at every scope that holds a price for it, as far as read. */
   readonly scopes = this._scopes.asReadonly();
@@ -103,6 +107,21 @@ export class ProductContext {
   readonly sourceCount = this._sourceCount.asReadonly();
 
   /**
+   * The counts beside the tabs of one product, for `record.counts`.
+   *
+   * The page asks once for each product it opens, and asking is what starts
+   * the reads.
+   */
+  readonly of = (id: string): Signal<ProductTabCounts> => {
+    void this.open(id);
+    return computed(() =>
+      this._id() === id
+        ? { prices: this.scopeCount(), sources: this._sourceCount() }
+        : { prices: null, sources: null }
+    );
+  };
+
+  /**
    * How many scopes hold a price of their own for it, or `null` while there
    * are more scopes to read.
    */
@@ -112,47 +131,18 @@ export class ProductContext {
       : null;
   }
 
-  /** Open a product. Everything the page shows is read again. */
+  /** Open a product. Everything held about the one before is dropped. */
   async open(id: string): Promise<void> {
     this._generation += 1;
     this._id.set(id);
-    this._product.set(null);
-    this._status.set('loading');
-    this._errorKey.set(null);
     this._scopes.set([]);
     this._scopesStatus.set('loading');
+    this._scopesErrorKey.set(null);
     this._scopesCursor.set(null);
     this._sourceCount.set(null);
 
-    void this.reloadPrices();
     void this._readSourceCount(id, this._generation);
-    await this.reload();
-  }
-
-  /** Read the product again, keeping what is on screen meanwhile. */
-  async reload(): Promise<void> {
-    const id = this._id();
-    if (id === null) {
-      return;
-    }
-    const generation = this._generation;
-
-    try {
-      const row = await this._products().read(id);
-      if (generation !== this._generation) {
-        return;
-      }
-      this._product.set(row as unknown as Item);
-      this._status.set('ready');
-    } catch (error) {
-      if (generation !== this._generation) {
-        return;
-      }
-      this._errorKey.set(
-        gatewayErrorKey(toGatewayError(error)) ?? 'resource.error.unknown'
-      );
-      this._status.set('error');
-    }
+    await this.reloadPrices();
   }
 
   /**
@@ -183,24 +173,6 @@ export class ProductContext {
   moreScopePrices(): Promise<void> {
     const cursor = this._scopesCursor();
     return cursor === null ? Promise.resolve() : this._readScopes(cursor);
-  }
-
-  /** Delete the product. Throws what the gateway refused. */
-  async remove(): Promise<void> {
-    const id = this._id();
-    if (id === null) {
-      return;
-    }
-    await this._products().remove(id);
-    this._changes.wrote('items');
-  }
-
-  private _products() {
-    const descriptor = this._registry.byName('items');
-    if (descriptor === undefined) {
-      throw new Error('The product page needs the items resource.');
-    }
-    return this._registry.gatewayFor(descriptor);
   }
 
   private async _readScopes(cursor: string | undefined): Promise<void> {
