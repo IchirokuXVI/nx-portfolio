@@ -100,7 +100,7 @@ export class ZoneDetailsTab {
         label: 'people.zones.updatedAt',
         text: instant(zone.updatedAt, locale),
       },
-      { label: 'people.zones.id', text: zone.id, mono: true },
+      { label: 'people.zones.id', text: zone.id, id: true },
     ];
   });
 

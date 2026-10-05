@@ -113,6 +113,11 @@
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
       "actions": "Actions"
     },
+    "id": {
+      "notFound": "No {{thing}} has this ID.",
+      "notFoundHere": "Nothing here has this ID.",
+      "copy": "Copy the ID"
+    },
     "filter": {
       "any": "Any",
       "more": "Filters"
@@ -505,6 +510,7 @@
       }
     },
     "products": {
+      "unnamed": "Product with no name",
       "back": "Back to products",
       "edit": "Edit product",
       "delete": "Delete product",
@@ -789,6 +795,7 @@
   "brands": {
     "registered": {
       "one": "Brand",
+      "noun": "brand",
       "many": "Registered brands",
       "field": {
         "label": "Name",
@@ -1974,6 +1981,7 @@
     "baskets": {
       "one": "shopping list",
       "many": "Shopping lists",
+      "unnamed": "List of {{date}}",
       "id": "Identifier",
       "name": "Name",
       "ownerUserId": "Owner",

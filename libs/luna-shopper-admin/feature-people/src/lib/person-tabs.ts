@@ -219,7 +219,7 @@ export class PersonDetailsTab {
         label: 'people.users.updatedAt',
         text: instant(user.updatedAt, locale),
       },
-      { label: 'people.users.userId', text: user.userId, mono: true },
+      { label: 'people.users.userId', text: user.userId, id: true },
     ];
   });
 

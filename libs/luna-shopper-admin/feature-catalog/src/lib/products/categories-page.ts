@@ -22,7 +22,10 @@ import {
   ResourceChanges,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { ErrorLinkTarget } from '@portfolio/luna-shopper-admin/models';
+import {
+  recordIdFor,
+  type ErrorLinkTarget,
+} from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import { CATEGORIES } from '../categories';
@@ -107,7 +110,16 @@ const CATEGORY_FILTER = 'categoryId';
       <p class="state" role="status">{{ 'resource.list.empty' | rokuT }}</p>
     } @else if (shown().length === 0) {
       <div class="state" role="status">
-        <p>{{ 'resource.list.noMatch' | rokuT }}</p>
+        @if (searchedId() === null) {
+          <p>{{ 'resource.list.noMatch' | rokuT }}</p>
+        } @else {
+          <p data-id-not-found>
+            {{
+              'resource.id.notFound'
+                | rokuT: { thing: descriptor.labels.one | rokuT }
+            }}
+          </p>
+        }
         <button (click)="term.set('')" class="button" type="button">
           {{ 'resource.action.clearFilters' | rokuT }}
         </button>
@@ -446,6 +458,11 @@ export class CategoriesPage {
     readonly link: ErrorLinkTarget | null;
   } | null>(null);
 
+  /** The record ID in the search box, or `null` while it holds words. */
+  readonly searchedId = computed(() =>
+    recordIdFor(this.descriptor, this.term())
+  );
+
   /**
    * The tree, narrowed by what was typed. A top level category stays when it
    * matches or when one inside it does, and then shows only those that do.
@@ -456,8 +473,13 @@ export class CategoriesPage {
     if (term === '') {
       return nodes;
     }
+    // A typed ID is the category that has it (admin plan 0051). The whole
+    // tree is already read, so it is found here and not by another request.
+    const id = this.searchedId();
     const matches = (node: CategoryNode) =>
-      `${node.name} ${node.row.slug}`.toLowerCase().includes(term);
+      id === null
+        ? `${node.name} ${node.row.slug}`.toLowerCase().includes(term)
+        : node.id === id;
 
     return nodes.flatMap((root) => {
       if (matches(root)) {

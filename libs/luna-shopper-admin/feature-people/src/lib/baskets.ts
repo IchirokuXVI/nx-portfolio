@@ -10,6 +10,7 @@ import {
   type ResourceParent,
 } from '@portfolio/luna-shopper-admin/models';
 import { BasketPage } from './basket-page';
+import { madeAt } from './people-format';
 import { BASKET_SEED, type BasketRow } from './people-seed';
 import { PERSON_PARAM, ZONE_PARAM } from './shopper-params';
 
@@ -84,9 +85,12 @@ function basketResource(
     labels: { one: 'people.baskets.one', many: 'people.baskets.many' },
 
     // A basket needs no name, and an unnamed one is the ordinary case: velista
-    // generates it and the shopper never titles it. So the fallback is its id,
-    // which is the only other thing that tells two of them apart.
-    title: (row) => row.name ?? row.id,
+    // generates it and the shopper never titles it. So the fallback is when
+    // it was made, to the minute, which is what `madeAt` writes for the
+    // heading of its page too. It was the ID, and an ID is never what a row
+    // is called (admin plan 0051): the list drew a column of uuids as its
+    // names.
+    title: (row, locales) => row.name ?? madeAt(row.generatedAt, locales),
 
     // Named so that a row opens. `shoppersRoutes` mounts it under the owner.
     detail: BasketPage,

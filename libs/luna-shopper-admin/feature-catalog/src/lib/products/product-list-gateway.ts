@@ -134,7 +134,27 @@ export function productListGateway<
         nextCursor: page.nextCursor,
       } satisfies ResourcePage<T & ScopePriced>;
     },
-    read: (id) => products.read(id),
+    // A product the list found by its ID (admin plan 0051) is drawn in the
+    // same row as any other, so it carries the price at the chosen scope.
+    // Without it the row would say "no price" about a product that has one.
+    read: async (id, shown) => {
+      const row = await products.read(id);
+      const { scopeId } = split(shown ?? {});
+      if (scopeId === null) {
+        return row;
+      }
+      // The product was found, and that is what was asked. A price read that
+      // fails must not turn it into "No product has this ID.", which is what
+      // a 404 or a 400 thrown from here would be read as. So the row goes
+      // back as the product route gave it, with no `scopePrice` at all: not
+      // `null`, which would say the scope holds no price for it.
+      try {
+        const priced = await pricesOf(prices, scopeId, [row.id]);
+        return { ...row, scopePrice: priced.get(row.id) ?? null };
+      } catch {
+        return row;
+      }
+    },
     create: (input) => products.create(input),
     update: (id, input) => products.update(id, input),
     remove: (id) => products.remove(id),

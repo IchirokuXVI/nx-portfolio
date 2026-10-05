@@ -197,6 +197,22 @@ export interface RowAction {
           {{ 'resource.action.retry' | rokuT }}
         </button>
       </div>
+    } @else if (idNotFound()) {
+      <!-- An ID was typed into the search and no row of this resource has it
+           (admin plan 0051). Its own sentence: nothing is hidden by a filter,
+           and the list is not empty. -->
+      <div class="state" role="status" data-id-not-found>
+        <p>
+          @if (oneKey() !== '') {
+            {{ 'resource.id.notFound' | rokuT: { thing: oneKey() | rokuT } }}
+          } @else {
+            {{ 'resource.id.notFoundHere' | rokuT }}
+          }
+        </p>
+        <button (click)="clear.emit()" type="button">
+          {{ 'resource.action.clearFilters' | rokuT }}
+        </button>
+      </div>
     } @else if (noMatch()) {
       <div class="state" role="status">
         <p>{{ 'resource.list.noMatch' | rokuT }}</p>
@@ -865,6 +881,10 @@ export class ResourceList {
   readonly errorKey = input('resource.error.unknown');
   readonly empty = input(false);
   readonly noMatch = input(false);
+  /** The search holds a record ID that no row of this resource has. */
+  readonly idNotFound = input(false);
+  /** What one row is called ("product"), as a key, for that sentence. */
+  readonly oneKey = input('');
   readonly hasMore = input(false);
   readonly loadingMore = input(false);
 

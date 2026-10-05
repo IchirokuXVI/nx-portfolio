@@ -1019,6 +1019,32 @@ describe('categories', () => {
     }
   });
 
+  /**
+   * `kind` is a filter and no column, and a read by ID sends no filter
+   * (admin plan 0051). A root pasted into a picker of leaves must read as not
+   * found, or the save is refused with `category_not_a_leaf`.
+   */
+  it('says whether a row read by its ID is a root or a leaf', () => {
+    const root = { id: 'c1', parentId: null } as Parameters<
+      NonNullable<typeof CATEGORIES.within>
+    >[0];
+    const leaf = { ...root, id: 'c2', parentId: 'c1' };
+    // A row the gateway sent with no parent at all is a root too.
+    const bare = { ...root, parentId: undefined };
+
+    expect(CATEGORIES.within?.(root, { kind: 'leaf' })).toBe(false);
+    expect(CATEGORIES.within?.(bare, { kind: 'leaf' })).toBe(false);
+    expect(CATEGORIES.within?.(leaf, { kind: 'leaf' })).toBe(true);
+
+    expect(CATEGORIES.within?.(leaf, { kind: 'root' })).toBe(false);
+    expect(CATEGORIES.within?.(root, { kind: 'root' })).toBe(true);
+    expect(CATEGORIES.within?.(bare, { kind: 'root' })).toBe(true);
+
+    // No kind fixed, or one this screen does not know: nothing is narrowed.
+    expect(CATEGORIES.within?.(root, {})).toBe(true);
+    expect(CATEGORIES.within?.(leaf, { kind: '' })).toBe(true);
+  });
+
   it('says a refusal about the parent under the parent', () => {
     expect(CATEGORIES.errorFields).toEqual({
       category_too_deep: 'parentId',

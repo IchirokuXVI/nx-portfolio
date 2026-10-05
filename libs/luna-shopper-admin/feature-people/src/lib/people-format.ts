@@ -17,6 +17,23 @@ export function day(value: string | null, locale: string): string {
   return format(value, locale, false);
 }
 
+/**
+ * What an unnamed shopping list is told apart by: the day it was made and the
+ * time, in the operator's reading language.
+ *
+ * One function for the row of the list and for the heading of the page it
+ * opens, so the two cannot name one shopping list by two days. They did: the
+ * row cut the day out of the timestamp, which is the day in UTC, and the
+ * heading wrote the day where the operator is. The time is there because a
+ * shopper makes more than one list in a day.
+ *
+ * `locales` is the reading order a descriptor's `title` is handed, chosen one
+ * first. A title is a pure function and has no other language to read.
+ */
+export function madeAt(value: string, locales: readonly string[]): string {
+  return instant(value, locales[0] ?? 'en');
+}
+
 function format(
   value: string | null,
   locale: string,

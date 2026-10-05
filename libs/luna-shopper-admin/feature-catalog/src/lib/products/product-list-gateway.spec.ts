@@ -1,3 +1,4 @@
+import { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import type {
   ResourceGateway,
   ResourceQuery,
@@ -95,6 +96,84 @@ function build(
 }
 
 describe('productListGateway', () => {
+  /**
+   * A product the list found by its ID (admin plan 0051) is drawn in the row
+   * of any other product, so it carries the price at the chosen scope.
+   */
+  it('reads one product with its price at the scope the list shows', async () => {
+    const { gateway, priceQueries } = build([], [price('a', { price: 2.5 })]);
+
+    const row = await gateway.read('a', {
+      query: 'a',
+      [PRICES_AT_FILTER]: 'scope',
+    });
+
+    expect(row.scopePrice?.price).toBe(2.5);
+    expect(priceQueries).toHaveLength(1);
+    expect(priceQueries[0].filters).toEqual({
+      [PRICES_AT_FILTER]: 'scope',
+      itemIds: ['a'],
+    });
+  });
+
+  /**
+   * The product was found. A price read that fails after it must not be
+   * read as "No product has this ID.", which is what a 404 or a 400 thrown
+   * from the read becomes.
+   */
+  it.each([404, 400, 503])(
+    'answers the product without a price when the price read fails with %i',
+    async (status) => {
+      const { gateway } = build([], []);
+      const failing = productListGateway(
+        { ...gateway, read: async (id: string) => product(id) },
+        {
+          list: () =>
+            Promise.reject(
+              new GatewayError({ code: 'failed', status, correlationId: 'c' })
+            ),
+        }
+      );
+
+      const row = await failing.read('a', { [PRICES_AT_FILTER]: 'scope' });
+
+      expect(row.id).toBe('a');
+      // Absent, and not `null`: nobody learned whether the scope holds one.
+      expect('scopePrice' in row).toBe(false);
+    }
+  );
+
+  it('still throws when the product itself cannot be read', async () => {
+    const { gateway } = build([], [price('a')]);
+    const failing = productListGateway(
+      {
+        ...gateway,
+        read: () =>
+          Promise.reject(
+            new GatewayError({
+              code: 'not_found',
+              status: 404,
+              correlationId: 'c',
+            })
+          ),
+      },
+      { list: async () => ({ items: [], nextCursor: null }) }
+    );
+
+    await expect(
+      failing.read('a', { [PRICES_AT_FILTER]: 'scope' })
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('reads one product alone when the list shows no scope', async () => {
+    const { gateway, priceQueries } = build([], [price('a')]);
+
+    const row = await gateway.read('a');
+
+    expect(row.scopePrice).toBeUndefined();
+    expect(priceQueries).toEqual([]);
+  });
+
   it('is the product gateway when no scope is asked for', async () => {
     const { gateway, productQueries, priceQueries } = build(
       [product('a'), product('b')],

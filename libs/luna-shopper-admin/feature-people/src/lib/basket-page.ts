@@ -12,7 +12,10 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { toGatewayError } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  toGatewayError,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
   ResourceReferences,
@@ -26,7 +29,7 @@ import {
   type BasketSettlementView,
 } from './basket-settlements';
 import { FactList, type Fact } from './fact-list';
-import { instant } from './people-format';
+import { instant, madeAt } from './people-format';
 import type { BasketRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
 import { BASKET_PARAM, PERSON_PARAM } from './shopper-params';
@@ -252,6 +255,7 @@ export class BasketPage {
   private readonly _registry = inject(ResourceRegistry);
   private readonly _references = inject(ResourceReferences);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _content = inject(ContentLocaleStore);
 
   private readonly _baskets = this._registry.byName('baskets');
 
@@ -276,7 +280,18 @@ export class BasketPage {
 
   readonly heading = computed(() => {
     const basket = this.basket();
-    return basket === null ? '' : (basket.name ?? basket.id);
+    if (basket === null) {
+      return '';
+    }
+    // Most shopping lists have no name, and an ID is not one (admin plan
+    // 0051). When it was made tells two of them apart, and it is written by
+    // the function that names the row in the list this page was opened from.
+    return (
+      basket.name ??
+      this._translator.t('people.baskets.unnamed', undefined, undefined, {
+        date: madeAt(basket.generatedAt, this._content.order()),
+      })
+    );
   });
 
   /** The owner's Shopping lists tab, for the way back. */
@@ -331,7 +346,7 @@ export class BasketPage {
         label: 'people.baskets.updatedAt',
         text: instant(basket.updatedAt, locale),
       },
-      { label: 'people.baskets.id', text: basket.id, mono: true },
+      { label: 'people.baskets.id', text: basket.id, id: true },
     ];
   });
 

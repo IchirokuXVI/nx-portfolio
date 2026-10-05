@@ -289,6 +289,18 @@ export interface ProductRowView {
               {{ 'resource.action.retry' | rokuT }}
             </button>
           </div>
+        } @else if (store.idNotFound()) {
+          <div class="state" role="status" data-id-not-found>
+            <p>
+              {{
+                'resource.id.notFound'
+                  | rokuT: { thing: descriptor.labels.one | rokuT }
+              }}
+            </p>
+            <button (click)="clearFilters()" class="button" type="button">
+              {{ 'resource.action.clearFilters' | rokuT }}
+            </button>
+          </div>
         } @else if (store.noMatch()) {
           <div class="state" role="status">
             <p>{{ 'resource.list.noMatch' | rokuT }}</p>

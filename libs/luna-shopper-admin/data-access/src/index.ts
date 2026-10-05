@@ -110,6 +110,7 @@ export {
   type PostalCodeServiceI,
 } from './lib/postal-codes/postal-code-service';
 export { PostalCodeSummaryStore } from './lib/postal-codes/postal-code-summary-store';
+export { readRecordById } from './lib/resource/read-record-by-id';
 export { ResourceApiGateways } from './lib/resource/resource-api';
 export { ResourceFormStore } from './lib/resource/resource-form-store';
 export {
