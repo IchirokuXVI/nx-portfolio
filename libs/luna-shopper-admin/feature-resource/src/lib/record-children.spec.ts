@@ -22,7 +22,7 @@ import { RECORD_CONTEXT } from './record-context';
 import { RecordPage } from './record-page';
 import { ResourceChanges } from './resource-changes';
 import { ResourceListPage } from './resource-list-page';
-import { recordRoute, resourceFormBranch } from './routes';
+import { recordRoute, resourceFormBranch, resourceTabRoute } from './routes';
 
 /**
  * What a record holds, drawn by the record page (admin plan 0054, sections 2
@@ -228,9 +228,6 @@ const OFFERS = defineResource<Shop>({
 @Component({ template: 'the list' })
 class ListStub {}
 
-const byName = (name: string) =>
-  [CHAINS, SHOPS, OFFERS].find((descriptor) => descriptor.name === name);
-
 async function mount(url: string, compact = false) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -249,7 +246,12 @@ async function mount(url: string, compact = false) {
       provideRouter([
         { path: 'chains', pathMatch: 'full', component: ListStub },
         recordRoute(CHAINS, { path: 'chains/new', mode: 'create' }),
-        recordRoute(CHAINS, { path: 'chains/:id', lists: byName }),
+        // By hand and not from `lists`: the rows of the shops open, and
+        // their forms are mounted beside the record, below.
+        recordRoute(CHAINS, {
+          path: 'chains/:id',
+          tabs: { shops: resourceTabRoute(SHOPS) },
+        }),
         { path: 'shops', pathMatch: 'full', component: ListStub },
         resourceFormBranch(SHOPS),
       ]),
