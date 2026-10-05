@@ -1,3 +1,5 @@
+> **PR:** [#647](https://github.com/IchirokuXVI/nx-portfolio/pull/647)
+
 # 0187: the products a scope has no price for
 
 > Asked for by admin plan `0043` (a product and its prices), section 2. Build it after admin
