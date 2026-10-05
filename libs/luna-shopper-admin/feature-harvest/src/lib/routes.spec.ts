@@ -2,7 +2,9 @@ import { Component, inject } from '@angular/core';
 import type { Route } from '@angular/router';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  RecordPage,
   RESOURCE_DESCRIPTOR,
+  RESOURCE_FORM_MODE,
   RESOURCE_LIST_EMBED,
   ResourceListPage,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -24,7 +26,8 @@ import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
-import { SourcesPage } from './sources-page';
+import { SOURCES } from './sources';
+import { SourcesTab } from './sources-tab';
 
 /**
  * The harvester in three tabs (admin plan 0044, target 1).
@@ -197,15 +200,22 @@ describe('harvestRoutes, Setup', () => {
   /** Target 6: one page, and each part is a child of it. */
   it('is a page with the three parts as its children', () => {
     expect(page.component).toBe(HarvestSetupPage);
-    expect(childPaths(page)).toEqual([
-      '',
-      'sources',
-      'brands',
-      'postal-codes',
-    ]);
-    expect(
-      page.children?.find((child) => child.path === 'sources')?.component
-    ).toBe(SourcesPage);
+    expect(childPaths(page)).toEqual(['', 'sources', 'brands', 'postal-codes']);
+  });
+
+  /**
+   * The chain sources are the generic list too (admin plan 0059), inside a
+   * part of this library that draws the notice of the harvester and the line
+   * about OpenStreetMap around it.
+   */
+  it('draws the chain sources as the generic list, inside their own part', () => {
+    const tab = page.children?.find((child) => child.path === 'sources');
+
+    expect(SOURCES.segment).toBe('sources');
+    expect(tab?.component).toBe(SourcesTab);
+    expect(tab?.data?.[RESOURCE_DESCRIPTOR]).toBe(SOURCES);
+    expect(tab?.data?.[RESOURCE_LIST_EMBED]).toBe('tab');
+    expect(tab?.children).toBeUndefined();
   });
 
   it('opens on the chain sources when the address names no part', () => {
@@ -240,7 +250,7 @@ describe('harvestRoutes, Setup', () => {
   it('mounts the forms of each resource beside the page, and not inside it', () => {
     expect(forms.component).toBeUndefined();
     expect(routes.indexOf(page)).toBeLessThan(routes.indexOf(forms));
-    expect(childPaths(forms)).toEqual(['brands', 'postal-codes']);
+    expect(childPaths(forms)).toEqual(['sources', 'brands', 'postal-codes']);
 
     const codes = forms.children?.find(
       (child) => child.path === 'postal-codes'
@@ -257,6 +267,29 @@ describe('harvestRoutes, Setup', () => {
     );
   });
 
+  /**
+   * A source is a record page (admin plan 0059): one page adds it, and one
+   * reads it and changes it. The chain sources are this library's own, so
+   * they are mounted whatever the app hands in.
+   */
+  it('opens a source, and adds one, on the record page', () => {
+    const sources = forms.children?.find((child) => child.path === 'sources');
+
+    expect(
+      (sources?.children ?? []).map((child) => [child.path, child.component])
+    ).toEqual([
+      ['new', RecordPage],
+      [':id', RecordPage],
+    ]);
+    for (const child of sources?.children ?? []) {
+      expect(child.data?.[RESOURCE_DESCRIPTOR]).toBe(SOURCES);
+      // The page asks before a draft is left.
+      expect(child.canDeactivate?.length).toBe(1);
+    }
+    expect(sources?.children?.[0].data?.[RESOURCE_FORM_MODE]).toBe('create');
+    expect(sources?.children?.[1].data?.[RESOURCE_FORM_MODE]).toBeUndefined();
+  });
+
   it('holds no resource the app did not hand it', () => {
     const bare = harvestRoutes({ brandsQueue: BrandsQueue, setup: [] });
     const [bareByItself, bareForms] = bare.filter(
@@ -264,7 +297,7 @@ describe('harvestRoutes, Setup', () => {
     );
 
     expect(childPaths(bareByItself)).toEqual(['', 'sources']);
-    expect(bareForms.children).toEqual([]);
+    expect(childPaths(bareForms)).toEqual(['sources']);
   });
 });
 

@@ -63,6 +63,7 @@ describe('ADMIN_SECTIONS', () => {
     ]);
     expect(harvest.resources).toBeUndefined();
     expect((harvest.held ?? []).map((descriptor) => descriptor.name)).toEqual([
+      'sources',
       'brands',
       'postal-codes',
     ]);

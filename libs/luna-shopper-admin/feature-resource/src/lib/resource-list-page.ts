@@ -118,6 +118,7 @@ interface PendingAction extends RowAction {
       [createKey]="descriptor.labels.create ?? 'resource.action.create'"
       [currentId]="openId()"
       [empty]="store.empty()"
+      [emptyKey]="descriptor.list.empty ?? 'resource.list.empty'"
       [errorKey]="errorKey()"
       [failed]="failed()"
       [filters]="filters"

@@ -26,6 +26,14 @@ export class ChainNames {
   }
 
   /**
+   * The chain's name, or `null` where the reference could not name it. For a
+   * caller that says something else than the ID then (admin plan 0059).
+   */
+  known(supermarketId: string): string | null {
+    return this._names().get(supermarketId) ?? null;
+  }
+
+  /**
    * Name the chains not named yet.
    *
    * One read per chain, of which there are a handful, and only for an id the map

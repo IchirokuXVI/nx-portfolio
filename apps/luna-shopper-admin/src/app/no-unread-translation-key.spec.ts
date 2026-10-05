@@ -43,17 +43,14 @@ const CATALOGUE = join(LIBS, 'ui', 'assets', 'i18n', 'en.json');
 /**
  * Keys that only a spec names, each one a decision somebody made.
  *
- * `harvest.sources.field.lastRunAt` is listed by `translations.spec.ts` as
- * one of the twelve the chain sources screen needs, and the screen draws
- * eleven of them. Admin plan 0047 may not delete a thing a spec reads, so it
- * is named here and in that plan's pull request.
+ * None today. `harvest.sources.field.lastRunAt` was the one: the chain
+ * sources screen drew eleven of the twelve keys `translations.spec.ts` lists.
+ * The record of a source draws the last run (admin plan 0059), so it is read.
  *
  * The list can only shrink: an entry that is read again, or that left the
  * catalogue, fails the last test of this file.
  */
-const NAMED_BY_A_SPEC_ONLY: readonly string[] = [
-  'harvest.sources.field.lastRunAt',
-];
+const NAMED_BY_A_SPEC_ONLY: readonly string[] = [];
 
 /** The plural forms i18next adds to a key, which the source never writes. */
 const PLURAL = /_(zero|one|two|few|many|other)$/;

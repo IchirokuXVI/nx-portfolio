@@ -1619,39 +1619,55 @@
     },
     "sources": {
       "heading": "Chain sources",
-      "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
+      "one": "Chain source",
+      "many": "Chain sources",
+      "noun": "source",
+      "add": "Add a source",
       "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
-      "edit": "Change",
-      "new": "Add a chain source",
-      "create": "Create the source",
-      "exists": "That chain already has a source row. Change it in the list instead.",
-      "never": "Never",
-      "enabled": {
-        "label": "{{chain}} may be fetched",
-        "info": {
-          "title": "May be fetched",
-          "allows": "A run may fetch this chain only while this is on.",
-          "off": "It is off for every chain until somebody turns it on."
-        }
+      "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
+      "exists": "This chain already has a source.",
+      "adapterGone": "A source can no longer be fetched this way. Choose another.",
+      "enabledSetBy": "Changed from the More menu",
+      "section": {
+        "source": "Source",
+        "speed": "How fast",
+        "may": "What it may do"
       },
-      "trusted": {
-        "label": "{{chain}} is trusted",
-        "info": {
-          "title": "Trusted",
-          "means": "Trusted means the shops this chain names go into the catalog with nobody looking first.",
-          "waits": "A shop with no position, postal code, country or chain still waits in the Places queue.",
-          "only": "This is the only switch here that writes to the catalog without a review."
-        }
+      "state": {
+        "fetched": "Fetched",
+        "off": "Off"
       },
-      "remove": {
-        "action": "Delete this source",
-        "heading": "Delete this chain's source?",
-        "body": "{{chain}} will have no source row, so no run can be started for it and its adapter, workers, rate and switches are forgotten. The runs it has already done are kept. Describe the chain again to fetch it once more.",
-        "confirm": "Delete the source"
+      "adapter": {
+        "mercadona-api": "mercadona-api",
+        "deza-web": "deza-web",
+        "eljamon-web": "eljamon-web",
+        "dia-api": "dia-api",
+        "carrefour-web": "carrefour-web",
+        "lidl-api": "lidl-api",
+        "manual": "manual"
+      },
+      "help": {
+        "enabled": "A run may fetch this chain only while this says yes. It says no for every chain until somebody changes it.",
+        "autoImportPlaces": "The shops this chain names go into the catalog with nobody looking first. A shop with no position, postal code, country or chain still waits in the Places queue. This is the only setting here that writes to the catalog without a review."
+      },
+      "action": {
+        "stop": "Stop fetching this chain",
+        "allow": "Let this chain be fetched"
+      },
+      "confirm": {
+        "stop": {
+          "heading": "Stop fetching this chain?",
+          "body": "No run may fetch {{name}} until somebody lets it be fetched again.",
+          "confirm": "Stop fetching"
+        },
+        "allow": {
+          "heading": "Let this chain be fetched?",
+          "body": "A run may then fetch {{name}} from its storefront. This starts no run by itself.",
+          "confirm": "Let it be fetched"
+        }
       },
       "config": {
-        "hint": "Adapter specific settings, as JSON. An empty box means no settings at all. The harvester reads this when a run starts, so a value that is wrong is found by the run rather than here.",
-        "invalid": "That is not a JSON object, so nothing was saved. Fix it, or empty the box."
+        "hint": "Adapter specific settings, as JSON. An empty box means no settings at all. The harvester reads this when a run starts, so a value that is wrong is found by the run rather than here."
       },
       "field": {
         "chain": "Chain",
@@ -1663,7 +1679,7 @@
         "lastSuccessAt": "Last good run",
         "failures": "Failures in a row",
         "enabled": "May be fetched",
-        "trusted": "Trusted"
+        "autoImportPlaces": "Places are added with no review"
       },
       "osmAlways": "OpenStreetMap is always asked for every postal code. It has no row here."
     },
@@ -1703,7 +1719,7 @@
       },
       "confirm": {
         "discoverAgain": {
-          "heading": "Discover {{name}} again?",
+          "heading": "Queue this postal code again?",
           "body": "This puts {{name}} back in the queue and ignores the thirty day wait, which is the only reason to press it. It fetches from a public service when its turn comes. The queue runs one code at a time, so the code is queued and not started.",
           "confirm": "Queue it again"
         }

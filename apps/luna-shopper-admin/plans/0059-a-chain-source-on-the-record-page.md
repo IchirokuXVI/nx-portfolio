@@ -1,3 +1,5 @@
+> **PR:** [#641](https://github.com/IchirokuXVI/nx-portfolio/pull/641)
+
 # 0059 A chain source on the record page
 
 > Eighth plan of the record page series (`0052` to `0060`). Needs `0054` (the collections
