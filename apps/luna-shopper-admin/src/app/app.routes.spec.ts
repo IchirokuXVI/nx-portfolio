@@ -233,7 +233,6 @@ describe('appRoutes', () => {
     [`/shoppers/people/${ROSA}/zones`, 'the zones of a person'],
     [`/shoppers/people/${ROSA}/shopping-lists`, 'what a person owns'],
     [`/shoppers/people/${ROSA}/shopping-lists/b-saturday`, 'a shopping list'],
-    [`/shoppers/people/${ROSA}/edit`, 'the form of a person'],
     ['/shoppers/zones', 'the zones'],
     [`/shoppers/zones/${KITCHEN}/members`, 'the members of a zone'],
     [
@@ -255,7 +254,6 @@ describe('appRoutes', () => {
       'the shopping lists drawn from a zone',
     ],
     [`/shoppers/zones/${KITCHEN}/details`, 'the facts of a zone'],
-    [`/shoppers/zones/${KITCHEN}/edit`, 'the form of a zone'],
     // The harvester in three tabs (admin plan 0044).
     ['/harvest/review/products', 'the queue of source products'],
     ['/harvest/review/shops', 'the queue of source shops'],
@@ -298,6 +296,30 @@ describe('appRoutes', () => {
 
     expect(router.url).toBe('/harvest/setup/brands/br_1?edit=1');
   });
+
+  /**
+   * The same for a person and a zone (admin plan 0057). Each has tabs, so the
+   * record opens on its first one, and the page then moves to Details.
+   */
+  it.each([
+    [
+      `/shoppers/people/${ROSA}/edit`,
+      `/shoppers/people/${ROSA}/details?edit=1`,
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/edit`,
+      `/shoppers/zones/${KITCHEN}/members?edit=1`,
+    ],
+  ])(
+    'sends the old address %s to the record, with its form open',
+    async (old, record) => {
+      const { router } = await boot(true);
+
+      await router.navigateByUrl(old);
+
+      expect(router.url).toBe(record);
+    }
+  );
 
   /**
    * The three tabs of the harvester, each drawn by its own page, and what

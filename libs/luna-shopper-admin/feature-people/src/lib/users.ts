@@ -4,9 +4,12 @@ import {
   DIRECTORY_SERVICE,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
 import { USER_SEED, type UserRow } from './people-seed';
-import { rolesCell, USER_ROLE_OPTIONS } from './user-roles';
+import { PersonZonesTab } from './person-tabs';
+import { PERSON_ZONES_TAB } from './shopper-params';
+import { roleActions, rolesCell, USER_ROLE_OPTIONS } from './user-roles';
 
 /** A person using velista, as the back office reads one. */
 export type User = UserRow;
@@ -20,12 +23,16 @@ const USER_KIND_OPTIONS = [
 /**
  * The people (plan 0007, section 2, widened by plan 0009, section 2).
  *
- * **A person is a page** (admin plan 0045): the People tab of Shoppers lists
- * them, and one of them opens beside the list with its details, its zones and
- * its shopping lists as tabs. `shoppersRoutes` mounts all of it, which is why
- * this names no detail component.
+ * **A person is a record page** (admin plans 0045 and 0057): the People tab
+ * of Shoppers lists them, and one of them opens beside the list with its
+ * details, its zones and its shopping lists as tabs. The `record` block says
+ * which tabs, and `shoppersRoutes` mounts the page.
  *
- * **Two editable fields and two named actions.** `0007` made this screen read
+ * **A role is given and taken away in the More menu** (admin plan 0057): one
+ * named action for each, with its own question. Nothing on the page that
+ * reads writes, so a role is no switch.
+ *
+ * **Two editable fields and two named actions of its own.** `0007` made this screen read
  * only, on the grounds that the invariants around a user live in services
  * rather than in constraints. That is still true, and it is why exactly two of
  * the six fields can be changed: backend plan 0077 put a service behind each of
@@ -107,6 +114,26 @@ export const USERS = defineResource<User>({
       time: true,
       help: 'people.users.emailVerifiedAtHelp',
       editable: false,
+      // Amber, because it is the one state of an account that an operator
+      // can do something about: "Resend confirmation" is in the More menu.
+      check: (row) =>
+        isUnconfirmed(row) ? { label: 'people.users.notConfirmed' } : null,
+    },
+    {
+      kind: 'boolean',
+      name: 'hasPassword',
+      label: 'people.users.hasPassword',
+      help: 'people.users.hasPasswordHelp',
+      editable: false,
+    },
+    {
+      kind: 'text',
+      name: 'providers',
+      label: 'people.users.providers',
+      help: 'people.users.providersHelp',
+      editable: false,
+      // The page also asks for a row it has not read yet, which holds none.
+      read: (row) => (row.providers ?? []).join(', '),
     },
     {
       kind: 'date',
@@ -115,15 +142,24 @@ export const USERS = defineResource<User>({
       help: 'people.field.createdAtHelp',
       editable: false,
     },
-    // Shown here and set only on the account's page, one switch at a time and
-    // each confirmed (admin plan 0038). Never a control on the form or a row.
+    {
+      kind: 'date',
+      name: 'updatedAt',
+      label: 'people.users.updatedAt',
+      help: 'people.field.updatedAtHelp',
+      time: true,
+      editable: false,
+    },
+    // Shown here and changed only in the More menu of the account's page, one
+    // role at a time and each confirmed (admin plans 0038 and 0057). Never a
+    // control on the form or a row.
     {
       kind: 'text',
       name: 'roles',
       label: 'people.users.roles.label',
       help: 'people.users.rolesHelp',
       editable: false,
-      read: (row) => rolesCell(row.roles),
+      read: (row) => rolesCell(row.roles ?? []),
     },
   ],
 
@@ -146,11 +182,17 @@ export const USERS = defineResource<User>({
   },
 
   /**
-   * What a row says beside the handle: a guest, and an address nobody has
-   * confirmed. The second is on the waiting wash, because it is the one an
-   * operator can do something about.
+   * What a row says beside the handle: an admin, a guest, and an address
+   * nobody has confirmed. The last is on the waiting wash, because it is the
+   * one an operator can do something about.
+   *
+   * "Admin" is the one role said here (the `Actions` board of the record page
+   * mock): it is the role that opens this back office.
    */
   rowStates: () => (row) => [
+    ...((row.roles ?? []).includes('admin')
+      ? [{ label: 'people.users.roles.admin.name', tone: 'good' as const }]
+      : []),
     ...(row.kind === 'TEMPORARY'
       ? [{ label: 'people.users.state.guest', tone: 'neutral' as const }]
       : []),
@@ -197,6 +239,57 @@ export const USERS = defineResource<User>({
     },
   ],
 
+  /**
+   * The page of a person (admin plan 0057, section 2.2).
+   *
+   * It opens on Details. The two links open the zones narrowed to this
+   * person, and neither has a count, because the view carries none.
+   */
+  record: {
+    sections: [
+      {
+        title: 'people.users.section.account',
+        fields: ['username', 'displayName', 'email', 'kind'],
+      },
+      {
+        title: 'people.users.section.access',
+        fields: ['roles', 'emailVerifiedAt', 'hasPassword', 'providers'],
+      },
+    ],
+    children: [
+      {
+        as: 'tab',
+        name: PERSON_ZONES_TAB,
+        label: 'people.users.tabs.zones',
+        component: PersonZonesTab,
+      },
+      {
+        as: 'tab',
+        resource: 'baskets',
+        by: 'ownerUserId',
+        label: 'people.users.tabs.baskets',
+      },
+      {
+        as: 'link',
+        resource: 'zones',
+        by: 'ownerUserId',
+        label: 'people.users.record.zonesOwned',
+      },
+      {
+        as: 'link',
+        resource: 'zones',
+        by: 'userId',
+        label: 'people.users.record.zonesJoined',
+      },
+    ],
+    facts: {
+      added: 'createdAt',
+      changed: 'updatedAt',
+      // "Signed up", which is what the date of an account is.
+      labels: { added: 'people.users.record.signedUp' },
+    },
+  },
+
   // No `delete: true`. Deleting an account is a named action instead, so the
   // confirmation can say whose account it is and what goes with it rather than
   // asking the generic question every row in the app would ask (plan 0007,
@@ -205,6 +298,7 @@ export const USERS = defineResource<User>({
     edit: true,
     named: () => {
       const directory = inject(DIRECTORY_SERVICE);
+      const changes = inject(ResourceChanges);
 
       return [
         {
@@ -222,15 +316,25 @@ export const USERS = defineResource<User>({
           },
           run: (row) => directory.resendVerification(row.userId),
         },
+        // One to give and one to take away for each role, each with its own
+        // question. The list beside the page shows the roles as a column, and
+        // the page says that `users` was written after any action.
+        ...roleActions(directory),
         {
           name: 'delete-account',
           label: 'people.users.action.deleteAccount',
+          danger: true,
+          after: 'leave',
           confirm: {
             heading: 'people.users.confirm.deleteAccount.heading',
             body: 'people.users.confirm.deleteAccount.body',
             confirm: 'people.users.confirm.deleteAccount.confirm',
           },
-          run: (row) => directory.deleteUser(row.userId),
+          run: async (row) => {
+            await directory.deleteUser(row.userId);
+            // Any zone the person owned is marked for deletion with them.
+            changes.wrote('zones');
+          },
         },
       ];
     },

@@ -100,6 +100,13 @@ describe('gatewayErrorKey', () => {
    * A body that did not reach this app intact is what a proxy answering instead
    * of the gateway looks like, and the status is all that survives it.
    */
+  /** Named apart from the conflict it is sent as (admin plan 0057). */
+  it('names a role that was refused to a guest account', () => {
+    expect(
+      gatewayErrorKey(failure({ code: 'guest_has_no_roles', status: 409 }))
+    ).toBe('resource.error.guestHasNoRoles');
+  });
+
   it('falls back to the status when there is no code', () => {
     expect(gatewayErrorKey(failure({ status: 404 }))).toBe(
       'resource.error.notFound'

@@ -11,6 +11,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RECORD_CONTEXT,
   RECORD_EDIT_PARAM,
   ResourceChanges,
   ResourceRegistry,
@@ -27,10 +28,9 @@ import {
 } from '@portfolio/luna-shopper-admin/ui';
 import { MoreIcon } from '@portfolio/shared/ui';
 import { day } from './people-format';
-import type { MembershipRow } from './people-seed';
+import type { MembershipRow, ZoneRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
 import { ActionConfirm, ActionRunner, isDangerAction } from './row-actions';
-import { ZoneContext } from './shopper-contexts';
 import { ZONE_CAUTION } from './shopper-params';
 import { ShoppersStatus } from './shoppers-status';
 
@@ -88,6 +88,10 @@ const ANSWERS: readonly string[] = ['approve-member', 'reject-member'];
  *
  * The members come with the zone's own read, so the tab makes no request of
  * its own and cannot disagree with the count on its tab.
+ *
+ * **It learns the zone from `RECORD_CONTEXT`** (admin plan 0057), which is the
+ * record the page holds. After an action it asks the page to read the zone
+ * again, so the header, the counts and this tab move together.
  */
 @Component({
   selector: 'lib-zone-members-tab',
@@ -104,7 +108,7 @@ const ANSWERS: readonly string[] = ['approve-member', 'reject-member'];
       <p class="refusal" role="alert">{{ key | rokuT }}</p>
     }
 
-    @if (zone.row(); as row) {
+    @if (zone() !== null) {
       @if (rows().length === 0) {
         <p class="state">{{ 'people.zones.noMembers' | rokuT }}</p>
       } @else {
@@ -225,7 +229,9 @@ const ANSWERS: readonly string[] = ['approve-member', 'reject-member'];
       }
 
       <lib-caution-line [text]="caution | rokuT" />
-    } @else if (zone.status() === 'loading') {
+    } @else {
+      <!-- The page draws no tab for a zone that could not be read, so no
+           zone here is one that is on its way. -->
       <p class="state" role="status">{{ 'resource.list.loading' | rokuT }}</p>
     }
 
@@ -292,7 +298,13 @@ export class ZoneMembersTab {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _status = inject(ShoppersStatus);
 
-  readonly zone = inject(ZoneContext);
+  private readonly _record = inject(RECORD_CONTEXT);
+
+  /**
+   * The zone, as the page read it. The read of one zone carries its members,
+   * which the descriptor names as no field.
+   */
+  readonly zone = computed(() => this._record.row() as ZoneRow | null);
   readonly actions = new ActionRunner();
   readonly compact = inject(Viewport).compact;
 
@@ -307,13 +319,13 @@ export class ZoneMembersTab {
 
   /** The requests that wait, then everybody else in the order they joined. */
   readonly rows = computed<readonly MemberRow[]>(() => {
-    const zone = this.zone.row();
+    const zone = this.zone();
     if (zone === null) {
       return [];
     }
     const locale = this._translator.locale();
 
-    const rows = zone.members.map((member): MemberRow => {
+    const rows = (zone.members ?? []).map((member): MemberRow => {
       const waiting = member.status === 'PENDING';
       const personPath = this._registry.rowPath('users', member.userId);
       const formPath = this._registry.rowPath(
@@ -412,8 +424,8 @@ export class ZoneMembersTab {
     this.closeMenu();
     this.actions.start(action, member, {
       args: { name: member.username, zone: member.zoneName },
-      // Letting somebody in is undone by removing them. The others are not.
-      tone: action.name === 'approve-member' ? 'primary' : 'danger',
+      // The tone is the descriptor's: letting somebody in is undone by
+      // removing them, and the others are marked `danger`.
       after: () => this._changed(),
     });
   }
@@ -421,11 +433,14 @@ export class ZoneMembersTab {
   /**
    * A membership moved. The zone is read again, the column of zones reads its
    * count of requests again, and so does the rail.
+   *
+   * Saying that `zones` was written is what reads the zone again: the page
+   * watches the resource it shows. A `reload()` beside it was a second read
+   * of the same zone.
    */
-  private async _changed(): Promise<void> {
+  private _changed(): void {
     this._changes.wrote('memberships');
     this._changes.wrote('zones');
     this._status.refresh();
-    await this.zone.reload();
   }
 }

@@ -195,6 +195,7 @@ const ADDED_STATE = 'added';
       >
         @for (chip of chips(); track chip.label) {
           <span
+            [class.danger]="chip.tone === 'danger'"
             [class.good]="chip.tone === 'good'"
             [class.waiting]="chip.tone === 'waiting'"
             class="chip"
@@ -271,6 +272,23 @@ const ADDED_STATE = 'added';
            go on showing the one before. -->
       @for (key of keys(); track key) {
         @if (tabbed) {
+          <!-- Above the tab that is open, whichever it is: an action of the
+               More menu can be refused while any tab is drawn. -->
+          @if (refusal(); as refused) {
+            <lib-caution-line
+              [text]="refused.key | rokuT"
+              tone="refused"
+              data-refusal
+            >
+              @if (refused.link; as link) {
+                <a
+                  [queryParams]="link.queryParams ?? null"
+                  [routerLink]="link.commands"
+                  >{{ link.labelKey | rokuT }}</a
+                >
+              }
+            </lib-caution-line>
+          }
           <div class="under"><router-outlet /></div>
         } @else {
           <lib-record-view
@@ -352,7 +370,9 @@ const ADDED_STATE = 'added';
           [bodyKey]="question.body"
           [busy]="working()"
           [confirmKey]="question.confirm"
+          [headingArgs]="{ name: title() }"
           [headingKey]="question.heading"
+          [tone]="action.danger ? 'danger' : 'primary'"
           data-action-question
         />
       }
@@ -409,6 +429,11 @@ const ADDED_STATE = 'added';
     .chip.waiting {
       background: var(--admin-waiting-wash);
       color: var(--admin-waiting-on-wash);
+    }
+
+    .chip.danger {
+      background: var(--admin-danger-wash);
+      color: var(--admin-danger-on-wash);
     }
 
     button {
@@ -638,7 +663,14 @@ export class RecordPage implements LeaveAware {
   readonly working = signal(false);
   /** A delete that was refused: why, and where the rows that hold it are. */
   readonly refusedDelete = signal<RecordRefusal | null>(null);
-  /** A named action that failed, drawn above the first section. */
+  /**
+   * A named action that failed. A record with no tabs draws it above the
+   * first section. A record with tabs draws it above the tab that is open,
+   * so it is said on every tab.
+   *
+   * It goes with the next action, with Edit, with another record and with
+   * another tab.
+   */
   readonly refusal = signal<RecordRefusal | null>(null);
 
   /** The body of the page, once it is drawn. */
@@ -898,6 +930,13 @@ export class RecordPage implements LeaveAware {
       }
       if (event instanceof NavigationEnd) {
         this.yielded.set(this._isYielded());
+        // A refusal is about what the operator did on the tab that was open.
+        // It has no control that takes it away, so another tab does.
+        const tab = this._openTab();
+        if (tab !== this._tab) {
+          this._tab = tab;
+          this.refusal.set(null);
+        }
       }
     });
 
@@ -1340,6 +1379,14 @@ export class RecordPage implements LeaveAware {
     return false;
   }
 
+  /** The path of the tab that is open, or `null` when the page has none. */
+  private _openTab(): string | null {
+    return this._route.snapshot.firstChild?.routeConfig?.path ?? null;
+  }
+
+  /** The tab that was open when the last navigation ended. */
+  private _tab = this._openTab();
+
   /** Whether a route under the child this page gives way to is open. */
   private _isYielded(): boolean {
     const child = this._route.snapshot.firstChild;
@@ -1602,6 +1649,8 @@ function askBeforeUnload(event: BeforeUnloadEvent): void {
  *
  * It holds nothing. The page above holds the record, the draft and the
  * questions, because the header is there, and this hands the view to it.
+ * A named action that was refused is said by the page above too, over every
+ * tab, so the view here is handed none.
  *
  * Leaving the tab asks the page. A form that is left with nothing changed is
  * closed, so that another tab is never drawn under the word "Editing".
@@ -1617,7 +1666,6 @@ function askBeforeUnload(event: BeforeUnloadEvent): void {
       [added]="page.added()"
       [descriptor]="page.descriptor"
       [parents]="page.parents()"
-      [refusal]="page.refusal()"
       [store]="page.store()"
     />
   `,

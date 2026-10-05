@@ -36,6 +36,10 @@ interface PendingAction {
 export interface ActionOptions {
   /** What to put into the confirmation's body. `name` is the row's title. */
   readonly args?: Readonly<Record<string, string | number>>;
+  /**
+   * For a named action the default is what its descriptor says: red when it
+   * is `danger`, and `primary` when it is not.
+   */
   readonly tone?: 'danger' | 'primary';
   readonly refusals?: Readonly<Record<string, string>>;
   /** What follows the action: usually reading the page again. */
@@ -91,7 +95,10 @@ export class ActionRunner {
         await action.run(row);
         await options.after?.();
       },
-      options
+      {
+        ...options,
+        tone: options.tone ?? (isDangerAction(action) ? 'danger' : 'primary'),
+      }
     );
   }
 
@@ -194,16 +201,12 @@ export class ActionConfirm {
 }
 
 /**
- * The actions whose button is red: the ones that take something away for
- * good. Named here so that the page of a person and the page of a zone agree.
+ * Whether an action's button is red.
+ *
+ * The descriptor says so, with `danger`, and nothing names the actions a
+ * second time: the record page reads the same flag, so a menu drawn here and
+ * the More menu of a page cannot disagree.
  */
-const DANGER_ACTIONS: readonly string[] = [
-  'delete-account',
-  'delete-zone',
-  'ban-member',
-];
-
-/** Whether an action's button is red. */
-export function isDangerAction(action: { readonly name: string }): boolean {
-  return DANGER_ACTIONS.includes(action.name);
+export function isDangerAction(action: { readonly danger?: true }): boolean {
+  return action.danger === true;
 }

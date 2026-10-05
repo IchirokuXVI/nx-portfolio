@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import {
+  ACCOUNT_ROLES,
   RESOURCE_GATEWAYS,
   ResourceListStore,
   type ResourceSource,
@@ -10,6 +11,8 @@ import {
   draftFor,
   fieldOf,
   idOf,
+  recordLayout,
+  recordTabs,
   toInput,
   toRowView,
   type AnyResourceDescriptor,
@@ -31,8 +34,9 @@ import {
   ZONE_SEED,
 } from './people-seed';
 import { ZONE_CAUTION } from './shopper-params';
-import { USERS } from './users';
-import { ZONES } from './zones';
+import { roleActions } from './user-roles';
+import { USERS, type User } from './users';
+import { ZONES, type Zone } from './zones';
 
 /**
  * The people descriptors, asserted rather than claimed.
@@ -356,6 +360,158 @@ describe('the users descriptor', () => {
   });
 });
 
+describe('the page of a person', () => {
+  it('opens on Details, then its zones and its shopping lists', () => {
+    expect(recordTabs(USERS).map((tab) => tab.key)).toEqual([
+      'details',
+      'zones',
+      'baskets',
+    ]);
+  });
+
+  it('reads the account and its access as two sections', () => {
+    const layout = recordLayout(USERS, 'read');
+
+    expect(
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      [
+        'people.users.section.account',
+        ['username', 'displayName', 'email', 'kind'],
+      ],
+      [
+        'people.users.section.access',
+        ['roles', 'emailVerifiedAt', 'hasPassword', 'providers'],
+      ],
+    ]);
+    expect(layout.facts.added?.name).toBe('createdAt');
+    expect(layout.facts.changed?.name).toBe('updatedAt');
+    expect(layout.facts.addedLabel).toBe('people.users.record.signedUp');
+  });
+
+  it('links to the zones narrowed to the person two ways, with no count', () => {
+    expect(
+      (USERS.record?.children ?? [])
+        .filter((child) => child.as === 'link')
+        .map((child) => ('by' in child ? [child.by, child.count] : []))
+    ).toEqual([
+      ['ownerUserId', undefined],
+      ['userId', undefined],
+    ]);
+  });
+
+  it('says "Not yet" for an address nobody confirmed, and nothing else', () => {
+    const [rosa, marc, , guest] = USER_SEED;
+    const field = USERS.fields.find(
+      (entry) => entry.name === 'emailVerifiedAt'
+    );
+    const check = (row: User) => field?.check?.(row) ?? null;
+
+    expect(check(marc)).toEqual({ label: 'people.users.notConfirmed' });
+    expect(check(rosa)).toBeNull();
+    // A guest has no address, so there is nothing to confirm.
+    expect(check(guest)).toBeNull();
+  });
+
+  it('prints the sign in providers as one line', () => {
+    const [rosa] = USER_SEED;
+    const field = USERS.fields.find((entry) => entry.name === 'providers');
+
+    expect(field?.read?.({ ...rosa, providers: ['google', 'apple'] })).toBe(
+      'google, apple'
+    );
+  });
+});
+
+describe('the roles of a person, as actions', () => {
+  const [rosa, marc, , guest] = USER_SEED;
+  const offered = (row: User) =>
+    namedActionsOf(USERS)
+      .filter((action) => action.available?.(row) !== false)
+      .map((action) => action.name)
+      .filter((name) => name.includes('-role-'));
+
+  it('builds one to give and one to take away for every role', () => {
+    expect(
+      namedActionsOf(USERS)
+        .map((action) => action.name)
+        .filter((name) => name.includes('-role-'))
+    ).toEqual(
+      ACCOUNT_ROLES.flatMap((role) => [
+        `give-role-${role}`,
+        `take-role-${role}`,
+      ])
+    );
+  });
+
+  it('offers a person who holds a role to take it away, and to give the others', () => {
+    // marc holds the admin role.
+    expect(offered(marc)).toEqual(['take-role-admin', 'give-role-premium']);
+  });
+
+  it('offers a person who holds none to give each', () => {
+    expect(offered(rosa)).toEqual(['give-role-admin', 'give-role-premium']);
+  });
+
+  it('never offers a role to a guest', () => {
+    expect(offered(guest)).toEqual([]);
+  });
+
+  it('asks before each, with the words of the role, and destroys nothing', () => {
+    const roles = namedActionsOf(USERS).filter((action) =>
+      action.name.includes('-role-')
+    );
+
+    expect(
+      roles.map((action) => [action.confirm?.body, action.danger ?? false])
+    ).toEqual(
+      ACCOUNT_ROLES.flatMap((role) => [
+        [`people.users.confirm.grantRole.body.${role}`, false],
+        [`people.users.confirm.removeRole.body.${role}`, false],
+      ])
+    );
+    // A heading is drawn with no values put in, so it holds none.
+    expect(roles.map((action) => action.confirm?.heading)).toEqual(
+      ACCOUNT_ROLES.flatMap(() => [
+        'people.users.confirm.grantRole.heading',
+        'people.users.confirm.removeRole.heading',
+      ])
+    );
+  });
+
+  it('sends the whole set with one role changed', async () => {
+    const sent: string[] = [];
+    const actions = roleActions({
+      setUserRoles: async (id, roles) =>
+        void sent.push(`${id}:${roles.join(',')}`),
+    });
+    const run = (name: string, row: User) =>
+      actions.find((action) => action.name === name)?.run(row);
+
+    await run('give-role-premium', marc);
+    await run('take-role-admin', marc);
+    await run('give-role-admin', { ...marc, roles: ['premium'] });
+
+    expect(sent).toEqual([
+      `${marc.userId}:admin,premium`,
+      `${marc.userId}:`,
+      // In the order the server lists the roles, whatever was held first.
+      `${marc.userId}:admin,premium`,
+    ]);
+  });
+
+  it('marks the delete of an account as the one action that destroys', () => {
+    expect(
+      namedActionsOf(USERS)
+        .filter((action) => action.danger === true)
+        .map((action) => [action.name, action.after])
+    ).toEqual([['delete-account', 'leave']]);
+  });
+});
+
 describe('the zones descriptor', () => {
   /** One filter, by one user, which is the whole requirement (plan 0007, section 2). */
   it('filters by a single user, chosen by name', () => {
@@ -389,9 +545,101 @@ describe('the zones descriptor', () => {
     const named = toRowView(ZONES, kitchen, RENDER);
     const unresolved = toRowView(ZONES, allotment, RENDER);
 
-    expect(named.cells['ownerName'].text).toBe('rosa');
-    expect(unresolved.cells['ownerName'].text).toBe(allotment.ownerUserId);
-    expect(unresolved.cells['ownerName'].key).toBeUndefined();
+    expect(named.cells['ownerUserId'].text).toBe('rosa');
+    expect(unresolved.cells['ownerUserId'].text).toBe(allotment.ownerUserId);
+    expect(unresolved.cells['ownerUserId'].key).toBeUndefined();
+  });
+
+  /** The page of a zone resolves the name itself, and links to the person. */
+  it('holds the owner as a reference to the person that nobody types', () => {
+    const owner = ZONES.fields.find((field) => field.name === 'ownerUserId');
+
+    expect(owner).toMatchObject({
+      kind: 'reference',
+      resource: 'users',
+      nameFrom: 'ownerName',
+      editable: false,
+    });
+    expect(ZONES.fields.map((field) => field.name)).not.toContain('ownerName');
+  });
+
+  /**
+   * The sentence beside an open zone says the owner by name. The read of one
+   * zone carries no name, so the owner is named as the member they are, and
+   * an owner nothing names is left out. Never the ID.
+   */
+  it('names the owner in the brief sentence, and never by ID', () => {
+    const [kitchen, allotment] = ZONE_SEED;
+    const sentence = (row: Zone) => ZONES.list.brief?.sentence?.(row);
+
+    expect(sentence(kitchen)).toMatchObject({
+      key: 'people.zones.brief.owned',
+      args: { owner: 'rosa' },
+    });
+    // As the read of one zone answers: no name on the row, the members there.
+    expect(sentence({ ...kitchen, ownerName: null })).toMatchObject({
+      key: 'people.zones.brief.owned',
+      args: { owner: 'rosa' },
+    });
+    expect(sentence(allotment)).toMatchObject({
+      key: 'people.zones.brief.counts',
+    });
+    expect(JSON.stringify(sentence(allotment))).not.toContain(
+      String(allotment.ownerUserId)
+    );
+    expect(sentence({ ...allotment, ownerUserId: null })).toMatchObject({
+      key: 'people.zones.brief.noOwner',
+    });
+  });
+
+  it('opens on its members, with Details last, and counts two tabs', () => {
+    expect(recordTabs(ZONES).map((tab) => tab.key)).toEqual([
+      'members',
+      'lists',
+      'zone-baskets',
+      'details',
+    ]);
+    expect(
+      (ZONES.record?.children ?? []).map((child) => child.count ?? null)
+    ).toEqual(['memberCount', 'listCount', null]);
+  });
+
+  it('reads the zone, its state and its settings as three sections', () => {
+    const layout = recordLayout(ZONES, 'read');
+
+    expect(
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      ['people.zones.section.zone', ['name', 'ownerUserId', 'joinCode']],
+      [
+        'people.zones.section.state',
+        ['status', 'markedForDeletionAt', 'pendingCount'],
+      ],
+      ['people.zones.section.settings', ['config']],
+    ]);
+    expect(layout.facts.added?.name).toBe('createdAt');
+    expect(layout.facts.changed?.name).toBe('updatedAt');
+    expect(
+      ZONES.fields.find((field) => field.name === 'joinCode')
+    ).toMatchObject({ format: 'code' });
+  });
+
+  it('marks the three actions that harm, and leaves after the delete', () => {
+    expect(
+      namedActionsOf(ZONES).map((action) => [
+        action.name,
+        action.danger ?? false,
+        action.after ?? 'reload',
+      ])
+    ).toEqual([
+      ['regenerate-join-code', true, 'reload'],
+      ['mark-for-deletion', true, 'reload'],
+      ['restore-zone', false, 'reload'],
+      ['delete-zone', true, 'leave'],
+    ]);
   });
 
   it('offers the four zone actions and no membership action', () => {

@@ -1,11 +1,14 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import {
   DIRECTORY_SERVICE,
   GatewayError,
   type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { RecordPage } from '@portfolio/luna-shopper-admin/feature-resource';
 import { compositeId } from '@portfolio/luna-shopper-admin/models';
+import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
 import { LIST_SEED, USER_SEED, ZONE_SEED } from './people-seed';
 import {
   bootShoppers,
@@ -43,6 +46,33 @@ const ZONES = '/shoppers/zones';
 const withDirectory = (directory: DirectoryServiceI) => [
   { provide: DIRECTORY_SERVICE, useValue: directory },
 ];
+
+/** The record page that is open: the page of a person or of a zone. */
+const recordPage = (fixture: ComponentFixture<unknown>): RecordPage =>
+  fixture.debugElement.query(By.directive(RecordPage)).componentInstance;
+
+/** The states beside the name in the header, as their keys. */
+const headerStates = (fixture: ComponentFixture<unknown>) =>
+  findAll(fixture, 'lib-record-page lib-page-header .chip').map((chip) => ({
+    label: chip.textContent?.trim(),
+    waiting: chip.classList.contains('waiting'),
+  }));
+
+/** The entries of the More menu, in the order they are drawn. */
+const menuEntries = (fixture: ComponentFixture<unknown>) =>
+  findAll(fixture, 'lib-record-page lib-page-header [data-action]').map(
+    (entry) => entry.getAttribute('data-action')
+  );
+
+/** The question that is up, as the dialog holds it. */
+const question = (fixture: ComponentFixture<unknown>): ConfirmDialog =>
+  fixture.debugElement.query(By.directive(ConfirmDialog)).componentInstance;
+
+/** A link of the page, found by the words it says. */
+const linkSaying = (fixture: ComponentFixture<unknown>, label: string) =>
+  findAll<HTMLAnchorElement>(fixture, 'lib-record-page a').find((link) =>
+    link.textContent?.includes(label)
+  );
 
 describe('the Shoppers section', () => {
   it('opens on the People tab', async () => {
@@ -138,25 +168,74 @@ describe('a person', () => {
     expect(currentUrl()).toBe(`${PEOPLE}/${ROSA.userId}/details`);
   });
 
-  it('says in the header who, what kind of account, and what waits', async () => {
+  it('says in the header who, that it is a guest, and what waits', async () => {
     const confirmed = await bootShoppers(`${PEOPLE}/${ROSA.userId}`);
-    expect(find(confirmed, 'lib-person-page .page-title')?.textContent).toBe(
+    expect(find(confirmed, 'lib-record-page .page-title')?.textContent).toBe(
       'rosa'
     );
-    expect(find(confirmed, '[data-kind]')?.textContent).toContain(
-      'people.users.kind.REGISTERED'
-    );
-    expect(find(confirmed, '[data-unconfirmed]')).toBeNull();
+    expect(headerStates(confirmed)).toEqual([]);
 
+    // An admin says so. Amber for the address, because it is the one an
+    // operator can do something about.
     const waiting = await bootShoppers(`${PEOPLE}/${MARC.userId}`);
-    expect(find(waiting, '[data-unconfirmed]')?.textContent).toContain(
-      'people.users.state.unconfirmed'
-    );
+    expect(headerStates(waiting)).toEqual([
+      { label: 'people.users.roles.admin.name', waiting: false },
+      { label: 'people.users.state.unconfirmed', waiting: true },
+    ]);
+    expect(
+      find(waiting, 'lib-record-page lib-page-header .chip.good')?.textContent
+    ).toContain('people.users.roles.admin.name');
 
     const guest = await bootShoppers(`${PEOPLE}/${GUEST.userId}`);
-    expect(find(guest, '[data-kind]')?.textContent).toContain(
-      'people.users.kind.TEMPORARY'
+    expect(headerStates(guest)).toEqual([
+      { label: 'people.users.state.guest', waiting: false },
+    ]);
+  });
+
+  /** Target 5: "Not yet", in the row as well as in the header. */
+  it('says "Not yet" on the row of an email nobody confirmed', async () => {
+    const waiting = await bootShoppers(`${PEOPLE}/${MARC.userId}/details`);
+    expect(
+      findAll(waiting, '[data-check]').map((mark) => mark.textContent)
+    ).toEqual([expect.stringContaining('people.users.notConfirmed')]);
+
+    const confirmed = await bootShoppers(`${PEOPLE}/${ROSA.userId}/details`);
+    expect(find(confirmed, '[data-check]')).toBeNull();
+  });
+
+  it('draws the account and its access as two sections, and the roles as words', async () => {
+    const fixture = await bootShoppers(`${PEOPLE}/${MARC.userId}/details`);
+    const text = textOf(fixture);
+
+    expect(text).toContain('people.users.section.account');
+    expect(text).toContain('people.users.section.access');
+    expect(text).toContain('people.users.roles.cell.admin');
+    expect(text).toContain('people.users.hasPassword');
+    expect(text).toContain('people.users.providers');
+    // "Signed up" and not "Added", and the ID in the Record block alone.
+    expect(find(fixture, '[data-fact="added"]')?.textContent).toContain(
+      'people.users.record.signedUp'
     );
+    expect(find(fixture, '[data-fact="id"]')?.textContent).toContain(
+      MARC.userId
+    );
+    // Nothing on a page that reads writes.
+    expect(findAll(fixture, '[role="switch"]')).toHaveLength(0);
+  });
+
+  it('links to the zones the account owns and to the ones it is in', async () => {
+    const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}/details`);
+
+    expect(
+      linkSaying(fixture, 'people.users.record.zonesOwned')?.getAttribute(
+        'href'
+      )
+    ).toBe(`${ZONES}?ownerUserId=${ROSA.userId}`);
+    expect(
+      linkSaying(fixture, 'people.users.record.zonesJoined')?.getAttribute(
+        'href'
+      )
+    ).toBe(`${ZONES}?userId=${ROSA.userId}`);
   });
 
   it('shows the display name on the Details tab, where a list would not', async () => {
@@ -170,7 +249,7 @@ describe('a person', () => {
     const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}`);
 
     expect(
-      findAll(fixture, 'lib-person-page lib-page-tabs a').map((tab) =>
+      findAll(fixture, 'lib-record-page lib-page-tabs a').map((tab) =>
         tab.getAttribute('href')
       )
     ).toEqual([
@@ -180,25 +259,42 @@ describe('a person', () => {
     ]);
   });
 
-  it('links Edit to the form, which goes back to the person', async () => {
-    const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}`);
+  it('turns Details into a form on Edit, from whichever tab is open', async () => {
+    const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}/zones`);
 
-    expect(find(fixture, '[data-edit]')?.getAttribute('href')).toBe(
-      `${PEOPLE}/${ROSA.userId}/edit`
-    );
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
+    await settle(fixture);
+    await settle(fixture);
 
-    await TestBed.inject(Router).navigateByUrl(`${PEOPLE}/${ROSA.userId}/edit`);
-    await settle(fixture);
-    await settle(fixture);
-    expect(find(fixture, 'lib-resource-form')).not.toBeNull();
-
-    find<HTMLButtonElement>(
-      fixture,
-      'lib-resource-form-page .page-back'
-    )?.click();
-    await settle(fixture);
-    await settle(fixture);
     expect(currentUrl()).toBe(`${PEOPLE}/${ROSA.userId}/details`);
+    expect(recordPage(fixture).store().mode()).toBe('edit');
+  });
+
+  /** The old address of the form, which links out in the world still name. */
+  it('leads the old address of the form to Details as a form', async () => {
+    const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}/edit`);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(currentUrl()).toBe(`${PEOPLE}/${ROSA.userId}/details`);
+    expect(recordPage(fixture).store().mode()).toBe('edit');
+  });
+
+  it('puts every action in the More menu, and the one that destroys last', async () => {
+    const waiting = await bootShoppers(`${PEOPLE}/${MARC.userId}`);
+
+    // marc holds the admin role and has not confirmed his address.
+    expect(menuEntries(waiting)).toEqual([
+      'resend-verification',
+      'take-role-admin',
+      'give-role-premium',
+      'delete-account',
+    ]);
+    expect(
+      findAll(waiting, 'lib-record-page [pageMoreDanger][data-action]').map(
+        (entry) => entry.getAttribute('data-action')
+      )
+    ).toEqual(['delete-account']);
   });
 
   it('offers no resend for an address that is already confirmed', async () => {
@@ -241,6 +337,9 @@ describe('a person', () => {
     expect(textOf(fixture)).toContain(
       'people.users.confirm.deleteAccount.heading'
     );
+    // It names the account, and the button that goes through is red.
+    expect(question(fixture).bodyArgs()).toEqual({ name: 'rosa' });
+    expect(question(fixture).tone()).toBe('danger');
     expect(calls).toEqual([]);
 
     controlSaying(
@@ -320,44 +419,54 @@ describe('a person', () => {
   });
 });
 
-/** The role switches of the Details tab, in the order the server lists roles. */
-const switches = (fixture: ComponentFixture<ShoppersTestHost>) =>
-  findAll<HTMLButtonElement>(fixture, 'button[role="switch"]');
-
 /**
- * An account's roles (admin plan 0038, on backend plan 0175).
+ * An account's roles (admin plans 0038 and 0057, on backend plan 0175).
  *
  * The in memory gateway holds one account with a role, `marc` with `admin`, so
- * the column, the filter and a switch that is already on each have something
+ * the column, the filter and an entry that takes a role away each have something
  * to show with no server.
  */
 describe("an account's roles", () => {
-  it('draws a switch per role, on where the account holds it', async () => {
-    const fixture = await bootShoppers(`${PEOPLE}/${MARC.userId}/details`);
+  /** A role is words on the page, and it changes in the More menu alone. */
+  it('offers to give a role the account lacks, and to take away one it holds', async () => {
+    const admin = await bootShoppers(`${PEOPLE}/${MARC.userId}/details`);
+    expect(menuEntries(admin)).toEqual(
+      expect.arrayContaining(['take-role-admin', 'give-role-premium'])
+    );
+    expect(menuEntries(admin)).not.toContain('give-role-admin');
+    expect(menuEntries(admin)).not.toContain('take-role-premium');
 
-    expect(
-      switches(fixture).map((button) => button.getAttribute('aria-checked'))
-    ).toEqual(['true', 'false']);
-    expect(textOf(fixture)).toContain('people.users.roles.admin.grants');
-    expect(textOf(fixture)).toContain('people.users.roles.premium.grants');
+    const plain = await bootShoppers(`${PEOPLE}/${ROSA.userId}/details`);
+    expect(menuEntries(plain)).toEqual(
+      expect.arrayContaining(['give-role-admin', 'give-role-premium'])
+    );
+    expect(textOf(plain)).toContain('people.users.roles.cell.none');
   });
 
-  it('grants a role once confirmed, and says when the account sees it', async () => {
+  it('gives a role once confirmed, and the page then says it', async () => {
     const fixture = await bootShoppers(`${PEOPLE}/${ROSA.userId}/details`);
 
-    switches(fixture)[0].click();
+    find(fixture, '[data-action="give-role-admin"]')?.click();
     await settle(fixture);
 
     expect(textOf(fixture)).toContain('people.users.confirm.grantRole.heading');
+    // The question says what the role grants and when the account gets it.
+    expect(textOf(fixture)).toContain(
+      'people.users.confirm.grantRole.body.admin'
+    );
+    expect(question(fixture).bodyArgs()).toEqual({ name: 'rosa' });
+    // A role is given back or taken away as easily, so the button is not red.
+    expect(question(fixture).tone()).toBe('primary');
     // Nothing moves until the operator says yes.
-    expect(switches(fixture)[0].getAttribute('aria-checked')).toBe('false');
+    expect(textOf(fixture)).toContain('people.users.roles.cell.none');
 
     controlSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
     await settle(fixture);
     await settle(fixture);
 
-    expect(switches(fixture)[0].getAttribute('aria-checked')).toBe('true');
-    expect(textOf(fixture)).toContain('people.users.roles.saved');
+    expect(textOf(fixture)).toContain('people.users.roles.cell.admin');
+    expect(menuEntries(fixture)).toContain('take-role-admin');
+    expect(menuEntries(fixture)).not.toContain('give-role-admin');
   });
 
   it('removes a role by sending the whole set without it', async () => {
@@ -367,10 +476,13 @@ describe("an account's roles", () => {
       withDirectory(directory)
     );
 
-    switches(fixture)[0].click();
+    find(fixture, '[data-action="take-role-admin"]')?.click();
     await settle(fixture);
     expect(textOf(fixture)).toContain(
       'people.users.confirm.removeRole.heading'
+    );
+    expect(textOf(fixture)).toContain(
+      'people.users.confirm.removeRole.body.admin'
     );
 
     controlSaying(fixture, 'people.users.confirm.removeRole.confirm')?.click();
@@ -386,7 +498,7 @@ describe("an account's roles", () => {
       withDirectory(directory)
     );
 
-    switches(fixture)[1].click();
+    find(fixture, '[data-action="give-role-premium"]')?.click();
     await settle(fixture);
     controlSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
     await settle(fixture);
@@ -401,56 +513,62 @@ describe("an account's roles", () => {
       withDirectory(directory)
     );
 
-    switches(fixture)[0].click();
+    find(fixture, '[data-action="give-role-admin"]')?.click();
     await settle(fixture);
     controlSaying(fixture, 'resource.action.cancel')?.click();
     await settle(fixture);
 
     expect(calls).toEqual([]);
-    expect(textOf(fixture)).not.toContain('people.users.roles.saved');
+    expect(find(fixture, 'lib-confirm-dialog')).toBeNull();
   });
 
   /** A guest has no roles (admin plan 0045, constraints). */
-  it('shows a guest the switches off, and why', async () => {
+  it('offers a guest no role', async () => {
     const fixture = await bootShoppers(`${PEOPLE}/${GUEST.userId}/details`);
 
-    expect(textOf(fixture)).toContain('people.users.roles.guest');
-    expect(switches(fixture)).toHaveLength(2);
-    expect(switches(fixture).every((button) => button.disabled)).toBe(true);
+    expect(
+      menuEntries(fixture).filter((name) => name?.includes('role'))
+    ).toEqual([]);
+    expect(menuEntries(fixture)).toContain('delete-account');
   });
 
   /**
    * The server's refusal for a guest, named and not the generic conflict. The
-   * tab turns the switches off for a guest, so reaching this takes a stale
-   * screen; the memory twin refuses the same way auth does.
+   * menu offers a guest no role, so reaching this takes a stale screen; the
+   * memory twin refuses the same way auth does. It is said on whichever tab
+   * is open, because the More menu is over every one of them.
    */
-  it('says why the server refused a guest', async () => {
-    const { directory } = recordingDirectory();
-    const refusing: DirectoryServiceI = {
-      ...directory,
-      setUserRoles: async () => {
-        throw new GatewayError({
-          code: 'guest_has_no_roles',
-          status: 409,
-          correlationId: '',
-        });
-      },
-    };
-    const fixture = await bootShoppers(
-      `${PEOPLE}/${ROSA.userId}/details`,
-      withDirectory(refusing)
-    );
+  it.each(['details', 'zones'])(
+    'says why the server refused a guest, on the tab %s',
+    async (tab) => {
+      const { directory } = recordingDirectory();
+      const refusing: DirectoryServiceI = {
+        ...directory,
+        setUserRoles: async () => {
+          throw new GatewayError({
+            code: 'guest_has_no_roles',
+            status: 409,
+            correlationId: '',
+          });
+        },
+      };
+      const fixture = await bootShoppers(
+        `${PEOPLE}/${ROSA.userId}/${tab}`,
+        withDirectory(refusing)
+      );
 
-    switches(fixture)[0].click();
-    await settle(fixture);
-    controlSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
-    await settle(fixture);
+      find(fixture, '[data-action="give-role-admin"]')?.click();
+      await settle(fixture);
+      controlSaying(fixture, 'people.users.confirm.grantRole.confirm')?.click();
+      await settle(fixture);
+      await settle(fixture);
 
-    expect(find(fixture, '[role="alert"]')?.textContent).toContain(
-      'people.users.roles.guestRefused'
-    );
-    expect(textOf(fixture)).not.toContain('people.users.roles.saved');
-  });
+      expect(find(fixture, '[data-refusal]')?.textContent).toContain(
+        'resource.error.guestHasNoRoles'
+      );
+      expect(currentUrl()).toBe(`${PEOPLE}/${ROSA.userId}/${tab}`);
+    }
+  );
 });
 
 describe('the Zones tab', () => {
@@ -466,13 +584,13 @@ describe('the Zones tab', () => {
     expect(textOf(fixture)).toContain('Kitchen');
     expect(textOf(fixture)).toContain('Allotment');
     // Who owns it and how much is in it, as one sentence under the name. The
-    // second zone's owner resolved to nobody, and the sentence still names
-    // the id it could not resolve.
+    // second zone's owner resolved to nobody, and the sentence then leaves
+    // the owner out: an owner is said by name and never by ID.
     expect(
       rows.map((row) => row.querySelector('.row-line')?.textContent?.trim())
     ).toEqual([
       expect.stringContaining('people.zones.brief.owned'),
-      expect.stringContaining('people.zones.brief.owned'),
+      expect.stringContaining('people.zones.brief.counts'),
     ]);
   });
 
@@ -514,24 +632,56 @@ describe('a zone', () => {
     expect(currentUrl()).toBe(`${ZONES}/${KITCHEN.id}/members`);
   });
 
-  it('says in the header who owns it, as a link, and its join code', async () => {
+  /**
+   * The owner and the join code are fields of Details now (admin plan 0057,
+   * section 5). The header keeps the states that say something waits or is
+   * wrong.
+   */
+  it('says in the header which zone, and what waits or is marked', async () => {
     const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
 
-    expect(find(fixture, 'lib-zone-page .page-title')?.textContent).toBe(
+    expect(find(fixture, 'lib-record-page .page-title')?.textContent).toBe(
       'Kitchen'
     );
-    expect(find(fixture, '[data-owner]')?.getAttribute('href')).toBe(
-      `${PEOPLE}/${KITCHEN.ownerUserId}`
+    expect(headerStates(fixture)).toEqual([
+      { label: 'people.zones.state.requests', waiting: true },
+    ]);
+
+    const marked = await bootShoppers(`${ZONES}/${ALLOTMENT.id}`);
+    expect(headerStates(marked)).toEqual([
+      { label: 'people.zones.status.MARKED_FOR_DELETION', waiting: false },
+    ]);
+    // In red, as the page of a zone always drew it.
+    expect(
+      find(marked, 'lib-record-page lib-page-header .chip.danger')?.textContent
+    ).toContain('people.zones.status.MARKED_FOR_DELETION');
+  });
+
+  it('draws the owner on Details as a link to the person, by name', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}/details`);
+    await settle(fixture);
+
+    const owner = findAll<HTMLAnchorElement>(
+      fixture,
+      'lib-record-page lib-record-view a'
+    ).find(
+      (link) => link.getAttribute('href') === `${PEOPLE}/${KITCHEN.ownerUserId}`
     );
-    expect(find(fixture, '[data-join-code]')?.textContent).toBe(
-      KITCHEN.joinCode
-    );
-    expect(find(fixture, '[data-join-code]')?.classList).toContain('mono');
+    expect(owner?.textContent?.trim()).toBe('rosa');
+  });
+
+  /** An owner whose account is gone is never drawn as its bare ID. */
+  it('never draws an owner it cannot name as an ID', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${ALLOTMENT.id}/details`);
+    await settle(fixture);
+
+    expect(textOf(fixture)).not.toContain(String(ALLOTMENT.ownerUserId));
+    expect(textOf(fixture)).toContain('record.value.gone');
   });
 
   it('has four tabs, each under the zone, with the counts the read carries', async () => {
     const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
-    const tabs = findAll(fixture, 'lib-zone-page lib-page-tabs a');
+    const tabs = findAll(fixture, 'lib-record-page lib-page-tabs a');
 
     expect(tabs.map((tab) => tab.getAttribute('href'))).toEqual([
       `${ZONES}/${KITCHEN.id}/members`,
@@ -549,32 +699,55 @@ describe('a zone', () => {
     );
   });
 
-  it('links Edit zone to the form, which shows the one caution', async () => {
+  it('turns Details into a form on Edit, with the one caution above it', async () => {
     const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
 
-    expect(find(fixture, '[data-edit]')?.getAttribute('href')).toBe(
-      `${ZONES}/${KITCHEN.id}/edit`
-    );
+    expect(find(fixture, '[data-caution]')).toBeNull();
 
-    await TestBed.inject(Router).navigateByUrl(`${ZONES}/${KITCHEN.id}/edit`);
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
     await settle(fixture);
     await settle(fixture);
 
-    expect(find(fixture, 'lib-caution-line')?.textContent).toContain(
+    expect(currentUrl()).toBe(`${ZONES}/${KITCHEN.id}/details`);
+    expect(recordPage(fixture).store().mode()).toBe('edit');
+    expect(find(fixture, '[data-caution]')?.textContent).toContain(
       'people.zoneCaution'
     );
+  });
+
+  /** The old address of the form, which links out in the world still name. */
+  it('leads the old address of the form to Details as a form', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}/edit`);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(currentUrl()).toBe(`${ZONES}/${KITCHEN.id}/details`);
+    expect(recordPage(fixture).store().mode()).toBe('edit');
+  });
+
+  it('puts every action in the More menu, the ones that harm in red and the delete last', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
+
+    expect(menuEntries(fixture)).toEqual([
+      'regenerate-join-code',
+      'mark-for-deletion',
+      'delete-zone',
+    ]);
+    expect(
+      findAll(fixture, 'lib-record-page [pageMoreDanger][data-action]').map(
+        (entry) => entry.getAttribute('data-action')
+      )
+    ).toEqual(['regenerate-join-code', 'mark-for-deletion', 'delete-zone']);
   });
 
   it('offers marking for an active zone and restoring for a marked one', async () => {
     const active = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
     expect(find(active, '[data-action="mark-for-deletion"]')).not.toBeNull();
     expect(find(active, '[data-action="restore-zone"]')).toBeNull();
-    expect(find(active, '[data-marked]')).toBeNull();
 
     const marked = await bootShoppers(`${ZONES}/${ALLOTMENT.id}`);
     expect(find(marked, '[data-action="mark-for-deletion"]')).toBeNull();
     expect(find(marked, '[data-action="restore-zone"]')).not.toBeNull();
-    expect(find(marked, '[data-marked]')).not.toBeNull();
   });
 
   it('replaces the join code once confirmed', async () => {
@@ -638,6 +811,51 @@ describe('a zone', () => {
     expect(textOf(fixture)).toContain(KITCHEN.joinCode);
     expect(textOf(fixture)).toContain('people.zones.config');
     expect(textOf(fixture)).toContain('people.zones.pendingCount');
+    expect(textOf(fixture)).toContain('people.zones.section.zone');
+    expect(textOf(fixture)).toContain('people.zones.section.state');
+    expect(textOf(fixture)).toContain('people.zones.section.settings');
+    expect(find(fixture, '[data-fact="id"]')?.textContent).toContain(
+      KITCHEN.id
+    );
+  });
+
+  /** The new code is read with the zone again, and no reload is needed. */
+  it('shows the new join code after it is replaced', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}/details`);
+
+    find(fixture, '[data-action="regenerate-join-code"]')?.click();
+    await settle(fixture);
+    controlSaying(
+      fixture,
+      'people.zones.confirm.regenerateJoinCode.confirm'
+    )?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(textOf(fixture)).not.toContain(KITCHEN.joinCode);
+  });
+
+  it('follows a mark and a restore in the header', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
+    const marked = () =>
+      headerStates(fixture).some(
+        (state) => state.label === 'people.zones.status.MARKED_FOR_DELETION'
+      );
+
+    find(fixture, '[data-action="mark-for-deletion"]')?.click();
+    await settle(fixture);
+    controlSaying(
+      fixture,
+      'people.zones.confirm.markForDeletion.confirm'
+    )?.click();
+    await settle(fixture);
+    await settle(fixture);
+    expect(marked()).toBe(true);
+
+    find(fixture, '[data-action="restore-zone"]')?.click();
+    await settle(fixture);
+    await settle(fixture);
+    expect(marked()).toBe(false);
   });
 });
 
@@ -712,7 +930,7 @@ describe('the Members tab of a zone', () => {
       'waiting'
     );
     expect(
-      find(fixture, 'lib-zone-page lib-page-tabs a .count')?.textContent
+      find(fixture, 'lib-record-page lib-page-tabs a .count')?.textContent
     ).toBe(String(KITCHEN.memberCount + 1));
   });
 
@@ -793,9 +1011,17 @@ describe('the Members tab of a zone', () => {
       .querySelector<HTMLButtonElement>('[data-member-menu]')
       ?.click();
     await settle(fixture);
+    // Red in the menu and red in the question, because the descriptor says
+    // `danger`. Nothing here names the action a second time.
+    expect(
+      findAll(fixture, '.menu-item.danger').map((item) =>
+        item.getAttribute('data-action')
+      )
+    ).toEqual(['transfer-ownership', 'kick-member', 'ban-member']);
     find(fixture, '.menu-item[data-action="ban-member"]')?.click();
     await settle(fixture);
     expect(calls).toEqual([]);
+    expect(question(fixture).tone()).toBe('danger');
 
     controlSaying(fixture, 'people.memberships.confirm.ban.confirm')?.click();
     await settle(fixture);
@@ -898,21 +1124,19 @@ describe('the Lists tab of a zone', () => {
  * name. It used to keep "Loading" as its heading, with "Edit" beside it.
  */
 describe('a person and a zone that cannot be read', () => {
-  it.each([
-    [`${PEOPLE}/nobody`, 'lib-person-page', 'people.users.many'],
-    [`${ZONES}/nowhere`, 'lib-zone-page', 'people.zones.many'],
-  ])('says so at %s, with no Edit and no tabs', async (url, page, heading) => {
-    const fixture = await bootShoppers(url);
-    await settle(fixture);
+  it.each([`${PEOPLE}/nobody`, `${ZONES}/nowhere`])(
+    'says so at %s, with no Edit, no menu and no tabs',
+    async (url) => {
+      const fixture = await bootShoppers(url);
+      await settle(fixture);
 
-    const header = find(fixture, `${page} lib-page-header`);
-    expect(header?.textContent).toContain(heading);
-    expect(header?.textContent).not.toContain('resource.form.loading');
-    expect(find(fixture, `${page} [data-edit]`)).toBeNull();
-    expect(find(fixture, `${page} [data-action]`)).toBeNull();
-    expect(find(fixture, `${page} lib-page-tabs a`)).toBeNull();
-    expect(find(fixture, `${page} .state.error`)).not.toBeNull();
-  });
+      const page = 'lib-record-page';
+      expect(find(fixture, `${page} [data-missing]`)).not.toBeNull();
+      expect(find(fixture, `${page} [data-edit]`)).toBeNull();
+      expect(find(fixture, `${page} [data-action]`)).toBeNull();
+      expect(find(fixture, `${page} lib-page-tabs a`)).toBeNull();
+    }
+  );
 });
 
 describe('a list of a zone', () => {

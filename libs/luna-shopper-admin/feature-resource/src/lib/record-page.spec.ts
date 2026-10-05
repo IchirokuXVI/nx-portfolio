@@ -1019,6 +1019,10 @@ describe('RecordPage, the questions', () => {
     expect(dialog?.querySelector('[data-confirm]')?.textContent).toContain(
       'lines.retire.confirm'
     );
+    // The action says `danger`, so the button that goes through is red.
+    expect(dialog?.querySelector('[data-confirm]')?.classList).toContain(
+      'danger'
+    );
     expect(ran).toEqual([]);
 
     // Dismissed, nothing ran.

@@ -56,7 +56,7 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
  * ```html
  * <lib-page-header
  *   (back)="leave()"
- *   [backLabel]="'people.zones.back' | rokuT"
+ *   [backLabel]="backLabel()"
  *   [heading]="name()"
  *   [info]="descriptor.info ?? null"
  *   [subtitle]="'Owner marta, 4 members'"

@@ -116,6 +116,11 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // half is which conflict: waiting for the run to finish is the whole of
       // what the operator has to do.
       return 'resource.error.runInProgress';
+    case 'guest_has_no_roles':
+      // A role given to a guest account (backend plan 0175). The page of a
+      // person offers a guest no role, so this is a screen that is behind:
+      // the account was a registered one when the page read it.
+      return 'resource.error.guestHasNoRoles';
   }
 
   switch (error.status) {
