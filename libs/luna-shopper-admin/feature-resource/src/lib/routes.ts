@@ -442,19 +442,19 @@ function resourceFormRoutes(
       ? [resourceCreateRoute(descriptor)]
       : []),
 
-    // The page that changes a row, for a resource whose `:id` is taken by a
-    // `detail` of its own. Without it, `edit` on such a resource would change
-    // nothing: `detail` wins at `:id`, and the form would have no address.
+    // The page that changes a row, for a resource that names both pages: its
+    // `:id` is taken by the `detail`, so its `editor` needs an address of its
+    // own. A resource with a `detail` and no `editor` gets none. The record
+    // page is never mounted here: a record has one page, and a second one
+    // beside a `detail` is how two pages come to disagree (admin plan 0060).
     //
     // Before `:id` for readability only. A terminal route has to consume the
     // whole remaining URL, so `:id` cannot match two segments whatever the
     // order.
-    ...(detail !== undefined && descriptor.actions?.edit === true
-      ? [
-          editor === undefined
-            ? recordRoute(descriptor, { path: ':id/edit' })
-            : editorRoute(descriptor, editor, ':id/edit'),
-        ]
+    ...(detail !== undefined &&
+    editor !== undefined &&
+    descriptor.actions?.edit === true
+      ? [editorRoute(descriptor, editor, ':id/edit')]
       : []),
 
     // The page of one row. `detail` before `editor`, because a resource that

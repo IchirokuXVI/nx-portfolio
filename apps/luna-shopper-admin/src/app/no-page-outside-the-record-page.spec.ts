@@ -1,3 +1,9 @@
+import type { Route } from '@angular/router';
+import {
+  adminRoutes,
+  RecordPage,
+  RESOURCE_DESCRIPTOR,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import { ADMIN_SECTIONS } from './sections';
 
@@ -38,6 +44,90 @@ const OUTSIDE: Readonly<
   // once and reports on each (admin plan 0060, section 1).
   'postal-codes': ['editor', 'detail'],
 };
+
+/**
+ * **The same list, read from the route table and not from the descriptors.**
+ *
+ * The list above only sees a page that a descriptor names. A route written by
+ * hand, with a component of its own and the descriptor in its `data`, sets
+ * neither property and passes it. So the route table of the app is walked as
+ * well: every route that names a resource and sits at `new` or at an ID is
+ * the record page, or it is here, by its address.
+ *
+ * Each entry is the name of the resource and the name of the component. The
+ * rule for a new entry is the rule of the list above.
+ */
+const HAND_MOUNTED: Readonly<Record<string, readonly [string, string]>> = {
+  // The editor of `prices`, above.
+  'products/:productId/prices/new': ['prices', 'PriceFormPage'],
+
+  // The editor and the detail of `postal-codes`, above.
+  'harvest/setup/postal-codes/new': ['postal-codes', 'PostalCodeAddPage'],
+  'harvest/setup/postal-codes/:id': ['postal-codes', 'PostalCodeDetailPage'],
+
+  // A price rule opens inside its row of the six rules and not on a page.
+  // The form in the row is `RecordView` on a `RecordStore`, so it is the
+  // record page without the page (admin plan 0060, section 2.1).
+  'products/price-rules/:id': ['price-policies', 'PriceRuleForm'],
+};
+
+/** One route that names a resource at `new` or at an ID. */
+interface RecordRoute {
+  readonly address: string;
+  readonly resource: string;
+  readonly component: unknown;
+}
+
+/**
+ * Whether an address is the page of one record: it ends at `new`, at a
+ * parameter, or at `edit` under a parameter.
+ */
+function isRecordAddress(segments: readonly string[]): boolean {
+  const last = segments[segments.length - 1] ?? '';
+  const before = segments[segments.length - 2] ?? '';
+
+  return (
+    last === 'new' ||
+    last.startsWith(':') ||
+    (last === 'edit' && before.startsWith(':'))
+  );
+}
+
+/**
+ * Every route of the app that draws a component for a resource at the
+ * address of one record.
+ *
+ * By the whole address and not by the path of the route alone: a record with
+ * tabs is mounted at the empty path under the route that holds its ID.
+ */
+function recordRoutes(
+  routes: readonly Route[],
+  above: readonly string[] = []
+): RecordRoute[] {
+  return routes.flatMap((route) => {
+    const segments = [
+      ...above,
+      ...(route.path ?? '').split('/').filter((segment) => segment !== ''),
+    ];
+    const descriptor = route.data?.[RESOURCE_DESCRIPTOR] as
+      | AnyResourceDescriptor
+      | undefined;
+    const here =
+      descriptor !== undefined &&
+      route.component !== undefined &&
+      isRecordAddress(segments)
+        ? [
+            {
+              address: segments.join('/'),
+              resource: descriptor.name,
+              component: route.component,
+            },
+          ]
+        : [];
+
+    return [...here, ...recordRoutes(route.children ?? [], segments)];
+  });
+}
 
 function mounted(): readonly AnyResourceDescriptor[] {
   return [
@@ -92,5 +182,44 @@ describe('the pages that are not the record page', () => {
 
   it('holds two entries, and can only shrink', () => {
     expect(Object.keys(OUTSIDE).sort()).toEqual(['postal-codes', 'prices']);
+  });
+});
+
+describe('the routes that open a record', () => {
+  const found = recordRoutes(adminRoutes(ADMIN_SECTIONS));
+
+  it('are read from the route table of the app', () => {
+    // A walk that found nothing would pass for ever.
+    expect(found.length).toBeGreaterThan(15);
+    expect(found.map((route) => route.address)).toEqual(
+      expect.arrayContaining([
+        'chains/new',
+        'chains/:chainId',
+        'products/:productId',
+        'harvest/setup/sources/:id',
+      ])
+    );
+  });
+
+  /**
+   * The case the list of descriptors cannot see: a route mounted by hand,
+   * with a component of its own. It is the record page, or it is in the list
+   * by its address, with its resource and its component as the list says.
+   */
+  it('draw the record page, but for the ones the list names', () => {
+    const outside = Object.fromEntries(
+      found
+        .filter((route) => route.component !== RecordPage)
+        .map((route) => [
+          route.address,
+          [route.resource, (route.component as { name: string }).name],
+        ])
+    );
+
+    expect(outside).toEqual(HAND_MOUNTED);
+  });
+
+  it('holds four entries, and can only shrink', () => {
+    expect(Object.keys(HAND_MOUNTED)).toHaveLength(4);
   });
 });

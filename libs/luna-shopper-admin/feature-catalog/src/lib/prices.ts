@@ -88,12 +88,10 @@ export const PRICES = defineResource<Price>({
     return name === '' ? row.itemId : name;
   },
 
-  editor: PriceFormPage,
-
   // A price has no page to open (admin plan 0060, target 3): after one is
-  // added the panel closes and the Prices tab shows it. The editor draws its
-  // own rows, so the block names no section.
-  record: { sections: [], afterAdd: 'list' },
+  // added, the editor closes its panel and the Prices tab shows it. The
+  // editor draws its own rows, so the descriptor states no `record` block.
+  editor: PriceFormPage,
 
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.prices.id', editable: false },

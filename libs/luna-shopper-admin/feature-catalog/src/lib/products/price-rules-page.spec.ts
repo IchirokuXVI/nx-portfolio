@@ -1,5 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component } from '@angular/core';
+import { Component, type Provider } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
@@ -8,9 +8,12 @@ import {
   ContentLocaleStore,
   DeploymentStore,
   RESOURCE_GATEWAYS,
+  ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
   SessionStore,
+  type ResourceGatewaysI,
+  type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
@@ -18,6 +21,10 @@ import {
   RecordView,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
+import type {
+  ResourceGateway,
+  ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   CautionLine,
   ConfirmDialog,
@@ -64,7 +71,33 @@ const SECTION: AdminSection = {
   screens: productsRoutes(),
 };
 
-async function boot(url = '/products/price-rules') {
+/**
+ * The memory gateways, recording every change of a rule as the ID and the
+ * body the gateway is handed.
+ */
+function recordingChanges(changed: unknown[]): ResourceGatewaysI {
+  const memory = new ResourceMemoryGateways();
+  return {
+    for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+      const inner = memory.for(source);
+      if (source.path !== pricePolicySource().path) {
+        return inner;
+      }
+      return {
+        list: (query) => inner.list(query),
+        read: (id) => inner.read(id),
+        create: (input) => inner.create(input),
+        update: (id, input) => {
+          changed.push([id, input]);
+          return inner.update(id, input);
+        },
+        remove: (id) => inner.remove(id),
+      } satisfies ResourceGateway<T>;
+    },
+  };
+}
+
+async function boot(url = '/products/price-rules', with_: Provider[] = []) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
@@ -77,6 +110,7 @@ async function boot(url = '/products/price-rules') {
       SessionStorage,
       SessionStore,
       DeploymentStore,
+      ...with_,
     ],
   }).compileComponents();
 
@@ -328,6 +362,43 @@ describe('the form of a price rule', () => {
         .rows()
         .find((row) => row.id === 'OFFICIAL_API')?.maxAgeDays
     ).toBe(14);
+  });
+
+  /**
+   * The exact body of "save a rule": the one of the two fields that changed,
+   * and never the other, the switch or the kind.
+   */
+  it('sends only the field that changed', async () => {
+    const changed: unknown[] = [];
+    const with_ = [
+      { provide: RESOURCE_GATEWAYS, useValue: recordingChanges(changed) },
+    ];
+
+    let fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'maxAgeDays', '14');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([['OFFICIAL_API', { maxAgeDays: 14 }]]);
+
+    changed.length = 0;
+    fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'priority', '5');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([['OFFICIAL_API', { priority: 5 }]]);
+
+    changed.length = 0;
+    fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'priority', '6');
+    type(fixture, 'maxAgeDays', '21');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([
+      ['OFFICIAL_API', { priority: 6, maxAgeDays: 21 }],
+    ]);
   });
 
   it('follows a change of rank: the rows are read again in the new order', async () => {

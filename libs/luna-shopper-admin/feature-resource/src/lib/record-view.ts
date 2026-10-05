@@ -208,7 +208,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
               } @else {
                 <lib-field-row
                   [help]="
-                    !form && field.editable === false
+                    !form && field.helpWhenRead === true
                       ? (field.help ?? null)
                       : null
                   "

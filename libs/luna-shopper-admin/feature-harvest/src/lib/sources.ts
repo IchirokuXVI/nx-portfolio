@@ -102,6 +102,8 @@ export const SOURCES = defineResource<Source>({
       name: 'enabled',
       label: 'harvest.sources.field.enabled',
       help: 'harvest.sources.help.enabled',
+      // No mode types into it, so the help is under the value that is read.
+      helpWhenRead: true,
       // Changed by the two named actions and by nothing else.
       editable: false,
       setBy: 'harvest.sources.enabledSetBy',
@@ -208,6 +210,10 @@ export const SOURCES = defineResource<Source>({
   // What the record page draws (section 2 of the plan). The view carries no
   // date of its own making, so the Record block has no "Added".
   record: {
+    // What the old page said before a source was deleted, and both halves
+    // are true of the harvester: a run needs the row, and no run row points
+    // at it.
+    deleteBody: 'harvest.sources.deleteBody',
     sections: [
       {
         title: 'harvest.sources.section.source',

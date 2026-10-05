@@ -57,6 +57,15 @@ interface FieldBase<T extends ResourceRow> {
   readonly label: string;
   /** A translation key for the line under the control, when one helps. */
   readonly help?: string;
+  /**
+   * Whether {@link help} is also drawn under the value while the page reads.
+   *
+   * Help is written for the person who types, so a reading page draws none.
+   * "May be fetched" of a chain source is the exception: no mode can type
+   * into it, and its help says what the value means and what changes it. Only
+   * a field that says so here is drawn with its help while it is read.
+   */
+  readonly helpWhenRead?: true;
   /** Refused when empty. */
   readonly required?: boolean;
   /**

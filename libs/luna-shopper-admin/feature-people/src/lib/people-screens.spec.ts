@@ -1069,8 +1069,8 @@ describe('the Members tab of a zone', () => {
     // The record page (admin plan 0053): read first, and no control.
     expect(find(fixture, 'lib-record-view')).not.toBeNull();
     expect(find(fixture, 'lib-field-control')).toBeNull();
-    // The zone is never typed here, so its help is under the value it reads.
-    expect(textOf(fixture)).toContain('people.memberships.zoneIdHelp');
+    // Help is for the person who types: a page that reads draws none.
+    expect(textOf(fixture)).not.toContain('people.memberships.zoneIdHelp');
 
     find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
     await settle(fixture);

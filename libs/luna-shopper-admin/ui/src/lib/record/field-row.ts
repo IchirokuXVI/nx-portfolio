@@ -83,6 +83,10 @@ export function describedByOf(
       @if (help(); as key) {
         <p [attr.id]="helpId()" class="help" data-help>{{ key | rokuT }}</p>
       }
+      <!-- What a row adds after the lines that belong to its control, such
+           as the proposal under a price. Marked with the attribute
+           fieldRowAfter. -->
+      <ng-content select="[fieldRowAfter]" />
     </ng-template>
 
     <ng-template #state>

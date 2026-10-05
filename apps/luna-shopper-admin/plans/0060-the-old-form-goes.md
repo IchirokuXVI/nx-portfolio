@@ -60,7 +60,8 @@ guard that keeps a record from getting a page of its own again. Use the
    `RecordStore` in `create`. The scope picker, the notice, the proposal and the check on
    the day stay, and they do what they do today.
 3. **After a price is added** the panel closes and the Prices tab shows it, as today.
-   `afterAdd` is `'list'` for a price: a price has no page to open.
+   The price editor closes its own panel after the save, and the descriptor states no
+   `record` block and no `afterAdd`, which only `RecordPage` reads: a price has no page to open.
 4. **`ResourceFormPage`, `ResourceForm` and `ResourceFormStore` do not exist.** No file
    imports them, and no key of `en.json` is left that only they read.
 5. **The route factory mounts `RecordPage`** for every descriptor with no `editor` and no

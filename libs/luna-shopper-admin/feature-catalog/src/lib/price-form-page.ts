@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -141,8 +142,8 @@ const OBSERVED_FIELD = 'observedAt';
     }
 
     <div class="rows">
-      <!-- The picker names itself to a screen reader, and it is a button, so
-           the label of the row is the visible name and the star. -->
+      <!-- The picker is a button. It carries the id the label of the row
+           points at, and it names the lines under it that refuse the scope. -->
       <lib-field-row
         [changed]="changed().has(scopeField)"
         [controlId]="scopeControlId"
@@ -155,6 +156,8 @@ const OBSERVED_FIELD = 'observedAt';
           <lib-price-scope-picker
             (choiceChange)="chooseScope($event)"
             [choice]="scopeChoice()"
+            [controlId]="scopeControlId"
+            [describedBy]="scopeDescribedBy()"
             [label]="'catalog.prices.chooseScope' | rokuT"
             [placeholder]="'catalog.prices.chooseScope' | rokuT"
           />
@@ -193,32 +196,32 @@ const OBSERVED_FIELD = 'observedAt';
 
           <!-- A proposal and nothing more (admin plan 0033): the unit price
                field stays as typed until the operator chooses to use it, so
-               nothing is sent that they did not see. Under the price it is
-               worked out from. -->
-          @if (field.name === 'price') {
-            @if (proposal(); as proposed) {
-              <section class="proposal" role="note">
-                <p class="what">
-                  {{
-                    'catalog.prices.proposal.heading'
-                      | rokuT
-                        : { price: proposed.unitPrice, label: proposed.label }
-                  }}
-                </p>
+               nothing is sent that they did not see. In the row of the price
+               it is worked out from, after the refusal and the help of that
+               field, which stay directly under the control. One block with
+               one root element, or the row cannot place it. -->
+          @if (field.name === 'price' ? proposal() : null; as proposed) {
+            <section class="proposal" fieldRowAfter role="note">
+              <p class="what">
+                {{
+                  'catalog.prices.proposal.heading'
+                    | rokuT
+                      : { price: proposed.unitPrice, label: proposed.label }
+                }}
+              </p>
+              <p class="muted">
+                {{ 'catalog.prices.proposal.caution' | rokuT }}
+              </p>
+              @if (proposalInUse()) {
                 <p class="muted">
-                  {{ 'catalog.prices.proposal.caution' | rokuT }}
+                  {{ 'catalog.prices.proposal.inUse' | rokuT }}
                 </p>
-                @if (proposalInUse()) {
-                  <p class="muted">
-                    {{ 'catalog.prices.proposal.inUse' | rokuT }}
-                  </p>
-                } @else {
-                  <button (click)="useProposal()" type="button">
-                    {{ 'catalog.prices.proposal.use' | rokuT }}
-                  </button>
-                }
-              </section>
-            }
+              } @else {
+                <button (click)="useProposal()" type="button">
+                  {{ 'catalog.prices.proposal.use' | rokuT }}
+                </button>
+              }
+            </section>
           }
         </lib-field-row>
       }
@@ -311,6 +314,9 @@ export class PriceFormPage implements LeaveAware {
 
   readonly references = inject(ResourceReferences);
 
+  /** Whether the form is gone. A save can answer after that. */
+  private _destroyed = false;
+
   /**
    * The prices, from the route. Not imported: the descriptor names this
    * component as its editor, and the two files would import each other.
@@ -379,10 +385,29 @@ export class PriceFormPage implements LeaveAware {
     () => this.priceMessages()[SCOPE_FIELD] ?? []
   );
 
+  /** The lines under the picker that refuse the scope, for its button. */
+  readonly scopeDescribedBy = computed(() =>
+    describedByOf(this.scopeControlId, this.scopeMessages().length, false)
+  );
+
   /** What the scope is called, once it has been read. */
   readonly scopeName = signal<string | null>(null);
-  /** Its kind, already translated. */
-  readonly scopeKindLabel = signal('');
+  /** The kind of the scope that was read, or `null` before it is. */
+  private readonly _scopeKind = signal<unknown>(null);
+  /**
+   * Its kind, as words. Worked out from the kind and not held as words, so
+   * that it follows the language and the words that arrive late.
+   */
+  readonly scopeKindLabel = computed(() => {
+    const kind = this._scopeKind();
+    if (kind === null) {
+      return '';
+    }
+    const option = PRICE_SCOPE_KIND_OPTIONS.find(
+      (entry) => entry.value === kind
+    );
+    return option === undefined ? String(kind) : this._t(option.label);
+  });
   /** How many shops it reaches, or `null` while that is not known. */
   readonly locationCount = signal<number | null>(null);
   /** Whether the count is a floor rather than the whole answer. */
@@ -543,6 +568,8 @@ export class PriceFormPage implements LeaveAware {
   }));
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this._destroyed = true));
+
     // Said by the store and not by the form: a save that answers after the
     // panel was closed still added the price, and the tab has to read again.
     this.store.onSaved(() => this._changes.wrote(this.descriptor.name));
@@ -612,8 +639,12 @@ export class PriceFormPage implements LeaveAware {
    * Send it. Refused here while the observed date is outside its window.
    *
    * After a save the panel closes: one route up is the Prices tab, which
-   * reads the scopes again. A price has no page to open, which is what
-   * `afterAdd: 'list'` on the descriptor says.
+   * reads the scopes again. A price has no page to open.
+   *
+   * The form can be gone by then: the operator left while the save was on
+   * its way. "One route up" is counted from the route the form was drawn at,
+   * so it would pull them back to the Prices tab. The store has already told
+   * the tab about the write, and nothing is left to close.
    */
   async submit(): Promise<void> {
     if (this.observedAtProblem() !== null) {
@@ -623,7 +654,7 @@ export class PriceFormPage implements LeaveAware {
     this._dayRefused.set(false);
 
     const saved = await this.store.submit();
-    if (saved !== null) {
+    if (saved !== null && !this._destroyed) {
       this.close();
     }
   }
@@ -694,7 +725,7 @@ export class PriceFormPage implements LeaveAware {
     const generation = this._generation;
 
     this.scopeName.set(null);
-    this.scopeKindLabel.set('');
+    this._scopeKind.set(null);
     this.locationCount.set(null);
     this.countIsFloor.set(false);
 
@@ -719,7 +750,7 @@ export class PriceFormPage implements LeaveAware {
 
       this._scopeRow.set(scope);
       this.scopeName.set(this._nameOf(scope));
-      this.scopeKindLabel.set(this._kindLabelOf(scope.kind));
+      this._scopeKind.set(scope.kind ?? null);
 
       const counted = await this._countLocations(scope.supermarketId, scopeId);
       if (generation !== this._generation) {
@@ -791,15 +822,5 @@ export class PriceFormPage implements LeaveAware {
     const kind = String(scope['kind'] ?? '');
     const key = scope['externalKey'];
     return typeof key === 'string' && key !== '' ? `${kind} ${key}` : kind;
-  }
-
-  /** A scope kind as words, translated here because it goes into a sentence. */
-  private _kindLabelOf(kind: unknown): string {
-    const option = PRICE_SCOPE_KIND_OPTIONS.find(
-      (entry) => entry.value === kind
-    );
-    return option === undefined
-      ? String(kind ?? '')
-      : this._translate.t(option.label);
   }
 }

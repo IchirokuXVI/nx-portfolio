@@ -11,10 +11,13 @@ import type { ActivatedRouteSnapshot } from '@angular/router';
 /** Route `data` key holding the {@link ResourceDescriptor} for the screen. */
 export const RESOURCE_DESCRIPTOR = 'descriptor';
 
-/** Route `data` key holding `'create'` or `'edit'`. */
+/**
+ * Route `data` key holding `'create'` on the route that adds a record. Every
+ * other route leaves it out: the page there reads first.
+ */
 export const RESOURCE_FORM_MODE = 'mode';
 
-/** Route parameter holding the row's id, on the edit route. */
+/** Route parameter holding the row's id, on the route that opens a record. */
 export const RESOURCE_ID_PARAM = 'id';
 
 /**

@@ -146,8 +146,16 @@ const SHOPS = defineResource<Shop>({
       editable: false,
       setBy: 'shops.keySetBy',
       help: 'shops.keyHelp',
+      helpWhenRead: true,
     },
-    { kind: 'number', name: 'visits', label: 'shops.visits', editable: false },
+    {
+      kind: 'number',
+      name: 'visits',
+      label: 'shops.visits',
+      editable: false,
+      // Never a control, and it does not ask for its help while it is read.
+      help: 'shops.visitsHelp',
+    },
     { kind: 'text', name: 'note', label: 'shops.note', nullable: true },
     {
       kind: 'date',
@@ -344,12 +352,14 @@ describe('RecordView', () => {
     /**
      * A field that no mode can type into ("May be fetched" of a chain source)
      * has no control to put its help under, so the help was drawn nowhere at
-     * all. It is drawn under the value that is read.
+     * all. Such a field says `helpWhenRead`, and its help is drawn under the
+     * value that is read.
      *
-     * The help of a field that has a control is written for the person who
-     * types ("One per line"), and is under that control alone.
+     * Only a field that says so. Help is written for the person who types
+     * ("Fixed here. ..."), and under a value that is read it is a long
+     * sentence about a form that is not open.
      */
-    it('draws the help of a field that is never a control, and of no other', async () => {
+    it('draws the help of a field that asks for it while it is read, and of no other', async () => {
       drawn = await draw();
 
       const helpOf = (label: string) =>
@@ -357,8 +367,10 @@ describe('RecordView', () => {
           .querySelector('[data-help]')
           ?.textContent?.trim();
 
-      // Never a control: the help is under the value.
+      // It says `helpWhenRead`: the help is under the value.
       expect(helpOf('shops.key')).toBe('shops.keyHelp');
+      // Never a control either, but it does not say the word: no help.
+      expect(helpOf('shops.visits')).toBeUndefined();
       // A control once the page is a form: no help while it is read.
       expect(helpOf('shops.slug')).toBeUndefined();
 
@@ -367,6 +379,7 @@ describe('RecordView', () => {
       await settle(drawn.fixture);
 
       expect(helpOf('shops.key')).toBeUndefined();
+      expect(helpOf('shops.visits')).toBeUndefined();
       expect(
         rowOf(drawn.element, 'shops.key')
           .querySelector('lib-locked-value [data-reason]')

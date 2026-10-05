@@ -1622,6 +1622,7 @@
       "exists": "This chain already has a source.",
       "adapterGone": "A source can no longer be fetched this way. Choose another.",
       "enabledSetBy": "Changed from the More menu",
+      "deleteBody": "No run that fetches this chain can start until a source is added again. A file import needs none and still can. The runs it has already done are kept. This cannot be taken back.",
       "section": {
         "source": "Source",
         "speed": "How fast",

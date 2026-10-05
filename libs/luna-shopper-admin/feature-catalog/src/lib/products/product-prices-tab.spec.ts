@@ -220,6 +220,36 @@ function recordingRemovals(removed: string[]): ResourceGatewaysI {
   };
 }
 
+/**
+ * The memory gateways, recording every price that is added, as the body the
+ * item prices gateway is handed. With `hold`, an add waits for it first.
+ */
+function recordingAdds(
+  added: unknown[],
+  hold?: Promise<void>
+): ResourceGatewaysI {
+  const memory = new ResourceMemoryGateways();
+  return {
+    for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+      const inner = memory.for(source);
+      if (source.path !== ITEM_PRICES_PATH) {
+        return inner;
+      }
+      return {
+        list: (query) => inner.list(query),
+        read: (id) => inner.read(id),
+        create: async (input) => {
+          added.push(input);
+          await hold;
+          return inner.create(input);
+        },
+        update: (id, input) => inner.update(id, input),
+        remove: (id) => inner.remove(id),
+      } satisfies ResourceGateway<T>;
+    },
+  };
+}
+
 async function boot(url: string, providers: Provider[] = []) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -789,6 +819,34 @@ describe('the add a price form', () => {
   });
 
   /**
+   * The picker is a button, and the row around it is a row like the others:
+   * its label points at the button, and the button names the lines that
+   * refuse the scope.
+   */
+  it('ties the label of the scope and its refusals to the button of the picker', async () => {
+    const { fixture, page } = await form();
+    const row = fixture.nativeElement.querySelector(
+      '[data-scope-row]'
+    ) as HTMLElement;
+    const trigger = row.querySelector('[data-scope-picker]') as HTMLElement;
+
+    expect(trigger.id).toBe('price-field-priceScopeId');
+    expect(row.querySelector('label')?.getAttribute('for')).toBe(trigger.id);
+    // Nothing refused yet: the attribute is left off.
+    expect(trigger.hasAttribute('aria-describedby')).toBe(false);
+
+    await page.submit();
+    await settle(fixture);
+
+    const errors = [...row.querySelectorAll('[data-error]')].map(
+      (line) => line.id
+    );
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]).toBe('price-field-priceScopeId-error-0');
+    expect(trigger.getAttribute('aria-describedby')).toBe(errors.join(' '));
+  });
+
+  /**
    * Admin plan 0060, target 2: the form is built from the parts of the
    * record page. A row for each field, the control of the field inside it,
    * and one bar that holds Save and Cancel.
@@ -902,6 +960,147 @@ describe('the add a price form', () => {
 
     expect(TestBed.inject(Router).url).toBe('/products/it_dish_soap/prices');
     expect(reads).toHaveBeenCalled();
+  });
+
+  /**
+   * The exact body of "add a price", for one filled draft. What the operator
+   * typed, the product of the address, and nothing the form worked out: the
+   * proposal was on screen and was not pressed, so no unit price is sent.
+   *
+   * A field that takes null and was left empty goes as null, which is the
+   * operator saying "no answer", and never as a number the form derived.
+   */
+  it('sends what was typed, and no unit price that was only proposed', async () => {
+    const added: unknown[] = [];
+    const { fixture, page } = await form(
+      '/products/it_dish_soap/prices/new?priceScopeId=ps_mercadona_national',
+      [{ provide: RESOURCE_GATEWAYS, useValue: recordingAdds(added) }]
+    );
+    const observedAt = new Date(
+      Date.now() - 3 * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    page.store.set('price', '1.50');
+    page.store.set('observedAt', observedAt);
+    await settle(fixture);
+    // The proposal is offered, and nobody pressed it.
+    expect(page.proposal()).toEqual({ unitPrice: '2.00', label: '1 L' });
+
+    await page.submit();
+    await settle(fixture);
+
+    expect(added).toEqual([
+      {
+        itemId: 'it_dish_soap',
+        priceScopeId: 'ps_mercadona_national',
+        price: 1.5,
+        currency: null,
+        unitPrice: null,
+        unitPriceLabel: null,
+        validFrom: null,
+        validUntil: null,
+        observedAt,
+      },
+    ]);
+  });
+
+  /** The same draft with the proposal pressed: now the two fields are sent. */
+  it('sends the unit price and its label once the proposal was used', async () => {
+    const added: unknown[] = [];
+    const { fixture, page } = await form(
+      '/products/it_dish_soap/prices/new?priceScopeId=ps_mercadona_national',
+      [{ provide: RESOURCE_GATEWAYS, useValue: recordingAdds(added) }]
+    );
+
+    page.store.set('price', '1.50');
+    await settle(fixture);
+    buttonSaying(fixture, 'catalog.prices.proposal.use')?.click();
+    await settle(fixture);
+    await page.submit();
+    await settle(fixture);
+
+    expect(added).toEqual([
+      {
+        itemId: 'it_dish_soap',
+        priceScopeId: 'ps_mercadona_national',
+        price: 1.5,
+        currency: null,
+        unitPrice: 2,
+        unitPriceLabel: '1 L',
+        validFrom: null,
+        validUntil: null,
+      },
+    ]);
+  });
+
+  /**
+   * A save can answer after the operator left. The panel is gone, so there
+   * is nothing to close, and "one route up" from a route that is no longer
+   * drawn would pull them back to the Prices tab.
+   */
+  it('goes nowhere when the save answers after the form was left', async () => {
+    let release: () => void = () => undefined;
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const added: unknown[] = [];
+    const { fixture, page } = await form(
+      '/products/it_dish_soap/prices/new?priceScopeId=ps_mercadona_national',
+      [{ provide: RESOURCE_GATEWAYS, useValue: recordingAdds(added, hold) }]
+    );
+    const router = TestBed.inject(Router);
+    const navigate = jest.spyOn(router, 'navigate');
+
+    page.store.set('price', '1.50');
+    const saving = page.submit();
+    await settle(fixture);
+    expect(added).toHaveLength(1);
+
+    // The operator leaves while the save is on its way, and says yes to the
+    // question about what was typed.
+    const leaving = router.navigateByUrl('/products/it_dish_soap/where');
+    await settle(fixture);
+    page.leave.answer(true);
+    await leaving;
+    await settle(fixture);
+    expect(router.url).toBe('/products/it_dish_soap/where');
+    expect(fixture.debugElement.query(By.directive(PriceFormPage))).toBeNull();
+    navigate.mockClear();
+
+    release();
+    await saving;
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(router.url).toBe('/products/it_dish_soap/where');
+  });
+
+  /**
+   * What is said about the price is directly under its control: the refusal,
+   * then the help. The proposal is worked out from the price and comes after
+   * them, in the same row.
+   */
+  it('draws the proposal after the refusal and the help of the price', async () => {
+    const { fixture, page } = await form();
+
+    page.store.set('price', '1.50');
+    await settle(fixture);
+
+    const row = fixture.nativeElement.querySelector(
+      '[data-field="price"]'
+    ) as HTMLElement;
+    const help = row.querySelector('[data-help]') as HTMLElement;
+    const proposal = row.querySelector('.proposal') as HTMLElement;
+
+    expect(help.textContent?.trim()).toBe('catalog.prices.priceHelp');
+    expect(proposal).not.toBeNull();
+    expect(
+      help.compareDocumentPosition(proposal) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // And the control is still the first thing in the row.
+    const control = row.querySelector('lib-field-control') as HTMLElement;
+    expect(
+      control.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('proposes a unit price in the base unit, and fills nothing in', async () => {

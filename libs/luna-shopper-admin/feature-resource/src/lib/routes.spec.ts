@@ -153,7 +153,6 @@ describe('resourceRoutes', () => {
     ).toEqual([
       ['', ResourceListPage],
       ['new', RecordPage],
-      [':id/edit', RecordPage],
       [':id', NotFoundPage],
     ]);
   });
@@ -180,7 +179,6 @@ describe('resourceRoutes', () => {
     expect(guards(withDetail)).toEqual([
       ['', undefined],
       ['new', [recordLeaveGuard]],
-      [':id/edit', [recordLeaveGuard]],
       [':id', undefined],
     ]);
   });
@@ -391,23 +389,23 @@ describe('adminRoutes with two sections at the root', () => {
  * section 1).
  *
  * `detail` wins at `:id`, because a row that is read is a different screen from
- * the one that changes it. Without a second route, turning on `edit` for a zone
- * or a list would change nothing at all: the form would have nowhere to be
- * reached, and the operator would find a resource that claims to be editable
- * and offers no way to edit it.
+ * the one that changes it. A resource that also names an `editor` gets it at
+ * `:id/edit`, or the editor would have nowhere to be reached.
  */
 describe('resourceRoutes for a resource with its own detail screen', () => {
   class ZoneDetail {}
+  class ZoneEditor {}
 
   const zones = defineResource<Shop>({
     ...shops,
     name: 'zones',
     segment: 'zones',
     detail: ZoneDetail,
+    editor: ZoneEditor,
     actions: { edit: true },
   });
 
-  it('puts the form at `:id/edit`, beside the detail screen at `:id`', () => {
+  it('puts the editor at `:id/edit`, beside the detail screen at `:id`', () => {
     const [branch] = resourceRoutes(zones);
     const children = branch.children ?? [];
 
@@ -416,13 +414,32 @@ describe('resourceRoutes for a resource with its own detail screen', () => {
       ':id/edit',
       ':id',
     ]);
-    // The record page, which is the one default the factory has.
     expect(children.map((route) => route.component)).toEqual([
       ResourceListPage,
-      RecordPage,
+      ZoneEditor,
       ZoneDetail,
     ]);
     expect(children[1].canDeactivate).toEqual([recordLeaveGuard]);
+  });
+
+  /**
+   * The record page is never a second page beside a `detail` (admin plan
+   * 0060): a record has one page.
+   */
+  it('mounts no record page beside a detail screen', () => {
+    const noEditor = defineResource<Shop>({
+      ...shops,
+      name: 'zones',
+      segment: 'zones',
+      detail: ZoneDetail,
+      actions: { edit: true },
+    });
+    const [branch] = resourceRoutes(noEditor);
+
+    expect(branch.children?.map((route) => route.path)).toEqual(['', ':id']);
+    expect(branch.children?.map((route) => route.component)).not.toContain(
+      RecordPage
+    );
   });
 
   /** A read only resource with a detail screen gets no form to reach at all. */
