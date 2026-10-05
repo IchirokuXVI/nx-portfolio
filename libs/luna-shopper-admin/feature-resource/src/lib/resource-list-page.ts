@@ -23,6 +23,7 @@ import {
 import {
   ContentLocaleStore,
   ResourceListStore,
+  toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   fieldOf,
@@ -872,10 +873,23 @@ export class ResourceListPage {
     this.asking.set(null);
   }
 
+  /**
+   * A refused action is said above the list, where a refused delete is, and
+   * the question is closed by the caller as it is after a delete. Nothing was
+   * written, so nothing is read again.
+   */
   private async _run(event: RowAction): Promise<void> {
     this.busyRowId.set(event.row.id);
+    this.refusal.set(null);
     try {
       await event.action.run(event.row.row);
+    } catch (error) {
+      this.refusal.set({
+        key: gatewayErrorKey(toGatewayError(error)) ?? 'resource.error.unknown',
+        name: event.row.title,
+        link: null,
+      });
+      return;
     } finally {
       this.busyRowId.set(null);
     }
