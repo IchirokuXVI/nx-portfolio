@@ -36,7 +36,11 @@ export { PAGE_FRAME_TABS, type PageTab } from './lib/page/page-tabs';
 export { PopoverSheet } from './lib/page/popover-sheet';
 export { ScopeMark } from './lib/page/scope-mark';
 export { FieldRow, describedByOf } from './lib/record/field-row';
-export { FieldValue } from './lib/record/field-value';
+export {
+  FieldValue,
+  NAME_UNREAD,
+  type ReferenceName,
+} from './lib/record/field-value';
 export { LockedValue } from './lib/record/locked-value';
 export {
   RecordCollection,

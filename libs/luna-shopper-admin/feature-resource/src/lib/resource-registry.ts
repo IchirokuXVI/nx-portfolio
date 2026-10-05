@@ -8,6 +8,7 @@ import type { ActivatedRouteSnapshot } from '@angular/router';
 import {
   ContentLocaleStore,
   readRecordById,
+  toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   idOf,
@@ -237,6 +238,17 @@ export class ResourceRegistry {
   }
 }
 
+/**
+ * What the read of one reference answered.
+ *
+ * `gone` and `failed` are two states and never one. A server that is down, or
+ * one that refuses the read, has not said the record is gone.
+ */
+export type ReferenceRead =
+  | { readonly state: 'found'; readonly option: ReferenceOption }
+  | { readonly state: 'gone' }
+  | { readonly state: 'failed' };
+
 /** How many rows a picker offers at once. */
 const PICKER_PAGE_SIZE = 20;
 
@@ -321,10 +333,29 @@ export class ResourceReferences implements ReferenceLookup {
     }));
   }
 
+  /**
+   * The row an id names, or `null` when no row was read.
+   *
+   * `null` does not say why. A caller that tells a record that is gone from
+   * a read that failed asks {@link read}.
+   */
   async resolve(resource: string, id: string): Promise<ReferenceOption | null> {
+    const read = await this.read(resource, id);
+    return read.state === 'found' ? read.option : null;
+  }
+
+  /**
+   * The row an id names, and what happened when there is none.
+   *
+   * `gone` only when the route answered 404. Every other failure is `failed`:
+   * too many requests, a server error, no network, a refusal. So is a
+   * resource this app does not know, which nobody read at all. It never
+   * rejects.
+   */
+  async read(resource: string, id: string): Promise<ReferenceRead> {
     const descriptor = this._registry.byName(resource);
     if (descriptor === undefined) {
-      return null;
+      return { state: 'failed' };
     }
 
     try {
@@ -332,15 +363,13 @@ export class ResourceReferences implements ReferenceLookup {
       // The row rides along, because a `references` field asks its
       // descriptor whether a target is locked, and that is a question about
       // the target's own columns (admin plan 0028, section 4.1).
+      return { state: 'found', option: this._option(descriptor, row) };
+    } catch (error) {
+      // A reference can outlive what it points at. That is a state the page
+      // draws rather than a failure, and only a 404 says it.
       return {
-        id: idOf(descriptor, row),
-        title: descriptor.title(row, this._content.order()),
-        row,
+        state: toGatewayError(error).status === 404 ? 'gone' : 'failed',
       };
-    } catch {
-      // A reference can outlive what it points at. That is a state the picker
-      // draws rather than a failure, so it is `null` here and a sentence there.
-      return null;
     }
   }
 

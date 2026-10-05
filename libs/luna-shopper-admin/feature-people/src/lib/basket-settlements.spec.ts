@@ -149,9 +149,12 @@ describe('a basket row’s settlements', () => {
     const fixture = await boot(SATURDAY, [
       {
         provide: ResourceReferences,
-        // `resolve` answers `null` for a row it cannot read, and never
-        // throws. The record page around the panel asks it too.
-        useValue: { resolve: async () => null },
+        // Neither answer throws for a row it cannot read. The record page
+        // around the panel asks it too.
+        useValue: {
+          resolve: async () => null,
+          read: async () => ({ state: 'failed' }),
+        },
       },
     ]);
 

@@ -6,7 +6,7 @@ import type { RecordValue } from '@portfolio/luna-shopper-admin/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ScopeMark } from '../page/scope-mark';
-import { FieldValue, NAMED_LANGUAGES } from './field-value';
+import { FieldValue, NAME_UNREAD, NAMED_LANGUAGES } from './field-value';
 
 /**
  * One value while the page reads (admin plan 0052, section 3.2). The testing
@@ -279,6 +279,40 @@ describe('FieldValue for one reference', () => {
       'record.value.gone'
     );
     expect(text(host)).not.toContain('b_1');
+  });
+
+  /** A read that failed has not said the record is gone. */
+  it('says the name could not be read, and never "gone", when the read failed', () => {
+    const { host } = render(unnamed, { names: { b_1: NAME_UNREAD } });
+
+    expect(host.querySelector('[data-gone]')).toBeNull();
+    expect(host.querySelector('[data-unread]')?.textContent?.trim()).toBe(
+      'record.value.unread'
+    );
+    expect(text(host)).not.toContain('b_1');
+  });
+
+  it('keeps the link of a name it could not read', () => {
+    const { host } = render(unnamed, {
+      names: { b_1: NAME_UNREAD },
+      link: ['/brands', 'b_1'],
+    });
+
+    expect(host.querySelector('a[data-unread]')?.getAttribute('href')).toBe(
+      '/brands/b_1'
+    );
+  });
+
+  it('says the same on one of several references', () => {
+    const { host } = render(
+      { kind: 'references', resource: 'categories', ids: ['c_1', 'c_2'] },
+      { names: { c_1: NAME_UNREAD, c_2: null } }
+    );
+    const lines = [...host.querySelectorAll('li')];
+
+    expect(lines[0].querySelector('[data-unread]')).not.toBeNull();
+    expect(lines[0].querySelector('[data-gone]')).toBeNull();
+    expect(lines[1].querySelector('[data-gone]')).not.toBeNull();
   });
 });
 

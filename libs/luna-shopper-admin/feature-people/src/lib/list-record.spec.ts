@@ -2,15 +2,25 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import {
+  ADMIN_LIST_LINES_PATH,
+  ADMIN_LISTS_PATH,
+  ADMIN_USERS_PATH,
   DIRECTORY_SERVICE,
+  GatewayError,
+  RESOURCE_GATEWAYS,
+  ResourceMemoryGateways,
   type DirectoryServiceI,
+  type ResourceGatewaysI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   RecordPage,
   ResourceChanges,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { compositeId } from '@portfolio/luna-shopper-admin/models';
+import {
+  compositeId,
+  type ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
 import { LISTS } from './lists';
 import { LIST_SEED, USER_SEED, ZONE_SEED } from './people-seed';
@@ -195,6 +205,49 @@ describe('the Record block of a list', () => {
     expect(by?.textContent).not.toContain(gone);
     expect(by?.querySelector('a')).toBeNull();
   });
+
+  /**
+   * "Gone" is what a 404 says. A person whose name could not be read is
+   * still there, so the page does not say gone, and it still draws no ID.
+   */
+  it.each([429, 500, 403])(
+    'does not say the person is gone when the read of the name answers %i',
+    async (status) => {
+      const fixture = await bootShoppers(address, [
+        {
+          provide: RESOURCE_GATEWAYS,
+          useFactory: (): ResourceGatewaysI => {
+            const memory = TestBed.inject(ResourceMemoryGateways);
+            return {
+              for: (source) =>
+                source.path === ADMIN_USERS_PATH
+                  ? {
+                      ...memory.for(source),
+                      read: () =>
+                        Promise.reject(
+                          new GatewayError({
+                            code: 'refused',
+                            status,
+                            correlationId: '',
+                          })
+                        ),
+                    }
+                  : memory.for(source),
+            };
+          },
+        },
+      ]);
+      await settle(fixture);
+
+      const by = find(fixture, '[data-fact="added"] [data-by]');
+      expect(by?.querySelector('[data-gone]')).toBeNull();
+      expect(by?.textContent).not.toContain('record.value.gone');
+      expect(by?.querySelector('[data-unread]')?.textContent?.trim()).toBe(
+        'record.value.unread'
+      );
+      expect(by?.textContent).not.toContain(WEEKLY.createdByUserId);
+    }
+  );
 });
 
 describe('a list as a form', () => {
@@ -288,6 +341,122 @@ describe('a list as a form', () => {
 
     expect(currentUrl()).toBe(address);
     expect(recordPage(fixture).store().mode()).toBe('edit');
+  });
+});
+
+/**
+ * What the server leaves out of the answer of a change, by the path of the
+ * resource. `PATCH /v1/admin/lists/{id}` answers `list.ListView` and the read
+ * answers `AdminListDetailView`. A line is the same: `list.LineView` has no
+ * `listName`.
+ */
+const LEFT_OUT: Readonly<Record<string, readonly string[]>> = {
+  [ADMIN_LISTS_PATH]: ['lines', 'lineCount', 'zoneName'],
+  [ADMIN_LIST_LINES_PATH]: ['listName'],
+};
+
+/**
+ * The in-memory gateways, whose change answers what the server answers. The
+ * memory gateway alone answers the whole row, which no route does.
+ */
+const smallerAnswers = () => [
+  {
+    provide: RESOURCE_GATEWAYS,
+    useFactory: (): ResourceGatewaysI => {
+      const memory = TestBed.inject(ResourceMemoryGateways);
+      return {
+        for: (source) => {
+          const gateway = memory.for(source);
+          const leftOut = LEFT_OUT[source.path] ?? [];
+          return {
+            ...gateway,
+            list: (query) => gateway.list(query),
+            read: (id, shown) => gateway.read(id, shown),
+            create: (input) => gateway.create(input),
+            remove: (id) => gateway.remove(id),
+            update: async (id, input) => {
+              const answer: ResourceRow = {
+                ...(await gateway.update(id, input)),
+              };
+              for (const name of leftOut) {
+                delete answer[name];
+              }
+              return answer as Awaited<ReturnType<typeof gateway.update>>;
+            },
+          };
+        },
+      };
+    },
+  },
+];
+
+/**
+ * A change answers less than a read does. The page reads the record again
+ * after a save, so it shows what it showed before.
+ */
+describe('a save whose answer is smaller than the read', () => {
+  it('keeps the lines, their count and the zone of a list', async () => {
+    const fixture = await bootShoppers(address, smallerAnswers());
+
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
+    await settle(fixture);
+    const [, shared] = findAll<HTMLButtonElement>(
+      fixture,
+      'lib-record-view lib-switch button'
+    );
+    shared.click();
+    await settle(fixture);
+    find<HTMLButtonElement>(fixture, 'lib-save-bar [data-save]')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    const store = recordPage(fixture).store();
+    expect(store.mode()).toBe('read');
+    expect(store.row()?.['sharedWithZone']).toBe(false);
+    expect(store.savedAt()).not.toBeNull();
+
+    expect(findAll(fixture, 'lib-list-lines-panel [data-line]')).toHaveLength(
+      WEEKLY.lines.length
+    );
+    expect(
+      find(fixture, 'lib-list-lines-panel [data-count]')?.textContent?.trim()
+    ).toBe(String(WEEKLY.lineCount));
+    expect(find(fixture, '[data-fact="zoneName"]')?.textContent).toContain(
+      KITCHEN.name
+    );
+  });
+
+  it('keeps the name of the list on a line', async () => {
+    const [first] = WEEKLY.lines;
+    const fixture = await bootShoppers(
+      `${address}/lines/${compositeId([WEEKLY.id, first.id])}`,
+      smallerAnswers()
+    );
+    await settle(fixture);
+
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
+    await settle(fixture);
+    const content = find<HTMLInputElement | HTMLTextAreaElement>(
+      fixture,
+      'lib-record-view lib-field-control input, lib-record-view lib-field-control textarea'
+    );
+    expect(content).not.toBeNull();
+    if (content !== null) {
+      content.value = 'Oat milk';
+      content.dispatchEvent(new Event('input'));
+    }
+    await settle(fixture);
+    find<HTMLButtonElement>(fixture, 'lib-save-bar [data-save]')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    const store = recordPage(fixture).store();
+    expect(store.mode()).toBe('read');
+    expect(store.row()?.['content']).toBe('Oat milk');
+    expect(store.row()?.['listName']).toBe('Weekly shop');
+    expect(find(fixture, '[data-fact="listName"]')?.textContent).toContain(
+      'Weekly shop'
+    );
   });
 });
 

@@ -20,11 +20,26 @@ import { ScopeMark } from '../page/scope-mark';
  */
 export const NAMED_LANGUAGES: readonly string[] = ['en', 'es'];
 
+/**
+ * In place of a name: the read of it failed. Nobody said the record is gone,
+ * so the value must not say so either.
+ */
+export const NAME_UNREAD: unique symbol = Symbol('name unread');
+
+/**
+ * What a page knows about the name of a reference: the name, `null` for a
+ * record that is gone (the read answered 404), or {@link NAME_UNREAD}.
+ */
+export type ReferenceName = string | null | typeof NAME_UNREAD;
+
 /** One of several references, as its row is drawn. */
 interface ReferenceLine {
   readonly id: string;
-  /** The name, `null` for a record that is gone, `undefined` while it is read. */
-  readonly name: string | null | undefined;
+  /**
+   * The name, `null` for a record that is gone, `undefined` while it is
+   * read, and {@link NAME_UNREAD} when that read failed.
+   */
+  readonly name: ReferenceName | undefined;
   readonly link: readonly string[] | null;
   /** The scope mark before the name, for one of several references. */
   readonly mark?: ScopeMarkView | null;
@@ -46,6 +61,11 @@ interface ReferenceLine {
  * an ID that is absent is still being read, and an ID held with `null` points
  * at a record that is gone. One reference is looked for there too, so the page
  * can hand the same map to both.
+ *
+ * **"Gone" is said only of a record the server said is gone.** A read that
+ * failed for any other reason is held as {@link NAME_UNREAD} and reads "This
+ * name could not be read", still as a link when the page knows one: the
+ * record is most likely there.
  *
  * A reference with no link is text and not a link. A link that leads to a 404
  * is worse.
@@ -145,6 +165,16 @@ interface ReferenceLine {
           }}</span>
         } @else if (target.name === null) {
           <span class="gone" data-gone>{{ 'record.value.gone' | rokuT }}</span>
+        } @else if (target.name === unread) {
+          @if (target.link !== null) {
+            <a [routerLink]="target.link" data-unread>{{
+              'record.value.unread' | rokuT
+            }}</a>
+          } @else {
+            <span class="none" data-unread>{{
+              'record.value.unread' | rokuT
+            }}</span>
+          }
         } @else if (target.link !== null) {
           <a [routerLink]="target.link">{{ target.name }}</a>
         } @else {
@@ -172,6 +202,16 @@ interface ReferenceLine {
                 <span class="gone" data-gone>{{
                   'record.value.gone' | rokuT
                 }}</span>
+              } @else if (target.name === unread) {
+                @if (target.link !== null) {
+                  <a [routerLink]="target.link" data-unread>{{
+                    'record.value.unread' | rokuT
+                  }}</a>
+                } @else {
+                  <span class="none" data-unread>{{
+                    'record.value.unread' | rokuT
+                  }}</span>
+                }
               } @else if (target.link !== null) {
                 <a [routerLink]="target.link">{{ target.name }}</a>
               } @else {
@@ -333,9 +373,13 @@ export class FieldValue {
   readonly name = input<string | null>(null);
   /**
    * The resolved names of several references, by ID. Absent is still being
-   * read, and `null` is a record that is gone.
+   * read, `null` is a record that is gone, and {@link NAME_UNREAD} is a name
+   * whose read failed.
    */
-  readonly names = input<Readonly<Record<string, string | null>>>({});
+  readonly names = input<Readonly<Record<string, ReferenceName>>>({});
+
+  /** For the template, which cannot name a symbol. */
+  readonly unread = NAME_UNREAD;
   /** Router commands to the record a reference points at. */
   readonly link = input<readonly string[] | null>(null);
   /** The same for several references, by ID. */
