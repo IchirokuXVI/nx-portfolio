@@ -123,7 +123,6 @@ interface SpellingGroup {
 
     <section class="panel">
       <h2>{{ 'brands.registered.spellings.heading' | rokuT }}</h2>
-      <p class="explains">{{ 'brands.registered.spellings.says' | rokuT }}</p>
 
       @if (loading()) {
         <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
@@ -288,13 +287,7 @@ interface SpellingGroup {
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 

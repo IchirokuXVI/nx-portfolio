@@ -658,10 +658,14 @@ export class AdminCatalogItemsController {
     @Query() query: AdminSearchItemsQueryDto
   ): Promise<ItemPage> {
     const group = referenceFilter(query.productGroupId);
+    // The same literal on the category (admin plan 0043, section 2): `none`
+    // becomes the flag catalog knows the question by.
+    const category = referenceFilter(query.categoryId);
     return this.nats.send<ItemPage>(ITEM_PATTERNS.search, {
       userId: admin.adminId,
       query: query.query,
-      categoryId: query.categoryId,
+      categoryId: category.id,
+      withoutCategory: category.none,
       productGroupId: group.id,
       withoutProductGroup: group.none,
       cursor: query.cursor,
@@ -1366,6 +1370,7 @@ export class AdminCatalogSupermarketItemsController {
       {
         ...adminCredential(admin),
         itemId: query.itemId,
+        itemIds: query.itemIds,
         priceScopeId: query.priceScopeId,
         sourceKind: query.sourceKind,
         stale: query.stale,

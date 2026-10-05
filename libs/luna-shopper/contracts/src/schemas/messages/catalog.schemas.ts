@@ -11,6 +11,7 @@ import {
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  ADMIN_PRICE_ITEM_IDS_MAX,
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BRAND_MATCHES_MAX_KEYS,
@@ -389,6 +390,13 @@ const supermarketView = object(
     externalBrandKey: nullableString(),
     // The last rung of the scope ladder (plan 0049, section 3.1).
     defaultPriceScopeId: nullableString(),
+    // Deliberately NOT required (admin plan 0042, section 2): the reads of a
+    // chain itself carry it, and a chain inside another view does not.
+    locationCount: integer({
+      minimum: 0,
+      description:
+        'The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view.',
+    }),
   },
   [
     'id',
@@ -886,6 +894,10 @@ const supermarketLocationItemView = object(
     availabilitySourceKind: nullableSourceKind(),
     availabilityObservedAt: nullableString(),
     availabilitySourceRunId: nullableString(),
+    // The product's name and brand, joined on as the admin price list joins
+    // `itemName` (admin plan 0042, section 2). Every read of the row fills both.
+    itemName: nullableLocalized(),
+    itemBrand: nullableString(),
   },
   [
     'id',
@@ -896,6 +908,8 @@ const supermarketLocationItemView = object(
     'availabilitySourceKind',
     'availabilityObservedAt',
     'availabilitySourceRunId',
+    'itemName',
+    'itemBrand',
   ]
 );
 
@@ -1760,6 +1774,8 @@ const searchItemsRequest = object(
     productGroupId: string(),
     // Plan 0073: the back office's "what has curation not reached yet".
     withoutProductGroup: boolean(),
+    // Admin plan 0043: the products on no category at all.
+    withoutCategory: boolean(),
     priceScopeIds: array(nonEmptyString()),
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
@@ -2221,6 +2237,11 @@ const adminListSupermarketItemsRequest = object(
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
+    // Admin plan 0043: one page of the product list, priced in one read.
+    itemIds: {
+      ...array(nonEmptyString()),
+      maxItems: ADMIN_PRICE_ITEM_IDS_MAX,
+    },
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     stale: boolean(),

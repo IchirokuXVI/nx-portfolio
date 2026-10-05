@@ -173,6 +173,17 @@ function underCategorySql(placeholder: string): string {
 }
 
 /**
+ * The products on no category at all (admin plan 0043, section 2): what the
+ * "No category" entry of the back office's tree lists. A product needs a
+ * category to be written, so these are the rows a source left behind.
+ */
+const WITHOUT_CATEGORY_SQL = `NOT EXISTS (
+        SELECT 1
+        FROM "item_categories" ic
+        WHERE ic."itemId" = i."id"
+      )`;
+
+/**
  * Global products (plan 0012), and the search over them (plan 0048).
  *
  * Writes are owner only; reads are open to any authenticated user.
@@ -1475,6 +1486,10 @@ export class ItemService {
     if (req.withoutProductGroup) {
       filters.push('i."productGroupId" IS NULL');
     }
+    // Admin plan 0043, on both branches for the reason the flag above gives.
+    if (req.withoutCategory) {
+      filters.push(WITHOUT_CATEGORY_SQL);
+    }
     // Plan 0146: which chains sell the product, which is not what the scopes
     // below decide. Empty is the same as absent, so a person who cleared the
     // chain chips reads the catalog rather than an empty page.
@@ -1618,6 +1633,11 @@ export class ItemService {
       // group filter rather than instead of it, so asking for both answers with
       // nothing, which is what the two clauses together mean.
       qb.andWhere('i."productGroupId" IS NULL');
+    }
+    if (req.withoutCategory) {
+      // Admin plan 0043: the products on no category at all. Beside a
+      // category it answers nothing, which is what the two together mean.
+      qb.andWhere(WITHOUT_CATEGORY_SQL);
     }
     if (req.soldBy?.length) {
       // The same rule the ranked branch applies, from the same function: the

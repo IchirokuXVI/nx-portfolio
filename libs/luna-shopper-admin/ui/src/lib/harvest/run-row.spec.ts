@@ -92,3 +92,56 @@ describe('RunRowView', () => {
     ).toContain('harvest.blocked.service-off');
   });
 });
+
+/**
+ * Admin plan 0044, target 5: the earlier runs name the chain of each run, and
+ * what it wrote.
+ */
+describe('RunRowView, on the Runs tab', () => {
+  it('names the chain of the run, before the kind of run', async () => {
+    const fixture = await render(row({ chain: 'Mercadona' }), ['run-1']);
+    const anchor: HTMLAnchorElement = fixture.nativeElement.querySelector('a');
+    const chain = anchor.querySelector('.chain');
+
+    expect(chain?.textContent?.trim()).toBe('Mercadona');
+    expect(chain?.classList.contains('every')).toBe(false);
+    expect(anchor.firstElementChild).toBe(chain);
+  });
+
+  /** A run over every chain has no chain, and the row says so. */
+  it('says "every chain" for a run that has none', async () => {
+    const fixture = await render(row({ chain: '' }), ['run-1']);
+    const chain = fixture.nativeElement.querySelector('.chain');
+
+    expect(chain.textContent.trim()).toBe('harvest.runs.row.everyChain');
+    expect(chain.classList.contains('every')).toBe(true);
+  });
+
+  /** A list that does not name chains draws no chain, and not "every chain". */
+  it('draws no chain where the list gave none', async () => {
+    const fixture = await render(row(), ['run-1']);
+
+    expect(fixture.nativeElement.querySelector('.chain')).toBeNull();
+  });
+
+  it('says what the run wrote, where the list gave it', async () => {
+    const fixture = await render(row({ wrote: 3902 }), ['run-1']);
+
+    expect(
+      fixture.nativeElement.querySelector('.wrote').textContent.trim()
+    ).toBe('harvest.runs.row.wrote');
+  });
+
+  /** Nothing written is a number, and a row that hid it would read as unknown. */
+  it('says so when the run wrote nothing', async () => {
+    const fixture = await render(row({ wrote: 0 }), ['run-1']);
+
+    expect(fixture.nativeElement.querySelector('.wrote')).not.toBeNull();
+  });
+
+  it('draws no "wrote" where the list gave none', async () => {
+    const fixture = await render(row(), ['run-1']);
+
+    expect(fixture.nativeElement.querySelector('.wrote')).toBeNull();
+  });
+});

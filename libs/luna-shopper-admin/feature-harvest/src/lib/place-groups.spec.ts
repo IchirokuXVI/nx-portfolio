@@ -14,9 +14,12 @@ import { SUPERMARKETS } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { provideResources } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { placeGroupRows } from './place-groups';
-import { PlaceGroupsPage } from './place-groups-page';
+import { PlaceGroupsView } from './place-groups-view';
 
-/** Admin plan 0034, section 4: the places queue, read by chain. */
+/**
+ * Admin plan 0034, section 4: the places queue, read by chain. A view of the
+ * Places queue since admin plan 0044, and no page of its own.
+ */
 
 const drain = async () => {
   for (let i = 0; i < 12; i++) {
@@ -71,7 +74,7 @@ describe('the place groups view', () => {
 
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
-      imports: [PlaceGroupsPage, RokuTranslatorTestingModule.forTesting()],
+      imports: [PlaceGroupsView, RokuTranslatorTestingModule.forTesting()],
       providers: [
         ContentLocaleStore,
         ServerReachability,
@@ -92,7 +95,7 @@ describe('the place groups view', () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(PlaceGroupsPage);
+    const fixture = TestBed.createComponent(PlaceGroupsView);
     fixture.detectChanges();
     await drain();
     fixture.detectChanges();
@@ -123,11 +126,16 @@ describe('the place groups view', () => {
     expect(deza?.sample).toEqual(['Supermercado Deza']);
   });
 
-  it('links back to the queue', async () => {
+  /**
+   * The queue's own view switch is the way back, so the view draws no header
+   * and no link of its own (admin plan 0044, target 4).
+   */
+  it('draws no page header and no way back of its own', async () => {
     const { fixture } = await render();
 
-    expect(
-      fixture.nativeElement.querySelector('header a').getAttribute('href')
-    ).toBe('/harvest/places');
+    expect(fixture.nativeElement.querySelector('lib-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a')).toBeNull();
   });
 });

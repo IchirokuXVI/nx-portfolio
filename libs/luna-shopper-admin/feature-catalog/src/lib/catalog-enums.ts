@@ -1,4 +1,8 @@
-import type { EnumOption } from '@portfolio/luna-shopper-admin/models';
+import type {
+  EnumOption,
+  ScopeLevel,
+  ScopeMarkView,
+} from '@portfolio/luna-shopper-admin/models';
 
 /**
  * The catalog's enumerations, as options with keyed labels.
@@ -52,6 +56,27 @@ export const PRICE_SCOPE_KIND_OPTIONS: readonly EnumOption[] = [
   { value: 'LOCAL_AREA', label: 'catalog.priceScopeKind.LOCAL_AREA' },
   { value: 'STORE', label: 'catalog.priceScopeKind.STORE' },
 ];
+
+/**
+ * The scope mark of a kind: how many of the four bars are filled, and what the
+ * kind is called (admin plan 0041, section 10).
+ *
+ * The order of {@link PRICE_SCOPE_KIND_OPTIONS} is the order of the levels,
+ * from the widest scope to the narrowest. A kind this app does not know has no
+ * mark, which is better than a mark that guesses how far a price reaches.
+ */
+export function priceScopeMark(kind: unknown): ScopeMarkView | undefined {
+  const at = PRICE_SCOPE_KIND_OPTIONS.findIndex(
+    (option) => option.value === kind
+  );
+
+  return at === -1
+    ? undefined
+    : {
+        level: (at + 1) as ScopeLevel,
+        label: PRICE_SCOPE_KIND_OPTIONS[at].label,
+      };
+}
 
 /**
  * Where a price came from, which is the column plan 0005 section 4 is about.

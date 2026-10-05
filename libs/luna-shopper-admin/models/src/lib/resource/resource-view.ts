@@ -1,6 +1,11 @@
+import type { ScopeMarkView } from './info-content';
 import { localizedTextValue, missingLocales } from './localized-text';
 import { formatMoney } from './money';
-import { idOf, type ResourceDescriptor } from './resource-descriptor';
+import {
+  idOf,
+  type ResourceDescriptor,
+  type RowState,
+} from './resource-descriptor';
 import type {
   FieldDescriptor,
   FieldMessage,
@@ -34,6 +39,11 @@ export interface ResourceCell {
    * from {@link ReferenceField.unsetFlag}.
    */
   readonly flag?: true;
+  /**
+   * The scope mark drawn before the value (admin plan 0041, section 10). Set
+   * only from `FieldBase.scope`.
+   */
+  readonly scope?: ScopeMarkView;
   /**
    * What to interpolate into {@link key}, for a word that carries a number.
    *
@@ -83,6 +93,15 @@ export interface ResourceCell {
   };
 }
 
+/** One row of a list drawn as a column, already formatted. */
+export interface RowBrief {
+  readonly heading: string;
+  /** The second line. Empty when the row has nothing to say there. */
+  readonly line: string;
+  /** The number at the end, or `null`. */
+  readonly trailing: string | null;
+}
+
 /** A row, ready to render. */
 export interface ResourceRowView<T extends ResourceRow = ResourceRow> {
   readonly id: string;
@@ -92,6 +111,10 @@ export interface ResourceRowView<T extends ResourceRow = ResourceRow> {
   readonly cells: Readonly<Record<string, ResourceCell>>;
   /** The row itself, for a named action that needs it. */
   readonly row: T;
+  /** The row's states, already decided, in the order they are drawn. */
+  readonly states?: readonly RowState[];
+  /** What the row says in a narrow column, when the page drew one. */
+  readonly brief?: RowBrief;
 }
 
 /** How to render values: which language, and which content locales to prefer. */
@@ -118,6 +141,18 @@ const EMPTY: ResourceCell = { text: '', key: EMPTY_VALUE_KEY };
 
 /** One field of one row, as a cell. */
 export function toCell<T extends ResourceRow>(
+  field: FieldDescriptor<T>,
+  row: T,
+  options: RenderOptions
+): ResourceCell {
+  const cell = valueCell(field, row, options);
+  const scope = field.scope?.(row);
+
+  return scope === undefined ? cell : { ...cell, scope };
+}
+
+/** The value alone, before any mark the field puts in front of it. */
+function valueCell<T extends ResourceRow>(
   field: FieldDescriptor<T>,
   row: T,
   options: RenderOptions

@@ -1,30 +1,49 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
+  effect,
   inject,
+  signal,
+  untracked,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { ResourceFormPage } from '@portfolio/luna-shopper-admin/feature-resource';
+import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
 import {
-  RESOURCE_ID_PARAM,
-  ResourceFormPage,
-} from '@portfolio/luna-shopper-admin/feature-resource';
-import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
-import { LocationSections } from './location-sections';
+  ConfirmDialog,
+  PageHeader,
+  ResourceForm,
+} from '@portfolio/luna-shopper-admin/ui';
+import { ShopContext } from './chains/shop-context';
 
 /**
- * The shop screen: the generic form, and under it the sections this shop has
- * (admin plan 0037, target 2).
+ * The shop's form, in the two places it is drawn (admin plan 0042, target 5).
  *
- * The panel needs the shop's chain, which only the row read can say, so it is
- * drawn once the form has read the shop. A shop being created has no sections
- * of its own yet and gets no panel.
+ * - **A new shop** is a page at `/chains/{chainId}/shops/new`, with the header
+ *   every form has. Its chain is the one in the address. Saving opens the shop
+ *   that was made.
+ * - **A shop that exists** is the Details tab of its page, which drew the
+ *   header. Saving stays on the tab, and the page reads the shop again so that
+ *   its title and its "Priced by" line say what was saved.
+ *
+ * The shop's sections used to be a panel under this form. They are the tab
+ * beside it now.
  */
 @Component({
   selector: 'lib-location-form-page',
-  imports: [ResourceForm, ConfirmDialog, LocationSections, RokuTranslatorPipe],
+  imports: [PageHeader, ResourceForm, ConfirmDialog, RokuTranslatorPipe],
   template: `
+    @if (mode === 'create') {
+      <lib-page-header
+        (back)="leave()"
+        [backDisabled]="store.busy()"
+        [backLabel]="'resource.action.back' | rokuT"
+        [frameTabs]="false"
+        [heading]="titleKey() | rokuT: titleArgs()"
+      />
+    }
+
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
@@ -35,32 +54,24 @@ import { LocationSections } from './location-sections';
         (save)="submit()"
         (valueChange)="change($event)"
         [busy]="store.busy()"
+        [cautionKey]="descriptor.caution ?? null"
         [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
-        [fields]="descriptor.fields"
+        [fields]="fields"
+        [header]="false"
         [lookup]="references"
         [messages]="messages()"
         [mode]="mode"
-        [noteKey]="descriptor.formNote ?? null"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
         [subtitle]="subtitle()"
         [titleArgs]="titleArgs()"
         [titleKey]="titleKey()"
       />
-    }
-
-    @if (locationId(); as id) {
-      @if (chainId(); as chain) {
-        <div class="beside">
-          <lib-location-sections
-            [hasMap]="hasMap()"
-            [locationId]="id"
-            [supermarketId]="chain"
-          />
-        </div>
+      @if (savedNow() && !store.dirty()) {
+        <p class="saved" role="status">{{ 'resource.form.saved' | rokuT }}</p>
       }
     }
 
@@ -79,7 +90,7 @@ import { LocationSections } from './location-sections';
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-6);
+      gap: var(--admin-space-4);
     }
 
     .state {
@@ -96,32 +107,78 @@ import { LocationSections } from './location-sections';
       color: var(--admin-ink);
     }
 
-    .beside {
-      padding-block-start: var(--admin-space-4);
-      border-block-start: 1px solid var(--admin-border);
+    .saved {
+      color: var(--admin-ink-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LocationFormPage extends ResourceFormPage {
   private readonly _shopRoute = inject(ActivatedRoute);
+  private readonly _shopRouter = inject(Router);
+  private readonly _shop = inject(ShopContext, { optional: true });
 
-  /** The shop being edited, or `null` on a create. */
-  readonly locationId = computed(() =>
-    this.mode === 'edit'
-      ? (this._shopRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
-      : null
-  );
+  /** Whether the last act was a save, for the line under the form. */
+  readonly savedNow = signal(false);
+
+  constructor() {
+    super();
+
+    // "Change" on the page's "Priced by" line writes the shop's scopes while
+    // this tab is open, and the form held the row it read before that. So
+    // when the shop the page holds names other scopes than the form's row,
+    // the form reads again. Not over something typed: a form that is being
+    // changed keeps what it holds, and its save sends the changed fields
+    // alone, so the scopes written beside it are not put back.
+    effect(() => {
+      const held = this._shop?.shop()?.priceScopeIds ?? null;
+      const shown = this.store.row()?.['priceScopeIds'];
+      untracked(() => {
+        if (
+          this.mode !== 'edit' ||
+          held === null ||
+          !Array.isArray(shown) ||
+          this.store.status() !== 'ready' ||
+          this.store.dirty() ||
+          sameIds(held, shown)
+        ) {
+          return;
+        }
+        void this.store.load();
+      });
+    });
+  }
+
+  /** A new shop opens its own page. A changed one stays on its tab. */
+  protected override afterSave(row: ResourceRow): void {
+    const id = row['id'];
+    if (this.mode === 'create' && typeof id === 'string') {
+      void this._shopRouter.navigate(['..', id], {
+        relativeTo: this._shopRoute,
+      });
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(true);
+    void this._shop?.reload();
+  }
 
   /**
-   * Whether the shop has a walk shown to shoppers, from the location read
-   * (backend plan 0168). Its section list follows that map (admin plan 0040).
+   * Cancel. From a new shop, back to the chain's shops. On the Details tab
+   * there is nowhere to go back to, so it puts back what the shop holds.
    */
-  readonly hasMap = computed(() => this.store.row()?.['hasMap'] === true);
+  override goBack(): void {
+    if (this.mode === 'create') {
+      super.goBack();
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(false);
+    void this.store.load();
+  }
+}
 
-  /** The shop's chain, once the row has been read. */
-  readonly chainId = computed(() => {
-    const chain = this.store.row()?.['supermarketId'];
-    return typeof chain === 'string' && chain !== '' ? chain : null;
-  });
+/** Whether two lists name the same ids, in any order. */
+function sameIds(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
 }

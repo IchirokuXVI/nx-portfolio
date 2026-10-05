@@ -145,6 +145,17 @@ export class AdminZoneService {
       // mean.
       qb.andWhere('z."ownerUserId" IS NULL');
     }
+    if (req.hasPending) {
+      // Admin plan 0045, section 2: the zones where a join request waits. The
+      // same predicate the count below groups on, so a row this filter keeps
+      // always carries a `pendingCount` above zero.
+      qb.andWhere(
+        `EXISTS (
+            SELECT 1 FROM zone_memberships p
+            WHERE p."zoneId" = z.id AND p.status = :pending)`,
+        { pending: MembershipStatus.PENDING }
+      );
+    }
     if (req.createdAfter) {
       qb.andWhere('z."createdAt" >= :after', { after: req.createdAfter });
     }
@@ -166,15 +177,22 @@ export class AdminZoneService {
     // Two grouped queries over the page's ids rather than two per row: a listing
     // of twenty zones costs three queries however many rows it has, and the
     // obvious per row version is the read that would eventually need fixing.
+    // The memberships are grouped once, by zone and status, and both member
+    // counts are read from that answer.
     const ids = page.map((zone) => zone.id);
     const [members, lists] = await Promise.all([
-      this.countApprovedMembers(ids),
+      this.countMembers(ids),
       this.countLists(ids),
     ]);
 
     return {
       items: page.map((zone) =>
-        toZoneRow(zone, members.get(zone.id) ?? 0, lists.get(zone.id) ?? 0)
+        toZoneRow(
+          zone,
+          members.get(zone.id)?.approved ?? 0,
+          lists.get(zone.id) ?? 0,
+          members.get(zone.id)?.pending ?? 0
+        )
       ),
       nextCursor:
         hasMore && last
@@ -225,9 +243,12 @@ export class AdminZoneService {
     const approved = members.filter(
       (member) => member.status === MembershipStatus.APPROVED
     ).length;
+    const pending = members.filter(
+      (member) => member.status === MembershipStatus.PENDING
+    ).length;
 
     return {
-      ...toZoneRow(zone, approved, lists.length),
+      ...toZoneRow(zone, approved, lists.length, pending),
       joinCode: zone.joinCode,
       config: zone.config ?? {},
       members: members.map((member) => toMemberView(member, zone.name)),
@@ -557,21 +578,43 @@ export class AdminZoneService {
     return new Map(rows.map((row) => [row.id, row.name]));
   }
 
-  private async countApprovedMembers(
+  /**
+   * How many members each zone has, and how many ask to join it.
+   *
+   * One grouped query for both numbers (admin plan 0045, section 2): approved
+   * memberships are the members a zone has, and pending ones are the requests
+   * that wait. Kicked and banned rows are neither, and are not counted.
+   */
+  private async countMembers(
     zoneIds: string[]
-  ): Promise<Map<string, number>> {
+  ): Promise<Map<string, { approved: number; pending: number }>> {
     if (!zoneIds.length) {
       return new Map();
     }
     const rows = await this.memberships
       .createQueryBuilder('m')
       .select('m."zoneId"', 'zoneId')
+      .addSelect('m.status', 'status')
       .addSelect('COUNT(*)', 'count')
       .where('m."zoneId" IN (:...ids)', { ids: zoneIds })
-      .andWhere('m.status = :status', { status: MembershipStatus.APPROVED })
+      .andWhere('m.status IN (:...statuses)', {
+        statuses: [MembershipStatus.APPROVED, MembershipStatus.PENDING],
+      })
       .groupBy('m."zoneId"')
-      .getRawMany<{ zoneId: string; count: string }>();
-    return new Map(rows.map((row) => [row.zoneId, Number(row.count)]));
+      .addGroupBy('m.status')
+      .getRawMany<{ zoneId: string; status: string; count: string }>();
+
+    const counts = new Map<string, { approved: number; pending: number }>();
+    for (const row of rows) {
+      const held = counts.get(row.zoneId) ?? { approved: 0, pending: 0 };
+      if (row.status === MembershipStatus.PENDING) {
+        held.pending = Number(row.count);
+      } else {
+        held.approved = Number(row.count);
+      }
+      counts.set(row.zoneId, held);
+    }
+    return counts;
   }
 
   private async countLists(zoneIds: string[]): Promise<Map<string, number>> {
@@ -592,7 +635,8 @@ export class AdminZoneService {
 function toZoneRow(
   zone: Zone,
   memberCount: number,
-  listCount: number
+  listCount: number,
+  pendingCount: number
 ): AdminZoneView {
   return {
     id: zone.id,
@@ -601,6 +645,7 @@ function toZoneRow(
     ownerUserId: zone.ownerUserId,
     memberCount,
     listCount,
+    pendingCount,
     markedForDeletionAt: zone.markedForDeletionAt?.toISOString() ?? null,
     createdAt: zone.createdAt.toISOString(),
     updatedAt: zone.updatedAt.toISOString(),

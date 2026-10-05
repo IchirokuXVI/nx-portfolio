@@ -16,10 +16,12 @@ import {
   gatewayErrorKey,
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { InfoContent, Wire } from '@portfolio/luna-shopper-admin/models';
 import {
+  CautionLine,
   ConfirmDialog,
   HarvestNotice,
+  InfoButton,
   ReferencePicker,
 } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
@@ -109,27 +111,24 @@ function configTextOf(
  * rather than a bare label. It has no route of its own and goes through the
  * upsert, so the row's own values are sent back beside it rather than the edit
  * form's.
+ *
+ * **A part of the Setup tab** (admin plan 0044, target 6), so the page above
+ * draws the header. One row per chain on a wide screen and one card per chain
+ * on a phone. "Change" opens the form in the row, with the caution about
+ * asking too fast. Each of the two switch columns has its own info button.
  */
 @Component({
   selector: 'lib-sources-page',
   imports: [
+    CautionLine,
     FormsModule,
     RokuTranslatorPipe,
     ConfirmDialog,
     HarvestNotice,
+    InfoButton,
     ReferencePicker,
   ],
   template: `
-    <header>
-      <h1>{{ 'harvest.sources.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'harvest.sources.lead' | rokuT }}</p>
-    </header>
-
-    <!-- Read only, and not a row: OpenStreetMap is asked by the postal code
-         queue for every code, so there is nothing about it to switch or
-         configure here (backend plan 0153). -->
-    <p class="always">{{ 'harvest.sources.osmAlways' | rokuT }}</p>
-
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
     } @else if (loading()) {
@@ -211,7 +210,7 @@ function configTextOf(
           </div>
         </div>
       } @else {
-        <div>
+        <div class="top">
           <button (click)="startCreate()" class="new" type="button">
             {{ 'harvest.sources.new' | rokuT }}
           </button>
@@ -221,150 +220,228 @@ function configTextOf(
       @if (sources().length === 0) {
         <p class="state">{{ 'harvest.sources.empty' | rokuT }}</p>
       } @else {
-        <ul class="sources">
-          @for (source of sources(); track source.id) {
-            <li>
-              <div class="row">
-                <span class="chain">{{
-                  names.nameOf(source.supermarketId)
-                }}</span>
-                <span class="adapter">{{ source.adapterKey }}</span>
+        <!-- One row per chain on a wide screen and one card per chain on a
+             phone (admin plan 0044, target 6). The same cells either way: a
+             card writes each label beside its value, and a row reads them
+             off the head above. -->
+        <div class="table">
+          <div aria-hidden="true" class="row head">
+            <span>{{ 'harvest.sources.field.chain' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.enabled' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.trusted' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.lastSuccessAt' | rokuT }}</span>
+            <span>{{ 'harvest.sources.field.failures' | rokuT }}</span>
+            <span></span>
+          </div>
 
-                <button
-                  (click)="toggle(source)"
-                  [attr.aria-pressed]="source.enabled"
-                  [class.on]="source.enabled"
-                  [disabled]="busyId() === source.supermarketId"
-                  class="toggle"
-                  type="button"
-                >
-                  {{
-                    (source.enabled
-                      ? 'harvest.sources.enabled'
-                      : 'harvest.sources.disabled'
-                    ) | rokuT
-                  }}
-                </button>
+          <!-- Each switch column has its own info button. Outside the head,
+               which is hidden from a screen reader as a set of labels the
+               cells repeat, and placed over it. -->
+          <div class="head-info">
+            <span class="pair">
+              <span class="label">{{
+                'harvest.sources.field.enabled' | rokuT
+              }}</span>
+              <lib-info-button [info]="enabledInfo" align="start" />
+            </span>
+            <span class="pair">
+              <span class="label">{{
+                'harvest.sources.field.trusted' | rokuT
+              }}</span>
+              <lib-info-button [info]="trustedInfo" align="start" />
+            </span>
+          </div>
 
-                <button
-                  (click)="toggleTrust(source)"
-                  [attr.aria-pressed]="source.autoImportPlaces"
-                  [class.on]="source.autoImportPlaces"
-                  [disabled]="
-                    busyId() === source.supermarketId || !writable(source)
-                  "
-                  class="toggle"
-                  type="button"
-                >
-                  {{
-                    (source.autoImportPlaces
-                      ? 'harvest.sources.trusted'
-                      : 'harvest.sources.untrusted'
-                    ) | rokuT
-                  }}
-                </button>
-              </div>
+          <ul class="sources">
+            @for (source of sources(); track source.id) {
+              <li [class.open]="editing() === source.supermarketId">
+                <div class="row">
+                  <span class="cell chain">{{
+                    names.nameOf(source.supermarketId)
+                  }}</span>
 
-              <p class="hint">{{ 'harvest.sources.trust.hint' | rokuT }}</p>
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.adapter' | rokuT
+                    }}</span>
+                    <span class="adapter">{{ source.adapterKey }}</span>
+                  </span>
 
-              <dl>
-                <div>
-                  <dt>{{ 'harvest.sources.field.workers' | rokuT }}</dt>
-                  <dd>{{ source.workers }}</dd>
-                </div>
-                <div>
-                  <dt>{{ 'harvest.sources.field.rate' | rokuT }}</dt>
-                  <dd>{{ source.maxRequestsPerSecond }}</dd>
-                </div>
-                <div>
-                  <dt>{{ 'harvest.sources.field.lastRunAt' | rokuT }}</dt>
-                  <dd>{{ instant(source.lastRunAt) }}</dd>
-                </div>
-                <div>
-                  <dt>{{ 'harvest.sources.field.lastSuccessAt' | rokuT }}</dt>
-                  <dd>{{ instant(source.lastSuccessAt) }}</dd>
-                </div>
-                <div>
-                  <dt>{{ 'harvest.sources.field.failures' | rokuT }}</dt>
-                  <dd>{{ source.consecutiveFailures }}</dd>
-                </div>
-              </dl>
-
-              @if (editing() === source.supermarketId) {
-                <div class="edit">
-                  <label>
-                    <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
-                    <select [(ngModel)]="adapterKey" name="adapterKey">
-                      @for (option of adapters; track option) {
-                        <option [value]="option">{{ option }}</option>
-                      }
-                    </select>
-                  </label>
-                  <label>
-                    <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
-                    <input
-                      [(ngModel)]="workers"
-                      min="1"
-                      name="workers"
-                      type="number"
-                    />
-                  </label>
-                  <label>
-                    <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
-                    <input
-                      [(ngModel)]="rate"
-                      min="1"
-                      name="rate"
-                      type="number"
-                    />
-                  </label>
-                  <label class="wide">
-                    <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
-                    <textarea
-                      [(ngModel)]="configText"
-                      name="config"
-                      rows="3"
-                      spellcheck="false"
-                    ></textarea>
-                    <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
-                  </label>
-
-                  @if (formErrorKey(); as key) {
-                    <p class="failure" role="alert">{{ key | rokuT }}</p>
-                  }
-
-                  <div class="controls">
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.enabled' | rokuT
+                    }}</span>
                     <button
-                      (click)="save(source)"
-                      class="primary"
+                      (click)="toggle(source)"
+                      [attr.aria-checked]="source.enabled"
+                      [attr.aria-label]="
+                        'harvest.sources.enabled.label'
+                          | rokuT: { chain: names.nameOf(source.supermarketId) }
+                      "
+                      [class.on]="source.enabled"
+                      [disabled]="busyId() === source.supermarketId"
+                      class="toggle"
+                      role="switch"
                       type="button"
+                      data-switch="enabled"
                     >
-                      {{ 'resource.action.save' | rokuT }}
+                      <i></i>
                     </button>
-                    <button (click)="editing.set(null)" type="button">
-                      {{ 'resource.action.cancel' | rokuT }}
+                  </span>
+
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.trusted' | rokuT
+                    }}</span>
+                    <button
+                      (click)="toggleTrust(source)"
+                      [attr.aria-checked]="source.autoImportPlaces"
+                      [attr.aria-label]="
+                        'harvest.sources.trusted.label'
+                          | rokuT: { chain: names.nameOf(source.supermarketId) }
+                      "
+                      [class.on]="source.autoImportPlaces"
+                      [disabled]="
+                        busyId() === source.supermarketId || !writable(source)
+                      "
+                      class="toggle"
+                      role="switch"
+                      type="button"
+                      data-switch="trusted"
+                    >
+                      <i></i>
                     </button>
+                  </span>
+
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.workers' | rokuT
+                    }}</span>
+                    <span class="num">{{ source.workers }}</span>
+                  </span>
+
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.rate' | rokuT
+                    }}</span>
+                    <span class="num">{{ source.maxRequestsPerSecond }}</span>
+                  </span>
+
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.lastSuccessAt' | rokuT
+                    }}</span>
+                    <span class="muted">{{
+                      instant(source.lastSuccessAt) ||
+                        ('harvest.sources.never' | rokuT)
+                    }}</span>
+                  </span>
+
+                  <span class="cell">
+                    <span class="label">{{
+                      'harvest.sources.field.failures' | rokuT
+                    }}</span>
+                    <span
+                      [class.failing]="source.consecutiveFailures > 0"
+                      class="num failures"
+                      >{{ source.consecutiveFailures }}</span
+                    >
+                  </span>
+
+                  <span class="cell act">
+                    @if (editing() !== source.supermarketId) {
+                      <button (click)="edit(source)" type="button" data-change>
+                        {{ 'harvest.sources.edit' | rokuT }}
+                      </button>
+                    }
+                  </span>
+                </div>
+
+                @if (editing() === source.supermarketId) {
+                  <!-- The form opens in the row. Beside the two settings it
+                       warns about, and only while they can be changed (admin
+                       plan 0041, section 3). -->
+                  <div class="edit">
+                    <label>
+                      <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
+                      <select [(ngModel)]="adapterKey" name="adapterKey">
+                        @for (option of adapters; track option) {
+                          <option [value]="option">{{ option }}</option>
+                        }
+                      </select>
+                    </label>
+                    <label>
+                      <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
+                      <input
+                        [(ngModel)]="workers"
+                        min="1"
+                        name="workers"
+                        type="number"
+                      />
+                    </label>
+                    <label>
+                      <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
+                      <input
+                        [(ngModel)]="rate"
+                        min="1"
+                        name="rate"
+                        type="number"
+                      />
+                    </label>
+                    <label class="wide">
+                      <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
+                      <textarea
+                        [(ngModel)]="configText"
+                        name="config"
+                        rows="3"
+                        spellcheck="false"
+                      ></textarea>
+                      <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
+                    </label>
+
+                    @if (formErrorKey(); as key) {
+                      <p class="failure" role="alert">{{ key | rokuT }}</p>
+                    }
+
+                    <div class="controls">
+                      <button
+                        (click)="save(source)"
+                        class="primary"
+                        type="button"
+                      >
+                        {{ 'resource.action.save' | rokuT }}
+                      </button>
+                      <button (click)="editing.set(null)" type="button">
+                        {{ 'resource.action.cancel' | rokuT }}
+                      </button>
+                      <button
+                        (click)="askDelete(source)"
+                        [disabled]="busyId() === source.supermarketId"
+                        class="danger"
+                        type="button"
+                      >
+                        {{ 'harvest.sources.remove.action' | rokuT }}
+                      </button>
+                    </div>
+
+                    <lib-caution-line
+                      [text]="'harvest.sources.caution' | rokuT"
+                    />
                   </div>
-                </div>
-              } @else {
-                <div class="controls">
-                  <button (click)="edit(source)" type="button">
-                    {{ 'harvest.sources.edit' | rokuT }}
-                  </button>
-                  <button
-                    (click)="askDelete(source)"
-                    [disabled]="busyId() === source.supermarketId"
-                    class="danger"
-                    type="button"
-                  >
-                    {{ 'harvest.sources.remove.action' | rokuT }}
-                  </button>
-                </div>
-              }
-            </li>
-          }
-        </ul>
+                }
+              </li>
+            }
+          </ul>
+        </div>
       }
+
+      <!-- Read only, and not a row: OpenStreetMap is asked by the postal code
+           queue for every code, so there is nothing about it to switch or
+           configure here (backend plan 0153). -->
+      <p class="always">{{ 'harvest.sources.osmAlways' | rokuT }}</p>
 
       @if (pendingDelete(); as target) {
         <lib-confirm-dialog
@@ -384,122 +461,198 @@ function configTextOf(
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-4);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
-    .lead,
-    .state {
-      color: var(--admin-ink-muted);
-    }
-
-    .always {
-      margin: 0;
-      padding: var(--admin-space-3) var(--admin-space-4);
-      border-inline-start: 3px solid var(--admin-border);
-      color: var(--admin-ink-muted);
+      gap: var(--admin-space-3);
+      min-inline-size: 0;
     }
 
     .state {
       padding: var(--admin-space-6);
       border: 1px dashed var(--admin-border);
       border-radius: var(--admin-radius);
+      color: var(--admin-ink-muted);
     }
 
     .failure {
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-danger);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-danger-wash);
     }
 
-    .sources {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      list-style: none;
+    .always,
+    .hint,
+    .muted,
+    small {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
     }
 
-    .sources li {
+    .top {
       display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      align-items: flex-start;
-      padding: var(--admin-space-4);
+      justify-content: flex-end;
+    }
+
+    .create,
+    .table {
       border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
-    }
-
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: center;
-      inline-size: 100%;
-    }
-
-    .chain {
-      flex: 1;
-      font-weight: 700;
-      overflow-wrap: anywhere;
-    }
-
-    .adapter {
-      color: var(--admin-ink-muted);
-    }
-
-    /* Wide enough that the row does not reflow when the label flips between
-       "Enabled" and "Disabled". The height is the global base's. */
-    .toggle {
-      min-inline-size: 7rem;
-    }
-
-    .toggle.on {
-      border-color: var(--admin-accent);
-      background: var(--admin-accent-wash);
-      color: var(--admin-accent-on-wash);
-    }
-
-    dl {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-4);
-    }
-
-    dt {
-      font-size: 0.75rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--admin-ink-muted);
     }
 
     .create {
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-3);
-      align-items: stretch;
       padding: var(--admin-space-4);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
     }
 
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-      max-inline-size: 24rem;
+    .table {
+      position: relative;
+      overflow: hidden;
     }
 
-    .field > span,
-    .hint {
-      font-size: 0.8125rem;
+    .sources {
+      list-style: none;
+    }
+
+    .sources li + li {
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    .sources li.open {
+      background: var(--admin-accent-wash);
+    }
+
+    /* Nine columns: the chain, how it is fetched, the two switches, the two
+       numbers, the last good run, the failures, and the action. */
+    .row {
+      display: grid;
+      grid-template-columns:
+        minmax(7rem, 1.2fr) minmax(7rem, 1fr) 9.5rem 7.5rem 4.5rem 6.5rem
+        minmax(6rem, 1fr) 6rem 5.5rem;
+      gap: var(--admin-space-3);
+      align-items: center;
+      padding: var(--admin-space-2) var(--admin-space-4);
+    }
+
+    .head {
+      min-block-size: 2.75rem;
+      border-block-end: 1px solid var(--admin-border);
+      font-size: 0.75rem;
+      font-weight: 600;
       color: var(--admin-ink-muted);
+    }
+
+    /* The two info buttons sit in the head, at the end of the third and the
+       fourth column. */
+    .head-info {
+      position: absolute;
+      inset-block-start: 0;
+      inset-inline: 0;
+      display: grid;
+      grid-template-columns:
+        minmax(7rem, 1.2fr) minmax(7rem, 1fr) 9.5rem 7.5rem 4.5rem 6.5rem
+        minmax(6rem, 1fr) 6rem 5.5rem;
+      gap: var(--admin-space-3);
+      align-items: center;
+      block-size: 2.75rem;
+      padding: 0 var(--admin-space-4);
+      pointer-events: none;
+    }
+
+    .head-info .pair {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      justify-self: end;
+      pointer-events: auto;
+    }
+
+    .head-info .label {
+      display: none;
+    }
+
+    .head-info .pair:first-child {
+      grid-column: 3;
+    }
+
+    .head-info .pair:last-child {
+      grid-column: 4;
+    }
+
+    .cell {
+      display: flex;
+      align-items: center;
+      min-inline-size: 0;
+    }
+
+    .cell .label {
+      display: none;
+    }
+
+    .chain {
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .adapter {
+      font-family: var(--admin-font-mono);
+      font-size: 0.8125rem;
+    }
+
+    .num {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Failures in a row wait for a person: the chain may be blocking us. */
+    .failures.failing {
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-waiting-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--admin-waiting-on-wash);
+    }
+
+    .act {
+      justify-content: flex-end;
+    }
+
+    /* A switch: a track and a knob, on when the knob is at the far end. Its
+       state is also its aria-checked, so color and place are not the only
+       signs. */
+    .toggle {
+      position: relative;
+      flex: none;
+      inline-size: 2.5rem;
+      min-inline-size: 0;
+      block-size: 1.5rem;
+      min-block-size: 0;
+      padding: 0;
+      border: 1px solid var(--admin-border-strong);
+      border-radius: 0.75rem;
+      background: var(--admin-neutral-wash);
+    }
+
+    .toggle i {
+      position: absolute;
+      inset-block-start: 0.125rem;
+      inset-inline-start: 0.125rem;
+      inline-size: 1.125rem;
+      block-size: 1.125rem;
+      border-radius: 50%;
+      background: var(--admin-surface-raised);
+      box-shadow: 0 0 0 1px var(--admin-border-strong);
+    }
+
+    .toggle.on {
+      border-color: var(--admin-accent);
+      background: var(--admin-accent);
+    }
+
+    .toggle.on i {
+      inset-inline-start: 1.125rem;
+      box-shadow: none;
     }
 
     .edit {
@@ -507,72 +660,158 @@ function configTextOf(
       flex-wrap: wrap;
       gap: var(--admin-space-3);
       align-items: flex-end;
-      inline-size: 100%;
+      padding: var(--admin-space-3) var(--admin-space-4) var(--admin-space-4);
     }
 
+    .create .edit {
+      padding: 0;
+    }
+
+    .field,
     label {
       display: flex;
-      flex: 1 1 8rem;
+      flex: 1 1 9rem;
       flex-direction: column;
       gap: var(--admin-space-1);
     }
 
-    label span {
+    .field > span,
+    label > span {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
     }
 
-    /* The settings box takes the whole row: it holds JSON, and a column of it
-       eight characters wide is unreadable beside three number fields. */
-    label.wide {
-      flex-basis: 100%;
+    .wide {
+      flex: 3 1 18rem;
     }
 
-    label small {
-      font-size: 0.8125rem;
-      color: var(--admin-ink-muted);
-    }
-
-    /* The global control rule covers button, input and select, and a textarea
-       is none of the three, so it wears the same clothes here. */
     textarea {
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font-family: monospace;
-      font-size: 1rem;
-      color: var(--admin-ink);
-      resize: vertical;
-    }
-
-    button.danger {
-      border-color: transparent;
-      background: var(--admin-danger);
-      font-weight: 600;
-      color: var(--admin-danger-ink);
+      font-family: var(--admin-font-mono);
+      font-size: 0.8125rem;
     }
 
     .controls {
       display: flex;
-      gap: var(--admin-space-3);
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+    }
+
+    .edit lib-caution-line,
+    .edit .failure {
+      flex-basis: 100%;
+    }
+
+    button {
+      cursor: pointer;
     }
 
     .primary {
-      border-color: transparent;
+      border-color: var(--admin-accent);
       background: var(--admin-accent);
       font-weight: 600;
       color: var(--admin-accent-ink);
     }
 
-    button {
-      cursor: pointer;
+    .danger {
+      border-color: var(--admin-danger);
+      color: var(--admin-danger-on-wash);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
+    /* Below 72 rem nine columns do not fit: one card per chain, each value
+       under its label. */
+    @media (max-width: 71.99rem) {
+      .head {
+        display: none;
+      }
+
+      /* What the two switches mean, said once above the cards. */
+      .head-info {
+        position: static;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--admin-space-4);
+        padding: var(--admin-space-2) var(--admin-space-4);
+        border-block-end: 1px solid var(--admin-border);
+      }
+
+      .head-info .label {
+        display: inline;
+        font-size: 0.8125rem;
+        color: var(--admin-ink-muted);
+      }
+
+      .row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--admin-space-3);
+        padding: var(--admin-space-3) var(--admin-space-4);
+      }
+
+      .cell {
+        flex-direction: column;
+        gap: var(--admin-space-1);
+        align-items: flex-start;
+      }
+
+      .cell .label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--admin-ink-muted);
+      }
+
+      .chain,
+      .act {
+        grid-column: 1 / -1;
+      }
+
+      .act {
+        align-items: stretch;
+      }
+
+      .toggle {
+        /* The target is 44 px high on a phone. The track stays its size. */
+        margin-block: 0.625rem;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SourcesPage {
   private readonly _service = inject(HARVEST_SERVICE);
+
+  /** What "May be fetched" allows (admin plan 0044, target 6). */
+  readonly enabledInfo: InfoContent = {
+    title: 'harvest.sources.enabled.info.title',
+    points: [
+      'harvest.sources.enabled.info.allows',
+      'harvest.sources.enabled.info.off',
+    ],
+  };
+
+  /**
+   * What "Trusted" means. The one switch in the harvester that writes to the
+   * catalog without a review, which the last point says.
+   */
+  readonly trustedInfo: InfoContent = {
+    title: 'harvest.sources.trusted.info.title',
+    points: [
+      'harvest.sources.trusted.info.means',
+      'harvest.sources.trusted.info.waits',
+      'harvest.sources.trusted.info.only',
+    ],
+  };
 
   readonly shell = inject(HarvestShell);
   /** Answers the create panel's chain picker, by descriptor name. */

@@ -9,7 +9,6 @@ import {
   CONTENT_LOCALES,
   draftFor,
   fieldOf,
-  hasDetailScreen,
   idOf,
   toInput,
   toRowView,
@@ -17,8 +16,7 @@ import {
   type ResourceGateway,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { ADMINS, toAdminPage } from './admins';
-import { BASKETS } from './baskets';
+import { BASKETS, ZONE_BASKETS } from './baskets';
 import { LIST_LINES } from './list-lines';
 import { LISTS } from './lists';
 import { MEMBERSHIPS } from './memberships';
@@ -31,6 +29,7 @@ import {
   USER_SEED,
   ZONE_SEED,
 } from './people-seed';
+import { ZONE_CAUTION } from './shopper-params';
 import { USERS } from './users';
 import { ZONES } from './zones';
 
@@ -50,7 +49,6 @@ const ALL: readonly AnyResourceDescriptor[] = [
   LISTS,
   LIST_LINES,
   BASKETS,
-  ADMINS,
 ];
 
 /** The five plan 0009 made editable, and the two it deliberately did not. */
@@ -62,7 +60,7 @@ const EDITABLE: readonly AnyResourceDescriptor[] = [
   LIST_LINES,
 ];
 
-const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS, ADMINS];
+const READ_ONLY: readonly AnyResourceDescriptor[] = [BASKETS];
 
 const RENDER = { locale: 'en', contentLocales: CONTENT_LOCALES };
 
@@ -440,18 +438,51 @@ describe('the list and shopping list descriptors', () => {
     expect(BASKETS.list.columns).toContain('lineCount');
   });
 
-  it('filters lists by zone and by owner', () => {
-    expect(LISTS.filters?.map((filter) => filter.param)).toEqual([
-      'zoneId',
-      'createdByUserId',
+  /**
+   * Admin plan 0045: the lists are a tab of their zone, so the zone comes from
+   * the address. Lists by who made them is dropped, by the owner's decision.
+   */
+  it('reads the zone of a list from the address, and offers no filter', () => {
+    expect(LISTS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(LISTS.filters).toBeUndefined();
+    expect(LISTS.list.columns).not.toContain('zoneName');
+  });
+
+  it('says behind the info button who adds a line and who corrects one', () => {
+    expect(LISTS.info?.points).toEqual([
+      'people.lists.info.corrects',
+      'people.lists.info.adds',
     ]);
   });
 
-  it('filters shopping lists by owner and by zone', () => {
-    expect(BASKETS.filters?.map((filter) => filter.param)).toEqual([
-      'ownerUserId',
-      'zoneId',
-    ]);
+  /**
+   * One collection, two tabs. A person's tab takes the owner from the address
+   * and a zone's tab takes the zone, and each still offers the other filter.
+   */
+  it('lists shopping lists under a person and under a zone', () => {
+    expect(BASKETS.parent).toEqual({
+      resource: 'users',
+      param: 'userId',
+      filter: 'ownerUserId',
+    });
+    expect(ZONE_BASKETS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(ZONE_BASKETS.segment).toBe(BASKETS.segment);
+    expect(ZONE_BASKETS.fields).toEqual(BASKETS.fields);
+
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(descriptor.filters?.map((filter) => filter.param)).toEqual([
+        'ownerUserId',
+        'zoneId',
+      ]);
+    }
   });
 
   /** A basket needs no name, and an unnamed one is the ordinary case. */
@@ -463,40 +494,6 @@ describe('the list and shopping list descriptors', () => {
   });
 });
 
-describe('the admins descriptor', () => {
-  /**
-   * Plan 0071, section 6 and plan 0007, section 2: an admin can be seen and
-   * cannot be created, edited or deleted from here, ever. There is no detail
-   * screen either, so `resourceRoutes` declares one route and the list draws
-   * its rows as text.
-   */
-  it('can be read and can never be written', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.detail).toBeUndefined();
-    expect(hasDetailScreen(ADMINS)).toBe(false);
-  });
-
-  it('says in place how an admin is actually managed', () => {
-    expect(ADMINS.note).toBe('people.admins.note');
-  });
-
-  /** The one collection under `/v1/admin/**` that answers `{ admins }`. */
-  it('reads a page out of the shape that route really answers with', () => {
-    const page = toAdminPage({ admins: ADMIN_SEED });
-
-    expect(page.items).toHaveLength(ADMIN_SEED.length);
-    expect(page.nextCursor).toBeNull();
-  });
-
-  it('answers an empty page for a body it cannot read', () => {
-    expect(toAdminPage(null)).toEqual({ items: [], nextCursor: null });
-    expect(toAdminPage({ items: ADMIN_SEED })).toEqual({
-      items: [],
-      nextCursor: null,
-    });
-  });
-});
-
 /**
  * The two collections plan 0009 adds, and plan 0017 opened.
  *
@@ -505,11 +502,15 @@ describe('the admins descriptor', () => {
  * refuses to draw anything until its parent is named.
  */
 describe('the membership descriptor', () => {
-  it('reads with no zone named, and offers the zone as a filter', () => {
-    expect(MEMBERSHIPS.requires).toBeUndefined();
-    expect(MEMBERSHIPS.filters?.map((filter) => filter.param)).toEqual([
-      'zoneId',
-    ]);
+  /** Admin plan 0045: the members are a tab of their zone. */
+  it('reads the zone from the address, and offers no filter', () => {
+    expect(MEMBERSHIPS.segment).toBe('members');
+    expect(MEMBERSHIPS.parent).toEqual({
+      resource: 'zones',
+      param: 'zoneId',
+      filter: 'zoneId',
+    });
+    expect(MEMBERSHIPS.filters).toBeUndefined();
   });
 
   /**
@@ -561,12 +562,15 @@ describe('the membership descriptor', () => {
    * service method per edge, and each edge does more than write the enum. So it
    * is locked, and the four verbs are four actions.
    */
-  it('locks the status and offers the four verbs that move it', () => {
+  it('locks the status and offers the verbs that move it', () => {
     expect(fieldOf(MEMBERSHIPS, 'status')?.editable).toBe(false);
     expect(fieldOf(MEMBERSHIPS, 'status')?.help).toBeDefined();
+    // Handing the zone over is here too since admin plan 0045: the zone's
+    // page used to declare it by hand, and one place declares an action.
     expect(namedActionsOf(MEMBERSHIPS).map((action) => action.name)).toEqual([
       'approve-member',
       'reject-member',
+      'transfer-ownership',
       'kick-member',
       'ban-member',
     ]);
@@ -577,18 +581,32 @@ describe('the membership descriptor', () => {
    * against one, and only a waiting member can be let in or refused.
    */
   it('offers each verb only where core would accept it', () => {
-    const [approve, reject, kick, ban] = namedActionsOf(MEMBERSHIPS);
+    const [approve, reject, transfer, kick, ban] = namedActionsOf(MEMBERSHIPS);
     const [owner] = MEMBERSHIP_SEED.filter((row) => row.role === 'OWNER');
     const [waiting] = MEMBERSHIP_SEED.filter((row) => row.status === 'PENDING');
+    const [member] = MEMBERSHIP_SEED.filter(
+      (row) => row.role !== 'OWNER' && row.status === 'APPROVED'
+    );
 
     // The fixture is what makes this test mean anything, so it is asserted.
-    expect([owner, waiting]).not.toContain(undefined);
+    expect([owner, waiting, member]).not.toContain(undefined);
 
-    expect(kick.available?.(owner)).toBe(false);
-    expect(ban.available?.(owner)).toBe(false);
+    // Nothing applies to an owner, which is why the owner's row has no menu.
+    for (const action of [approve, reject, transfer, kick, ban]) {
+      expect(action.available?.(owner)).toBe(false);
+    }
+
+    // A request is answered, and the zone is not handed to somebody who is
+    // not in it yet.
     expect(approve.available?.(waiting)).toBe(true);
     expect(reject.available?.(waiting)).toBe(true);
-    expect(approve.available?.(owner)).toBe(false);
+    expect(transfer.available?.(waiting)).toBe(false);
+
+    // Somebody in the zone can be handed it, removed or banned.
+    expect(transfer.available?.(member)).toBe(true);
+    expect(kick.available?.(member)).toBe(true);
+    expect(ban.available?.(member)).toBe(true);
+    expect(approve.available?.(member)).toBe(false);
   });
 
   /**
@@ -605,16 +623,20 @@ describe('the membership descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(MEMBERSHIPS.formNote).toBe('people.broadcast');
+    expect(MEMBERSHIPS.caution).toBe(ZONE_CAUTION);
   });
 });
 
 describe('the list line descriptor', () => {
-  it('reads with no list named, and offers the list as a filter', () => {
-    expect(LIST_LINES.requires).toBeUndefined();
-    expect(LIST_LINES.filters?.map((filter) => filter.param)).toEqual([
-      'listId',
-    ]);
+  /** Admin plan 0045: a line sits under its list, which sits under its zone. */
+  it('reads the list from the address, and offers no filter', () => {
+    expect(LIST_LINES.segment).toBe('lines');
+    expect(LIST_LINES.parent).toEqual({
+      resource: 'lists',
+      param: 'listId',
+      filter: 'listId',
+    });
+    expect(LIST_LINES.filters).toBeUndefined();
   });
 
   it('lists at a flat path and still opens a row under its list', () => {
@@ -642,9 +664,11 @@ describe('the list line descriptor', () => {
    * is no route that creates one. The list says so where the control would be,
    * rather than offering a button the gateway refuses.
    */
-  it('offers no way to add a line, and says why in place', () => {
+  it('offers no way to add a line', () => {
+    // Who adds one is said by the list's own info button, on the page the
+    // lines are drawn on (admin plan 0045, target 7).
     expect(LIST_LINES.actions?.create).toBeUndefined();
-    expect(LIST_LINES.note).toBe('people.lines.note');
+    expect(LIST_LINES.info).toBeUndefined();
   });
 
   it('locks the approval and offers the two acts that move it', () => {
@@ -654,6 +678,18 @@ describe('the list line descriptor', () => {
       'approve-line',
       'reject-line',
     ]);
+  });
+
+  /** Admin plan 0045, target 5: on a line that waits, and on no other. */
+  it('offers the two acts on a line that waits alone', () => {
+    const line = (approvalStatus: string) =>
+      ({ ...LIST_LINE_SEED[0], approvalStatus }) as ResourceRow;
+
+    for (const action of namedActionsOf(LIST_LINES)) {
+      expect(action.available?.(line('PENDING'))).toBe(true);
+      expect(action.available?.(line('APPROVED'))).toBe(false);
+      expect(action.available?.(line('REJECTED'))).toBe(false);
+    }
   });
 
   it('changes what a line says and how many, and nothing else', () => {
@@ -671,7 +707,7 @@ describe('the list line descriptor', () => {
   });
 
   it('warns that a change is seen by the whole zone', () => {
-    expect(LIST_LINES.formNote).toBe('people.broadcast');
+    expect(LIST_LINES.caution).toBe(ZONE_CAUTION);
   });
 });
 
@@ -681,18 +717,12 @@ describe('what plan 0009 deliberately left read only', () => {
    * and settlements written against them, so a changed content or quantity
    * contradicts rows already on disk, inside one person's private document.
    */
-  it('says on the basket screen why there is nothing to press', () => {
+  it('says on the basket screen that there is nothing to press', () => {
     expect(BASKETS.actions).toBeUndefined();
-    expect(BASKETS.note).toBe('people.baskets.note');
-  });
-
-  /**
-   * Plan 0071, section 6, permanently: a back office that can create back
-   * office accounts is one where a single compromised session is forever.
-   */
-  it('leaves the admin table exactly as plan 0007 left it', () => {
-    expect(ADMINS.actions).toBeUndefined();
-    expect(ADMINS.note).toBe('people.admins.note');
+    expect(BASKETS.info?.points).toEqual([
+      'people.baskets.info.record',
+      'people.baskets.info.correct',
+    ]);
   });
 });
 
@@ -708,7 +738,7 @@ describe('what plan 0009 deliberately left read only', () => {
 describe('an edit that is seen by whoever is holding the app', () => {
   it('warns on exactly the four resources that broadcast', () => {
     const warned = ALL.filter(
-      (descriptor) => descriptor.formNote === 'people.broadcast'
+      (descriptor) => descriptor.caution === ZONE_CAUTION
     ).map((descriptor) => descriptor.name);
 
     expect(warned).toEqual(['zones', 'memberships', 'lists', 'list-lines']);
@@ -773,8 +803,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(MEMBERSHIPS);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(MEMBERSHIP_SEED.length);
     // The fixture spans more than one household, which is what makes the
     // assertion above mean anything.
@@ -794,8 +822,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(LIST_LINES);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(LIST_LINE_SEED.length);
     expect(
       new Set(LIST_LINE_SEED.map((row) => row.listId)).size

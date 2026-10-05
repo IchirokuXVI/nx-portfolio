@@ -27,11 +27,12 @@ import {
   // A value import, not a type one: the adapter capability table is a `const`
   // in the generated file, because the gateway publishes the answers and not
   // only the question (backend plan 0103, section 4.1).
+  HARVEST_IMPORT,
+  harvestRunsPath,
   Wire,
   type HarvestRunMode,
 } from '@portfolio/luna-shopper-admin/models';
 import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 import { ScopeCopies, type CopyMessage } from './scope-copies';
 
@@ -500,9 +501,9 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
     a.primary {
       display: inline-flex;
       align-items: center;
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
-      border-radius: var(--admin-radius);
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
+      border-radius: var(--admin-radius-control);
       text-decoration: none;
     }
 
@@ -1056,7 +1057,7 @@ export class RunRequestForm {
    * component is rendered directly in its spec.
    */
   uploadLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'imports', 'upload'];
+    return harvestRunsPath(HARVEST_IMPORT);
   }
 
   /**

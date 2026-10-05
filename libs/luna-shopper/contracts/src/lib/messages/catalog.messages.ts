@@ -707,6 +707,16 @@ export interface SupermarketView {
    * store.
    */
   defaultPriceScopeId: string | null;
+  /**
+   * How many shops the chain holds (admin plan 0042, section 2): its rows of
+   * `supermarket_locations`, counted in one grouped query for the page.
+   *
+   * Present on the reads of a chain itself (`supermarket.create`, `list`, `get`
+   * and `update`), and absent where a chain rides inside another view (a shop's
+   * neighbours, a basket's shop), which is about one shop and would cost a
+   * count nobody there reads.
+   */
+  locationCount?: number;
 }
 
 export interface SupermarketLocationView {
@@ -1604,6 +1614,18 @@ export interface SupermarketLocationItemView {
   availabilityObservedAt: string | null;
   /** The harvest run that wrote it. Opaque, never joined. */
   availabilitySourceRunId: string | null;
+  /**
+   * The product's name, joined on as {@link AdminSupermarketItemView} joins it
+   * (admin plan 0042, section 2): a shop's page of products is a page of
+   * distinct products, so resolving the name client side would cost a request
+   * per row. Null when the join found nothing.
+   */
+  itemName: LocalizedText | null;
+  /**
+   * The product's brand as `ItemView.brand` states it, joined on beside the
+   * name. Null for a product with no brand, and when the join found nothing.
+   */
+  itemBrand: string | null;
 }
 
 // --- Supermarket requests --------------------------------------------------
@@ -2298,6 +2320,16 @@ export interface SearchItemsRequest extends PageQuery {
    * answers exactly that rather than picking one of the two.
    */
   withoutProductGroup?: boolean;
+  /**
+   * Only the products on no category at all (admin plan 0043, section 2).
+   *
+   * A product needs a category to be written, so these are the rows a source
+   * left behind and the rows a deleted category let go of. A separate flag for
+   * the reason {@link withoutProductGroup} is one: absent already means "any
+   * category". Setting it beside a `categoryId` answers nothing, which is what
+   * the two together mean.
+   */
+  withoutCategory?: boolean;
   /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
@@ -3049,10 +3081,19 @@ export interface ListSupermarketItemsByScopeRequest extends PageQuery {
  * and is the only useful shape for somebody looking for the row they just broke,
  * so it is reachable by an operator token and by nothing else.
  */
+/** How many products one {@link AdminListSupermarketItemsRequest} may name. */
+export const ADMIN_PRICE_ITEM_IDS_MAX = 100;
+
 export interface AdminListSupermarketItemsRequest
   extends PageQuery, AdminCredential {
   /** One product's prices across every scope. */
   itemId?: string;
+  /**
+   * Several products at once (admin plan 0043, section 2): the price of every
+   * product on one page of the product list, in one read. At most
+   * {@link ADMIN_PRICE_ITEM_IDS_MAX}. Empty is the same as absent.
+   */
+  itemIds?: string[];
   /** One scope's prices, which is what a chain's price table is. */
   priceScopeId?: string;
   /** `ADMIN` answers "what have I overridden": the effective rows an operator's price won. */

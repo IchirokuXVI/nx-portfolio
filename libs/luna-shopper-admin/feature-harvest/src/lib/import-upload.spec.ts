@@ -12,6 +12,7 @@ import {
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
+import { ImportHandoff } from './import-handoff';
 import { ImportUploadPage } from './import-upload-page';
 
 /**
@@ -76,7 +77,11 @@ function dropped(doc: unknown): Event {
 /** What the next import is answered with, when it is not answered with a run. */
 let refusal: unknown = null;
 
-async function render() {
+/**
+ * `arrange` runs after the module is configured and before the page is built,
+ * which is when the Runs tab leaves a file for it.
+ */
+async function render(arrange?: (handoff: ImportHandoff) => void) {
   const imported: unknown[] = [];
 
   const service = {
@@ -131,6 +136,8 @@ async function render() {
       DeploymentStore,
     ],
   }).compileComponents();
+
+  arrange?.(TestBed.inject(ImportHandoff));
 
   const fixture = TestBed.createComponent(ImportUploadPage);
   fixture.detectChanges();
@@ -410,8 +417,10 @@ describe('the import, once it has started', () => {
     fixture.detectChanges();
 
     expect(page.started()).toBe('run-9');
-    expect(page.queueLink()).toEqual(['/', 'harvest', 'entries']);
-    expect(page.queueParams()).toEqual({ supermarketId: CHAIN });
+    // The products queue of Review, on the chain the four queues share
+    // (admin plan 0044).
+    expect(page.queueLink()).toEqual(['/', 'harvest', 'review', 'products']);
+    expect(page.queueParams()).toEqual({ chain: CHAIN });
     expect(text(fixture)).toContain('harvest.imports.openQueue');
   });
 });
@@ -851,5 +860,80 @@ describe('the import, the scope the file needs', () => {
 
     expect(page.scopeSummary()).toBeNull();
     expect(text(fixture)).not.toContain('harvest.imports.scopes.count');
+  });
+});
+
+/**
+ * A file from the Runs tab (admin plan 0044, target 5).
+ *
+ * The tab has the drop zone and this page reads the file, so the tab leaves
+ * the file in `ImportHandoff` and navigates. The page takes it when it is
+ * built, and reads it as if it had been chosen here.
+ */
+describe('the import, given a file by the Runs tab', () => {
+  /** A file as the handoff holds one: a name, and its text. */
+  function handed(doc: unknown, name = 'leaflet.json'): File {
+    return { name, text: async () => JSON.stringify(doc) } as unknown as File;
+  }
+
+  it('reads the file that was left, and names it', async () => {
+    const { fixture, page } = await render((handoff) =>
+      handoff.leave(handed(document({ hints: undefined })))
+    );
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.read()).not.toBeNull();
+    expect(page.fileName()).toBe('leaflet.json');
+    // A file input cannot be given a file, so the page says which one it holds.
+    expect(
+      fixture.nativeElement.querySelector('[data-file-name]')
+    ).not.toBeNull();
+    expect(text(fixture)).toContain('harvest.imports.holds');
+  });
+
+  it('refuses a handed file that is not JSON, like a chosen one', async () => {
+    const { fixture, page } = await render((handoff) =>
+      handoff.leave({
+        name: 'leaflet.pdf',
+        text: async () => '%PDF-1.7',
+      } as unknown as File)
+    );
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.read()).toBeNull();
+    expect(page.rejection()).not.toBeNull();
+  });
+
+  /** Taken once: a later visit by the address starts with no file. */
+  it('leaves the handoff empty', async () => {
+    await render((handoff) =>
+      handoff.leave(handed(document({ hints: undefined })))
+    );
+
+    expect(TestBed.inject(ImportHandoff).take()).toBeNull();
+  });
+
+  it('holds no file, and names none, when nothing was left', async () => {
+    const { fixture, page } = await render();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.read()).toBeNull();
+    expect(page.fileName()).toBe('');
+    expect(fixture.nativeElement.querySelector('[data-file-name]')).toBeNull();
+  });
+
+  /** A page under the Runs tab, with its way back to it. */
+  it('goes back to the Runs tab', async () => {
+    const { fixture, page } = await render();
+    fixture.detectChanges();
+
+    expect(page.runsLink).toEqual(['/', 'harvest', 'runs']);
+    const back: HTMLAnchorElement =
+      fixture.nativeElement.querySelector('a.page-back');
+    expect(back).not.toBeNull();
+    expect(back.getAttribute('href')).toBe('/harvest/runs');
   });
 });

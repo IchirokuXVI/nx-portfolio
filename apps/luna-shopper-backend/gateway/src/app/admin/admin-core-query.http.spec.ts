@@ -135,6 +135,64 @@ describe('the zones nobody owns, over HTTP', () => {
 });
 
 /**
+ * The zones where a join request waits (admin plan 0045, section 2).
+ *
+ * Over HTTP because a query string holds text, and it is the pipe that turns
+ * `true` into the boolean core reads. A handler call would hand over a boolean
+ * and prove nothing about the address the back office sends.
+ */
+describe('the zones with a join request, over HTTP', () => {
+  it('passes the filter on as a boolean', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/zones?hasPending=true`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['hasPending']).toBe(true);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('leaves the filter out when the address does', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/zones`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['hasPending']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('refuses a value that is neither true nor false', async () => {
+    const { nest, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/zones?hasPending=some`);
+
+      expect(res.status).toBe(400);
+    } finally {
+      await nest.close();
+    }
+  });
+
+  // The pipe converts every text but the empty one to true before a transform
+  // runs, so the word has to be read from the request itself.
+  it('reads false as the filter being off', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/zones?hasPending=false`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['hasPending']).toBe(false);
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+/**
  * The two collections that read across their parent (admin plan 0017).
  *
  * Over HTTP for the reason the block above is: the parent is a query parameter

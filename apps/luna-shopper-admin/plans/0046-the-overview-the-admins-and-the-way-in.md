@@ -1,3 +1,16 @@
+> **PR:** [#628](https://github.com/IchirokuXVI/nx-portfolio/pull/628)
+> Five things were left out. The first three need the gateway, which was out of scope.
+> Target 1: the tile "Prices out of date" opens the product list with no filter. The "Out of
+> date" filter of `0043` needs one price scope, and the tile counts every scope.
+> Target 3: a list row and a price row of the feed have no link. An audit row names no zone and
+> no product, so the app cannot build the address.
+> Target 6: the count on the "Failed sign ins" tab is the last 24 hours and not "today". The
+> document holds the failures of the last 24 hours and of the last 7 days.
+> Target 2: "Failed" in the Harvest panel is over all time, and its label says so. The document
+> holds the failed runs by status and not by window.
+> Section 1: `harvesterDeployed()` still says that staging and production do not run the
+> harvester. The plan asks only for the stale comments that name it to go.
+
 # 0046 The overview, the admins and the way in
 
 > Sixth of the seven remodel plans. Needs `0041` (the frame and the tokens). Its links point

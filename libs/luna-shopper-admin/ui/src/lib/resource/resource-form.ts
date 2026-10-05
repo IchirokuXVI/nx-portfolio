@@ -17,6 +17,8 @@ import {
   type ResourceDraft,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
+import { CautionLine } from '../info/caution-line';
+import { PageHeader } from '../page/page-header';
 import { FieldControl } from './field-control';
 import type { ReferenceLookup } from './reference-lookup';
 import { ResourceCellView } from './resource-cell';
@@ -57,25 +59,38 @@ export interface FieldChange {
  */
 @Component({
   selector: 'lib-resource-form',
-  imports: [RokuTranslatorPipe, RouterLink, FieldControl, ResourceCellView],
+  imports: [
+    RokuTranslatorPipe,
+    RouterLink,
+    FieldControl,
+    ResourceCellView,
+    PageHeader,
+    CautionLine,
+  ],
   template: `
+    @if (header()) {
+      <lib-page-header
+        (back)="leave.emit()"
+        [backDisabled]="busy()"
+        [backLabel]="'resource.action.back' | rokuT"
+        [heading]="titleKey() | rokuT: titleArgs()"
+        [subtitle]="subtitle()"
+      />
+    }
+
     <!-- The native submit event, not ngSubmit. This form holds no ngModel, so
          importing FormsModule for one output would pull a whole forms
          implementation in to rename an event that already exists; and a
          template that binds ngSubmit without it silently listens for a DOM
          event nobody dispatches. -->
     <form (submit)="onSubmit($event)" novalidate>
-      <h1>{{ titleKey() | rokuT: titleArgs() }}</h1>
-
-      @if (subtitle(); as text) {
-        <p class="subtitle">{{ text }}</p>
-      }
-
       <!-- What saving this does beyond writing the row. Above the fields
            rather than beside the submit button, so it is read before anything
-           is typed instead of after (plan 0009, section 7). -->
-      @if (noteKey(); as key) {
-        <p class="note">{{ key | rokuT }}</p>
+           is typed instead of after (plan 0009, section 7). One line with a
+           warning mark, and always on the screen: a caution must be seen
+           before the action (admin plan 0041, section 3). -->
+      @if (cautionKey(); as key) {
+        <lib-caution-line [text]="key | rokuT" class="caution" />
       }
 
       @for (field of fields(); track field.name) {
@@ -158,7 +173,9 @@ export interface FieldChange {
   `,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-4);
     }
 
     form {
@@ -170,16 +187,6 @@ export interface FieldChange {
       border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
-    }
-
-    h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-
-    .subtitle {
-      margin-block-start: calc(var(--admin-space-4) * -1);
-      color: var(--admin-ink-muted);
     }
 
     .field {
@@ -204,15 +211,6 @@ export interface FieldChange {
     }
 
     .help {
-      font-size: 0.875rem;
-      color: var(--admin-ink-muted);
-    }
-
-    .note {
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface);
       font-size: 0.875rem;
       color: var(--admin-ink-muted);
     }
@@ -243,13 +241,8 @@ export interface FieldChange {
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -286,13 +279,21 @@ export class ResourceForm {
   /** What the row is called, when there is one. Shown under the heading. */
   readonly subtitle = input<string | null>(null);
   /**
-   * A key for a sentence about what saving does, above the fields.
+   * A key for one line about what saving does, above the fields.
    *
-   * `ResourceDescriptor.formNote`, and the four resources that carry one all
-   * carry the same warning: the write broadcasts, so somebody with velista open
-   * sees it arrive (plan 0009, section 7).
+   * `ResourceDescriptor.caution`. Four resources say that the write is seen at
+   * once by everybody in the zone (plan 0009, section 7), and a price rule
+   * says that saving works out every shown price again.
    */
-  readonly noteKey = input<string | null>(null);
+  readonly cautionKey = input<string | null>(null);
+  /**
+   * Whether the form draws the page header above itself.
+   *
+   * A page that has something to draw above the form, or a state before the
+   * form exists, draws the header at its own top and turns this off, so that
+   * the header is the first thing on the page in every state.
+   */
+  readonly header = input(true);
   readonly mode = input.required<FormMode>();
   readonly fields = input.required<readonly FieldDescriptor<ResourceRow>[]>();
   readonly draft = input.required<ResourceDraft>();

@@ -7,6 +7,8 @@
  * entity that arrives after this one.
  */
 
+import type { ScopeMarkView } from './info-content';
+
 /** Anything the generic machinery can read a field off. */
 export type ResourceRow = Record<string, unknown>;
 
@@ -113,6 +115,14 @@ interface FieldBase<T extends ResourceRow> {
    * concrete row has to remain assignable to a descriptor for any row.
    */
   read?(row: T): unknown;
+  /**
+   * The scope mark to draw before this field's value, when the value names a
+   * price scope or a kind of one (admin plan 0041, section 10).
+   *
+   * A method for the reason {@link read} is one. `undefined` draws no mark,
+   * which is the answer for a row whose scope the read did not describe.
+   */
+  scope?(row: T): ScopeMarkView | undefined;
 }
 
 /** A single line, or a paragraph. */

@@ -64,6 +64,11 @@ const request = object(
   {
     ...adminCredentialProperties,
     window: ref(ADMIN_DASHBOARD_SCHEMA_IDS.window),
+    registeredBrandKeys: {
+      ...array(nonEmptyString()),
+      description:
+        'Every registered brand key, sent to the harvester alone so that it can count the suggested brands. Absent when catalog did not answer.',
+    },
   },
   ['userId', 'window']
 );
@@ -290,11 +295,16 @@ const harvestDashboard = object(
     queues: {
       type: 'object',
       additionalProperties: false,
-      required: ['entries', 'places', 'shops'],
+      required: ['entries', 'places', 'shops', 'brands'],
       properties: {
         entries: array(ref(ADMIN_DASHBOARD_SCHEMA_IDS.queueEntry)),
         places: count(),
         shops: array(ref(ADMIN_DASHBOARD_SCHEMA_IDS.shopQueue)),
+        brands: {
+          anyOf: [count(), { type: 'null' }],
+          description:
+            'The suggested brands: brand keys that queued source rows carry and no registered brand holds. Null when the brand registry did not answer.',
+        },
       },
     },
     sources: {

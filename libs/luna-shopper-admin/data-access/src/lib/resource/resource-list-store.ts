@@ -32,6 +32,8 @@ export class ResourceListStore<T extends ResourceRow> {
   private readonly _loadingMore = signal(false);
   private readonly _filters = signal<Readonly<Record<string, string>>>({});
   private readonly _order = signal<string | undefined>(undefined);
+  /** Counts the reads from the start, so a refresh that was overtaken is dropped. */
+  private _reads = 0;
 
   constructor(
     private readonly _descriptor: ResourceDescriptor<T>,
@@ -43,7 +45,17 @@ export class ResourceListStore<T extends ResourceRow> {
      * that still holds products links to its products (admin plan 0036), and
      * the list has to open already filtered or the link says nothing.
      */
-    initialFilters: Readonly<Record<string, string>> = {}
+    initialFilters: Readonly<Record<string, string>> = {},
+    /**
+     * What the address already decided, sent on every read (admin plan 0042).
+     *
+     * A chain's shops sit at `/chains/{chainId}/shops`, so the chain is not a
+     * choice the operator makes on the list. It is kept apart from the filters
+     * for that reason: it is no control, clearing the filters keeps it, and a
+     * list narrowed by nothing else is still an empty list and not a list
+     * whose filter needs clearing.
+     */
+    private readonly _fixed: Readonly<Record<string, string>> = {}
   ) {
     this._filters.set(initialFilters);
   }
@@ -76,38 +88,12 @@ export class ResourceListStore<T extends ResourceRow> {
     Object.values(this._filters()).some((value) => value !== '')
   );
 
-  /**
-   * The filters this list cannot be read without, that are still unset.
-   *
-   * A chain's shops are read at `/supermarkets/{id}/locations` and what is in
-   * one shop is read with a shop named, so before either is chosen there is no
-   * collection to ask for. Empty for every resource that lists from nothing,
-   * which is most of them.
-   */
-  readonly missingFilters = computed(() => {
-    const filters = this._filters();
-    return (this._descriptor.requires ?? []).filter(
-      (param) => (filters[param] ?? '') === ''
-    );
-  });
-
-  /**
-   * Whether the list is waiting to be told what to read.
-   *
-   * A **third** state beside empty and no match, and it needs to be: "there are
-   * no shops" and "you have not said whose shops" are different sentences, and
-   * only one of them is true. Drawing the first would be a claim nothing
-   * checked.
-   */
-  readonly blocked = computed(() => this.missingFilters().length > 0);
-
   /** Nothing is here, and nothing was excluded. */
   readonly empty = computed(
     () =>
       this._status() === 'ready' &&
       this._rows().length === 0 &&
-      !this.narrowed() &&
-      !this.blocked()
+      !this.narrowed()
   );
 
   /**
@@ -119,24 +105,15 @@ export class ResourceListStore<T extends ResourceRow> {
    */
   readonly noMatch = computed(
     () =>
-      this._status() === 'ready' &&
-      this._rows().length === 0 &&
-      this.narrowed() &&
-      !this.blocked()
+      this._status() === 'ready' && this._rows().length === 0 && this.narrowed()
   );
 
   /** The first page, from the current filters and order. Replaces the rows. */
   async load(): Promise<void> {
+    this._reads += 1;
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
-
-    // Nothing to ask for yet. The request would answer 400, and a spinner while
-    // it did would suggest the screen was busy rather than waiting.
-    if (this.blocked()) {
-      this._status.set('ready');
-      return;
-    }
 
     this._status.set('loading');
     await this._fetch(undefined, (page) => this._rows.set(page));
@@ -167,6 +144,59 @@ export class ResourceListStore<T extends ResourceRow> {
       )
     );
     this._loadingMore.set(false);
+  }
+
+  /**
+   * Read again what is on screen, and keep as many rows as were loaded.
+   *
+   * For a list that stays drawn while one of its rows is written (admin plan
+   * 0042). `load` answers the first page alone, so a row the operator had
+   * reached with "Load more", and had open beside the list, left the column
+   * on every save. This reads page after page until it holds as many rows as
+   * were shown, and swaps them in at once: the rows on screen stay until the
+   * new ones are here, so nothing blinks.
+   *
+   * A list with nothing loaded has nothing to keep, and is read from the
+   * start. A failure leaves the rows that are shown and says so in a line,
+   * as a failed "Load more" does.
+   */
+  async refresh(): Promise<void> {
+    const wanted = this._rows().length;
+    if (this._status() !== 'ready' || wanted === 0) {
+      return this.load();
+    }
+
+    this._reads += 1;
+    const read = this._reads;
+    let rows: readonly T[] = [];
+    let cursor: string | null = null;
+
+    try {
+      do {
+        const page = await this._gateway.list({
+          cursor: cursor ?? undefined,
+          order: this._order(),
+          filters: { ...this._filters(), ...this._fixed },
+        });
+        if (read !== this._reads) {
+          // A filter or an order changed meanwhile, and its own read is what
+          // the screen shows.
+          return;
+        }
+        rows = appendPage(rows, page.items, (row) =>
+          idOf(this._descriptor, row)
+        );
+        cursor = page.nextCursor;
+      } while (cursor !== null && rows.length < wanted);
+
+      this._rows.set(rows);
+      this._cursor.set(cursor);
+      this._error.set(null);
+    } catch (error) {
+      if (read === this._reads) {
+        this._error.set(toGatewayError(error));
+      }
+    }
   }
 
   /** Set one filter and read the first page again. */
@@ -217,7 +247,7 @@ export class ResourceListStore<T extends ResourceRow> {
       const page = await this._gateway.list({
         cursor,
         order: this._order(),
-        filters: this._filters(),
+        filters: { ...this._filters(), ...this._fixed },
       });
 
       apply(page.items);

@@ -26,13 +26,11 @@ import { failureBlockReason } from './harvest-run';
  */
 export type SwitchState = 'on' | 'off' | 'unknown';
 
-/** One switch, and the account of how its state was arrived at. */
+/** One switch, and the state this app arrived at for it. */
 export interface HarvestSwitch {
   /** Which of the two. Also the translation key suffix. */
   readonly name: 'deployed' | 'harvestEnabled';
   readonly state: SwitchState;
-  /** A translation key saying where the state came from. */
-  readonly source: string;
 }
 
 /**
@@ -95,27 +93,23 @@ function deployedSwitch(evidence: HarvestEvidence): HarvestSwitch {
     return {
       name: 'deployed',
       state: 'on',
-      source: 'harvest.switch.from.reply',
     };
   }
   if (!harvesterDeployed(evidence.deployment)) {
     return {
       name: 'deployed',
       state: 'off',
-      source: 'harvest.switch.from.chart',
     };
   }
   if (evidence.reachable === false) {
     return {
       name: 'deployed',
       state: 'off',
-      source: 'harvest.switch.from.silence',
     };
   }
   return {
     name: 'deployed',
     state: 'unknown',
-    source: 'harvest.switch.from.nothing',
   };
 }
 
@@ -124,7 +118,6 @@ function harvestEnabledSwitch(evidence: HarvestEvidence): HarvestSwitch {
     return {
       name: 'harvestEnabled',
       state: 'off',
-      source: 'harvest.switch.from.refusal',
     };
   }
   // A run that reached RUNNING is proof the switch was on when it started, and
@@ -134,7 +127,6 @@ function harvestEnabledSwitch(evidence: HarvestEvidence): HarvestSwitch {
     return {
       name: 'harvestEnabled',
       state: 'on',
-      source: 'harvest.switch.from.run',
     };
   }
   if (
@@ -143,12 +135,10 @@ function harvestEnabledSwitch(evidence: HarvestEvidence): HarvestSwitch {
     return {
       name: 'harvestEnabled',
       state: 'off',
-      source: 'harvest.switch.from.failure',
     };
   }
   return {
     name: 'harvestEnabled',
     state: 'unknown',
-    source: 'harvest.switch.from.nothing',
   };
 }

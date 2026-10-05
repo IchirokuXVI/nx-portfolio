@@ -136,11 +136,7 @@ import { ReferencePicker } from './reference-picker';
       min-block-size: 2rem;
       padding: 0 var(--admin-space-2);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
       font-size: 0.875rem;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 

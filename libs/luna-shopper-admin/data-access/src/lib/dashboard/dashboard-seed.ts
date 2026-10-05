@@ -178,6 +178,7 @@ const HARVEST: Wire.AdminDashboardAdminHarvestDashboard = {
       { supermarketId: CARREFOUR, unmapped: 0 },
       { supermarketId: DEZA, unmapped: 0 },
     ],
+    brands: 5,
   },
   sources: { total: 4, enabled: 3 },
 };

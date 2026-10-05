@@ -12,10 +12,33 @@ import {
   type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  BrandDetailPage,
+  BrandSuggestionsPage,
+} from '@portfolio/luna-shopper-admin/feature-brands';
+import {
+  EntriesQueuePage,
+  HarvestReviewPage,
+  HarvestSetupPage,
+  ImportUploadPage,
+  NewRunPage,
+  PlacesQueuePage,
+  PostalCodeAddPage,
+  PostalCodeDetailPage,
+  RunPage,
+  RunsPage,
+  ShopsQueuePage,
+  SourcesPage,
+} from '@portfolio/luna-shopper-admin/feature-harvest';
+import {
+  provideSections,
+  ResourceListPage,
+} from '@portfolio/luna-shopper-admin/feature-resource';
+import {
   UNKNOWN_ENVIRONMENT,
   type AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
 import { appRoutes } from './app.routes';
+import { ADMIN_SECTIONS } from './sections';
 
 /**
  * The two branches and the guards that pair them (plan 0002, then 0004).
@@ -69,6 +92,21 @@ const service: SessionServiceI = {
   }),
 };
 
+/** The component of every route on the way down to where the router rests. */
+function componentsAt(router: Router): unknown[] {
+  const found: unknown[] = [];
+  let route = router.routerState.snapshot.root.firstChild;
+
+  while (route !== null) {
+    if (route.component !== null) {
+      found.push(route.component);
+    }
+    route = route.firstChild;
+  }
+
+  return found;
+}
+
 async function boot(signedIn: boolean) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -77,6 +115,10 @@ async function boot(signedIn: boolean) {
       ServerReachability,
       provideRouter(appRoutes),
       provideLocationMocks(),
+      // What `app.config.ts` provides. A redirect under a zone asks the
+      // registry where a list or a shopping list is, and the registry reads
+      // the sections from here: without them every one lands on `/`.
+      provideSections(...ADMIN_SECTIONS),
       { provide: SESSION_SERVICE, useValue: service },
       {
         provide: DEPLOYMENT_SERVICE,
@@ -95,6 +137,10 @@ async function boot(signedIn: boolean) {
 
   return { router: TestBed.inject(Router), sessions };
 }
+
+/** A person and a zone of the in-memory rows, by the ids the fixture gives. */
+const ROSA = '11111111-1111-4111-8111-111111111111';
+const KITCHEN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 describe('appRoutes', () => {
   beforeEach(() => localStorage.clear());
@@ -145,38 +191,199 @@ describe('appRoutes', () => {
    */
   it.each([
     ['/', 'the overview'],
-    ['/catalog', 'the catalog dashboard'],
-    ['/catalog/supermarkets', 'the chains'],
-    ['/catalog/locations', 'the shops'],
-    ['/catalog/price-scopes', 'the price scopes'],
-    ['/catalog/items', 'the products'],
-    ['/catalog/product-groups', 'the product groups'],
-    ['/catalog/prices', 'the prices'],
-    ['/catalog/price-policies', 'the price policies'],
-    ['/catalog/location-items', 'the per shop rows'],
-    ['/shoppers', 'the shoppers dashboard'],
-    ['/shoppers/users', 'the users'],
+    // A chain holds its shops (admin plan 0042).
+    ['/chains', 'the chains'],
+    ['/chains/new', 'the form of a new chain'],
+    ['/chains/sm_mercadona/shops', 'the shops of a chain'],
+    ['/chains/sm_mercadona/shops/new', 'the form of a new shop'],
+    ['/chains/sm_mercadona/shops/loc_cordoba_centro/details', 'a shop'],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/sections',
+      'the order a shop walks its sections in',
+    ],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/products',
+      'the products in a shop',
+    ],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/products/new',
+      'the form of a new shop product',
+    ],
+    ['/chains/sm_mercadona/sections', 'the sections of a chain'],
+    ['/chains/sm_mercadona/sections/new', 'the form of a new section'],
+    ['/chains/sm_mercadona/scopes', 'the price scopes of a chain'],
+    ['/chains/sm_mercadona/scopes/new', 'the form of a new price scope'],
+    ['/chains/sm_mercadona/details', 'the form of a chain'],
+    // A product and its prices (admin plan 0043).
+    ['/products', 'the products'],
+    ['/products/new', 'the form of a new product'],
+    ['/products/groups', 'the product groups'],
+    ['/products/groups/new', 'the form of a new group'],
+    ['/products/groups/pg_whole_milk', 'a product group'],
+    ['/products/categories', 'the category tree'],
+    ['/products/categories/new', 'the form of a new category'],
+    ['/products/price-rules', 'the price rules'],
+    ['/products/price-rules/ADMIN', 'a price rule, its form open'],
+    ['/products/it_milk_1l/details', 'the form of a product'],
+    ['/products/it_milk_1l/prices', 'the prices of a product'],
+    ['/products/it_milk_1l/prices/new', 'the form of a new price'],
+    ['/products/it_milk_1l/where', 'where a product is'],
+    ['/products/it_milk_1l/sources', 'the source rows of a product'],
+    // A zone holds its members and its lists (admin plan 0045).
+    ['/shoppers/people', 'the people'],
+    [`/shoppers/people/${ROSA}/details`, 'the account of a person'],
+    [`/shoppers/people/${ROSA}/zones`, 'the zones of a person'],
+    [`/shoppers/people/${ROSA}/shopping-lists`, 'what a person owns'],
+    [`/shoppers/people/${ROSA}/shopping-lists/b-saturday`, 'a shopping list'],
+    [`/shoppers/people/${ROSA}/edit`, 'the form of a person'],
     ['/shoppers/zones', 'the zones'],
-    ['/shoppers/memberships', 'the memberships'],
-    ['/shoppers/lists', 'the lists'],
-    ['/shoppers/list-lines', 'the list lines'],
-    ['/shoppers/shopping-lists', 'the baskets'],
-    ['/harvest', 'the harvester dashboard'],
+    [`/shoppers/zones/${KITCHEN}/members`, 'the members of a zone'],
+    [
+      `/shoppers/zones/${KITCHEN}/members/${KITCHEN}~m-kitchen-marc`,
+      'the form of a member',
+    ],
+    [`/shoppers/zones/${KITCHEN}/lists`, 'the lists of a zone'],
+    [`/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`, 'a list'],
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/edit`,
+      'the form of a list',
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines/l-kitchen-weekly~line-milk`,
+      'the form of a line',
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/shopping-lists`,
+      'the shopping lists drawn from a zone',
+    ],
+    [`/shoppers/zones/${KITCHEN}/details`, 'the facts of a zone'],
+    [`/shoppers/zones/${KITCHEN}/edit`, 'the form of a zone'],
+    // The harvester in three tabs (admin plan 0044).
+    ['/harvest/review/products', 'the queue of source products'],
+    ['/harvest/review/shops', 'the queue of source shops'],
+    ['/harvest/review/places', 'the queue of discovered places'],
+    ['/harvest/review/brands', 'the queue of suggested brands'],
     ['/harvest/runs', 'the runs'],
-    ['/harvest/presets', 'the run presets'],
-    ['/harvest/places', 'the discovered places'],
-    ['/harvest/entries', 'the source products'],
-    ['/harvest/imports/upload', 'the import'],
-    ['/harvest/shops', 'the source shops'],
-    ['/harvest/sources', 'the chain sources'],
-    ['/harvest/postal-codes', 'the postal codes'],
-    ['/admins', 'the admins'],
+    ['/harvest/runs/new', 'the form of a new run'],
+    ['/harvest/runs/import', 'the file import'],
+    ['/harvest/runs/run-catalog-running', 'one run'],
+    ['/harvest/setup/sources', 'the chain sources'],
+    ['/harvest/setup/brands', 'the registered brands'],
+    ['/harvest/setup/brands/new', 'the form of a new brand'],
+    ['/harvest/setup/brands/br_1', 'a registered brand'],
+    ['/harvest/setup/brands/br_1/edit', 'the form of a brand'],
+    ['/harvest/setup/postal-codes', 'the postal codes'],
+    ['/harvest/setup/postal-codes/new', 'the form that adds postal codes'],
+    ['/harvest/setup/postal-codes/14001', 'a postal code'],
+    ['/admins/accounts', 'the accounts of the admins'],
+    ['/admins/failed-sign-ins', 'the failed sign ins of the admins'],
   ])('draws %s at its own URL', async (url) => {
     const { router } = await boot(true);
 
     await router.navigateByUrl(url);
 
     expect(router.url).toBe(url);
+  });
+
+  /**
+   * The three tabs of the harvester, each drawn by its own page, and what
+   * the switch of Review and of Setup opens inside it (admin plan 0044,
+   * targets 4 to 6). A form of a Setup resource is a page of its own, beside
+   * the Setup page and not inside it.
+   */
+  it.each([
+    ['/harvest/review/products', [HarvestReviewPage, EntriesQueuePage]],
+    ['/harvest/review/shops', [HarvestReviewPage, ShopsQueuePage]],
+    ['/harvest/review/places', [HarvestReviewPage, PlacesQueuePage]],
+    ['/harvest/review/brands', [HarvestReviewPage, BrandSuggestionsPage]],
+    ['/harvest/runs', [RunsPage]],
+    ['/harvest/runs/new', [NewRunPage]],
+    ['/harvest/runs/import', [ImportUploadPage]],
+    ['/harvest/runs/run-1', [RunPage]],
+    ['/harvest/setup/sources', [HarvestSetupPage, SourcesPage]],
+    ['/harvest/setup/brands', [HarvestSetupPage, ResourceListPage]],
+    ['/harvest/setup/postal-codes', [HarvestSetupPage, ResourceListPage]],
+    ['/harvest/setup/brands/br_1', [BrandDetailPage]],
+    ['/harvest/setup/postal-codes/new', [PostalCodeAddPage]],
+    ['/harvest/setup/postal-codes/14001', [PostalCodeDetailPage]],
+  ])('draws %s with its own pages', async (url, pages) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(url);
+    // Inside the chrome, which is the first component on the way down.
+    expect(componentsAt(router).slice(1)).toEqual(pages);
+  });
+
+  /** The section, and each tab that holds a switch, opens on its first entry. */
+  it.each([
+    ['/harvest', '/harvest/review/products'],
+    ['/harvest/review', '/harvest/review/products'],
+    ['/harvest/setup', '/harvest/setup/sources'],
+    // Admins opens on its accounts (admin plan 0046, target 6).
+    ['/admins', '/admins/accounts'],
+    // The chain the four queues share rides along.
+    [
+      '/harvest?chain=sm_mercadona',
+      '/harvest/review/products?chain=sm_mercadona',
+    ],
+    [
+      '/harvest/review?chain=sm_mercadona',
+      '/harvest/review/products?chain=sm_mercadona',
+    ],
+  ])('opens %s on %s', async (url, lands) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(lands);
+  });
+
+  /**
+   * A chain, a shop and a product each open on their first tab. So do the
+   * Shoppers section, a person and a zone (admin plan 0045, targets 1, 3 and
+   * 5).
+   */
+  it.each([
+    ['/chains/sm_mercadona', '/chains/sm_mercadona/shops'],
+    [
+      '/chains/sm_mercadona/shops/loc_cordoba_centro',
+      '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
+    ],
+    ['/products/it_milk_1l', '/products/it_milk_1l/details'],
+    ['/shoppers', '/shoppers/people'],
+    [`/shoppers/people/${ROSA}`, `/shoppers/people/${ROSA}/details`],
+    [`/shoppers/zones/${KITCHEN}`, `/shoppers/zones/${KITCHEN}/members`],
+  ])('opens %s on its first tab', async (url, tab) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(tab);
+  });
+
+  /**
+   * Two addresses under a zone are no screen of their own (admin plan 0045),
+   * against the app's own sections.
+   */
+  it.each([
+    // A row of a zone's Shopping lists tab opens under its owner.
+    [
+      `/shoppers/zones/${KITCHEN}/shopping-lists/b-saturday`,
+      `/shoppers/people/${ROSA}/shopping-lists/b-saturday`,
+    ],
+    // A line's form goes back one segment, which is the list it is on.
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines`,
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
+    ],
+  ])('sends %s to %s', async (from, to) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(from);
+
+    expect(router.url).toBe(to);
   });
 
   /**

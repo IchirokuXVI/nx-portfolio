@@ -30,15 +30,22 @@ const STYLES = join(
   'styles.scss'
 );
 
-/** The `button, input, select` rule, selector and body, as it is written. */
+/** The whole stylesheet, for a rule that sits inside a media query. */
+export function controlBaseStylesheet(): string {
+  return readFileSync(STYLES, 'utf8').replace(/\r\n/g, '\n');
+}
+
+/** The `button, input, select, textarea` rule, selector and body, as written. */
 export function controlBaseRule(): { selector: string; body: string } {
-  const text = readFileSync(STYLES, 'utf8');
-  const found = /(button,\s*input,\s*select)\s*\{([^}]*)\}/.exec(text);
+  const text = controlBaseStylesheet();
+  const found = /(button,\s*input,\s*select,\s*textarea)\s*\{([^}]*)\}/.exec(
+    text
+  );
 
   if (!found) {
     throw new Error(
       'apps/luna-shopper-admin/src/styles.scss no longer carries the ' +
-        '`button, input, select` rule that every screen depends on'
+        '`button, input, select, textarea` rule that every screen depends on'
     );
   }
 

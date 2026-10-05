@@ -420,6 +420,96 @@ describeIntegration('per shop availability (real Postgres)', () => {
     expect(byItem.has(noRow)).toBe(false);
   });
 
+  /**
+   * The product's name and brand, joined onto every read of the row (admin plan
+   * 0042, section 2). A shop of its own, so the page holds exactly these rows
+   * and the assertion is about all of them.
+   */
+  it('names the product and its brand on every read of a row', async () => {
+    const locations = dataSource.getRepository(SupermarketLocation);
+    const shopD = (
+      await locations.save(
+        locations.create({ supermarketId: (await chainOf(shopA)) as string })
+      )
+    ).id;
+    await setStack(dataSource.manager, shopD, [scopeId]);
+
+    const items = dataSource.getRepository(Item);
+    const [branded, unbranded, spanishOnly] = await items.save(
+      [
+        { name: { en: 'Whole milk', es: 'Leche entera' }, brand: 'Hacendado' },
+        { name: { en: 'Loose apples', es: 'Manzanas a granel' }, brand: null },
+        { name: { es: 'Arroz redondo' }, brand: 'SOS' },
+      ].map((fields) =>
+        items.create({ ...fields, defaultUnit: UnitOfMeasure.UNIT })
+      )
+    );
+
+    // The upsert answers the same view, so it names the product too.
+    const written = await shopItems.upsert({
+      userId: OPERATOR,
+      itemId: branded.id,
+      supermarketLocationId: shopD,
+      positionInStore: 'Aisle 4',
+    });
+    expect(written.itemName).toEqual({ en: 'Whole milk', es: 'Leche entera' });
+    expect(written.itemBrand).toBe('Hacendado');
+
+    await crawl(shopD, [
+      { itemId: unbranded.id, available: true },
+      { itemId: spanishOnly.id, available: false },
+    ]);
+
+    // Two rows a page, so the batched read runs once per page and not once.
+    const seen = new Map<
+      string,
+      { itemName: unknown; itemBrand: string | null }
+    >();
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 5; guard += 1) {
+      const page = await shopItems.listByLocation({
+        userId: OPERATOR,
+        supermarketLocationId: shopD,
+        limit: 2,
+        cursor,
+      });
+      for (const row of page.items) {
+        seen.set(row.itemId, {
+          itemName: row.itemName,
+          itemBrand: row.itemBrand,
+        });
+      }
+      if (page.nextCursor === null) {
+        break;
+      }
+      cursor = page.nextCursor;
+    }
+
+    expect(seen.size).toBe(3);
+    expect(seen.get(branded.id)).toEqual({
+      itemName: { en: 'Whole milk', es: 'Leche entera' },
+      itemBrand: 'Hacendado',
+    });
+    // A product with no brand keeps its name and a null brand.
+    expect(seen.get(unbranded.id)).toEqual({
+      itemName: { en: 'Loose apples', es: 'Manzanas a granel' },
+      itemBrand: null,
+    });
+    // The stored text, both languages or one: the reader picks, not this read.
+    expect(seen.get(spanishOnly.id)).toEqual({
+      itemName: { es: 'Arroz redondo' },
+      itemBrand: 'SOS',
+    });
+
+    const one = await shopItems.get({
+      userId: OPERATOR,
+      itemId: spanishOnly.id,
+      supermarketLocationId: shopD,
+    });
+    expect(one.itemName).toEqual({ es: 'Arroz redondo' });
+    expect(one.itemBrand).toBe('SOS');
+  });
+
   it('answers not found for a shop that does not exist', async () => {
     await expect(
       shopItems.shopAvailability({

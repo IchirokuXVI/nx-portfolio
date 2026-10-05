@@ -99,13 +99,8 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-4);
+      padding: var(--admin-control-pad) var(--admin-space-4);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 

@@ -86,7 +86,8 @@ export class SupermarketService {
       chain.defaultPriceScopeId = national.id;
       return tx.update(Supermarket, before, chain);
     });
-    return toSupermarketView(saved);
+    // A chain made a moment ago holds no shop, so nothing is counted.
+    return { ...toSupermarketView(saved), locationCount: 0 };
   }
 
   async update(req: UpdateSupermarketRequest): Promise<SupermarketView> {
@@ -125,9 +126,10 @@ export class SupermarketService {
       }
       row.defaultPriceScopeId = req.defaultPriceScopeId;
     }
-    return toSupermarketView(
-      await this.audit.write(actor, (tx) => tx.update(Supermarket, before, row))
+    const saved = await this.audit.write(actor, (tx) =>
+      tx.update(Supermarket, before, row)
     );
+    return this.withLocationCount(saved);
   }
 
   async delete(req: SupermarketIdRequest): Promise<{ id: string }> {
@@ -141,7 +143,7 @@ export class SupermarketService {
   }
 
   async get(req: SupermarketIdRequest): Promise<SupermarketView> {
-    return toSupermarketView(await this.load(req.supermarketId));
+    return this.withLocationCount(await this.load(req.supermarketId));
   }
 
   async list(req: ListSupermarketsRequest): Promise<SupermarketPage> {
@@ -171,7 +173,44 @@ export class SupermarketService {
           })
         : null;
 
-    return { items: page.map(toSupermarketView), nextCursor };
+    const counts = await this.locationCounts(page.map((row) => row.id));
+    return {
+      items: page.map((row) => ({
+        ...toSupermarketView(row),
+        locationCount: counts.get(row.id) ?? 0,
+      })),
+      nextCursor,
+    };
+  }
+
+  /** One chain's view with its shop count, for the reads of a single chain. */
+  private async withLocationCount(row: Supermarket): Promise<SupermarketView> {
+    const counts = await this.locationCounts([row.id]);
+    return {
+      ...toSupermarketView(row),
+      locationCount: counts.get(row.id) ?? 0,
+    };
+  }
+
+  /**
+   * How many shops each of these chains holds (admin plan 0042, section 2), in
+   * one grouped query for the whole page rather than a count per row. A chain
+   * with no shop has no group, so the caller reads a missing key as zero.
+   */
+  private async locationCounts(
+    supermarketIds: readonly string[]
+  ): Promise<Map<string, number>> {
+    if (supermarketIds.length === 0) {
+      return new Map();
+    }
+    const rows = (await this.supermarkets.query(
+      `SELECT l."supermarketId"::text AS "id", count(*)::int AS "count"
+         FROM "supermarket_locations" l
+        WHERE l."supermarketId" = ANY($1::uuid[])
+        GROUP BY l."supermarketId"`,
+      [[...supermarketIds]]
+    )) as { id: string; count: number }[];
+    return new Map(rows.map((row) => [row.id, Number(row.count)]));
   }
 
   private async load(id: string): Promise<Supermarket> {

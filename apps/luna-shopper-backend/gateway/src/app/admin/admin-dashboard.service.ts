@@ -14,6 +14,8 @@ import {
   type AdminHarvestDashboard,
   type AdminIdentityDashboard,
   type AdminIdentityListView,
+  BRAND_PATTERNS,
+  type BrandKeysResult,
 } from '@portfolio/luna-shopper/contracts';
 import { NatsClient } from '../messaging/nats-client';
 import { adminCredential } from './admin-credential';
@@ -65,10 +67,7 @@ export class AdminDashboardService {
         ADMIN_DASHBOARD_PATTERNS.catalog,
         request
       ),
-      this.ask<AdminHarvestDashboard>(
-        ADMIN_DASHBOARD_PATTERNS.harvest,
-        request
-      ),
+      this.askHarvest(admin, request),
     ]);
 
     const activity = await this.nameActors(
@@ -103,6 +102,52 @@ export class AdminDashboardService {
       // missing, and the reason it is missing belongs in the gateway's log.
       this.logger.warn(
         `${subject} did not answer the dashboard: ${(error as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * The harvester's block, with the brand registry sent along (admin plan
+   * 0044, section 2).
+   *
+   * `queues.brands` counts the suggested brands: the brand keys that queued
+   * source rows carry and no registered brand holds. The rows are the
+   * harvester's and the registry is catalog's, so the gateway reads the keys
+   * and sends them with the request, which is what
+   * `GET /v1/admin/catalog/brand-suggestions` does for the list itself.
+   *
+   * **A registry that did not answer costs that one count.** The request then
+   * goes out without the keys, the harvester answers `brands: null`, and the
+   * runs and the three other queues are still on the screen.
+   */
+  private async askHarvest(
+    admin: CurrentAdmin,
+    request: AdminDashboardRequest
+  ): Promise<AdminHarvestDashboard | null> {
+    const registeredBrandKeys = await this.registeredBrandKeys(admin);
+
+    return this.ask<AdminHarvestDashboard>(
+      ADMIN_DASHBOARD_PATTERNS.harvest,
+      registeredBrandKeys === null
+        ? request
+        : { ...request, registeredBrandKeys }
+    );
+  }
+
+  /** Every registered brand key, or `null` when catalog did not answer. */
+  private async registeredBrandKeys(
+    admin: CurrentAdmin
+  ): Promise<string[] | null> {
+    try {
+      const result = await this.nats.send<BrandKeysResult>(
+        BRAND_PATTERNS.keys,
+        { userId: admin.adminId }
+      );
+      return result?.keys ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `Could not read the brand registry for the dashboard: ${(error as Error).message}`
       );
       return null;
     }

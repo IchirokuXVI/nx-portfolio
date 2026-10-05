@@ -427,4 +427,106 @@ describeIntegration('the admin collections that read across a parent', () => {
       expect(page.items).toHaveLength(1);
     });
   });
+
+  /**
+   * Admin plan 0045, section 2: a zone row says how many join requests wait,
+   * and the listing can be narrowed to the zones that have one.
+   *
+   * Against real Postgres because the filter is an `EXISTS` over another table
+   * and the count is a `GROUP BY` over two columns, and a fake repository
+   * answers both with whatever the test handed it.
+   */
+  describe('zones with a join request that waits', () => {
+    async function withStatus(
+      zone: Zone,
+      joinedAt: string,
+      name: string,
+      status: MembershipStatus
+    ) {
+      const row = await newMember(zone, joinedAt, name);
+      await memberships.update({ id: row.id }, { status });
+      return row;
+    }
+
+    it('counts the requests of each zone apart from its members', async () => {
+      const waiting = await newZone();
+      const quiet = await newZone();
+      await newMember(waiting, '2026-09-01T10:00:00.000Z', 'marta');
+      await withStatus(
+        waiting,
+        '2026-09-02T10:00:00.000Z',
+        'dani',
+        MembershipStatus.PENDING
+      );
+      await newMember(quiet, '2026-09-01T10:00:00.000Z', 'lucas');
+      // Neither a member nor a request: a ban is the record of one.
+      await withStatus(
+        quiet,
+        '2026-09-03T10:00:00.000Z',
+        'pablo',
+        MembershipStatus.BANNED
+      );
+
+      const page = await zoneService.list({ ...CREDENTIAL });
+      const byId = new Map(page.items.map((row) => [row.id, row]));
+
+      expect(byId.get(waiting.id)).toMatchObject({
+        memberCount: 1,
+        pendingCount: 1,
+      });
+      expect(byId.get(quiet.id)).toMatchObject({
+        memberCount: 1,
+        pendingCount: 0,
+      });
+    });
+
+    it('answers only the zone with a request when asked for those', async () => {
+      const waiting = await newZone();
+      const quiet = await newZone();
+      await withStatus(
+        waiting,
+        '2026-09-02T10:00:00.000Z',
+        'dani',
+        MembershipStatus.PENDING
+      );
+      await newMember(quiet, '2026-09-01T10:00:00.000Z', 'lucas');
+
+      const page = await zoneService.list({ ...CREDENTIAL, hasPending: true });
+
+      expect(page.items.map((row) => row.id)).toEqual([waiting.id]);
+      expect(page.items[0].pendingCount).toBe(1);
+    });
+
+    it('narrows nothing when the filter is off', async () => {
+      const waiting = await newZone();
+      const quiet = await newZone();
+      await withStatus(
+        waiting,
+        '2026-09-02T10:00:00.000Z',
+        'dani',
+        MembershipStatus.PENDING
+      );
+
+      const page = await zoneService.list({ ...CREDENTIAL, hasPending: false });
+
+      expect(page.items.map((row) => row.id).sort()).toEqual(
+        [waiting.id, quiet.id].sort()
+      );
+    });
+
+    it('says the same count on the zone read on its own', async () => {
+      const waiting = await newZone();
+      await newMember(waiting, '2026-09-01T10:00:00.000Z', 'marta');
+      await withStatus(
+        waiting,
+        '2026-09-02T10:00:00.000Z',
+        'dani',
+        MembershipStatus.PENDING
+      );
+
+      const zone = await zoneService.get({ ...CREDENTIAL, zoneId: waiting.id });
+
+      expect(zone).toMatchObject({ memberCount: 1, pendingCount: 1 });
+    });
+  });
 });

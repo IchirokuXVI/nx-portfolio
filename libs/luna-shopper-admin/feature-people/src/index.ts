@@ -1,18 +1,14 @@
-export * from './lib/admins';
-export * from './lib/basket-detail-page';
-export * from './lib/baskets';
-export * from './lib/detail-frame';
-export * from './lib/detail-page';
-export * from './lib/list-detail-page';
-export * from './lib/list-lines';
-export * from './lib/lists';
-export * from './lib/memberships';
-export * from './lib/people-dashboard';
-export * from './lib/people-dashboard-view';
-export * from './lib/people-format';
-export * from './lib/people-seed';
-export * from './lib/user-detail-page';
-export * from './lib/user-roles';
-export * from './lib/users';
-export * from './lib/zone-detail-page';
-export * from './lib/zones';
+// Named, and not `export *`: this barrel offers what another project imports,
+// and nothing else (admin plan 0047). A name used only inside this library is
+// imported there by its relative path. `no-unused-public-export.spec.ts`
+// in the app fails when a name here has no importer outside the library.
+export {
+  ADMINS_SEGMENT,
+  ADMIN_ACCOUNTS_TAB,
+  ADMIN_FAILED_SIGN_INS_TAB,
+  adminsPath,
+} from './lib/admins';
+export { adminsRoutes } from './lib/admins-routes';
+export { SHOPPER_RESOURCES, shoppersRoutes } from './lib/shoppers-routes';
+export { ShoppersStatus } from './lib/shoppers-status';
+export { USERS } from './lib/users';

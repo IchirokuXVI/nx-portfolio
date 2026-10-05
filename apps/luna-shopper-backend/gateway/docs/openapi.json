@@ -1743,6 +1743,15 @@
             }
           },
           {
+            "name": "hasPending",
+            "required": false,
+            "in": "query",
+            "description": "True for the zones with at least one pending join request. False is the same as absent: it narrows nothing.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "createdAfter",
             "required": false,
             "in": "query",
@@ -16387,9 +16396,8 @@
             "name": "categoryId",
             "required": false,
             "in": "query",
-            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children.",
+            "description": "Only the products under this category (plan 0166, section 4): a leaf, or a root meaning the products under any of its children. The literal `none` instead of a uuid asks for the products on no category at all.",
             "schema": {
-              "format": "uuid",
               "type": "string"
             }
           },
@@ -19721,6 +19729,19 @@
             "schema": {
               "format": "uuid",
               "type": "string"
+            }
+          },
+          {
+            "name": "itemIds",
+            "required": false,
+            "in": "query",
+            "description": "Repeatable, at most 100. Only the prices of these products: with priceScopeId, the price of every product on one page of the product list in one read (admin plan 0043). Empty and absent both mean every product.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
             }
           },
           {
@@ -30963,6 +30984,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -31005,6 +31030,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
@@ -31135,6 +31161,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "pendingCount": {
+            "type": "integer",
+            "minimum": 0
+          },
           "markedForDeletionAt": {
             "type": [
               "string",
@@ -31163,6 +31193,7 @@
           "ownerUserId",
           "memberCount",
           "listCount",
+          "pendingCount",
           "markedForDeletionAt",
           "createdAt",
           "updatedAt",
@@ -31570,7 +31601,8 @@
             "required": [
               "entries",
               "places",
-              "shops"
+              "shops",
+              "brands"
             ],
             "properties": {
               "entries": {
@@ -31588,6 +31620,18 @@
                 "items": {
                   "$ref": "#/components/schemas/admin-dashboard.AdminHarvestShopQueue"
                 }
+              },
+              "brands": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The suggested brands: brand keys that queued source rows carry and no registered brand holds. Null when the brand registry did not answer."
               }
             }
           },
@@ -36903,6 +36947,22 @@
               "string",
               "null"
             ]
+          },
+          "itemName": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itemBrand": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -36913,7 +36973,9 @@
           "available",
           "availabilitySourceKind",
           "availabilityObservedAt",
-          "availabilitySourceRunId"
+          "availabilitySourceRunId",
+          "itemName",
+          "itemBrand"
         ],
         "additionalProperties": false
       },
@@ -37194,6 +37256,11 @@
               "string",
               "null"
             ]
+          },
+          "locationCount": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view."
           }
         },
         "required": [

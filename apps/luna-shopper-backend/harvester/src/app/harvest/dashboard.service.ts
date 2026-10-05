@@ -20,6 +20,7 @@ import {
 } from '../entities';
 import { toHarvestRunView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { suggestedBrandRows } from './suggested-brand-rows';
 
 /**
  * The harvester's block of the back office dashboard (plan 0088, section 3.4).
@@ -66,6 +67,7 @@ export class HarvestDashboardService {
       placesQueued,
       shops,
       sources,
+      brands,
     ] = await Promise.all([
       this.runsByStatus(),
       this.runsInWindow(req),
@@ -75,15 +77,47 @@ export class HarvestDashboardService {
       this.places.count({ where: { status: DiscoveredPlaceStatus.NEW } }),
       this.shopQueues(chains),
       this.countSources(),
+      this.suggestedBrands(req.registeredBrandKeys),
     ]);
 
     return {
       runs: { byStatus, inWindow },
       running,
       recent,
-      queues: { entries, places: placesQueued, shops },
+      queues: { entries, places: placesQueued, shops, brands },
       sources,
     };
+  }
+
+  /**
+   * How many brands wait to be registered (admin plan 0044, section 2).
+   *
+   * The rows `SourceEntryService.brandSuggestions` pages through, counted: one
+   * per brand key that a queued source row carries and no registered brand
+   * holds. Both reads take the same predicate from
+   * {@link suggestedBrandRows}, so the number on the tab cannot disagree
+   * with the length of the list behind it.
+   *
+   * The registry lives in catalog and travels in the request. With no keys in
+   * the request there is nothing to count against, and the answer is `null`
+   * rather than a count of every brand the queue names.
+   */
+  private async suggestedBrands(
+    registeredKeys: readonly string[] | undefined
+  ): Promise<number | null> {
+    if (registeredKeys === undefined) {
+      return null;
+    }
+
+    const rows: { count: number }[] = await this.entries.query(
+      `
+      SELECT count(DISTINCT e."brandKey")::int AS "count"
+        FROM "source_catalog_entries" e
+       WHERE ${suggestedBrandRows('$1')}
+      `,
+      [registeredKeys]
+    );
+    return rows[0]?.count ?? 0;
   }
 
   /**

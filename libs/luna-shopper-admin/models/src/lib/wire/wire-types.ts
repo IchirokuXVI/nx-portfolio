@@ -1464,6 +1464,7 @@ export type AdminCoreAdminZoneDetailView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1518,6 +1519,7 @@ export type AdminCoreAdminZoneRowView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1635,6 +1637,7 @@ export type AdminDashboardAdminHarvestDashboard = {
     entries: AdminDashboardAdminHarvestQueueEntry[];
     places: number;
     shops: AdminDashboardAdminHarvestShopQueue[];
+    brands: number | null;
   };
   sources: {
     total: number;
@@ -3253,6 +3256,8 @@ export type CatalogSupermarketLocationItemView = {
   availabilitySourceKind: EnumsPriceSourceKind | null;
   availabilityObservedAt: string | null;
   availabilitySourceRunId: string | null;
+  itemName: CatalogLocalizedText | null;
+  itemBrand: string | null;
 };
 
 /**
@@ -3331,6 +3336,7 @@ export type CatalogSupermarketView = {
   websiteUrl: string | null;
   externalBrandKey: string | null;
   defaultPriceScopeId: string | null;
+  locationCount?: number;
 };
 
 /**

@@ -47,6 +47,17 @@ export interface AdminDashboardWindow {
 /** What every dashboard subject takes: the operator's credential, plus the window. */
 export interface AdminDashboardRequest extends AdminCredential {
   window: AdminDashboardWindow;
+  /**
+   * Every registered brand key, for the harvester's block alone (admin plan
+   * 0044, section 2).
+   *
+   * The harvester counts the suggested brands, and a suggestion is a key that
+   * no registered brand holds. The registry lives in catalog, so the gateway
+   * reads the keys there and sends them with the request, exactly as it does
+   * for `GET /v1/admin/catalog/brand-suggestions`. Absent when catalog did not
+   * answer, and the count is then `null`.
+   */
+  registeredBrandKeys?: string[];
 }
 
 /**
@@ -261,6 +272,16 @@ export interface AdminHarvestDashboard {
     places: number;
     /** Per chain, as `entries`. `source_locations` with `status = UNMAPPED`. */
     shops: AdminHarvestShopQueue[];
+    /**
+     * The suggested brands: the brand keys queued source rows carry that no
+     * registered brand holds (admin plan 0044, section 2). The same rows
+     * `GET /v1/admin/catalog/brand-suggestions` pages through, counted.
+     *
+     * `null` when the request carried no registered keys, which is when
+     * catalog did not answer the gateway. A count made without the registry
+     * would count every brand as a suggestion.
+     */
+    brands: number | null;
   };
   sources: {
     total: number;

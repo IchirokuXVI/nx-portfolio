@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { PageHeader } from '../page/page-header';
 
 /**
  * A URL that is not a screen.
@@ -16,9 +17,9 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
  */
 @Component({
   selector: 'lib-not-found-page',
-  imports: [RouterLink, RokuTranslatorPipe],
+  imports: [RouterLink, RokuTranslatorPipe, PageHeader],
   template: `
-    <h1>{{ 'notFound.heading' | rokuT }}</h1>
+    <lib-page-header [heading]="'notFound.heading' | rokuT" />
     <p>{{ 'notFound.body' | rokuT }}</p>
     <a routerLink="/">{{ 'notFound.home' | rokuT }}</a>
   `,
@@ -28,11 +29,6 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
       flex-direction: column;
       gap: var(--admin-space-4);
       align-items: flex-start;
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
     }
 
     p {

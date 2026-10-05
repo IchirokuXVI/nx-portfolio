@@ -14,7 +14,9 @@ import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceFormPage } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   fieldMessage,
+  isEditable,
   parseMoney,
+  type FieldDescriptor,
   type FieldMessage,
 } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
@@ -30,6 +32,15 @@ import {
   type UnitPriceProposal,
 } from './price-proposal';
 import { PriceScopeNotice } from './price-scope-notice';
+import { PriceScopePicker } from './products/price-scope-picker';
+import {
+  ScopeChoices,
+  type PriceScopeChoice,
+  type ScopeRow,
+} from './products/scope-choices';
+
+/** The field the scope picker stands in for. */
+const SCOPE_FIELD = 'priceScopeId';
 
 /**
  * How many pages of shops the count is willing to read.
@@ -63,21 +74,54 @@ const COUNT_PAGE_SIZE = 100;
  * and how many shops that is, and it says the count out loud rather than
  * leaving an operator to infer it from the word "warehouse".
  *
- * **The scope picker offers scopes and never shops**, which is the descriptor's
- * doing rather than this component's: `priceScopeId` is a reference to
- * `price-scopes`, so there is no control on this screen that a shop could be
- * chosen in. That is what makes "cannot submit against a location" a property of
- * the form rather than a check inside it.
+ * **The scope picker offers scopes and never shops.** It asks for the chain
+ * and then for one of that chain's scopes, each with the mark that says how
+ * far it reaches (admin plan 0043, target 3). There is no control on this
+ * screen that a shop could be chosen in, which is what makes "cannot submit
+ * against a location" a property of the form rather than a check inside it.
+ *
+ * **It is drawn inside the Prices tab of a product**, in a panel on a wide
+ * screen and a sheet on a phone, so it draws no page header of its own: the
+ * panel names it. The product is the page it is opened from, so the form asks
+ * for no product either.
  */
 @Component({
   selector: 'lib-price-form-page',
-  imports: [ResourceForm, ConfirmDialog, PriceScopeNotice, RokuTranslatorPipe],
+  imports: [
+    ResourceForm,
+    ConfirmDialog,
+    PriceScopeNotice,
+    PriceScopePicker,
+    RokuTranslatorPipe,
+  ],
   template: `
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
       <p class="state error" role="alert">{{ errorKey() | rokuT }}</p>
     } @else {
+      <div class="scope-field">
+        <span class="scope-label">
+          {{ 'catalog.prices.priceScopeId' | rokuT }}
+          <span aria-hidden="true" class="required">*</span>
+        </span>
+        <lib-price-scope-picker
+          (choiceChange)="chooseScope($event)"
+          [choice]="scopeChoice()"
+          [label]="'catalog.prices.chooseScope' | rokuT"
+          [placeholder]="'catalog.prices.chooseScope' | rokuT"
+        />
+        @for (message of scopeMessages(); track $index) {
+          <p class="problem" role="alert">
+            @if (message.kind === 'key') {
+              {{ message.key | rokuT: message.args }}
+            } @else {
+              {{ message.text }}
+            }
+          </p>
+        }
+      </div>
+
       <lib-price-scope-notice
         [atLeast]="countIsFloor()"
         [counting]="counting()"
@@ -115,7 +159,8 @@ const COUNT_PAGE_SIZE = 100;
         [busy]="store.busy()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
-        [fields]="descriptor.fields"
+        [fields]="formFields"
+        [header]="false"
         [lookup]="references"
         [messages]="priceMessages()"
         [mode]="mode"
@@ -143,6 +188,26 @@ const COUNT_PAGE_SIZE = 100;
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
+    }
+
+    .scope-field {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+      align-items: flex-start;
+    }
+
+    .scope-label {
+      font-weight: 500;
+    }
+
+    .required,
+    .problem {
+      color: var(--admin-danger);
+    }
+
+    .problem {
+      font-size: 0.875rem;
     }
 
     .proposal {
@@ -184,6 +249,44 @@ const COUNT_PAGE_SIZE = 100;
 export class PriceFormPage extends ResourceFormPage {
   private readonly _gateways = inject(RESOURCE_GATEWAYS);
   private readonly _translate = inject(RokuTranslatorService);
+  private readonly _choices = inject(ScopeChoices);
+
+  /**
+   * The fields the form draws: what an added price can state.
+   *
+   * Not the scope, which the picker above the form chooses, and not the
+   * product, which is the page the form was opened from. Not the fields a
+   * shown price carries and a typed one cannot set, which on a form that only
+   * adds would be a column of "None".
+   */
+  readonly formFields: readonly FieldDescriptor[] = this.fields.filter(
+    (field) => field.name !== SCOPE_FIELD && isEditable(field, 'create')
+  );
+
+  /** The scope as it was read or picked, for the picker to name. */
+  private readonly _scopeRow = signal<ScopeRow | null>(null);
+
+  /** The chosen scope with its chain, or `null` until both are known. */
+  readonly scopeChoice = computed<PriceScopeChoice | null>(() => {
+    const scope = this._scopeRow();
+    if (scope === null || scope.id !== this._scopeId()) {
+      return null;
+    }
+    const chain = this._choices.chainsById().get(scope.supermarketId);
+    return {
+      scope,
+      chain: chain ?? {
+        id: scope.supermarketId,
+        name: {},
+        defaultPriceScopeId: null,
+      },
+    };
+  });
+
+  /** What the form has to say about the scope, drawn under the picker. */
+  readonly scopeMessages = computed(
+    () => this.priceMessages()[SCOPE_FIELD] ?? []
+  );
 
   /** What the scope is called, once it has been read. */
   readonly scopeName = signal<string | null>(null);
@@ -304,6 +407,9 @@ export class PriceFormPage extends ResourceFormPage {
   constructor() {
     super();
 
+    // The chains, so that the picker can say which chain the scope is of.
+    void this._choices.loadChains();
+
     effect(() => {
       const scopeId = this._scopeId();
       void this._describe(scopeId);
@@ -330,6 +436,12 @@ export class PriceFormPage extends ResourceFormPage {
     if (typeof label !== 'string' || label.trim() === '') {
       this.store.set('unitPriceLabel', proposed.label);
     }
+  }
+
+  /** A scope was chosen in the picker. It goes in the draft like any field. */
+  chooseScope(choice: PriceScopeChoice | null): void {
+    this._scopeRow.set(choice?.scope ?? null);
+    this.store.set(SCOPE_FIELD, choice?.scope.id ?? '');
   }
 
   /** Refused here while the observed date is outside its window. */
@@ -379,11 +491,18 @@ export class PriceFormPage extends ResourceFormPage {
     this.counting.set(true);
 
     try {
-      const scope = await this._gateways.for(priceScopeSource()).read(scopeId);
+      // The picker already holds the scope it chose. A scope that came in the
+      // address is read.
+      const picked = this._scopeRow();
+      const scope =
+        picked?.id === scopeId
+          ? picked
+          : await this._gateways.for(priceScopeSource()).read(scopeId);
       if (generation !== this._generation) {
         return;
       }
 
+      this._scopeRow.set(scope);
       this.scopeName.set(this._nameOf(scope));
       this.scopeKindLabel.set(this._kindLabelOf(scope.kind));
 

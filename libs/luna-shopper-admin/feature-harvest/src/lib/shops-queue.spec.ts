@@ -1,9 +1,11 @@
 import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
+  DASHBOARD_SERVICE,
+  DashboardMemory,
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
@@ -21,6 +23,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { ResourceQuery } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
+import { ReviewChain } from './review-chain';
 import { ShopsQueuePage } from './shops-queue-page';
 
 /**
@@ -69,8 +72,12 @@ function recorded(): {
   return { service, calls };
 }
 
-async function render() {
+/** How many times the dashboard was read, which is where the counts come from. */
+let dashboardReads = 0;
+
+async function render(url?: string) {
   const { service, calls } = recorded();
+  dashboardReads = 0;
 
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -85,6 +92,20 @@ async function render() {
       // nothing.
       provideResources(SUPERMARKETS, LOCATIONS),
       { provide: HARVEST_SERVICE, useValue: service },
+      // The seeded dashboard, with its reads counted: the chains that have
+      // shops waiting come from it, and a decision reads it again.
+      {
+        provide: DASHBOARD_SERVICE,
+        useFactory: () => {
+          const memory = new DashboardMemory();
+          return {
+            read: () => {
+              dashboardReads += 1;
+              return memory.read();
+            },
+          };
+        },
+      },
       {
         provide: DEPLOYMENT_SERVICE,
         useValue: {
@@ -97,6 +118,10 @@ async function render() {
       DeploymentStore,
     ],
   }).compileComponents();
+
+  if (url !== undefined) {
+    await TestBed.inject(Router).navigateByUrl(url);
+  }
 
   const fixture = TestBed.createComponent(ShopsQueuePage);
   fixture.detectChanges();
@@ -134,12 +159,93 @@ describe('the source shops queue', () => {
    * shops and no screen that could use one.
    */
   it('reads nothing until a chain is chosen', async () => {
-    const { calls, fixture } = await render();
+    const { calls, fixture, page } = await render();
 
     expect(named(calls, 'listShops')).toHaveLength(0);
+    expect(page.queue).toBeNull();
+    expect(fixture.nativeElement.querySelector('lib-queue-frame')).toBeNull();
+  });
+
+  /**
+   * Admin plan 0044, target 4. With no chain chosen the queue lists the chains
+   * that have shops waiting, with the count of each, most first.
+   */
+  it('lists the chains that have shops waiting while none is chosen', async () => {
+    const { fixture, page } = await render();
+
+    // The seed holds four unmapped shops of Mercadona and none of the others,
+    // and a chain with nothing waiting is not offered.
+    expect(page.waitingChains()).toEqual([
+      { supermarketId: MERCADONA, count: 4 },
+    ]);
+    const rows: HTMLButtonElement[] = [
+      ...fixture.nativeElement.querySelectorAll('.chains button'),
+    ];
+    expect(rows.map((row) => row.getAttribute('data-chain'))).toEqual([
+      MERCADONA,
+    ]);
+    expect(rows[0].querySelector('.waiting')?.textContent).toBe('4');
     expect(fixture.nativeElement.textContent).toContain(
-      'harvest.shops.chooseChain'
+      'harvest.shops.chains.heading'
     );
+  });
+
+  it('chooses the chain that is pressed, through the filter the four queues share', async () => {
+    const { fixture, page, calls } = await render();
+
+    (
+      fixture.nativeElement.querySelector(
+        `.chains button[data-chain="${MERCADONA}"]`
+      ) as HTMLButtonElement
+    ).click();
+    await drain();
+    fixture.detectChanges();
+    await drain();
+    fixture.detectChanges();
+
+    expect(TestBed.inject(ReviewChain).chain()).toBe(MERCADONA);
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${MERCADONA}`);
+    expect(page.supermarketId()).toBe(MERCADONA);
+    expect(named(calls, 'listShops')[0][0]).toMatchObject({
+      supermarketId: MERCADONA,
+    });
+    expect(fixture.nativeElement.querySelector('.chains')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('lib-queue-frame')
+    ).not.toBeNull();
+  });
+
+  /** The chain is kept in the address, so a link and a reload open on it. */
+  it('opens on the chain the address names', async () => {
+    const { page, calls } = await render(`/?chain=${MERCADONA}`);
+
+    expect(page.supermarketId()).toBe(MERCADONA);
+    expect(named(calls, 'listShops')[0][0]).toMatchObject({
+      supermarketId: MERCADONA,
+      status: 'UNMAPPED',
+    });
+  });
+
+  it('goes back to the list of chains when the filter is cleared', async () => {
+    const { fixture, page } = await render(`/?chain=${MERCADONA}`);
+
+    TestBed.inject(ReviewChain).choose('');
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue).toBeNull();
+    expect(fixture.nativeElement.querySelector('.chains')).not.toBeNull();
+  });
+
+  /** The Review page above the queue draws the header (admin plan 0044). */
+  it('draws no page header, and keeps what a row is behind an info button', async () => {
+    const { fixture } = await render();
+
+    expect(fixture.nativeElement.querySelector('lib-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('.filters lib-info-button')
+    ).not.toBeNull();
   });
 
   it('reads the chosen chain, waiting to be mapped, because that is what the queue is for', async () => {
@@ -339,6 +445,41 @@ describe('mapping a source shop', () => {
   });
 });
 
+/**
+ * Admin plan 0044, target 2. A decision takes a row out of the queue, and the
+ * count on the rail is the queue's length, so the counts are read again.
+ */
+describe('the counts, after a decision on a source shop', () => {
+  it('reads the counts again after one shop is ignored', async () => {
+    const { page } = await opened();
+    const before = dashboardReads;
+
+    await page.ignore(page.rows()[0]);
+    await drain();
+
+    expect(dashboardReads).toBe(before + 1);
+  });
+
+  it('reads the counts again once after a batch, and not once per row', async () => {
+    const { page } = await opened();
+    page.queue?.selectLoaded();
+    const selected = page.queue?.selectedCount() ?? 0;
+    expect(selected).toBeGreaterThan(1);
+    const before = dashboardReads;
+
+    page.askIgnore();
+    const pending = page.pending();
+    expect(pending).not.toBeNull();
+    page.go(pending as NonNullable<typeof pending>);
+    for (let round = 0; round < 10; round++) {
+      await drain();
+    }
+
+    expect(page.report()?.succeeded).toBe(selected);
+    expect(dashboardReads).toBe(before + 1);
+  });
+});
+
 describe('ignoring a source shop', () => {
   /**
    * DEZA publishes eighteen centres and ten of them appear in the product
@@ -365,6 +506,62 @@ describe('ignoring a source shop', () => {
 
     await page.unignore(row);
     expect(named(calls, 'unignoreShop')[0][0]).toBe(row.id);
+  });
+});
+
+/**
+ * An ignored shop cannot be ignored again. The button stays in the bar,
+ * disabled, so that Skip does not move into its slot: two quick presses on
+ * Skip must never land on the next row's "Ignore".
+ */
+describe('the decide bar of a source shop that cannot be ignored', () => {
+  const actionsOf = (fixture: ComponentFixture<ShopsQueuePage>): string[] =>
+    [
+      ...fixture.nativeElement.querySelectorAll(
+        '.actions.decide > [data-action]'
+      ),
+    ].map((button) => (button as HTMLElement).dataset['action'] ?? '');
+  const reject = (fixture: ComponentFixture<ShopsQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '.actions.decide [data-action="reject"]'
+    ) as HTMLButtonElement | null;
+
+  async function inReview(status?: string) {
+    const rendered = await opened();
+    if (status !== undefined) {
+      rendered.page.chooseStatus({
+        target: { value: status },
+      } as unknown as Event);
+      await drain();
+      rendered.fixture.detectChanges();
+    }
+    rendered.fixture.nativeElement
+      .querySelector('.rows li .cells')
+      ?.click();
+    await drain();
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  it('offers Ignore on a shop that waits', async () => {
+    const { fixture, page } = await inReview();
+
+    expect(page.current()?.canIgnore).toBe(true);
+    expect(actionsOf(fixture)).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject(fixture)?.disabled).toBe(false);
+  });
+
+  it('keeps Ignore in its slot, disabled, on a shop that is ignored', async () => {
+    const { fixture, page, calls } = await inReview('IGNORED');
+
+    expect(page.current()?.canIgnore).toBe(false);
+    // The same three, in the same places.
+    expect(actionsOf(fixture)).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject(fixture)?.disabled).toBe(true);
+
+    reject(fixture)?.click();
+    await drain();
+    expect(named(calls, 'ignoreShop')).toHaveLength(0);
   });
 });
 

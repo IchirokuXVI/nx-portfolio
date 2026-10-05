@@ -8,8 +8,12 @@ import {
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
-import { itemSource } from './catalog-sources';
+import { itemSource, priceSource } from './catalog-sources';
 import { ItemFormPage } from './item-form-page';
+import {
+  productListGateway,
+  type ScopePriced,
+} from './products/product-list-gateway';
 import { SetCategoriesPanel } from './set-categories-panel';
 import { SetGroupPanel } from './set-group-panel';
 
@@ -24,7 +28,7 @@ import { SetGroupPanel } from './set-group-panel';
  */
 export type Item = Wire.CatalogItemView & {
   readonly categoryIds: readonly string[];
-};
+} & ScopePriced;
 
 /** A product row with the ids its categories carry, in their order. */
 export function withCategoryIds(row: Wire.CatalogItemView): Item {
@@ -62,8 +66,14 @@ export function itemGateway(
  * answer rather than a gap** (backend plan 0073, section 4). The admin read
  * names no price scopes, because an operator has no postal code and no shopping
  * profile, so there is no set of scopes that is theirs and inventing one would
- * price the catalog from somewhere arbitrary. What a product costs is the price
- * screen, which lists prices as prices and says which scope each belongs to.
+ * price the catalog from somewhere arbitrary. What a product costs is asked
+ * at one scope the operator names: the list's "Prices at" picker reads the
+ * shown price of every row of a page at that scope, in one request, and lays
+ * it on the row as `scopePrice` (admin plan 0043).
+ *
+ * **The products sit at their section's own address**, `/products`, so the
+ * segment is empty. Their groups, their categories and the price rules are
+ * the other tabs of that section, each one segment under it.
  *
  * **"None" on the group filter is the filter with no user facing counterpart**
  * (plan 0012, section 2). An ungrouped product is invisible to every "show me
@@ -80,13 +90,17 @@ export function itemGateway(
  */
 export const ITEMS = defineResource<Item>({
   name: 'items',
-  segment: 'items',
-  labels: { one: 'catalog.items.one', many: 'catalog.items.many' },
+  // At the section's own address: see above.
+  segment: '',
+  labels: {
+    one: 'catalog.items.one',
+    many: 'catalog.items.many',
+    create: 'catalog.items.add',
+  },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
 
-  // The generic form, with the source products panel and the way to the
-  // product's prices at every scope below it (admin plan 0033).
+  // The form of a new product, and the Details tab of one that exists.
   editor: ItemFormPage,
 
   fields: [
@@ -247,8 +261,12 @@ export const ITEMS = defineResource<Item>({
     category_not_found: 'categoryIds',
   },
 
-  gateway: () =>
-    itemGateway(
-      inject(RESOURCE_GATEWAYS).for<Wire.CatalogItemView>(itemSource())
-    ),
+  gateway: () => {
+    const gateways = inject(RESOURCE_GATEWAYS);
+    // The products, able to show the price at one scope when the list asks.
+    return productListGateway(
+      itemGateway(gateways.for<Wire.CatalogItemView>(itemSource())),
+      gateways.for(priceSource())
+    );
+  },
 });

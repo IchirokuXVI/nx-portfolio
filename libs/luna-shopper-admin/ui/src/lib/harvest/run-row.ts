@@ -28,6 +28,17 @@ export interface RunRow {
   readonly revertedBy: string;
   /** A translation key saying why a finished run did nothing, or `null`. */
   readonly reasonKey: string | null;
+  /**
+   * The chain the run was for, by name (admin plan 0044, target 5). Absent or
+   * empty for a run over every chain, and the row then says so.
+   */
+  readonly chain?: string;
+  /**
+   * How many rows the run wrote: the ones it created plus the ones it
+   * updated (admin plan 0044, section 2). Absent where the list does not
+   * show it.
+   */
+  readonly wrote?: number;
 }
 
 /**
@@ -48,6 +59,11 @@ export interface RunRow {
   imports: [RouterLink, RokuTranslatorPipe],
   template: `
     <a [routerLink]="link()">
+      @if (row().chain !== undefined) {
+        <span [class.every]="row().chain === ''" class="chain">{{
+          row().chain || ('harvest.runs.row.everyChain' | rokuT)
+        }}</span>
+      }
       <span class="mode">{{ 'harvest.mode.' + row().mode | rokuT }}</span>
       <span [class]="row().status" class="status">
         {{ 'harvest.status.' + row().status | rokuT }}
@@ -66,6 +82,11 @@ export interface RunRow {
             | rokuT: { processed: row().processed, failed: row().failed }
         }}
       </span>
+      @if (row().wrote !== undefined) {
+        <span class="wrote">{{
+          'harvest.runs.row.wrote' | rokuT: { count: row().wrote }
+        }}</span>
+      }
       @if (row().reasonKey; as key) {
         <span class="reason">{{ key | rokuT }}</span>
       }
@@ -83,7 +104,7 @@ export interface RunRow {
       align-items: baseline;
       padding: var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
+      border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       text-decoration: none;
       color: inherit;
@@ -94,20 +115,32 @@ export interface RunRow {
       outline-offset: 2px;
     }
 
-    .mode {
-      font-weight: 700;
+    .mode,
+    .chain {
+      font-weight: 600;
+    }
+
+    .chain.every {
+      font-weight: 400;
+      color: var(--admin-ink-muted);
+    }
+
+    .wrote {
+      font-variant-numeric: tabular-nums;
     }
 
     .status {
-      padding: var(--admin-space-1) var(--admin-space-2);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface);
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
       font-size: 0.75rem;
-      text-transform: uppercase;
+      font-weight: 500;
+      color: var(--admin-neutral-on-wash);
     }
 
     .status.RUNNING,
-    .status.PENDING {
+    .status.PENDING,
+    .status.COMPLETED {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
     }

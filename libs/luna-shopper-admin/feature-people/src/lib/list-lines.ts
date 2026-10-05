@@ -12,6 +12,7 @@ import {
   defineResource,
 } from '@portfolio/luna-shopper-admin/models';
 import { LIST_LINE_SEED, type ListLineRow } from './people-seed';
+import { LIST_PARAM, ZONE_CAUTION } from './shopper-params';
 
 /** One thing written on a standing list, as the back office reads it. */
 export type ListLine = ListLineRow;
@@ -21,7 +22,7 @@ const QUANTITY_MIN = 0;
 const QUANTITY_MAX = 100000;
 
 /** How far a line can get, which is the whole of `LineApprovalStatus`. */
-export const LINE_APPROVAL_OPTIONS = [
+const LINE_APPROVAL_OPTIONS = [
   { value: 'PENDING', label: 'people.lists.approval.PENDING' },
   { value: 'APPROVED', label: 'people.lists.approval.APPROVED' },
   { value: 'REJECTED', label: 'people.lists.approval.REJECTED' },
@@ -30,14 +31,14 @@ export const LINE_APPROVAL_OPTIONS = [
 /**
  * One line at a time (plan 0009, section 4.2).
  *
- * The list detail screen still draws every line, because reading what a
- * household wrote down is what that screen is for. This is the other question:
- * correct **this** line's wording or its quantity.
+ * The page of a list draws every line, because reading what a household wrote
+ * down is what that page is for, and it draws the named actions declared here.
+ * This descriptor's form is the other question: correct **this** line's
+ * wording or its quantity.
  *
- * The list is a filter and not a question: opening this screen with none
- * chosen lists every list's lines, grouped by the list they are on, because the
- * list is the thing somebody hunting for what one person wrote does not know
- * yet (plan 0017).
+ * **The list is the address** (admin plan 0045): a line sits at
+ * `/shoppers/zones/{zoneId}/lists/{listId}/lines/{id}`, so the list is read
+ * from the route and is no filter.
  *
  * What is deliberately missing, and why:
  *
@@ -47,7 +48,10 @@ export const LINE_APPROVAL_OPTIONS = [
  *   plan 0077, section 6.4).
  * - **`approvalStatus` is not editable.** It is one route and one service call,
  *   and an act can be confirmed while a select cannot. The two acts are beside
- *   it.
+ *   it, **on a line that waits and on no other** (admin plan 0045, target 5).
+ *   A line somebody approved used to offer "Reject", and one that was
+ *   rejected offered "Approve": two buttons on every line of a list, for an
+ *   answer that was already given.
  * - **No control for the line's product set.** It is a set of catalog items with
  *   bounds of its own, an operator has no reason to curate it, and the route
  *   exists without this screen needing to offer it (plan 0009, section 10).
@@ -57,9 +61,15 @@ export const LINE_APPROVAL_OPTIONS = [
  * second change nobody asked for, seen by everyone in the zone. A rejected line
  * still reopens, because that rule applies to everyone.
  */
+/** Whether a line waits for somebody to approve or reject it. */
+function waits(row: ListLine): boolean {
+  return row.approvalStatus === 'PENDING';
+}
+
 export const LIST_LINES = defineResource<ListLine>({
   name: 'list-lines',
-  segment: 'list-lines',
+  segment: 'lines',
+  parent: { resource: 'lists', param: LIST_PARAM, filter: 'listId' },
   labels: { one: 'people.lines.one', many: 'people.lines.many' },
 
   // The pair, because a line's own id addresses nothing on its own: every route
@@ -141,17 +151,7 @@ export const LIST_LINES = defineResource<ListLine>({
     compact: ['listName', 'approvalStatus'],
   },
 
-  note: 'people.lines.note',
-  formNote: 'people.broadcast',
-
-  filters: [
-    {
-      kind: 'reference',
-      param: 'listId',
-      label: 'people.lines.filter.listId',
-      resource: 'lists',
-    },
-  ],
+  caution: ZONE_CAUTION,
 
   actions: {
     edit: true,
@@ -163,7 +163,7 @@ export const LIST_LINES = defineResource<ListLine>({
         {
           name: 'approve-line',
           label: 'people.lines.action.approve',
-          available: (row) => row.approvalStatus !== 'APPROVED',
+          available: waits,
           confirm: {
             heading: 'people.lines.confirm.approve.heading',
             body: 'people.lines.confirm.approve.body',
@@ -175,7 +175,7 @@ export const LIST_LINES = defineResource<ListLine>({
         {
           name: 'reject-line',
           label: 'people.lines.action.reject',
-          available: (row) => row.approvalStatus !== 'REJECTED',
+          available: waits,
           confirm: {
             heading: 'people.lines.confirm.reject.heading',
             body: 'people.lines.confirm.reject.body',

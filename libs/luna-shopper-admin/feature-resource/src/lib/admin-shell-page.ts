@@ -24,6 +24,7 @@ import {
   sectionLink,
   sectionScreens,
   type AdminSection,
+  type SectionCounts,
 } from './admin-section';
 
 /**
@@ -36,9 +37,10 @@ import {
  *
  * The navigation is **the sections**, not a list written out again. A resource a
  * section mounted is a resource the operator can reach, and a link that pointed
- * at a route nobody declared would be a 404 the app itself produced. The second
- * row is the current section's screens, and working out which section that is,
- * from the URL, is the one thing this component gained.
+ * at a route nobody declared would be a 404 the app itself produced. The tabs
+ * under a page header are the current section's screens (admin plan 0041), and
+ * working out which section that is, from the URL, is what this component does
+ * for them.
  */
 @Component({
   selector: 'lib-admin-shell-page',
@@ -87,6 +89,22 @@ export class AdminShellPage {
    */
   private readonly _url = signal(this._router.url);
 
+  /**
+   * Who counts the waiting work of each section that named a counter (admin
+   * plan 0044), by the section's key.
+   *
+   * Resolved here, once, because this is the one place that has both the list
+   * of sections and an injector. The shell is behind the sign in, so a counter
+   * that reads the gateway is never built for somebody with no session.
+   */
+  private readonly _counts = new Map<string, SectionCounts>(
+    this._sections.flatMap((section) =>
+      section.counts === undefined
+        ? []
+        : [[section.key, inject(section.counts)] as const]
+    )
+  );
+
   constructor() {
     const events = this._router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
@@ -98,13 +116,13 @@ export class AdminShellPage {
   }
 
   /**
-   * The first row: one tab per section, pointing at its home.
+   * The rail and the bar: one entry per section, pointing at its home.
    *
    * A section mounted at the root **with a home of its own** is matched
    * exactly. That is the overview, and prefix matching would leave it marked on
    * every screen in the app, since every URL starts with a slash. The admins
-   * section is also at the root and is not exact, because its tab points at its
-   * only screen and has to stay marked on a row inside it.
+   * section is also at the root and is not exact, because its entry points at
+   * its only screen and has to stay marked on a row inside it.
    */
   readonly sections = computed<readonly ShellLink[]>(() =>
     this._sections.flatMap((section) => {
@@ -116,26 +134,28 @@ export class AdminShellPage {
             {
               path,
               label: section.label,
+              icon: section.icon,
               exact:
                 section.segment === undefined && section.home !== undefined,
-              badge: () => sectionBadge(section),
+              badge: () => sectionBadge(this._screensOf(section)),
             },
           ];
     })
   );
 
   /**
-   * The second row: the screens inside whichever section the URL is in.
+   * The tabs of every page: the screens inside whichever section the URL is in.
    *
-   * **The longest matching tab, not the first.** `/harvest` and `/harvest/runs`
-   * are both prefixes of `/harvest/runs/abc`, and only one of them is a section.
+   * **The longest matching section, not the first.** `/harvest` and
+   * `/harvest/runs` are both prefixes of `/harvest/runs/abc`, and only one of
+   * them is a section.
    *
-   * A URL matching no section is the not found page, and it draws an empty
-   * second row: the operator is somewhere the app does not know about, and
-   * guessing a section for them is worse than admitting it.
+   * A URL matching no section is the not found page, and it draws no tabs: the
+   * operator is somewhere the app does not know about, and guessing a section
+   * for them is worse than admitting it.
    *
-   * **A section whose tab already is its only screen draws no row either.** That
-   * is the admins section, and a second row repeating the word above it says
+   * **A section whose entry already is its only screen draws no tabs either.**
+   * That is the admins section, and one tab repeating the title above it says
    * nothing an operator did not just read.
    */
   readonly screens = computed<readonly ShellLink[]>(() => {
@@ -144,18 +164,36 @@ export class AdminShellPage {
       return [];
     }
 
-    const screens = sectionScreens(section);
+    const screens = this._screensOf(section);
 
     return section.home === undefined && screens.length === 1 ? [] : screens;
   });
 
   /**
-   * Which section those screens belong to, as the path of its tab.
+   * A section's screens, each with its count.
    *
-   * The collapsed menu indents the screens under their own section, and needs
-   * to be told which one that is: `routerLinkActive` answers the same question
-   * for the highlight and settles a change detection pass later, which is fine
-   * for a class and wrong for a structural block.
+   * A link that states its own `badge` keeps it. Any other link of a section
+   * with a counter asks the counter, by its path.
+   */
+  private _screensOf(section: AdminSection): readonly ShellLink[] {
+    const counts = this._counts.get(section.key);
+    const screens = sectionScreens(section);
+
+    return counts === undefined
+      ? screens
+      : screens.map((screen) =>
+          screen.badge === undefined
+            ? { ...screen, badge: () => counts.countAt(screen.path) }
+            : screen
+        );
+  }
+
+  /**
+   * Which section the operator is in, as the path of its entry.
+   *
+   * The bar on a phone marks "More" while the current section is one of those
+   * behind it, and "More" is a button with no link for `routerLinkActive` to
+   * ask.
    */
   readonly current = computed<string | null>(() => {
     const section = this._activeSection();
@@ -257,8 +295,8 @@ function inside(url: string, path: string): boolean {
  * It exists because work waiting behind a link an operator can no longer see is
  * the one way two rows make this app worse than one.
  */
-function sectionBadge(section: AdminSection): number | null {
-  const counts = sectionScreens(section)
+function sectionBadge(screens: readonly ShellLink[]): number | null {
+  const counts = screens
     .map((screen) => screen.badge?.() ?? null)
     .filter((count): count is number => count !== null);
 

@@ -1,46 +1,46 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
   inject,
+  signal,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import { ResourceFormPage } from '@portfolio/luna-shopper-admin/feature-resource';
+import type { ResourceRow } from '@portfolio/luna-shopper-admin/models';
 import {
-  RESOURCE_ID_PARAM,
-  ResourceFormPage,
-  ResourceRegistry,
-} from '@portfolio/luna-shopper-admin/feature-resource';
-import { ConfirmDialog, ResourceForm } from '@portfolio/luna-shopper-admin/ui';
-import { ItemSectionsPanel } from './item-sections-panel';
-import { ItemSourceEntries } from './item-source-entries';
+  ConfirmDialog,
+  PageHeader,
+  ResourceForm,
+} from '@portfolio/luna-shopper-admin/ui';
 
 /**
- * The product screen: the generic form, and below it what the product is
- * bound to and priced at (admin plan 0033).
+ * The product's form, in the two places it is drawn (admin plan 0043, target
+ * 3).
  *
- * Everything the form does is inherited, exactly as the price editor inherits
- * it. What is added is only on an existing product: a way to its prices at
- * every scope, where it is in each chain's shops (admin plan 0037), and the
- * source products panel. A product being created has no
- * prices and nothing bound to it, so neither is drawn there.
+ * - **A new product** is a page of its own at `/products/new`, with the header
+ *   every form has. Saving opens the product that was made.
+ * - **A product that exists** is the Details tab of its page. The page above
+ *   drew the header and the tabs, so this draws the form alone, and saving
+ *   stays on the tab: the page is what the operator was looking at.
  *
- * **The panel is drawn whatever the form's read did.** It reads the harvester
- * and the form reads catalog, so a product whose row cannot be read can still
- * show which chain rows name it, and a harvester that does not answer costs the
- * panel and not the form.
+ * It used to draw two panels under the form, where the product is in each
+ * chain's shops and the chain rows that name it, and a link to its prices.
+ * Each of the three is a tab of the product's page now, beside this one.
  */
 @Component({
   selector: 'lib-item-form-page',
-  imports: [
-    ResourceForm,
-    ConfirmDialog,
-    ItemSourceEntries,
-    ItemSectionsPanel,
-    RouterLink,
-    RokuTranslatorPipe,
-  ],
+  imports: [PageHeader, ResourceForm, ConfirmDialog, RokuTranslatorPipe],
   template: `
+    @if (mode === 'create') {
+      <lib-page-header
+        (back)="leave()"
+        [backDisabled]="store.busy()"
+        [backLabel]="'resource.action.back' | rokuT"
+        [heading]="titleKey() | rokuT: titleArgs()"
+      />
+    }
+
     @if (store.status() === 'loading') {
       <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
     } @else if (store.status() === 'error') {
@@ -51,33 +51,25 @@ import { ItemSourceEntries } from './item-source-entries';
         (save)="submit()"
         (valueChange)="change($event)"
         [busy]="store.busy()"
+        [cautionKey]="descriptor.caution ?? null"
         [context]="context()"
         [draft]="store.draft()"
         [errorKey]="bannerKey()"
         [errorLink]="bannerLink()"
-        [fields]="descriptor.fields"
+        [fields]="fields"
+        [header]="false"
         [lookup]="references"
         [messages]="messages()"
         [mode]="mode"
-        [noteKey]="descriptor.formNote ?? null"
         [readonlyCells]="readonlyCells()"
         [strayErrors]="store.strayErrors()"
         [subtitle]="subtitle()"
         [titleArgs]="titleArgs()"
         [titleKey]="titleKey()"
       />
-    }
-
-    @if (itemId(); as id) {
-      <div class="beside">
-        @if (pricesLink(); as link) {
-          <a [routerLink]="link" class="prices">{{
-            'catalog.items.pricesLink' | rokuT
-          }}</a>
-        }
-        <lib-item-sections-panel [itemId]="id" />
-        <lib-item-source-entries [itemId]="id" />
-      </div>
+      @if (savedNow() && !store.dirty()) {
+        <p class="saved" role="status">{{ 'resource.form.saved' | rokuT }}</p>
+      }
     }
 
     @if (confirmingLeave()) {
@@ -95,7 +87,7 @@ import { ItemSourceEntries } from './item-source-entries';
       display: flex;
       flex: 1;
       flex-direction: column;
-      gap: var(--admin-space-6);
+      gap: var(--admin-space-4);
     }
 
     .state {
@@ -112,36 +104,43 @@ import { ItemSourceEntries } from './item-source-entries';
       color: var(--admin-ink);
     }
 
-    .beside {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-4);
-      padding-block-start: var(--admin-space-4);
-      border-block-start: 1px solid var(--admin-border);
-    }
-
-    .prices {
-      align-self: flex-start;
-      color: var(--admin-accent);
+    .saved {
+      color: var(--admin-ink-muted);
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ItemFormPage extends ResourceFormPage {
   private readonly _itemRoute = inject(ActivatedRoute);
-  private readonly _itemRegistry = inject(ResourceRegistry);
+  private readonly _itemRouter = inject(Router);
 
-  /** The product being edited, or `null` on a create. */
-  readonly itemId = computed(() =>
-    this.mode === 'edit'
-      ? (this._itemRoute.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? null)
-      : null
-  );
+  /** Whether the last act was a save, for the line under the form. */
+  readonly savedNow = signal(false);
 
-  /** The product at every scope, under wherever the registry mounted items. */
-  readonly pricesLink = computed(() => {
-    const id = this.itemId();
-    const path = this._itemRegistry.pathOf('items');
-    return id === null || path === null ? null : [...path, id, 'prices'];
-  });
+  /** A new product opens its own page. A changed one stays on its tab. */
+  protected override afterSave(row: ResourceRow): void {
+    const id = row['id'];
+    if (this.mode === 'create' && typeof id === 'string') {
+      void this._itemRouter.navigate(['..', id], {
+        relativeTo: this._itemRoute,
+      });
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(true);
+  }
+
+  /**
+   * Cancel. From a new product, back to the list. On the Details tab there is
+   * nowhere to go back to, so it puts back what the product holds.
+   */
+  override goBack(): void {
+    if (this.mode === 'create') {
+      super.goBack();
+      return;
+    }
+    this.confirmingLeave.set(false);
+    this.savedNow.set(false);
+    void this.store.load();
+  }
 }

@@ -34,8 +34,7 @@ export interface ResourceSource<T extends ResourceRow = ResourceRow> {
    *
    * `null` means the collection cannot be addressed yet, because the value
    * naming it has not been given. The list answers an empty page rather than
-   * asking the gateway for a URL with a hole in it, and the screen says which
-   * filter is missing (see `ResourceDescriptor.requires`).
+   * asking the gateway for a URL with a hole in it.
    */
   collectionPath?(values: Readonly<Record<string, unknown>>): string | null;
   /**

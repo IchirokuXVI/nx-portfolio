@@ -17,14 +17,24 @@ import {
   ChainNames,
   formatInstant,
   formatSince,
-  HARVEST_SEGMENT,
+  HarvestStatus,
+  ReviewChain,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   gatewayErrorKey,
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { ReferencePicker, Viewport } from '@portfolio/luna-shopper-admin/ui';
+import {
+  harvestReviewPath,
+  REVIEW_CHAIN_PARAM,
+  type InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  InfoButton,
+  ReferencePicker,
+  Viewport,
+} from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { capitalizeBrand } from './brand-capitalization';
 import { BRAND_BATCH_MAX } from './brand-sources';
@@ -100,26 +110,32 @@ const SEARCH_DELAY_MS = 250;
  */
 @Component({
   selector: 'lib-brand-suggestions-page',
-  imports: [NgTemplateOutlet, RokuTranslatorPipe, ReferencePicker, RouterLink],
+  imports: [
+    InfoButton,
+    NgTemplateOutlet,
+    RokuTranslatorPipe,
+    ReferencePicker,
+    RouterLink,
+  ],
   template: `
-    <header>
-      <h1>{{ 'brands.suggested.heading' | rokuT }}</h1>
-      <p class="lead">{{ 'brands.suggested.lead' | rokuT }}</p>
-    </header>
-
-    <label class="search">
-      <span>{{ 'brands.suggested.search' | rokuT }}</span>
-      <input
-        (input)="onSearch($event)"
-        [value]="query()"
-        autocapitalize="none"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck="false"
-        type="search"
-        data-search
-      />
-    </label>
+    <!-- The Review page above this queue draws the header (admin plan 0044).
+         What a row is stays behind an info button, beside the search. -->
+    <div class="find">
+      <label class="search">
+        <span>{{ 'brands.suggested.search' | rokuT }}</span>
+        <input
+          (input)="onSearch($event)"
+          [value]="query()"
+          autocapitalize="none"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          type="search"
+          data-search
+        />
+      </label>
+      <lib-info-button [info]="info" align="start" />
+    </div>
 
     <!-- Selecting several (admin plan 0035, section 1). A tick only marks a
          row: the review below is the one place a batch is sent from. -->
@@ -346,11 +362,13 @@ const SEARCH_DELAY_MS = 250;
           {{ 'resource.action.retry' | rokuT }}
         </button>
       </p>
-    } @else if (rows().length === 0) {
+    } @else if (shown().length === 0) {
       <p class="state">
         {{
-          (query() === '' ? 'brands.suggested.empty' : 'resource.list.noMatch')
-            | rokuT
+          (query() === '' && chain() === ''
+            ? 'brands.suggested.empty'
+            : 'resource.list.noMatch'
+          ) | rokuT
         }}
       </p>
     } @else if (compact()) {
@@ -358,7 +376,7 @@ const SEARCH_DELAY_MS = 250;
            chips, then the action. A four column table at that width is
            unreadable however it scrolls. -->
       <ul class="cards">
-        @for (row of rows(); track row.key) {
+        @for (row of shown(); track row.key) {
           <li>
             <article [class.picked]="isPicked(row.key)">
               @if (selecting()) {
@@ -399,10 +417,7 @@ const SEARCH_DELAY_MS = 250;
                 @for (chain of row.chains; track chain.supermarketId) {
                   <li>
                     <a
-                      [queryParams]="{
-                        supermarketId: chain.supermarketId,
-                        brandKey: row.key,
-                      }"
+                      [queryParams]="entriesParams(chain.supermarketId, row.key)"
                       [routerLink]="entriesLink"
                       class="chip"
                     >
@@ -474,7 +489,7 @@ const SEARCH_DELAY_MS = 250;
             </tr>
           </thead>
           <tbody>
-            @for (row of rows(); track row.key) {
+            @for (row of shown(); track row.key) {
               <tr [class.picked]="isPicked(row.key)">
                 @if (selecting()) {
                   <td class="pick-cell">
@@ -514,10 +529,9 @@ const SEARCH_DELAY_MS = 250;
                     @for (chain of row.chains; track chain.supermarketId) {
                       <li>
                         <a
-                          [queryParams]="{
-                            supermarketId: chain.supermarketId,
-                            brandKey: row.key,
-                          }"
+                          [queryParams]="
+                            entriesParams(chain.supermarketId, row.key)
+                          "
                           [routerLink]="entriesLink"
                           class="chip"
                         >
@@ -711,17 +725,6 @@ const SEARCH_DELAY_MS = 250;
       align-items: flex-start;
     }
 
-    header {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-    }
-
     h2 {
       display: flex;
       flex-direction: column;
@@ -729,7 +732,12 @@ const SEARCH_DELAY_MS = 250;
       font-size: 1rem;
     }
 
-    .lead,
+    .find {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: flex-end;
+    }
+
     .state,
     .muted {
       color: var(--admin-ink-muted);
@@ -930,10 +938,10 @@ const SEARCH_DELAY_MS = 250;
 
     .warn-line {
       padding: var(--admin-space-2) var(--admin-space-3);
-      border: 1px solid var(--admin-status-attention);
+      border: 1px solid var(--admin-waiting-on-wash);
       border-radius: var(--admin-radius);
-      background: var(--admin-status-attention-wash);
-      color: var(--admin-status-attention-on-wash);
+      background: var(--admin-waiting-wash);
+      color: var(--admin-waiting-on-wash);
     }
 
     .batch-result li {
@@ -1064,13 +1072,7 @@ const SEARCH_DELAY_MS = 250;
     }
 
     button {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -1086,16 +1088,11 @@ const SEARCH_DELAY_MS = 250;
     }
 
     input {
-      min-block-size: 2.75rem;
-      padding: var(--admin-space-2) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface-raised);
       /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
          smaller, which on a phone leaves the operator scrolled sideways. */
       font: inherit;
-      font-size: 1rem;
-      color: var(--admin-ink);
+      font-size: var(--admin-field-size);
     }
 
     button:focus-visible,
@@ -1116,6 +1113,12 @@ const SEARCH_DELAY_MS = 250;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BrandSuggestionsPage implements OnDestroy {
+  /** What the info button says (admin plan 0041, section 3). */
+  readonly info: InfoContent = {
+    title: 'brands.suggested.heading',
+    points: ['brands.suggested.info.what'],
+  };
+
   private readonly _brands = inject(BrandsGateway);
   private readonly _registry = inject(ResourceRegistry);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -1171,13 +1174,47 @@ export class BrandSuggestionsPage implements OnDestroy {
   /**
    * Where a chain chip goes: the source products queue, filtered.
    *
-   * `HARVEST_SEGMENT` and a plain segment, because the entries queue is a hand
-   * written screen rather than a resource, and `ResourceRegistry.pathOf` only
-   * answers for resources. No status on the link: the queue's own default is
+   * The address is the Review tab's own, because the queue is a hand written
+   * screen rather than a resource, and `ResourceRegistry.pathOf` only answers
+   * for resources. No status on the link: the queue's own default is
    * `CANDIDATE` and `UNRESOLVED`, which is exactly what the chip counted, so the
    * list it opens holds the number it showed.
    */
-  readonly entriesLink: readonly string[] = ['/', HARVEST_SEGMENT, 'entries'];
+  readonly entriesLink = harvestReviewPath('products');
+
+  /** The chain and the brand a chip opens the source products on. */
+  entriesParams(
+    supermarketId: string,
+    key: string
+  ): Readonly<Record<string, string>> {
+    return { [REVIEW_CHAIN_PARAM]: supermarketId, brandKey: key };
+  }
+
+  private readonly _review = inject(ReviewChain);
+  private readonly _status = inject(HarvestStatus);
+
+  /** The chain the four queues are narrowed to, or `''`. */
+  readonly chain = this._review.chain;
+
+  /**
+   * The rows on screen: every suggestion, or the ones the chosen chain uses
+   * (admin plan 0044, target 4).
+   *
+   * Narrowed here and not by the gateway. A suggestion names every chain that
+   * prints it, so the rows already hold the answer, and the read has no chain
+   * filter to ask with. The rows that are loaded are narrowed, and "Load more"
+   * brings more of them.
+   */
+  readonly shown = computed<readonly BrandSuggestion[]>(() => {
+    const chain = this.chain();
+    const rows = this.rows();
+
+    return chain === ''
+      ? rows
+      : rows.filter((row) =>
+          row.chains.some((entry) => entry.supermarketId === chain)
+        );
+  });
 
   /**
    * The key this label would make, live.
@@ -1406,6 +1443,8 @@ export class BrandSuggestionsPage implements OnDestroy {
       const next = this._keyAfter(open);
 
       this.rows.set(remaining);
+      // A registered brand leaves the queue, so the counts are read again.
+      this._status.refresh();
       this.openKey.set(null);
       this.done.set({
         label: registered.brand.label,
@@ -1557,6 +1596,7 @@ export class BrandSuggestionsPage implements OnDestroy {
       );
 
       this.rows.set(this.rows().filter((row) => !held.has(row.key)));
+      this._status.refresh();
       const kept = new Map(this.picked());
       for (const key of held) {
         kept.delete(key);

@@ -26,7 +26,6 @@ const pathOf: PathOf = (name) => {
     zones: 'shoppers',
     lists: 'shoppers',
     users: 'shoppers',
-    prices: 'catalog',
     items: 'catalog',
     'postal-codes': 'harvest',
   };
@@ -95,7 +94,7 @@ function harvest(
     runs: { byStatus: [], inWindow: 0 },
     running: null,
     recent: [],
-    queues: { entries: [], places: 0, shops: [] },
+    queues: { entries: [], places: 0, shops: [], brands: 0 },
     sources: { total: 2, enabled: 1 },
     ...over,
   };
@@ -116,103 +115,146 @@ function response(
   };
 }
 
-describe('waitingTiles', () => {
-  it('counts the join requests and opens the zones', () => {
-    const [tile] = waitingTiles(response(), translate, nameChain, pathOf);
+/** Where the Admins section keeps the failed sign ins, as the page hands it over. */
+const failedSignIns = ['/', 'admins', 'failed-sign-ins'] as const;
 
-    expect(tile.key).toBe('memberships');
-    expect(tile.value).toBe(2);
-    expect(tile.link).toEqual(['/', 'shoppers', 'zones']);
+function tilesOf(
+  document: Wire.AdminAdminDashboardResponse,
+  resolve: PathOf = pathOf
+) {
+  return waitingTiles(
+    document,
+    null,
+    translate,
+    nameChain,
+    resolve,
+    failedSignIns
+  );
+}
+
+describe('waitingTiles', () => {
+  /**
+   * Admin plan 0046, target 1: the same tiles on every visit, so that the row
+   * does not jump. The order is the mock's.
+   */
+  it('is the same row whatever waits', () => {
+    expect(tilesOf(response()).map((tile) => tile.key)).toEqual([
+      'entries',
+      'shops',
+      'places',
+      'memberships',
+      'stale',
+      'loginFailures',
+    ]);
   });
 
-  /** A queue with rows in it is the reason this screen exists. */
-  it('puts a tile with rows in it in the attention tone', () => {
-    const tiles = waitingTiles(response(), translate, nameChain, pathOf);
+  /**
+   * Admin plan 0045, section 2: the tile opens the Zones tab already narrowed
+   * to the zones where a request waits.
+   */
+  it('counts the join requests and opens the zones that have one', () => {
+    const tile = tilesOf(response()).find(
+      (entry) => entry.key === 'memberships'
+    );
+
+    expect(tile?.value).toBe(2);
+    expect(tile?.link).toEqual(['/', 'shoppers', 'zones']);
+    expect(tile?.query).toEqual({ hasPending: 'true' });
+  });
+
+  /** A tile with a count above zero takes the waiting wash. One at zero is plain. */
+  it('marks a tile that has something waiting, and keeps one at zero plain', () => {
+    const tiles = tilesOf(response());
     const memberships = tiles.find((tile) => tile.key === 'memberships');
     const places = tiles.find((tile) => tile.key === 'places');
 
     expect(memberships?.tone).toBe('attention');
+    expect(places?.value).toBe(0);
     expect(places?.tone).toBe('quiet');
   });
 
   /**
-   * A row of zeros reads as noise, and the reader is looking for the one that is
-   * not zero.
+   * The two queues that are kept per chain are one tile each: the sum, and the
+   * chains with their counts as the second line, most first. A chain with
+   * nothing waiting is not named.
    */
-  it('draws no tile for a chain with nothing waiting', () => {
+  it('makes one tile of each per chain queue, with the chains on its second line', () => {
     const document = response({
       harvest: harvest({
         queues: {
           entries: [
             { supermarketId: 'a', candidate: 2, unresolved: 3 },
             { supermarketId: 'b', candidate: 0, unresolved: 0 },
+            { supermarketId: 'c', candidate: 30, unresolved: 5 },
           ],
           places: 0,
           shops: [
             { supermarketId: 'a', unmapped: 4 },
             { supermarketId: 'b', unmapped: 0 },
           ],
+          brands: 0,
         },
       }),
     });
+    const tiles = tilesOf(document);
+    const entries = tiles.find((tile) => tile.key === 'entries');
+    const shops = tiles.find((tile) => tile.key === 'shops');
 
-    const keys = waitingTiles(document, translate, nameChain, pathOf).map(
-      (tile) => tile.key
-    );
-
-    expect(keys).toContain('entries-a');
-    expect(keys).not.toContain('entries-b');
-    expect(keys).toContain('shops-a');
-    expect(keys).not.toContain('shops-b');
+    expect(entries?.value).toBe(40);
+    expect(entries?.caption).toBe('chain:c 35, chain:a 5');
+    expect(shops?.value).toBe(4);
+    expect(shops?.caption).toBe('chain:a 4');
   });
 
-  it('sums the two states a product queue holds', () => {
+  it('gives a per chain queue with nothing waiting no second line', () => {
+    const entries = tilesOf(response()).find((tile) => tile.key === 'entries');
+
+    expect(entries?.value).toBe(0);
+    expect(entries?.caption).toBeNull();
+  });
+
+  it('names three chains and counts the rest', () => {
     const document = response({
       harvest: harvest({
         queues: {
-          entries: [{ supermarketId: 'a', candidate: 2, unresolved: 3 }],
+          entries: ['a', 'b', 'c', 'd', 'e'].map((supermarketId, index) => ({
+            supermarketId,
+            candidate: 10 - index,
+            unresolved: 0,
+          })),
           places: 0,
           shops: [],
+          brands: 0,
         },
       }),
     });
-    const tile = waitingTiles(document, translate, nameChain, pathOf).find(
-      (entry) => entry.key === 'entries-a'
-    );
 
-    expect(tile?.value).toBe(5);
+    expect(
+      tilesOf(document).find((tile) => tile.key === 'entries')?.caption
+    ).toBe(
+      'dashboard.waiting.moreChains(chains=chain:a 10, chain:b 9, chain:c 8,count=2)'
+    );
   });
 
-  /** The one queue that reads its chain from the query string. */
-  it('opens the product queue on the chain and every other queue unfiltered', () => {
-    const document = response({
-      harvest: harvest({
-        queues: {
-          entries: [{ supermarketId: 'a', candidate: 1, unresolved: 0 }],
-          places: 3,
-          shops: [{ supermarketId: 'a', unmapped: 1 }],
-        },
-      }),
-    });
-    const tiles = waitingTiles(document, translate, nameChain, pathOf);
-    const entries = tiles.find((tile) => tile.key === 'entries-a');
-    const shops = tiles.find((tile) => tile.key === 'shops-a');
-    const places = tiles.find((tile) => tile.key === 'places');
+  /**
+   * The queues are the Review tab's (admin plan 0044). A tile is about every
+   * chain now, so it opens its queue whole.
+   */
+  it('opens each queue of Review', () => {
+    const tiles = tilesOf(response());
+    const link = (key: string) => tiles.find((tile) => tile.key === key)?.link;
 
-    expect(entries?.link).toEqual(['/', 'harvest', 'entries']);
-    expect(entries?.query).toEqual({ supermarketId: 'a' });
-    expect(shops?.link).toEqual(['/', 'harvest', 'shops']);
-    expect(shops?.query).toBeNull();
-    expect(places?.link).toEqual(['/', 'harvest', 'places']);
+    expect(link('entries')).toEqual(['/', 'harvest', 'review', 'products']);
+    expect(link('shops')).toEqual(['/', 'harvest', 'review', 'shops']);
+    expect(link('places')).toEqual(['/', 'harvest', 'review', 'places']);
+    expect(tiles.find((tile) => tile.key === 'entries')?.query).toBeNull();
   });
 
-  it('sends the stale prices to the price list, wherever it is mounted', () => {
-    const tile = waitingTiles(response(), translate, nameChain, pathOf).find(
-      (entry) => entry.key === 'stale'
-    );
+  it('sends the stale prices to the products, wherever they are mounted', () => {
+    const tile = tilesOf(response()).find((entry) => entry.key === 'stale');
 
     expect(tile?.value).toBe(61);
-    expect(tile?.link).toEqual(['/', 'catalog', 'prices']);
+    expect(tile?.link).toEqual(['/', 'catalog', 'items']);
   });
 
   /**
@@ -220,20 +262,58 @@ describe('waitingTiles', () => {
    * link, rather than pointing at a URL that answers the not found page.
    */
   it('draws an unlinked tile where the screen is not mounted', () => {
-    const tiles = waitingTiles(response(), translate, nameChain, nothing);
-    const stale = tiles.find((tile) => tile.key === 'stale');
+    const stale = tilesOf(response(), nothing).find(
+      (tile) => tile.key === 'stale'
+    );
 
     expect(stale?.value).toBe(61);
     expect(stale?.link).toBeNull();
   });
 
-  /** The rows are further down this same page, so the tile opens nothing. */
-  it('gives the failed sign ins no link', () => {
-    const tile = waitingTiles(response(), translate, nameChain, pathOf).find(
-      (entry) => entry.key === 'loginFailures'
-    );
+  /** Admin plan 0046, target 5: the table is the second tab of Admins. */
+  it('opens the failed sign ins of Admins', () => {
+    const tile = tilesOf(
+      response({
+        identity: identity({
+          loginFailures: { last24h: 3, last7d: 5, recent: [] },
+        }),
+      })
+    ).find((entry) => entry.key === 'loginFailures');
 
-    expect(tile?.link).toBeNull();
+    expect(tile?.value).toBe(3);
+    expect(tile?.tone).toBe('attention');
+    expect(tile?.link).toEqual(['/', 'admins', 'failed-sign-ins']);
+  });
+
+  /** The postal codes are read beside the document and take their place in the row. */
+  it('puts the postal codes between the join requests and the prices', () => {
+    const postalCodes = {
+      key: 'postalCodes',
+      label: 'postal',
+      value: 4,
+      caption: null,
+      link: null,
+      query: null,
+      tone: 'attention' as const,
+    };
+    const keys = waitingTiles(
+      response(),
+      postalCodes,
+      translate,
+      nameChain,
+      pathOf,
+      failedSignIns
+    ).map((tile) => tile.key);
+
+    expect(keys).toEqual([
+      'entries',
+      'shops',
+      'places',
+      'memberships',
+      'postalCodes',
+      'stale',
+      'loginFailures',
+    ]);
   });
 
   /**
@@ -241,14 +321,9 @@ describe('waitingTiles', () => {
    * same, so a block that did not answer contributes no tile at all.
    */
   it('contributes nothing for a block that did not answer', () => {
-    const keys = waitingTiles(
-      response({ harvest: null, core: null }),
-      translate,
-      nameChain,
-      pathOf
-    ).map((tile) => tile.key);
-
-    expect(keys).toEqual(['stale', 'loginFailures']);
+    expect(
+      tilesOf(response({ harvest: null, core: null })).map((tile) => tile.key)
+    ).toEqual(['stale', 'loginFailures']);
   });
 });
 
@@ -276,6 +351,16 @@ describe('activityRows', () => {
 
     expect(row.link).toEqual(['/', 'shoppers', 'zones', 'zone-1']);
     expect(row.who).toBe('Ichiroku');
+  });
+
+  /** The feed is a list of sentences: who did what (admin plan 0046, target 3). */
+  it('says who did what as one line', () => {
+    const [row] = activityRows([entry()], translate, since, instant, pathOf);
+
+    expect(row.line).toBe(
+      `dashboard.activity.line(who=Ichiroku,what=${row.what})`
+    );
+    expect(row.when).toBe('a moment ago');
   });
 
   /** A guessed URL would land on the not found page, which costs a navigation. */

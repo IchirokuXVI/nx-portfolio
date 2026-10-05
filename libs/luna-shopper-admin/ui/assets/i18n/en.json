@@ -12,10 +12,12 @@
   },
   "environment": {
     "label": "Environment",
-    "production": "Production",
-    "staging": "Staging",
-    "development": "Development",
-    "unknown": "Unknown",
+    "short": {
+      "production": "PRODUCTION",
+      "staging": "STAGING",
+      "development": "LOCAL",
+      "unknown": "UNKNOWN"
+    },
     "checking": "Checking which environment answered…",
     "unknownExplanation": "The gateway did not say which deployment it is. Nothing here should be treated as safe to change until it does."
   },
@@ -61,10 +63,12 @@
     "stopped": "Automatic checking has stopped. Use the button when you think the server is back."
   },
   "shell": {
-    "menu": "Menu",
     "navigation": "Sections",
+    "more": "More",
     "waiting": "{{count}} waiting for a decision",
     "signOut": "Sign out",
+    "account": "Account: {{name}}",
+    "signedInAs": "Signed in as {{name}}",
     "screens": "Screens in this section",
     "contentLanguage": "Read the catalog in",
     "language": {
@@ -73,11 +77,21 @@
     },
     "sections": {
       "overview": "Overview",
-      "catalog": "Catalog",
+      "chains": "Chains",
+      "products": "Products",
       "shoppers": "Shoppers",
-      "harvest": "Harvester",
+      "harvest": "Harvest",
       "admins": "Admins"
     }
+  },
+  "page": {
+    "moreActions": "More actions"
+  },
+  "info": {
+    "about": "About {{subject}}",
+    "close": "Close",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "notFound": {
     "heading": "There is no such screen",
@@ -96,11 +110,11 @@
       "loadingMore": "Loading more…",
       "empty": "There is nothing here yet.",
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
-      "actions": "Actions",
-      "blocked": "Choose {{filters}} first. There is nothing to read until you do."
+      "actions": "Actions"
     },
     "filter": {
-      "any": "Any"
+      "any": "Any",
+      "more": "Filters"
     },
     "sort": {
       "label": "Order",
@@ -130,13 +144,15 @@
     "form": {
       "create": "New {{name}}",
       "edit": "Edit {{name}}",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "saved": "Saved."
     },
     "action": {
       "create": "Create",
       "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
+      "back": "Back",
       "delete": "Delete",
       "retry": "Try again",
       "more": "Load more",
@@ -206,8 +222,10 @@
   },
   "catalog": {
     "supermarkets": {
-      "one": "supermarket",
-      "many": "Supermarkets",
+      "one": "chain",
+      "many": "Chains",
+      "add": "Add a chain",
+      "locationCount": "Shops",
       "id": "Identifier",
       "name": "Name",
       "logoUrl": "Logo address",
@@ -229,6 +247,11 @@
     "locations": {
       "one": "shop",
       "many": "Shops",
+      "add": "Add a shop",
+      "state": {
+        "map": "Map",
+        "postalCodeGuessed": "Postal code guessed"
+      },
       "id": "Identifier",
       "supermarketId": "Chain",
       "priceScopeIds": "Price scopes",
@@ -246,10 +269,8 @@
       "externalRef": "Source reference",
       "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
       "externalProvider": "Source",
-      "note": "Shops are read one chain at a time, because the gateway has no route that lists them all. Choose a chain to begin.",
       "filter": {
-        "query": "Label, address or town contains",
-        "supermarketId": "Chain",
+        "query": "Name, address or town",
         "postalCodeSource": "Postal code source",
         "priceScopeId": "Price scope"
       }
@@ -268,20 +289,61 @@
       "categoryIdsHelp": "The kinds of product shoppers find here. A top level category covers every category inside it. A section may hold none, and then only the products pinned to it are in it.",
       "locationCount": "Shops",
       "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
-      "note": "Sections are read one chain at a time. Choose a chain to begin, or open the chain and use its Sections tab.",
       "filter": {
-        "query": "Name or slug contains",
-        "supermarketId": "Chain"
+        "query": "Name or slug contains"
       }
     },
-    "chainTabs": {
-      "label": "Chain screens",
-      "details": "Details",
-      "sections": "Sections"
+    "chains": {
+      "back": "Back to chains",
+      "edit": "Edit chain",
+      "delete": "Delete chain",
+      "deleteHeading": "Delete this chain?",
+      "deleteBody": "{{name}} will be deleted. There is no undo. A chain that still holds shops or prices is refused.",
+      "deleteConfirm": "Delete the chain",
+      "choose": "Choose a chain to see its shops, its sections and its price scopes.",
+      "info": {
+        "title": "a chain",
+        "holds": "A chain holds its shops, its sections and its price scopes.",
+        "openShop": "Open a shop to set its section order, its products and the scopes that price it."
+      },
+      "source": {
+        "fetched": "Fetched by the harvester",
+        "off": "Harvester source is off",
+        "none": "No harvester source"
+      },
+      "tabs": {
+        "shops": "Shops",
+        "sections": "Sections",
+        "scopes": "Price scopes",
+        "details": "Details"
+      }
+    },
+    "shops": {
+      "back": "Back to {{chain}}",
+      "edit": "Edit shop",
+      "delete": "Delete shop",
+      "deleteHeading": "Delete this shop?",
+      "deleteBody": "{{name}} will be deleted, with its section order and its single shop price scope. There is no undo.",
+      "deleteConfirm": "Delete the shop",
+      "choose": "Choose a shop to see its details, its sections and its products.",
+      "tabs": {
+        "details": "Details",
+        "sections": "Sections",
+        "products": "Products"
+      },
+      "pricedBy": {
+        "heading": "Priced by",
+        "change": "Change",
+        "own": "This shop only",
+        "info": {
+          "title": "the scopes that price a shop",
+          "mostSpecific": "A shop shows the price of its most specific scope.",
+          "reach": "A chain region covers many shops. A single shop scope covers one."
+        }
+      }
     },
     "chainSections": {
       "heading": "Sections of this chain",
-      "says": "The chain's own aisles, in the order a shop with no list of its own walks them, and the categories each one holds.",
       "add": "Add a section",
       "empty": "This chain has no sections yet. Its shops show products under their own categories.",
       "actions": "Actions",
@@ -302,9 +364,17 @@
       "upShort": "Up",
       "downShort": "Down",
       "save": "Save this order",
-      "discard": "Discard changes",
-      "useChain": "Use the chain's default",
+      "discard": "Discard",
+      "useChain": "Use the chain's order",
       "saved": "Saved.",
+      "notHere": "Not in this shop",
+      "grip": "{{name}}, place {{place}} of {{count}}. Press the up or down arrow key to move it.",
+      "movedTo": "{{name}} is now at place {{place}} of {{count}}.",
+      "mapState": "A map writes this list",
+      "info": {
+        "title": "what a map does to this list",
+        "map": "This list follows the shop's map. The next save of the map's walk replaces any change made here."
+      },
       "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
       "mapConfirm": {
         "heading": "Change a list that follows a map?",
@@ -331,6 +401,11 @@
     "priceScopes": {
       "one": "price scope",
       "many": "Price scopes",
+      "add": "Add a scope",
+      "makeDefault": "Make default",
+      "state": {
+        "default": "Default"
+      },
       "id": "Identifier",
       "supermarketId": "Chain",
       "supermarketIdHelp": "The chain this scope prices for. It is fixed once the scope exists.",
@@ -344,11 +419,10 @@
       "priorityCustom": "Custom ({{priority}})",
       "priorityHelp": "Which of a shop's scopes it is quoted from. A shop can sell at several, and the most specific one that has a price for a product is the price that shop charges. It is set from the kind when the scope is made and changed through the API, because moving it re-ranks every shop that holds it.",
       "filter": {
-        "supermarketId": "Chain"
+        "kind": "Kind"
       }
     },
     "items": {
-      "pricesLink": "Prices at every scope",
       "sources": {
         "heading": "Source products",
         "empty": "No chain product is bound to or proposed for this product.",
@@ -417,7 +491,42 @@
         "refused": "Nothing was changed.",
         "unknown": "Not found: {{names}}",
         "close": "Done"
+      },
+      "add": "Add a product",
+      "product": "Product",
+      "group": "Group",
+      "selectAll": "Select every loaded product",
+      "selected_one": "{{count}} product selected",
+      "selected_other": "{{count}} products selected",
+      "clearSelection": "Clear",
+      "info": {
+        "title": "the product list",
+        "tick": "Tick products to set their group or categories together.",
+        "scope": "Choose a scope in Prices at to see what each product costs there."
       }
+    },
+    "products": {
+      "back": "Back to products",
+      "edit": "Edit product",
+      "delete": "Delete product",
+      "deleteHeading": "Delete this product?",
+      "deleteBody": "{{name}} will be deleted, with every price it holds. There is no undo.",
+      "deleteConfirm": "Delete the product",
+      "summary": "Product",
+      "noGroup": "No group",
+      "tabs": {
+        "details": "Details",
+        "prices": "Prices",
+        "where": "Where it is",
+        "sources": "Sources"
+      }
+    },
+    "categoryTree": {
+      "all": "All products",
+      "none": "No category",
+      "open": "Show what is inside {{name}}",
+      "close": "Hide what is inside {{name}}",
+      "edit": "Edit the category tree"
     },
     "categories": {
       "one": "category",
@@ -440,11 +549,14 @@
         "query": "Name or handle contains",
         "parentId": "Inside",
         "kind": "Level"
-      }
+      },
+      "add": "Add a category",
+      "delete": "Delete {{name}}",
+      "products": "{{count}} products in {{name}}. Show them."
     },
     "productGroups": {
       "one": "product group",
-      "many": "Product groups",
+      "many": "Groups",
       "id": "Identifier",
       "name": "Name",
       "slug": "Handle",
@@ -463,7 +575,6 @@
       },
       "addItems": {
         "heading": "Add items",
-        "lead": "Find products, tick them, and move them into this group after a review.",
         "open": "Add items",
         "search": "Search products",
         "showingUngrouped": "Showing products in no group. Type to search every product.",
@@ -527,32 +638,6 @@
       "observedAtHelp": "When the shown price was last observed by its source.",
       "stale": "Out of date",
       "staleHelp": "Nothing currently eligible prices this product, so the newest price anybody gave is shown and flagged. Set by the server from the price policies.",
-      "note": "The price a shopper sees, chosen among every price a source gave. A price belongs to a price scope, not to a shop. Open a row to see the prices behind it, add one, or remove one.",
-      "filter": {
-        "itemId": "Product",
-        "priceScopeId": "Price scope",
-        "sourceKind": "Source",
-        "stale": "Out of date",
-        "available": "Sold at this scope"
-      },
-      "history": {
-        "back": "Back to the prices",
-        "scope": "Scope",
-        "effective": "Shown to shoppers",
-        "noEffective": "No price is shown for this product in this scope.",
-        "staleYes": "Yes, nothing current prices it",
-        "staleNo": "No",
-        "rows": "Every price a source gave",
-        "none": "No source has priced this product in this scope.",
-        "shown": "shown",
-        "seen": "Seen",
-        "lastSeen": "last",
-        "run": "run",
-        "overriding": "Overriding {{kind}} at {{price}}",
-        "remove": "Remove",
-        "actions": "Actions",
-        "add": "Add a price"
-      },
       "confirm": {
         "remove": {
           "heading": "Remove this price?",
@@ -577,29 +662,74 @@
         "use": "Use this unit price",
         "inUse": "The unit price field holds this proposal."
       },
-      "byItem": {
-        "open": "Every scope for this product",
-        "back": "Back to the product",
-        "lead": "Every scope that prices this product, the rows each one weighed, and why the shown price is the one shown.",
-        "empty": "No scope prices this product.",
-        "stale": "Shown on sufferance",
-        "nothingShown": "No row is shown at this scope.",
-        "protectedUntil": "Protected until {{date}}",
-        "protectionEnded": "Protection ended {{date}}",
-        "history": "History, and add a price here",
-        "more": "Show more scopes",
-        "because": {
-          "PROTECTED_ADMIN": "A person typed this price, it is inside its seven days of protection, and no source disputes it.",
-          "POLICY_PRIORITY": "Several rows were eligible, and this source comes first in the price policies.",
-          "ONLY_ROW": "No other row was a candidate.",
-          "NEWEST": "It is the newest: two eligible rows ranked the same, or nothing was eligible and the newest is shown as stale.",
-          "UNKNOWN": "The server gave a reason this screen does not know."
-        }
+      "chooseScope": "Choose a chain, then a scope"
+    },
+    "productPrices": {
+      "hint": "Open a row to see every price behind it.",
+      "add": "Add a price",
+      "addHere": "Add a price here",
+      "scopes_one": "{{count}} scope",
+      "scopes_other": "{{count}} scopes",
+      "none": "No price shown",
+      "noneYet": "No price yet. A run or a person can add one.",
+      "empty": "No chain has a price scope yet, so there is nowhere to add a price.",
+      "more": "Show more scopes",
+      "heldUntil": "Held until {{date}}",
+      "remove": "Remove",
+      "run": "Run of {{date}}.",
+      "seen": "Seen {{date}}",
+      "until": "Until {{date}}",
+      "overriding": "Overriding {{kind}} at {{price}}",
+      "noTillPrice": "Unit price only",
+      "nothingShown": "No price is shown at this scope.",
+      "state": {
+        "shown": "Shown",
+        "ended": "Ended",
+        "tooOld": "Too old"
+      },
+      "because": {
+        "PROTECTED_ADMIN": "Shown because a person typed it in, it is held for seven days, and no source says otherwise.",
+        "POLICY_PRIORITY": "Shown because it is the newest price from the highest ranked source.",
+        "ONLY_ROW": "Shown because it is the only price at this scope.",
+        "NEWEST": "Shown because it is the newest. Either two sources rank the same, or every price is out of date.",
+        "UNKNOWN": "The server gave a reason this screen does not know."
+      },
+      "info": {
+        "title": "the prices of a product",
+        "row": "One row is the price a shopper sees at one scope.",
+        "open": "Open a row to see every price behind it.",
+        "held": "A price typed in by an admin is held for seven days, then sources compete again."
+      },
+      "followers_one": "Also the price of {{count}} narrower scope",
+      "followers_other": "Also the price of {{count}} narrower scopes",
+      "fromWider": "Written at a wider scope"
+    },
+    "pricesAt": {
+      "label": "Prices at",
+      "choose": "Choose the price scope the list shows",
+      "none": "No scope",
+      "clear": "Show no prices",
+      "seen": "Seen",
+      "notSold": "Not sold here",
+      "state": {
+        "label": "Price state",
+        "any": "Any price",
+        "stale": "Out of date",
+        "note": "These rows show the product name and its price only. Choose Any price to search, filter and tick products again.",
+        "suspended": "The category, the search and the order you set do not apply to these rows. They come back with Any price."
       }
     },
+    "scopePicker": {
+      "find": "Find a scope",
+      "noScopes": "This chain has no price scope to choose.",
+      "noChains": "There are no chains to choose from.",
+      "truncated": "Only the first 500 are listed.",
+      "shops": "Show single shop scopes",
+      "clear": "No scope"
+    },
     "pricePolicies": {
-      "one": "price policy",
-      "many": "Price policies",
+      "one": "price rule",
+      "many": "Price rules",
       "sourceKind": "Source",
       "priority": "Priority",
       "priorityHelp": "Lower wins. A leaflet at 10 outranks a website crawl at 30 whenever both are eligible.",
@@ -607,23 +737,29 @@
       "maxAgeDaysHelp": "How old a price of this source may be before it stops being eligible. Empty means it never ages out. Typed in prices have none on purpose: for a chain with no automated source they are the only truth.",
       "enabled": "Enabled",
       "enabledHelp": "Off removes this source from every read at once.",
-      "note": "How each source competes for the price a shopper sees. Six rows, one per source.",
-      "formNote": "Saving works out the shown price again for every product in the catalog, inside this request."
+      "info": {
+        "wins": "One rule for each kind of source. When two sources price the same product, the higher rule wins.",
+        "age": "A price older than the limit of its rule is out of date. A newer price from a lower rule then replaces it.",
+        "off": "Turn a rule off to ignore every price from that kind of source."
+      },
+      "caution": "Saving a rule works out the shown price of every product again. Expect a short wait.",
+      "neverOld": "Never out of date",
+      "oldAfter_one": "Out of date after {{count}} day",
+      "oldAfter_other": "Out of date after {{count}} days",
+      "switch": "Use prices from {{source}}"
     },
     "locationItems": {
-      "one": "shop row",
+      "one": "shop product",
       "many": "Products in a shop",
+      "add": "Add a product",
       "id": "Identifier",
       "itemId": "Product",
+      "itemBrand": "Brand",
       "supermarketLocationId": "Shop",
       "positionInStore": "Shelf note",
       "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
       "available": "Available in this shop",
-      "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
-      "note": "These rows are read one shop at a time, because an aisle is a fact about one shop. Choose a shop to begin.",
-      "filter": {
-        "supermarketLocationId": "Shop"
-      }
+      "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so."
     },
     "unit": {
       "UNIT": "Unit",
@@ -654,9 +790,6 @@
     }
   },
   "brands": {
-    "nav": {
-      "suggested": "Suggested brands"
-    },
     "registered": {
       "one": "Brand",
       "many": "Registered brands",
@@ -696,7 +829,6 @@
       },
       "spellings": {
         "heading": "How chains spell it",
-        "says": "Every spelling the harvester has seen for this key, chain by chain. A spelling that differs only by case or by an accent is listed too: that is what the key is holding together.",
         "chain": "Chain",
         "spelling": "Spelling",
         "products": "Products",
@@ -706,7 +838,9 @@
     },
     "suggested": {
       "heading": "Suggested brands",
-      "lead": "Brand keys the queue carries that no registered brand holds, the most repeated first.",
+      "info": {
+        "what": "Brand names that sources use and that no registered brand holds. The most used come first."
+      },
       "search": "Search",
       "brand": "Brand",
       "products": "Products",
@@ -762,16 +896,6 @@
     }
   },
   "harvest": {
-    "nav": {
-      "runs": "Runs",
-      "presets": "Presets",
-      "places": "Discovered places",
-      "entries": "Source products",
-      "import": "Import a file",
-      "shops": "Source shops",
-      "sources": "Chain sources",
-      "postalCodes": "Postal codes"
-    },
     "match": {
       "EAN": "Barcode",
       "NAME_BRAND_SIZE": "Name, brand and size",
@@ -801,6 +925,39 @@
       "MILLILITER": "Millilitre",
       "LITER": "Litre",
       "PACK": "Pack"
+    },
+    "tab": {
+      "review": "Review",
+      "runs": "Runs",
+      "setup": "Setup"
+    },
+    "running": {
+      "open": "Open the run in progress: {{what}}, {{processed}} processed"
+    },
+    "review": {
+      "queues": "Queue",
+      "chain": "Chain",
+      "queue": {
+        "products": "Products",
+        "shops": "Shops",
+        "places": "Places",
+        "brands": "Brands"
+      },
+      "info": {
+        "title": "How Review works",
+        "holds": "Each queue holds what a run found and could not place by itself.",
+        "decide": "Accept, point it at another row, or reject it. A rejected row is never offered again."
+      },
+      "anyChain": "Every chain"
+    },
+    "setup": {
+      "parts": "Setup",
+      "info": {
+        "title": "How Setup works",
+        "sources": "Chain sources say how each chain is fetched, and whether it may be.",
+        "brands": "Brands are the names that products are filed under. The Brands queue of Review feeds them.",
+        "postalCodes": "Postal codes are where the harvester looks for shops."
+      }
     },
     "warning": {
       "DUPLICATE_KEY": "Two products, one key",
@@ -835,38 +992,21 @@
       "unknown": "The run could not start, and the server did not say which switch stopped it."
     },
     "switch": {
-      "heading": "What is allowed to happen",
-      "lead": "Two separate decisions, neither of them changed from here. They are shown because otherwise there is no way to tell a run that did nothing from a run that was never allowed to. Whether a chain may be fetched is a third decision, and it is on the chain sources screen.",
-      "state": {
-        "on": "On",
-        "off": "Off",
-        "unknown": "Not known"
-      },
-      "name": {
-        "deployed": "Harvester deployed",
-        "harvestEnabled": "HARVEST_ENABLED"
-      },
-      "what": {
-        "deployed": "Whether the service exists in this environment at all. Set in the Helm chart.",
-        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration."
-      },
-      "from": {
-        "chart": "From the chart, which switches the harvester off in production and in staging.",
-        "reply": "Something answered a request on this screen.",
-        "silence": "Nothing answered a request on this screen.",
-        "refusal": "The server refused to start a run and named this switch.",
-        "run": "A run got far enough that this switch must have been on.",
-        "failure": "A run failed and named this switch.",
-        "nothing": "No route reports this, and nothing has been attempted that would reveal it."
+      "heading": "When a run may start",
+      "info": {
+        "both": "A run starts only when the service is on and runs are allowed. Both are set at deploy time.",
+        "chain": "Whether one chain may be fetched is a switch in Setup."
       }
     },
     "queue": {
       "tally": "{{remaining}} left, {{decided}} decided",
-      "skip": "Skip for now",
+      "skip": "Skip",
       "view": {
         "review": "One at a time",
-        "list": "As a list"
+        "list": "As a list",
+        "label": "View"
       },
+      "column": "Rows of this queue",
       "select": "Select this row",
       "selectAll": "Select all {{loaded}} loaded",
       "clearSelection": "Clear the selection ({{count}})",
@@ -882,12 +1022,32 @@
     },
     "runs": {
       "heading": "Harvest runs",
+      "new": "New run",
+      "state": {
+        "on": "Runs may start",
+        "off": "Runs are off",
+        "unknown": "Not known yet"
+      },
+      "earlier": "Earlier runs",
+      "running": {
+        "since": "Started {{when}}",
+        "open": "Open",
+        "stopHeading": "Stop this run?",
+        "stopBody": "What it has already fetched is kept. The run finishes as stopped.",
+        "stopFailed": "The run was not stopped. The server said:"
+      },
+      "import": {
+        "drop": "Drop a JSON file here",
+        "choose": "Choose a file"
+      },
       "empty": "No runs have been recorded.",
       "row": {
         "counts": "{{processed}} processed, {{failed}} failed",
         "reverted": "Reverted {{when}}",
         "preset": "From preset {{name}}",
-        "deletedPreset": "Deleted preset"
+        "deletedPreset": "Deleted preset",
+        "everyChain": "Every chain",
+        "wrote": "Wrote {{count}}"
       },
       "filter": {
         "reverted": "Reverted runs",
@@ -951,10 +1111,10 @@
       }
     },
     "presets": {
-      "heading": "Run presets",
+      "title": "Presets",
       "chain": "Chain",
       "chooseChain": "Choose a chain to see its presets.",
-      "empty": "This chain has no presets. Save one from the runs page, or create one here.",
+      "empty": "This chain has no presets. Save one from a new run, or create one here.",
       "new": "New preset",
       "newHeading": "New preset",
       "editHeading": "Edit preset",
@@ -966,6 +1126,8 @@
       "start": "Start",
       "starting": "Starting…",
       "edit": "Edit",
+      "editAll": "Edit presets",
+      "editDone": "Done",
       "more": "Show more presets",
       "neverRun": "Never run",
       "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
@@ -996,7 +1158,8 @@
         "heading": "Save as preset",
         "saved": "Saved as \"{{name}}\".",
         "open": "Open the preset"
-      }
+      },
+      "noChain": "Choose a chain"
     },
     "run": {
       "back": "Back to runs",
@@ -1101,7 +1264,12 @@
       "empty": "Every discovered place has been decided.",
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
-      "why": "Discovery did not match this to a shop in the catalog by itself, so it is offered to a person rather than created. Any shop of the chain the catalog holds nearby is listed with it.",
+      "chainHasNoKey": "This chain has no brand key, so its places cannot be told apart. Every place is shown.",
+      "info": {
+        "title": "What to do with this place",
+        "found": "Discovery found this place and could not match it to a shop.",
+        "decide": "Add it to the catalog, link it to a shop we have, or reject it."
+      },
       "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
@@ -1136,16 +1304,13 @@
         }
       },
       "groups": {
-        "open": "See them grouped by chain",
-        "heading": "Discovered places by chain",
-        "lead": "Every place discovery found, grouped by the chain it belongs to. A place with no Wikidata identifier is grouped by the brand it prints, then by its name.",
-        "back": "Back to the queue",
         "empty": "Discovery has found no places yet.",
         "noBrand": "No brand",
         "count_one": "{{count}} place",
         "count_other": "{{count}} places",
         "unknownChain": "No chain in the catalog yet",
-        "knownChain": "Filed under {{chain}}"
+        "knownChain": "Filed under {{chain}}",
+        "view": "Grouped by chain"
       },
       "newChain": {
         "start": "Create a chain for it",
@@ -1196,12 +1361,16 @@
       "accept": "Yes, it is this product",
       "openSibling": "Open the row it points at",
       "reject": "Not a product we track",
+      "rejectShort": "Reject",
+      "pick": "Pick another product",
+      "says": {
+        "heading": "The source says",
+        "openAtChain": "Open the product page at the chain"
+      },
       "timesSeen": "Seen {{count}} times",
       "extra": "Everything else the source sent",
       "lastRun": "The run that last saw it",
       "filter": {
-        "chain": "Chain",
-        "anyChain": "Every chain, newest first. Pick one to work through a single chain, and each row says which chain named it until you do.",
         "status": "State",
         "queued": "Waiting for a decision",
         "sourceKind": "What named it",
@@ -1211,15 +1380,29 @@
         "brandNoKey": "This text makes no key, so nothing matches it."
       },
       "prices": {
-        "heading": "What it costs, by scope",
-        "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either."
+        "heading": "Prices it brings",
+        "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either.",
+        "writes": "Accepting writes these prices."
       },
       "proposal": {
-        "heading": "What was proposed",
-        "item": "A product was proposed by name, {{confidence}}% sure. Nothing was written: agreeing here is what binds it and writes the prices.",
+        "heading": "Proposed product",
+        "item": "The match is {{confidence}}% sure. Nothing is written until you accept.",
         "sibling": "This looks like {{name}}, another row of this chain. That row is the one with the barcode, so it is the one to create the product from.",
         "siblingElsewhere": "The row it points at ({{id}}) is not in this queue, which usually means somebody has already decided it. Accept or create here instead.",
         "none": "Nothing in the catalog looked like it, so find the product or create it."
+      },
+      "reason": {
+        "EAN": "Same barcode",
+        "NAME_BRAND_SIZE": "Same name, brand and size",
+        "NAME_SIZE": "Same name and size",
+        "MANUAL": "Set by a person"
+      },
+      "proposed": {
+        "name": "Name",
+        "brand": "Brand",
+        "size": "Size",
+        "ean": "Barcode",
+        "open": "Open the product"
       },
       "written": {
         "none": "Nothing was written for {{name}}, because this row carries no price. That is the truth for a chain that prints none, and it is not a failure.",
@@ -1231,17 +1414,20 @@
         "body": "The row stays as rejected, so no run asks about it again. You can find it later by asking for rejected rows."
       },
       "field": {
-        "externalId": "The source's own identifier",
-        "categoryPath": "Source category",
-        "url": "Product page",
-        "status": "State",
+        "name": "Name",
+        "brand": "Brand",
+        "size": "Size",
+        "ean": "Barcode",
+        "categoryPath": "Its category",
+        "externalId": "Its id",
         "lastSeen": "Last seen"
       },
       "bind": {
-        "heading": "Point it at a product we have"
+        "heading": "Point it at a product we have",
+        "help": "Choose the product, then press the accept button."
       },
       "create": {
-        "heading": "Or create the product",
+        "heading": "Create the product",
         "help": "Every field starts as the source stated it and only what you change is sent: the rest is filled in from the row. The English name may be left empty, and then the product lists with a missing translation tag and a shopper reading English sees the Spanish name. Whatever the product ends up called, the name the source printed is what the next run resolves against.",
         "fromRow": "As the row says",
         "nameEs": "Name in Spanish",
@@ -1252,12 +1438,13 @@
         "categories": "Categories",
         "categoriesHelp": "Empty uses the categories the row’s own path resolves to. Pick one or more to override them, first one first.",
         "defaultUnit": "Sold by",
-        "submit": "Create it and bind the row"
+        "submit": "Create it and bind the row",
+        "open": "Create the product"
       },
       "proposalBadge": {
-        "item": "A product was proposed",
+        "item": "Has a proposal",
         "sibling": "Points at another row",
-        "none": "Nothing proposed"
+        "none": "No proposal"
       },
       "bulk": {
         "accept": "Accept the proposals",
@@ -1325,8 +1512,12 @@
     },
     "imports": {
       "heading": "Import a file",
-      "lead": "Drop the JSON a producer made: a leaflet extractor, a person typing a chain's prices, or the export of a walk that ran on another machine. Nothing here changes the document, because an edited file has a different digest and the digest is what stops the same file being imported twice.",
+      "info": {
+        "drop": "Drop the JSON that a leaflet extractor, a person or an exported run made.",
+        "caution": "The same file is refused the second time, so do not edit a file to import it again."
+      },
       "file": "The document",
+      "holds": "Reading {{name}}.",
       "rejected": {
         "not-json": "That file is not JSON. Check that it is the producer's output and not the PDF.",
         "not-a-document": "That file reads as JSON but has no products in it, so it did not come from a harvest producer."
@@ -1400,9 +1591,16 @@
     },
     "shops": {
       "heading": "Source shops",
-      "lead": "Every shop a source names, and the shop of ours it points at. A run writes no availability for a shop nobody has mapped: it counts it and finishes.",
-      "chain": "Chain",
-      "chooseChain": "Choose a chain. A source's shops are only ever read one chain at a time, so there is nothing to show until you do.",
+      "info": {
+        "row": "One row is a shop that a source names.",
+        "map": "Map it to one of our shops, or ignore it.",
+        "unmapped": "A run writes nothing for a shop that is not mapped."
+      },
+      "chains": {
+        "heading": "Chains with shops waiting",
+        "none": "No chain has a shop waiting. Choose a chain above to see the shops it has mapped or ignored.",
+        "unknown": "Choose a chain above to see its shops."
+      },
       "empty": "No shop of this chain is in this state.",
       "filter": {
         "status": "State",
@@ -1424,6 +1622,7 @@
         "map": "Map it to one of ours",
         "unmap": "Unmap it",
         "ignore": "We do not sell from here",
+        "ignoreShort": "Ignore",
         "unignore": "Put it back in the queue"
       },
       "map": {
@@ -1460,18 +1659,29 @@
     },
     "sources": {
       "heading": "Chain sources",
-      "lead": "One row per chain: which adapter fetches it, how hard, and whether it may be fetched at all. Workers and requests per second are the two settings that decide whether a crawl gets us blocked by a chain's storefront, so raise them one step at a time and watch what the failures count does.",
+      "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
       "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
-      "edit": "Change how it is fetched",
+      "edit": "Change",
       "new": "Add a chain source",
       "create": "Create the source",
       "exists": "That chain already has a source row. Change it in the list instead.",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "trusted": "Trusted",
-      "untrusted": "Not trusted",
-      "trust": {
-        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a position, its own postal code, a country or a chain still waits in the places queue. A name is not required, because many chains publish none. This is the only switch here that writes to the catalog without a review."
+      "never": "Never",
+      "enabled": {
+        "label": "{{chain}} may be fetched",
+        "info": {
+          "title": "May be fetched",
+          "allows": "A run may fetch this chain only while this is on.",
+          "off": "It is off for every chain until somebody turns it on."
+        }
+      },
+      "trusted": {
+        "label": "{{chain}} is trusted",
+        "info": {
+          "title": "Trusted",
+          "means": "Trusted means the shops this chain names go into the catalog with nobody looking first.",
+          "waits": "A shop with no position, postal code, country or chain still waits in the Places queue.",
+          "only": "This is the only switch here that writes to the catalog without a review."
+        }
       },
       "remove": {
         "action": "Delete this source",
@@ -1485,15 +1695,17 @@
       },
       "field": {
         "chain": "Chain",
-        "adapter": "Adapter",
+        "adapter": "Fetched as",
         "config": "Adapter settings",
         "workers": "Workers",
-        "rate": "Requests per second",
+        "rate": "Requests a second",
         "lastRunAt": "Last run",
-        "lastSuccessAt": "Last success",
-        "failures": "Failures in a row"
+        "lastSuccessAt": "Last good run",
+        "failures": "Failures in a row",
+        "enabled": "May be fetched",
+        "trusted": "Trusted"
       },
-      "osmAlways": "OpenStreetMap: always asked for every postal code."
+      "osmAlways": "OpenStreetMap is always asked for every postal code. It has no row here."
     },
     "postalCodes": {
       "one": "Postal code",
@@ -1542,7 +1754,10 @@
       },
       "add": {
         "heading": "Add postal codes",
-        "lead": "Codes you add are looked at by the harvester, which finds the shops in them. A code that is not in the national table is refused, one code at a time, so you can see which one was wrong.",
+        "info": {
+          "looks": "The harvester looks for shops in each code you add.",
+          "refused": "A code that is not in the national table is refused, and the others are still added."
+        },
         "country": "Country",
         "codes": "Postal codes",
         "codesHelp": "One or many. Separate them with spaces, commas or new lines. Repeats are dropped.",
@@ -1590,14 +1805,28 @@
     }
   },
   "people": {
-    "detail": {
-      "back": "Back to the list",
-      "loading": "Loading…",
-      "actions": "Actions"
+    "shoppers": {
+      "info": {
+        "title": "Shoppers",
+        "zone": "A zone is a household. It holds its members and its lists.",
+        "person": "A person is in one or more zones and owns their shopping lists."
+      }
     },
+    "zoneCaution": "Everybody in the zone sees a change here at once.",
     "users": {
       "one": "person",
       "many": "People",
+      "back": "Back to people",
+      "choose": "Choose a person to see their account.",
+      "state": {
+        "guest": "Guest",
+        "unconfirmed": "Email not confirmed"
+      },
+      "tabs": {
+        "details": "Details",
+        "zones": "Zones",
+        "baskets": "Shopping lists"
+      },
       "userId": "Identifier",
       "username": "Username",
       "displayName": "Display name",
@@ -1607,13 +1836,12 @@
       "providers": "Sign in methods",
       "createdAt": "Signed up",
       "updatedAt": "Last changed",
-      "zones": "Zones",
       "noZones": "This person is not in any zone.",
-      "zonesUnavailable": "The zones could not be read. The account above is still what the server sent.",
+      "zonesUnavailable": "The zones could not be read.",
       "kind": {
         "label": "Kind",
         "REGISTERED": "Registered",
-        "TEMPORARY": "Temporary"
+        "TEMPORARY": "Guest"
       },
       "filter": {
         "username": "Username contains",
@@ -1674,7 +1902,7 @@
         "guestRefused": "A guest account holds no roles, so the server refused. Set them once the account has registered.",
         "saved": "Saved. The account sees the change at its next token refresh, within 15 minutes."
       },
-      "rolesHelp": "Set on the account’s page, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
+      "rolesHelp": "Set on the Details tab of the person, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
     },
     "zones": {
       "one": "zone",
@@ -1688,11 +1916,32 @@
       "markedForDeletionAt": "Marked for deletion",
       "createdAt": "Created",
       "updatedAt": "Last changed",
-      "members": "Members",
+      "back": "Back to zones",
+      "choose": "Choose a zone to see its members and its lists.",
+      "edit": "Edit zone",
+      "ownedBy": "Owner {{name}}",
+      "noOwner": "No owner",
+      "summary_one": "Owner {{owner}}, {{count}} member",
+      "summary_other": "Owner {{owner}}, {{count}} members",
+      "summaryNoOwner_one": "No owner, {{count}} member",
+      "summaryNoOwner_other": "No owner, {{count}} members",
+      "pendingCount": "Requests waiting",
       "noMembers": "This zone has no members.",
-      "lists": "Lists",
-      "noLists": "This zone has no lists.",
-      "lineCount": "{{count}} lines",
+      "noConfig": "This zone has set nothing.",
+      "tabs": {
+        "members": "Members",
+        "lists": "Lists",
+        "baskets": "Shopping lists",
+        "details": "Details"
+      },
+      "state": {
+        "requests_one": "{{count}} request",
+        "requests_other": "{{count}} requests"
+      },
+      "brief": {
+        "owned": "Owner {{owner}}. Members {{members}}, lists {{lists}}",
+        "noOwner": "No owner. Members {{members}}, lists {{lists}}"
+      },
       "status": {
         "label": "State",
         "ACTIVE": "Active",
@@ -1710,6 +1959,8 @@
         "BANNED": "Banned"
       },
       "filter": {
+        "hasPending": "Requests",
+        "waiting": "Requests waiting",
         "userId": "Zones this person is in",
         "ownerUserId": "Owned by",
         "createdAfter": "Created on or after",
@@ -1718,12 +1969,8 @@
       "action": {
         "regenerateJoinCode": "New join code",
         "deleteZone": "Delete zone",
-        "transferOwnership": "Make owner",
-        "kickMember": "Remove",
-        "banMember": "Ban",
         "markForDeletion": "Mark for deletion",
-        "restore": "Restore",
-        "openMembership": "Open"
+        "restore": "Restore"
       },
       "confirm": {
         "regenerateJoinCode": {
@@ -1736,35 +1983,21 @@
           "body": "{{name}} is deleted, with its lists, its lines and everything settled inside it. Every member loses it from their app. There is no undo.",
           "confirm": "Delete the zone"
         },
-        "transferOwnership": {
-          "heading": "Hand the zone over?",
-          "body": "{{member}} becomes the owner of {{name}}. Whoever owns it now becomes an admin instead.",
-          "confirm": "Make them the owner"
-        },
-        "kickMember": {
-          "heading": "Remove this member?",
-          "body": "{{member}} loses {{name}} from their app. They can join again with the code, so ban them instead if that is not what you want.",
-          "confirm": "Remove them"
-        },
-        "banMember": {
-          "heading": "Ban this member?",
-          "body": "{{member}} loses {{name}} and cannot rejoin with the code. What they already wrote on the zone's lists stays.",
-          "confirm": "Ban them"
-        },
         "markForDeletion": {
           "heading": "Mark this zone for deletion?",
           "body": "{{name}} is put in the queue the reaper works through, and is removed for good once the grace period is up. Restoring it before then undoes this.",
           "confirm": "Mark it"
         }
       },
-      "config": "Settings",
-      "configHelp": "The zone’s own settings, as a JSON object. It is replaced whole rather than merged, which is what saving does for the zone’s owner too.",
-      "ownerHelp": "Fixed here. Handing the zone to somebody is “Make owner” on one of the member rows, because it is two role changes and this column in one transaction. A zone with no owner is an ordinary state, and that action is what rescues it.",
+      "config": "Configuration",
+      "configHelp": "The zone’s own configuration, as a JSON object. It is replaced whole rather than merged, which is what saving does for the zone’s owner too.",
+      "ownerHelp": "Fixed here. Handing the zone to somebody is “Make owner” in a member’s menu on the Members tab, because it is two role changes and this value in one transaction. A zone with no owner is an ordinary state, and that action is what rescues it.",
       "joinCodeHelp": "Fixed here. It is unique and random on purpose, so it is minted rather than typed: “New join code” replaces it and invalidates every invitation already handed out.",
-      "statusHelp": "Fixed here. It is written together with “Marked for deletion” in one transaction, and the two actions below are how it moves. Writing one of the pair alone leaves a zone the reaper either never removes or removes anyway.",
+      "statusHelp": "Fixed here. It is written together with “Marked for deletion” in one transaction, and “Mark for deletion” and “Restore” on the zone’s page are how it moves. Writing one of the pair alone leaves a zone the reaper either never removes or removes anyway.",
       "markedForDeletionAtHelp": "Fixed here, and the other half of the pair above. “Mark for deletion” sets both and “Restore” clears both.",
-      "memberCountHelp": "Counted from the membership below. Add or remove a member to change it.",
-      "listCountHelp": "Counted from the lists below. Add or remove a list to change it."
+      "memberCountHelp": "Counted from the members who are in the zone. Add or remove a member to change it.",
+      "listCountHelp": "Counted from the lists of the zone. Add or remove a list to change it.",
+      "pendingCountHelp": "Counted from the people who asked to join and wait for an answer. Approve or reject a request on the Members tab to change it."
     },
     "lists": {
       "one": "list",
@@ -1772,7 +2005,16 @@
       "id": "Identifier",
       "name": "Name",
       "zone": "Zone",
-      "zoneId": "Zone identifier",
+      "back": "Back to the lists of {{zone}}",
+      "edit": "Edit list",
+      "delete": "Delete list",
+      "settings": "Settings",
+      "quantity": "Quantity {{count}}",
+      "info": {
+        "title": "Lists",
+        "corrects": "An operator corrects a line.",
+        "adds": "Only a member of the zone adds one."
+      },
       "createdByUserId": "Created by",
       "lineCount": "Lines",
       "sharedWithZone": "Shared with the zone",
@@ -1786,18 +2028,11 @@
         "APPROVED": "Approved",
         "REJECTED": "Rejected"
       },
-      "filter": {
-        "zoneId": "In this zone",
-        "createdByUserId": "Created by this person"
-      },
       "zoneHelp": "Fixed here. A list belongs to the zone it was made in, and nothing moves one between zones.",
       "createdByUserIdHelp": "Fixed here. It records who made the list, which is a fact about what happened rather than a setting.",
-      "lineCountHelp": "Counted from the lines below. Add or delete a line to change it.",
+      "lineCountHelp": "Counted from the lines of the list. A member adds a line, and deleting one here lowers it.",
       "autoApproveLinesHelp": "Whether a line added from now on counts straight away. It governs new lines only, so turning it on approves nothing that is already waiting.",
-      "sharedWithZoneHelp": "Turning this on gives every approved member of the zone the right to read this list, write on it and decide its lines. Turning it off takes that right from nobody. It governs who arrives next, so switching it off does not close the list: to shut somebody out, remove them from the zone.",
-      "action": {
-        "openLine": "Open"
-      }
+      "sharedWithZoneHelp": "Turning this on gives every approved member of the zone the right to read this list, write on it and decide its lines. Turning it off takes that right from nobody. It governs who arrives next, so switching it off does not close the list: to shut somebody out, remove them from the zone."
     },
     "baskets": {
       "one": "shopping list",
@@ -1805,13 +2040,15 @@
       "id": "Identifier",
       "name": "Name",
       "ownerUserId": "Owner",
-      "zoneIds": "Zones it draws from",
+      "zoneIds": "Draws from the zone",
       "lineCount": "Rows",
       "generatedAt": "Generated",
       "updatedAt": "Last changed",
+      "back": "Back to the shopping lists",
       "lines": "Rows",
-      "noLines": "This basket is showing no rows.",
+      "noLines": "This shopping list shows no rows.",
       "bought": "{{bought}} of {{asked}} bought",
+      "left": "{{count}} left",
       "kind": {
         "label": "Kind",
         "LIVE": "Always there",
@@ -1827,7 +2064,11 @@
         "ownerUserId": "Belonging to this person",
         "zoneId": "With lines from this zone"
       },
-      "note": "A shopping list is a record of what somebody took to the shop, so nothing here can be changed. It was put together from the household’s lists at a moment it remembers, and its lines carry what was claimed and settled while that person walked round. What an operator can correct is the list it came from.",
+      "info": {
+        "title": "Shopping lists",
+        "record": "A shopping list is the record of one trip, so it is read only.",
+        "correct": "To correct something, change the list it came from."
+      },
       "settlement": {
         "none": "Not settled yet.",
         "outcome": {
@@ -1843,53 +2084,89 @@
       }
     },
     "admins": {
-      "one": "admin",
       "many": "Admins",
-      "username": "Username",
-      "displayName": "Display name",
-      "disabledAt": "Disabled",
-      "lastLoginAt": "Last signed in",
-      "note": "Admins are read only here, on purpose. There is no route that creates, changes or removes one, so adding an admin means running \"npx nx run luna-shopper-backend-auth:admin:create\" on the server, or \"node admin-cli.js create <username>\" inside the auth pod."
+      "name": "Name",
+      "username": "Sign in name",
+      "lastLoginAt": "Last sign in",
+      "never": "Never",
+      "you": "(you)",
+      "state": {
+        "label": "State",
+        "active": "Active",
+        "off": "Turned off"
+      },
+      "tabs": {
+        "accounts": "Accounts",
+        "failed": "Failed sign ins",
+        "failedCount": "{{count}} in 24 h"
+      },
+      "accounts": {
+        "none": "No admin account was found.",
+        "retry": "Try again"
+      },
+      "failed": {
+        "last24h": "Failed, last 24 hours",
+        "last7d": "Failed, last 7 days",
+        "when": "When",
+        "ip": "From",
+        "noIp": "not recorded",
+        "none": "No failed sign in has been recorded."
+      },
+      "info": {
+        "readOnly": "This list is read only. An admin is added on the server, not here.",
+        "add": "To add one, run this where kubectl reaches the cluster. It asks for the password.",
+        "addLocal": "To add one, run this at the root of the repository. It asks for the password."
+      }
     },
-    "broadcast": "Saving this is seen straight away by everybody in the zone. Somebody with the app open watches it change under their thumb, with nothing on their screen to say an operator did it.",
     "field": {
       "idHelp": "The identifier this row is addressed by. It is generated when the row is created and nothing changes it.",
       "createdAtHelp": "When the row was created. It records what happened and is never rewritten."
     },
     "memberships": {
       "one": "membership",
-      "many": "Memberships",
+      "many": "Members",
+      "menu": "Actions for {{name}}",
+      "openPerson": "Open this person",
+      "change": "Change role or name",
+      "asked": "Asked to join on {{when}}",
+      "since": "In the zone since {{when}}",
+      "joined": "Joined on {{when}}",
       "membershipId": "Identifier",
       "zoneId": "Zone identifier",
       "zoneIdHelp": "Fixed here. A membership is one person in one zone; somebody joining a second zone gets a second membership.",
       "zoneName": "Zone",
-      "zoneNameHelp": "The household this membership is in. It is on the row, so this list reads with no zone chosen and every row still says which one it belongs to.",
+      "zoneNameHelp": "The household this membership is in.",
       "userId": "Person",
       "userIdHelp": "Fixed here. It says whose membership this is, and nothing transfers one between accounts.",
       "username": "Name in this zone",
       "usernameHelp": "What this person is called inside this zone alone. Their global handle is on their account and is not touched by this.",
       "role": "Role",
-      "roleHelp": "Owner is deliberately not offered. Handing the zone over is “Make owner” on the zone screen, because it is two role changes and a column in one transaction.",
+      "roleHelp": "Owner is deliberately not offered. Handing the zone over is “Make owner” in the member’s menu on the Members tab, because it is two role changes and the zone’s owner in one transaction.",
       "status": "State",
-      "statusHelp": "Fixed here. The four actions beside this row are how it moves, because each of them does more than write this value: letting somebody in announces it to the zone, banning keeps the row so the ban survives, and refusing removes it.",
+      "statusHelp": "Fixed here. The actions on the Members tab of the zone are how it moves, because each of them does more than write this value: approving somebody announces it to the zone, banning keeps the row so the ban survives, and rejecting removes it.",
       "createdAt": "Joined",
-      "filter": {
-        "zoneId": "In this zone"
-      },
       "action": {
-        "approve": "Let them in",
-        "reject": "Refuse"
+        "approve": "Approve",
+        "reject": "Reject",
+        "transfer": "Make owner",
+        "kick": "Remove from the zone",
+        "ban": "Ban from the zone"
       },
       "confirm": {
+        "transfer": {
+          "heading": "Hand the zone over?",
+          "body": "{{name}} becomes the owner of the zone. Whoever owns it now becomes an admin instead.",
+          "confirm": "Make them the owner"
+        },
         "approve": {
           "heading": "Let this person in?",
           "body": "{{name}} becomes a member of the zone and can read and write its lists straight away. The zone is told, so everybody with the app open sees them arrive.",
           "confirm": "Let them in"
         },
         "reject": {
-          "heading": "Refuse this request?",
-          "body": "{{name}} stops waiting and the request is removed. They can ask again with the join code, so ban them instead if that is not what you want.",
-          "confirm": "Refuse it"
+          "heading": "Reject this request?",
+          "body": "{{name}} stops waiting and the request is removed. They can ask again with the join code.",
+          "confirm": "Reject it"
         },
         "kick": {
           "heading": "Remove this member?",
@@ -1905,23 +2182,19 @@
     },
     "lines": {
       "one": "line",
-      "many": "List lines",
+      "many": "Lines",
       "id": "Identifier",
       "listId": "List identifier",
       "listIdHelp": "Fixed here. A line belongs to the list it was written on, and nothing moves one between lists.",
       "listName": "List",
-      "listNameHelp": "The list this line was written on. It is on the row, so this list reads with no list chosen and every row still says which one it is from.",
+      "listNameHelp": "The list this line was written on.",
       "content": "What it says",
       "quantity": "How many",
       "approvalStatus": "Approval",
-      "approvalStatusHelp": "Fixed here. The two actions beside this row are how it moves, because each is a service call that tells the zone. Correcting the wording above leaves an approved line approved.",
+      "approvalStatusHelp": "Fixed here. “Approve” and “Reject” beside the line on its list’s page are how it moves, because each tells the zone. Correcting the wording above leaves an approved line approved.",
       "createdByUserId": "Written by",
       "createdByUserIdHelp": "Fixed here. It records who wrote the line, and an operator did not.",
       "createdAt": "Written",
-      "note": "There is no way to add a line here, on purpose. Every line records who wrote it, that column cannot be empty, and an operator is not a member of the household. Somebody in the zone adds a line; an operator corrects one.",
-      "filter": {
-        "listId": "On this list"
-      },
       "action": {
         "approve": "Approve",
         "reject": "Reject"
@@ -1942,10 +2215,9 @@
   },
   "dashboard": {
     "heading": "Overview",
-    "measuredAt": "Taken {{when}}",
+    "measuredAt": "Read {{when}}",
     "refresh": "Refresh",
-    "refreshing": "Refreshing…",
-    "stale": "The last refresh did not answer, so these numbers are older than the time above.",
+    "stale": "The last refresh failed, so these numbers are older than the time shown.",
     "loading": "Reading the numbers…",
     "error": {
       "heading": "The dashboard could not be read",
@@ -1960,54 +2232,42 @@
       "retry": "Try again"
     },
     "waiting": {
-      "heading": "Work waiting",
-      "joinRequests": "Join requests waiting",
-      "entries": "Products to decide, {{chain}}",
-      "shops": "Shops to map, {{chain}}",
+      "heading": "Waiting for you",
+      "joinRequests": "Join requests",
+      "entries": "Products to decide",
+      "shops": "Shops to map",
       "places": "Places found",
-      "stalePrices": "Stale prices",
+      "stalePrices": "Prices out of date",
       "loginFailures": "Failed admin sign ins, last 24 hours",
-      "clear": "Nothing is waiting for a decision.",
       "postalCodes": "Postal codes waiting",
       "postalCodesFailed": "{{count}} failed",
-      "postalCodesOldest": "oldest queued {{since}}"
+      "postalCodesOldest": "oldest queued {{since}}",
+      "moreChains": "{{chains}} and {{count}} more"
     },
     "harvest": {
-      "running": "Running now",
-      "noRun": "Nothing is running.",
-      "openRun": "Open this run",
-      "recent": "Recent runs",
-      "noRuns": "Nothing has run yet.",
-      "byStatus": "Runs",
-      "byStatusTitle": "Runs by status",
-      "sources": "{{enabled}} of {{total}} chains enabled"
+      "heading": "Harvest",
+      "numbers": "Harvest numbers",
+      "inWindow_one": "Runs in {{count}} day",
+      "inWindow_other": "Runs in {{count}} days",
+      "running": "Running",
+      "failed": "Failed, all time",
+      "sources": "Chains that may be fetched"
     },
     "catalog": {
+      "heading": "Catalog",
       "supermarkets": "Chains",
       "locations": "Shops",
       "items": "Products",
-      "productGroups": "Product groups",
-      "supermarketItems": "Priced products",
-      "supermarketItemsCaption": "{{priced}} priced, {{stale}} stale, {{unavailable}} unavailable",
-      "pricesWritten": "Prices written per day"
-    },
-    "signIns": {
-      "heading": "Admin sign ins",
-      "last24h": "Failed, last 24 hours",
-      "last7d": "Failed, last 7 days",
-      "when": "When",
-      "username": "Username",
-      "ip": "From",
-      "noIp": "not recorded",
-      "none": "No failed sign in has been recorded."
+      "productGroups": "Groups",
+      "numbers": "Catalog numbers",
+      "priced": "Priced",
+      "pricesWritten_one": "Prices written each day, last {{count}} day",
+      "pricesWritten_other": "Prices written each day, last {{count}} days"
     },
     "activity": {
-      "heading": "Recent activity",
-      "when": "When",
-      "who": "Who",
-      "what": "What",
+      "heading": "What changed",
       "none": "Nothing has changed.",
-      "service": "harvester",
+      "service": "The harvester",
       "entry": "{{action}} {{entity}}",
       "action": {
         "CREATE": "created",
@@ -2028,22 +2288,22 @@
         "product_groups": "a product group",
         "price_scopes": "a price scope",
         "price_policies": "a price policy"
-      }
+      },
+      "line": "{{who}} {{what}}",
+      "all": "Show all",
+      "fewer": "Show fewer"
     },
     "shoppers": {
-      "users": "Users",
-      "usersCaption": "{{registered}} registered, {{temporary}} temporary, {{verified}} verified",
+      "heading": "Shoppers",
+      "users": "People",
       "zones": "Zones",
-      "zonesCaption": "{{active}} active of {{total}}",
       "lists": "Lists",
-      "baskets": "Baskets",
-      "basketsCaption": "{{open}} being shopped, {{finished}} finished, {{live}} always there",
       "signUps": "Sign ups",
-      "signUpsTitle": "Sign ups per day",
-      "zonesSeries": "Zones",
-      "listsSeries": "Lists",
-      "zonesAndLists": "Zones and lists created per day",
-      "inLast7Days": "in the last 7 days"
-    }
+      "numbers": "Shopper numbers",
+      "beingShopped": "Being shopped",
+      "signUpsTitle_one": "Sign ups each day, last {{count}} day",
+      "signUpsTitle_other": "Sign ups each day, last {{count}} days"
+    },
+    "partOf": "{{part}} of {{whole}}"
   }
 }

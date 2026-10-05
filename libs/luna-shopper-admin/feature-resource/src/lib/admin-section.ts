@@ -1,4 +1,9 @@
-import { InjectionToken, type Provider, type Type } from '@angular/core';
+import {
+  InjectionToken,
+  type Provider,
+  type ProviderToken,
+  type Type,
+} from '@angular/core';
 import type { Route } from '@angular/router';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
@@ -22,8 +27,14 @@ import type { ShellLink } from '@portfolio/luna-shopper-admin/ui';
 export interface AdminSection {
   /** This section's own name, for a spec and for tracking. */
   readonly key: string;
-  /** A translation key for the tab. */
+  /** A translation key for the entry in the rail and the bar. */
   readonly label: string;
+  /**
+   * The icon above that label: an icon component from `libs/shared/ui` (admin
+   * plan 0041). The app names it beside the label, for the reason it names the
+   * label: it is the app that decides what a section is called.
+   */
+  readonly icon?: Type<unknown>;
   /**
    * The URL segment this section owns, absent for a section with one screen.
    *
@@ -36,12 +47,80 @@ export interface AdminSection {
   readonly segment?: string;
   /** The screen at the section's own path. */
   readonly home?: Type<unknown>;
+  /**
+   * The screen the section's own address goes to, as a path under the segment
+   * (admin plan 0044).
+   *
+   * For a section whose own address is no screen: the harvester has three
+   * tabs and opens on the first, where a person has work. The section's entry
+   * in the rail then points at the segment, and stays marked on every tab.
+   * A section names this or a {@link home}, and never both.
+   */
+  readonly landing?: string;
   /** Resources mounted under the segment, in navigation order. */
   readonly resources?: readonly AnyResourceDescriptor[];
+  /**
+   * Resources this section holds and mounts itself, through {@link screens}
+   * (admin plan 0042).
+   *
+   * A chain is a page and its shops are a tab of that page, so neither is a
+   * flat list with a tab of its own, and the route factory cannot mount them.
+   * They are named here so that the registry still finds them: a reference
+   * field pointing at a chain has to resolve, and a link to a shop has to be
+   * built from where shops are mounted. Their address is the section's segment
+   * and then their own, with the parent row between for a resource that
+   * declares a `parent`.
+   */
+  readonly held?: readonly AnyResourceDescriptor[];
+  /**
+   * Whether the held resources that have no parent are the section's tabs
+   * (admin plan 0043).
+   *
+   * The products, their groups, their categories and the price rules are four
+   * lists the section mounts itself, because one of them holds a page with
+   * tabs of its own. They are still the four screens of the section, so they
+   * are its tabs, in the order {@link held} names them.
+   *
+   * A held resource whose segment is empty sits at the section's own address:
+   * the products are at `/products` and their groups at `/products/groups`.
+   * Its tab is current only on exactly that address, since every other tab is
+   * under it.
+   */
+  readonly heldTabs?: boolean;
+  /**
+   * A segment between the section's own and each resource it holds (admin
+   * plan 0044).
+   *
+   * The registered brands and the postal codes are parts of the harvester's
+   * Setup tab, so they are at `/harvest/setup/brands` and not at
+   * `/harvest/brands`. The registry answers with this segment in the path,
+   * and the section's own route table mounts them there.
+   */
+  readonly heldUnder?: string;
   /** Hand written screens under the segment. */
   readonly screens?: readonly Route[];
   /** Navigation entries for those hand written screens. */
   readonly links?: readonly ShellLink[];
+  /**
+   * Who counts the work that waits behind this section's links (admin plan
+   * 0044).
+   *
+   * A service, named and not built, because a count is read from the gateway
+   * and the list of sections is a constant written before any injector
+   * exists. The frame resolves it once and asks it for each link. A link that
+   * states a `badge` of its own keeps it.
+   */
+  readonly counts?: ProviderToken<SectionCounts>;
+}
+
+/** What counts the work waiting behind the links of one section. */
+export interface SectionCounts {
+  /**
+   * How much waits behind the link at this path, or `null` when that link has
+   * no count. Read inside a template, so a signal read here keeps the badge
+   * current.
+   */
+  countAt(path: string): number | null;
 }
 
 /**
@@ -97,13 +176,30 @@ export function provideResources(
  * `shell-sections.spec.ts` refuses and which therefore cannot reach a tab.
  */
 export function sectionLink(section: AdminSection): string | null {
-  if (section.home !== undefined) {
+  // A section that opens on one of its tabs is at its own segment (admin plan
+  // 0044). The entry in the rail then stays marked on every tab.
+  if (section.home !== undefined || section.landing !== undefined) {
     return section.segment === undefined ? '/' : `/${section.segment}`;
   }
 
   const [only] = sectionScreens(section);
+  if (only !== undefined) {
+    return only.path;
+  }
 
-  return only?.path ?? null;
+  // A section that mounts its own resources opens on the one that has no
+  // parent: the chains, which every other resource of that section is under
+  // (admin plan 0042).
+  const root = (section.held ?? []).find(
+    (descriptor) => descriptor.parent === undefined
+  );
+  if (root === undefined) {
+    return null;
+  }
+
+  return `/${[section.segment, root.segment]
+    .filter((segment) => segment !== undefined && segment !== '')
+    .join('/')}`;
 }
 
 /**
@@ -126,5 +222,20 @@ export function sectionScreens(section: AdminSection): readonly ShellLink[] {
       path: `${prefix}/${descriptor.segment}`,
       label: descriptor.labels.many,
     })),
+    ...(section.heldTabs === true ? (section.held ?? []) : [])
+      .filter((descriptor) => descriptor.parent === undefined)
+      .map((descriptor) =>
+        descriptor.segment === ''
+          ? // At the section's own address, which every other tab is under.
+            {
+              path: prefix === '' ? '/' : prefix,
+              label: descriptor.labels.many,
+              exact: true,
+            }
+          : {
+              path: `${prefix}/${descriptor.segment}`,
+              label: descriptor.labels.many,
+            }
+      ),
   ];
 }

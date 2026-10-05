@@ -219,7 +219,7 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
   ];
 
   async function renderZone(
-    noteKey: string | null
+    cautionKey: string | null
   ): Promise<ComponentFixture<ResourceForm>> {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
@@ -237,7 +237,7 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
     fixture.componentRef.setInput('readonlyCells', {
       joinCode: { text: 'K4TCH2N9' },
     });
-    fixture.componentRef.setInput('noteKey', noteKey);
+    fixture.componentRef.setInput('cautionKey', cautionKey);
     fixture.detectChanges();
     return fixture;
   }
@@ -248,17 +248,17 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
    * every edit, which becomes a click people stop reading.
    */
   it('says above the fields what saving does beyond writing the row', async () => {
-    const fixture = await renderZone('people.broadcast');
-    const note = query(fixture, '.note');
+    const fixture = await renderZone('people.zoneCaution');
+    const caution = query(fixture, '.caution');
 
-    expect(note).toHaveLength(1);
-    expect(note[0].textContent).toContain('people.broadcast');
+    expect(caution).toHaveLength(1);
+    expect(caution[0].textContent).toContain('people.zoneCaution');
   });
 
-  it('says nothing where the resource named no note', async () => {
+  it('says nothing where the resource named no caution', async () => {
     const fixture = await renderZone(null);
 
-    expect(query(fixture, '.note')).toHaveLength(0);
+    expect(query(fixture, '.caution')).toHaveLength(0);
   });
 
   /**
@@ -288,5 +288,53 @@ describe('ResourceForm, on a resource plan 0009 made editable', () => {
 
     expect(areas).toHaveLength(1);
     expect((areas[0] as HTMLTextAreaElement).value).toBe('{}');
+  });
+});
+
+/**
+ * A member's role is the one thing its form is opened to change (admin plan
+ * 0045, target 5), and the form opened on "Choose" over a member who held a
+ * role: the select's value was written before its options existed.
+ */
+describe('a field that is one of a few values', () => {
+  const roleFields: FieldDescriptor[] = [
+    {
+      kind: 'enum',
+      name: 'role',
+      label: 'members.role',
+      options: [
+        { value: 'ADMIN', label: 'members.role.ADMIN' },
+        { value: 'MEMBER', label: 'members.role.MEMBER' },
+      ],
+    },
+  ];
+
+  async function renderRole(role: string) {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ResourceForm, RokuTranslatorTestingModule.forTesting()],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ResourceForm);
+    fixture.componentRef.setInput('titleKey', 'resource.form.edit');
+    fixture.componentRef.setInput('mode', 'edit');
+    fixture.componentRef.setInput('fields', roleFields);
+    fixture.componentRef.setInput('draft', { role });
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('opens on the value the row holds', async () => {
+    const fixture = await renderRole('MEMBER');
+    const select = query(fixture, 'select')[0] as HTMLSelectElement;
+
+    expect(select.value).toBe('MEMBER');
+  });
+
+  it('opens on nothing chosen for a row that holds none', async () => {
+    const fixture = await renderRole('');
+    const select = query(fixture, 'select')[0] as HTMLSelectElement;
+
+    expect(select.value).toBe('');
   });
 });

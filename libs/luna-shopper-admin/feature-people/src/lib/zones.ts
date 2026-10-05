@@ -4,15 +4,18 @@ import {
   DIRECTORY_SERVICE,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { defineResource } from '@portfolio/luna-shopper-admin/models';
+import {
+  defineResource,
+  fieldMessage,
+} from '@portfolio/luna-shopper-admin/models';
 import { ZONE_SEED, type ZoneRow } from './people-seed';
-import { ZoneDetailPage } from './zone-detail-page';
+import { ZONE_CAUTION } from './shopper-params';
 
 /** A household, as the back office reads one. */
 export type Zone = ZoneRow;
 
 /** The two states a zone can be in, which is the whole of `ZoneStatus`. */
-export const ZONE_STATUS_OPTIONS = [
+const ZONE_STATUS_OPTIONS = [
   { value: 'ACTIVE', label: 'people.zones.status.ACTIVE' },
   {
     value: 'MARKED_FOR_DELETION',
@@ -22,6 +25,14 @@ export const ZONE_STATUS_OPTIONS = [
 
 /**
  * The households (plan 0007, section 2).
+ *
+ * **A zone is a page** (admin plan 0045): the Zones tab of Shoppers lists
+ * them, and one of them opens beside the list with its members, its lists, its
+ * shopping lists and its details as tabs. `shoppersRoutes` mounts all of it,
+ * which is why this names no detail component.
+ *
+ * **A row says how many join requests wait** (`pendingCount`), and the list
+ * can be narrowed to the zones that have one. Both come from the gateway.
  *
  * **Listable, and filterable by a single user. That is the whole requirement**
  * and this screen does not exceed it: there is no usage dashboard, no ranking
@@ -53,8 +64,6 @@ export const ZONES = defineResource<Zone>({
   labels: { one: 'people.zones.one', many: 'people.zones.many' },
 
   title: (row) => row.name,
-
-  detail: ZoneDetailPage,
 
   fields: [
     {
@@ -125,6 +134,13 @@ export const ZONES = defineResource<Zone>({
       editable: false,
     },
     {
+      kind: 'number',
+      name: 'pendingCount',
+      label: 'people.zones.pendingCount',
+      help: 'people.zones.pendingCountHelp',
+      editable: false,
+    },
+    {
       kind: 'date',
       name: 'createdAt',
       label: 'people.zones.createdAt',
@@ -146,9 +162,51 @@ export const ZONES = defineResource<Zone>({
     // it belongs to and how many people are in it. Counting its lists is a
     // question asked on the detail screen, where the lists are named.
     compact: ['ownerName', 'memberCount'],
+    // Beside the open zone: who owns it and how much is in it, as a sentence.
+    brief: {
+      sentence: (row) => {
+        const owner = row.ownerName ?? row.ownerUserId;
+        const counts = { members: row.memberCount, lists: row.listCount };
+        return owner === null
+          ? fieldMessage('people.zones.brief.noOwner', counts)
+          : fieldMessage('people.zones.brief.owned', { owner, ...counts });
+      },
+    },
   },
 
+  /**
+   * What a row says beside the name: how many requests wait, on the waiting
+   * wash, and that the zone is marked for deletion.
+   */
+  rowStates: () => (row) => [
+    ...(row.pendingCount > 0
+      ? [
+          {
+            label: 'people.zones.state.requests',
+            args: { count: row.pendingCount },
+            tone: 'waiting' as const,
+          },
+        ]
+      : []),
+    ...(row.status === 'MARKED_FOR_DELETION'
+      ? [
+          {
+            label: 'people.zones.status.MARKED_FOR_DELETION',
+            tone: 'neutral' as const,
+          },
+        ]
+      : []),
+  ],
+
   filters: [
+    {
+      // One answer and not three. "No" would have to mean the zones with no
+      // request, and the gateway reads it as no filter at all.
+      kind: 'enum',
+      param: 'hasPending',
+      label: 'people.zones.filter.hasPending',
+      options: [{ value: 'true', label: 'people.zones.filter.waiting' }],
+    },
     {
       kind: 'reference',
       param: 'userId',
@@ -177,7 +235,7 @@ export const ZONES = defineResource<Zone>({
     },
   ],
 
-  formNote: 'people.broadcast',
+  caution: ZONE_CAUTION,
 
   actions: {
     edit: true,
@@ -238,5 +296,13 @@ export const ZONES = defineResource<Zone>({
     inject(RESOURCE_GATEWAYS).for<Zone>({
       path: ADMIN_ZONES_PATH,
       seed: ZONE_SEED,
+      // `hasPending` is not a column: it asks for the zones where a request
+      // waits, which is what the gateway answers for it.
+      memory: {
+        matches: (row, param, value) =>
+          param === 'hasPending'
+            ? value !== 'true' || row.pendingCount > 0
+            : undefined,
+      },
     }),
 });

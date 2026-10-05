@@ -117,11 +117,10 @@ export class DirectoryMemory implements DirectoryServiceI {
   async rejectMember(zoneId: string, membershipId: string): Promise<void> {
     const gateway = this._zones();
     const zone = await gateway.read(zoneId);
-    await gateway.update(zoneId, {
-      members: membersOf(zone).filter(
-        (member) => member['membershipId'] !== membershipId
-      ),
-    });
+    const members = membersOf(zone).filter(
+      (member) => member['membershipId'] !== membershipId
+    );
+    await gateway.update(zoneId, { members, ...countsOf(members) });
 
     await this._mirror(() =>
       this._memberships().remove(compositeId([zoneId, membershipId]))
@@ -213,7 +212,7 @@ export class DirectoryMemory implements DirectoryServiceI {
     const gateway = this._zones();
     const zone = await gateway.read(zoneId);
     const members = membersOf(zone).map(change);
-    await gateway.update(zoneId, { members });
+    await gateway.update(zoneId, { members, ...countsOf(members) });
 
     for (const member of members) {
       const membershipId = member['membershipId'];
@@ -247,6 +246,26 @@ export class DirectoryMemory implements DirectoryServiceI {
 function membersOf(zone: ResourceRow): ResourceRow[] {
   const members = zone['members'];
   return Array.isArray(members) ? (members as ResourceRow[]) : [];
+}
+
+/**
+ * The two counts a zone row carries, from its members (admin plan 0045).
+ *
+ * The gateway counts them on every read. This table keeps what was written,
+ * so the counts are written with the members, or a zone would go on saying a
+ * request waits after it was approved.
+ */
+function countsOf(members: readonly ResourceRow[]): {
+  memberCount: number;
+  pendingCount: number;
+} {
+  const holding = (status: string) =>
+    members.filter((member) => member['status'] === status).length;
+
+  return {
+    memberCount: holding('APPROVED'),
+    pendingCount: holding('PENDING'),
+  };
 }
 
 /** A list's lines, as rows. */

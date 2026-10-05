@@ -7,8 +7,25 @@ import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
-import { RESOURCE_DESCRIPTOR, RESOURCE_FORM_MODE } from './resource-route-data';
-import { adminRoutes, resourceRoutes } from './routes';
+import {
+  RESOURCE_DESCRIPTOR,
+  RESOURCE_FORM_MODE,
+  RESOURCE_LIST_EMBED,
+  SPLIT_UNDER_HEADER,
+} from './resource-route-data';
+import {
+  ResourceSplitPage,
+  SPLIT_EMPTY_KEY,
+  SPLIT_LIST_WIDTH,
+} from './resource-split-page';
+import {
+  adminRoutes,
+  resourceCreateRoute,
+  resourceFormBranch,
+  resourceRoutes,
+  resourceSplitRoute,
+  resourceTabRoute,
+} from './routes';
 
 interface Shop {
   id: string;
@@ -394,5 +411,241 @@ describe('adminRoutes with a home', () => {
     );
 
     expect(redirect?.redirectTo).toBe('catalog/shops');
+  });
+});
+
+/**
+ * A list that is part of a larger page (admin plan 0042).
+ *
+ * The same list component in every case, told through route `data` which part
+ * of the page it is. A second list component is what the plan forbids.
+ */
+describe('resourceTabRoute', () => {
+  const tab = resourceTabRoute(shops);
+
+  it('is the list alone, at the resource own segment', () => {
+    expect(tab.path).toBe('shops');
+    expect(tab.component).toBe(ResourceListPage);
+    expect(tab.children).toBeUndefined();
+  });
+
+  it('tells the list that the page above drew the header', () => {
+    expect(tab.data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_LIST_EMBED]: 'tab',
+    });
+  });
+});
+
+describe('resourceFormBranch', () => {
+  const branch = resourceFormBranch(shops);
+  const children = branch.children ?? [];
+
+  /**
+   * Under the segment, so that one route up from a form, which is where the
+   * form goes back to, is the address the list is at.
+   */
+  it('is the forms under the segment, with no list', () => {
+    expect(branch.path).toBe('shops');
+    expect(branch.component).toBeUndefined();
+    expect(children.map((route) => route.path)).toEqual(['new', ':id']);
+    expect(children.map((route) => route.component)).toEqual([
+      ResourceFormPage,
+      ResourceFormPage,
+    ]);
+  });
+
+  it('states the descriptor and the mode on each form', () => {
+    expect(children[0].data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_FORM_MODE]: 'create',
+    });
+    expect(children[1].data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_FORM_MODE]: 'edit',
+    });
+  });
+
+  /** The rules of the three routes hold for the two of them. */
+  it('leaves out what the resource cannot do', () => {
+    const readOnly = defineResource<Shop>({
+      ...shops,
+      actions: { edit: true },
+    });
+    const listOnly = defineResource<Shop>({ ...shops, actions: {} });
+
+    expect(
+      resourceFormBranch(readOnly).children?.map((route) => route.path)
+    ).toEqual([':id']);
+    expect(resourceFormBranch(listOnly).children).toEqual([]);
+  });
+
+  it('mounts the resource own editor where it named one', () => {
+    class ShopEditor {}
+    const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+
+    expect(
+      resourceFormBranch(withEditor).children?.map((route) => route.component)
+    ).toEqual([ShopEditor, ShopEditor]);
+  });
+});
+
+describe('resourceCreateRoute', () => {
+  it('is the create form alone, for a caller that mounts the rest', () => {
+    const create = resourceCreateRoute(shops);
+
+    expect(create.path).toBe('new');
+    expect(create.component).toBe(ResourceFormPage);
+    expect(create.data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_FORM_MODE]: 'create',
+    });
+  });
+
+  it('uses the resource own editor where it named one', () => {
+    class ShopEditor {}
+    const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+
+    expect(resourceCreateRoute(withEditor).component).toBe(ShopEditor);
+  });
+});
+
+describe('resourceSplitRoute', () => {
+  class ShopPage {}
+
+  const open = [{ path: ':shopId', component: ShopPage }];
+  const split = resourceSplitRoute(shops, {
+    children: open,
+    listWidth: '340px',
+    underHeader: true,
+    emptyKey: 'shops.pick',
+  });
+
+  it('is the split page at the segment, with what can be open as its children', () => {
+    expect(split.path).toBe('shops');
+    expect(split.component).toBe(ResourceSplitPage);
+    expect(split.children).toBe(open);
+  });
+
+  it('tells the list it is a column, and the page how to lay it out', () => {
+    expect(split.data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_LIST_EMBED]: 'column',
+      [SPLIT_LIST_WIDTH]: '340px',
+      [SPLIT_UNDER_HEADER]: true,
+      [SPLIT_EMPTY_KEY]: 'shops.pick',
+    });
+  });
+
+  /** A split under nothing, with nothing to say while no row is open. */
+  it('answers plainly for what the caller left out', () => {
+    const bare = resourceSplitRoute(shops, {
+      children: [],
+      listWidth: '216px',
+    });
+
+    expect(bare.data?.[SPLIT_UNDER_HEADER]).toBe(false);
+    expect(bare.data?.[SPLIT_EMPTY_KEY]).toBeNull();
+  });
+});
+
+/**
+ * A section that holds its resources mounts them itself, through its screens
+ * (admin plan 0042). The route factory must not also mount them as flat lists,
+ * or `/shops` would answer with a list that has no chain to read.
+ */
+describe('adminRoutes with held resources', () => {
+  const screen = { path: 'chains', children: [] };
+  const children =
+    adminRoutes([
+      {
+        key: 'chains',
+        label: 'shell.sections.chains',
+        held: [shops, items],
+        screens: [screen],
+      },
+    ])[0].children ?? [];
+  const branch = children.find((route) => route.children !== undefined);
+
+  it('mounts the section screens and nothing for what it holds', () => {
+    expect(branch?.children).toEqual([screen]);
+  });
+
+  /** A held resource is not somewhere the empty path can land. */
+  it('emits no redirect to a held resource', () => {
+    expect(children.filter((route) => route.redirectTo !== undefined)).toEqual(
+      []
+    );
+  });
+});
+
+/**
+ * A section whose own address is no screen (admin plan 0044): the harvester
+ * has three tabs and opens on the first.
+ */
+describe('adminRoutes with a section that opens on one of its tabs', () => {
+  class Home {}
+
+  const review = { path: 'review', children: [] };
+  const branchOf = (section: AdminSection) =>
+    (adminRoutes([section])[0].children ?? []).find(
+      (route) => route.path === 'harvest'
+    );
+
+  const section: AdminSection = {
+    key: 'harvest',
+    label: 'shell.sections.harvest',
+    segment: 'harvest',
+    landing: 'review',
+    screens: [review],
+  };
+
+  it('redirects the section own address to that tab, after its screens', () => {
+    const children = branchOf(section)?.children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual(['review', '']);
+    expect(children[1]).toEqual({
+      path: '',
+      pathMatch: 'full',
+      redirectTo: 'review',
+    });
+  });
+
+  /**
+   * Relative, so it is resolved under the section's segment, and the query
+   * parameters of the address ride along.
+   */
+  it('redirects relative to the section', () => {
+    const redirect = (branchOf(section)?.children ?? []).find(
+      (route) => route.path === ''
+    );
+
+    expect(String(redirect?.redirectTo).startsWith('/')).toBe(false);
+  });
+
+  /** The home is declared first and would win, so no redirect is declared. */
+  it('declares no redirect beside a home', () => {
+    const children = branchOf({ ...section, home: Home })?.children ?? [];
+    const empty = children.filter((route) => route.path === '');
+
+    expect(empty).toHaveLength(1);
+    expect(empty[0].component).toBe(Home);
+    expect(empty[0].redirectTo).toBeUndefined();
+  });
+
+  it('declares none for a section that names no landing', () => {
+    const children =
+      branchOf({ ...section, landing: undefined })?.children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual(['review']);
+  });
+
+  /** A held resource is mounted by the section's own table, wherever it holds it. */
+  it('mounts no resource the section holds under a tab', () => {
+    const children =
+      branchOf({ ...section, held: [shops], heldUnder: 'setup' })?.children ??
+      [];
+
+    expect(children.map((route) => route.path)).toEqual(['review', '']);
   });
 });

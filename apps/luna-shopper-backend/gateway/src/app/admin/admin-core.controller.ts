@@ -139,6 +139,7 @@ export class AdminZonesController {
       targetUserId: query.userId,
       ownerUserId: owner.id,
       withoutOwner: owner.none,
+      hasPending: query.hasPending,
       createdAfter: query.createdAfter,
       createdBefore: query.createdBefore,
       cursor: query.cursor,

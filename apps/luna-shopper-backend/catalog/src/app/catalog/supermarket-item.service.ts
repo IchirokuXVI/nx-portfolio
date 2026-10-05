@@ -277,6 +277,12 @@ export class SupermarketItemService {
     if (req.itemId) {
       qb.andWhere('si."itemId" = :itemId', { itemId: req.itemId });
     }
+    if (req.itemIds?.length) {
+      // Admin plan 0043: the price of every product on one page of the product
+      // list. Empty is the same as absent, as a filter left out is. Beside a
+      // scope it is planned on the unique index of the pair.
+      qb.andWhere('si."itemId" IN (:...itemIds)', { itemIds: req.itemIds });
+    }
     if (req.priceScopeId) {
       qb.andWhere('si."priceScopeId" = :scopeId', {
         scopeId: req.priceScopeId,

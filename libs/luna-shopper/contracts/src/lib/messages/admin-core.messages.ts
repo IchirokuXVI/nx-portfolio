@@ -210,6 +210,12 @@ export interface AdminZoneView {
   memberCount: number;
   /** Every list in the zone, not the ones some caller may read. */
   listCount: number;
+  /**
+   * PENDING memberships: the join requests that wait for somebody to approve
+   * or reject them (admin plan 0045, section 2). A count, so that the listing
+   * can say which zones have work waiting without reading their members.
+   */
+  pendingCount: number;
   /** ISO 8601 UTC, or null unless the zone is MARKED_FOR_DELETION. */
   markedForDeletionAt: string | null;
   /** ISO 8601 UTC. */
@@ -300,6 +306,12 @@ export interface ListAdminZonesRequest extends AdminCredential, PageQuery {
    * service answers exactly that rather than picking one of the two.
    */
   withoutOwner?: boolean;
+  /**
+   * Only the zones with at least one PENDING membership (admin plan 0045,
+   * section 2). `false` is the same as absent, as `withoutOwner` is: a filter
+   * that is off narrows nothing.
+   */
+  hasPending?: boolean;
   /** ISO 8601. Inclusive lower bound on `createdAt`. */
   createdAfter?: string;
   /** ISO 8601. Exclusive upper bound on `createdAt`. */
