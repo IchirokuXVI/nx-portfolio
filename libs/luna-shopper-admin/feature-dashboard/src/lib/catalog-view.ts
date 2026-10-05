@@ -3,7 +3,8 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import type { BarChartView, TileView } from '@portfolio/luna-shopper-admin/ui';
+import type { BarChartView } from '@portfolio/luna-shopper-admin/ui';
+import type { StatView } from './dashboard-view';
 
 /**
  * The catalog block of the dashboard document, as the overview draws it.
@@ -11,8 +12,8 @@ import type { BarChartView, TileView } from '@portfolio/luna-shopper-admin/ui';
  * Admin plan 0022 moved both functions to `feature-catalog`, for a dashboard
  * of the Catalog section. That section is gone (admin plan 0043): its screens
  * are the Chains and the Products sections, neither of which opens on a
- * dashboard. So the tiles and the chart are a block of the overview again,
- * and the functions are back beside the page that draws them.
+ * dashboard. So the numbers and the chart are a panel of the overview, and
+ * the functions are beside the page that draws them.
  */
 
 /** The six price source kinds, in the order that fixes their chart colours. */
@@ -25,67 +26,60 @@ const PRICE_SOURCE_KINDS: readonly Wire.EnumsPriceSourceKind[] = [
   'USER_REPORTED',
 ];
 
-/** How much of the catalog there is, and how much of it carries a price. */
-export function catalogTiles(
+/**
+ * How much of the catalog there is, and how much of it carries a price (admin
+ * plan 0046, target 2). A number links to its list.
+ */
+export function catalogStats(
   catalog: Wire.AdminDashboardAdminCatalogDashboard,
   translate: Translate,
   pathOf: PathOf
-): TileView[] {
+): StatView[] {
   return [
-    tile(
+    stat(
       'supermarkets',
       'dashboard.catalog.supermarkets',
       catalog.supermarkets,
       pathOf('supermarkets')
     ),
-    tile(
+    // A shop is under its chain and has no list of its own (admin plan 0042),
+    // so this answers with wherever the registry says the closest list is.
+    stat(
       'locations',
       'dashboard.catalog.locations',
       catalog.locations,
       pathOf('locations')
     ),
-    tile('items', 'dashboard.catalog.items', catalog.items, pathOf('items')),
-    tile(
+    stat('items', 'dashboard.catalog.items', catalog.items, pathOf('items')),
+    stat(
       'productGroups',
       'dashboard.catalog.productGroups',
       catalog.productGroups,
       pathOf('product-groups')
     ),
-    {
-      key: 'supermarketItems',
-      label: translate('dashboard.catalog.supermarketItems'),
-      value: catalog.supermarketItems.total,
-      caption: translate('dashboard.catalog.supermarketItemsCaption', {
-        priced: catalog.supermarketItems.priced,
-        stale: catalog.supermarketItems.stale,
-        unavailable: catalog.supermarketItems.unavailable,
-      }),
-      delta: null,
-      trend: null,
-      // A price has no screen of its own (admin plan 0043). It is read on its
-      // product, and the products are where an operator starts.
-      link: pathOf('items'),
-      query: null,
-      tone: 'quiet',
-    },
+    // A price has no screen of its own (admin plan 0043). It is read on its
+    // product, and the products are where an operator starts.
+    stat(
+      'priced',
+      'dashboard.catalog.priced',
+      catalog.supermarketItems.priced,
+      pathOf('items')
+    ),
   ];
 
-  function tile(
+  function stat(
     key: string,
     label: string,
     value: number,
     link: readonly string[] | null
-  ): TileView {
+  ): StatView {
     return {
       key,
       label: translate(label),
       value,
-      caption: null,
-      delta: null,
-      trend: null,
+      of: null,
       link,
-      query: null,
-      tone: 'quiet',
+      danger: false,
     };
   }
 }

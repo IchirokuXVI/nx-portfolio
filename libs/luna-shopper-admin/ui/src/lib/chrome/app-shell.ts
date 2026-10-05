@@ -189,9 +189,32 @@ export const BAR_SECTIONS = 4;
               {{ initials() }}
             </button>
             @if (menu() === 'account') {
+              <!-- Who is signed in, to which deployment, the language the
+                   catalog is read in, and the way out (admin plan 0046,
+                   target 9). The deployment is said here in words as well as
+                   by the color of the rail. -->
               <div class="menu" role="group">
                 <p class="menu-title who">{{ operator() }}</p>
-                <button (click)="leave()" class="danger" type="button">
+                @if (deployment() !== undefined) {
+                  <p class="menu-title">
+                    {{ 'environment.label' | rokuT }}:
+                    {{ deploymentKey() | rokuT }}
+                  </p>
+                }
+                <p class="menu-title rule">
+                  {{ 'shell.contentLanguage' | rokuT }}
+                </p>
+                @for (locale of contentLocales(); track locale) {
+                  <button
+                    (click)="chooseContent(locale)"
+                    [attr.aria-pressed]="locale === contentLocale()"
+                    [class.on]="locale === contentLocale()"
+                    type="button"
+                  >
+                    {{ 'shell.language.' + locale | rokuT }}
+                  </button>
+                }
+                <button (click)="leave()" class="danger rule" type="button">
                   {{ 'shell.signOut' | rokuT }}
                 </button>
               </div>
@@ -503,6 +526,15 @@ export const BAR_SECTIONS = 4;
 
     .menu button.danger {
       color: var(--admin-danger);
+    }
+
+    /* A line above a part of the menu that is about something else. */
+    .menu .rule {
+      margin-block-start: var(--admin-space-1);
+      padding-block-start: var(--admin-space-2);
+      border-block-start: 1px solid var(--admin-border);
+      border-start-start-radius: 0;
+      border-start-end-radius: 0;
     }
 
     main {

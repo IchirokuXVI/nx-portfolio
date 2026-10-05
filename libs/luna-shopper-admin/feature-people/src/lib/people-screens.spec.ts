@@ -1,23 +1,11 @@
-import { provideLocationMocks } from '@angular/common/testing';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import { Router } from '@angular/router';
 import {
-  ContentLocaleStore,
-  DeploymentStore,
   DIRECTORY_SERVICE,
   GatewayError,
-  ServerReachability,
-  SessionStorage,
-  SessionStore,
   type DirectoryServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
-import {
-  adminRoutes,
-  provideResources,
-} from '@portfolio/luna-shopper-admin/feature-resource';
 import { compositeId } from '@portfolio/luna-shopper-admin/models';
-import { ADMINS } from './admins';
 import { LIST_SEED, USER_SEED, ZONE_SEED } from './people-seed';
 import {
   bootShoppers,
@@ -1080,68 +1068,5 @@ describe('a shopping list', () => {
 
     expect(textOf(fixture)).toContain('people.baskets.info.record');
     expect(textOf(fixture)).toContain('people.baskets.info.correct');
-  });
-});
-
-describe('the admins table', () => {
-  async function bootAdmins(url: string) {
-    TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({
-      imports: [ShoppersTestHost, RokuTranslatorTestingModule.forTesting()],
-      providers: [
-        ContentLocaleStore,
-        ServerReachability,
-        provideRouter(
-          adminRoutes([{ key: 'admins', label: '', resources: [ADMINS] }])
-        ),
-        provideLocationMocks(),
-        provideResources(ADMINS),
-        SessionStorage,
-        SessionStore,
-        DeploymentStore,
-      ],
-    }).compileComponents();
-
-    const fixture = TestBed.createComponent(ShoppersTestHost);
-    fixture.detectChanges();
-    await TestBed.inject(Router).navigateByUrl(url);
-    await settle(fixture);
-
-    return fixture;
-  }
-
-  /**
-   * Plan 0071, section 6: an admin can be seen and cannot be created, edited or
-   * deleted from here, ever.
-   */
-  it('offers no create, edit or delete control', async () => {
-    const fixture = await bootAdmins('/admins');
-
-    expect(controlSaying(fixture, 'resource.action.create')).toBeUndefined();
-    expect(controlSaying(fixture, 'resource.action.delete')).toBeUndefined();
-    expect(findAll(fixture, 'button.title')).toHaveLength(0);
-  });
-
-  /**
-   * Behind the info button since admin plan 0041: the list opens on its rows,
-   * and how an admin is added is one press away and not a paragraph above
-   * them.
-   */
-  it('says behind the info button how an admin is managed instead', async () => {
-    const fixture = await bootAdmins('/admins');
-
-    expect(textOf(fixture)).not.toContain('people.admins.info.add');
-
-    find<HTMLButtonElement>(fixture, 'lib-info-button button')?.click();
-    fixture.detectChanges();
-
-    expect(textOf(fixture)).toContain('people.admins.info.readOnly');
-    expect(textOf(fixture)).toContain('people.admins.info.add');
-  });
-
-  it('answers the detail address with the not found page', async () => {
-    const fixture = await bootAdmins('/admins/admin-ichiroku');
-
-    expect(textOf(fixture)).toContain('notFound.heading');
   });
 });

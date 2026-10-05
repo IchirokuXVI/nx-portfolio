@@ -37,6 +37,16 @@ export interface PageTab {
    * count, such as how many shops a chain has, is drawn in grey.
    */
   readonly waiting?: boolean;
+  /**
+   * A translation key for the count as words, with the count as `count`
+   * (admin plan 0046): "2 in 24 hours" on the failed sign ins of Admins.
+   *
+   * For a count that is neither a length of the list behind the tab nor work
+   * that waits for a decision, so that the bare number would be read as one of
+   * those. The words take the place of the number, and nothing is announced
+   * beside them.
+   */
+  readonly countLabel?: string;
 }
 
 /**
@@ -84,11 +94,15 @@ export const PAGE_FRAME_TABS = new InjectionToken<Signal<readonly PageTab[]>>(
               @if (tab.count?.(); as count) {
                 <span
                   [attr.aria-label]="
-                    tab.waiting ? ('shell.waiting' | rokuT: { count }) : null
+                    tab.waiting && !tab.countLabel
+                      ? ('shell.waiting' | rokuT: { count })
+                      : null
                   "
                   [class.waiting]="tab.waiting === true"
                   class="count"
-                  >{{ count }}</span
+                  >{{
+                    tab.countLabel ? (tab.countLabel | rokuT: { count }) : count
+                  }}</span
                 >
               }
             </a>

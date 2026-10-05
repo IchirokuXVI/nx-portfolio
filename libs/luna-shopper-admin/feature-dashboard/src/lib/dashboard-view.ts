@@ -1,7 +1,10 @@
 import {
+  harvestWaiting,
+  type ChainWaiting,
+} from '@portfolio/luna-shopper-admin/feature-harvest';
+import {
   activityTarget,
   harvestReviewPath,
-  REVIEW_CHAIN_PARAM,
   type PathOf,
   type Translate,
   type Wire,
@@ -10,38 +13,43 @@ import type { TileView } from '@portfolio/luna-shopper-admin/ui';
 import { postalCodeCaption } from './harvest-view';
 
 /**
- * The document turned into what the overview's components take (admin plan
- * 0016, split by admin plan 0022).
+ * The document turned into what the overview draws (admin plan 0016, given
+ * its final layout by admin plan 0046).
  *
  * Every function here is pure and takes its strings through `translate`, so the
- * screen is a template over these and a spec can assert a tile's count and a
- * chart's series without rendering anything. That is also what keeps the rule
- * about assertions: the numbers are on a view model, never only in interpolated
- * text the testing translator does not fill in.
+ * screen is a template over these and a spec can assert a tile's count without
+ * rendering anything. That is also what keeps the rule about assertions: the
+ * numbers are on a view model, never only in interpolated text the testing
+ * translator does not fill in.
  *
- * **Three of them are left here.** The counts and the charts moved to the
- * section that owns them: `peopleTiles`, `signUpsChart` and
- * `zonesAndListsChart` to `feature-people`, `recentRunRows` and
- * `runsByStatusChart` to `feature-harvest`. `catalogTiles` and
- * `pricesWrittenChart` went to `feature-catalog` and came back, to
- * `catalog-view.ts` beside this file, when the Catalog section went (admin
- * plan 0043). None of them changed except to take {@link PathOf} where it
- * held a literal path, and nothing was copied. What stays is what is true of the
- * whole system rather than of one part of it: every queue in one place, a fact
- * about the tool itself, and a feed that crosses all three audit trails by
- * definition.
+ * This file holds what is true of the whole system: everything that waits, in
+ * one row, and the feed that crosses all three audit trails. The numbers of
+ * each area are beside it, in `catalog-view.ts`, `shoppers-view.ts` and
+ * `harvest-view.ts`.
  */
 
 /** A chain's name, or its id when the reference cannot name it (plan 0007, 4). */
 export type NameChain = (supermarketId: string) => string;
 
-/** One row of the sign in failure table. */
-export interface FailureRow {
+/**
+ * One number of a numbers panel: how many, of what, and where the list is.
+ *
+ * The three panels share it, so it is here and not in any one of their files.
+ */
+export interface StatView {
+  /** Stable across renders: what `@for` tracks. */
   readonly key: string;
-  readonly when: string;
-  readonly username: string;
-  /** The address, or the word for a request that carried none. */
-  readonly ip: string;
+  readonly label: string;
+  readonly value: number;
+  /**
+   * What the value is a part of, for a number read as "0 of 4". `null` for a
+   * plain count.
+   */
+  readonly of: number | null;
+  /** Where the list behind the number is, or `null` when it has none. */
+  readonly link: readonly string[] | null;
+  /** Red, for a count that is a failure when it is above zero. */
+  readonly danger: boolean;
 }
 
 /** One row of the activity feed. */
@@ -53,8 +61,10 @@ export interface ActivityRow {
   readonly at: string;
   /** The admin's name, or the service's. */
   readonly who: string;
-  /** The action and the table, as one sentence. */
+  /** The action and the table, as words. */
   readonly what: string;
+  /** Who did what, as the one sentence the row shows. */
+  readonly line: string;
   /** Where the row opens, or `null` where this app has no screen for it. */
   readonly link: readonly string[] | null;
 }
@@ -86,36 +96,72 @@ const ENTITY_KEYS: Readonly<Record<string, string | undefined>> = {
   price_policies: 'dashboard.activity.entity.price_policies',
 };
 
+/** How many chains the second line of a tile names before it counts the rest. */
+const CHAINS_NAMED = 3;
+
 /**
- * What is waiting for a decision, as tiles that link to where it is made.
+ * What is waiting for a decision, as tiles that link to where it is made
+ * (admin plan 0046, target 1).
  *
- * A tile is in the attention tone whenever its count is above zero, because a
- * queue with rows in it is the reason this screen is the first thing an operator
- * sees. A chain with nothing waiting in a queue draws **no tile** for that
- * queue: a row of zeros reads as noise, and the reader is looking for the one
- * that is not zero.
+ * **A tile at zero stays, and is plain.** The row is the same seven tiles on
+ * every visit, so the eye learns where each one is, and the one on the waiting
+ * wash is the one to open. The two queues that are kept per chain are one tile
+ * each, with the chains and their counts as the second line: a tile per chain
+ * made the row a different length every day.
  *
- * A block that did not answer contributes nothing here, and the screen draws its
- * notice in place of the tiles rather than an empty row. "The harvester did not
- * answer" and "nothing is waiting" are different sentences and must never look
- * the same.
+ * A block that did not answer contributes no tile, and its numbers panel says
+ * that it did not answer. "The harvester did not answer" and "nothing is
+ * waiting" are different sentences, and a tile that showed a zero for the
+ * first would be the second.
  *
- * The three resource tiles ask `pathOf` where their screen is, and draw as an
- * unlinked tile where the app did not mount it. The harvester's are hand written
- * screens, which have no descriptor and keep the segment constant they have
- * always built from.
+ * `postalCodes` is built beside the document, from its own read, and takes its
+ * place in the row here. `failedSignIns` is where the Admins section keeps the
+ * table of failed sign ins: its screens are hand written, so the registry
+ * cannot answer for it.
  */
 export function waitingTiles(
   document: Wire.AdminAdminDashboardResponse,
+  postalCodes: TileView | null,
   translate: Translate,
   nameChain: NameChain,
-  pathOf: PathOf
+  pathOf: PathOf,
+  failedSignIns: readonly string[]
 ): TileView[] {
   const tiles: TileView[] = [];
   const core = document.core;
-  const harvest = document.harvest;
   const catalog = document.catalog;
   const identity = document.identity;
+
+  if (document.harvest !== null) {
+    const waits = harvestWaiting(document.harvest);
+
+    tiles.push(
+      {
+        ...waiting(
+          'entries',
+          translate('dashboard.waiting.entries'),
+          waits.products,
+          harvestReviewPath('products')
+        ),
+        caption: chainsCaption(waits.productsByChain, translate, nameChain),
+      },
+      {
+        ...waiting(
+          'shops',
+          translate('dashboard.waiting.shops'),
+          waits.shops,
+          harvestReviewPath('shops')
+        ),
+        caption: chainsCaption(waits.shopsByChain, translate, nameChain),
+      },
+      waiting(
+        'places',
+        translate('dashboard.waiting.places'),
+        waits.places,
+        harvestReviewPath('places')
+      )
+    );
+  }
 
   if (core !== null) {
     tiles.push(
@@ -131,50 +177,8 @@ export function waitingTiles(
     );
   }
 
-  if (harvest !== null) {
-    for (const queue of harvest.queues.entries) {
-      const count = queue.candidate + queue.unresolved;
-      if (count > 0) {
-        tiles.push(
-          waiting(
-            `entries-${queue.supermarketId}`,
-            translate('dashboard.waiting.entries', {
-              chain: nameChain(queue.supermarketId),
-            }),
-            count,
-            // The Review queue, already on the chain (admin plan 0044): the
-            // four queues share one chain filter, kept in the address.
-            harvestReviewPath('products'),
-            { [REVIEW_CHAIN_PARAM]: queue.supermarketId }
-          )
-        );
-      }
-    }
-
-    for (const queue of harvest.queues.shops) {
-      if (queue.unmapped > 0) {
-        tiles.push(
-          waiting(
-            `shops-${queue.supermarketId}`,
-            translate('dashboard.waiting.shops', {
-              chain: nameChain(queue.supermarketId),
-            }),
-            queue.unmapped,
-            harvestReviewPath('shops'),
-            { [REVIEW_CHAIN_PARAM]: queue.supermarketId }
-          )
-        );
-      }
-    }
-
-    tiles.push(
-      waiting(
-        'places',
-        translate('dashboard.waiting.places'),
-        harvest.queues.places,
-        harvestReviewPath('places')
-      )
-    );
+  if (postalCodes !== null) {
+    tiles.push(postalCodes);
   }
 
   if (catalog !== null) {
@@ -184,7 +188,8 @@ export function waitingTiles(
         translate('dashboard.waiting.stalePrices'),
         catalog.supermarketItems.stale,
         // Every out of date price over every scope has no list of its own
-        // (admin plan 0043): the product list shows them one scope at a time.
+        // (admin plan 0043): the product list shows them one scope at a time,
+        // under "Out of date" once a scope is chosen.
         pathOf('items')
       )
     );
@@ -192,18 +197,44 @@ export function waitingTiles(
 
   if (identity !== null) {
     tiles.push(
-      // No link: the rows are further down this same page, so sending the
-      // operator somewhere else to read five of them would be a worse answer.
       waiting(
         'loginFailures',
         translate('dashboard.waiting.loginFailures'),
         identity.loginFailures.last24h,
-        null
+        // The table is the second tab of Admins (admin plan 0046, target 5).
+        failedSignIns
       )
     );
   }
 
   return tiles;
+}
+
+/**
+ * The chains with something waiting and how much, as the second line of a
+ * tile: "Mercadona 61, DIA 35".
+ *
+ * The first three, most first, and then how many more there are. `null` when
+ * no chain has anything, which is a tile at zero.
+ */
+function chainsCaption(
+  chains: readonly ChainWaiting[],
+  translate: Translate,
+  nameChain: NameChain
+): string | null {
+  if (chains.length === 0) {
+    return null;
+  }
+
+  const named = chains
+    .slice(0, CHAINS_NAMED)
+    .map((chain) => `${nameChain(chain.supermarketId)} ${chain.count}`)
+    .join(', ');
+  const more = chains.length - CHAINS_NAMED;
+
+  return more > 0
+    ? translate('dashboard.waiting.moreChains', { chains: named, count: more })
+    : named;
 }
 
 /**
@@ -218,12 +249,10 @@ export function waitingTiles(
  * It earns its place on that row because it is the only number on the screen
  * that stands for people waiting on us. A run that failed is our problem. A
  * postal code queued for three weeks is somebody opening velista and being told
- * we have nothing for them. That argument survives admin plan 0022's split
- * intact, which is why the count stays here while the card holding all three
- * numbers is on the harvester's dashboard.
+ * we have nothing for them.
  *
- * `null` where the summary did not answer, because a decoration that could not
- * be read draws nothing rather than a zero that reads as good news.
+ * `null` where the summary did not answer, because a number that could not be
+ * read draws nothing rather than a zero that reads as good news.
  */
 export function postalCodeWaitingTile(
   summary: Wire.HarvestPostalCodeDiscoverySummaryView | null,
@@ -267,22 +296,6 @@ function waiting(
   };
 }
 
-/** The most recent failed admin sign ins, as a short table. */
-export function loginFailureRows(
-  identity: Wire.AdminDashboardAdminIdentityDashboard,
-  translate: Translate,
-  formatInstant: (value: string | null) => string
-): FailureRow[] {
-  return identity.loginFailures.recent.map((failure, index) => ({
-    key: `${failure.at}-${index}`,
-    when: formatInstant(failure.at),
-    username: failure.username,
-    // A proxy that did not pass the address through is a real row, and the
-    // table says so rather than drawing an empty cell that reads as a bug.
-    ip: failure.ip ?? translate('dashboard.signIns.noIp'),
-  }));
-}
-
 /**
  * The three trails merged, as rows that open where this app has a screen.
  *
@@ -301,20 +314,26 @@ export function activityRows(
   formatInstant: (value: string | null) => string,
   pathOf: PathOf
 ): ActivityRow[] {
-  return entries.map((entry, index) => ({
-    key: `${entry.at}-${entry.entity}-${entry.entityId}-${index}`,
-    when: formatSince(entry.at),
-    at: formatInstant(entry.at),
-    who:
+  return entries.map((entry, index) => {
+    const who =
       entry.actorKind === 'SERVICE'
         ? translate('dashboard.activity.service')
-        : entry.actorName,
-    what: translate('dashboard.activity.entry', {
+        : entry.actorName;
+    const what = translate('dashboard.activity.entry', {
       action: translate(`dashboard.activity.action.${entry.action}`),
       entity: entityLabel(entry.entity, translate),
-    }),
-    link: activityTarget(entry, pathOf),
-  }));
+    });
+
+    return {
+      key: `${entry.at}-${entry.entity}-${entry.entityId}-${index}`,
+      when: formatSince(entry.at),
+      at: formatInstant(entry.at),
+      who,
+      what,
+      line: translate('dashboard.activity.line', { who, what }),
+      link: activityTarget(entry, pathOf),
+    };
+  });
 }
 
 function entityLabel(entity: string, translate: Translate): string {

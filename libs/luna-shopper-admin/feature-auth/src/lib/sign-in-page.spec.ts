@@ -192,7 +192,41 @@ describe('SignInPage', () => {
       await drain();
       fixture.detectChanges();
 
-      expect(text(fixture, '.name')).toBe('environment.staging');
+      // The name the rail writes, above the form (admin plan 0046, target 8).
+      expect(text(fixture, '.entry-deployment')).toContain(
+        'environment.short.staging'
+      );
+    });
+
+    /**
+     * A deployment that could not be established keeps its warning text: an
+     * operator who cannot see which database this is must be told so.
+     */
+    it('says so when the deployment could not be established', async () => {
+      const { fixture } = await render({ session }, async () => ({
+        deployment: null,
+        devAutologin: false,
+      }));
+      TestBed.inject(DeploymentStore).load();
+      await drain();
+      fixture.detectChanges();
+
+      expect(text(fixture, '.entry-deployment')).toContain(
+        'environment.short.unknown'
+      );
+      expect(text(fixture, '.entry-unknown')).toBe(
+        'environment.unknownExplanation'
+      );
+    });
+
+    /** The card, the fields and the button are the shared entry card's. */
+    it('is drawn on the shared entry card, with the one first heading', async () => {
+      const { fixture } = await render({ session });
+      const host: HTMLElement = fixture.nativeElement;
+
+      expect(host.querySelector('lib-entry-card form')).not.toBeNull();
+      expect(host.querySelectorAll('h1')).toHaveLength(1);
+      expect(host.querySelector('h1')?.textContent).toContain('signIn.heading');
     });
 
     /**
@@ -216,7 +250,7 @@ describe('SignInPage', () => {
 
     /**
      * Color is never the only sign: the band is hidden from a screen reader
-     * and the name of the deployment is in the form, in words.
+     * and the name of the deployment is on the card, in words.
      */
     it('says the deployment in words beside the band', async () => {
       const { fixture } = await render({ session });
@@ -229,8 +263,8 @@ describe('SignInPage', () => {
       expect(host.querySelector('.band')?.getAttribute('aria-hidden')).toBe(
         'true'
       );
-      expect(host.querySelector('form')?.textContent).toContain(
-        'environment.staging'
+      expect(host.querySelector('lib-entry-card')?.textContent).toContain(
+        'environment.short.staging'
       );
     });
   });
@@ -331,7 +365,7 @@ describe('SignInPage', () => {
       fill(fixture, 'ops', 'pw');
       await submit(fixture);
 
-      expect(text(fixture, '.error')).toBe(key);
+      expect(text(fixture, '.entry-error')).toBe(key);
     });
 
     it('says the same thing for an unknown username as for a wrong password', async () => {
@@ -345,8 +379,8 @@ describe('SignInPage', () => {
       fill(wrongPassword.fixture, 'ops', 'wrong');
       await submit(wrongPassword.fixture);
 
-      expect(text(unknownUser.fixture, '.error')).toBe(
-        text(wrongPassword.fixture, '.error')
+      expect(text(unknownUser.fixture, '.entry-error')).toBe(
+        text(wrongPassword.fixture, '.entry-error')
       );
     });
 
@@ -356,13 +390,13 @@ describe('SignInPage', () => {
       fill(fixture, 'ops', 'pw');
       await submit(fixture);
 
-      expect(el(fixture, '.error')?.getAttribute('role')).toBe('alert');
+      expect(el(fixture, '.entry-error')?.getAttribute('role')).toBe('alert');
     });
 
     it('shows nothing before an attempt has been made', async () => {
       const { fixture } = await render({ error: refusal('unauthorized', 401) });
 
-      expect(el(fixture, '.error')).toBeNull();
+      expect(el(fixture, '.entry-error')).toBeNull();
     });
 
     /**
@@ -383,12 +417,12 @@ describe('SignInPage', () => {
       const { fixture } = await render({ error: refusal('unauthorized', 401) });
       fill(fixture, 'ops', 'wrong');
       await submit(fixture);
-      expect(el(fixture, '.error')).not.toBeNull();
+      expect(el(fixture, '.entry-error')).not.toBeNull();
 
       fill(fixture, 'ops', 'again');
       const inFlight = fixture.componentInstance.submit();
       fixture.detectChanges();
-      expect(el(fixture, '.error')).toBeNull();
+      expect(el(fixture, '.entry-error')).toBeNull();
 
       await inFlight;
       await drain();

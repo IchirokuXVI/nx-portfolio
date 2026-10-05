@@ -22,6 +22,16 @@ export interface InfoContent {
    * is `ResourceDescriptor.caution`, which stays visible beside the action.
    */
   readonly caution?: string;
+  /**
+   * A command the points tell the operator to run, as it is typed (admin plan
+   * 0046, target 7).
+   *
+   * Text and not a translation key: a command reads the same in every
+   * language. It is drawn in the mono face under the points, with a button
+   * that copies it, because a command retyped from a sentence is a command
+   * with a typo in it.
+   */
+  readonly command?: string;
 }
 
 /**

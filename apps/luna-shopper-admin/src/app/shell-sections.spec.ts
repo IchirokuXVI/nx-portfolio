@@ -4,6 +4,7 @@ import {
   ResourceRegistry,
   sectionLink,
   sectionScreens,
+  type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ADMIN_SECTIONS } from './sections';
 
@@ -70,17 +71,56 @@ describe('ADMIN_SECTIONS', () => {
     expect(harvest.counts).toBeDefined();
   });
 
-  /** The tab the section opens on is one of its tabs. */
-  it('opens every section that has a landing on one of its own links', () => {
+  /**
+   * The tab the section opens on is one of its tabs.
+   *
+   * A section that hands its tabs to the frame names them as links. The
+   * Admins section draws its own two (admin plan 0046), so its landing is
+   * looked for among the routes of its page.
+   */
+  it('opens every section that has a landing on one of its own tabs', () => {
     for (const section of ADMIN_SECTIONS) {
       if (section.landing === undefined) {
         continue;
       }
       expect(section.home).toBeUndefined();
-      expect(sectionScreens(section).map((screen) => screen.path)).toContain(
-        `/${section.segment}/${section.landing}`
-      );
+
+      const links = sectionScreens(section).map((screen) => screen.path);
+      if (links.length > 0) {
+        expect(links).toContain(`/${section.segment}/${section.landing}`);
+        continue;
+      }
+
+      expect(
+        (section.screens ?? [])
+          .flatMap((route) => route.children ?? [])
+          .map((route) => route.path)
+      ).toContain(section.landing);
     }
+  });
+
+  /**
+   * Admins is a section of its own, with two tabs (admin plan 0046, targets 5
+   * and 6): the accounts, and the failed sign ins that left the Overview.
+   * Its own address goes to the accounts. It holds no resource, because an
+   * admin is never opened, created, changed or removed from here.
+   */
+  it('opens Admins on its accounts, with the failed sign ins beside them', () => {
+    const admins = ADMIN_SECTIONS.find((section) => section.key === 'admins');
+    const tabs = (admins?.screens ?? [])
+      .flatMap((route) => route.children ?? [])
+      .filter((route) => route.redirectTo === undefined)
+      .map((route) => route.path);
+
+    expect(admins?.segment).toBe('admins');
+    expect(admins?.landing).toBe('accounts');
+    expect(tabs).toEqual(['accounts', 'failed-sign-ins']);
+    expect(admins?.resources).toBeUndefined();
+    expect(admins?.held).toBeUndefined();
+    // No count is handed to the frame: a failed sign in is not work that
+    // waits for a decision, and the rail would count it as such.
+    expect(admins?.counts).toBeUndefined();
+    expect(sectionLink(admins as AdminSection)).toBe('/admins');
   });
 
   /**
@@ -403,8 +443,9 @@ describe('ADMIN_SECTIONS', () => {
       'postal-codes',
       '14001',
     ]);
-    // The one section that keeps the root, because it has one screen.
-    expect(at('admins')).toBe('admins');
+    // An admin is no resource any more (admin plan 0046): its rows do not
+    // open, so nothing asks the registry where one is.
+    expect(registry.pathOf('admins')).toBeNull();
   });
 
   /**

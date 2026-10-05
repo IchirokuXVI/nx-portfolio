@@ -3,7 +3,11 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { peopleTiles, signUpsChart, zonesAndListsChart } from './shoppers-view';
+import {
+  shopperStats,
+  signUpsChart,
+  zonesAndListsChart,
+} from './shoppers-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -46,7 +50,7 @@ function core(
     zones: { total: 4, active: 3, markedForDeletion: 1 },
     memberships: { pending: 2 },
     lists: { total: 9 },
-    baskets: { total: 6, draft: 1, completed: 5 },
+    baskets: { total: 6, open: 1, finished: 4, live: 1 },
     zonesCreated: days(1, 0, 2),
     listsCreated: days(0, 3, 1),
     activity: [],
@@ -54,44 +58,47 @@ function core(
   };
 }
 
-describe('peopleTiles', () => {
-  it('carries the seven day delta and the sparkline on the users tile', () => {
-    const tiles = peopleTiles(
-      identity({ signUps: days(...Array.from({ length: 14 }, () => 1)) }),
-      core(),
+describe('shopperStats', () => {
+  /** Admin plan 0046, target 2: people, zones, lists, being shopped. */
+  it('is people, zones, lists and the shopping lists being shopped', () => {
+    const stats = shopperStats(
+      identity(),
+      core({ baskets: { total: 6, open: 2, finished: 3, live: 1 } }),
       translate,
       pathOf
     );
-    const users = tiles[0];
 
-    expect(users.key).toBe('users');
-    expect(users.delta?.value).toBe(0);
-    expect(users.trend).toHaveLength(14);
+    expect(stats.map((stat) => [stat.key, stat.value])).toEqual([
+      ['users', 10],
+      ['zones', 4],
+      ['lists', 9],
+      ['beingShopped', 2],
+    ]);
   });
 
   it('draws only what answered', () => {
     expect(
-      peopleTiles(null, core(), translate, pathOf).map((tile) => tile.key)
-    ).toEqual(['zones', 'lists', 'baskets']);
+      shopperStats(null, core(), translate, pathOf).map((stat) => stat.key)
+    ).toEqual(['zones', 'lists', 'beingShopped']);
     expect(
-      peopleTiles(identity(), null, translate, pathOf).map((tile) => tile.key)
+      shopperStats(identity(), null, translate, pathOf).map((stat) => stat.key)
     ).toEqual(['users']);
   });
 
   /**
-   * The baskets tile opens the `baskets` resource, whose segment is
+   * The last number opens the `baskets` resource, whose segment is
    * `shopping-lists`: the gateway's own word for a basket. It used to be
    * that segment written out, which is a second copy of a fact the descriptor
    * already holds and is wrong the moment the screen moves into a section.
    */
   it('opens each of them by resource name rather than by segment', () => {
-    const tiles = peopleTiles(identity(), core(), translate, (name) => [
+    const stats = shopperStats(identity(), core(), translate, (name) => [
       '/',
       'shoppers',
       `resolved:${name}`,
     ]);
 
-    expect(tiles.map((tile) => tile.link?.[2])).toEqual([
+    expect(stats.map((stat) => stat.link?.[2])).toEqual([
       'resolved:users',
       'resolved:zones',
       'resolved:lists',
@@ -99,11 +106,11 @@ describe('peopleTiles', () => {
     ]);
   });
 
-  it('draws an unlinked tile where the screen is not mounted', () => {
-    const tiles = peopleTiles(identity(), core(), translate, nothing);
+  it('draws a number with no link where the screen is not mounted', () => {
+    const stats = shopperStats(identity(), core(), translate, nothing);
 
-    expect(tiles.map((tile) => tile.link)).toEqual([null, null, null, null]);
-    expect(tiles[0].value).toBe(10);
+    expect(stats.map((stat) => stat.link)).toEqual([null, null, null, null]);
+    expect(stats[0].value).toBe(10);
   });
 });
 

@@ -114,6 +114,70 @@ describe('AppShell, the rail', () => {
     expect(all(fixture, '.menu')).toEqual([]);
   });
 
+  /**
+   * Admin plan 0046, target 9: the account menu holds who is signed in, the
+   * name of the deployment, the language the catalog is read in, and the way
+   * out.
+   */
+  it('shows the operator, the deployment, the two languages and "Sign out"', async () => {
+    const fixture = await render();
+
+    all(fixture, '[data-menu="account"]')[0].click();
+    fixture.detectChanges();
+
+    const [menu] = all(fixture, '.menu');
+    const titles = [...menu.querySelectorAll('.menu-title')].map((title) =>
+      (title.textContent ?? '').replace(/\s+/g, ' ').trim()
+    );
+    const buttons = [...menu.querySelectorAll('button')].map((button) =>
+      button.textContent?.trim()
+    );
+
+    expect(titles).toEqual([
+      'Dev Admin',
+      'environment.label: environment.short.production',
+      'shell.contentLanguage',
+    ]);
+    expect(buttons).toEqual([
+      'shell.language.en',
+      'shell.language.es',
+      'shell.signOut',
+    ]);
+    expect(
+      [...menu.querySelectorAll('button[aria-pressed]')].map((button) =>
+        button.getAttribute('aria-pressed')
+      )
+    ).toEqual(['true', 'false']);
+  });
+
+  it('chooses the language of the catalog from the account menu', async () => {
+    const fixture = await render();
+    const chosen: string[] = [];
+    fixture.componentInstance.chooseContentLocale.subscribe((locale) =>
+      chosen.push(locale)
+    );
+
+    all(fixture, '[data-menu="account"]')[0].click();
+    fixture.detectChanges();
+    all(fixture, '.menu button[aria-pressed="false"]')[0].click();
+    fixture.detectChanges();
+
+    expect(chosen).toEqual(['es']);
+    expect(all(fixture, '.menu')).toEqual([]);
+  });
+
+  /** Before the deployment is known the menu names none, and never a guess. */
+  it('names no deployment in the account menu while it is being asked for', async () => {
+    const fixture = await render({ deployment: undefined });
+
+    all(fixture, '[data-menu="account"]')[0].click();
+    fixture.detectChanges();
+
+    expect(all(fixture, '.menu')[0].textContent).not.toContain(
+      'environment.short'
+    );
+  });
+
   it('opens one menu at a time', async () => {
     const fixture = await render();
 

@@ -275,7 +275,8 @@ describe('appRoutes', () => {
     ['/harvest/setup/postal-codes', 'the postal codes'],
     ['/harvest/setup/postal-codes/new', 'the form that adds postal codes'],
     ['/harvest/setup/postal-codes/14001', 'a postal code'],
-    ['/admins', 'the admins'],
+    ['/admins/accounts', 'the accounts of the admins'],
+    ['/admins/failed-sign-ins', 'the failed sign ins of the admins'],
   ])('draws %s at its own URL', async (url) => {
     const { router } = await boot(true);
 
@@ -320,6 +321,8 @@ describe('appRoutes', () => {
     ['/harvest', '/harvest/review/products'],
     ['/harvest/review', '/harvest/review/products'],
     ['/harvest/setup', '/harvest/setup/sources'],
+    // Admins opens on its accounts (admin plan 0046, target 6).
+    ['/admins', '/admins/accounts'],
     // The chain the four queues share rides along.
     [
       '/harvest?chain=sm_mercadona',

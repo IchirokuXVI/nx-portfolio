@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  signal,
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -78,6 +79,15 @@ const GAP = 8;
           <li>{{ point | rokuT }}</li>
         }
       </ul>
+
+      @if (info().command; as command) {
+        <div class="command">
+          <code>{{ command }}</code>
+          <button (click)="copy(command)" type="button">
+            {{ (copied() ? 'info.copied' : 'info.copy') | rokuT }}
+          </button>
+        </div>
+      }
 
       @if (info().caution; as caution) {
         <lib-caution-line [text]="caution | rokuT" />
@@ -168,6 +178,45 @@ const GAP = 8;
       padding-inline-start: 1.25rem;
     }
 
+    /* A command to run, as it is typed: the mono face, on the page ground so
+       that it reads as a thing to copy and not as a sentence. */
+    .command {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface);
+    }
+
+    .command code {
+      flex: 1;
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
+      font-family: var(--admin-font-mono);
+      font-size: 0.78125rem;
+    }
+
+    .command button {
+      flex: none;
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
+      border: 1px solid var(--admin-border-strong);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .command button:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
     .close {
       flex: none;
       min-block-size: var(--admin-control);
@@ -217,6 +266,9 @@ export class InfoPanel {
   /** Asked to close: the Close button of the sheet. */
   readonly closed = output<void>();
 
+  /** Whether the command was just copied, which the button then says. */
+  readonly copied = signal(false);
+
   private readonly _panel =
     viewChild.required<ElementRef<HTMLElement>>('panel');
   private readonly _scrim = viewChild<ElementRef<HTMLElement>>('scrim');
@@ -250,6 +302,22 @@ export class InfoPanel {
         window.removeEventListener('resize', again);
       });
     });
+  }
+
+  /**
+   * Copy the command to the clipboard, and say so on the button.
+   *
+   * A browser that refuses (no permission, or a page that is not served over
+   * a secure origin) leaves the button as it was. The command is still on the
+   * screen to be selected by hand.
+   */
+  async copy(command: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(command);
+      this.copied.set(true);
+    } catch {
+      this.copied.set(false);
+    }
   }
 
   /** Tab stays inside the sheet. The panel on a wide screen lets it leave. */

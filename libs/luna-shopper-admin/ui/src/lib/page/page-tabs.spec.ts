@@ -179,3 +179,49 @@ describe('PageTabs', () => {
     );
   });
 });
+
+/**
+ * A count that is neither the length of the list behind the tab nor work that
+ * waits for a decision (admin plan 0046): the failed sign ins of Admins.
+ */
+describe('PageTabs, a count said in words', () => {
+  const failed: readonly PageTab[] = [
+    { path: '/admins/accounts', label: 'tabs.accounts', count: () => 3 },
+    {
+      path: '/admins/failed',
+      label: 'tabs.failed',
+      waiting: true,
+      countLabel: 'tabs.failedCount',
+      count: () => waiting(),
+    },
+  ];
+
+  beforeEach(() => waiting.set(2));
+
+  it('writes the words in place of the number, on the waiting wash', async () => {
+    const fixture = await render('/admins/accounts', failed);
+    const [plain, worded] = [
+      ...fixture.nativeElement.querySelectorAll('.count'),
+    ] as HTMLElement[];
+
+    expect(plain.textContent?.trim()).toBe('3');
+    // The testing translator answers with the key: the count is its argument.
+    expect(worded.textContent?.trim()).toBe('tabs.failedCount');
+    expect(worded.classList.contains('waiting')).toBe(true);
+  });
+
+  /** The words are the name. "2 waiting for a decision" would be wrong here. */
+  it('does not announce it as waiting for a decision', async () => {
+    const fixture = await render('/admins/accounts', failed);
+    const worded = fixture.nativeElement.querySelector('.count.waiting');
+
+    expect(worded.getAttribute('aria-label')).toBeNull();
+  });
+
+  it('draws nothing at zero, as every count does', async () => {
+    waiting.set(0);
+    const fixture = await render('/admins/accounts', failed);
+
+    expect(fixture.nativeElement.querySelectorAll('.count')).toHaveLength(1);
+  });
+});

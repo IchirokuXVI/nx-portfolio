@@ -1,11 +1,10 @@
-import { inject } from '@angular/core';
 import {
   ADMIN_ADMINS_PATH,
-  RESOURCE_GATEWAYS,
+  type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
-import {
-  defineResource,
-  type ResourcePage,
+import type {
+  InfoContent,
+  ResourcePage,
 } from '@portfolio/luna-shopper-admin/models';
 import { ADMIN_SEED, type AdminRow } from './people-seed';
 
@@ -13,84 +12,71 @@ import { ADMIN_SEED, type AdminRow } from './people-seed';
 export type Admin = AdminRow;
 
 /**
- * Who has access (plan 0007, section 2; backend plans 0071 and 0074).
+ * Who has access, and who tried to get it (admin plan 0046, targets 5 to 7;
+ * plan 0007, section 2; backend plans 0071 and 0074).
  *
  * **An admin can be seen and cannot be created, edited or deleted from here,
  * ever.** That is not a gap to be filled in a later plan: there is no create,
  * update or delete route, and none may be added without changing plan 0071
- * first. Changing an admin means having the server.
+ * first. Changing an admin means having the server. So the accounts are a
+ * table whose rows do not open, and the info button names the command.
  *
- * So this descriptor names no actions and no detail screen, `resourceRoutes`
- * therefore declares neither a create nor an `:id` route, and the list draws its
- * rows as text rather than as controls that lead nowhere. The note above the
- * table names the command, so an operator hunting for the missing button finds
- * the answer rather than an empty toolbar.
+ * The section is a page with two tabs, and not a descriptor: a list of rows
+ * that never open, with a mark on the signed in admin, is not what the list
+ * engine draws, and the second tab is no list of a resource at all.
+ */
+
+/** The segment the Admins section owns. */
+export const ADMINS_SEGMENT = 'admins';
+
+/** The two tabs of the section, as the segment each one owns. */
+export const ADMIN_ACCOUNTS_TAB = 'accounts';
+export const ADMIN_FAILED_SIGN_INS_TAB = 'failed-sign-ins';
+
+/** One tab of the Admins section, as its segment. */
+export type AdminsTab =
+  | typeof ADMIN_ACCOUNTS_TAB
+  | typeof ADMIN_FAILED_SIGN_INS_TAB;
+
+/**
+ * Where the Admins section is, or one of its tabs.
+ *
+ * The screens are hand written, so no descriptor names them and the resource
+ * registry cannot answer for them. This function is that answer, and the
+ * Overview's tile of failed sign ins reads it.
+ */
+export function adminsPath(tab?: AdminsTab): readonly string[] {
+  return tab === undefined ? ['/', ADMINS_SEGMENT] : ['/', ADMINS_SEGMENT, tab];
+}
+
+/**
+ * What the info button of Admins says (target 7).
+ *
+ * The command is the one that makes an account. It is text to copy and not a
+ * sentence, so it is no translation key.
+ */
+export const ADMINS_INFO: InfoContent = {
+  title: 'people.admins.many',
+  points: ['people.admins.info.readOnly', 'people.admins.info.add'],
+  command: 'npx nx run luna-shopper-backend-auth:admin:create',
+};
+
+/**
+ * Where the accounts are read from.
  *
  * `GET /v1/admin/admins` is the one collection under `/v1/admin/**` that does
  * not answer `{ items, nextCursor }`: there are a handful of admins and paging
- * them would be a ceremony, so it answers `{ admins }` and the gateway source
- * says how to read it.
+ * them would be a ceremony, so it answers `{ admins }`.
+ *
+ * Read through the resource gateways although no descriptor is left, so that
+ * the screen has rows with no backend, like every other one.
  */
-export const ADMINS = defineResource<Admin>({
-  name: 'admins',
-  segment: 'admins',
-  labels: { one: 'people.admins.one', many: 'people.admins.many' },
+export const ADMINS_SOURCE: ResourceSource<Admin> = {
+  path: ADMIN_ADMINS_PATH,
   idField: 'adminId',
-  info: {
-    title: 'people.admins.many',
-    points: ['people.admins.info.readOnly', 'people.admins.info.add'],
-  },
-
-  title: (row) => row.username,
-
-  fields: [
-    {
-      kind: 'text',
-      name: 'username',
-      label: 'people.admins.username',
-      editable: false,
-    },
-    {
-      kind: 'text',
-      name: 'displayName',
-      label: 'people.admins.displayName',
-      editable: false,
-    },
-    {
-      kind: 'date',
-      name: 'disabledAt',
-      label: 'people.admins.disabledAt',
-      time: true,
-      editable: false,
-    },
-    {
-      kind: 'date',
-      name: 'lastLoginAt',
-      label: 'people.admins.lastLoginAt',
-      time: true,
-      editable: false,
-    },
-  ],
-
-  list: {
-    columns: ['username', 'displayName', 'disabledAt', 'lastLoginAt'],
-    // Whether somebody still signs in, and when they last did. Whether they are
-    // disabled is the answer to "should this person still have access", which
-    // is the only reason to open this screen on a phone.
-    compact: ['disabledAt', 'lastLoginAt'],
-  },
-
-  // No filters and no order. There are a handful of rows and the route takes
-  // neither.
-
-  gateway: () =>
-    inject(RESOURCE_GATEWAYS).for<Admin>({
-      path: ADMIN_ADMINS_PATH,
-      idField: 'adminId',
-      seed: ADMIN_SEED,
-      page: toAdminPage,
-    }),
-});
+  seed: ADMIN_SEED,
+  page: toAdminPage,
+};
 
 /** `{ admins }` as a page, since this one route answers with no cursor. */
 export function toAdminPage(body: unknown): ResourcePage<Admin> {
@@ -102,9 +88,7 @@ export function toAdminPage(body: unknown): ResourcePage<Admin> {
 
   return {
     items: Array.isArray(admins) ? (admins as Admin[]) : [],
-    // There is no next page and there is no cursor to ask for one with. Saying
-    // so explicitly is what stops the list offering a "load more" that would
-    // fetch the same handful of rows again.
+    // There is no next page and there is no cursor to ask for one with.
     nextCursor: null,
   };
 }

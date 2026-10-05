@@ -47,10 +47,11 @@ import { SessionLifecycle } from '@portfolio/luna-shopper-admin/data-access';
       align-items: center;
       justify-content: center;
       gap: var(--admin-space-3);
-      /* Bottom rather than top: the top of an admin screen is where the chrome
-         and the environment badge go, and covering the badge to warn about a
-         session would hide which database the operator is looking at. */
-      inset-block-end: 0;
+      /* Bottom rather than top, so that it never covers the header of the
+         page. On a phone the bar of sections is fixed at the bottom, and the
+         strip sits above it (admin plan 0046, target 10): the token is the
+         height of that bar, and nothing on a wide screen. */
+      inset-block-end: var(--admin-bar);
       inset-inline: 0;
       padding: var(--admin-space-3) var(--admin-space-4);
       /* Fully opaque, like the overlay, for the plainer reason that text over a

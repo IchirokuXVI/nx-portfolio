@@ -164,6 +164,23 @@ describe('ReauthOverlay', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
+  /** The card, the field and the buttons are the shared entry card's (admin plan 0046). */
+  it('is drawn on the shared entry card, which names the dialog', async () => {
+    const { fixture } = await render();
+    const host: HTMLElement = fixture.nativeElement;
+
+    expect(host.querySelector('lib-entry-card form')).not.toBeNull();
+    expect(host.getAttribute('aria-labelledby')).toBe('reauth-heading');
+    expect(host.querySelector('h2#reauth-heading')?.textContent).toContain(
+      'session.reauth.heading'
+    );
+    // A cover sits over a page that has its own first heading.
+    expect(host.querySelector('h1')).toBeNull();
+    expect(host.querySelector('button.entry-quiet')?.textContent).toContain(
+      'session.reauth.signOut'
+    );
+  });
+
   it('asks for a password, and only a password', async () => {
     const { fixture } = await render();
 

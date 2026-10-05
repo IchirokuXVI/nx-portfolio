@@ -405,3 +405,78 @@ describe('InfoButton, where its dialog is drawn', () => {
     expect(source).not.toMatch(/position: absolute/);
   });
 });
+
+/**
+ * A command the points tell the operator to run (admin plan 0046, target 7):
+ * in the mono face under the points, with a button that copies it.
+ */
+describe('InfoButton, a command to copy', () => {
+  const withCommand: InfoContent = {
+    ...INFO,
+    command: 'npx nx run some-project:some-target',
+  };
+
+  afterEach(() => {
+    document.body.replaceChildren();
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('draws the command as it is typed, with a Copy button', async () => {
+    const fixture = await render(false, withCommand);
+    await open(fixture);
+
+    expect(panel(fixture)?.querySelector('.command code')?.textContent).toBe(
+      'npx nx run some-project:some-target'
+    );
+    expect(
+      panel(fixture)?.querySelector('.command button')?.textContent?.trim()
+    ).toBe('info.copy');
+  });
+
+  it('draws no command where the content has none', async () => {
+    const fixture = await render();
+    await open(fixture);
+
+    expect(panel(fixture)?.querySelector('.command')).toBeNull();
+  });
+
+  it('copies the command and says so, and stays open', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const fixture = await render(false, withCommand);
+    await open(fixture);
+
+    (panel(fixture)?.querySelector('.command button') as HTMLElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(writeText).toHaveBeenCalledWith(
+      'npx nx run some-project:some-target'
+    );
+    expect(
+      panel(fixture)?.querySelector('.command button')?.textContent?.trim()
+    ).toBe('info.copied');
+    expect(fixture.componentInstance.open()).toBe(true);
+  });
+
+  /** No permission, or no secure origin: the command is still there to select. */
+  it('leaves the button as it was when the browser refuses', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: jest.fn().mockRejectedValue(new Error('denied')) },
+    });
+    const fixture = await render(false, withCommand);
+    await open(fixture);
+
+    (panel(fixture)?.querySelector('.command button') as HTMLElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      panel(fixture)?.querySelector('.command button')?.textContent?.trim()
+    ).toBe('info.copy');
+  });
+});

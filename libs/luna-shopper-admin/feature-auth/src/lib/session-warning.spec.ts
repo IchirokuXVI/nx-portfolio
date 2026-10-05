@@ -13,6 +13,8 @@ import type {
   AdminMe,
   AdminSession,
 } from '@portfolio/luna-shopper-admin/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SessionWarning } from './session-warning';
 
 /**
@@ -98,5 +100,18 @@ describe('SessionWarning', () => {
 
     expect(keepAlive).toHaveBeenCalled();
     keepAlive.mockRestore();
+  });
+
+  /**
+   * Admin plan 0046, target 10: on a phone the bar of sections is fixed at the
+   * bottom, and the strip sits above it. Read out of the source, because a
+   * spec here loads no component styles. The token is the height of the bar,
+   * and nothing on a wide screen.
+   */
+  it('sits above the bar of sections', () => {
+    const source = readFileSync(join(__dirname, 'session-warning.ts'), 'utf8');
+
+    expect(source).toMatch(/inset-block-end: var\(--admin-bar\);/);
+    expect(source).not.toMatch(/inset-block-end: 0;/);
   });
 });
