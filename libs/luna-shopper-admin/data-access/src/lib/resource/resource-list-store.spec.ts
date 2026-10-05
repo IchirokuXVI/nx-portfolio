@@ -550,6 +550,85 @@ describe('ResourceListStore delete', () => {
     expect(gateway.queries).toHaveLength(1);
   });
 
+  it('lowers the count by the row it took off', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      {
+        items: [
+          { id: 'a', name: 'Aldi' },
+          { id: 'b', name: 'Bonpreu' },
+        ],
+        nextCursor: 'c1',
+        total: 5,
+      },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.total()).toBe(4);
+    expect(gateway.queries).toHaveLength(1);
+  });
+
+  it('leaves the count alone for a row that was not on screen', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: 'c1', total: 5 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('z');
+
+    expect(gateway.removed).toEqual(['z']);
+    expect(store.rows()).toHaveLength(1);
+    expect(store.total()).toBe(5);
+  });
+
+  it('never counts below zero', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: null, total: 0 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.total()).toBe(0);
+  });
+
+  it('keeps no count where the route gave none', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [{ items: [{ id: 'a', name: 'Aldi' }], nextCursor: null }];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.rows()).toHaveLength(0);
+    expect(store.total()).toBeNull();
+  });
+
+  it('keeps the count when the delete fails', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: null, total: 1 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    gateway.failWith = new GatewayError({
+      code: 'conflict',
+      status: 409,
+      correlationId: '',
+    });
+    await store.remove('a');
+
+    expect(store.total()).toBe(1);
+  });
+
   it('leaves the row exactly where it was when the delete fails', async () => {
     const gateway = new FakeGateway();
     gateway.pages = [{ items: [{ id: 'a', name: 'Aldi' }], nextCursor: null }];

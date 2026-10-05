@@ -425,6 +425,45 @@ describe('ItemService', () => {
       expect(count).not.toContain('LIMIT');
     });
 
+    /**
+     * Postgres refuses a statement that is sent a parameter it never names
+     * (42P18). The count has no ranking keys, so each parameter it binds has
+     * to be one its filter reads, for every shape of text.
+     */
+    it('binds nothing to the ranked count that the count does not name', async () => {
+      // Under four characters, four and over, a barcode, and digits that are
+      // not one.
+      for (const query of ['te', 'pan', 'leche', '8480000181077', '12']) {
+        const { items, service } = worklist(true, 0);
+
+        await service.search({
+          userId: 'operator',
+          query,
+          categoryId: SCOPE,
+          withoutPriceAtScopeId: SCOPE,
+        });
+
+        const read = (items.query as jest.Mock).mock.calls
+          .slice(1)
+          .map(([sql, values]) => ({
+            sql: sql as string,
+            values: values as unknown[],
+          }));
+        expect(read).toHaveLength(2);
+        for (const { sql, values } of read) {
+          const named = new Set(
+            [...sql.matchAll(/\$(\d+)/g)].map(([, n]) => Number(n))
+          );
+          expect([...named].sort((a, b) => a - b)).toEqual(
+            values.map((_, index) => index + 1)
+          );
+        }
+        // The page still binds the text as typed second, as it always did.
+        const page = read.find(({ sql }) => !sql.includes('count(*)'));
+        expect(page?.values[1]).toBe(query);
+      }
+    });
+
     it('answers 404 for a scope that does not exist, and reads nothing', async () => {
       const { items, service } = worklist(false, 0);
 

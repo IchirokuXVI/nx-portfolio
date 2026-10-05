@@ -218,7 +218,10 @@ function withoutPriceAtScopeSql(placeholder: string): string {
 interface RankedMatch {
   /** The placeholder of the normalized tsquery. */
   readonly query: string;
-  /** The placeholder of the text as typed. */
+  /**
+   * The placeholder of the text as typed, or `''` when the statement has no
+   * part that reads it and so it was never bound.
+   */
   readonly raw: string;
   /** The barcode test, or the constant `false` when the query is words. */
   readonly barcode: string;
@@ -1515,7 +1518,7 @@ export class ItemService {
   ): Promise<Item[]> {
     const offset = Number(cursor?.value ?? 0) || 0;
     const p = params();
-    const match = this.rankedMatch(req, term, p);
+    const match = this.rankedMatch(req, term, p, true);
     const { query, raw, barcode } = match;
     // The same test as a ranking key, with the two things SQL three valued logic
     // does to it spelled out.
@@ -1588,13 +1591,16 @@ export class ItemService {
    * How many products the ranked branch matches (plan 0187): the `WHERE` of
    * {@link rankedItems}, from the same two functions, with no ordering, no
    * limit and no offset.
+   *
+   * No ordering is also why this statement does not always read the text as
+   * typed, so it tells {@link rankedMatch} that only the filter is written.
    */
   private async rankedCount(
     req: SearchItemsRequest,
     term: SearchTerm
   ): Promise<number> {
     const p = params();
-    const match = this.rankedMatch(req, term, p);
+    const match = this.rankedMatch(req, term, p, false);
     const rows: { total: string }[] = await this.items.query(
       `
       SELECT count(*) AS "total"
@@ -1606,17 +1612,31 @@ export class ItemService {
     return Number(rows[0]?.total ?? 0);
   }
 
-  /** What {@link rankedItems} and {@link rankedCount} both match on. */
+  /**
+   * What {@link rankedItems} and {@link rankedCount} both match on.
+   *
+   * `ordered` says that the caller writes the ranking keys after the filter.
+   * The page does and its count does not, and that decides one binding: see
+   * the text as typed, below.
+   */
   private rankedMatch(
     req: SearchItemsRequest,
     term: SearchTerm,
-    p: ReturnType<typeof params>
+    p: ReturnType<typeof params>,
+    ordered: boolean
   ): RankedMatch {
     // Through `catalog_norm` before the stemmer, because the item documents are
     // built from normalized text (plan 0156). The group search binds the same
     // tsquery unnormalized, since group documents still keep their accents.
     const query = `"catalog_norm"(${p.bind(term.tsquery)})`;
-    const raw = p.bind(term.raw);
+    // The text as typed is read by the ranking keys and by the fuzzy branch,
+    // and by nothing else. A count has no ranking keys, so under four
+    // characters, where the fuzzy branch is not written, no part of the count
+    // names it. Postgres cannot type a parameter that the statement never
+    // mentions, and it refuses the whole statement (42P18), so the text is
+    // bound only for a statement that reads it. The page always does, which
+    // leaves its text and its bind order as they were.
+    const raw = ordered || term.fuzzy ? p.bind(term.raw) : '';
     // The barcode test, bound once and spent in both the filter and the
     // ordering, or the constant `false` when the query is words. A barcode names
     // one product, so the row carrying it is not merely the most relevant

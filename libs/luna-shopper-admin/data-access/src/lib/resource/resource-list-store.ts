@@ -266,6 +266,10 @@ export class ResourceListStore<T extends ResourceRow> {
    * operator's scroll position and every page they have loaded survive. A
    * failure leaves the row exactly where it was and answers the error, which
    * the caller shows.
+   *
+   * The count, where the route gave one, goes down with the row. Nothing reads
+   * the list again here, so a count left alone would say one more than there
+   * is until the next read.
    */
   async remove(id: string): Promise<GatewayError | null> {
     try {
@@ -274,9 +278,14 @@ export class ResourceListStore<T extends ResourceRow> {
       return toGatewayError(error);
     }
 
-    this._rows.update((rows) =>
-      rows.filter((row) => idOf(this._descriptor, row) !== id)
-    );
+    const shown = this._rows();
+    const kept = shown.filter((row) => idOf(this._descriptor, row) !== id);
+    this._rows.set(kept);
+    if (kept.length < shown.length) {
+      this._total.update((total) =>
+        total === null ? null : Math.max(0, total - 1)
+      );
+    }
     return null;
   }
 

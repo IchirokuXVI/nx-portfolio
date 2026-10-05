@@ -333,6 +333,27 @@ describeIntegration(
         expect(page.total).toBe(1);
       });
 
+      // Under four characters the trigram branch is not written, and that
+      // branch was the only part of the count that named the text as typed.
+      // The count then carried a parameter that no part of it mentioned, and
+      // Postgres refused the statement.
+      it('counts a text too short for the fuzzy branch, on the ranked branch', async () => {
+        // Neither fragment is a Spanish stop word, which the stemmer would drop.
+        const three = await worklist({ query: 'lec' });
+        expect(three.ids.sort()).toEqual([noRow, soldUnpriced, grouped].sort());
+        expect(three.page.total).toBe(3);
+
+        const two = await worklist({ query: 'qu' });
+        expect(two.ids).toEqual([elsewhere]);
+        expect(two.page.total).toBe(1);
+
+        // A barcode shorter than four characters does not exist, so this is the
+        // one shape left: digits that are words and not a barcode.
+        const digits = await worklist({ query: '12' });
+        expect(digits.ids).toEqual([]);
+        expect(digits.page.total).toBe(0);
+      });
+
       it('combines with the text under an order by name, on the listing branch', async () => {
         const { ids, page } = await worklist({ query: 'leche', order: 'name' });
 
