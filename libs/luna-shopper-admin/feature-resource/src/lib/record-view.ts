@@ -204,7 +204,14 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                   />
                 </lib-field-row>
               } @else {
-                <lib-field-row [label]="field.label | rokuT">
+                <lib-field-row
+                  [help]="
+                    !form && field.editable === false
+                      ? (field.help ?? null)
+                      : null
+                  "
+                  [label]="field.label | rokuT"
+                >
                   @if (form) {
                     <lib-locked-value [reason]="lockReason(field)">
                       <lib-field-value

@@ -96,6 +96,11 @@ export interface ListPresentation<T extends ResourceRow = ResourceRow> {
    * (admin plan 0042). Absent means the row's title alone.
    */
   readonly brief?: BriefPresentation<T>;
+  /**
+   * A translation key for what the list says when it holds no row at all.
+   * Absent means the sentence every list says.
+   */
+  readonly empty?: string;
 }
 
 /**

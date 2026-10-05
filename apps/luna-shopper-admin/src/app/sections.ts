@@ -16,6 +16,7 @@ import {
   harvestRoutes,
   HarvestStatus,
   POSTAL_CODES,
+  SOURCES,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   ADMIN_ACCOUNTS_TAB,
@@ -161,12 +162,16 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     // The two resources are held and not mounted by the route factory: they
     // are parts of the Setup tab, at `/harvest/setup/brands` and
     // `/harvest/setup/postal-codes`, and the section's own table mounts them.
+    //
+    // The chain sources are held too (admin plan 0059), so that the registry
+    // knows where a source is. They are the harvester's own, so its route
+    // table mounts them without being handed them.
     key: 'harvest',
     label: 'shell.sections.harvest',
     icon: InboxIcon,
     segment: HARVEST_SEGMENT,
     landing: HARVEST_REVIEW_TAB,
-    held: [BRANDS, POSTAL_CODES],
+    held: [SOURCES, BRANDS, POSTAL_CODES],
     heldUnder: HARVEST_SETUP_TAB,
     screens: harvestRoutes({
       brandsQueue: BrandSuggestionsPage,

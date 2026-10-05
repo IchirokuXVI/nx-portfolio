@@ -145,6 +145,7 @@ const SHOPS = defineResource<Shop>({
       label: 'shops.key',
       editable: false,
       setBy: 'shops.keySetBy',
+      help: 'shops.keyHelp',
     },
     { kind: 'number', name: 'visits', label: 'shops.visits', editable: false },
     { kind: 'text', name: 'note', label: 'shops.note', nullable: true },
@@ -338,6 +339,41 @@ describe('RecordView', () => {
       expect(rowOf(drawn.element, 'shops.open').textContent).toContain(
         'resource.value.yes'
       );
+    });
+
+    /**
+     * A field that no mode can type into ("May be fetched" of a chain source)
+     * has no control to put its help under, so the help was drawn nowhere at
+     * all. It is drawn under the value that is read.
+     *
+     * The help of a field that has a control is written for the person who
+     * types ("One per line"), and is under that control alone.
+     */
+    it('draws the help of a field that is never a control, and of no other', async () => {
+      drawn = await draw();
+
+      const helpOf = (label: string) =>
+        rowOf(drawn.element, label)
+          .querySelector('[data-help]')
+          ?.textContent?.trim();
+
+      // Never a control: the help is under the value.
+      expect(helpOf('shops.key')).toBe('shops.keyHelp');
+      // A control once the page is a form: no help while it is read.
+      expect(helpOf('shops.slug')).toBeUndefined();
+
+      // Locked in the form: the lock and its reason, as it was, and no help.
+      drawn.store.edit();
+      await settle(drawn.fixture);
+
+      expect(helpOf('shops.key')).toBeUndefined();
+      expect(
+        rowOf(drawn.element, 'shops.key')
+          .querySelector('lib-locked-value [data-reason]')
+          ?.textContent?.trim()
+      ).toBe('shops.keySetBy');
+      // And the help of a control is under the control.
+      expect(helpOf('shops.slug')).toBe('shops.slugHelp');
     });
 
     it('holds the date and the ID in the Record block, and in no section', async () => {
