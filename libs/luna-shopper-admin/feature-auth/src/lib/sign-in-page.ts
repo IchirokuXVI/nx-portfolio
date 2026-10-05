@@ -23,9 +23,11 @@ import { signInMessage } from './sign-in-copy';
  * How long this page waits before each new try of a passwordless sign in that
  * got no answer, in milliseconds (admin plan 0049, target 1).
  *
- * Four more tries over fifteen seconds, which is about what a backend takes to
- * finish starting. A fixed number and not a loop: a server that goes on not
- * answering is a broken server, and the page then says so with the form.
+ * The first waits are short, because a backend that is starting answers
+ * within seconds. After the last one the page goes on trying at that same
+ * wait, for as long as it is on screen and the server still says that it
+ * hands out a session: the owner's rule is that the form does not show on a
+ * development server at all. Only an answer in words stops it.
  */
 export const DEVELOPMENT_RETRY_WAITS_MS: readonly number[] = [
   1000, 2000, 4000, 8000,
@@ -63,7 +65,7 @@ export const DEVELOPMENT_RETRY_WAITS_MS: readonly number[] = [
  * this form in front of a server that would have let them in: a backend that
  * is still starting is the ordinary case, and so is one that restarts while
  * the tab is open. So the page asks whenever the server says it may, draws a
- * line that says so in place of the form, and tries again a few times when
+ * line that says so in place of the form, and goes on trying while
  * nothing answers. It is still the server that decides, through
  * `devAutologin`, and never the build. A sign in that the server refuses in
  * words puts the form back with the reason, which is the fallback `0002`
@@ -263,12 +265,30 @@ export class SignInPage {
    * `attempt` counts the tries that got no answer. A try that the server
    * answered with a refusal is not tried again: the answer will not change,
    * and the form with its reason is where the operator should then be. A try
-   * that got no answer is, after the wait {@link DEVELOPMENT_RETRY_WAITS_MS}
-   * names, until the waits run out.
+   * that got no answer is tried again after the wait
+   * {@link DEVELOPMENT_RETRY_WAITS_MS} names, and after the last of those
+   * waits at that same wait, with no end.
+   *
+   * **A session that is already held is used, and never asked for again.**
+   * Another tab can sign in while this page waits, and the token is shared by
+   * every tab. A try made then could fail, and a failed sign in clears the
+   * shared token, which signs the other tab out. So the page looks before
+   * each try, and goes in on what it finds.
    */
   private async _enter(attempt: number): Promise<void> {
     this._retry = null;
     if (this._left || this.busy()) {
+      return;
+    }
+
+    if (this._sessions.signedIn()) {
+      await this._router.navigateByUrl('/');
+      return;
+    }
+
+    // The server stopped offering, which a deployment read again can say.
+    if (!this._deployments.devAutologin()) {
+      this.entering.set(false);
       return;
     }
 
@@ -285,8 +305,9 @@ export class SignInPage {
       return;
     }
 
-    const wait = DEVELOPMENT_RETRY_WAITS_MS[attempt];
-    if (failure.reason === 'unknown' && wait !== undefined) {
+    if (failure.reason === 'unknown') {
+      const last = DEVELOPMENT_RETRY_WAITS_MS.length - 1;
+      const wait = DEVELOPMENT_RETRY_WAITS_MS[Math.min(attempt, last)];
       this._retry = setTimeout(() => void this._enter(attempt + 1), wait);
       return;
     }

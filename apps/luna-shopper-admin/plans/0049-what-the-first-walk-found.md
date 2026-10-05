@@ -53,14 +53,17 @@ the remodeled back office. Use the `nx-portfolio-angular-developer` skill.
    - The server says `devAutologin`. Then the sign in page takes the session by itself and
      goes in.
    - During that time the page draws one line that says so, in place of the form.
-   - If nothing answers, the page tries again after 1, 2, 4 and 8 seconds.
-   - If the server refuses in words, or the waits run out, the form comes back with the reason.
+   - If nothing answers, the page tries again after 1, 2, 4 and 8 seconds. Then it tries
+     every 8 seconds, with no end, while the page is on screen.
+   - If the server refuses in words, the form comes back with the reason. A throttle, a 401,
+     a lockout and a 501 are such answers.
+   - If another tab already holds a session, the page asks for none and goes in.
    - Production and staging answer `devAutologin: false`, so nothing changes there.
 2. The white panel of the shops list reaches the bottom of the page. At 72 rem and above, the
    column of a split under a header is as tall as the pane that holds it.
 3. The count of shops and the list of shops agree. A shop can have no label, no address and no
    town. Its row then shows its postal code, or else the reference of its source, or else its
-   id. No row is drawn with no text.
+   id. No row is drawn with no text. The line under a heading does not repeat the heading.
 4. The form of a price rule has no "Enabled" checkbox. The switch on the row is the one place
    that turns a rule on and off.
 5. A queue keeps its rows in their places.
@@ -68,7 +71,11 @@ the remodeled back office. Use the `nx-portfolio-angular-developer` skill.
    - "Skip" goes to the next row and moves no line.
    - After a decision on the open row, the row under it opens. After the last row, the first
      row opens.
+   - If the gateway holds another page, "Skip" on the last loaded row waits for that page.
+     Then it opens the first row of the page.
    - The column does not scroll.
+   - A new open row clears the answers that belonged to the row before it: the picked chain on
+     Places, the mapping picker on Shops.
 6. The three queues have no "As a list" view.
    - The list of checkboxes, the bar of bulk actions and the bulk report are deleted.
    - Their texts, their specs and everything that only they used are deleted too.
@@ -168,6 +175,15 @@ the page signs in and goes to `/`. That covers three cases:
 - The page was drawn under the cover, and the server comes back.
 - The operator signs out on a development server.
 
+**The tries have no end.** The first review of this plan stopped after the fourth wait and put
+the form back. The owner's rule is that the form does not show on such a server, so the page
+goes on at 8 seconds. Only an answer in words stops it.
+
+**Other tabs.** Every tab shares one token, and a failed sign in clears it. So the page looks
+for a held session before each try. If it finds one, it goes in and asks for nothing. One case
+stays open: another tab signs in during a try of this page that then fails. The store clears
+the token there, and this plan does not change the store.
+
 **One consequence.** "Sign out" on a development server signs the operator in again at once.
 That is the meaning of "the sign in must never show" on such a server. The session lifecycle
 already says that a cover there protects nothing.
@@ -198,14 +214,17 @@ text: a blank strip 44 px high, which reads as the edge of the list. This was re
 slot: a chain with one ordinary shop and one bare shop shows "Shops 2" over what looks like one
 row.
 
-**What is not known.** The rows of Dia on slot 0 were not read. A builder is not permitted to
-sign in to slot 0, and the copy of the slot 3 database was refused. So this plan fixes one real
-cause of "2 counted, 1 shown". It cannot say that slot 0 has that cause. Section 3 says how the
-owner can tell in a minute.
+**What the builder did not see.** The builder did not read the rows of Dia on slot 0, because
+a builder is not permitted to sign in to slot 0. The review read them later, and the last
+paragraph of this section says what it found.
 
 **The fix.** `LOCATIONS.title` and its `brief.heading` fall back to the postal code, then the
 reference of the source, then the id. It is the rule `BASKETS.title` already follows for a list
-with no name.
+with no name. The line of a row leaves out a field whose text is the heading. So a shop headed
+by its postal code does not say the code twice.
+
+**Known after the review.** The second Dia shop on slot 0 has no label, no address and no
+town. It has postal code 14014.
 
 ### 1.4 A checkbox that repeats the switch
 
@@ -229,6 +248,12 @@ row. When the open row leaves, the row under it takes the name, and after the la
 first one does. `upcoming` is the rows after the open one and then the rows before it, which is
 what the Places queue reads to find near duplicates. With fewer than three rows left under the
 open row, the store reads the next page.
+
+Three things came from the review. A press, a skip and a decision can each ask for the next
+page, so the store shares one read for each cursor. "Skip" on the last loaded row waits for the
+next page and opens its first row. A walk that went back to the top there hid the rows that
+were not read yet. On Places, a new open row clears the picked chain, the scope and the
+chain form.
 
 Two pages took the first row for themselves instead of asking the store. `ShopsQueuePage.current`
 now follows the store. Opening another line or skipping also closes a mapping picker that was
@@ -289,9 +314,7 @@ changed.
 
 ## 3. Decisions for the owner
 
-1. Is the second Dia shop on slot 0 a bare row? Open Chains, then Dia, with this change.
-   - If two rows show and one is a postal code or an id, section 1.3 found the cause.
-   - If one row shows, the cause is another one, and the rows of Dia are necessary to find it.
+1. Settled: the second Dia shop on slot 0 is a bare row, as section 1.3 says.
 2. Bulk work on the queues is gone with the list view. If the owner still wants to reject two
    hundred rows at once, that action needs a new home. One example is a "Reject all of these"
    button over the column. Nothing is scheduled.

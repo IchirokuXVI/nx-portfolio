@@ -1498,10 +1498,24 @@ export class EntriesQueuePage implements OnDestroy {
    * front of it, so calling it directly would leave the picker holding the
    * skipped row's product. That is exactly how a name gets bound to the wrong
    * product, which is this queue's whole hazard.
+   *
+   * On the last row that is loaded the queue first reads the next page, so
+   * the row changes a moment later. The controls are pointed again then.
    */
   skip(): void {
-    this.queue?.skip();
+    const queue = this.queue;
+    if (queue === null) {
+      return;
+    }
+
+    const moved = queue.skip();
     this._syncSubject();
+    const front = this.row()?.id ?? null;
+    void moved.then(() => {
+      if (this.queue === queue && (this.row()?.id ?? null) !== front) {
+        this._syncSubject();
+      }
+    });
   }
 
   /** Move the queue to the row the ladder proposed, without deciding this one. */

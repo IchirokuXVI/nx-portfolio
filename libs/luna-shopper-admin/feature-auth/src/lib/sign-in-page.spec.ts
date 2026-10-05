@@ -522,10 +522,16 @@ describe('SignInPage', () => {
       expect(navigate).toHaveBeenCalledWith('/');
     });
 
-    it('puts the form back, with the reason, once the waits run out', async () => {
+    /**
+     * The form does not show on a development server at all, so a server that
+     * goes on not answering is asked for as long as the page is on screen.
+     */
+    it('goes on trying at the last wait, and never puts the form back', async () => {
       const { fixture, tries } = await render({ session }, passwordless, [
         new Error('nothing answered'),
       ]);
+      const last =
+        DEVELOPMENT_RETRY_WAITS_MS[DEVELOPMENT_RETRY_WAITS_MS.length - 1];
       jest.useFakeTimers();
 
       await settle(fixture);
@@ -533,16 +539,72 @@ describe('SignInPage', () => {
         jest.advanceTimersByTime(wait);
         await drain();
       }
+      expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1);
+
+      for (let more = 1; more <= 5; more++) {
+        jest.advanceTimersByTime(last);
+        await drain();
+        expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1 + more);
+      }
       fixture.detectChanges();
 
-      expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1);
-      expect(el(fixture, 'form')).not.toBeNull();
-      expect(text(fixture, '.entry-error')).toBe('signIn.error.unknown');
+      expect(el(fixture, 'form')).toBeNull();
+      expect(text(fixture, '[data-entering]')).toBe('signIn.development');
+    });
 
-      // And nothing is waiting to try a sixth time.
+    it('stops, with the form and the reason, when a later try is refused in words', async () => {
+      const { fixture, tries } = await render({ session }, passwordless, [
+        new Error('nothing answered'),
+        new Error('still nothing'),
+        refusal('rate_limited', 429, 60),
+      ]);
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[0]);
+      await drain();
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[1]);
+      await drain();
+      fixture.detectChanges();
+
+      expect(tries.count).toBe(3);
+      expect(el(fixture, 'form')).not.toBeNull();
+      expect(text(fixture, '.entry-error')).toBe('signIn.error.throttledFor');
+
       jest.advanceTimersByTime(60_000);
       await drain();
-      expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1);
+      expect(tries.count).toBe(3);
+    });
+
+    /**
+     * The token is shared by every tab, and a failed sign in clears it. So a
+     * page that waits must not ask again once another tab holds a session:
+     * a try that failed then would sign that tab out.
+     */
+    it('goes in on a session another tab took, and asks for none of its own', async () => {
+      const { fixture, tries, sessions } = await render(
+        { session },
+        passwordless,
+        [new Error('nothing answered')]
+      );
+      const navigate = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      expect(tries.count).toBe(1);
+
+      // What the lifecycle does when another tab writes the shared token.
+      sessions.adopt(session);
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[0]);
+      await drain();
+
+      expect(tries.count).toBe(1);
+      expect(sessions.signedIn()).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('/');
+
+      jest.advanceTimersByTime(60_000);
+      await drain();
+      expect(tries.count).toBe(1);
     });
 
     /** The server changed its mind between the two calls (plan 0002). */

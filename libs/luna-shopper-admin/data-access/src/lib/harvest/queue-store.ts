@@ -238,22 +238,40 @@ export class QueueStore<T> {
   }
 
   /**
-   * Go to the next row without deciding this one, and from the last row back
-   * to the first.
+   * Go to the next row without deciding this one, and from the last row of
+   * the queue back to the first.
    *
    * The way out of an item somebody cannot judge. Without it the only way past a
    * hard case is to answer it wrongly, and this queue writes to the catalog.
    * The skipped row keeps its place, so it is where the operator left it when
    * they come back to it.
+   *
+   * **The last row that is loaded is not the last row of the queue** while
+   * the gateway holds another page. Skipping it waits for that page and opens
+   * its first row. Going back to the first row there would hide every row
+   * that was not read yet behind a walk that looks complete. The promise
+   * settles when the next row is the open one.
    */
-  skip(): void {
-    const items = this._items();
+  async skip(): Promise<void> {
     const at = this._at();
     if (at < 0) {
       return;
     }
 
-    const next = items[(at + 1) % items.length];
+    const skipped = this._idOf(this._items()[at]);
+    if (at === this._items().length - 1 && this.canLoadMore()) {
+      await this._more();
+      // The operator chose another row, or decided this one, while the page
+      // was read. What they did stands.
+      const front = this.current();
+      if (front === null || this._idOf(front) !== skipped) {
+        return;
+      }
+    }
+
+    const items = this._items();
+    const now = items.findIndex((item) => this._idOf(item) === skipped);
+    const next = items[(now + 1) % items.length];
     this._currentId.set(this._idOf(next));
     this._readAhead();
   }
@@ -296,15 +314,35 @@ export class QueueStore<T> {
     }
   }
 
-  private async _more(): Promise<void> {
+  /** The read of the next page that is in flight, and the cursor it is for. */
+  private _reading: { cursor: string; done: Promise<void> } | null = null;
+
+  /**
+   * Read the next page, once for each cursor.
+   *
+   * A press on a row, a skip and a decision can each ask for the next page,
+   * and quick presses ask several times before the first answer. Every one of
+   * them gets the same read, so a cursor is sent once and a page is added
+   * once.
+   */
+  private _more(): Promise<void> {
     const cursor = this._cursor();
     if (cursor === null || this._exhausted) {
-      return;
+      return Promise.resolve();
+    }
+    if (this._reading?.cursor === cursor) {
+      return this._reading.done;
     }
 
-    await this._fetch(cursor, (items) =>
+    const done = this._fetch(cursor, (items) =>
       this._items.update((shown) => dedupe([...shown, ...items], this._idOf))
-    );
+    ).finally(() => {
+      if (this._reading?.done === done) {
+        this._reading = null;
+      }
+    });
+    this._reading = { cursor, done };
+    return done;
   }
 
   private async _fetch(

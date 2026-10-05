@@ -322,6 +322,113 @@ describe('QueueStore, the row in front', () => {
     expect(queue.current()).toEqual({ id: 'e' });
   });
 
+  /**
+   * A press on a row, a skip and a decision can each ask for the next page.
+   * Quick presses ask several times before the first answer, and the cursor
+   * must still be sent once.
+   */
+  it('sends a cursor once, however many presses ask for the next page', async () => {
+    const source = pages(
+      { items: items('a', 'b', 'c'), nextCursor: '3' },
+      { items: items('d', 'e', 'f', 'g', 'h'), nextCursor: null }
+    );
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+
+    queue.focus('b');
+    queue.focus('c');
+    queue.focus('a');
+    void queue.loadMore();
+    for (let turn = 0; turn < 6; turn++) {
+      await Promise.resolve();
+    }
+
+    expect(source.reads).toEqual([undefined, '3']);
+    expect(queue.items()).toEqual(
+      items('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h')
+    );
+  });
+
+  /**
+   * The last row that is loaded is not the last row of the queue while the
+   * gateway holds another page. Going back to the first row there would hide
+   * every row that was not read yet.
+   */
+  it('waits for the next page on a skip at the last loaded row, and opens its first row', async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let call = 0;
+    const queue = new QueueStore<Item>(
+      async () => {
+        call += 1;
+        if (call === 1) {
+          return { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' };
+        }
+        await gate;
+        return { items: items('f', 'g'), nextCursor: null };
+      },
+      (item) => item.id
+    );
+    await queue.load();
+    queue.focus('e');
+
+    const skipped = queue.skip();
+    await Promise.resolve();
+    // Not the first row, and not yet the next one: the page is being read.
+    expect(queue.current()).toEqual({ id: 'e' });
+
+    release();
+    await skipped;
+
+    expect(queue.current()).toEqual({ id: 'f' });
+    expect(queue.items()).toEqual(items('a', 'b', 'c', 'd', 'e', 'f', 'g'));
+    expect(call).toBe(2);
+  });
+
+  it('leaves the row the operator chose while the next page was read', async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let call = 0;
+    const queue = new QueueStore<Item>(
+      async () => {
+        call += 1;
+        if (call === 1) {
+          return { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' };
+        }
+        await gate;
+        return { items: items('f'), nextCursor: null };
+      },
+      (item) => item.id
+    );
+    await queue.load();
+    queue.focus('e');
+
+    const skipped = queue.skip();
+    queue.focus('b');
+    release();
+    await skipped;
+
+    expect(queue.current()).toEqual({ id: 'b' });
+  });
+
+  it('goes back to the first row when the next page brings nothing', async () => {
+    const source = pages(
+      { items: items('a', 'b', 'c', 'd', 'e'), nextCursor: '5' },
+      { items: [], nextCursor: null }
+    );
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+    // Chosen with no read ahead in the way: the page is asked for by the skip.
+    queue.focus('e');
+    for (let turn = 0; turn < 6; turn++) {
+      await Promise.resolve();
+    }
+
+    await queue.skip();
+
+    expect(queue.current()).toEqual({ id: 'a' });
+  });
+
   it('opens on the first row again after a reload', async () => {
     const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
     const queue = new QueueStore(source.read, (item) => item.id);

@@ -738,6 +738,36 @@ describe('the source shops queue, a column and no list', () => {
     expect(page.current()?.status).toBe('IGNORED');
   });
 
+  /**
+   * The name of the picked shop is looked up before the dialog is raised. An
+   * answer that arrives after the operator opened another row belongs to a
+   * picker that is gone, and must raise nothing.
+   */
+  it('raises no dialog for a pick whose row was left while its name was read', async () => {
+    const { fixture, page } = await opened();
+
+    page.startMapping(page.rows()[0]);
+    const picked = page.pickLocation('loc_cordoba_centro');
+    lines(fixture)[1].click();
+    await picked;
+    await drain();
+
+    expect(page.mapping()).toBeNull();
+    expect(page.confirming()).toBeNull();
+  });
+
+  it('raises the dialog for a pick whose row is still open', async () => {
+    const { page } = await opened();
+
+    page.startMapping(page.rows()[0]);
+    await page.pickLocation('loc_cordoba_centro');
+
+    expect(page.confirming()).toMatchObject({
+      shopId: page.rows()[0].id,
+      supermarketLocationId: 'loc_cordoba_centro',
+    });
+  });
+
   /** A picker opened for one row does not follow the operator to another. */
   it('drops a mapping that was being picked when another line is opened', async () => {
     const { fixture, page } = await opened();

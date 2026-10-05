@@ -211,6 +211,49 @@ describe('the places queue, importing under a scope', () => {
   });
 });
 
+/**
+ * Admin plan 0049. The picked chain, the scope and the chain form are answers
+ * about one place. Left in the panel when another place comes up, they file
+ * that one under the wrong chain in one press.
+ */
+describe('the places queue, the panel when another place comes up', () => {
+  it('clears the picked chain and scope when another line is opened', async () => {
+    const { page } = await render();
+    const other = page.queue.items()[1];
+
+    page.chooseChain(MERCADONA);
+    page.priceScopeId.set('ps_mercadona_4661');
+    page.open(other.id);
+
+    expect(page.queue.current()?.id).toBe(other.id);
+    expect(page.supermarketId()).toBe('');
+    expect(page.priceScopeId()).toBe('');
+  });
+
+  it('clears the picked chain and the chain form on a skip', async () => {
+    const { page } = await render();
+    const first = front(page);
+
+    page.chooseChain(MERCADONA);
+    page.startNewChain(first);
+    page.skip();
+
+    expect(page.queue.current()?.id).not.toBe(first.id);
+    expect(page.supermarketId()).toBe('');
+    expect(page.creatingChain()).toBe(false);
+    expect(page.newChainName()).toBe('');
+  });
+
+  it('keeps the panel when the line that is pressed is the open one', async () => {
+    const { page } = await render();
+
+    page.chooseChain(MERCADONA);
+    page.open(front(page).id);
+
+    expect(page.supermarketId()).toBe(MERCADONA);
+  });
+});
+
 describe('the places queue, when the catalog may already hold the shop', () => {
   async function refused() {
     const rendered = await render(LIBERTADOR);

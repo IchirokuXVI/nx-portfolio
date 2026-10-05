@@ -123,7 +123,7 @@ const CATALOG_SHOPS_READ = 100;
       (loadMore)="queue.loadMore()"
       (openRow)="open($event)"
       (reject)="reject()"
-      (skip)="queue.skip()"
+      (skip)="skip()"
       [busy]="queue.busy()"
       [canLoadMore]="queue.canLoadMore()"
       [currentId]="queue.current()?.id ?? null"
@@ -900,9 +900,43 @@ export class PlacesQueuePage {
     await queue.load();
   }
 
-  /** A line of the column was pressed: that place is the one in front. */
+  /**
+   * A line of the column was pressed: that place is the one in front.
+   *
+   * The panel is cleared when the place changes. The picked chain, the scope
+   * and the chain form were answers about the place before it, and left in
+   * place they would file this one under the wrong chain in one press.
+   */
   open(id: string): void {
-    this.queue.focus(id);
+    this._follow(() => this.queue.focus(id));
+  }
+
+  /** The next place, without deciding this one, with the panel cleared. */
+  skip(): void {
+    const queue = this.queue;
+    const moved = this._follow(() => queue.skip());
+    const front = queue.current()?.id ?? null;
+    // On the last place that is loaded, the queue reads the next page first
+    // and the place changes a moment later.
+    void moved.then(() => {
+      if (this.queue === queue && this._changedFrom(front)) {
+        this._reset();
+      }
+    });
+  }
+
+  /** Move the queue, and clear the panel when another place came up. */
+  private _follow<R>(move: () => R): R {
+    const front = this.queue.current()?.id ?? null;
+    const result = move();
+    if (this._changedFrom(front)) {
+      this._reset();
+    }
+    return result;
+  }
+
+  private _changedFrom(id: string | null): boolean {
+    return (this.queue.current()?.id ?? null) !== id;
   }
 
   /** Name the chain here, starting from the brand the place prints. */

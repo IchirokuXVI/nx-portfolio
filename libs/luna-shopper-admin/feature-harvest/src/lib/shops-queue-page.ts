@@ -851,7 +851,7 @@ export class ShopsQueuePage {
 
   skip(): void {
     this.cancelMapping();
-    this.queue?.skip();
+    void this.queue?.skip();
   }
 
   /** The open row's "no", which exists only on a row that has one. */
@@ -893,6 +893,13 @@ export class ShopsQueuePage {
       'locations',
       supermarketLocationId
     );
+
+    // The lookup took a moment, and the operator can open another row or
+    // cancel in it. The answer then belongs to a picker that is gone, and a
+    // dialog raised from it would ask to bind a shop nobody is looking at.
+    if (this.mapping() !== shop) {
+      return;
+    }
 
     this.confirming.set({
       shopId: shop.id,
