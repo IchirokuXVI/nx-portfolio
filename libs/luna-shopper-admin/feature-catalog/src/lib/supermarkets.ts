@@ -163,6 +163,8 @@ export const SUPERMARKETS = defineResource<Supermarket>({
   // is the last tab, so a chain opens on its shops.
   record: {
     details: 'last',
+    // What the gateway refuses, said before it is asked.
+    deleteBody: 'catalog.chains.deleteBody',
     sections: [
       {
         title: 'catalog.supermarkets.section.name',

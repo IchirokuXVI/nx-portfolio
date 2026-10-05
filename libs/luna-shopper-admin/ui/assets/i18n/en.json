@@ -315,6 +315,7 @@
       }
     },
     "chains": {
+      "deleteBody": "A chain that still holds shops or prices is refused. This cannot be taken back.",
       "choose": "Choose a chain to see its shops, its sections and its price scopes.",
       "info": {
         "title": "a chain",
@@ -330,6 +331,7 @@
       }
     },
     "shops": {
+      "deleteBody": "Its section order and its single shop price scope are deleted with it. This cannot be taken back.",
       "choose": "Choose a shop to see its details, its sections and its products.",
       "tabs": {
         "sections": "Sections",

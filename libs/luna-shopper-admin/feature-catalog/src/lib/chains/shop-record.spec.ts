@@ -281,9 +281,7 @@ describe('a shop, on the record page', () => {
   it('is titled with the address, over the town and the postal code', async () => {
     const fixture = await boot(`${CENTRO}/details`);
 
-    expect(page(fixture).heading()).toBe(
-      'Avenida del Gran Capitán 12, Córdoba'
-    );
+    expect(page(fixture).heading()).toBe('Avenida del Gran Capitán 12');
     expect(page(fixture).subtitle()).toBe('Córdoba 14001');
     expect(
       pageElement(fixture).querySelector('.page-subtitle')?.textContent
@@ -390,9 +388,7 @@ describe('a shop, on the record page', () => {
 
     expect(url()).toBe(`${CENTRO}/details`);
     expect(chainPage(fixture).heading()).toBe('Mercadona');
-    expect(page(fixture).heading()).toBe(
-      'Avenida del Gran Capitán 12, Córdoba'
-    );
+    expect(page(fixture).heading()).toBe('Avenida del Gran Capitán 12');
   });
 
   it('goes there from a tab of the wrong address as well', async () => {
@@ -563,7 +559,7 @@ describe('the Details tab of a shop', () => {
     expect(store.mode()).toBe('read');
     expect(pageElement(fixture).querySelector('[data-saved]')).not.toBeNull();
     // The page holds what was saved, so its title says it.
-    expect(page(fixture).heading()).toBe('Calle Nueva 1, Córdoba');
+    expect(page(fixture).heading()).toBe('Calle Nueva 1');
   });
 
   /** Cancel asks first when something changed, and a yes puts the shop back. */
@@ -1033,9 +1029,7 @@ describe('going from one shop to another', () => {
     expect(view(fixture).valueOf(field(fixture, 'postalCode'))).toMatchObject({
       text: '14005',
     });
-    expect(page(fixture).heading()).toBe(
-      'Calle Historiador Domínguez Ortiz 4, Córdoba'
-    );
+    expect(page(fixture).heading()).toBe('Calle Historiador Domínguez Ortiz 4');
     expect(page(fixture).subtitle()).toBe('Córdoba 14005');
   });
 

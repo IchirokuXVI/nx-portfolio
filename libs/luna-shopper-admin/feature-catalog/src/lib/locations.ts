@@ -442,6 +442,8 @@ export const LOCATIONS = defineResource<Location>({
       },
     ],
     facts: { also: ['postalCodeSource'] },
+    // Catalog deletes the order of its sections and its own scope with it.
+    deleteBody: 'catalog.shops.deleteBody',
     /**
      * The sections the shop walks, counted off the shop's own row.
      *
