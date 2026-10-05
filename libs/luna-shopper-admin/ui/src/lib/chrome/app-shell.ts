@@ -140,43 +140,14 @@ export const BAR_SECTIONS = 4;
             </p>
           }
 
-          <!-- The language the catalog is read in (admin plan 0026, section
-               7). Beside the account rather than in a screen's toolbar,
-               because it is a property of who is reading and not of what is
-               on screen: in a filter bar it would read as narrowing the rows,
-               which is the one thing it never does. -->
-          <div class="menu-host">
-            <button
-              (click)="toggleMenu('language')"
-              [attr.aria-expanded]="menu() === 'language'"
-              [attr.aria-label]="
-                ('shell.contentLanguage' | rokuT) +
-                ': ' +
-                ('shell.language.' + contentLocale() | rokuT)
-              "
-              class="foot-button"
-              type="button"
-              data-menu="language"
-            >
-              {{ contentLocale().toUpperCase() }}
-            </button>
-            @if (menu() === 'language') {
-              <div class="menu" role="group">
-                <p class="menu-title">{{ 'shell.contentLanguage' | rokuT }}</p>
-                @for (locale of contentLocales(); track locale) {
-                  <button
-                    (click)="chooseContent(locale)"
-                    [attr.aria-pressed]="locale === contentLocale()"
-                    [class.on]="locale === contentLocale()"
-                    type="button"
-                  >
-                    {{ 'shell.language.' + locale | rokuT }}
-                  </button>
-                }
-              </div>
-            }
-          </div>
-
+          <!-- One button at the foot of the rail: the account. The language
+               the catalog is read in (admin plan 0026, section 7) is chosen
+               in the menu it opens, and the menu marks the one in use. It
+               had a button of its own here too, which said the same thing a
+               second time (admin plan 0049, target 8). It belongs with the
+               account because it is a property of who is reading and not of
+               what is on screen: in a filter bar it would read as narrowing
+               the rows, which is the one thing it never does. -->
           <div class="menu-host">
             <button
               (click)="toggleMenu('account')"
@@ -757,8 +728,8 @@ export class AppShell {
   /** The operator picked a language to read the catalog in. */
   readonly chooseContentLocale = output<string>();
 
-  /** Which of the three menus is open: one at a time, or none. */
-  readonly menu = signal<'language' | 'account' | 'more' | null>(null);
+  /** Which menu is open: the account's on the rail, "More" on the bar. */
+  readonly menu = signal<'account' | 'more' | null>(null);
 
   /** The sections the bar has room for. */
   readonly shown = computed(() => this.sections().slice(0, BAR_SECTIONS));
@@ -812,7 +783,7 @@ export class AppShell {
     }))
   );
 
-  toggleMenu(name: 'language' | 'account' | 'more'): void {
+  toggleMenu(name: 'account' | 'more'): void {
     this.menu.update((open) => (open === name ? null : name));
 
     if (this.menu() === 'more') {

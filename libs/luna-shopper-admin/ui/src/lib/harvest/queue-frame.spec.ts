@@ -4,22 +4,21 @@ import {
   signal,
   type Type,
 } from '@angular/core';
-import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Viewport } from '../viewport';
-import { QueueFrame, type QueueReport } from './queue-frame';
+import { QueueFrame } from './queue-frame';
 
 /**
- * Plan 0020, section 7. The frame's own half of the plan: the toggle, the two
- * bars in one place, and what the selection bar looks like while a run is going.
+ * The chrome the three decision queues share.
  *
- * The router is stubbed rather than mounted. The two properties worth asserting
- * are that arriving with `view=list` opens the list and that toggling writes the
- * parameter back, and both are visible at the edge of the component. Mounting a
- * real router would test `Router` instead.
+ * The router is stubbed rather than mounted. What is worth asserting about the
+ * `view` parameter is that arriving with it opens that view and that the
+ * switch writes it back, and both are visible at the edge of the component.
+ * Mounting a real router would test `Router` instead.
  */
 
 interface Navigated {
@@ -32,310 +31,104 @@ const rows = [
   { id: 'b', label: 'Beta' },
 ];
 
-/**
- * A screen around the frame, which is the only way to reach it.
- *
- * The row template and the bulk buttons are the screen's, by design: the frame
- * owns the checkbox column and the bar's position, and the columns in between
- * are per screen because the rows are.
- */
+/** A queue with no view of its own and no tool: the plainest frame there is. */
 @Component({
   selector: 'lib-queue-frame-host',
   imports: [QueueFrame],
   template: `
     <lib-queue-frame
+      (loadMore)="asked.set(asked() + 1)"
       (openRow)="opened.set($event)"
-      (pickRow)="ticked.set($event)"
       [busy]="false"
       [canLoadMore]="canLoadMore()"
-      [decided]="1"
-      [defaultView]="defaultView()"
       [empty]="false"
       [failed]="false"
       [loading]="false"
-      [progress]="progress()"
-      [remaining]="2"
-      [report]="report()"
       [rows]="rows"
-      [selected]="selected()"
-      [selectedCount]="selected().size"
       confirmKey="test.confirm"
       emptyKey="test.empty"
-      progressKey="test.rejecting"
       rejectKey="test.reject"
       titleKey="test.title"
     >
       <p class="subject-body">the one in front</p>
 
-      <ng-template #queueRow let-row>
+      <ng-template #queueLine let-row>
         <span class="label">{{ row.label }}</span>
       </ng-template>
-
-      <button class="bulk-reject" queueBulk type="button">reject them</button>
     </lib-queue-frame>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class Host {
   readonly rows = rows;
-  readonly defaultView = signal<'review' | 'list'>('review');
-  readonly selected = signal<ReadonlySet<string>>(new Set<string>());
-  readonly progress = signal<{ done: number; total: number } | null>(null);
-  readonly report = signal<QueueReport | null>(null);
   readonly canLoadMore = signal(false);
-
-  readonly ticked = signal<string | null>(null);
   readonly opened = signal<string | null>(null);
+  readonly asked = signal(0);
 }
 
-async function render(view?: string) {
-  const navigations: Navigated[] = [];
+/**
+ * Admin plan 0049, targets 6 and 7. The rows were also a list with a checkbox
+ * on each one, and a count sat above them. Both are gone: the column beside
+ * the open row is the list, and the tab of the queue says how many wait.
+ */
+describe('the queue frame, with the list view and the count removed', () => {
+  it('draws the open row and its bar, and no list of checkboxes', async () => {
+    const { element } = await mount(Host);
 
-  TestBed.resetTestingModule();
-  await TestBed.configureTestingModule({
-    imports: [Host, RokuTranslatorTestingModule.forTesting()],
-    providers: [
-      {
-        provide: ActivatedRoute,
-        useValue: {
-          snapshot: {
-            queryParamMap: convertToParamMap(
-              view === undefined ? {} : { view }
-            ),
-          },
-        },
-      },
-      {
-        provide: Router,
-        useValue: {
-          navigate: async (
-            commands: unknown[],
-            extras: Record<string, unknown>
-          ) => {
-            navigations.push({ commands, extras });
-            return true;
-          },
-        },
-      },
-    ],
-  }).compileComponents();
-
-  const fixture = TestBed.createComponent(Host);
-  fixture.detectChanges();
-
-  return { fixture, navigations, host: fixture.componentInstance };
-}
-
-const frameOf = (fixture: ComponentFixture<Host>): QueueFrame =>
-  fixture.debugElement.query(
-    (node) => node.componentInstance instanceof QueueFrame
-  ).componentInstance as QueueFrame;
-
-const html = (fixture: ComponentFixture<Host>): HTMLElement =>
-  fixture.nativeElement as HTMLElement;
-
-describe('the queue frame view toggle', () => {
-  it('opens in the view the screen states when the URL names none', async () => {
-    const { fixture } = await render();
-
-    expect(frameOf(fixture).view()).toBe('review');
-    expect(html(fixture).querySelector('.subject-body')).not.toBeNull();
-    expect(html(fixture).querySelector('.rows')).toBeNull();
+    expect(element.querySelector('.subject-body')).not.toBeNull();
+    expect(element.querySelector('.actions.decide')).not.toBeNull();
+    expect(element.querySelector('.rows')).toBeNull();
+    expect(element.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(element.querySelector('.actions.selection')).toBeNull();
   });
 
-  /** A reload keeps it, and a link carries it. That is the whole reason it is a
-   * query parameter rather than storage. */
-  it('opens in the view the URL names, whatever the screen states', async () => {
-    const { fixture } = await render('list');
+  /** An old link, or a bookmark, that still names the view. */
+  it('opens the rows for a link that still says view=list', async () => {
+    const { element, frame } = await mount(Host, { view: 'list', split: true });
 
-    expect(frameOf(fixture).view()).toBe('list');
-    expect(html(fixture).querySelectorAll('.rows li')).toHaveLength(2);
+    expect(frame.extra()).toBeNull();
+    expect(element.querySelector('.subject-body')).not.toBeNull();
+    expect(element.querySelectorAll('.column button.line')).toHaveLength(2);
+    expect(element.querySelector('.rows')).toBeNull();
   });
 
-  it('ignores a view the URL invented', async () => {
-    const { fixture } = await render('sideways');
+  it('says no count of rows left and decided', async () => {
+    const { element } = await mount(Host, { split: true });
 
-    expect(frameOf(fixture).view()).toBe('review');
+    expect(element.querySelector('.tally')).toBeNull();
+    expect(element.textContent).not.toContain('harvest.queue.tally');
   });
 
-  it('honours each screen own default', async () => {
-    const { fixture, host } = await render();
+  it('draws no view switch for a queue with one view', async () => {
+    const { element } = await mount(Host);
 
-    host.defaultView.set('list');
-    fixture.detectChanges();
-
-    expect(frameOf(fixture).view()).toBe('list');
+    expect(element.querySelector('.views')).toBeNull();
+    expect(element.querySelector('[data-view]')).toBeNull();
   });
 
-  it('writes the parameter when the toggle is pressed', async () => {
-    const { fixture, navigations } = await render();
-
-    const toggles =
-      html(fixture).querySelectorAll<HTMLButtonElement>('.views button');
-    toggles[1].click();
-    fixture.detectChanges();
-
-    expect(frameOf(fixture).view()).toBe('list');
-    expect(navigations).toHaveLength(1);
-    expect(navigations[0].extras).toMatchObject({
-      queryParams: { view: 'list' },
-      queryParamsHandling: 'merge',
-      replaceUrl: true,
-    });
-  });
-});
-
-describe('the queue frame two bars', () => {
-  /**
-   * Same place on the screen, same size, same reachability by thumb. The fixed
-   * position is one rule over `.actions`, so both bars carrying that class is
-   * what makes them the same place rather than two rules that agree today.
-   */
-  it('puts the action bar and the selection bar in the same position', async () => {
-    const review = await render();
-    const list = await render('list');
-
-    const reviewBar = html(review.fixture).querySelector('.actions');
-    const listBar = html(list.fixture).querySelector('.actions');
-
-    expect(reviewBar).not.toBeNull();
-    expect(listBar).not.toBeNull();
-    expect(listBar?.classList.contains('actions')).toBe(true);
-    // The review bar decides; the selection bar acts on a selection. Neither
-    // shows while the other does.
-    expect(reviewBar?.textContent).toContain('test.confirm');
-    expect(listBar?.textContent).toContain('harvest.queue.selectAll');
-  });
-
-  it('offers the screen own bulk buttons in the selection bar', async () => {
-    const { fixture } = await render('list');
-
-    expect(html(fixture).querySelector('.actions .bulk-reject')).not.toBeNull();
+  /** The row above the queue is hidden when it would hold nothing. */
+  it('hides the row above a queue that has no tool and no view of its own', () => {
+    expect(frameStyles()).toMatch(
+      /header:not\(:has\(\.views\)\):has\(\.tools:empty\) \{ display: none/
+    );
   });
 
   /**
-   * A progress line counting rows and not time, in place of the buttons. A bar
-   * that still offered "reject" while rejecting would invite a second run over a
-   * selection the first is already draining.
-   */
-  it('replaces the selection bar buttons with the progress line while a run is in flight', async () => {
-    const { fixture, host } = await render('list');
-
-    host.progress.set({ done: 42, total: 200 });
-    fixture.detectChanges();
-
-    const bar = html(fixture).querySelector('.actions');
-    expect(bar?.textContent).toContain('test.rejecting');
-    expect(bar?.textContent).toContain('harvest.queue.bulk.stop');
-    expect(bar?.textContent).not.toContain('harvest.queue.selectAll');
-    expect(html(fixture).querySelector('.bulk-reject')).toBeNull();
-  });
-});
-
-describe('the queue frame list view', () => {
-  it('draws one row per item, with the screen own columns and a checkbox', async () => {
-    const { fixture } = await render('list');
-
-    const items = html(fixture).querySelectorAll('.rows li');
-    expect(items).toHaveLength(2);
-    expect(items[0].querySelector('input[type="checkbox"]')).not.toBeNull();
-    expect(items[0].querySelector('.label')?.textContent).toBe('Alpha');
-  });
-
-  it('ticks a row without deciding it', async () => {
-    const { fixture, host } = await render('list');
-
-    html(fixture).querySelectorAll<HTMLInputElement>('.rows input')[1].click();
-
-    expect(host.ticked()).toBe('b');
-    expect(host.opened()).toBeNull();
-  });
-
-  /**
-   * A list whose rows cannot be examined pushes every hard case into a decision
-   * made from four columns.
-   */
-  it('opens a clicked row in the review view', async () => {
-    const { fixture, host } = await render('list');
-
-    html(fixture)
-      .querySelectorAll<HTMLButtonElement>('.rows .cells')[1]
-      .click();
-    fixture.detectChanges();
-
-    expect(host.opened()).toBe('b');
-    expect(frameOf(fixture).view()).toBe('review');
-  });
-
-  it('shows the selected rows as selected', async () => {
-    const { fixture, host } = await render('list');
-
-    host.selected.set(new Set(['b']));
-    fixture.detectChanges();
-
-    const items = html(fixture).querySelectorAll('.rows li');
-    expect(items[0].classList.contains('picked')).toBe(false);
-    expect(items[1].classList.contains('picked')).toBe(true);
-  });
-
-  /**
-   * There is no decision in a list view to trigger the queue's own prefetch, so
+   * An operator reading down the column decides nothing while they read, so
    * the way to more rows is a button, and it says how many are loaded.
    */
-  it('offers a load more button only while there is more', async () => {
-    const { fixture, host } = await render('list');
+  it('offers a load more button under the column only while there is more', async () => {
+    const { fixture, element, host } = await mount(Host, { split: true });
 
-    expect(html(fixture).querySelector('.more')).toBeNull();
+    expect(element.querySelector('.column .more')).toBeNull();
 
     host.canLoadMore.set(true);
     fixture.detectChanges();
 
-    expect(html(fixture).querySelector('.more')?.textContent).toContain(
-      'harvest.queue.loadMore'
-    );
-  });
-});
-
-describe('the queue frame bulk report', () => {
-  const report: QueueReport = {
-    done: 3,
-    total: 3,
-    succeeded: 1,
-    stopped: false,
-    failed: [
-      { name: 'Ronda del Marrubial', reasonKey: 'resource.error.conflict' },
-    ],
-    skipped: [{ name: 'Centro Comercial Zahira', reasonKey: '' }],
-  };
-
-  /**
-   * Section 6. A bulk that reports one word is a bulk an operator cannot
-   * recover from, so every failure is named with its own reason, and the rows
-   * that were never attempted are a separate list.
-   */
-  it('names each refusal and lists what was left alone apart from it', async () => {
-    const { fixture, host } = await render('list');
-
-    host.report.set(report);
-    fixture.detectChanges();
-
-    const text = html(fixture).querySelector('.report')?.textContent ?? '';
-    expect(text).toContain('Ronda del Marrubial');
-    expect(text).toContain('resource.error.conflict');
-    expect(text).toContain('harvest.queue.bulk.refused');
-    expect(text).toContain('Centro Comercial Zahira');
-    expect(text).toContain('harvest.queue.bulk.leftAlone');
-  });
-
-  it('says what a stopped run did rather than what it was going to do', async () => {
-    const { fixture, host } = await render('list');
-
-    host.report.set({ ...report, stopped: true });
-    fixture.detectChanges();
-
-    const text = html(fixture).querySelector('.report')?.textContent ?? '';
-    expect(text).toContain('harvest.queue.bulk.stopped');
-    expect(text).not.toContain('harvest.queue.bulk.finished');
+    const more = element.querySelector<HTMLButtonElement>('.column .more');
+    expect(more?.textContent).toContain('harvest.queue.loadMore');
+    more?.click();
+    expect(host.asked()).toBe(1);
   });
 });
 
@@ -354,13 +147,11 @@ describe('the queue frame bulk report', () => {
       (openRow)="opened.set($event)"
       [busy]="false"
       [currentId]="current()"
-      [decided]="0"
       [empty]="false"
       [extraViews]="extras"
       [failed]="false"
       [loading]="false"
       [rejectShortKey]="short()"
-      [remaining]="2"
       [rows]="rows"
       confirmKey="test.confirm"
       emptyKey="test.empty"
@@ -372,9 +163,6 @@ describe('the queue frame bulk report', () => {
       <button class="tool" queueTool type="button">a tool</button>
       <button class="other-act" queueAction type="button">another way</button>
 
-      <ng-template #queueRow let-row>
-        <span class="label">{{ row.label }}</span>
-      </ng-template>
       <ng-template #queueLine let-row>
         <span class="line-label">{{ row.label }}</span>
       </ng-template>
@@ -470,9 +258,8 @@ describe('the queue frame split', () => {
   it('draws the rows as a column beside the open row at the split width', async () => {
     const { element, frame } = await mount(WideHost, { split: true });
 
-    // The same view and the same parameter: the column is the queue drawn
-    // beside the row and not a third answer to "which view".
-    expect(frame.view()).toBe('review');
+    // The column is the queue drawn beside the row, and not a view of it.
+    expect(frame.extra()).toBeNull();
     expect(element.querySelector('.review.split')).not.toBeNull();
     expect(element.querySelectorAll('.column button.line')).toHaveLength(2);
     expect(element.querySelector('.card .subject-body')).not.toBeNull();
@@ -522,30 +309,37 @@ describe('the queue frame split', () => {
       .click();
 
     expect(host.opened()).toBe('a');
-    expect(frame.view()).toBe('review');
+    expect(frame.extra()).toBeNull();
     expect(navigations).toHaveLength(0);
   });
 
-  it('draws a line with the line template where the screen gave one', async () => {
+  it('draws a line with the template the screen gave', async () => {
     const { element } = await mount(WideHost, { split: true });
 
     const line = element.querySelector('.column button.line');
     expect(line?.querySelector('.line-label')?.textContent).toBe('Alpha');
-    expect(line?.querySelector('.label')).toBeNull();
   });
 
-  it('falls back to the list row where the screen gave no line template', async () => {
-    const { element } = await mount(Host, { split: true });
+  /**
+   * Admin plan 0049, target 5. A press on a line says which row, and the
+   * frame draws the lines in the order it was given: it holds no order of
+   * its own to change.
+   */
+  it('keeps every line in its place when another row is opened', async () => {
+    const { fixture, element, host } = await mount(WideHost, { split: true });
+    const labels = () =>
+      [...element.querySelectorAll('.column .line-label')].map(
+        (label) => label.textContent
+      );
 
-    const line = element.querySelector('.column button.line');
-    expect(line?.querySelector('.label')?.textContent).toBe('Alpha');
-  });
+    expect(labels()).toEqual(['Alpha', 'Beta']);
 
-  it('keeps the list view a list at the split width', async () => {
-    const { element } = await mount(WideHost, { view: 'list', split: true });
+    host.current.set('a');
+    fixture.detectChanges();
+    host.current.set('b');
+    fixture.detectChanges();
 
-    expect(element.querySelector('.column')).toBeNull();
-    expect(element.querySelectorAll('.rows li')).toHaveLength(2);
+    expect(labels()).toEqual(['Alpha', 'Beta']);
   });
 });
 
@@ -557,16 +351,10 @@ describe('the queue frame own views', () => {
       ...element.querySelectorAll<HTMLButtonElement>('.views button'),
     ].map((button) => button.dataset['view']);
 
-    expect(views).toEqual(['review', 'list', 'groups']);
+    expect(views).toEqual(['review', 'groups']);
     expect(frame.extra()).toBeNull();
     // Projected content has one place, so it is hidden and not removed.
     expect(element.querySelector<HTMLElement>('.extra')?.hidden).toBe(true);
-  });
-
-  it('adds none for a queue that names none', async () => {
-    const { element } = await mount(Host);
-
-    expect(element.querySelectorAll('.views button')).toHaveLength(2);
   });
 
   it('shows the queue own view when the URL names it, in place of the rows', async () => {
@@ -582,7 +370,7 @@ describe('the queue frame own views', () => {
     const pressed = [
       ...element.querySelectorAll<HTMLButtonElement>('.views button'),
     ].map((button) => button.getAttribute('aria-pressed'));
-    expect(pressed).toEqual(['false', 'false', 'true']);
+    expect(pressed).toEqual(['false', 'true']);
   });
 
   it('writes the parameter when its entry is pressed, and back again', async () => {
@@ -609,11 +397,11 @@ describe('the queue frame own views', () => {
     expect(element.querySelector('.subject-body')).not.toBeNull();
   });
 
-  it('reads a view no queue named as the screen own default', async () => {
-    const { frame } = await mount(Host, { view: 'groups' });
+  it('reads a view no queue named as the rows', async () => {
+    const { element, frame } = await mount(Host, { view: 'groups' });
 
     expect(frame.extra()).toBeNull();
-    expect(frame.view()).toBe('review');
+    expect(element.querySelector('.subject-body')).not.toBeNull();
   });
 });
 
@@ -681,11 +469,9 @@ describe('the queue frame decide bar', () => {
       template: `
         <lib-queue-frame
           [busy]="false"
-          [decided]="0"
           [empty]="false"
           [failed]="false"
           [loading]="false"
-          [remaining]="1"
           confirmKey="test.confirm"
           emptyKey="test.empty"
           titleKey="test.title"
@@ -714,12 +500,10 @@ describe('the queue frame decide bar', () => {
         <lib-queue-frame
           (reject)="rejected.set(rejected() + 1)"
           [busy]="false"
-          [decided]="0"
           [empty]="false"
           [failed]="false"
           [loading]="false"
           [rejectDisabled]="disabled()"
-          [remaining]="1"
           confirmKey="test.confirm"
           emptyKey="test.empty"
           rejectKey="test.reject"

@@ -45,6 +45,26 @@ export function isOwnStoreScope(
   );
 }
 
+/** A column that holds something to read. */
+function present(part: string | null | undefined): part is string {
+  return part != null && part !== '';
+}
+
+/**
+ * What a shop is called when it has no label, no address and no town (admin
+ * plan 0049, target 3): its postal code, then the reference its source gave
+ * it, then its id.
+ *
+ * Never nothing. Every one of those three columns can be null, and a shop
+ * that had none of them was a row with no text in it: the tab above the list
+ * counted two shops and the operator saw one. The id is the last answer for
+ * the reason a shopping list with no name is called by its id: a row has to
+ * be something a person can point at.
+ */
+function lastName(row: Location): string {
+  return [row.postalCode, row.externalRef].find(present) ?? row.id;
+}
+
 /**
  * The shops (plan 0005, section 3).
  *
@@ -115,7 +135,8 @@ export const LOCATIONS = defineResource<Location>({
     if (label !== '') {
       return label;
     }
-    return [row.address, row.city].filter((part) => part !== null).join(', ');
+    const place = [row.address, row.city].filter(present).join(', ');
+    return place !== '' ? place : lastName(row);
   },
 
   fields: [
@@ -257,7 +278,10 @@ export const LOCATIONS = defineResource<Location>({
     // postal code. The states below say the rest.
     brief: {
       heading: (row, locales) =>
-        localizedTextValue(row.label, locales) || row.address || row.city || '',
+        localizedTextValue(row.label, locales) ||
+        row.address ||
+        row.city ||
+        lastName(row),
       line: ['city', 'postalCode'],
     },
   },
