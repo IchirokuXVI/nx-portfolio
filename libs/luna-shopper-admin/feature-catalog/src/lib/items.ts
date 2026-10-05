@@ -314,6 +314,9 @@ export const ITEMS = defineResource<Item>({
     // No field of a product holds either count: the scopes that price it and
     // the chain rows that name it are each another read.
     counts: () => inject(ProductCounts).of,
+    // Catalog deletes the prices of a product with it (`item_prices` cascades
+    // on the item), so the question says so.
+    deleteBody: 'catalog.products.deleteBody',
   },
 
   // What the server refuses about a product's categories is said under them.

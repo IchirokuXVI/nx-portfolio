@@ -9,7 +9,10 @@ import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  GatewayError,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   defineResource,
   type ResourcePage,
@@ -414,6 +417,44 @@ describe('the tabs of a record', () => {
 
     expect(url()).toBe('/chains/c1/details');
     expect(page(harness).store().mode()).toBe('edit');
+  });
+
+  /**
+   * The read answers when it answers: before the page is drawn, a turn
+   * later as a gateway in memory does, or long after. One navigation opens
+   * the form and takes the parameter out, so no order of the two can leave
+   * `?edit=1` in the address, where a reload would open the form again.
+   */
+  it.each([
+    ['at once', 0],
+    ['a turn later', 1],
+    ['after the page is drawn', 30],
+  ])('leaves no ?edit=1 behind when the read answers %s', async (_, wait) => {
+    const chain = server.chain;
+    server.chain = async (id) => {
+      if (wait > 0) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+      return chain(id);
+    };
+
+    const harness = await mount('/chains/c1?edit=1');
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    await drawn(harness);
+
+    expect(url()).toBe('/chains/c1/details');
+    expect(page(harness).store().mode()).toBe('edit');
+  });
+
+  it('takes ?edit=1 out for a record that is not there, and opens no form', async () => {
+    server.chain = async () => {
+      throw new GatewayError({ code: 'not_found', status: 404 });
+    };
+
+    const harness = await mount('/chains/c1?edit=1');
+
+    expect(url()).toBe('/chains/c1/details');
+    expect(page(harness).store().mode()).toBe('read');
   });
 
   it('asks before another tab is opened over changes, and stays on "Stay here"', async () => {

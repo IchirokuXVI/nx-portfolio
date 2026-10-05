@@ -105,6 +105,31 @@ function refusingProducts(code: string): ResourceGatewaysI {
   };
 }
 
+/**
+ * The memory gateways, with the read of a product bent: `answer` gets the
+ * row the memory holds, and what it answers or throws is the read.
+ */
+function readingProducts(
+  answer: (row: ResourceRow) => ResourceRow
+): ResourceGatewaysI {
+  const memory = new ResourceMemoryGateways();
+  return {
+    for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+      const inner = memory.for(source);
+      if (source.path !== ITEMS_PATH) {
+        return inner;
+      }
+      return {
+        list: (query) => inner.list(query),
+        read: async (id) => answer(await inner.read(id)) as T,
+        create: (input) => inner.create(input),
+        update: (id, input) => inner.update(id, input),
+        remove: (id) => inner.remove(id),
+      } satisfies ResourceGateway<T>;
+    },
+  };
+}
+
 async function boot(url: string, providers: Provider[] = []) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
@@ -247,7 +272,7 @@ describe('a product, on the record page', () => {
     ).toBeNull();
   });
 
-  it('keeps the product on Details after a save, reading again', async () => {
+  it('keeps the product on Details after a save, reading again, under its new name', async () => {
     const fixture = await boot('/products/it_dish_soap/details');
     const store = page(fixture).store();
 
@@ -257,6 +282,7 @@ describe('a product, on the record page', () => {
     expect(store.mode()).toBe('edit');
 
     store.set('brand', 'Bosque Verde Eco');
+    store.set('name', { en: 'Dish soap 750 ml', es: 'Lavavajillas 750 ml' });
     await view(fixture).save();
     await settle(fixture);
     await settle(fixture);
@@ -264,6 +290,11 @@ describe('a product, on the record page', () => {
     expect(url()).toBe('/products/it_dish_soap/details');
     expect(store.mode()).toBe('read');
     expect(store.row()?.['brand']).toBe('Bosque Verde Eco');
+    // The header is renamed, and not only the row under it.
+    expect(page(fixture).heading()).toBe('Dish soap 750 ml');
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toBe(
+      'Dish soap 750 ml'
+    );
   });
 
   /** The three codes of `errorFields`, each said under "Categories". */
@@ -296,9 +327,39 @@ describe('a product, on the record page', () => {
     await settle(fixture);
     await settle(fixture);
 
-    // On Details, which is where the form is.
-    expect(url().split('?')[0]).toBe('/products/it_dish_soap/details');
+    // On Details, which is where the form is, and with the parameter taken
+    // out: a reload reads.
+    expect(url()).toBe('/products/it_dish_soap/details');
     expect(page(fixture).store().mode()).toBe('edit');
+  });
+
+  /** A name in no language. The header still says what the record is. */
+  it('calls a product with no name "Product with no name"', async () => {
+    const fixture = await boot('/products/it_dish_soap/details', [
+      {
+        provide: RESOURCE_GATEWAYS,
+        useValue: readingProducts((row) => ({ ...row, name: {} })),
+      },
+    ]);
+
+    // The testing translator answers the key.
+    expect(page(fixture).title()).toBe('record.unnamed');
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toBe(
+      'record.unnamed'
+    );
+  });
+
+  it('says in the delete question that the prices go with the product', async () => {
+    const fixture = await boot('/products/it_dish_soap/details');
+
+    page(fixture).deleting.set(true);
+    await settle(fixture);
+
+    const question = fixture.nativeElement.querySelector(
+      '[data-delete-question]'
+    ) as HTMLElement;
+    expect(question.textContent).toContain('catalog.products.deleteBody');
+    expect(question.textContent).not.toContain('record.delete.body');
   });
 
   it('draws another product when the address names one', async () => {
@@ -331,9 +392,29 @@ describe('a product, on the record page', () => {
   it('says so when the product is not there, and draws no tab', async () => {
     const fixture = await boot('/products/it_nowhere/details');
 
+    // A 404 is a product that is gone, and not a gateway that is silent.
     expect(
-      fixture.nativeElement.querySelector('[data-missing], [data-no-answer]')
+      fixture.nativeElement.querySelector('[data-missing]')
     ).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-no-answer]')).toBeNull();
+    expect(page(fixture).tabs()).toBeNull();
+  });
+
+  it('says the gateway did not answer when the read fails, and draws no tab', async () => {
+    const fixture = await boot('/products/it_milk_1l/details', [
+      {
+        provide: RESOURCE_GATEWAYS,
+        useValue: readingProducts(() => {
+          throw unavailable();
+        }),
+      },
+    ]);
+
+    // Nothing here can be taken for the product, or for one that is gone.
+    expect(
+      fixture.nativeElement.querySelector('[data-no-answer]')
+    ).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-missing]')).toBeNull();
     expect(page(fixture).tabs()).toBeNull();
   });
 });

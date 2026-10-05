@@ -519,6 +519,7 @@
       }
     },
     "products": {
+      "deleteBody": "Every price it holds is deleted with it. This cannot be taken back.",
       "tabs": {
         "prices": "Prices",
         "where": "Where it is",
@@ -2290,6 +2291,7 @@
     "added": "{{name}} added.",
     "addAnother": "Add another {{name}}",
     "more": "More actions for {{name}}",
+    "unnamed": "{{name}} with no name",
     "state": {
       "editing": "Editing",
       "loading": "Loading the {{name}}",
