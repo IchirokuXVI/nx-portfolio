@@ -24,6 +24,7 @@ import {
   ResourceChanges,
   ResourceReferences,
   ResourceRegistry,
+  routeParam,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   localizedTextValue,
@@ -50,6 +51,14 @@ import { ShopContext } from './shop-context';
 
 /** The route parameter that holds the shop. */
 export const SHOP_PARAM = 'shopId';
+
+/**
+ * The route parameter that names the chain. The chain's page declares it as
+ * `CHAIN_PARAM`, and imports this file, so it is restated here: the locations
+ * descriptor states the same word as its parent's parameter, and
+ * `catalog-descriptors.spec.ts` holds the two together.
+ */
+const CHAIN_ROUTE_PARAM = 'chainId';
 
 /** The segment of a shop's Sections tab. */
 export const SHOP_SECTIONS_TAB = 'sections';
@@ -575,6 +584,28 @@ export class ShopPage {
         if (version !== sections) {
           sections = version;
           void this.shop.reload();
+        }
+      });
+    });
+
+    // A shop is read by its own id, so an address that names another chain
+    // would draw this shop under that chain's name, with that chain's column
+    // beside it. The shop says which chain it is in: go to its own address.
+    effect(() => {
+      const shop = this.shop.shop();
+      untracked(() => {
+        const named = routeParam(this._route.snapshot, CHAIN_ROUTE_PARAM);
+        if (
+          shop === null ||
+          named === null ||
+          typeof shop.supermarketId !== 'string' ||
+          shop.supermarketId === named
+        ) {
+          return;
+        }
+        const path = this._registry.rowPath('locations', shop.id, shop);
+        if (path !== null) {
+          void this._router.navigate([...path], { replaceUrl: true });
         }
       });
     });

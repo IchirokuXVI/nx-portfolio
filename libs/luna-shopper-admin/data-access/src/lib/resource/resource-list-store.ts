@@ -32,6 +32,8 @@ export class ResourceListStore<T extends ResourceRow> {
   private readonly _loadingMore = signal(false);
   private readonly _filters = signal<Readonly<Record<string, string>>>({});
   private readonly _order = signal<string | undefined>(undefined);
+  /** Counts the reads from the start, so a refresh that was overtaken is dropped. */
+  private _reads = 0;
 
   constructor(
     private readonly _descriptor: ResourceDescriptor<T>,
@@ -108,6 +110,7 @@ export class ResourceListStore<T extends ResourceRow> {
 
   /** The first page, from the current filters and order. Replaces the rows. */
   async load(): Promise<void> {
+    this._reads += 1;
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
@@ -141,6 +144,59 @@ export class ResourceListStore<T extends ResourceRow> {
       )
     );
     this._loadingMore.set(false);
+  }
+
+  /**
+   * Read again what is on screen, and keep as many rows as were loaded.
+   *
+   * For a list that stays drawn while one of its rows is written (admin plan
+   * 0042). `load` answers the first page alone, so a row the operator had
+   * reached with "Load more", and had open beside the list, left the column
+   * on every save. This reads page after page until it holds as many rows as
+   * were shown, and swaps them in at once: the rows on screen stay until the
+   * new ones are here, so nothing blinks.
+   *
+   * A list with nothing loaded has nothing to keep, and is read from the
+   * start. A failure leaves the rows that are shown and says so in a line,
+   * as a failed "Load more" does.
+   */
+  async refresh(): Promise<void> {
+    const wanted = this._rows().length;
+    if (this._status() !== 'ready' || wanted === 0) {
+      return this.load();
+    }
+
+    this._reads += 1;
+    const read = this._reads;
+    let rows: readonly T[] = [];
+    let cursor: string | null = null;
+
+    try {
+      do {
+        const page = await this._gateway.list({
+          cursor: cursor ?? undefined,
+          order: this._order(),
+          filters: { ...this._filters(), ...this._fixed },
+        });
+        if (read !== this._reads) {
+          // A filter or an order changed meanwhile, and its own read is what
+          // the screen shows.
+          return;
+        }
+        rows = appendPage(rows, page.items, (row) =>
+          idOf(this._descriptor, row)
+        );
+        cursor = page.nextCursor;
+      } while (cursor !== null && rows.length < wanted);
+
+      this._rows.set(rows);
+      this._cursor.set(cursor);
+      this._error.set(null);
+    } catch (error) {
+      if (read === this._reads) {
+        this._error.set(toGatewayError(error));
+      }
+    }
   }
 
   /** Set one filter and read the first page again. */

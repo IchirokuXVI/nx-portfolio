@@ -110,6 +110,13 @@ export interface ProductRowView {
  * names its product and carries nothing else of it, so the search, the group
  * and the tree are put away, and the rows cannot be ticked: a review of a
  * change has to show what each product holds now, and these rows do not know.
+ *
+ * **Put away on every screen, the tree's column included.** The read of the
+ * prices takes the scope and the state and nothing else, so a tree left
+ * beside the rows would mark a category that the rows do not follow. A
+ * category, a search or an order set before the state was chosen is kept and
+ * not applied, the page says so in words, and all of it comes back with
+ * "Any price".
  */
 @Component({
   selector: 'lib-products-page',
@@ -132,8 +139,8 @@ export interface ProductRowView {
       </button>
     </lib-page-header>
 
-    <div [class.split]="split()" class="layout">
-      @if (split()) {
+    <div [class.split]="withTree()" class="layout">
+      @if (withTree()) {
         <aside class="tree">
           <h2>{{ 'catalog.categories.many' | rokuT }}</h2>
           <lib-category-tree
@@ -247,6 +254,11 @@ export interface ProductRowView {
 
         @if (state() !== null) {
           <p class="note">{{ 'catalog.pricesAt.state.note' | rokuT }}</p>
+          @if (suspended()) {
+            <p class="note" data-suspended>
+              {{ 'catalog.pricesAt.state.suspended' | rokuT }}
+            </p>
+          }
         }
 
         @if (refusal(); as refused) {
@@ -1014,6 +1026,30 @@ export class ProductsPage extends ResourceListPage {
       ? null
       : toPriceState(this.store.filters()[PRICE_STATE_FILTER])
   );
+
+  /**
+   * Whether the tree's column is drawn: on a wide screen, and not while the
+   * rows are read from the prices, which no category narrows.
+   */
+  readonly withTree = computed(() => this.split() && this.state() === null);
+
+  /**
+   * Whether a state is chosen while something else narrows or orders the
+   * list. None of it reaches the read of the prices, so the page says that it
+   * is set aside.
+   */
+  readonly suspended = computed(() => {
+    if (this.state() === null) {
+      return false;
+    }
+    const narrowed = Object.entries(this.store.filters()).some(
+      ([param, value]) =>
+        param !== PRICES_AT_FILTER &&
+        param !== PRICE_STATE_FILTER &&
+        value !== ''
+    );
+    return narrowed || this.store.order() !== undefined;
+  });
 
   /** What the tree marks: a category, every product, or no category. */
   readonly category = computed(

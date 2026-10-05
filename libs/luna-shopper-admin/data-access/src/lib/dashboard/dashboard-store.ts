@@ -39,6 +39,14 @@ export const DASHBOARD_POLL_INTERVAL_MS = 60_000;
  * one that is never trusted. Only a first read with nothing to keep leaves the
  * screen with an error on it.
  *
+ * **Nothing is read, and nothing is kept, while nobody is signed in.** The
+ * rail's counters watch for as long as the tab lives, so without this the
+ * reads went on every minute after a sign out, each one refused, and the
+ * next admin to sign in on the same tab was shown the last one's document
+ * until the first read answered. `suspend` clears the document and stops the
+ * timer, `resume` reads at once for whoever still watches, and
+ * `dashboardFollowsSession` calls the two as the session ends and starts.
+ *
  * `providedIn: 'root'`, so a navigation away and back does not throw the
  * document away and draw an empty screen while the first read is in flight. The
  * page starts the watch and stops it on its own teardown, which is a component's
@@ -64,6 +72,11 @@ export class DashboardStore {
    * the reads stop when the last watcher does.
    */
   private _watchers = 0;
+
+  /** Whether reading is suspended, which is while nobody is signed in. */
+  private _suspended = false;
+  /** Grows on every suspension, so a read asked before one is not kept. */
+  private _epoch = 0;
 
   /** The whole document, or `null` before a read has ever answered. */
   readonly document = this._dashboard.asReadonly();
@@ -150,28 +163,70 @@ export class DashboardStore {
     this._document.removeEventListener('visibilitychange', this._onVisibility);
   }
 
+  /**
+   * Nobody is signed in: drop the document and stop asking.
+   *
+   * The watchers are still counted, so {@link resume} reads for them. A read
+   * that is on its way is not kept when it answers: it is the last admin's
+   * document, and the next one must not see it.
+   */
+  suspend(): void {
+    this._suspended = true;
+    this._epoch += 1;
+    this._clearTimer();
+    this._dashboard.set(null);
+    this._error.set(null);
+    this._loading.set(true);
+    this._followingRuns.set(false);
+  }
+
+  /** Somebody signed in: read at once, when anything watches. */
+  resume(): void {
+    if (!this._suspended) {
+      return;
+    }
+    this._suspended = false;
+    if (this._watching) {
+      void this.load();
+    }
+  }
+
   /** Read now, whatever the timer was going to do. The refresh button calls it. */
   async load(): Promise<void> {
     this._clearTimer();
 
+    if (this._suspended) {
+      return;
+    }
+    const epoch = this._epoch;
+
     try {
-      this._dashboard.set(await this._service.read());
+      const read = await this._service.read();
+      if (epoch !== this._epoch) {
+        return;
+      }
+      this._dashboard.set(read);
       this._error.set(null);
     } catch (error) {
+      if (epoch !== this._epoch) {
+        return;
+      }
       // The document already on screen is still the document, so a failed
       // re-read is a line beside the timestamp rather than the loss of
       // everything the operator had.
       this._error.set(toGatewayError(error));
     } finally {
-      this._loading.set(false);
-      this._schedule();
+      if (epoch === this._epoch) {
+        this._loading.set(false);
+        this._schedule();
+      }
     }
   }
 
   private _schedule(): void {
     this._clearTimer();
 
-    if (!this._watching || !this._visible()) {
+    if (!this._watching || !this._visible() || this._suspended) {
       return;
     }
 

@@ -462,3 +462,98 @@ describe('DashboardStore with more than one watcher', () => {
     store.stop();
   });
 });
+
+/**
+ * The rail's counters watch for as long as the tab lives, and nothing stops
+ * them. So the store goes quiet while nobody is signed in: no read every
+ * minute against a gateway that refuses each one, and no document of the last
+ * admin for the next one to see.
+ */
+describe('DashboardStore while nobody is signed in', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('drops the document and stops reading when it is suspended', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+    store.watch();
+    await settle();
+    expect(store.document()).not.toBeNull();
+
+    store.suspend();
+
+    expect(store.document()).toBeNull();
+    expect(store.loading()).toBe(true);
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS * 3);
+    await settle();
+    expect(service.calls).toBe(1);
+  });
+
+  it('does not read when the tab comes back, nor when a screen asks', async () => {
+    const service = reader([document_()]);
+    const { store, page } = build(service);
+    store.watch();
+    await settle();
+
+    store.suspend();
+    page.change('hidden');
+    page.change('visible');
+    await store.load();
+    await settle();
+
+    expect(service.calls).toBe(1);
+  });
+
+  it('reads at once when it resumes, and keeps reading', async () => {
+    const service = reader([
+      document_(),
+      document_({ measuredAt: '2026-09-03T11:00:00.000Z' }),
+    ]);
+    const { store } = build(service);
+    store.watch();
+    await settle();
+
+    store.suspend();
+    store.resume();
+    await settle();
+
+    expect(service.calls).toBe(2);
+    expect(store.measuredAt()).toBe('2026-09-03T11:00:00.000Z');
+
+    jest.advanceTimersByTime(DASHBOARD_POLL_INTERVAL_MS);
+    await settle();
+    expect(service.calls).toBe(3);
+    store.stop();
+  });
+
+  it('does not keep a read that answers after the suspension', async () => {
+    let answer: (document: DashboardDocument) => void = () => undefined;
+    const service = {
+      read: () =>
+        new Promise<DashboardDocument>((resolve) => {
+          answer = resolve;
+        }),
+    };
+    const { store } = build(service);
+    store.watch();
+
+    store.suspend();
+    answer(document_());
+    await settle();
+    await settle();
+
+    expect(store.document()).toBeNull();
+  });
+
+  it('reads nothing on a resume that nobody watches', async () => {
+    const service = reader([document_()]);
+    const { store } = build(service);
+
+    store.suspend();
+    store.resume();
+    await settle();
+
+    expect(service.calls).toBe(0);
+  });
+});

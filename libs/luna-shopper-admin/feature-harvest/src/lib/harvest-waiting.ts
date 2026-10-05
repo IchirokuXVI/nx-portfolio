@@ -65,12 +65,37 @@ export function harvestWaiting(
   };
 }
 
-/** The count of one queue, or `null` when it is not known. */
+/**
+ * The count of one queue, or `null` when it is not known.
+ *
+ * With a chain chosen, it is that chain's count, since the chain narrows all
+ * four queues and the total would say more than the list behind it holds. The
+ * dashboard counts the products and the shops by chain. It counts the places
+ * and the brands as one number each, so with a chain chosen those two are not
+ * known, and nothing is drawn for them.
+ */
 export function waitingIn(
   waiting: HarvestWaiting | null,
-  queue: ReviewQueue
+  queue: ReviewQueue,
+  supermarketId = ''
 ): number | null {
-  return waiting === null ? null : waiting[queue];
+  if (waiting === null) {
+    return null;
+  }
+  if (supermarketId === '') {
+    return waiting[queue];
+  }
+
+  const byChain =
+    queue === 'products'
+      ? waiting.productsByChain
+      : queue === 'shops'
+        ? waiting.shopsByChain
+        : null;
+
+  return byChain === null
+    ? null
+    : (byChain.find((row) => row.supermarketId === supermarketId)?.count ?? 0);
 }
 
 /** The chains with something waiting, most first, then by id so ties hold still. */

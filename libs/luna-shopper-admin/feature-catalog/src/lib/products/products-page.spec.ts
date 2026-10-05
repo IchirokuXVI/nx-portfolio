@@ -654,6 +654,62 @@ describe('the states of a price at the chosen scope', () => {
     expect(page(fixture).products()).toHaveLength(4);
   });
 
+  /**
+   * The read of the prices takes the scope and the state alone. So the tree
+   * leaves the wide screen as well, and a category set before is said to be
+   * set aside, and is applied again with "Any price".
+   */
+  it('puts the tree away on a wide screen, and says a category is set aside', async () => {
+    const reads: { path: string; query: ResourceQuery }[] = [];
+    const fixture = await boot('/products', [
+      WIDE,
+      { provide: RESOURCE_GATEWAYS, useValue: recording(reads) },
+    ]);
+    await page(fixture).chooseScope(CORDOBA);
+    await settle(fixture);
+    expect(q(fixture, 'aside.tree')).not.toBeNull();
+
+    page(fixture).chooseState('stale');
+    await settle(fixture);
+    await settle(fixture);
+
+    // No category set: the tree goes, and nothing is said to be set aside.
+    expect(q(fixture, 'aside.tree')).toBeNull();
+    expect(q(fixture, '.layout.split')).toBeNull();
+    expect(q(fixture, '[data-suspended]')).toBeNull();
+
+    page(fixture).chooseState(null);
+    await settle(fixture);
+    await settle(fixture);
+    page(fixture).chooseCategory('cat_dairy');
+    await settle(fixture);
+    page(fixture).chooseState('stale');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(q(fixture, 'aside.tree')).toBeNull();
+    expect(q(fixture, '[data-suspended]')?.textContent).toContain(
+      'catalog.pricesAt.state.suspended'
+    );
+    // The read names the scope and the state, and no category.
+    expect(reads[reads.length - 1].path).toBe(PRICES_PATH);
+    expect(reads[reads.length - 1].query.filters).toEqual({
+      priceScopeId: 'ps_mercadona_4661',
+      stale: 'true',
+    });
+
+    // "Any price" brings the tree back with the category still marked.
+    page(fixture).chooseState(null);
+    await settle(fixture);
+    await settle(fixture);
+    expect(q(fixture, 'aside.tree')).not.toBeNull();
+    expect(page(fixture).category()).toBe('cat_dairy');
+    expect(reads[reads.length - 1]).toMatchObject({
+      path: ITEMS_PATH,
+      query: { filters: { categoryId: 'cat_dairy' } },
+    });
+  });
+
   it('drops the state with the scope', async () => {
     const fixture = await boot();
     await page(fixture).chooseScope(CORDOBA);

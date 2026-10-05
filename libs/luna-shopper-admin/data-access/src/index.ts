@@ -33,6 +33,7 @@ export { clientVersionInterceptor } from './lib/client-version-interceptor';
 export { contentLocaleInterceptor } from './lib/content-locale-interceptor';
 export { ContentLocaleStore } from './lib/content-locale-store';
 export { DashboardApi } from './lib/dashboard/dashboard-api';
+export { dashboardFollowsSession } from './lib/dashboard/dashboard-follows-session';
 export { DashboardMemory } from './lib/dashboard/dashboard-memory';
 export {
   DASHBOARD_SEED,

@@ -771,6 +771,24 @@ export class RunsPage {
     void this.load();
     void this._readPresets();
 
+    // The run that was in progress ended: the earlier runs are one more than
+    // the list on screen holds, so read them again. A run that begins adds
+    // nothing to that list, and the first read of the status is no change.
+    let inProgress = this.running()?.id ?? null;
+    effect(() => {
+      const now = this.running()?.id ?? null;
+      untracked(() => {
+        if (now === inProgress) {
+          return;
+        }
+        const ended = inProgress !== null;
+        inProgress = now;
+        if (ended) {
+          void this.load();
+        }
+      });
+    });
+
     // The chain of the run in progress, for the panel's title.
     effect(() => {
       const chain = this.running()?.supermarketId ?? '';

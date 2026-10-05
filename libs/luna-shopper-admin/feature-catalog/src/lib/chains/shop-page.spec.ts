@@ -298,6 +298,18 @@ describe('the page of a shop', () => {
     expect(counts).toEqual([null, '2', null]);
   });
 
+  /**
+   * A shop is read by its own id. So an address that names another chain goes
+   * to the shop's own address, and never draws the shop under that chain.
+   */
+  it('goes to the shop own chain when the address names another one', async () => {
+    const fixture = await boot('/chains/sm_consum/shops/loc_cordoba_centro');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(url()).toBe(`${CENTRO}/details`);
+  });
+
   it('says so when the shop cannot be read, and draws no tab', async () => {
     const fixture = await boot(`${SHOPS}/loc_nowhere/details`);
 

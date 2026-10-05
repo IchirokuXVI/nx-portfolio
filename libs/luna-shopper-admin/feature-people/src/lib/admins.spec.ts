@@ -8,6 +8,7 @@ import {
   DASHBOARD_SERVICE,
   dashboardSeedWithout,
   DashboardStore,
+  DeploymentStore,
   RESOURCE_GATEWAYS,
   SessionStore,
   type DashboardDocument,
@@ -19,7 +20,9 @@ import {
   ADMIN_ACCOUNTS_TAB,
   ADMIN_FAILED_SIGN_INS_TAB,
   ADMINS_INFO,
+  ADMINS_INFO_LOCAL,
   ADMINS_SEGMENT,
+  adminsInfo,
   adminsPath,
   toAdminPage,
 } from './admins';
@@ -37,6 +40,8 @@ class Host {}
 interface Options {
   readonly document?: DashboardDocument;
   readonly compact?: boolean;
+  /** The deployment the app talks to. Production, unless stated. */
+  readonly deployment?: 'production' | 'staging' | 'development';
   /** The id of the admin who is signed in. */
   readonly signedIn?: string | null;
   /** A read of the accounts that fails, for the one spec about that. */
@@ -71,6 +76,11 @@ async function boot(
           read:
             options.read ?? (async () => options.document ?? DASHBOARD_SEED),
         },
+      },
+      // Which deployment the app talks to, which decides the command.
+      {
+        provide: DeploymentStore,
+        useValue: { deployment: signal(options.deployment ?? 'production') },
       },
       // The one thing the accounts read from the session: whose it is.
       {
@@ -228,7 +238,7 @@ describe('the Admins section', () => {
         'people.admins.info.add',
       ]);
       expect(textOf(panel?.querySelector('.command code') ?? null)).toBe(
-        'npx nx run luna-shopper-backend-auth:admin:create'
+        'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>'
       );
       expect(textOf(panel?.querySelector('.command button') ?? null)).toBe(
         'info.copy'
@@ -262,8 +272,44 @@ describe('the Admins section', () => {
       expect(ADMINS_INFO).toEqual({
         title: 'people.admins.many',
         points: ['people.admins.info.readOnly', 'people.admins.info.add'],
-        command: 'npx nx run luna-shopper-backend-auth:admin:create',
+        command:
+          'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
       });
+    });
+
+    /**
+     * The Nx target of the same name cannot ask for a password, because Nx
+     * gives a run-commands target no terminal. So neither form goes through
+     * it, and the cluster form asks for a terminal.
+     */
+    it('names no command that has no terminal to ask on', () => {
+      for (const info of [ADMINS_INFO, ADMINS_INFO_LOCAL]) {
+        expect(info.command).not.toContain('nx run');
+        expect(info.command).toContain('create <username>');
+      }
+      expect(ADMINS_INFO.command).toContain('exec -it ');
+    });
+
+    it('shows the command of a checkout on a developer machine', async () => {
+      const fixture = await boot('/admins', { deployment: 'development' });
+
+      find<HTMLButtonElement>(fixture, 'lib-info-button button')?.click();
+      fixture.detectChanges();
+
+      expect(findAll(fixture, 'lib-info-panel li').map(textOf)).toEqual([
+        'people.admins.info.readOnly',
+        'people.admins.info.addLocal',
+      ]);
+      expect(textOf(find(fixture, 'lib-info-panel .command code'))).toBe(
+        'node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js create <username>'
+      );
+    });
+
+    it('shows the cluster command where the deployment is not known', () => {
+      expect(adminsInfo(null)).toBe(ADMINS_INFO);
+      expect(adminsInfo(undefined)).toBe(ADMINS_INFO);
+      expect(adminsInfo('staging')).toBe(ADMINS_INFO);
+      expect(adminsInfo('development')).toBe(ADMINS_INFO_LOCAL);
     });
   });
 });

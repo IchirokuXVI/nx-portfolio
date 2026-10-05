@@ -65,8 +65,8 @@ import {
     <lib-page-header
       [backLabel]="split() ? null : ('people.users.back' | rokuT)"
       [backLink]="listPath"
-      [heading]="name() || ('resource.form.loading' | rokuT)"
-      [tabs]="tabs()"
+      [heading]="name() || (headingKey() | rokuT)"
+      [tabs]="failed() ? [] : tabs()"
       [tabsLabel]="name()"
     >
       @if (person.row(); as row) {
@@ -79,9 +79,11 @@ import {
           'people.users.state.unconfirmed' | rokuT
         }}</span>
       }
-      <a [routerLink]="editPath()" class="button" pageMoreAction data-edit>{{
-        'resource.action.edit' | rokuT
-      }}</a>
+      @if (person.row() !== null) {
+        <a [routerLink]="editPath()" class="button" pageAction data-edit>{{
+          'resource.action.edit' | rokuT
+        }}</a>
+      }
       @for (action of available(); track action.name) {
         <button
           (click)="run(action)"
@@ -168,6 +170,19 @@ export class PersonPage {
     const row = this.person.row();
     return row !== null && row.email !== null && row.emailVerifiedAt === null;
   });
+
+  /** Whether the account could not be read. The page then says why and nothing else. */
+  readonly failed = computed(() => this.person.status() === 'error');
+
+  /**
+   * What the header says while there is no name to say: the section's own
+   * name when the read failed, and "Loading" only while a read is on its
+   * way. A failed read used to keep "Loading" as its heading, with "Edit"
+   * beside it.
+   */
+  readonly headingKey = computed(() =>
+    this.failed() ? 'people.users.many' : 'resource.form.loading'
+  );
 
   /** The actions this account can have done to it right now. */
   readonly available = computed(() => {

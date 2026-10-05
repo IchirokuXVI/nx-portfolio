@@ -509,6 +509,62 @@ describe('ignoring a source shop', () => {
   });
 });
 
+/**
+ * An ignored shop cannot be ignored again. The button stays in the bar,
+ * disabled, so that Skip does not move into its slot: two quick presses on
+ * Skip must never land on the next row's "Ignore".
+ */
+describe('the decide bar of a source shop that cannot be ignored', () => {
+  const actionsOf = (fixture: ComponentFixture<ShopsQueuePage>): string[] =>
+    [
+      ...fixture.nativeElement.querySelectorAll(
+        '.actions.decide > [data-action]'
+      ),
+    ].map((button) => (button as HTMLElement).dataset['action'] ?? '');
+  const reject = (fixture: ComponentFixture<ShopsQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '.actions.decide [data-action="reject"]'
+    ) as HTMLButtonElement | null;
+
+  async function inReview(status?: string) {
+    const rendered = await opened();
+    if (status !== undefined) {
+      rendered.page.chooseStatus({
+        target: { value: status },
+      } as unknown as Event);
+      await drain();
+      rendered.fixture.detectChanges();
+    }
+    rendered.fixture.nativeElement
+      .querySelector('.rows li .cells')
+      ?.click();
+    await drain();
+    rendered.fixture.detectChanges();
+    return rendered;
+  }
+
+  it('offers Ignore on a shop that waits', async () => {
+    const { fixture, page } = await inReview();
+
+    expect(page.current()?.canIgnore).toBe(true);
+    expect(actionsOf(fixture)).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject(fixture)?.disabled).toBe(false);
+  });
+
+  it('keeps Ignore in its slot, disabled, on a shop that is ignored', async () => {
+    const { fixture, page, calls } = await inReview('IGNORED');
+
+    expect(page.current()?.canIgnore).toBe(false);
+    // The same three, in the same places.
+    expect(actionsOf(fixture)).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject(fixture)?.disabled).toBe(true);
+
+    reject(fixture)?.click();
+    await drain();
+    expect(named(calls, 'ignoreShop')).toHaveLength(0);
+  });
+});
+
 describe('unmapping a source shop', () => {
   it('is offered on a mapped row and puts it back in the queue', async () => {
     const { page, calls } = await opened();

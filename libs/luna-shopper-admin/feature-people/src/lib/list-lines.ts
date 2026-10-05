@@ -48,7 +48,10 @@ const LINE_APPROVAL_OPTIONS = [
  *   plan 0077, section 6.4).
  * - **`approvalStatus` is not editable.** It is one route and one service call,
  *   and an act can be confirmed while a select cannot. The two acts are beside
- *   it.
+ *   it, **on a line that waits and on no other** (admin plan 0045, target 5).
+ *   A line somebody approved used to offer "Reject", and one that was
+ *   rejected offered "Approve": two buttons on every line of a list, for an
+ *   answer that was already given.
  * - **No control for the line's product set.** It is a set of catalog items with
  *   bounds of its own, an operator has no reason to curate it, and the route
  *   exists without this screen needing to offer it (plan 0009, section 10).
@@ -58,6 +61,11 @@ const LINE_APPROVAL_OPTIONS = [
  * second change nobody asked for, seen by everyone in the zone. A rejected line
  * still reopens, because that rule applies to everyone.
  */
+/** Whether a line waits for somebody to approve or reject it. */
+function waits(row: ListLine): boolean {
+  return row.approvalStatus === 'PENDING';
+}
+
 export const LIST_LINES = defineResource<ListLine>({
   name: 'list-lines',
   segment: 'lines',
@@ -155,7 +163,7 @@ export const LIST_LINES = defineResource<ListLine>({
         {
           name: 'approve-line',
           label: 'people.lines.action.approve',
-          available: (row) => row.approvalStatus !== 'APPROVED',
+          available: waits,
           confirm: {
             heading: 'people.lines.confirm.approve.heading',
             body: 'people.lines.confirm.approve.body',
@@ -167,7 +175,7 @@ export const LIST_LINES = defineResource<ListLine>({
         {
           name: 'reject-line',
           label: 'people.lines.action.reject',
-          available: (row) => row.approvalStatus !== 'REJECTED',
+          available: waits,
           confirm: {
             heading: 'people.lines.confirm.reject.heading',
             body: 'people.lines.confirm.reject.body',

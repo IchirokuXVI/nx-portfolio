@@ -62,7 +62,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
     }
 
     button {
+      min-block-size: var(--admin-control);
+      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface-raised);
+      font: inherit;
+      color: var(--admin-ink);
       cursor: pointer;
     }
   `,

@@ -16,6 +16,7 @@ import {
   contentLocaleInterceptor,
   DASHBOARD_SERVICE,
   DashboardApi,
+  dashboardFollowsSession,
   DEPLOYMENT_SERVICE,
   DeploymentApi,
   DIRECTORY_SERVICE,
@@ -156,6 +157,12 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // token needs renewing — by which point every interaction it should have been
   // counting has already happened and the session would look idle from birth.
   provideEnvironmentInitializer(() => inject(SessionLifecycle).start()),
+
+  // Stop the dashboard read when the session ends, and start it for the next
+  // one (admin plan 0044). The rail's two counters watch it for as long as the
+  // tab lives, so without this the read went on after a sign out and the next
+  // admin on the same tab saw the last one's numbers first.
+  provideEnvironmentInitializer(() => dashboardFollowsSession()),
 
   // Put the environment name in the document title (plan 0001, section 6). A
   // listener, not a dependency: nothing injects it, so without this line nothing

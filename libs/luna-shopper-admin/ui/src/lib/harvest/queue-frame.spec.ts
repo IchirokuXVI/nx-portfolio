@@ -702,6 +702,61 @@ describe('the queue frame decide bar', () => {
   });
 
   /**
+   * A row that cannot be refused keeps the button, disabled. Without it Skip
+   * moved into the slot, and two quick presses on Skip could refuse the next
+   * row.
+   */
+  it('keeps reject in its slot, disabled, for a row that has no such action', async () => {
+    @Component({
+      selector: 'lib-queue-frame-reject-disabled-host',
+      imports: [QueueFrame],
+      template: `
+        <lib-queue-frame
+          (reject)="rejected.set(rejected() + 1)"
+          [busy]="false"
+          [decided]="0"
+          [empty]="false"
+          [failed]="false"
+          [loading]="false"
+          [rejectDisabled]="disabled()"
+          [remaining]="1"
+          confirmKey="test.confirm"
+          emptyKey="test.empty"
+          rejectKey="test.reject"
+          titleKey="test.title"
+        />
+      `,
+      changeDetection: ChangeDetectionStrategy.OnPush,
+    })
+    class RejectDisabled {
+      readonly disabled = signal(true);
+      readonly rejected = signal(0);
+    }
+
+    const { fixture, element, host } = await mount(RejectDisabled);
+    const order = () =>
+      [...(element.querySelector('.actions.decide')?.children ?? [])]
+        .map((child) => (child as HTMLElement).dataset['action'])
+        .filter((action) => action !== undefined);
+    const reject = () =>
+      element.querySelector<HTMLButtonElement>('[data-action="reject"]');
+
+    expect(order()).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject()?.disabled).toBe(true);
+    reject()?.click();
+    expect(host.rejected()).toBe(0);
+
+    host.disabled.set(false);
+    fixture.detectChanges();
+
+    // The same three, in the same places.
+    expect(order()).toEqual(['confirm', 'skip', 'reject']);
+    expect(reject()?.disabled).toBe(false);
+    reject()?.click();
+    expect(host.rejected()).toBe(1);
+  });
+
+  /**
    * Three buttons share one row on a phone, so reject may carry a shorter
    * name there. The long name stays the accessible one.
    */

@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -119,6 +121,34 @@ export class LocationFormPage extends ResourceFormPage {
   /** Whether the last act was a save, for the line under the form. */
   readonly savedNow = signal(false);
 
+  constructor() {
+    super();
+
+    // "Change" on the page's "Priced by" line writes the shop's scopes while
+    // this tab is open, and the form held the row it read before that. So
+    // when the shop the page holds names other scopes than the form's row,
+    // the form reads again. Not over something typed: a form that is being
+    // changed keeps what it holds, and its save sends the changed fields
+    // alone, so the scopes written beside it are not put back.
+    effect(() => {
+      const held = this._shop?.shop()?.priceScopeIds ?? null;
+      const shown = this.store.row()?.['priceScopeIds'];
+      untracked(() => {
+        if (
+          this.mode !== 'edit' ||
+          held === null ||
+          !Array.isArray(shown) ||
+          this.store.status() !== 'ready' ||
+          this.store.dirty() ||
+          sameIds(held, shown)
+        ) {
+          return;
+        }
+        void this.store.load();
+      });
+    });
+  }
+
   /** A new shop opens its own page. A changed one stays on its tab. */
   protected override afterSave(row: ResourceRow): void {
     const id = row['id'];
@@ -146,4 +176,9 @@ export class LocationFormPage extends ResourceFormPage {
     this.savedNow.set(false);
     void this.store.load();
   }
+}
+
+/** Whether two lists name the same ids, in any order. */
+function sameIds(left: readonly unknown[], right: readonly unknown[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
 }

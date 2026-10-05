@@ -715,7 +715,8 @@
         "label": "Price state",
         "any": "Any price",
         "stale": "Out of date",
-        "note": "These rows show the product name and its price only. Choose Any price to search, filter and tick products again."
+        "note": "These rows show the product name and its price only. Choose Any price to search, filter and tick products again.",
+        "suspended": "The category, the search and the order you set do not apply to these rows. They come back with Any price."
       }
     },
     "scopePicker": {
@@ -1621,6 +1622,7 @@
         "map": "Map it to one of ours",
         "unmap": "Unmap it",
         "ignore": "We do not sell from here",
+        "ignoreShort": "Ignore",
         "unignore": "Put it back in the queue"
       },
       "map": {
@@ -2112,7 +2114,8 @@
       },
       "info": {
         "readOnly": "This list is read only. An admin is added on the server, not here.",
-        "add": "To add one, run this where the auth service runs:"
+        "add": "To add one, run this where kubectl reaches the cluster. It asks for the password.",
+        "addLocal": "To add one, run this at the root of the repository. It asks for the password."
       }
     },
     "field": {
