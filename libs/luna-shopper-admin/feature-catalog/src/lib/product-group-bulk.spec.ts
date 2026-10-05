@@ -138,7 +138,6 @@ describe('Add items on a product group', () => {
     expect(
       q(fixture, 'lib-record-view lib-group-add-items-panel')
     ).not.toBeNull();
-    expect(q(fixture, 'lib-resource-form-page')).toBeNull();
 
     await click(fixture, '[data-add-items-open]');
     await settle(fixture, 300);

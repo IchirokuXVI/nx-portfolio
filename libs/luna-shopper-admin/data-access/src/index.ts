@@ -113,7 +113,6 @@ export { PostalCodeSummaryStore } from './lib/postal-codes/postal-code-summary-s
 export { readRecordById } from './lib/resource/read-record-by-id';
 export { RecordStore } from './lib/resource/record-store';
 export { ResourceApiGateways } from './lib/resource/resource-api';
-export { ResourceFormStore } from './lib/resource/resource-form-store';
 export {
   RESOURCE_GATEWAYS,
   type MemoryTables,

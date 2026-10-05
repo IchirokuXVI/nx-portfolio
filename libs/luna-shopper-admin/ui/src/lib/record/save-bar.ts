@@ -33,10 +33,16 @@ import { Viewport } from '../viewport';
  * On a phone there is no room for the words. Save takes the rest of the row
  * and carries the count, and the words are still said to a screen reader.
  * A saved form has no bar at all: the page reads again.
+ *
+ * **A form that is not a page says `sticky: false`** (admin plan 0060). The
+ * form of a price rule is inside a row and the form of a price is inside a
+ * panel. A bar at the edge of the window would be far from both, so there the
+ * bar is the last line of the form.
  */
 @Component({
   selector: 'lib-save-bar',
   imports: [RokuTranslatorPipe],
+  host: { '[class.sticky]': 'sticky()' },
   template: `
     @let now = state();
 
@@ -111,12 +117,7 @@ import { Viewport } from '../viewport';
     </button>
   `,
   styles: `
-    /* Above the bar of the app on a phone, where --admin-bar is its height,
-       and at the very edge on a wide screen, where it is nothing. */
     :host {
-      position: sticky;
-      inset-block-end: var(--admin-bar);
-      z-index: 20;
       display: flex;
       gap: var(--admin-space-3);
       align-items: center;
@@ -124,6 +125,14 @@ import { Viewport } from '../viewport';
       padding: var(--admin-space-2) var(--admin-page-inline);
       border-block-start: 1px solid var(--admin-border);
       background: var(--admin-surface-raised);
+    }
+
+    /* Above the bar of the app on a phone, where --admin-bar is its height,
+       and at the very edge on a wide screen, where it is nothing. */
+    :host(.sticky) {
+      position: sticky;
+      inset-block-end: var(--admin-bar);
+      z-index: 20;
     }
 
     .words {
@@ -204,6 +213,11 @@ export class SaveBar {
   readonly state = input.required<SaveBarState>();
   /** The words of the button, already translated: "Save", "Add product". */
   readonly saveLabel = input.required<string>();
+  /**
+   * Whether the bar stays at the bottom edge of the window. `false` for a
+   * form inside a row or a panel, where the bar is the last line of the form.
+   */
+  readonly sticky = input(true);
 
   readonly save = output<void>();
   // The name the plan gives it. It is the Cancel button and not the DOM event

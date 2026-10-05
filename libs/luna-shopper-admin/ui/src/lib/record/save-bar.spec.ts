@@ -208,4 +208,33 @@ describe('SaveBar on a phone', () => {
     expect(invalid.words.getAttribute('role')).toBe('alert');
     expect(refused.save.textContent?.trim()).toBe('Save');
   });
+
+  /**
+   * Admin plan 0060: a form inside a row or a panel holds its bar as its last
+   * line. A page keeps the bar at the bottom edge of the window.
+   */
+  it('sticks to the window unless the form says it is not a page', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [SaveBar, RokuTranslatorTestingModule.forTesting()],
+      providers: [{ provide: Viewport, useValue: { compact: signal(false) } }],
+    });
+    const fixture = TestBed.createComponent(SaveBar);
+    fixture.componentRef.setInput('state', { kind: 'clean' });
+    fixture.componentRef.setInput('saveLabel', 'Save');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(fixture.componentInstance.sticky()).toBe(true);
+    expect(host.classList).toContain('sticky');
+
+    fixture.componentRef.setInput('sticky', false);
+    fixture.detectChanges();
+
+    expect(host.classList).not.toContain('sticky');
+    // The same bar otherwise: the words and both buttons.
+    expect(host.querySelector('[data-save-words]')).not.toBeNull();
+    expect(host.querySelector('[data-cancel]')).not.toBeNull();
+    expect(host.querySelector('[data-save]')).not.toBeNull();
+  });
 });

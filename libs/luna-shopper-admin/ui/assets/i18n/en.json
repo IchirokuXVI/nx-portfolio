@@ -150,16 +150,13 @@
       "moveDown": "Move {{name}} down"
     },
     "form": {
-      "create": "New {{name}}",
-      "edit": "Edit {{name}}",
-      "loading": "Loading…"
+      "create": "New {{name}}"
     },
     "action": {
       "create": "Create",
       "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
-      "back": "Back",
       "delete": "Delete",
       "retry": "Try again",
       "more": "Load more",
@@ -177,7 +174,6 @@
       },
       "discard": {
         "heading": "Leave without saving?",
-        "body": "This form has changes that have not been saved. Leaving now loses them.",
         "confirm": "Leave and lose them"
       }
     },

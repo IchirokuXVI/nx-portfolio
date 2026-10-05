@@ -451,10 +451,13 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | JsonField<T>;
 
 /**
- * Whether the form is creating a row or changing one.
+ * Whether a draft adds a record or changes one.
  *
- * Here rather than beside the draft, because {@link isEditable} needs it and a
- * field's own rules are the deeper of the two.
+ * The record page has a third mode, reading, which holds no draft:
+ * `RecordMode` names all three, and `RecordStore` hands the rules of a draft
+ * one of these two. Here rather than beside the draft, because
+ * {@link isEditable} needs it and a field's own rules are the deeper of the
+ * two.
  */
 export type FormMode = 'create' | 'edit';
 

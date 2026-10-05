@@ -827,6 +827,41 @@ describe('RecordView', () => {
     });
   });
 
+  /**
+   * Admin plan 0060, section 2.1: the form of a price rule is this view
+   * inside a row that already names the record.
+   */
+  describe('inside a row, and not as a page', () => {
+    it('draws the Record block unless it is told not to', async () => {
+      drawn = await draw();
+      expect(drawn.element.querySelector('.facts')).not.toBeNull();
+
+      drawn.fixture.componentRef.setInput('facts', false);
+      await settle(drawn.fixture);
+
+      expect(drawn.element.querySelector('.facts')).toBeNull();
+      expect(drawn.element.querySelector('[data-fact]')).toBeNull();
+      // The sections are what they were.
+      expect(labels(drawn.element)).toContain('shops.slug');
+    });
+
+    it('keeps the bar at the edge of the window unless it is told not to', async () => {
+      drawn = await draw();
+      drawn.store.edit();
+      await settle(drawn.fixture);
+      const bar = drawn.element.querySelector('lib-save-bar') as HTMLElement;
+
+      expect(bar.classList).toContain('sticky');
+      expect(bar.classList).toContain('edge');
+
+      drawn.fixture.componentRef.setInput('stickyBar', false);
+      await settle(drawn.fixture);
+
+      expect(bar.classList).not.toContain('sticky');
+      expect(bar.classList).not.toContain('edge');
+    });
+  });
+
   describe('while the record is on its way', () => {
     /** Only the values wait. The frame and the labels are there at once. */
     it('draws the frame and the labels, with a bar for each value', async () => {

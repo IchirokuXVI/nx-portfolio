@@ -1,9 +1,9 @@
 import type { Route } from '@angular/router';
 import {
   recordEditRedirect,
+  recordLeaveGuard,
   recordRoute,
   RESOURCE_DESCRIPTOR,
-  RESOURCE_FORM_MODE,
   resourceCreateRoute,
   resourceFormBranch,
   resourceRoutes,
@@ -96,7 +96,8 @@ export function productsRoutes(): Route[] {
     // has beside it.
     withList(resourceFormBranch(CATEGORIES), CategoriesPage),
 
-    // The rules are six rows, and a rule's form opens under its row.
+    // The rules are six rows, and a rule's form opens under its row. Leaving
+    // a row with changes asks first.
     {
       path: PRICE_POLICIES.segment,
       component: PriceRulesPage,
@@ -104,10 +105,8 @@ export function productsRoutes(): Route[] {
         {
           path: ':id',
           component: PriceRuleForm,
-          data: {
-            [RESOURCE_DESCRIPTOR]: PRICE_POLICIES,
-            [RESOURCE_FORM_MODE]: 'edit',
-          },
+          canDeactivate: [recordLeaveGuard],
+          data: { [RESOURCE_DESCRIPTOR]: PRICE_POLICIES },
         },
       ],
     },
@@ -119,7 +118,8 @@ export function productsRoutes(): Route[] {
         [PRODUCT_PRICES_TAB]: {
           path: PRICES.segment,
           component: ProductPricesTab,
-          // The add a price form, drawn inside the tab.
+          // The add a price form, drawn inside the tab. The route carries
+          // the leave guard, so a typed price asks before it is lost.
           children: [resourceCreateRoute(PRICES)],
         },
       },

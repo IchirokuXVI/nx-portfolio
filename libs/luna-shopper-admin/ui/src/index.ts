@@ -56,7 +56,6 @@ export { ReferencePicker } from './lib/resource/reference-picker';
 export { ReferencesControl } from './lib/resource/references-control';
 export { ResourceCellView } from './lib/resource/resource-cell';
 export { ResourceFilters } from './lib/resource/resource-filters';
-export { ResourceForm, type FieldChange } from './lib/resource/resource-form';
 export { ResourceList, type RowAction } from './lib/resource/resource-list';
 export { LUNA_SHOPPER_ADMIN_UI_TRANSLATIONS } from './lib/translations';
 export { Viewport } from './lib/viewport';

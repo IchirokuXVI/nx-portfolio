@@ -9,7 +9,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 /**
  * One input per locale (plan 0004, section 2).
  *
- * In the generic form from the first day rather than added when the first
+ * In every form from the first day rather than added when the first
  * Spanish name is needed, because this is the single most annoying thing to
  * retrofit: every name and label on supermarkets, items, locations and price
  * scopes is a `jsonb` column with one string per language, and a form that

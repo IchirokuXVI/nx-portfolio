@@ -48,8 +48,8 @@ export type Price = Wire.CatalogAdminSupermarketItemView & {
  *
  * ## What the editor adds
  *
- * `PriceFormPage` replaces the generic form for the add, and section 2 of plan
- * 0005 is still why: a price belongs to a **scope** and not to a shop, so the
+ * `PriceFormPage` stands in for the record page for the add, and section 2 of
+ * plan 0005 is still why: a price belongs to a **scope** and not to a shop, so the
  * screen has to name the scope, say what kind it is, and say how many shops
  * share it. What changed is the verb: the form inserts an `ADMIN` row and never
  * edits one, so the descriptor's one write goes to the item prices and not to
@@ -89,6 +89,11 @@ export const PRICES = defineResource<Price>({
   },
 
   editor: PriceFormPage,
+
+  // A price has no page to open (admin plan 0060, target 3): after one is
+  // added the panel closes and the Prices tab shows it. The editor draws its
+  // own rows, so the block names no section.
+  record: { sections: [], afterAdd: 'list' },
 
   fields: [
     { kind: 'text', name: 'id', label: 'catalog.prices.id', editable: false },

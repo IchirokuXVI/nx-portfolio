@@ -29,7 +29,7 @@ const CHAIN_INFO: InfoContent = {
  * Supermarkets, as a descriptor and nothing else (plan 0004, section 9).
  *
  * This file is the proof the plan asks for: the simplest entity, working end to
- * end through the generic list and the generic form, with no component of its
+ * end through the generic list and the record page, with no component of its
  * own. Everything peculiar to a supermarket is stated here, and everything
  * general is inherited.
  *

@@ -12,10 +12,15 @@ export {
 } from './lib/admin-section';
 export { gatewayErrorKey } from './lib/gateway-error-key';
 export { RECORD_CONTEXT } from './lib/record-context';
+export {
+  LeaveQuestion,
+  recordLeaveGuard,
+  type LeaveAware,
+} from './lib/record-leave-guard';
 export { RECORD_EDIT_PARAM, RecordPage } from './lib/record-page';
+export { recordPrefill } from './lib/record-prefill';
 export { RecordView } from './lib/record-view';
 export { ResourceChanges } from './lib/resource-changes';
-export { ResourceFormPage } from './lib/resource-form-page';
 export { ResourceListPage } from './lib/resource-list-page';
 export { ResourceReferences, ResourceRegistry } from './lib/resource-registry';
 export {

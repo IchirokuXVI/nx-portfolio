@@ -37,7 +37,7 @@ const AT_ONCE = 4;
  *
  * **The codes field accepts several.** An operator adding a city adds twelve
  * codes, not one, and a form used twelve times is a form nobody uses. That is
- * the whole reason this screen exists instead of the generic form: everything
+ * the whole reason this screen exists instead of the record page: everything
  * else about it is three fields.
  *
  * The route keeps one code per call (backend plan 0097, section 6.1), because a

@@ -284,15 +284,6 @@ export function changedFields(
   );
 }
 
-/** Whether anything has been typed that would be lost by leaving. */
-export function isDirty(
-  draft: ResourceDraft,
-  original: ResourceDraft,
-  ordered: ReadonlySet<string> = NOTHING_ORDERED
-): boolean {
-  return changedFields(draft, original, ordered).length > 0;
-}
-
 export const REQUIRED_KEY = 'resource.error.required';
 
 /**

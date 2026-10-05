@@ -92,6 +92,18 @@ export const PRICE_POLICIES = defineResource<PricePolicy>({
   },
   caution: 'catalog.pricePolicies.caution',
 
+  // What the form under a row draws (admin plan 0060, section 2.1): the two
+  // columns a rule can change. `sourceKind` is the ID of a rule and the
+  // heading of its row, so it is in no section.
+  record: {
+    sections: [
+      {
+        title: 'record.section.details',
+        fields: ['priority', 'maxAgeDays'],
+      },
+    ],
+  },
+
   // Six rows, seeded by the migration. Nothing creates a seventh and nothing
   // deletes one: a kind with no policy would be a kind no read could rank.
   actions: { edit: true },

@@ -560,33 +560,39 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   readonly sorts?: readonly EnumOption[];
   readonly actions?: ResourceActions<T>;
   /**
-   * The component that draws one row, when the generic form cannot.
+   * The component that draws one row, when the record page cannot.
    *
-   * The generic form is the detail view for anything whose rows are flat, which
-   * is every catalog resource: it draws the fields it cannot change beside the
-   * ones it can. It is not the detail view for a zone, whose interesting
-   * content is its membership and its lists, or for a list, whose content is
-   * its lines. Those get a component, named here, and the route factory mounts
-   * it at `:id` instead.
+   * The record page reads a row, changes it and adds one, for every resource
+   * that names no page of its own (admin plan 0053). It also draws what a
+   * record holds: the members and the lists of a zone are tabs of its record
+   * page. So this is an exception, and there is one: a postal code, which is
+   * keyed by the code and whose page only reads, from four reads that each
+   * fail alone. The route factory mounts the component at `:id`.
    *
-   * Absent, with no edit either, means the resource has no detail screen at all
-   * and its rows do not open. That is the admin table (plan 0007, section 2).
+   * `no-page-outside-the-record-page.spec.ts` in the app holds the list of
+   * the resources that set this or {@link editor}. A new one fails that spec
+   * until somebody decides that the record page cannot draw it.
+   *
+   * Absent, with no `record` block, no {@link editor} and no edit, means the
+   * rows do not open. That is the admin table (plan 0007, section 2).
    */
   readonly detail?: Type<unknown>;
   /**
-   * The component that creates and changes one row, when the generic form
+   * The component that adds and changes one row, when the record page
    * cannot.
    *
-   * There is one of these, and the plan that asks for it says why: a price is
-   * the screen where a well meaning generic form creates wrong data. A price
-   * belongs to a **scope** and not to a shop, so the form has to name the scope,
-   * state its kind and say how many shops share it, and none of that is a field
-   * of the row being edited (plan 0005, section 2).
+   * There are two of these. A price is the screen where a form that only
+   * knows the fields of a row creates wrong data: a price belongs to a
+   * **scope** and not to a shop, so the form has to name the scope, state its
+   * kind and say how many shops share it, and none of that is a field of the
+   * row (plan 0005, section 2). Its form is built from the parts of the
+   * record page and keeps a layout of its own (admin plan 0060). The other
+   * is the page that adds many postal codes at once and reports on each.
    *
-   * It replaces the generic form at `new` and at `:id`, so create and edit stay
-   * one act with one component. {@link detail} still wins at `:id` where a
-   * resource named both, since a row that is read rather than changed is a
-   * different screen from the one that changes it.
+   * It stands in for the record page at `new` and at `:id`. {@link detail}
+   * still wins at `:id` where a resource named both, since a row that is
+   * read rather than changed is a different screen from the one that changes
+   * it. The route of an editor carries the leave guard of the record page.
    */
   readonly editor?: Type<unknown>;
   /**
@@ -625,8 +631,8 @@ export function hasDetailScreen<T extends ResourceRow>(
 /**
  * A descriptor for whatever row shape, which is what a registry can hold.
  *
- * The generic form cannot be assigned to this one, and that is a property of
- * TypeScript rather than a mistake. A field name is `Extract<keyof T, string>`,
+ * A descriptor of a known row cannot be assigned to this one, and that is a
+ * property of TypeScript rather than a mistake. A field name is `Extract<keyof T, string>`,
  * and `keyof T` makes `T` **contravariant**: a descriptor for a known row is
  * therefore not a descriptor for any row, however much it looks like one.
  */

@@ -28,8 +28,10 @@ import type {
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
+  ConfirmDialog,
   InfoButton,
   PopoverSheet,
+  SaveBar,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import type { ItemScopePrices } from '../catalog-seed';
@@ -780,9 +782,111 @@ describe('the add a price form', () => {
     await settle(fixture);
 
     expect(page.scopeMessages().length).toBeGreaterThan(0);
+    // Where every other form says it: a line under the control, in its row.
     expect(
-      fixture.nativeElement.querySelector('.scope-field [role="alert"]')
+      fixture.nativeElement.querySelector('[data-scope-row] [data-error]')
     ).not.toBeNull();
+  });
+
+  /**
+   * Admin plan 0060, target 2: the form is built from the parts of the
+   * record page. A row for each field, the control of the field inside it,
+   * and one bar that holds Save and Cancel.
+   */
+  it('draws each field as a row of the record page, with its control', async () => {
+    const { fixture, page } = await form();
+    const host = fixture.nativeElement.querySelector(
+      'lib-price-form-page'
+    ) as HTMLElement;
+    const rows = [...host.querySelectorAll('lib-field-row')] as HTMLElement[];
+
+    // The scope first, then what an added price can state.
+    expect(rows).toHaveLength(page.formFields.length + 1);
+    expect(rows[0].querySelector('lib-price-scope-picker')).not.toBeNull();
+    expect(rows[0].querySelector('lib-price-scope-notice')).not.toBeNull();
+    // The star of a field that has to be filled in, where every form has it.
+    expect(rows[0].querySelector('.star')).not.toBeNull();
+    for (const field of page.formFields) {
+      const row = host.querySelector(`[data-field="${field.name}"]`);
+      expect(row?.querySelector('lib-field-control')).not.toBeNull();
+      expect(row?.querySelector('label')?.getAttribute('for')).toBe(
+        `price-field-${field.name}`
+      );
+    }
+    expect(host.querySelector('form')).toBeNull();
+  });
+
+  it('holds Save and Cancel in one bar, inside the panel, and says "Add price"', async () => {
+    const { fixture, page } = await form(
+      '/products/it_dish_soap/prices/new?priceScopeId=ps_mercadona_national'
+    );
+    const bar = fixture.debugElement.query(By.directive(SaveBar))
+      .componentInstance as SaveBar;
+
+    expect(bar.sticky()).toBe(false);
+    expect(page.saveLabel()).toBe('record.action.add');
+    // A price whose scope came with the address is complete as it opened.
+    expect(bar.state()).toEqual({ kind: 'clean', canSave: true });
+
+    page.store.set('price', '1.50');
+    fixture.detectChanges();
+    expect(bar.state()).toEqual({ kind: 'dirty', changes: 1 });
+  });
+
+  it('counts the scope as a required field that is still empty', async () => {
+    const { fixture } = await form();
+    const bar = fixture.debugElement.query(By.directive(SaveBar))
+      .componentInstance as SaveBar;
+
+    expect(bar.state()).toEqual({ kind: 'missing', required: 1 });
+  });
+
+  it('closes on Cancel with nothing typed, and asks nothing', async () => {
+    const { fixture } = await form();
+
+    fixture.nativeElement
+      .querySelector('lib-price-form-page [data-cancel]')
+      .click();
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe('/products/it_dish_soap/prices');
+    expect(fixture.debugElement.query(By.directive(PriceFormPage))).toBeNull();
+  });
+
+  it('asks before a typed price is lost, and stays on "Stay here"', async () => {
+    const { fixture, page } = await form();
+    const router = TestBed.inject(Router);
+
+    page.store.set('price', '1.50');
+    fixture.detectChanges();
+    fixture.nativeElement
+      .querySelector('lib-price-form-page [data-cancel]')
+      .click();
+    await settle(fixture);
+
+    const dialog = fixture.debugElement
+      .query(By.directive(PriceFormPage))
+      .query(By.directive(ConfirmDialog)).componentInstance as ConfirmDialog;
+    expect(dialog.bodyKey()).toBe('record.leave.bodyNew');
+    expect(dialog.bodyArgs()).toEqual({ count: 1, name: 'catalog.prices.one' });
+    dialog.dismiss.emit();
+    await settle(fixture);
+
+    expect(router.url).toBe('/products/it_dish_soap/prices/new');
+    expect(page.store.draft()['price']).toBe('1.50');
+
+    // The same question from the tab itself, which closes the form too.
+    pricesTab(fixture).closeForm();
+    await settle(fixture);
+    (
+      fixture.debugElement
+        .query(By.directive(PriceFormPage))
+        .query(By.directive(ConfirmDialog)).componentInstance as ConfirmDialog
+    ).confirm.emit();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(router.url).toBe('/products/it_dish_soap/prices');
   });
 
   it('saves, closes, and has the tab read the scopes again', async () => {
@@ -846,6 +950,14 @@ describe('the add a price form', () => {
       { kind: 'key', key: 'catalog.prices.observedAtFuture' },
     ]);
     expect(create).not.toHaveBeenCalled();
+    // The bar says that nothing was saved, though the store never saw it.
+    expect(page.bar()).toEqual({ kind: 'invalid', fields: 1 });
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector(
+        '[data-field="observedAt"] [data-error]'
+      )
+    ).not.toBeNull();
   });
 
   it('refuses one more than 30 days back', async () => {
