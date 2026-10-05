@@ -232,10 +232,16 @@ export class ResourceFormPage {
    * The heading is one key for every entity, so the entity's own name has to
    * arrive as a string: a pipe cannot resolve a key that is the argument of
    * another key.
+   *
+   * `t` reads no signal, so the two reads below are what bring this back when
+   * the catalogue arrives. Without them a page opened cold kept the raw key:
+   * "New catalog.items.one".
    */
-  readonly titleArgs = computed(() => ({
-    name: this._translator.t(this.descriptor.labels.one),
-  }));
+  readonly titleArgs = computed(() => {
+    this._translator.loaded();
+    this._translator.locale();
+    return { name: this._translator.t(this.descriptor.labels.one) };
+  });
 
   /**
    * The row as the form holds it: what was read, with the draft over it.

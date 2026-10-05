@@ -16,6 +16,7 @@ import {
 import {
   adminRoutes,
   provideSections,
+  RecordPage,
   ResourceChanges,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -379,17 +380,27 @@ describe('the Sections tab of a chain', () => {
     ]);
   });
 
-  it('opens the form of a section as a page beside the chain’s', async () => {
+  it('opens a section as a page beside the chain’s, to be read first', async () => {
     const fixture = await boot(`/chains/sm_mercadona/sections/${OFFERS}`);
 
     // A sibling of the chain's page and not a tab of it.
     expect(fixture.debugElement.query(By.directive(ChainPage))).toBeNull();
-    expect(text(fixture)).toContain('resource.form.edit');
-    // The chain is the address, so the form has no control for it. The slug
-    // is there to show that the form did draw.
-    expect(fixture.nativeElement.querySelector('#field-slug')).not.toBeNull();
+    const record = fixture.debugElement.query(By.directive(RecordPage));
+    expect(record).not.toBeNull();
+    // Reading: no control anywhere on the page (admin plan 0053).
+    expect(fixture.nativeElement.querySelector('lib-field-control')).toBeNull();
+
+    (record.componentInstance as RecordPage).edit();
+    await settle(fixture);
+
+    // "Edit" turns the same page into a form. The chain is fixed once the
+    // section exists, so it has no control. The position is there to show
+    // that the form did draw.
     expect(
-      fixture.nativeElement.querySelector('#field-supermarketId')
+      fixture.nativeElement.querySelector('#record-field-position')
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('#record-field-supermarketId')
     ).toBeNull();
   });
 

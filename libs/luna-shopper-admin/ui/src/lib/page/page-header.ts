@@ -1,4 +1,6 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
+  afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -18,6 +20,10 @@ import { ChevronLeftIcon, MoreIcon } from '@portfolio/shared/ui';
 import { InfoButton } from '../info/info-button';
 import { Viewport } from '../viewport';
 import { PAGE_FRAME_TABS, PageTabs, type PageTab } from './page-tabs';
+import { PopoverSheet } from './popover-sheet';
+
+/** What the More menu moves the focus between. */
+const MENU_ITEMS = 'button:not(:disabled), a[href]';
 
 /**
  * Whether a header drawn here is the page's own, or sits under one (admin plan
@@ -66,6 +72,18 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
  * - `pageMoreAction`: the second and later actions. In the row on a wide screen,
  *   and inside a "More actions" menu on a phone, where two buttons beside a
  *   title leave no room for the title.
+ * - `pageMoreDanger`: the actions that destroy. They come after the others,
+ *   and in a menu they are under a line and in red.
+ *
+ * ## The More menu
+ *
+ * `overflow="menu"` puts every `pageMoreAction` and `pageMoreDanger` in the
+ * menu at every width (admin plan 0053, section 2.4). The record page uses
+ * it, so that its header keeps to "Edit" and one button. The menu is a panel
+ * under the button on a wide screen and a sheet from the bottom on a phone.
+ * Arrow Down and Arrow Up move and wrap, Escape closes and gives the focus
+ * back to the button, and a press outside closes. The header gives each
+ * button in the menu the role `menuitem`, so a page cannot forget it.
  *
  * It sits at the top of the page and reaches the edges of the main column by
  * itself, so put it first in the template and outside any element that has
@@ -90,10 +108,12 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
 @Component({
   selector: 'lib-page-header',
   imports: [
+    NgTemplateOutlet,
     RouterLink,
     RokuTranslatorPipe,
     InfoButton,
     PageTabs,
+    PopoverSheet,
     ChevronLeftIcon,
     MoreIcon,
   ],
@@ -117,7 +137,10 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
         }
       }
 
-      <div class="page-titles">
+      <div [class.pending]="loading()" class="page-titles">
+        <!-- While the name is on its way a grey bar stands in for it. The
+             words are still in the heading, so a screen reader hears what
+             is loading and not a silence. -->
         @if (level() === 2) {
           <h2 class="page-title">{{ heading() }}</h2>
         } @else {
@@ -139,11 +162,22 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
       <div class="page-actions"><ng-content select="[pageAction]" /></div>
 
       <div class="page-overflow">
-        @if (compact()) {
+        <!-- Drawn in one place and put in the row, the panel or the sheet. A
+             component has one slot of each name, and a second one in another
+             branch would take the content away from the first. -->
+        <ng-template #more>
+          <ng-content select="[pageMoreAction]" />
+          <div class="page-more-danger">
+            <ng-content select="[pageMoreDanger]" />
+          </div>
+        </ng-template>
+
+        @if (compact() || menu()) {
           <button
             (click)="toggleMore()"
             [attr.aria-expanded]="moreOpen()"
-            [attr.aria-label]="'page.moreActions' | rokuT"
+            [attr.aria-haspopup]="menu() ? 'menu' : null"
+            [attr.aria-label]="moreLabel() ?? ('page.moreActions' | rokuT)"
             #moreToggle
             class="page-overflow-toggle"
             type="button"
@@ -151,13 +185,29 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
             <lib-more-icon />
           </button>
         }
-        <div
-          [class.open]="moreOpen()"
-          [class.page-menu]="compact()"
-          class="page-overflow-actions"
-        >
-          <ng-content select="[pageMoreAction]" />
-        </div>
+
+        @if (menu() && compact() && moreOpen()) {
+          <lib-popover-sheet
+            (closed)="closeMore(true)"
+            [heading]="moreLabel() ?? ('page.moreActions' | rokuT)"
+            [sheet]="true"
+          >
+            <div class="page-more-items as-menu as-sheet" role="menu">
+              <ng-container [ngTemplateOutlet]="more" />
+            </div>
+          </lib-popover-sheet>
+        } @else {
+          <div
+            [attr.aria-label]="menu() ? moreLabel() : null"
+            [attr.role]="menu() ? 'menu' : null"
+            [class.as-menu]="menu()"
+            [class.open]="moreOpen()"
+            [class.page-menu]="compact() || menu()"
+            class="page-more-items page-overflow-actions"
+          >
+            <ng-container [ngTemplateOutlet]="more" />
+          </div>
+        }
       </div>
     </header>
 
@@ -171,6 +221,10 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
   host: {
     '(document:click)': 'pressed($event)',
     '(document:keydown.escape)': 'closeMore(true)',
+    // The keys of the More menu are heard on the header and not on its list:
+    // the sheet takes the focus when it opens, and the sheet is above the
+    // list.
+    '(keydown)': 'onMenuKeydown($event)',
   },
   styles: `
     /* It reaches the edges of the main column whatever the page lays its own
@@ -232,6 +286,19 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
       letter-spacing: 0;
     }
 
+    /* The bar is the heading itself with its ink taken away, so the words
+       stay where a screen reader finds them. */
+    .pending .page-title {
+      inline-size: 11rem;
+      max-inline-size: 100%;
+      block-size: 0.875rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
+      text-overflow: clip;
+      color: transparent;
+      user-select: none;
+    }
+
     /* A header under another one is the title of a pane and not of the page,
        so it is a step smaller than the header above it. */
     h2.page-title {
@@ -287,10 +354,19 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
       flex: none;
     }
 
+    /* The wrapper of the actions that destroy is always there, so it is the
+       wrapper's own content that counts. */
     .page-chips:empty,
     .page-actions:empty,
-    .page-overflow:not(:has(.page-overflow-actions > *)) {
+    .page-overflow:not(
+      :has(.page-more-items > :not(.page-more-danger), .page-more-danger > *)
+    ) {
       display: none;
+    }
+
+    /* In the row the actions that destroy are buttons like the others. */
+    .page-more-danger {
+      display: contents;
     }
 
     .page-grow {
@@ -366,6 +442,82 @@ export const PAGE_HEADING_LEVEL = new InjectionToken<Signal<1 | 2>>(
     .page-overflow-actions.page-menu.open {
       display: flex;
     }
+
+    /* The More menu (admin plan 0053, section 2.4): 264 px under the button,
+       one entry for each row, and the actions that destroy under a line. */
+    .page-overflow-actions.as-menu {
+      gap: 0;
+      inline-size: 16.5rem;
+      padding: 0.375rem;
+      border-color: var(--admin-border-strong);
+      border-radius: 0.5rem;
+    }
+
+    .as-menu.as-sheet {
+      display: flex;
+      flex-direction: column;
+      padding: var(--admin-space-2);
+    }
+
+    .as-menu .page-more-danger {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* The line parts them from the entries above, so it needs one above. */
+    .as-menu > * ~ .page-more-danger:not(:empty) {
+      margin-block-start: 0.375rem;
+      padding-block-start: 0.375rem;
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    /* The entries belong to the page and not to this component, so the rules
+       have to reach through to them. */
+    :host ::ng-deep .as-menu button,
+    :host ::ng-deep .as-menu a {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+      inline-size: 100%;
+      min-block-size: 2.25rem;
+      padding: 0 0.625rem;
+      border: none;
+      border-radius: var(--admin-radius-control);
+      background: none;
+      font-weight: 400;
+      text-align: start;
+      text-decoration: none;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    :host ::ng-deep .as-menu.as-sheet button,
+    :host ::ng-deep .as-menu.as-sheet a {
+      min-block-size: 3rem;
+    }
+
+    :host ::ng-deep .as-menu button:hover,
+    :host ::ng-deep .as-menu a:hover,
+    :host ::ng-deep .as-menu button:focus-visible,
+    :host ::ng-deep .as-menu a:focus-visible {
+      background: var(--admin-neutral-wash);
+    }
+
+    :host ::ng-deep .as-menu button:focus-visible,
+    :host ::ng-deep .as-menu a:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: -2px;
+    }
+
+    :host ::ng-deep .as-menu button:disabled {
+      color: var(--admin-ink-muted);
+      cursor: default;
+    }
+
+    :host ::ng-deep .as-menu .page-more-danger button,
+    :host ::ng-deep .as-menu .page-more-danger a {
+      color: var(--admin-danger);
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -382,6 +534,12 @@ export class PageHeader {
 
   /** The title, already translated. */
   readonly heading = input.required<string>();
+  /**
+   * Whether the title is still on its way (admin plan 0053, section 4). A
+   * grey bar is drawn in its place, and {@link heading} is what a screen
+   * reader hears: "Loading the brand".
+   */
+  readonly loading = input(false);
   /**
    * A second line, already translated: what the row is called on a form, or
    * who owns a zone. Beside the title on a wide screen, under it on a phone.
@@ -424,12 +582,44 @@ export class PageHeader {
   /** What the page's own tabs are, already translated, for a screen reader. */
   readonly tabsLabel = input('');
 
+  /**
+   * Where the second and later actions are.
+   *
+   * `'row'` is the row on a wide screen and a menu on a phone. `'menu'` puts
+   * every `pageMoreAction` in the More menu at every width.
+   */
+  readonly overflow = input<'row' | 'menu'>('row');
+  /**
+   * The accessible name of the button of the menu, already translated: "More
+   * actions for Hacendado". `null` says "More actions".
+   */
+  readonly moreLabel = input<string | null>(null);
+
   /** The way back was pressed, and no {@link backLink} was given. */
   readonly back = output<void>();
 
   readonly compact = this._viewport.compact;
 
   readonly moreOpen = signal(false);
+
+  /** Whether every later action is in the More menu, at every width. */
+  readonly menu = computed(() => this.overflow() === 'menu');
+
+  constructor() {
+    // An open menu says what its entries are, and the keyboard starts on the
+    // first one. After the render, because the render is what puts the
+    // entries in the panel or the sheet.
+    afterRenderEffect(() => {
+      if (!this.menu() || !this.moreOpen()) {
+        return;
+      }
+      const items = this._menuItems();
+      for (const item of items) {
+        item.setAttribute('role', 'menuitem');
+      }
+      items[0]?.focus();
+    });
+  }
 
   /** The tabs under the header: the page's own, or else the frame's. */
   readonly shownTabs = computed<readonly PageTab[]>(
@@ -478,9 +668,50 @@ export class PageHeader {
       return;
     }
 
-    const menu = this._host.nativeElement.querySelector(
-      '.page-overflow-actions'
-    );
-    this.closeMore(menu?.contains(target) === true);
+    const menu = this._host.nativeElement.querySelector('.page-more-items');
+    const inside = menu?.contains(target) === true;
+    // The sheet has a scrim over the page and says by itself that it was
+    // pressed. A press on its heading is a press on no entry.
+    if (this.menu() && this.compact() && !inside) {
+      return;
+    }
+    this.closeMore(inside);
+  }
+
+  /** Arrow Down and Arrow Up move through the menu and wrap. */
+  onMenuKeydown(event: KeyboardEvent): void {
+    if (!this.menu() || !this.moreOpen()) {
+      return;
+    }
+
+    const items = this._menuItems();
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    let next: number;
+    switch (event.key) {
+      case 'ArrowDown':
+        next = at + 1 >= items.length ? 0 : at + 1;
+        break;
+      case 'ArrowUp':
+        next = at <= 0 ? items.length - 1 : at - 1;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = items.length - 1;
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    items[next]?.focus();
+  }
+
+  private _menuItems(): HTMLElement[] {
+    const list = this._host.nativeElement.querySelector('.page-more-items');
+    return list === null
+      ? []
+      : Array.from(list.querySelectorAll<HTMLElement>(MENU_ITEMS));
   }
 }
