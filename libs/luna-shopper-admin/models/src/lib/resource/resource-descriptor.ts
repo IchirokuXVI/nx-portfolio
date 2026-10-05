@@ -398,6 +398,12 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
     readonly one: string;
     readonly many: string;
     readonly create?: string;
+    /**
+     * What one row is called in the middle of a sentence, where `one` is
+     * written as a heading ("Brand"). "No brand has this ID." reads it through
+     * {@link nounKeyOf}. Absent means `one` already reads that way.
+     */
+    readonly noun?: string;
   };
   /** The property holding the row's id. `id` unless stated. */
   readonly idField?: FieldName<T>;
@@ -409,6 +415,23 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * "no row has this ID" would be a guess there and not an answer.
    */
   readonly readById?: false;
+  /**
+   * Whether a row read by its ID belongs to what a screen fixed, for the
+   * parts of a scope that are no column of the row (admin plan 0051).
+   *
+   * A list is narrowed by its route, and a read by ID is narrowed by nothing.
+   * `rowWithin` holds the row against every scope value that is a column. A
+   * category has no `kind`: "root" and "leaf" are what the list route works
+   * out from the parent, so only the resource can say whether a row it was
+   * handed is one. Without this, a pasted ID chose a root in a picker of
+   * leaves, and the save was refused.
+   *
+   * Absent means every part of every scope is a column. A row this answers
+   * `false` for reads as not found.
+   *
+   * A method for the reason {@link rowId} is one.
+   */
+  within?(row: T, scope: Readonly<Record<string, FilterValue>>): boolean;
   /**
    * The address one row has, when no single property is one.
    *
@@ -595,6 +618,13 @@ export function defineResource<T extends ResourceRow>(
   descriptor: ResourceDescriptor<T>
 ): AnyResourceDescriptor {
   return descriptor as unknown as AnyResourceDescriptor;
+}
+
+/** The key of what one row is called inside a sentence. */
+export function nounKeyOf(
+  descriptor: Pick<AnyResourceDescriptor, 'labels'>
+): string {
+  return descriptor.labels.noun ?? descriptor.labels.one;
 }
 
 /** The property holding a row's id. */

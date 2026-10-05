@@ -4,6 +4,8 @@ import {
   rowWithin,
   searchedRecordId,
 } from './record-id';
+import { REFERENCE_NONE } from './reference-none';
+import { nounKeyOf } from './resource-descriptor';
 
 /**
  * The rule that says a typed term is a record's ID (admin plan 0051).
@@ -92,7 +94,38 @@ describe('rowWithin', () => {
     expect(rowWithin(shop, { kind: ['NATIONAL'] })).toBe(false);
   });
 
-  it('passes what the row does not carry, which the server decides', () => {
+  it('passes a filter that is no column of the row', () => {
     expect(rowWithin(shop, { leafOnly: 'true', supermarketId: '' })).toBe(true);
+  });
+
+  /**
+   * A column that is absent cannot be checked. A column that holds nothing
+   * can: a category with no parent is not under the root a screen fixed.
+   */
+  it('refuses a row whose column is null where a value was fixed', () => {
+    const root = { id: 'c1', parentId: null };
+
+    expect(rowWithin(root, { parentId: 'c0' })).toBe(false);
+    expect(rowWithin(root, { parentId: ['c0', 'c9'] })).toBe(false);
+    expect(rowWithin({ id: 'c2' }, { parentId: 'c0' })).toBe(true);
+  });
+
+  it('keeps a null column for the "none" literal, and for no value', () => {
+    const root = { id: 'c1', parentId: null };
+
+    expect(rowWithin(root, { parentId: REFERENCE_NONE })).toBe(true);
+    expect(rowWithin(root, { parentId: '' })).toBe(true);
+    expect(rowWithin({ id: 'c2', parentId: 'c1' }, { parentId: 'none' })).toBe(
+      false
+    );
+  });
+});
+
+describe('nounKeyOf', () => {
+  it('is the sentence form where a resource names one', () => {
+    expect(
+      nounKeyOf({ labels: { one: 'Brand', many: 'm', noun: 'brand' } })
+    ).toBe('brand');
+    expect(nounKeyOf({ labels: { one: 'shop', many: 'm' } })).toBe('shop');
   });
 });

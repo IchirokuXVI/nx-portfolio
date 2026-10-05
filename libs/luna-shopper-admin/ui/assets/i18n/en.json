@@ -796,6 +796,7 @@
   "brands": {
     "registered": {
       "one": "Brand",
+      "noun": "brand",
       "many": "Registered brands",
       "field": {
         "label": "Name",

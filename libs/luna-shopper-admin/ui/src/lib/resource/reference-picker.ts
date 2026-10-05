@@ -544,7 +544,7 @@ export class ReferencePicker implements OnDestroy {
 
     this._clearTimer();
     // An ID is pasted whole, so there is no typing to wait out.
-    if (recordIdIn(term) !== null) {
+    if (this._idIn(term) !== null) {
       void this._search(term);
       return;
     }
@@ -611,6 +611,20 @@ export class ReferencePicker implements OnDestroy {
   }
 
   /**
+   * The ID a term is on this picker's resource, or `null` for text.
+   *
+   * The lookup's answer when it has one, because it is the lookup that reads
+   * the term: a resource with no read by ID gets a pasted uuid searched as
+   * words, and then nothing here may treat it as an ID.
+   */
+  private _idIn(term: string): string | null {
+    const lookup = this.lookup();
+    return lookup.recordIdFor === undefined
+      ? recordIdIn(term)
+      : lookup.recordIdFor(this.resource(), term);
+  }
+
+  /**
    * The options for a term, and the one place this component reads them.
    *
    * An empty term asks for the first page. A term that is a record ID asks
@@ -645,7 +659,7 @@ export class ReferencePicker implements OnDestroy {
       this._seen.set(option.id, option);
     }
 
-    const id = recordIdIn(term);
+    const id = this._idIn(term);
     if (id !== null && options.length === 1 && options[0].id === id) {
       // The record the ID names. There is nothing to choose between, so it is
       // chosen: the field shows its name, and the list closes.

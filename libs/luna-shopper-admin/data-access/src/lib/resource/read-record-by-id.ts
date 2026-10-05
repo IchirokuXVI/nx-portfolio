@@ -23,7 +23,9 @@ import { toGatewayError } from '../gateway-error';
  * - The route answers 404: no such row.
  * - The route answers 400: it refused the ID itself, so no row can have it.
  * - A row came back that is outside `within`: a shop of another chain is not
- *   a row of this chain's list.
+ *   a row of this chain's list, and a root category is not a row of a picker
+ *   of leaves. The first is a column of the row and the second is not, so the
+ *   row is held against `rowWithin` and against the resource's own `within`.
  *
  * Any other failure is thrown. A server that is down has not said the record
  * is missing, and saying so would send an operator looking for a row that is
@@ -49,8 +51,10 @@ export async function readRecordById<T extends ResourceRow>(
     throw error;
   }
 
-  return idOf(descriptor as AnyResourceDescriptor, row) === id &&
-    rowWithin(row, within)
+  const erased = descriptor as AnyResourceDescriptor;
+  return idOf(erased, row) === id &&
+    rowWithin(row, within) &&
+    (erased.within?.(row, within) ?? true)
     ? row
     : null;
 }

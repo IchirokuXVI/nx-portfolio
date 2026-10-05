@@ -27,6 +27,7 @@ import {
 import {
   fieldOf,
   hasDetailScreen,
+  nounKeyOf,
   toCell,
   toRowView,
   type ActionConfirmation,
@@ -132,7 +133,7 @@ interface PendingAction extends RowAction {
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
       [noticeKeys]="notices()"
-      [oneKey]="descriptor.labels.one"
+      [oneKey]="nounKey"
       [order]="store.order()"
       [rows]="rows()"
       [selectable]="bulkActions.length > 0"
@@ -324,6 +325,8 @@ export class ResourceListPage {
    * with `provideRouter` and nothing else.
    */
   readonly descriptor = this._route.snapshot.data[RESOURCE_DESCRIPTOR];
+  /** What one row is called in "No brand has this ID." */
+  readonly nounKey = nounKeyOf(this.descriptor);
 
   /**
    * Whether the list is part of a larger page, and which part (admin plan
@@ -376,6 +379,8 @@ export class ResourceListPage {
     },
     resolve: (resource, id) => this.references.resolve(resource, id),
     nounOf: (resource) => this.references.nounOf(resource),
+    recordIdFor: (resource, term) =>
+      this.references.recordIdFor(resource, term),
   };
 
   /**

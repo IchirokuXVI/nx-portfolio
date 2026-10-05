@@ -1,3 +1,4 @@
+import { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import type {
   ResourceGateway,
   ResourceQuery,
@@ -113,6 +114,55 @@ describe('productListGateway', () => {
       [PRICES_AT_FILTER]: 'scope',
       itemIds: ['a'],
     });
+  });
+
+  /**
+   * The product was found. A price read that fails after it must not be
+   * read as "No product has this ID.", which is what a 404 or a 400 thrown
+   * from the read becomes.
+   */
+  it.each([404, 400, 503])(
+    'answers the product without a price when the price read fails with %i',
+    async (status) => {
+      const { gateway } = build([], []);
+      const failing = productListGateway(
+        { ...gateway, read: async (id: string) => product(id) },
+        {
+          list: () =>
+            Promise.reject(
+              new GatewayError({ code: 'failed', status, correlationId: 'c' })
+            ),
+        }
+      );
+
+      const row = await failing.read('a', { [PRICES_AT_FILTER]: 'scope' });
+
+      expect(row.id).toBe('a');
+      // Absent, and not `null`: nobody learned whether the scope holds one.
+      expect('scopePrice' in row).toBe(false);
+    }
+  );
+
+  it('still throws when the product itself cannot be read', async () => {
+    const { gateway } = build([], [price('a')]);
+    const failing = productListGateway(
+      {
+        ...gateway,
+        read: () =>
+          Promise.reject(
+            new GatewayError({
+              code: 'not_found',
+              status: 404,
+              correlationId: 'c',
+            })
+          ),
+      },
+      { list: async () => ({ items: [], nextCursor: null }) }
+    );
+
+    await expect(
+      failing.read('a', { [PRICES_AT_FILTER]: 'scope' })
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it('reads one product alone when the list shows no scope', async () => {

@@ -12,7 +12,10 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import { toGatewayError } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  toGatewayError,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
   ResourceReferences,
@@ -26,7 +29,7 @@ import {
   type BasketSettlementView,
 } from './basket-settlements';
 import { FactList, type Fact } from './fact-list';
-import { day, instant } from './people-format';
+import { instant, madeAt } from './people-format';
 import type { BasketRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
 import { BASKET_PARAM, PERSON_PARAM } from './shopper-params';
@@ -252,6 +255,7 @@ export class BasketPage {
   private readonly _registry = inject(ResourceRegistry);
   private readonly _references = inject(ResourceReferences);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _content = inject(ContentLocaleStore);
 
   private readonly _baskets = this._registry.byName('baskets');
 
@@ -280,11 +284,12 @@ export class BasketPage {
       return '';
     }
     // Most shopping lists have no name, and an ID is not one (admin plan
-    // 0051). The day it was made tells two of them apart, in words.
+    // 0051). When it was made tells two of them apart, and it is written by
+    // the function that names the row in the list this page was opened from.
     return (
       basket.name ??
       this._translator.t('people.baskets.unnamed', undefined, undefined, {
-        date: day(basket.generatedAt, this._translator.locale()),
+        date: madeAt(basket.generatedAt, this._content.order()),
       })
     );
   });

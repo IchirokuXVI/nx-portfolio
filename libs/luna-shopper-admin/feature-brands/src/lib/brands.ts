@@ -41,6 +41,8 @@ export const BRANDS = defineResource<Brand>({
   labels: {
     one: 'brands.registered.one',
     many: 'brands.registered.many',
+    // `one` is written as a heading. A sentence takes this one.
+    noun: 'brands.registered.noun',
   },
 
   // The label, which is the brand's name everywhere a person reads one. Not

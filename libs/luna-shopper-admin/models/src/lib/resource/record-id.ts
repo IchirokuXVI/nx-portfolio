@@ -1,3 +1,4 @@
+import { isReferenceNone } from './reference-none';
 import type { AnyResourceDescriptor } from './resource-descriptor';
 import type { FilterValue, ResourceRow } from './resource-field';
 
@@ -78,9 +79,15 @@ export function searchedRecordId(
  * must not show a row of another chain, so the row is held against the same
  * values the list sends as filters.
  *
- * Only a value the row carries can be checked. A filter that is not a column,
- * such as the `kind` of a category, passes here and stays the server's to
- * refuse.
+ * Only a column the row carries can be checked here, and "carries" means the
+ * property is there. A column that holds `null` is carried: a category with no
+ * parent is not within "the categories under this root", so `null` matches
+ * the "none" literal and no other value.
+ *
+ * A filter that is not a column at all, such as the `kind` of a category, is
+ * skipped. The read by ID sends no filter, so nothing else would refuse such
+ * a row: a resource with a filter like that answers it itself, in the
+ * `within` of its descriptor, and `readRecordById` asks both.
  */
 export function rowWithin(
   row: ResourceRow,
@@ -88,9 +95,15 @@ export function rowWithin(
 ): boolean {
   return Object.entries(within).every(([name, wanted]) => {
     const held = row[name];
-    if (typeof held !== 'string' || wanted === '') {
+    if (held === undefined || wanted === '') {
       return true;
     }
-    return typeof wanted === 'string' ? held === wanted : wanted.includes(held);
+    const values = typeof wanted === 'string' ? [wanted] : wanted;
+    if (held === null) {
+      return values.some(isReferenceNone);
+    }
+    // A number or a flag is not compared: a filter arrives as text, and how
+    // that text reads as either is the route's own business.
+    return typeof held !== 'string' || values.includes(held);
   });
 }

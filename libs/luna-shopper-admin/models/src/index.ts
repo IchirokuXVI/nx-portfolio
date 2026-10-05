@@ -121,6 +121,7 @@ export {
   fieldOf,
   hasDetailScreen,
   idOf,
+  nounKeyOf,
   type ActionConfirmation,
   type AnyResourceDescriptor,
   type BriefPresentation,

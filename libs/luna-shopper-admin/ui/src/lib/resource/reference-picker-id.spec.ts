@@ -225,3 +225,103 @@ describe('ReferencePicker with a typed record ID', () => {
     ).toHaveLength(2);
   });
 });
+
+/**
+ * A resource with no read by ID, such as the price scopes, searches a pasted
+ * uuid as words. The lookup says so, and the picker then treats the uuid as
+ * any other text.
+ */
+describe('ReferencePicker over a resource with no read by ID', () => {
+  const asText = (overrides: Partial<ReferenceLookup> = {}) =>
+    lookupOf({
+      nounOf: () => 'scopes.one',
+      recordIdFor: () => null,
+      ...overrides,
+    });
+
+  it('never says that no record has the ID', async () => {
+    jest.useFakeTimers();
+    try {
+      const { fixture, emitted } = await render(
+        asText({ search: async () => [] })
+      );
+
+      paste(fixture, NOBODY);
+      jest.advanceTimersByTime(300);
+      await settle(fixture);
+
+      expect(emitted).toEqual([]);
+      expect(notFound(fixture)).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain(
+        'resource.reference.noResults'
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('waits out the typing, as for any text', async () => {
+    jest.useFakeTimers();
+    try {
+      const terms: string[] = [];
+      const { fixture } = await render(
+        asText({
+          search: async (_resource, term) => {
+            terms.push(term);
+            return [];
+          },
+        })
+      );
+      terms.length = 0;
+
+      paste(fixture, NOBODY);
+      await settle(fixture);
+      expect(terms).toEqual([]);
+
+      jest.advanceTimersByTime(300);
+      await settle(fixture);
+      expect(terms).toEqual([NOBODY]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('chooses nothing by itself, even for one row with that ID', async () => {
+    jest.useFakeTimers();
+    try {
+      const { fixture, emitted } = await render(
+        asText({ search: async () => [scopes[1]] })
+      );
+
+      paste(fixture, MADRID);
+      jest.advanceTimersByTime(300);
+      await settle(fixture);
+
+      expect(emitted).toEqual([]);
+      expect(fixture.componentInstance.open()).toBe(true);
+      expect(
+        fixture.nativeElement.querySelectorAll('[role="option"]')
+      ).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('asks the lookup about its own resource', async () => {
+    const asked: [string, string][] = [];
+    const { fixture, emitted } = await render(
+      lookupOf({
+        recordIdFor: (resource, term) => {
+          asked.push([resource, term]);
+          return recordIdIn(term);
+        },
+      })
+    );
+
+    paste(fixture, MADRID);
+    await settle(fixture);
+
+    expect(asked[0]).toEqual(['price-scopes', MADRID]);
+    expect(emitted).toEqual([MADRID]);
+  });
+});

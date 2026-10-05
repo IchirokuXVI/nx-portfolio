@@ -73,6 +73,42 @@ const scopes = defineResource<{ id: string; label: string }>({
     }),
 });
 
+const ROOT = 'aaaaaaaa-2222-4333-8444-555555555555';
+const LEAF = 'bbbbbbbb-2222-4333-8444-555555555555';
+
+interface Category {
+  id: string;
+  label: string;
+  parentId: string | null;
+}
+
+/**
+ * A tree whose list is filtered by a `kind` no row carries, as the catalog's
+ * categories are. `one` is written as a heading, so it names a sentence form.
+ */
+const categories = defineResource<Category>({
+  name: 'categories',
+  segment: 'categories',
+  labels: { one: 'Category', many: 'categories.many', noun: 'category' },
+  title: (row) => row.label,
+  within: (row, scope) =>
+    scope['kind'] === 'root'
+      ? row.parentId === null
+      : scope['kind'] === 'leaf'
+        ? row.parentId !== null
+        : true,
+  fields: [{ kind: 'text', name: 'label', label: 'categories.label' }],
+  list: { columns: ['label'], compact: ['label'] },
+  gateway: () =>
+    inject(RESOURCE_GATEWAYS).for<Category>({
+      path: '/v1/admin/catalog/categories',
+      seed: [
+        { id: ROOT, label: 'Food', parentId: null },
+        { id: LEAF, label: 'Fruit', parentId: ROOT },
+      ],
+    }),
+});
+
 describe('ResourceReferences with a record ID', () => {
   let references: ResourceReferences;
 
@@ -80,7 +116,7 @@ describe('ResourceReferences with a record ID', () => {
     TestBed.configureTestingModule({
       providers: [
         ContentLocaleStore,
-        provideResources(shops, products, scopes),
+        provideResources(shops, products, scopes, categories),
       ],
     });
     references = TestBed.inject(ResourceReferences);
@@ -120,8 +156,52 @@ describe('ResourceReferences with a record ID', () => {
     ).resolves.toHaveLength(2);
   });
 
+  /**
+   * The read by ID sends no filter, so a scope that is no column of the row
+   * is the resource's to judge. A root pasted into a picker of leaves was
+   * chosen at once, and the save was refused with `category_not_a_leaf`.
+   */
+  it('answers nothing for a root in a picker of leaves', async () => {
+    await expect(
+      references.search('categories', ROOT, { kind: 'leaf' })
+    ).resolves.toEqual([]);
+    await expect(
+      references.search('categories', LEAF, { kind: 'leaf' })
+    ).resolves.toHaveLength(1);
+  });
+
+  it('answers nothing for a leaf in a picker of roots', async () => {
+    await expect(
+      references.search('categories', LEAF, { kind: 'root' })
+    ).resolves.toEqual([]);
+    await expect(
+      references.search('categories', ROOT, { kind: 'root' })
+    ).resolves.toHaveLength(1);
+  });
+
+  it('answers either where the screen fixed no kind', async () => {
+    await expect(references.search('categories', ROOT)).resolves.toHaveLength(
+      1
+    );
+    await expect(references.search('categories', LEAF)).resolves.toHaveLength(
+      1
+    );
+  });
+
   it('names what one row is called', () => {
     expect(references.nounOf('items')).toBe('items.one');
     expect(references.nounOf('nothing')).toBeNull();
+  });
+
+  it('names it in its sentence form where the resource has one', () => {
+    expect(references.nounOf('categories')).toBe('category');
+  });
+
+  /** The picker asks this, so it and the search cannot disagree. */
+  it('says a term is an ID only where the search reads it as one', () => {
+    expect(references.recordIdFor('locations', ` ${GRAN_VIA} `)).toBe(GRAN_VIA);
+    expect(references.recordIdFor('locations', 'gran via')).toBeNull();
+    expect(references.recordIdFor('price-scopes', REGION)).toBeNull();
+    expect(references.recordIdFor('nothing', REGION)).toBeNull();
   });
 });

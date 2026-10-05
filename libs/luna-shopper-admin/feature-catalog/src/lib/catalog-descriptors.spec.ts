@@ -9,7 +9,6 @@ import {
   type FieldDescriptor,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { CATEGORIES } from './categories';
 import {
   CATEGORY_KIND_OPTIONS,
   POSTAL_CODE_SOURCE_OPTIONS,
@@ -18,13 +17,14 @@ import {
   UNIT_OF_MEASURE_OPTIONS,
 } from './catalog-enums';
 import {
+  ITEM_SEED,
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
   PRICE_POLICY_SEED,
-  ITEM_SEED,
   PRICE_SCOPE_SEED,
   PRICE_SEED,
 } from './catalog-seed';
+import { CATEGORIES } from './categories';
 import { ChainContext } from './chains/chain-context';
 import { CHAIN_PARAM } from './chains/chain-page';
 import { CHAIN_RESOURCES } from './chains/chains-routes';
@@ -370,7 +370,10 @@ describe('reference columns that name their target', () => {
     expect(PRICES.title(row, ENGLISH_FIRST)).toBe('Whole milk 1 L');
     expect(PRICES.title(row, SPANISH_FIRST)).toBe('Leche entera 1 L');
     expect(
-      PRICES.title({ ...row, itemName: { es: 'Leche entera 1 L' } }, ENGLISH_FIRST)
+      PRICES.title(
+        { ...row, itemName: { es: 'Leche entera 1 L' } },
+        ENGLISH_FIRST
+      )
     ).toBe('Leche entera 1 L');
   });
 });
@@ -553,9 +556,9 @@ describe('the shop price scopes', () => {
     expect(
       scopes?.locked?.(shop, { kind: 'REGION', externalKey: 'loc_1' })
     ).toBe(false);
-    expect(
-      scopes?.locked?.({}, { kind: 'STORE', externalKey: 'loc_1' })
-    ).toBe(false);
+    expect(scopes?.locked?.({}, { kind: 'STORE', externalKey: 'loc_1' })).toBe(
+      false
+    );
   });
 
   it('lists the stack by name, and filters on one scope', () => {
@@ -620,9 +623,9 @@ describe('the price scope tier names', () => {
   it('translates the priority column through its read', () => {
     const priority = fieldOf(PRICE_SCOPES, 'priority');
 
-    expect(
-      priority?.read?.({ ...PRICE_SCOPE_SEED[0], priority: 200 })
-    ).toEqual(priorityBand(200));
+    expect(priority?.read?.({ ...PRICE_SCOPE_SEED[0], priority: 200 })).toEqual(
+      priorityBand(200)
+    );
   });
 });
 
@@ -992,6 +995,32 @@ describe('categories', () => {
       expect(parent.nullable).toBe(true);
       expect(parent.scopeFrom?.({})).toEqual({ kind: 'root' });
     }
+  });
+
+  /**
+   * `kind` is a filter and no column, and a read by ID sends no filter
+   * (admin plan 0051). A root pasted into a picker of leaves must read as not
+   * found, or the save is refused with `category_not_a_leaf`.
+   */
+  it('says whether a row read by its ID is a root or a leaf', () => {
+    const root = { id: 'c1', parentId: null } as Parameters<
+      NonNullable<typeof CATEGORIES.within>
+    >[0];
+    const leaf = { ...root, id: 'c2', parentId: 'c1' };
+    // A row the gateway sent with no parent at all is a root too.
+    const bare = { ...root, parentId: undefined };
+
+    expect(CATEGORIES.within?.(root, { kind: 'leaf' })).toBe(false);
+    expect(CATEGORIES.within?.(bare, { kind: 'leaf' })).toBe(false);
+    expect(CATEGORIES.within?.(leaf, { kind: 'leaf' })).toBe(true);
+
+    expect(CATEGORIES.within?.(leaf, { kind: 'root' })).toBe(false);
+    expect(CATEGORIES.within?.(root, { kind: 'root' })).toBe(true);
+    expect(CATEGORIES.within?.(bare, { kind: 'root' })).toBe(true);
+
+    // No kind fixed, or one this screen does not know: nothing is narrowed.
+    expect(CATEGORIES.within?.(root, {})).toBe(true);
+    expect(CATEGORIES.within?.(leaf, { kind: '' })).toBe(true);
   });
 
   it('says a refusal about the parent under the parent', () => {

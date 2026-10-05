@@ -214,6 +214,51 @@ describe('Add items on a product group', () => {
   });
 });
 
+describe('Add items, when one search overtakes another', () => {
+  /**
+   * A search by name is slower than the read of an ID typed after it (admin
+   * plan 0051). The slow answer must not be drawn over the ID's.
+   */
+  it('drops a search that lands after the one that replaced it', async () => {
+    const { fixture } = await boot('/products/groups/pg_olive_oil');
+    await click(fixture, '[data-add-items-open]');
+    await settle(fixture, 300);
+
+    const page = fixture.debugElement.query(
+      By.directive(ProductGroupDetailPage)
+    ).componentInstance as ProductGroupDetailPage;
+    const items = page['_items'];
+    const found = await itemsNow();
+    let answer: () => void = () => undefined;
+    jest.spyOn(items, 'list').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = () => resolve({ items: found, nextCursor: null });
+        })
+    );
+    const type = async (text: string) => {
+      const box = q<HTMLInputElement>(fixture, '[data-item-search]');
+      expect(box).not.toBeNull();
+      if (box !== null) {
+        box.value = text;
+        box.dispatchEvent(new Event('input'));
+      }
+      await settle(fixture, 300);
+    };
+
+    await type('oil');
+    // No product of the seed has this ID, and the read answers at once.
+    await type('3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f');
+    expect(q(fixture, '[data-id-not-found]')).not.toBeNull();
+
+    answer();
+    await settle(fixture);
+
+    expect(q(fixture, '[data-id-not-found]')).not.toBeNull();
+    expect(all(fixture, '[data-pick-item]')).toHaveLength(0);
+  });
+});
+
 describe('Set group on the product list', () => {
   it('draws a tick box per row, and a tick sends nothing', async () => {
     const { fixture, assign } = await boot('/products');

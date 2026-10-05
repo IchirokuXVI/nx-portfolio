@@ -143,8 +143,17 @@ export function productListGateway<
       if (scopeId === null) {
         return row;
       }
-      const priced = await pricesOf(prices, scopeId, [row.id]);
-      return { ...row, scopePrice: priced.get(row.id) ?? null };
+      // The product was found, and that is what was asked. A price read that
+      // fails must not turn it into "No product has this ID.", which is what
+      // a 404 or a 400 thrown from here would be read as. So the row goes
+      // back as the product route gave it, with no `scopePrice` at all: not
+      // `null`, which would say the scope holds no price for it.
+      try {
+        const priced = await pricesOf(prices, scopeId, [row.id]);
+        return { ...row, scopePrice: priced.get(row.id) ?? null };
+      } catch {
+        return row;
+      }
     },
     create: (input) => products.create(input),
     update: (id, input) => products.update(id, input),

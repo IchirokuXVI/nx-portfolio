@@ -3,8 +3,12 @@ import {
   Component,
   input,
   signal,
+  type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+
+/** How long the button says "Copied" before it offers the copy again. */
+export const COPIED_FOR_MS = 2000;
 
 /**
  * A record's ID, as the secondary thing it is (admin plan 0051, section 4).
@@ -22,9 +26,12 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   imports: [RokuTranslatorPipe],
   template: `
     <code>{{ value() }}</code>
+    <!-- Named for what it copies while it offers the copy. While it reads
+         "Copied" it has no name of its own, so the name a screen reader says
+         is the word on the button and not a second one. -->
     <button
       (click)="copy()"
-      [attr.aria-label]="'resource.id.copy' | rokuT"
+      [attr.aria-label]="copied() ? null : ('resource.id.copy' | rokuT)"
       type="button"
       data-copy-id
     >
@@ -80,25 +87,47 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class RecordId {
+export class RecordId implements OnDestroy {
   readonly value = input.required<string>();
 
   /** Whether the ID was just copied, which the button then says. */
   readonly copied = signal(false);
 
+  private _timer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    this._clearTimer();
+  }
+
   /**
-   * Copy the ID, and say so on the button.
+   * Copy the ID, and say so on the button for a moment.
+   *
+   * The button goes back to "Copy" by itself. A button that stayed on
+   * "Copied" would say so about a clipboard that has held something else
+   * since, and a second copy would have nothing to announce.
    *
    * A browser that refuses (no permission, or a page not served over a secure
    * origin) leaves the button as it was. The ID is still on the screen to be
    * selected by hand.
    */
   async copy(): Promise<void> {
+    this._clearTimer();
     try {
       await navigator.clipboard.writeText(this.value());
       this.copied.set(true);
+      this._timer = setTimeout(() => {
+        this._timer = null;
+        this.copied.set(false);
+      }, COPIED_FOR_MS);
     } catch {
       this.copied.set(false);
+    }
+  }
+
+  private _clearTimer(): void {
+    if (this._timer !== null) {
+      clearTimeout(this._timer);
+      this._timer = null;
     }
   }
 }

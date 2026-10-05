@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   idOf,
+  nounKeyOf,
   recordIdFor,
   type AnyResourceDescriptor,
   type ErrorLink,
@@ -345,7 +346,19 @@ export class ResourceReferences implements ReferenceLookup {
 
   /** What one row of a resource is called, for "No product has this ID." */
   nounOf(resource: string): string | null {
-    return this._registry.byName(resource)?.labels.one ?? null;
+    const descriptor = this._registry.byName(resource);
+    return descriptor === undefined ? null : nounKeyOf(descriptor);
+  }
+
+  /**
+   * The ID a term is on `resource`, or `null` when the term is text there.
+   *
+   * `null` for a resource with no read by ID and for one this app does not
+   * know, which is exactly when {@link search} treats the term as text.
+   */
+  recordIdFor(resource: string, term: string): string | null {
+    const descriptor = this._registry.byName(resource);
+    return descriptor === undefined ? null : recordIdFor(descriptor, term);
   }
 
   private _option(

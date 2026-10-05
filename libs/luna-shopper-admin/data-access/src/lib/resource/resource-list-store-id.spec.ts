@@ -188,7 +188,103 @@ describe('ResourceListStore with an ID in the search', () => {
   });
 });
 
+describe('ResourceListStore, when one read overtakes another', () => {
+  /**
+   * A search by name is slower than the read of an ID typed after it. The
+   * slow answer must not replace the record the ID found.
+   */
+  it('drops a search that lands after the read that replaced it', async () => {
+    const gateway = new FakeGateway();
+    let answer: (page: ResourcePage<ResourceRow>) => void = () => undefined;
+    gateway.list = (query) => {
+      gateway.queries.push(query);
+      return new Promise((resolve) => (answer = resolve));
+    };
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+
+    const slow = store.setFilter('query', 'gran');
+    await store.setFilter('query', ID);
+    answer({
+      items: [{ id: OTHER, name: 'Gran Plaza', supermarketId: 'chain-a' }],
+      nextCursor: 'more',
+    });
+    await slow;
+
+    expect(store.rows().map((row) => row['id'])).toEqual([ID]);
+    expect(store.hasMore()).toBe(false);
+    expect(store.status()).toBe('ready');
+  });
+
+  it('drops the failure of a search that was replaced', async () => {
+    const gateway = new FakeGateway();
+    let fail: (error: unknown) => void = () => undefined;
+    gateway.list = () => new Promise((_resolve, reject) => (fail = reject));
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+
+    const slow = store.setFilter('query', 'gran');
+    await store.setFilter('query', ID);
+    fail(
+      new GatewayError({ code: 'unavailable', status: 503, correlationId: 'c' })
+    );
+    await slow;
+
+    expect(store.error()).toBeNull();
+    expect(store.rows()).toHaveLength(1);
+  });
+
+  /** "Load more" of the old filter must not append to the new rows. */
+  it('drops a next page that lands after the filter changed', async () => {
+    const gateway = new FakeGateway();
+    let answer: (page: ResourcePage<ResourceRow>) => void = () => undefined;
+    let calls = 0;
+    gateway.list = async () => {
+      calls += 1;
+      if (calls === 2) {
+        return new Promise((resolve) => (answer = resolve));
+      }
+      return { items: gateway.rows, nextCursor: calls === 1 ? 'next' : null };
+    };
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+    await store.load();
+
+    const more = store.loadMore();
+    await store.setFilter('open', 'true');
+    answer({
+      items: [{ id: OTHER, name: 'Late', supermarketId: 'chain-a' }],
+      nextCursor: null,
+    });
+    await more;
+
+    expect(store.rows().map((row) => row['id'])).toEqual([ID]);
+    expect(store.loadingMore()).toBe(false);
+  });
+});
+
 describe('readRecordById', () => {
+  /**
+   * A scope can hold a value that is no column of a row. The resource then
+   * says itself whether the row belongs, and a row that does not is not found.
+   */
+  it('asks the resource about a scope that is no column of the row', async () => {
+    const asked: unknown[] = [];
+    const judged = defineResource<Shop>({
+      ...(descriptor as never as Parameters<typeof defineResource<Shop>>[0]),
+      within: (row, scope) => {
+        asked.push(scope);
+        return scope['kind'] !== 'closed' || row.name === 'Closed';
+      },
+    });
+    const gateway = new FakeGateway();
+
+    await expect(
+      readRecordById(judged, gateway, ID, { kind: 'closed' })
+    ).resolves.toBeNull();
+    await expect(
+      readRecordById(judged, gateway, ID, { kind: 'open' })
+    ).resolves.toMatchObject({ id: ID });
+    expect(asked).toEqual([{ kind: 'closed' }, { kind: 'open' }]);
+  });
+
   it('answers nothing for an ID the route refuses as malformed', async () => {
     const gateway = new FakeGateway();
     gateway.failWith = new GatewayError({

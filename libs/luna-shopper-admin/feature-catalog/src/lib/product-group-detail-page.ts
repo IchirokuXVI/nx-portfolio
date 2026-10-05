@@ -351,6 +351,8 @@ export class ProductGroupDetailPage implements OnDestroy {
   });
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
+  /** The search this page is waiting for, so a slow one cannot land last. */
+  private _searches = 0;
 
   ngOnDestroy(): void {
     if (this._timer !== null) {
@@ -443,6 +445,9 @@ export class ProductGroupDetailPage implements OnDestroy {
 
   private async _search(): Promise<void> {
     const term = this.query().trim();
+    // A search by name can be slower than the read of an ID typed after it.
+    // Only the last one asked for is drawn.
+    const search = ++this._searches;
     this.searching.set(true);
     this._searchError.set(null);
     this.idNotFound.set(false);
@@ -462,15 +467,22 @@ export class ProductGroupDetailPage implements OnDestroy {
               })
             ).items
           : await this._byId(id);
+      if (search !== this._searches) {
+        return;
+      }
       this._found.set(items);
       this.idNotFound.set(id !== null && items.length === 0);
       void this._names.resolve(
         items.map((item) => item.productGroupId ?? null)
       );
     } catch (error) {
-      this._searchError.set(error as GatewayError);
+      if (search === this._searches) {
+        this._searchError.set(error as GatewayError);
+      }
     } finally {
-      this.searching.set(false);
+      if (search === this._searches) {
+        this.searching.set(false);
+      }
     }
   }
 

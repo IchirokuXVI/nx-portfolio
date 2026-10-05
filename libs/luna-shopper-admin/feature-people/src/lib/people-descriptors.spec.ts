@@ -20,6 +20,7 @@ import { BASKETS, ZONE_BASKETS } from './baskets';
 import { LIST_LINES } from './list-lines';
 import { LISTS } from './lists';
 import { MEMBERSHIPS } from './memberships';
+import { madeAt } from './people-format';
 import {
   ADMIN_SEED,
   BASKET_SEED,
@@ -486,14 +487,44 @@ describe('the list and shopping list descriptors', () => {
   });
 
   /** A basket needs no name, and an unnamed one is the ordinary case. */
-  it('calls an unnamed shopping list by its day, never by its ID', () => {
+  it('calls an unnamed shopping list by when it was made, never by its ID', () => {
     const [named, unnamed] = BASKET_SEED;
 
     expect(BASKETS.title(named, CONTENT_LOCALES)).toBe('Saturday');
+    // The function the heading of its page reads, so the two cannot name one
+    // shopping list by two days.
     expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(
-      unnamed.generatedAt.slice(0, 10)
+      madeAt(unnamed.generatedAt, CONTENT_LOCALES)
     );
     expect(BASKETS.title(unnamed, CONTENT_LOCALES)).not.toContain(unnamed.id);
+  });
+
+  /** A shopper makes more than one list in a day. */
+  it('tells two unnamed shopping lists of one day apart', () => {
+    const [, unnamed] = BASKET_SEED;
+    const at = (generatedAt: string) =>
+      BASKETS.title({ ...unnamed, generatedAt }, CONTENT_LOCALES);
+
+    expect(at('2026-02-02T10:00:00.000Z')).not.toBe(
+      at('2026-02-02T10:07:00.000Z')
+    );
+  });
+
+  /**
+   * The day where the operator is, and not the UTC day cut out of the
+   * timestamp, which is the day before or after for part of every day.
+   */
+  it('writes the day and the time through Intl, in the reading language', () => {
+    const made = '2026-02-02T10:00:00.000Z';
+    const words = (locale: string) =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(made));
+
+    expect(madeAt(made, ['en', 'es'])).toBe(words('en'));
+    expect(madeAt(made, ['es', 'en'])).toBe(words('es'));
+    expect(madeAt(made, [])).toBe(words('en'));
   });
 });
 

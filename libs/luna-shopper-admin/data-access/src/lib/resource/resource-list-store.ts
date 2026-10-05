@@ -35,7 +35,7 @@ export class ResourceListStore<T extends ResourceRow> {
   private readonly _loadingMore = signal(false);
   private readonly _filters = signal<Readonly<Record<string, string>>>({});
   private readonly _order = signal<string | undefined>(undefined);
-  /** Counts the reads from the start, so a refresh that was overtaken is dropped. */
+  /** Counts the reads from the start, so a read that was overtaken is dropped. */
   private _reads = 0;
 
   constructor(
@@ -297,13 +297,24 @@ export class ResourceListStore<T extends ResourceRow> {
     cursor: string | undefined,
     apply: (items: readonly T[]) => void
   ): Promise<void> {
+    // A filter that changes while a read is out starts its own read, and that
+    // one is what the screen shows. A slow search by name must not land over
+    // the record a typed ID found after it (admin plan 0051), and a "Load
+    // more" of the old filter must not append to the new rows.
+    const read = this._reads;
     try {
       const page = await this._page(cursor);
+      if (read !== this._reads) {
+        return;
+      }
 
       apply(page.items);
       this._cursor.set(page.nextCursor);
       this._status.set('ready');
     } catch (error) {
+      if (read !== this._reads) {
+        return;
+      }
       // A failure while appending leaves the rows already shown alone: they are
       // still true, and clearing them would turn a failed request for more into
       // the loss of everything the operator had. So the whole screen becomes an
