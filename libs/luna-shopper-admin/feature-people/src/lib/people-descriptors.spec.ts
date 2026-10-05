@@ -10,6 +10,7 @@ import {
   CONTENT_LOCALES,
   draftFor,
   fieldOf,
+  hasDetailScreen,
   idOf,
   recordLayout,
   recordTabs,
@@ -1115,5 +1116,130 @@ describe('a list with no parent chosen', () => {
       LIST_LINE_SEED.filter((row) => row.listId === LIST_SEED[0].id).length
     );
     expect(store.rows().length).toBeLessThan(LIST_LINE_SEED.length);
+  });
+});
+
+/**
+ * Admin plan 0058: a list, one of its lines and a shopping list are each a
+ * record page, and the `record` block of each says what that page draws.
+ */
+describe('the record pages of a list, a line and a shopping list', () => {
+  const drawn = (descriptor: AnyResourceDescriptor, mode: 'read' | 'edit') =>
+    recordLayout(descriptor, mode).sections.map((section) => [
+      section.title,
+      section.fields.map((field) => field.name),
+    ]);
+
+  const facts = (descriptor: AnyResourceDescriptor) => {
+    const { added, addedBy, changed, changedBy, also } = recordLayout(
+      descriptor,
+      'read'
+    ).facts;
+
+    return {
+      added: added?.name,
+      addedBy: addedBy?.name,
+      changed: changed?.name,
+      changedBy: changedBy?.name,
+      also: also.map((field) => field.name),
+    };
+  };
+
+  it('draws a list as one section, with no field left over', () => {
+    const sections = [
+      [
+        'people.lists.section.list',
+        ['name', 'autoApproveLines', 'sharedWithZone'],
+      ],
+    ];
+
+    expect(drawn(LISTS, 'read')).toEqual(sections);
+    expect(drawn(LISTS, 'edit')).toEqual(sections);
+    expect(recordTabs(LISTS)).toEqual([]);
+  });
+
+  it('holds the lines of a list as one panel, counted by the list', () => {
+    expect(
+      (LISTS.record?.children ?? []).map((child) => [
+        child.as,
+        'name' in child ? child.name : child.resource,
+        child.count,
+      ])
+    ).toEqual([['panel', 'lines', 'lineCount']]);
+  });
+
+  it('says who made a list and a line, from the row', () => {
+    expect(facts(LISTS)).toEqual({
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      changedBy: undefined,
+      also: ['zoneName'],
+    });
+    expect(facts(LIST_LINES)).toEqual({
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      changedBy: undefined,
+      also: ['listName'],
+    });
+    // A person, by name, and never a field the form could change.
+    for (const descriptor of [LISTS, LIST_LINES]) {
+      expect(fieldOf(descriptor, 'createdByUserId')).toMatchObject({
+        kind: 'reference',
+        resource: 'users',
+        editable: false,
+      });
+      expect(fieldOf(descriptor, 'updatedAt')).toMatchObject({
+        kind: 'date',
+        time: true,
+        editable: false,
+      });
+    }
+  });
+
+  it('draws a line as one section, with no field left over', () => {
+    expect(drawn(LIST_LINES, 'read')).toEqual([
+      ['people.lines.section.line', ['content', 'quantity', 'approvalStatus']],
+    ]);
+  });
+
+  it('draws a shopping list as one section and a panel, made and by nobody', () => {
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(drawn(descriptor, 'read')).toEqual([
+        [
+          'people.baskets.section.list',
+          ['name', 'kind', 'status', 'lineCount'],
+        ],
+      ]);
+      expect(
+        (descriptor.record?.children ?? []).map((child) => [
+          child.as,
+          'name' in child ? child.name : child.resource,
+        ])
+      ).toEqual([['panel', 'lines']]);
+      expect(facts(descriptor)).toEqual({
+        added: 'generatedAt',
+        addedBy: undefined,
+        changed: undefined,
+        changedBy: undefined,
+        also: ['zoneIds'],
+      });
+      expect(recordLayout(descriptor, 'read').facts.addedLabel).toBe(
+        'people.baskets.record.made'
+      );
+    }
+  });
+
+  /**
+   * Nothing of a shopping list can be changed, so no action says that it has
+   * a page. The `record` block does, and no `detail` component is left.
+   */
+  it('opens a shopping list though it has no action', () => {
+    for (const descriptor of [BASKETS, ZONE_BASKETS]) {
+      expect(descriptor.detail).toBeUndefined();
+      expect(descriptor.actions).toBeUndefined();
+      expect(hasDetailScreen(descriptor)).toBe(true);
+    }
   });
 });

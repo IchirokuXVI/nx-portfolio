@@ -2,10 +2,10 @@
  * What the shoppers pages look like, written once (admin plan 0045, section 1).
  *
  * The four detail pages each carried their own copy of the same section, row
- * and button rules, and the fourth had started to disagree with the first. A
- * person, a zone, a list and a shopping list are drawn from these instead: a
- * panel of rows, the states on a row, the buttons, and the three sentences a
- * read can end in.
+ * and button rules, and the fourth had started to disagree with the first.
+ * The parts the shoppers pages draw themselves read these instead, such as
+ * the members of a zone and the lines of a list: a panel of rows, the states
+ * on a row, the buttons, and the three sentences a read can end in.
  *
  * A string and not a stylesheet, because every component here keeps its styles
  * inline. Each one lists this first and its own rules after it.
@@ -219,31 +219,6 @@ export const PEOPLE_STYLES = `
     border-radius: var(--admin-radius);
     background: var(--admin-accent-wash);
     color: var(--admin-accent-on-wash);
-  }
-
-  .facts {
-    display: grid;
-    gap: var(--admin-space-2);
-    padding: var(--admin-space-4);
-    border: 1px solid var(--admin-border);
-    border-radius: var(--admin-radius);
-    background: var(--admin-surface-raised);
-  }
-
-  .fact {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--admin-space-1) var(--admin-space-4);
-    justify-content: space-between;
-  }
-
-  .fact > dt {
-    color: var(--admin-ink-muted);
-  }
-
-  .fact > dd {
-    overflow-wrap: anywhere;
-    text-align: end;
   }
 
   /* On a phone a row keeps its text on the first line and puts what can be

@@ -71,7 +71,7 @@ describe('where an action of the shoppers screens is declared', () => {
         'user-roles.ts',
         'person-tabs.ts',
         'zone-members-tab.ts',
-        'list-page.ts',
+        'list-lines-panel.ts',
       ])
     );
   });

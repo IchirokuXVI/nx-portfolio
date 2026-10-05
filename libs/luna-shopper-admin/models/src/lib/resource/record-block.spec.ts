@@ -7,7 +7,10 @@ import {
   type RecordBlock,
   type RecordChild,
 } from './record-block';
-import type { ResourceDescriptor } from './resource-descriptor';
+import {
+  hasDetailScreen,
+  type ResourceDescriptor,
+} from './resource-descriptor';
 
 /**
  * What the record page draws in each mode (admin plan 0052, section 2.3). One
@@ -399,5 +402,18 @@ describe('the children of a record', () => {
     expect(recordChildCount(prices, {}, null)).toBeNull();
     expect(recordChildCount(prices, {}, {})).toBeNull();
     expect(recordChildCount(prices, {}, { prices: null })).toBeNull();
+  });
+});
+
+/**
+ * A descriptor that states a block has a record page, so its rows open. A
+ * shopping list has no action at all, and still has a page that reads (admin
+ * plan 0058).
+ */
+describe('a record that only reads', () => {
+  it('opens when the descriptor states a record block', () => {
+    expect(shops().actions).toBeUndefined();
+    expect(hasDetailScreen(shops())).toBe(false);
+    expect(hasDetailScreen(shops(block))).toBe(true);
   });
 });

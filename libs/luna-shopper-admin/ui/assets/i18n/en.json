@@ -1978,10 +1978,12 @@
       "id": "Identifier",
       "name": "Name",
       "zone": "Zone",
-      "back": "Back to the lists of {{zone}}",
-      "edit": "Edit list",
-      "delete": "Delete list",
-      "settings": "Settings",
+      "section": {
+        "list": "List"
+      },
+      "record": {
+        "lines": "Lines"
+      },
       "quantity": "Quantity {{count}}",
       "info": {
         "title": "Lists",
@@ -1994,7 +1996,6 @@
       "autoApproveLines": "Lines approved automatically",
       "createdAt": "Created",
       "updatedAt": "Last changed",
-      "lines": "Lines",
       "noLines": "This list has no lines.",
       "approval": {
         "PENDING": "Waiting for approval",
@@ -2010,16 +2011,18 @@
     "baskets": {
       "one": "shopping list",
       "many": "Shopping lists",
-      "unnamed": "List of {{date}}",
       "id": "Identifier",
       "name": "Name",
-      "ownerUserId": "Owner",
       "zoneIds": "Draws from the zone",
       "lineCount": "Rows",
       "generatedAt": "Generated",
-      "updatedAt": "Last changed",
-      "back": "Back to the shopping lists",
-      "lines": "Rows",
+      "section": {
+        "list": "Shopping list"
+      },
+      "record": {
+        "lines": "Rows",
+        "made": "Made"
+      },
       "noLines": "This shopping list shows no rows.",
       "bought": "{{bought}} of {{asked}} bought",
       "left": "{{count}} left",
@@ -2170,6 +2173,10 @@
       "createdByUserId": "Written by",
       "createdByUserIdHelp": "Fixed here. It records who wrote the line, and an operator did not.",
       "createdAt": "Written",
+      "updatedAt": "Last changed",
+      "section": {
+        "line": "Line"
+      },
       "action": {
         "approve": "Approve",
         "reject": "Reject"

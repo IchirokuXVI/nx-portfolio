@@ -9,7 +9,7 @@ import {
   type InfoContent,
   type ResourceParent,
 } from '@portfolio/luna-shopper-admin/models';
-import { BasketPage } from './basket-page';
+import { BASKET_LINES_PANEL, BasketLinesPanel } from './basket-lines-panel';
 import { madeAt } from './people-format';
 import { BASKET_SEED, type BasketRow } from './people-seed';
 import { PERSON_PARAM, ZONE_PARAM } from './shopper-params';
@@ -47,7 +47,8 @@ const BASKET_KIND_OPTIONS = [
  * The shopping lists people take round the shop (plan 0007, section 2).
  *
  * Read only, by zone and by owner, with the rows on the shopping list's own
- * page alone.
+ * page alone. That page is the record page (admin plan 0058): it has no
+ * "Edit" and no More menu, because the resource has no action.
  *
  * A basket belongs to a **person** rather than to a zone, so it lives under
  * its owner (admin plan 0045): `/shoppers/people/{userId}/shopping-lists/{id}`.
@@ -86,14 +87,11 @@ function basketResource(
 
     // A basket needs no name, and an unnamed one is the ordinary case: velista
     // generates it and the shopper never titles it. So the fallback is when
-    // it was made, to the minute, which is what `madeAt` writes for the
-    // heading of its page too. It was the ID, and an ID is never what a row
+    // it was made, to the minute, and the heading of its page is this title
+    // too. It was the ID, and an ID is never what a row
     // is called (admin plan 0051): the list drew a column of uuids as its
     // names.
     title: (row, locales) => row.name ?? madeAt(row.generatedAt, locales),
-
-    // Named so that a row opens. `shoppersRoutes` mounts it under the owner.
-    detail: BasketPage,
 
     fields: [
       { kind: 'text', name: 'id', label: 'people.baskets.id', editable: false },
@@ -130,6 +128,14 @@ function basketResource(
         time: true,
         editable: false,
       },
+      {
+        // The zones the lines were drawn from, each a link to that zone.
+        kind: 'references',
+        name: 'zoneIds',
+        label: 'people.baskets.zoneIds',
+        resource: 'zones',
+        editable: false,
+      },
     ],
 
     list: {
@@ -139,6 +145,37 @@ function basketResource(
 
     // Why there is nothing to press here, where an operator would look for it.
     info: BASKET_INFO,
+
+    /**
+     * The page of a shopping list (admin plan 0058, section 2.3). The block
+     * is also what makes a row open: nothing of a shopping list can be
+     * changed, so no action says that it has a page.
+     *
+     * The owner is the parent, so the way back names the person. The view
+     * carries nobody who made the list, so the Record block says when it was
+     * made and no "by".
+     */
+    record: {
+      sections: [
+        {
+          title: 'people.baskets.section.list',
+          fields: ['name', 'kind', 'status', 'lineCount'],
+        },
+      ],
+      children: [
+        {
+          as: 'panel',
+          name: BASKET_LINES_PANEL,
+          label: 'people.baskets.record.lines',
+          component: BasketLinesPanel,
+        },
+      ],
+      facts: {
+        added: 'generatedAt',
+        labels: { added: 'people.baskets.record.made' },
+        also: ['zoneIds'],
+      },
+    },
 
     filters: [
       {

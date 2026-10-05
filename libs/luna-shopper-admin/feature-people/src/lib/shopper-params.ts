@@ -5,7 +5,7 @@
  * read them, and a page must not import the descriptor that names it.
  *
  * ```
- * /shoppers/people/{userId}/shopping-lists/{basketId}
+ * /shoppers/people/{userId}/shopping-lists/{id}
  * /shoppers/zones/{zoneId}/lists/{listId}/lines/{id}
  * ```
  */
@@ -19,9 +19,6 @@ export const ZONE_PARAM = 'zoneId';
 /** The route parameter that holds the list, for everything under one. */
 export const LIST_PARAM = 'listId';
 
-/** The route parameter that holds the shopping list. */
-export const BASKET_PARAM = 'basketId';
-
 /** The segment of a person's Zones tab. */
 export const PERSON_ZONES_TAB = 'zones';
 
@@ -33,9 +30,9 @@ export const PERSON_ZONES_TAB = 'zones';
 export const ZONE_MEMBERS_TAB = 'members';
 
 /**
- * The segment of the form that changes the row a page is about. For a list it
- * is still a form of its own. For a person and a zone it is an old address
- * that leads to the record with its form open (admin plan 0057).
+ * The segment of the form that changed the row a page is about. It is an old
+ * address now: for a person, a zone and a list it leads to the record with
+ * its form open (admin plans 0057 and 0058).
  */
 export const EDIT_SEGMENT = 'edit';
 

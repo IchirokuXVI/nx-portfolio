@@ -256,6 +256,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                           <span class="by" data-by>
                             {{ 'record.facts.by' | rokuT }}
                             <lib-field-value
+                              [links]="form ? noLinks : linksOf(by)"
                               [names]="namesOf(by)"
                               [value]="valueOf(by)"
                             />
@@ -279,6 +280,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
                           <span class="by" data-by>
                             {{ 'record.facts.by' | rokuT }}
                             <lib-field-value
+                              [links]="form ? noLinks : linksOf(by)"
                               [names]="namesOf(by)"
                               [value]="valueOf(by)"
                             />

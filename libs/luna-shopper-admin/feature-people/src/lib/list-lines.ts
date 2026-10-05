@@ -34,7 +34,8 @@ const LINE_APPROVAL_OPTIONS = [
  * The page of a list draws every line, because reading what a household wrote
  * down is what that page is for, and it draws the named actions declared here.
  * This descriptor's form is the other question: correct **this** line's
- * wording or its quantity.
+ * wording or its quantity. The page of one line says who wrote it, in its
+ * Record block (admin plan 0058).
  *
  * **The list is the address** (admin plan 0045): a line sits at
  * `/shoppers/zones/{zoneId}/lists/{listId}/lines/{id}`, so the list is read
@@ -141,6 +142,14 @@ export const LIST_LINES = defineResource<ListLine>({
       help: 'people.field.createdAtHelp',
       editable: false,
     },
+    {
+      kind: 'date',
+      name: 'updatedAt',
+      label: 'people.lines.updatedAt',
+      time: true,
+      help: 'people.field.updatedAtHelp',
+      editable: false,
+    },
   ],
 
   list: {
@@ -152,6 +161,27 @@ export const LIST_LINES = defineResource<ListLine>({
   },
 
   caution: ZONE_CAUTION,
+
+  /**
+   * The page of one line (admin plan 0058, section 2.2).
+   *
+   * The list is the parent, so the way back names it. Its name is also a row
+   * of the Record block, because every field is drawn somewhere.
+   */
+  record: {
+    sections: [
+      {
+        title: 'people.lines.section.line',
+        fields: ['content', 'quantity', 'approvalStatus'],
+      },
+    ],
+    facts: {
+      added: 'createdAt',
+      addedBy: 'createdByUserId',
+      changed: 'updatedAt',
+      also: ['listName'],
+    },
+  },
 
   actions: {
     edit: true,

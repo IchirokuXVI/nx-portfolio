@@ -7,7 +7,7 @@ import {
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { BasketPage } from './basket-page';
+import { BasketLinesPanel } from './basket-lines-panel';
 import { basketSettlements, toBasketSettlement } from './basket-settlements';
 import {
   bootShoppers,
@@ -95,9 +95,10 @@ async function boot(
   return fixture;
 }
 
-function page(fixture: ComponentFixture<ShoppersTestHost>): BasketPage {
-  return fixture.debugElement.query(By.directive(BasketPage))
-    .componentInstance as BasketPage;
+/** The panel of the record page that draws the rows and their settlements. */
+function page(fixture: ComponentFixture<ShoppersTestHost>): BasketLinesPanel {
+  return fixture.debugElement.query(By.directive(BasketLinesPanel))
+    .componentInstance as BasketLinesPanel;
 }
 
 const text = textOf;
@@ -148,11 +149,9 @@ describe('a basket row’s settlements', () => {
     const fixture = await boot(SATURDAY, [
       {
         provide: ResourceReferences,
-        useValue: {
-          resolve: async () => {
-            throw new Error('down');
-          },
-        },
+        // `resolve` answers `null` for a row it cannot read, and never
+        // throws. The record page around the panel asks it too.
+        useValue: { resolve: async () => null },
       },
     ]);
 

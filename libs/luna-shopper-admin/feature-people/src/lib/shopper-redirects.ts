@@ -70,7 +70,7 @@ export const toBasket: RedirectFunction = async ({ params }) => {
 };
 
 /**
- * The list a line's form goes back to.
+ * The list a line's page goes back to.
  *
  * `/shoppers/zones/{zoneId}/lists/{listId}/lines` is no screen: the lines are
  * drawn on the list's own page. Both ids are in the address, so nothing is
