@@ -167,9 +167,11 @@ interface SpellingGroup {
 
     /* Verbatim and monospaced, so MAHOU beside Mahou reads as two spellings
        and not as one of them styled twice. */
+    /* A spelling breaks only when it cannot fit at all. On a phone the table
+       then scrolls inside its panel, and a name is not cut after any letter. */
     .spelling {
       font-family: monospace;
-      overflow-wrap: anywhere;
+      overflow-wrap: break-word;
     }
 
     .figure {
