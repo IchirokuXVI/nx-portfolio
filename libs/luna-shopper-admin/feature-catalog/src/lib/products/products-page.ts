@@ -42,6 +42,7 @@ import { formatPrice, formatSeen, formatSize } from './product-format';
 import {
   PRICE_STATE_FILTER,
   PRICES_AT_FILTER,
+  readsFromPrices,
   toPriceState,
   type PriceState,
   type ScopePriced,
@@ -98,18 +99,25 @@ export interface ProductRowView {
  *   press narrows the list, through the filter the list already had.
  * - **"Prices at"**, a picker of one price scope. With a scope the list gains
  *   a Price and a Seen column, read for the whole page in one request, and
- *   the one state the gateway can list by, "Out of date". The choice is kept
- *   for the operator.
+ *   the two states the gateway can list by, "Out of date" and "No price". The
+ *   choice is kept for the operator.
  * - **Its own rows**: the name over the brand, the size, the barcode in the
  *   mono face, the group, and the price. Two lines on a phone.
  * - **A bar at the bottom** while rows are ticked, with what can be done to
  *   them.
  *
- * With a state chosen the page is read from the prices and not from the
- * products, because that is the read that can filter by state. Such a row
- * names its product and carries nothing else of it, so the search, the group
- * and the tree are put away, and the rows cannot be ticked: a review of a
- * change has to show what each product holds now, and these rows do not know.
+ * With "Out of date" chosen the page is read from the prices and not from the
+ * products, because that is the read that can filter by that state. Such a
+ * row names its product and carries nothing else of it, so the search, the
+ * group and the tree are put away, and the rows cannot be ticked: a review of
+ * a change has to show what each product holds now, and these rows do not
+ * know.
+ *
+ * **"No price" is the other kind** (backend plan 0187). Its rows are whole
+ * products, read from the product route, so the search, the group, the tree,
+ * the order and the ticks all stay, and each of them narrows the worklist.
+ * The state says how many products it holds, counted by the gateway for the
+ * whole of what is asked and not for the rows on screen.
  *
  * **Put away on every screen, the tree's column included.** The read of the
  * prices takes the scope and the state and nothing else, so a tree left
@@ -161,7 +169,7 @@ export interface ProductRowView {
         <!-- On a phone only the search stays in view. The group and the order
              open under a button, so that the first product is not a screen
              down. -->
-        @if (state() === null) {
+        @if (!fromPrices()) {
           <lib-resource-filters
             (filterChange)="store.setFilter($event.param, $event.value)"
             (orderChange)="store.setOrder($event)"
@@ -176,7 +184,7 @@ export interface ProductRowView {
         <!-- One row: the category on a screen with no room for the tree, the
              scope the prices are read at, and the states of a price there. -->
         <div class="tools">
-          @if (state() === null && !split()) {
+          @if (!fromPrices() && !split()) {
             <button
               (click)="treeOpen.set(true)"
               [attr.aria-expanded]="treeOpen()"
@@ -204,7 +212,7 @@ export interface ProductRowView {
             clearKey="catalog.pricesAt.clear"
           />
 
-          @if (state() === null && compact()) {
+          @if (!fromPrices() && compact()) {
             <button
               (click)="filtersOpen.set(!filtersOpen())"
               [attr.aria-expanded]="filtersOpen()"
@@ -234,13 +242,18 @@ export interface ProductRowView {
                   type="button"
                 >
                   {{ option.label | rokuT }}
+                  @if (option.value === 'noPrice' && noPriceCount(); as count) {
+                    <span class="filter-count" data-state-count>{{
+                      count
+                    }}</span>
+                  }
                 </button>
               }
             </div>
           }
         </div>
 
-        @if (state() === null && compact() && filtersOpen()) {
+        @if (!fromPrices() && compact() && filtersOpen()) {
           <lib-resource-filters
             (filterChange)="store.setFilter($event.param, $event.value)"
             (orderChange)="store.setOrder($event)"
@@ -252,7 +265,7 @@ export interface ProductRowView {
           />
         }
 
-        @if (state() !== null) {
+        @if (fromPrices()) {
           <p class="note">{{ 'catalog.pricesAt.state.note' | rokuT }}</p>
           @if (suspended()) {
             <p class="note" data-suspended>
@@ -380,7 +393,7 @@ export interface ProductRowView {
                     </th>
                   }
                   <th scope="col">{{ 'catalog.items.product' | rokuT }}</th>
-                  @if (state() === null) {
+                  @if (!fromPrices()) {
                     <th scope="col">{{ 'catalog.items.unitSize' | rokuT }}</th>
                     <th scope="col">{{ 'catalog.items.ean' | rokuT }}</th>
                     <th scope="col">{{ 'catalog.items.group' | rokuT }}</th>
@@ -424,7 +437,7 @@ export interface ProductRowView {
                         <span class="brand">{{ row.brand }}</span>
                       }
                     </td>
-                    @if (state() === null) {
+                    @if (!fromPrices()) {
                       <td>{{ row.size }}</td>
                       <td class="mono">{{ row.barcode }}</td>
                       <td><lib-resource-cell [cell]="row.group" /></td>
@@ -638,6 +651,9 @@ export interface ProductRowView {
     }
 
     .segment button {
+      display: inline-flex;
+      gap: var(--admin-space-2);
+      align-items: center;
       min-block-size: var(--admin-control);
       padding: var(--admin-control-pad) var(--admin-space-3);
       border: none;
@@ -1010,6 +1026,7 @@ export class ProductsPage extends ResourceListPage {
   }[] = [
     { value: null, label: 'catalog.pricesAt.state.any' },
     { value: 'stale', label: 'catalog.pricesAt.state.stale' },
+    { value: 'noPrice', label: 'catalog.pricesAt.state.noPrice' },
   ];
 
   /**
@@ -1040,18 +1057,43 @@ export class ProductsPage extends ResourceListPage {
   );
 
   /**
+   * Whether the rows are read from the prices and not from the products. Such
+   * rows name a product and carry nothing else of it, and nothing but the
+   * scope and the state narrows them.
+   */
+  readonly fromPrices = computed(() => {
+    const state = this.state();
+    return state !== null && readsFromPrices(state);
+  });
+
+  /**
+   * How many products the scope has no price for, as the "No price" state
+   * says it, or `''` while that is not known.
+   *
+   * Counted by the gateway for everything the list is narrowed by, and only
+   * while that state is the one chosen: the count is a query of its own, and
+   * nothing asks it for a state that is not on screen.
+   */
+  readonly noPriceCount = computed(() => {
+    const total = this.store.total();
+    return this.state() !== 'noPrice' || total === null
+      ? ''
+      : new Intl.NumberFormat(this._translate.locale()).format(total);
+  });
+
+  /**
    * Whether the tree's column is drawn: on a wide screen, and not while the
    * rows are read from the prices, which no category narrows.
    */
-  readonly withTree = computed(() => this.split() && this.state() === null);
+  readonly withTree = computed(() => this.split() && !this.fromPrices());
 
   /**
-   * Whether a state is chosen while something else narrows or orders the
-   * list. None of it reaches the read of the prices, so the page says that it
-   * is set aside.
+   * Whether the rows are read from the prices while something else narrows
+   * or orders the list. None of it reaches the read of the prices, so the
+   * page says that it is set aside.
    */
   readonly suspended = computed(() => {
-    if (this.state() === null) {
+    if (!this.fromPrices()) {
       return false;
     }
     const narrowed = Object.entries(this.store.filters()).some(
@@ -1086,7 +1128,7 @@ export class ProductsPage extends ResourceListPage {
    * those rows do not carry what a review has to show.
    */
   readonly selectable = computed(
-    () => this.bulkActions.length > 0 && this.state() === null
+    () => this.bulkActions.length > 0 && !this.fromPrices()
   );
 
   /** The rows, as this list draws them. */

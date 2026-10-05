@@ -568,8 +568,8 @@ describe('"Prices at" on the product list', () => {
 
 describe('the states of a price at the chosen scope', () => {
   /**
-   * "Not sold here" and "No price" are not drawn: the gateway cannot answer
-   * either today (see `PRICE_STATES`).
+   * "Not sold here" is not drawn: the gateway cannot answer it today (see
+   * `PRICE_STATES`).
    */
   it('offers the states the gateway can answer, and no other', async () => {
     const fixture = await boot();
@@ -580,7 +580,9 @@ describe('the states of a price at the chosen scope', () => {
       all(fixture, '.segment button').map((button) =>
         button.getAttribute('data-state')
       )
-    ).toEqual(['any', 'stale']);
+    ).toEqual(['any', 'stale', 'noPrice']);
+    // No state says a number until it is the one chosen and counted.
+    expect(q(fixture, '[data-state-count]')).toBeNull();
     expect(q(fixture, '[data-state="any"]')?.getAttribute('aria-pressed')).toBe(
       'true'
     );
@@ -708,6 +710,136 @@ describe('the states of a price at the chosen scope', () => {
       path: ITEMS_PATH,
       query: { filters: { categoryId: 'cat_dairy' } },
     });
+  });
+
+  /**
+   * "No price" (backend plan 0187) is read from the products, so its rows are
+   * whole: the scope goes to the product route, and the state says how many
+   * products it holds.
+   */
+  it('reads the list from the products for "No price", and says how many', async () => {
+    const reads: { path: string; query: ResourceQuery }[] = [];
+    const fixture = await boot('/products', [
+      WIDE,
+      { provide: RESOURCE_GATEWAYS, useValue: recording(reads) },
+    ]);
+    await page(fixture).chooseScope(CORDOBA);
+    await settle(fixture);
+    const priceReads = reads.filter((read) => read.path === PRICES_PATH).length;
+
+    q<HTMLButtonElement>(fixture, '[data-state="noPrice"]')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(page(fixture).state()).toBe('noPrice');
+    expect(reads[reads.length - 1]).toMatchObject({
+      path: ITEMS_PATH,
+      query: { filters: { withoutPriceAtScopeId: 'ps_mercadona_4661' } },
+    });
+    // Neither name of this page for the scope reaches the product route.
+    expect(reads[reads.length - 1].query.filters).not.toHaveProperty(
+      'priceScopeId'
+    );
+    expect(reads[reads.length - 1].query.filters).not.toHaveProperty(
+      'priceState'
+    );
+    // Not one more read of the prices: there is no price to show.
+    expect(reads.filter((read) => read.path === PRICES_PATH)).toHaveLength(
+      priceReads
+    );
+
+    // The seed prices the milk and the oil at this scope, and no other.
+    const listed = page(fixture)
+      .products()
+      .map((row) => row.id);
+    expect(listed).toHaveLength(2);
+    expect(listed).not.toContain('it_milk_1l');
+    expect(listed).not.toContain('it_olive_oil_1l');
+    expect(
+      page(fixture)
+        .products()
+        .every((row) => row.price.kind === 'none')
+    ).toBe(true);
+
+    const pressed = q(fixture, '[data-state="noPrice"]');
+    expect(pressed?.getAttribute('aria-pressed')).toBe('true');
+    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe('2');
+    expect(pressed?.textContent).toContain('catalog.pricesAt.state.noPrice');
+  });
+
+  /**
+   * Its rows are whole products, so nothing is put away: the search, the
+   * group, the tree and the ticks stay, and each narrows the worklist.
+   */
+  it('keeps the filters, the tree and the ticks for "No price", and counts what they leave', async () => {
+    const reads: { path: string; query: ResourceQuery }[] = [];
+    const fixture = await boot('/products', [
+      WIDE,
+      { provide: RESOURCE_GATEWAYS, useValue: recording(reads) },
+    ]);
+    await page(fixture).chooseScope(CORDOBA);
+    page(fixture).chooseState('noPrice');
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(q(fixture, 'lib-resource-filters')).not.toBeNull();
+    expect(q(fixture, 'aside.tree')).not.toBeNull();
+    expect(q(fixture, '[data-pick-row]')).not.toBeNull();
+    expect(q(fixture, '[data-suspended]')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'catalog.pricesAt.state.note'
+    );
+    expect(headers(fixture)).toContain('catalog.items.ean');
+
+    const [first] = page(fixture).products();
+    const category = (
+      page(fixture).rows()[0].row as unknown as {
+        categories: { id: string }[];
+      }
+    ).categories[0].id;
+    page(fixture).chooseCategory(category);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(reads[reads.length - 1]).toMatchObject({
+      path: ITEMS_PATH,
+      query: {
+        filters: {
+          categoryId: category,
+          withoutPriceAtScopeId: 'ps_mercadona_4661',
+        },
+      },
+    });
+    const narrowed = page(fixture).products();
+    expect(narrowed.map((row) => row.id)).toContain(first.id);
+    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe(
+      String(narrowed.length)
+    );
+  });
+
+  it('says no number once "No price" is not the state chosen', async () => {
+    const fixture = await boot();
+    await page(fixture).chooseScope(CORDOBA);
+    page(fixture).chooseState('noPrice');
+    await settle(fixture);
+    await settle(fixture);
+    expect(q(fixture, '[data-state-count]')).not.toBeNull();
+
+    page(fixture).chooseState(null);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(q(fixture, '[data-state-count]')).toBeNull();
+    expect(page(fixture).products()).toHaveLength(4);
+  });
+
+  it('opens on "No price" when a link names the scope and the state', async () => {
+    const fixture = await boot(
+      '/products?priceScopeId=ps_mercadona_4661&priceState=noPrice'
+    );
+
+    expect(page(fixture).state()).toBe('noPrice');
+    expect(page(fixture).products()).toHaveLength(2);
   });
 
   it('drops the state with the scope', async () => {

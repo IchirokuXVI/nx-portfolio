@@ -59,6 +59,38 @@ describe('ResourceApiGateways', () => {
     await listing;
   });
 
+  /**
+   * A route that counts its rows says so beside the page (backend plan 0187).
+   * Nearly none does, and a page then carries no count at all, which is not
+   * the same as a count of nothing.
+   */
+  it('carries the total a route answers, and none where it answers none', async () => {
+    const counted = gateway().list({});
+    http
+      .expectOne((candidate) => candidate.url === URL)
+      .flush({ items: [{ id: 'a' }], nextCursor: 'c1', total: 4431 });
+    expect((await counted).total).toBe(4431);
+
+    const plain = gateway().list({});
+    http
+      .expectOne((candidate) => candidate.url === URL)
+      .flush({ items: [], nextCursor: null });
+    expect('total' in (await plain)).toBe(false);
+
+    const empty = gateway().list({});
+    http
+      .expectOne((candidate) => candidate.url === URL)
+      .flush({ items: [], nextCursor: null, total: 0 });
+    expect((await empty).total).toBe(0);
+
+    // Anything that is not a whole number was not said.
+    const wrong = gateway().list({});
+    http
+      .expectOne((candidate) => candidate.url === URL)
+      .flush({ items: [], nextCursor: null, total: '12' });
+    expect('total' in (await wrong)).toBe(false);
+  });
+
   it('sends the cursor, the limit, the order and the filters', async () => {
     const listing = gateway().list({
       cursor: 'c1',

@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
 import type {
+  FilterValue,
   ResourceGateway,
   ResourcePage,
   ResourceRow,
@@ -180,7 +181,18 @@ export interface ResourceMemoryRules<T extends ResourceRow = ResourceRow> {
    * substring rule. For a parameter that is not a column, such as the
    * category tree's `kind`.
    */
-  matches?(row: T, param: string, value: string): boolean | undefined;
+  matches?(
+    row: T,
+    param: string,
+    value: string,
+    tables: MemoryTables
+  ): boolean | undefined;
+  /**
+   * Whether a list narrowed by these filters says how many rows match, as the
+   * route it stands for does (backend plan 0187). Almost none does, so a
+   * memory page carries no `total` unless this says so.
+   */
+  counts?(filters: Readonly<Record<string, FilterValue>>): boolean;
   create?(input: ResourceRow, tables: MemoryTables): ResourceRow;
   update?(current: T, input: ResourceRow, tables: MemoryTables): ResourceRow;
   /** Throws to refuse the delete. */

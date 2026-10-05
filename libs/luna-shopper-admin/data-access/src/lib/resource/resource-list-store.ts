@@ -32,6 +32,7 @@ export class ResourceListStore<T extends ResourceRow> {
   private readonly _status = signal<ListStatus>('loading');
   private readonly _error = signal<GatewayError | null>(null);
   private readonly _cursor = signal<string | null>(null);
+  private readonly _total = signal<number | null>(null);
   private readonly _loadingMore = signal(false);
   private readonly _filters = signal<Readonly<Record<string, string>>>({});
   private readonly _order = signal<string | undefined>(undefined);
@@ -80,6 +81,15 @@ export class ResourceListStore<T extends ResourceRow> {
    * proof that one does not (section 4).
    */
   readonly hasMore = computed(() => this._cursor() !== null);
+
+  /**
+   * How many rows match what the list shows, or `null` where the route does
+   * not count them, which is nearly every route (backend plan 0187).
+   *
+   * From the last page read, since each page of one query carries the same
+   * number. It never decides whether there is more: that is {@link hasMore}.
+   */
+  readonly total: Signal<number | null> = this._total.asReadonly();
 
   /**
    * Whether the operator has narrowed the list.
@@ -145,6 +155,7 @@ export class ResourceListStore<T extends ResourceRow> {
     this._error.set(null);
     this._rows.set([]);
     this._cursor.set(null);
+    this._total.set(null);
 
     this._status.set('loading');
     await this._fetch(undefined, (page) => this._rows.set(page));
@@ -201,6 +212,7 @@ export class ResourceListStore<T extends ResourceRow> {
     const read = this._reads;
     let rows: readonly T[] = [];
     let cursor: string | null = null;
+    let total: number | null = null;
 
     try {
       do {
@@ -214,10 +226,12 @@ export class ResourceListStore<T extends ResourceRow> {
           idOf(this._descriptor, row)
         );
         cursor = page.nextCursor;
+        total = page.total ?? null;
       } while (cursor !== null && rows.length < wanted);
 
       this._rows.set(rows);
       this._cursor.set(cursor);
+      this._total.set(total);
       this._error.set(null);
     } catch (error) {
       if (read === this._reads) {
@@ -310,6 +324,7 @@ export class ResourceListStore<T extends ResourceRow> {
 
       apply(page.items);
       this._cursor.set(page.nextCursor);
+      this._total.set(page.total ?? null);
       this._status.set('ready');
     } catch (error) {
       if (read !== this._reads) {

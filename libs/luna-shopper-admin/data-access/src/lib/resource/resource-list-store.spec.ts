@@ -246,6 +246,71 @@ describe('ResourceListStore pagination', () => {
  * `/chains/{chainId}/shops`, so the chain goes out on every read and is never
  * one of the filters the operator set.
  */
+/**
+ * A count is what a route says beside a page, where it counts at all
+ * (backend plan 0187). The store holds it and decides nothing from it.
+ */
+describe('ResourceListStore total', () => {
+  const row = (id: string): ResourceRow => ({ id, name: id });
+
+  it('is null where the route does not count its rows', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [{ items: [row('a')], nextCursor: null }];
+    const store = storeWith(gateway);
+
+    await store.load();
+
+    expect(store.total()).toBeNull();
+  });
+
+  it('holds the count of the page, and keeps it across "Load more"', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a')], nextCursor: 'c1', total: 3 },
+      { items: [row('b')], nextCursor: null, total: 3 },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    expect(store.total()).toBe(3);
+    // The cursor alone says whether there is more, whatever the count says.
+    expect(store.hasMore()).toBe(true);
+
+    await store.loadMore();
+    expect(store.total()).toBe(3);
+    expect(store.hasMore()).toBe(false);
+  });
+
+  it('forgets the count when the next read carries none', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a')], nextCursor: null, total: 1 },
+      { items: [row('a'), row('b')], nextCursor: null },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    expect(store.total()).toBe(1);
+
+    await store.setFilter('query', 'x');
+    expect(store.total()).toBeNull();
+  });
+
+  it('takes the count a refresh reads', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a'), row('b')], nextCursor: null, total: 2 },
+      { items: [row('a')], nextCursor: null, total: 1 },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    await store.refresh();
+
+    expect(store.total()).toBe(1);
+  });
+});
+
 describe('ResourceListStore fixed filters', () => {
   const fixed = { supermarketId: 'sm_mercadona' };
 

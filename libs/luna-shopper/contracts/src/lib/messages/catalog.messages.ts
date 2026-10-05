@@ -2363,6 +2363,26 @@ export interface SearchItemsRequest extends PageQuery {
    */
   soldBy?: string[];
   /**
+   * Only the products this price scope shows no price for (plan 0187).
+   *
+   * The curation worklist of the back office: after a crawl of a chain, what
+   * the crawl did not reach. A product is listed when the scope holds no row
+   * for it, or a row with no price that still says the product is sold.
+   *
+   * **A scope that says "not sold" has answered**, so a row with
+   * `available = false` keeps its product out of this list. An out of date
+   * price is a price, and keeps its product out too.
+   *
+   * Read from the materialized row and never worked out again from the price
+   * rows (plan 0080). A uuid and nothing else: an id that names no scope is
+   * refused with the 404 the price scope read answers, because an empty
+   * worklist for a scope that does not exist would read as "all priced".
+   *
+   * It combines with every other filter, and it is what makes the page carry
+   * {@link ItemPage.total}.
+   */
+  withoutPriceAtScopeId?: string;
+  /**
    * How much of the pricing to attach (plan 0161, section 1), read exactly as
    * {@link GetItemsRequest.offers} is: `best` is the default, `all` adds
    * {@link ItemView.offers}, and `bestOffer` is then its first entry. Read only
@@ -3395,7 +3415,16 @@ export type SupermarketPage = Paginated<SupermarketView>;
 export type SupermarketLocationPage = Paginated<SupermarketLocationView>;
 /** The browsed read of the same table (plan 0068), chain attached and refusals flagged. */
 export type ShopPage = Paginated<ShopView>;
-export type ItemPage = Paginated<ItemView>;
+/**
+ * A page of products.
+ *
+ * `total` is present on one read and absent on every other (plan 0187): the
+ * search with {@link SearchItemsRequest.withoutPriceAtScopeId} set. It is the
+ * number of products that match the whole request, on every page of it, so
+ * that the back office can show how long the worklist is. A cursor page says
+ * nothing about totals otherwise, and a count is a second query.
+ */
+export type ItemPage = Paginated<ItemView> & { total?: number };
 export type SupermarketItemPage = Paginated<SupermarketItemView>;
 /** The admin listing's page: the same rows with the product's name joined on. */
 export type AdminSupermarketItemPage = Paginated<AdminSupermarketItemView>;

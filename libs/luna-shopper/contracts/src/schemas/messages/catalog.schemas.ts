@@ -921,10 +921,25 @@ const supermarketLocationPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketLocationPage,
   CATALOG_SCHEMA_IDS.supermarketLocationView
 );
-const itemPage = paginated(
+const itemPageBase = paginated(
   CATALOG_SCHEMA_IDS.itemPage,
   CATALOG_SCHEMA_IDS.itemView
 );
+/**
+ * The one page that can carry a count (plan 0187). `total` is present only
+ * when the search named `withoutPriceAtScopeId`, so it is not required.
+ */
+const itemPage: JsonSchema = {
+  ...itemPageBase,
+  properties: {
+    ...(itemPageBase['properties'] as Record<string, JsonSchema>),
+    total: integer({
+      minimum: 0,
+      description:
+        'How many products match the whole request, on every page of it. Present only when the request named `withoutPriceAtScopeId`, and absent on every other read.',
+    }),
+  },
+};
 const supermarketItemPage = paginated(
   CATALOG_SCHEMA_IDS.supermarketItemPage,
   CATALOG_SCHEMA_IDS.supermarketItemView
@@ -1780,6 +1795,9 @@ const searchItemsRequest = object(
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
     soldBy: array(nonEmptyString()),
+    // Plan 0187: the products this scope shows no price for. Its presence is
+    // what puts `total` on the page.
+    withoutPriceAtScopeId: nonEmptyString(),
     // Plan 0161: every scope's offer, read as `item.getMany` reads it.
     offers: string({ enum: ['best', 'all'] }),
     cursor: string(),

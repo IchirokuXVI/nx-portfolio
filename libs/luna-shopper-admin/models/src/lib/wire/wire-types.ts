@@ -2481,6 +2481,7 @@ export type CatalogItemOfferView = {
 export type CatalogItemPage = {
   items: CatalogItemView[];
   nextCursor: string | null;
+  total?: number;
 };
 
 /**

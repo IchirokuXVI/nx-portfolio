@@ -20,7 +20,9 @@ import {
   PRICE_STATES,
   PRICES_AT_FILTER,
   productListGateway,
+  readsFromPrices,
   toPriceState,
+  WITHOUT_PRICE_FILTER,
   type ScopePrice,
 } from './product-list-gateway';
 
@@ -294,6 +296,95 @@ describe('productListGateway', () => {
     ]);
   });
 
+  /**
+   * "No price" is read from the products (backend plan 0187): the scope goes
+   * to the product route under that route's own name for it, beside every
+   * other filter, the order and the cursor. No price is read, since by the
+   * meaning of the state there is none to show.
+   */
+  it('reads the products a scope has no price for from the product route', async () => {
+    const { gateway, productQueries, priceQueries } = build(
+      [product('a'), product('b')],
+      [price('a')],
+      'more'
+    );
+
+    const page = await gateway.list({
+      cursor: 'c1',
+      limit: 50,
+      order: 'name',
+      filters: {
+        query: 'leche',
+        categoryId: 'cat',
+        productGroupId: 'none',
+        [PRICES_AT_FILTER]: 'scope',
+        [PRICE_STATE_FILTER]: 'noPrice',
+      },
+    });
+
+    expect(productQueries).toEqual([
+      {
+        cursor: 'c1',
+        limit: 50,
+        order: 'name',
+        filters: {
+          query: 'leche',
+          categoryId: 'cat',
+          productGroupId: 'none',
+          [WITHOUT_PRICE_FILTER]: 'scope',
+        },
+      },
+    ]);
+    expect(priceQueries).toEqual([]);
+    expect(page.nextCursor).toBe('more');
+    expect(page.items).toEqual([
+      { ...product('a'), scopePrice: null },
+      { ...product('b'), scopePrice: null },
+    ]);
+  });
+
+  it('passes on the count the product route answers for that state', async () => {
+    const inner: ResourceGateway<Product> = {
+      list: async () => ({
+        items: [product('a')],
+        nextCursor: 'more',
+        total: 4431,
+      }),
+      read: async (id) => product(id),
+      create: async () => product('new'),
+      update: async (id) => product(id),
+      remove: async () => undefined,
+    };
+    const gateway = productListGateway(inner, {
+      list: async () => ({ items: [], nextCursor: null }),
+    });
+
+    const page = await gateway.list({
+      filters: { [PRICES_AT_FILTER]: 'scope', [PRICE_STATE_FILTER]: 'noPrice' },
+    });
+
+    expect(page.total).toBe(4431);
+  });
+
+  /** The route's own name for the scope is set by this gateway and by nothing else. */
+  it('never lets a caller name the scope of that state itself', async () => {
+    const { gateway, productQueries } = build([product('a')], []);
+
+    await gateway.list({ filters: { [WITHOUT_PRICE_FILTER]: 'other' } });
+    await gateway.list({
+      filters: {
+        [WITHOUT_PRICE_FILTER]: 'other',
+        [PRICES_AT_FILTER]: 'scope',
+        [PRICE_STATE_FILTER]: 'noPrice',
+      },
+    });
+
+    expect(productQueries[0].filters).toEqual({});
+    expect(productQueries[1].filters).toEqual({
+      [WITHOUT_PRICE_FILTER]: 'scope',
+    });
+  });
+
   it('names a priced product that is gone by nothing, and still lists it', async () => {
     const { gateway } = build([], [price('gone', { itemName: null })]);
 
@@ -335,15 +426,22 @@ describe('productListGateway', () => {
 
 describe('the states a price can be listed by', () => {
   /**
-   * "Not sold here" and "No price" are not among them: the gateway cannot
-   * answer either today, and a state it cannot answer is not drawn.
+   * "Not sold here" is not among them: the gateway cannot answer it today,
+   * and a state it cannot answer is not drawn.
    */
-  it('is "out of date" and nothing else', () => {
-    expect([...PRICE_STATES]).toEqual(['stale']);
+  it('is "out of date" and "no price", and nothing else', () => {
+    expect([...PRICE_STATES]).toEqual(['stale', 'noPrice']);
     expect(toPriceState('stale')).toBe('stale');
+    expect(toPriceState('noPrice')).toBe('noPrice');
     expect(toPriceState('unavailable')).toBeNull();
     expect(toPriceState('none')).toBeNull();
     expect(toPriceState(undefined)).toBeNull();
+  });
+
+  /** Only "out of date" is read from the prices, as rows that are not whole. */
+  it('reads only "out of date" from the prices', () => {
+    expect(readsFromPrices('stale')).toBe(true);
+    expect(readsFromPrices('noPrice')).toBe(false);
   });
 });
 

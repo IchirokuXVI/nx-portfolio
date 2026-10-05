@@ -369,6 +369,56 @@ describe('the product list of the back office, over HTTP', () => {
     }
   });
 
+  /** Plan 0187: the worklist of one price scope. */
+  it('passes the scope of the worklist through, beside every other filter', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(
+        `${origin}/v1/admin/catalog/items?withoutPriceAtScopeId=${SCOPE}&categoryId=${CATEGORY}&productGroupId=none&query=leche&order=name`
+      );
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload).toMatchObject({
+        withoutPriceAtScopeId: SCOPE,
+        categoryId: CATEGORY,
+        withoutProductGroup: true,
+        query: 'leche',
+        order: 'name',
+      });
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('sends no scope of a worklist when none is named', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      const res = await fetch(`${origin}/v1/admin/catalog/items`);
+
+      expect(res.status).toBe(200);
+      expect(sent[0].payload['withoutPriceAtScopeId']).toBeUndefined();
+    } finally {
+      await nest.close();
+    }
+  });
+
+  it('takes a uuid for the worklist and nothing else', async () => {
+    const { nest, sent, origin } = await boot();
+    try {
+      // The literal the reference filters take has no meaning here, and
+      // neither has a flag.
+      for (const value of ['none', 'true', 'nothing', '']) {
+        const res = await fetch(
+          `${origin}/v1/admin/catalog/items?withoutPriceAtScopeId=${value}`
+        );
+        expect(res.status).toBe(400);
+      }
+      expect(sent).toHaveLength(0);
+    } finally {
+      await nest.close();
+    }
+  });
+
   it('refuses a category that is neither a uuid nor the literal', async () => {
     const { nest, origin } = await boot();
     try {

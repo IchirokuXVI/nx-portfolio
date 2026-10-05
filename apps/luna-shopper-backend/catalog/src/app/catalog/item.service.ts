@@ -184,6 +184,76 @@ const WITHOUT_CATEGORY_SQL = `NOT EXISTS (
       )`;
 
 /**
+ * The products one price scope shows no price for (plan 0187), written once
+ * for both branches of the search and for the count beside each.
+ *
+ * A product is listed unless the scope holds a row for it that is an answer:
+ * a price, or `available = false`, which is the scope saying it does not sell
+ * the product. A row with no price that still says "sold" is not an answer,
+ * and neither is no row at all.
+ *
+ * **Read from `supermarket_items` and never worked out from `item_prices`.**
+ * That row is the price a shopper sees, materialized on every write (plan
+ * 0080), so an out of date price is a price here too.
+ *
+ * **`NOT EXISTS` and not a left join with a null test**, so the planner can
+ * answer each product from the unique index on the pair, or build the set of
+ * one scope's rows once from the index on the scope.
+ */
+function withoutPriceAtScopeSql(placeholder: string): string {
+  return `NOT EXISTS (
+        SELECT 1
+        FROM "supermarket_items" np
+        WHERE np."itemId" = i."id"
+          AND np."priceScopeId" = ${placeholder}::uuid
+          AND (np."price" IS NOT NULL OR NOT np."available")
+      )`;
+}
+
+/**
+ * What the ranked branch matches on, bound once and spent by the page and by
+ * its count (plan 0187). The two must not be able to disagree, so neither
+ * writes the filter itself.
+ */
+interface RankedMatch {
+  /** The placeholder of the normalized tsquery. */
+  readonly query: string;
+  /** The placeholder of the text as typed. */
+  readonly raw: string;
+  /** The barcode test, or the constant `false` when the query is words. */
+  readonly barcode: string;
+  /** The trigram branch, or `''` when the query is too short for it. */
+  readonly fuzzy: string;
+  /** Every narrowing clause, to be joined with `AND`. */
+  readonly filters: readonly string[];
+}
+
+/**
+ * The `WHERE` of the ranked branch, for the page and for its count.
+ *
+ * The literal recheck binds its words here, so the caller writes this where
+ * the statement reads it.
+ */
+function rankedWhereSql(
+  match: RankedMatch,
+  term: SearchTerm,
+  bind: (value: unknown) => string
+): string {
+  return `(
+        ${match.barcode}
+        OR (
+          (
+            i."search_es" @@ to_tsquery('spanish', ${match.query})
+            OR i."search_en" @@ to_tsquery('english', ${match.query})
+          )
+          AND ${literalMatchSql(ITEM_SEARCH_TEXT, term.words, bind)}
+        )
+        ${match.fuzzy}
+      )
+      ${match.filters.map((clause) => `AND ${clause}`).join('\n      ')}`;
+}
+
+/**
  * Global products (plan 0012), and the search over them (plan 0048).
  *
  * Writes are owner only; reads are open to any authenticated user.
@@ -838,11 +908,18 @@ export class ItemService {
    * all.
    */
   async search(req: SearchItemsRequest): Promise<ItemPage> {
+    // Plan 0187: the worklist of one scope. The scope is checked before
+    // anything is read, because an empty page for a scope that does not exist
+    // would say "every product is priced there".
+    const counted = req.withoutPriceAtScopeId !== undefined;
+    if (req.withoutPriceAtScopeId !== undefined) {
+      await this.requirePriceScope(req.withoutPriceAtScopeId);
+    }
     if (req.categoryId !== undefined && !isUuid(req.categoryId)) {
       // An id that is not a uuid names no category, so the filter matches
       // nothing, as an unknown uuid does (plan 0166, section 3). Casting it
       // would fail the query instead.
-      return { items: [], nextCursor: null };
+      return { items: [], nextCursor: null, ...(counted ? { total: 0 } : {}) };
     }
     const limit = clampPageSize(req.limit);
     // The caller's language, off the request context the gateway propagated
@@ -852,10 +929,20 @@ export class ItemService {
     const term = parseSearchTerm(req.query);
     const order = this.resolveOrder(req.order, term);
 
-    const rows =
+    // One statement for the page and, for the worklist of plan 0187 alone,
+    // one for the count. The count is of the whole request and not of what is
+    // left after the cursor, so every page of one request carries one number.
+    const [rows, matching] = await Promise.all([
       order === 'relevance' && term
-        ? await this.rankedItems(req, term, limit, cursor)
-        : await this.listedItems(req, term, order, locale, limit, cursor);
+        ? this.rankedItems(req, term, limit, cursor)
+        : this.listedItems(req, term, order, locale, limit, cursor),
+      !counted
+        ? undefined
+        : order === 'relevance' && term
+          ? this.rankedCount(req, term)
+          : this.listedCount(req, term),
+    ]);
+    const total = matching === undefined ? {} : { total: matching };
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
@@ -883,12 +970,14 @@ export class ItemService {
           };
         }),
         nextCursor,
+        ...total,
       };
     }
     const offers = await this.offersFor(pageIds, req.priceScopeIds);
     return {
       items: page.map((row) => view(row, offers.get(row.id))),
       nextCursor,
+      ...total,
     };
   }
 
@@ -1426,6 +1515,103 @@ export class ItemService {
   ): Promise<Item[]> {
     const offset = Number(cursor?.value ?? 0) || 0;
     const p = params();
+    const match = this.rankedMatch(req, term, p);
+    const { query, raw, barcode } = match;
+    // The same test as a ranking key, with the two things SQL three valued logic
+    // does to it spelled out.
+    //
+    // **`NULLS LAST`, because most products have no barcode at all**, and
+    // `NULL = '8480000181077'` is NULL rather than false. A descending sort puts
+    // nulls first by default, so without this every unbarcoded text match would
+    // rank above the very product that was scanned.
+    //
+    // **Written only when there is a barcode to rank on**: Postgres refuses a
+    // bare constant in `ORDER BY`, so the `false` that is harmless in the filter
+    // is a syntax error here. Leaving the key out is the same ordering anyway,
+    // since a key every row ties on decides nothing.
+    const barcodeKey =
+      term.ean === null ? '' : `(${barcode}) DESC NULLS LAST,\n               `;
+    // Unit price is the last ranking key, so it is joined even when the caller
+    // asked for no prices in the answer: with no scopes there is nothing to join
+    // and every row sorts as unpriced, which is the same order.
+    //
+    // Only over rows with a till price (plan 0157). A leaflet row with no price
+    // and a unit price of 2 is not an offer, so a product whose only cheap unit
+    // price is one of those ranks by its priced rows, or with the unpriced.
+    const scopeIds = req.priceScopeIds ?? [];
+    const cheapest =
+      scopeIds.length === 0
+        ? 'NULL::numeric'
+        : `(
+            SELECT min(si."unitPrice")
+            FROM "supermarket_items" si
+            WHERE si."itemId" = i."id"
+              AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
+              AND si."available"
+              AND si."price" IS NOT NULL
+          )`;
+
+    return this.items.query(
+      `
+      SELECT i.*
+      FROM "items" i
+      WHERE ${rankedWhereSql(match, term, p.bind)}
+      ORDER BY ${barcodeKey}(${wholeWordMatchSql(
+        ITEM_SEARCH_TEXT,
+        term.words,
+        p.bind
+      )}) DESC,
+               ${brandTypedSql('i."brand"', term.words, p.bind)} DESC,
+               round(GREATEST(
+                 ts_rank(i."search_es", to_tsquery('spanish', ${query}), 1),
+                 ts_rank(i."search_en", to_tsquery('english', ${query}), 1),
+                 GREATEST(
+                   similarity(coalesce(i."brand", ''), ${raw}),
+                   similarity(i."name" ->> 'es', ${raw}),
+                   similarity(i."name" ->> 'en', ${raw})
+                 ) * ${TRIGRAM_WEIGHT}
+               )::numeric, 4) DESC,
+               (
+                 lower(coalesce(i."brand", '')) = lower(${raw})
+                 OR lower(i."name" ->> 'es') = lower(${raw})
+                 OR lower(i."name" ->> 'en') = lower(${raw})
+               ) DESC,
+               ${cheapest} ASC NULLS LAST,
+               i."id" ASC
+      LIMIT ${p.bind(limit + 1)} OFFSET ${p.bind(offset)}
+      `,
+      p.values
+    );
+  }
+
+  /**
+   * How many products the ranked branch matches (plan 0187): the `WHERE` of
+   * {@link rankedItems}, from the same two functions, with no ordering, no
+   * limit and no offset.
+   */
+  private async rankedCount(
+    req: SearchItemsRequest,
+    term: SearchTerm
+  ): Promise<number> {
+    const p = params();
+    const match = this.rankedMatch(req, term, p);
+    const rows: { total: string }[] = await this.items.query(
+      `
+      SELECT count(*) AS "total"
+      FROM "items" i
+      WHERE ${rankedWhereSql(match, term, p.bind)}
+      `,
+      p.values
+    );
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  /** What {@link rankedItems} and {@link rankedCount} both match on. */
+  private rankedMatch(
+    req: SearchItemsRequest,
+    term: SearchTerm,
+    p: ReturnType<typeof params>
+  ): RankedMatch {
     // Through `catalog_norm` before the stemmer, because the item documents are
     // built from normalized text (plan 0156). The group search binds the same
     // tsquery unnormalized, since group documents still keep their accents.
@@ -1442,20 +1628,6 @@ export class ItemService {
     // the second reads `item_eans` once for the whole statement.
     const barcode =
       term.ean === null ? 'false' : barcodeMatchSql(p.bind(term.ean));
-    // The same test as a ranking key, with the two things SQL three valued logic
-    // does to it spelled out.
-    //
-    // **`NULLS LAST`, because most products have no barcode at all**, and
-    // `NULL = '8480000181077'` is NULL rather than false. A descending sort puts
-    // nulls first by default, so without this every unbarcoded text match would
-    // rank above the very product that was scanned.
-    //
-    // **Written only when there is a barcode to rank on**: Postgres refuses a
-    // bare constant in `ORDER BY`, so the `false` that is harmless in the filter
-    // is a syntax error here. Leaving the key out is the same ordering anyway,
-    // since a key every row ties on decides nothing.
-    const barcodeKey =
-      term.ean === null ? '' : `(${barcode}) DESC NULLS LAST,\n               `;
     // The fuzzy branch, or nothing at all when the query is too short for
     // trigram distance to mean anything. It is the one part of the filter the
     // literal recheck is not applied to, and that is the point of it: a
@@ -1496,68 +1668,11 @@ export class ItemService {
     if (req.soldBy?.length) {
       filters.push(soldByChainSql(p.bind(req.soldBy)));
     }
-    // Unit price is the last ranking key, so it is joined even when the caller
-    // asked for no prices in the answer: with no scopes there is nothing to join
-    // and every row sorts as unpriced, which is the same order.
-    //
-    // Only over rows with a till price (plan 0157). A leaflet row with no price
-    // and a unit price of 2 is not an offer, so a product whose only cheap unit
-    // price is one of those ranks by its priced rows, or with the unpriced.
-    const scopeIds = req.priceScopeIds ?? [];
-    const cheapest =
-      scopeIds.length === 0
-        ? 'NULL::numeric'
-        : `(
-            SELECT min(si."unitPrice")
-            FROM "supermarket_items" si
-            WHERE si."itemId" = i."id"
-              AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
-              AND si."available"
-              AND si."price" IS NOT NULL
-          )`;
-
-    return this.items.query(
-      `
-      SELECT i.*
-      FROM "items" i
-      WHERE (
-        ${barcode}
-        OR (
-          (
-            i."search_es" @@ to_tsquery('spanish', ${query})
-            OR i."search_en" @@ to_tsquery('english', ${query})
-          )
-          AND ${literalMatchSql(ITEM_SEARCH_TEXT, term.words, p.bind)}
-        )
-        ${fuzzy}
-      )
-      ${filters.map((clause) => `AND ${clause}`).join('\n      ')}
-      ORDER BY ${barcodeKey}(${wholeWordMatchSql(
-        ITEM_SEARCH_TEXT,
-        term.words,
-        p.bind
-      )}) DESC,
-               ${brandTypedSql('i."brand"', term.words, p.bind)} DESC,
-               round(GREATEST(
-                 ts_rank(i."search_es", to_tsquery('spanish', ${query}), 1),
-                 ts_rank(i."search_en", to_tsquery('english', ${query}), 1),
-                 GREATEST(
-                   similarity(coalesce(i."brand", ''), ${raw}),
-                   similarity(i."name" ->> 'es', ${raw}),
-                   similarity(i."name" ->> 'en', ${raw})
-                 ) * ${TRIGRAM_WEIGHT}
-               )::numeric, 4) DESC,
-               (
-                 lower(coalesce(i."brand", '')) = lower(${raw})
-                 OR lower(i."name" ->> 'es') = lower(${raw})
-                 OR lower(i."name" ->> 'en') = lower(${raw})
-               ) DESC,
-               ${cheapest} ASC NULLS LAST,
-               i."id" ASC
-      LIMIT ${p.bind(limit + 1)} OFFSET ${p.bind(offset)}
-      `,
-      p.values
-    );
+    // Plan 0187: what this scope shows no price for, on both branches.
+    if (req.withoutPriceAtScopeId !== undefined) {
+      filters.push(withoutPriceAtScopeSql(p.bind(req.withoutPriceAtScopeId)));
+    }
+    return { query, raw, barcode, fuzzy, filters };
   }
 
   /**
@@ -1576,7 +1691,32 @@ export class ItemService {
     limit: number,
     cursor?: ItemCursor
   ): Promise<Item[]> {
-    const qb = this.items.createQueryBuilder('i').take(limit + 1);
+    const qb = this.listedMatch(req, term).take(limit + 1);
+    this.applyOrder(qb, order, locale, cursor);
+    return qb.getMany();
+  }
+
+  /**
+   * How many products the listing branch matches (plan 0187): the filters of
+   * {@link listedItems} with no order and no cursor, so the number is of the
+   * whole request on every page of it.
+   */
+  private async listedCount(
+    req: SearchItemsRequest,
+    term: SearchTerm | null
+  ): Promise<number> {
+    const row = await this.listedMatch(req, term)
+      .select('count(*)', 'total')
+      .getRawOne<{ total: string }>();
+    return Number(row?.total ?? 0);
+  }
+
+  /** What {@link listedItems} and {@link listedCount} both match on. */
+  private listedMatch(
+    req: SearchItemsRequest,
+    term: SearchTerm | null
+  ): SelectQueryBuilder<Item> {
+    const qb = this.items.createQueryBuilder('i');
     if (term) {
       // The same filter the ranked branch applies, named parameters apart. It is
       // written twice because the two branches assemble their SQL differently,
@@ -1644,8 +1784,14 @@ export class ItemService {
       // chain chips must not stop narrowing the moment somebody types a word.
       qb.andWhere(soldByChainSql(':soldBy'), { soldBy: req.soldBy });
     }
-    this.applyOrder(qb, order, locale, cursor);
-    return qb.getMany();
+    if (req.withoutPriceAtScopeId !== undefined) {
+      // Plan 0187, from the same function as the ranked branch: a word typed
+      // into the worklist narrows the worklist.
+      qb.andWhere(withoutPriceAtScopeSql(':withoutPriceAtScopeId'), {
+        withoutPriceAtScopeId: req.withoutPriceAtScopeId,
+      });
+    }
+    return qb;
   }
 
   private nextCursor(
@@ -1711,6 +1857,25 @@ export class ItemService {
     }
     const group = await this.productGroups.load(productGroupId);
     return group.id;
+  }
+
+  /**
+   * The scope a worklist names, checked to exist (plan 0187).
+   *
+   * The 404 the price scope read answers, in the same words. An id that is
+   * not a uuid names no scope either, and is refused here rather than failing
+   * the cast in the statement.
+   */
+  private async requirePriceScope(priceScopeId: string): Promise<void> {
+    const found: unknown[] = isUuid(priceScopeId)
+      ? await this.items.query(
+          'SELECT 1 FROM "price_scopes" WHERE "id" = $1::uuid LIMIT 1',
+          [priceScopeId]
+        )
+      : [];
+    if (found.length === 0) {
+      throw new NotFoundException('Price scope not found');
+    }
   }
 
   private async load(id: string): Promise<Item> {

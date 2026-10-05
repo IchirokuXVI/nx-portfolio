@@ -80,6 +80,7 @@ class ResourceApi<T extends ResourceRow> implements ResourceGateway<T> {
     return {
       items: page.items.map((row) => stampRow(row, stamped)),
       nextCursor: page.nextCursor,
+      ...(page.total === undefined ? {} : { total: page.total }),
     };
   }
 
@@ -442,9 +443,15 @@ function toPage<T extends ResourceRow>(body: unknown): ResourcePage<T> {
       : {};
   const items = record['items'];
   const cursor = record['nextCursor'];
+  // Only the routes that count their rows say this (backend plan 0187), and
+  // anything that is not a whole number is read as not said.
+  const total = record['total'];
 
   return {
     items: Array.isArray(items) ? (items as T[]) : [],
     nextCursor: typeof cursor === 'string' && cursor !== '' ? cursor : null,
+    ...(typeof total === 'number' && Number.isInteger(total) && total >= 0
+      ? { total }
+      : {}),
   };
 }

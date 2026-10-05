@@ -49,6 +49,16 @@ export interface ResourceQuery {
 export interface ResourcePage<T extends ResourceRow = ResourceRow> {
   readonly items: readonly T[];
   readonly nextCursor: string | null;
+  /**
+   * How many rows match the whole query, where the route counts them.
+   *
+   * Absent on almost every read: a cursor page says nothing about totals, and
+   * a count is a second query. The one route that answers it today is the
+   * product list narrowed to the products a scope has no price for (backend
+   * plan 0187). It never says whether there is another page. That is
+   * `nextCursor`, as above.
+   */
+  readonly total?: number;
 }
 
 /** What the form submits: field names to values, already in wire shape. */

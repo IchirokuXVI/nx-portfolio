@@ -349,6 +349,120 @@ describe('ItemService', () => {
     expect(sql).toContain('"item_categories" ic');
   });
 
+  /**
+   * Plan 0187: the products one scope shows no price for. What a unit spec can
+   * hold is the shape: the scope is checked first, both branches take the
+   * clause, each asks one count, and no other read gains a `total`. That the
+   * clause lists the right products is `no-price-at-scope.integration.spec.ts`.
+   */
+  describe('the products a scope has no price for', () => {
+    const SCOPE = '3f2a1b4c-5d6e-4f7a-8b9c-0d1e2f3a4b5c';
+
+    /** A repository whose scope lookup, page and count each answer apart. */
+    function worklist(known: boolean, total: number) {
+      const qb = makeQb([]);
+      qb.select = jest.fn(() => qb);
+      qb.getRawOne = jest.fn(async () => ({ total: String(total) }));
+      const items = {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes('"price_scopes"')) {
+            return known ? [{}] : [];
+          }
+          return sql.includes('count(*)') ? [{ total: String(total) }] : [];
+        }),
+        createQueryBuilder: jest.fn(() => qb),
+      } as unknown as Repository<Item>;
+      return { qb, items, ...build({ items }) };
+    }
+
+    const statements = (items: Repository<Item>): string[] =>
+      (items.query as jest.Mock).mock.calls.map(([sql]) => sql as string);
+
+    it('narrows the listing branch and counts it in one more statement', async () => {
+      const { qb, items, service } = worklist(true, 7);
+
+      const page = await service.search({
+        userId: 'operator',
+        withoutPriceAtScopeId: SCOPE,
+      });
+
+      expect(page).toEqual({ items: [], nextCursor: null, total: 7 });
+      // The page and the count are two builders over the same clause.
+      expect(items.createQueryBuilder).toHaveBeenCalledTimes(2);
+      const clauses = (qb.andWhere as jest.Mock).mock.calls.filter(
+        ([clause]) =>
+          typeof clause === 'string' &&
+          clause.includes('NOT EXISTS') &&
+          clause.includes('"supermarket_items"')
+      );
+      expect(clauses).toHaveLength(2);
+      expect(clauses[0][0]).toContain(
+        '(np."price" IS NOT NULL OR NOT np."available")'
+      );
+      expect(clauses[0][1]).toEqual({ withoutPriceAtScopeId: SCOPE });
+      expect(qb.getRawOne).toHaveBeenCalledTimes(1);
+    });
+
+    it('narrows the ranked branch and counts it with the same filter', async () => {
+      const { items, service } = worklist(true, 3);
+
+      const page = await service.search({
+        userId: 'operator',
+        query: 'leche',
+        withoutPriceAtScopeId: SCOPE,
+      });
+
+      expect(page.total).toBe(3);
+      const [, ...read] = statements(items);
+      expect(read).toHaveLength(2);
+      for (const sql of read) {
+        expect(sql).toContain('FROM "supermarket_items" np');
+        expect(sql).toContain('to_tsquery');
+      }
+      const count = read.find((sql) => sql.includes('count(*)'));
+      expect(count).toBeDefined();
+      expect(count).not.toContain('ORDER BY');
+      expect(count).not.toContain('LIMIT');
+    });
+
+    it('answers 404 for a scope that does not exist, and reads nothing', async () => {
+      const { items, service } = worklist(false, 0);
+
+      await expect(
+        service.search({ userId: 'operator', withoutPriceAtScopeId: SCOPE })
+      ).rejects.toMatchObject({
+        code: 'not_found',
+        message: 'Price scope not found',
+      });
+      expect(items.createQueryBuilder).not.toHaveBeenCalled();
+      expect(statements(items)).toHaveLength(1);
+    });
+
+    it('answers 404 for an id that is not a uuid, without asking', async () => {
+      const { items, service } = worklist(true, 0);
+
+      await expect(
+        service.search({ userId: 'operator', withoutPriceAtScopeId: 'none' })
+      ).rejects.toMatchObject({ code: 'not_found' });
+      expect(items.query).not.toHaveBeenCalled();
+    });
+
+    it('puts no total on a read that names no scope', async () => {
+      const { qb, items, service } = worklist(true, 9);
+
+      const listed = await service.search({ userId: 'operator' });
+      const ranked = await service.search({
+        userId: 'operator',
+        query: 'leche',
+      });
+
+      expect(listed).toEqual({ items: [], nextCursor: null });
+      expect(ranked).toEqual({ items: [], nextCursor: null });
+      expect(qb.getRawOne).not.toHaveBeenCalled();
+      expect(statements(items)).toHaveLength(1);
+    });
+  });
+
   it('quotes no price when the caller names no scopes (section 3.1)', async () => {
     const rows = [
       {

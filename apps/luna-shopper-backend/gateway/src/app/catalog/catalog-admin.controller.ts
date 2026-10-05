@@ -650,6 +650,10 @@ export class AdminCatalogItemsController {
    * the ones curation has not reached are found. Catalog knows the question as
    * `withoutProductGroup`, and this is where the literal becomes the flag
    * (admin plan 0012, section 2).
+   *
+   * `withoutPriceAtScopeId` is the worklist of one price scope (plan 0187):
+   * the products that scope shows no price for. It is the one parameter that
+   * puts `total` on the page, and an id that names no scope is a 404.
    */
   @Get()
   @ApiContractResponse(ITEM_PATTERNS.search)
@@ -668,6 +672,7 @@ export class AdminCatalogItemsController {
       withoutCategory: category.none,
       productGroupId: group.id,
       withoutProductGroup: group.none,
+      withoutPriceAtScopeId: query.withoutPriceAtScopeId,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
