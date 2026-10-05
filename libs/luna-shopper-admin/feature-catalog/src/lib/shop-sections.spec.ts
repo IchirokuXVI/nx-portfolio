@@ -24,16 +24,17 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOCATION_SEED } from './catalog-seed';
 import { sectionSource } from './catalog-sources';
-import { CATEGORIES } from './categories';
 import { ChainSections } from './chain-sections';
 import { ChainPage } from './chains/chain-page';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
 import { ShopPage } from './chains/shop-page';
 import { ItemChainSections, previewSentence } from './item-sections-panel';
-import { ITEMS } from './items';
 import { LocationSections, moveId } from './location-sections';
-import { PRICES } from './prices';
-import { catalogRoutes } from './routes';
+import {
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
+} from './products/products-routes';
 import { SEEDED_SECTION } from './section-seed';
 import {
   ShopSections,
@@ -60,8 +61,7 @@ import { SupermarketFormPage } from './supermarket-form-page';
 class TestHost {}
 
 /**
- * The Chains section as the app declares it, and beside it what the product
- * screen needs of the catalog, mounted at the root.
+ * The Chains section and the Products section, each as the app declares it.
  */
 const SECTIONS: readonly AdminSection[] = [
   {
@@ -71,10 +71,12 @@ const SECTIONS: readonly AdminSection[] = [
     screens: chainsRoutes(),
   },
   {
-    key: 'catalog',
+    key: 'products',
     label: '',
-    resources: [ITEMS, CATEGORIES, PRICES],
-    screens: catalogRoutes(),
+    segment: PRODUCTS_SEGMENT,
+    held: PRODUCT_RESOURCES,
+    heldTabs: true,
+    screens: productsRoutes(),
   },
 ];
 
@@ -1043,8 +1045,8 @@ describe('the sections of a shop with a map', () => {
 
 describe('where a product is, per chain', () => {
   async function openItem(id: string) {
-    // The catalog is at the root here, as the comment on `SECTIONS` says.
-    const fixture = await boot(`/items/${id}`);
+    // The "Where it is" tab of the product's page (admin plan 0043).
+    const fixture = await boot(`/products/${id}/where`);
     await settle(fixture);
     await settle(fixture);
     const rows = fixture.debugElement

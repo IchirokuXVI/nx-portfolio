@@ -81,9 +81,10 @@ describe('what an info button says', () => {
     ).toEqual([
       'brands.suggested.info',
       'catalog.chains.info',
+      'catalog.items.info',
       'catalog.locationSections.info',
       'catalog.pricePolicies.info',
-      'catalog.prices.info',
+      'catalog.productPrices.info',
       'catalog.shops.pricedBy.info',
       'harvest.imports.info',
       'harvest.places.info',

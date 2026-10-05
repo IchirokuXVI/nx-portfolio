@@ -316,6 +316,39 @@ describe('ItemService', () => {
     expect(sql).toContain('i."productGroupId" IS NULL');
   });
 
+  /**
+   * Admin plan 0043, section 2: "No category" in the back office's tree. On
+   * both branches, for the reason the ungrouped filter is.
+   */
+  it('lists the products on no category, on both branches', async () => {
+    const rows: Item[] = [];
+    const qb = makeQb(rows);
+    const items = {
+      query: jest.fn(async () => rows),
+      createQueryBuilder: jest.fn(() => qb),
+    } as unknown as Repository<Item>;
+    const { service } = build({ items });
+
+    await service.search({ userId: 'operator', withoutCategory: true });
+    expect(
+      (qb.andWhere as jest.Mock).mock.calls.some(
+        ([clause]) =>
+          typeof clause === 'string' &&
+          clause.includes('NOT EXISTS') &&
+          clause.includes('"item_categories"')
+      )
+    ).toBe(true);
+
+    await service.search({
+      userId: 'operator',
+      query: 'leche',
+      withoutCategory: true,
+    });
+    const sql = (items.query as jest.Mock).mock.calls[0][0] as string;
+    expect(sql).toContain('NOT EXISTS');
+    expect(sql).toContain('"item_categories" ic');
+  });
+
   it('quotes no price when the caller names no scopes (section 3.1)', async () => {
     const rows = [
       {

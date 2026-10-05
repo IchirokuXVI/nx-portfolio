@@ -11,6 +11,7 @@ import {
 } from '../../lib/enums/catalog.enums';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
+  ADMIN_PRICE_ITEM_IDS_MAX,
   BRAND_BATCH_MAX,
   BRAND_LABEL_MAX_LENGTH,
   BRAND_MATCHES_MAX_KEYS,
@@ -1773,6 +1774,8 @@ const searchItemsRequest = object(
     productGroupId: string(),
     // Plan 0073: the back office's "what has curation not reached yet".
     withoutProductGroup: boolean(),
+    // Admin plan 0043: the products on no category at all.
+    withoutCategory: boolean(),
     priceScopeIds: array(nonEmptyString()),
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
@@ -2234,6 +2237,11 @@ const adminListSupermarketItemsRequest = object(
   {
     ...adminCredentialProperties,
     itemId: nonEmptyString(),
+    // Admin plan 0043: one page of the product list, priced in one read.
+    itemIds: {
+      ...array(nonEmptyString()),
+      maxItems: ADMIN_PRICE_ITEM_IDS_MAX,
+    },
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
     stale: boolean(),

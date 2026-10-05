@@ -52,10 +52,10 @@ import { SUPERMARKETS_PATH } from './supermarkets';
  */
 
 /** Where the back office reads and writes shops (backend plan 0073). */
-export const LOCATIONS_PATH = '/v1/admin/catalog/locations';
+const LOCATIONS_PATH = '/v1/admin/catalog/locations';
 
 /** Where the back office reads and writes scopes. */
-export const PRICE_SCOPES_PATH = '/v1/admin/catalog/price-scopes';
+const PRICE_SCOPES_PATH = '/v1/admin/catalog/price-scopes';
 
 /** Where the back office reads and writes products. */
 export const ITEMS_PATH = '/v1/admin/catalog/items';
@@ -77,7 +77,7 @@ export const CATEGORIES_PATH = '/v1/admin/catalog/categories';
 export const ITEM_SCOPE_PRICES_PATH = `${ITEMS_PATH}/{id}/prices`;
 
 /** Where the back office reads and writes groups. */
-export const PRODUCT_GROUPS_PATH = '/v1/admin/catalog/product-groups';
+const PRODUCT_GROUPS_PATH = '/v1/admin/catalog/product-groups';
 
 /**
  * Where many products are moved into groups in one transaction (backend plan
@@ -104,10 +104,10 @@ export const PRICES_PATH = '/v3/admin/catalog/supermarket-items';
 export const ITEM_PRICES_PATH = '/v1/admin/catalog/item-prices';
 
 /** Where the back office reads and changes the six policy rows (plan 0080, section 3). */
-export const PRICE_POLICIES_PATH = '/v1/admin/catalog/price-policies';
+const PRICE_POLICIES_PATH = '/v1/admin/catalog/price-policies';
 
 /** Where the back office reads and writes the per shop rows. */
-export const LOCATION_ITEMS_PATH = '/v1/admin/catalog/location-items';
+const LOCATION_ITEMS_PATH = '/v1/admin/catalog/location-items';
 
 /** The two columns a price is unique on, and therefore addressed by. */
 export const PRICE_KEY = ['itemId', 'priceScopeId'] as const;
@@ -273,7 +273,7 @@ export function locationItemSource(): ResourceSource<Wire.CatalogSupermarketLoca
  * Where one shop section is read, changed and deleted (backend plan 0167,
  * section 4). Listed and created under its chain, the way shops are.
  */
-export const SECTIONS_PATH = '/v1/admin/catalog/sections';
+const SECTIONS_PATH = '/v1/admin/catalog/sections';
 
 /** A chain's sections, with the chain in place of `{id}`. */
 export function chainSectionsPath(supermarketId: string): string {

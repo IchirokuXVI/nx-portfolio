@@ -21,8 +21,7 @@ import type {
   ResourceGateway,
   ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { ITEMS } from '../items';
-import { catalogRoutes } from '../routes';
+import { oldCatalogAddresses } from '../products/old-addresses';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains-routes';
 import { oldChainAddresses } from './old-addresses';
 
@@ -32,9 +31,10 @@ import { oldChainAddresses } from './old-addresses';
  * Supermarkets, shops, shop sections, price scopes and the products of a shop
  * were five lists under `/catalog`. A bookmark, a link in a chat and the
  * browser's own history still hold those addresses, so each one is a redirect
- * to where the same rows are now. One test per address, against the two
- * sections as the app declares them: the chains with no segment, and the
- * catalog, which held the old screens, under `/catalog`.
+ * to where the same rows are now. One test per address, against the Chains
+ * section as the app declares it: with no segment, and with everything that
+ * was under `/catalog` beside its own screens, as redirects (admin plan 0043
+ * took the last screens out of that segment).
  *
  * **What is asserted is where the router comes to rest.** A redirect to a
  * chain is followed by the chain's own redirect to its Shops tab, and one to a
@@ -47,14 +47,7 @@ const SECTIONS: readonly AdminSection[] = [
     key: 'chains',
     label: '',
     held: CHAIN_RESOURCES,
-    screens: chainsRoutes(),
-  },
-  {
-    key: 'catalog',
-    label: '',
-    segment: 'catalog',
-    resources: [ITEMS],
-    screens: catalogRoutes(),
+    screens: [...chainsRoutes(), oldCatalogAddresses()],
   },
 ];
 
@@ -206,13 +199,8 @@ describe('the addresses the chain screens had', () => {
     ).toBe(chain('sm_mercadona'));
   });
 
-  /** The screen that was beside them is still where it was. */
-  it('leaves the rest of the catalog where it is', async () => {
-    expect(await landOn('/catalog/items')).toBe('/catalog/items');
-    expect(await landOn('/catalog/items/it_milk_1l/prices')).toBe(
-      '/catalog/items/it_milk_1l/prices'
-    );
-  });
+  // The product screens that were beside them moved as well (admin plan
+  // 0043). Their redirects are `products/old-addresses.spec.ts`'s claim.
 
   /**
    * Every redirect is a route of its own with no component, so none of them

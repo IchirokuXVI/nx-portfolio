@@ -27,11 +27,11 @@ import {
   ReferencesControl,
 } from '@portfolio/luna-shopper-admin/ui';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
-import { ITEMS } from './items';
-import { PRICE_POLICIES } from './price-policies';
-import { PriceScopeNotice } from './price-scope-notice';
-import { PRICES } from './prices';
-import { PRODUCT_GROUPS } from './product-groups';
+import {
+  PRODUCT_RESOURCES,
+  PRODUCTS_SEGMENT,
+  productsRoutes,
+} from './products/products-routes';
 
 /**
  * The catalog screens, rendered (plan 0005, section 6).
@@ -62,11 +62,10 @@ class TestHost {}
  * is drawn where the app draws it, under its chain, and never as a flat list
  * this spec made up.
  *
- * The rest of the catalog is mounted at the root rather than under `/catalog`.
- * This file is about the screens, not about where the app hangs them: admin
- * plan 0022's own mount is asserted in `shell-sections.spec.ts` and in the app's
- * route spec, against the real sections. Leaving the segment off here keeps
- * every URL below reading as the screen it opens.
+ * **The products are the real thing as well** (admin plan 0043). A shop's
+ * product row names its product through the registry, so the product has to
+ * be where the app mounts it. The product screens have a spec of their own
+ * beside them, under `products/`.
  */
 const SECTIONS: readonly AdminSection[] = [
   {
@@ -76,9 +75,12 @@ const SECTIONS: readonly AdminSection[] = [
     screens: chainsRoutes(),
   },
   {
-    key: 'catalog',
+    key: 'products',
     label: '',
-    resources: [ITEMS, PRODUCT_GROUPS, PRICES, PRICE_POLICIES],
+    segment: PRODUCTS_SEGMENT,
+    held: PRODUCT_RESOURCES,
+    heldTabs: true,
+    screens: productsRoutes(),
   },
 ];
 
@@ -200,201 +202,6 @@ async function chooseFilter(
   await settle(fixture);
 }
 
-describe('the effective price list', () => {
-  it('draws every effective price, whichever source won', async () => {
-    const fixture = await boot('/prices');
-
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(3);
-  });
-
-  /** "What have I overridden": the effective rows an operator's price won. */
-  it('narrows to the prices somebody typed in', async () => {
-    const fixture = await boot('/prices');
-
-    await chooseFilter(fixture, 'sourceKind', 'ADMIN');
-
-    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
-    expect(rows).toHaveLength(2);
-    expect(rowsText(fixture)).not.toContain(
-      'catalog.priceSourceKind.OFFICIAL_API'
-    );
-  });
-
-  /**
-   * Backend plan 0080, section 5: the server flags a price shown on
-   * sufferance, and the screen draws the flag rather than working it out from
-   * the date.
-   */
-  /**
-   * Admin plan 0023, section 3: the admin read joins the product's name on,
-   * and the row's own heading draws it, so the operator reads "Whole milk"
-   * where a uuid used to be.
-   */
-  it('names the product rather than printing its id', async () => {
-    const fixture = await boot('/prices');
-
-    expect(rowsText(fixture)).toContain('Whole milk 1 L');
-    expect(rowsText(fixture)).not.toContain('it_milk_1l');
-  });
-
-  it('shows the source, the date and the stale flag', async () => {
-    const fixture = await boot('/prices');
-
-    const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
-      (cell) => (cell as HTMLElement).textContent?.trim()
-    );
-
-    expect(headers).toContain('catalog.prices.sourceKind');
-    expect(headers).toContain('catalog.prices.observedAt');
-    expect(headers).toContain('catalog.prices.stale');
-  });
-
-  /**
-   * Admin plan 0029, section 5: a price a run copied names the scope it was
-   * read at, through the price scopes lookup rather than as its id.
-   */
-  it('names the scope a copied price was read at', async () => {
-    const fixture = await boot('/prices');
-    await settle(fixture);
-    await settle(fixture);
-
-    const headers = [...fixture.nativeElement.querySelectorAll('thead th')].map(
-      (cell) => (cell as HTMLElement).textContent?.trim()
-    );
-    expect(headers).toContain('catalog.prices.priceCopiedFromScopeId');
-    expect(rowsText(fixture)).toContain('REGION 3421');
-  });
-});
-
-describe('a price and its history', () => {
-  /**
-   * The second screen of plan 0080, section 10: the effective row at the top
-   * and every row a source gave below it, with the override line beside the
-   * typed row that is still inside its protection window.
-   */
-  it('draws the effective row and the rows behind it', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(text(fixture)).toContain('catalog.prices.history.effective');
-    // Two rows behind the olive oil price: the typed one and the crawl it
-    // overrode.
-    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(2);
-    expect(text(fixture)).toContain('catalog.priceSourceKind.ADMIN');
-    expect(text(fixture)).toContain('catalog.priceSourceKind.OFFICIAL_API');
-    // The typed row says what it is overriding, from its own snapshot.
-    expect(text(fixture)).toContain('catalog.prices.history.overriding');
-  });
-
-  /**
-   * Editing a price is inserting a price: the only write on a row is its
-   * removal, and it asks first. The effective row is read again afterwards
-   * rather than guessed, because the server recomputes it.
-   */
-  it('removes a row after asking, and re-reads what is shown', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-    await settle(fixture);
-
-    [...fixture.nativeElement.querySelectorAll('.rows li button')][0]?.click();
-    await settle(fixture);
-    expect(text(fixture)).toContain('catalog.prices.confirm.remove.heading');
-
-    buttonSaying(fixture, 'catalog.prices.confirm.remove.confirm')?.click();
-    await settle(fixture);
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(fixture.nativeElement.querySelectorAll('.rows li')).toHaveLength(1);
-  });
-
-  /** Admin plan 0029, section 5, on the detail: the row and the history. */
-  it('names where a copied price was read, and says nothing for one that was not', async () => {
-    const copied = await boot('/prices/it_milk_1l~ps_mercadona_4661');
-    await settle(copied);
-    await settle(copied);
-
-    expect(copied.nativeElement.querySelector('dd.copied')?.textContent).toBe(
-      'REGION 3421'
-    );
-    expect(
-      copied.nativeElement.querySelector('.rows li .copied')?.textContent
-    ).toContain('REGION 3421');
-
-    const read = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(read);
-    await settle(read);
-
-    expect(text(read)).not.toContain('catalog.prices.priceCopiedFromScopeId');
-  });
-
-  it('offers to add a price, which is the form and not an edit', async () => {
-    const fixture = await boot('/prices/it_olive_oil_1l~ps_mercadona_4661');
-    await settle(fixture);
-
-    buttonSaying(fixture, 'catalog.prices.history.add')?.click();
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(TestBed.inject(Router).url).toBe('/prices/new');
-  });
-});
-
-describe('the price form', () => {
-  /**
-   * Section 2 of plan 0005 still: a price is keyed on `(itemId, priceScopeId)`,
-   * and twelve shops served by one warehouse share one row, so the screen has
-   * to say which scope and how many shops that is. With no scope chosen yet
-   * the notice says so, and it is on the screen.
-   */
-  it('draws the scope notice on the add a price form', async () => {
-    const fixture = await boot('/prices/new');
-    await settle(fixture);
-
-    const notice = fixture.debugElement.query(By.directive(PriceScopeNotice));
-    expect(notice).not.toBeNull();
-    expect(
-      (notice.componentInstance as PriceScopeNotice).scopeName()
-    ).toBeNull();
-  });
-
-  /**
-   * There is no control on this screen a shop could be chosen in, and that is
-   * the descriptor's doing rather than a check inside the form: `priceScopeId`
-   * is a reference to `price-scopes`.
-   */
-  it('offers scopes to choose from, and never shops', async () => {
-    const fixture = await boot('/prices/new');
-
-    const resources = fixture.debugElement
-      .queryAll(By.directive(ReferencePicker))
-      .map((found) => found.componentInstance.resource() as string);
-
-    expect(resources).toContain('price-scopes');
-    expect(resources).not.toContain('locations');
-  });
-});
-
-/**
- * The two lookup columns (admin plan 0023, section 4): a group and a chain are
- * small targets, so the page resolves each distinct id once through the
- * reference lookup and the cell becomes the target's name and a link to it.
- */
-describe('the looked up reference columns', () => {
-  it('names the group on the product list, as a link to it', async () => {
-    const fixture = await boot('/items');
-    await settle(fixture);
-
-    const anchors = [
-      ...fixture.nativeElement.querySelectorAll('tbody td a'),
-    ].map((anchor) => (anchor as HTMLElement).textContent?.trim());
-
-    expect(anchors).toContain('Olive oil');
-    expect(rowsText(fixture)).not.toContain('pg_olive_oil');
-  });
-});
-
 /**
  * The Price scopes tab of a chain (admin plan 0042, target 7).
  *
@@ -429,17 +236,6 @@ describe('the price scopes of a chain', () => {
         `select#${filterId('kind', 'price-scopes')}`
       )
     ).not.toBeNull();
-  });
-});
-
-describe('the price policies', () => {
-  it('lists the six rows of the plan', async () => {
-    const fixture = await boot('/price-policies');
-
-    expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(6);
-    // The kind is the row's title, drawn as the value it is keyed on.
-    expect(rowsText(fixture)).toContain('OFFICIAL_LEAFLET');
-    expect(rowsText(fixture)).toContain('USER_REPORTED');
   });
 });
 

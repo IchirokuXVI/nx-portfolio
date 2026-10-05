@@ -1,4 +1,6 @@
 export * from './lib/app-locales';
+export * from './lib/catalog/category-tree';
+export * from './lib/catalog/scope-picker';
 export * from './lib/chart/bar-chart';
 export * from './lib/chart/chart-palette';
 export * from './lib/chart/chart-types';
@@ -22,6 +24,7 @@ export * from './lib/info/info-button';
 export * from './lib/info/info-panel';
 export * from './lib/page/page-header';
 export * from './lib/page/page-tabs';
+export * from './lib/page/popover-sheet';
 export * from './lib/page/scope-mark';
 export * from './lib/resource/field-control';
 export * from './lib/resource/localized-text-control';

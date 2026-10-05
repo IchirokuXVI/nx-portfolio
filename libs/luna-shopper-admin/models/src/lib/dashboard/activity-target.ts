@@ -16,10 +16,13 @@ export interface ActivitySubject {
  * The tables whose rows have a screen, and which resource that screen is.
  *
  * The audit trail names a table and this app names a resource, and the two agree
- * only by accident: `shopping_lists` is the table behind the `lists` screen and
- * `item_prices` is the table behind `prices`. So the mapping is written out
- * rather than derived, and a table missing from it has no screen rather than a
- * guessed one.
+ * only by accident: `shopping_lists` is the table behind the `lists` screen.
+ * So the mapping is written out rather than derived, and a table missing from
+ * it has no screen rather than a guessed one.
+ *
+ * `item_prices` is not in it (admin plan 0043). A price is read on its
+ * product's page, the audit row carries the price's own uuid, and nothing in
+ * it names the product.
  *
  * **A resource name, never a URL segment** (admin plan 0022, section 3). This
  * used to be a second hand written copy of the segment list, which drifted
@@ -33,7 +36,6 @@ const RESOURCE_NAMES: Readonly<Record<string, string | undefined>> = {
   shopping_lists: 'lists',
   users: 'users',
   items: 'items',
-  item_prices: 'prices',
 };
 
 /**

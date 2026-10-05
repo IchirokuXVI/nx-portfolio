@@ -18,12 +18,16 @@ import { ADMIN_SECTIONS } from './sections';
  * would give the reference picker two answers to the same question.
  */
 describe('ADMIN_SECTIONS', () => {
-  /** The chains are second, after the overview (admin plan 0042, target 1). */
+  /**
+   * The chains are second, after the overview (admin plan 0042, target 1),
+   * and the products third (admin plan 0043, target 1). There is no Catalog
+   * section: its ten screens are those two.
+   */
   it('is the six sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
       'chains',
-      'catalog',
+      'products',
       'shoppers',
       'harvest',
       'admins',
@@ -90,19 +94,45 @@ describe('ADMIN_SECTIONS', () => {
     ]);
   });
 
-  /** The five screens left the catalog's row when the chains took them. */
-  it('lists none of the chain screens in the catalog any more', () => {
-    const catalog = ADMIN_SECTIONS.find((section) => section.key === 'catalog');
+  /**
+   * The products open on the product list, and their four lists are the tabs
+   * of the section (admin plan 0043, target 1). A price is held as well, under
+   * one product, and is no tab.
+   */
+  it('opens the products on the product list, with four tabs', () => {
+    const products = ADMIN_SECTIONS.find(
+      (section) => section.key === 'products'
+    );
 
-    expect(
-      (catalog?.resources ?? []).map((descriptor) => descriptor.name)
-    ).toEqual([
-      'items',
-      'categories',
-      'product-groups',
-      'prices',
-      'price-policies',
+    expect(products).toBeDefined();
+    if (products === undefined) {
+      return;
+    }
+    expect(sectionLink(products)).toBe('/products');
+    expect(products.home).toBeUndefined();
+    expect(sectionScreens(products)).toEqual([
+      { path: '/products', label: 'catalog.items.many', exact: true },
+      { path: '/products/groups', label: 'catalog.productGroups.many' },
+      { path: '/products/categories', label: 'catalog.categories.many' },
+      { path: '/products/price-rules', label: 'catalog.pricePolicies.many' },
     ]);
+    expect((products.held ?? []).map((descriptor) => descriptor.name)).toEqual([
+      'items',
+      'product-groups',
+      'categories',
+      'price-policies',
+      'prices',
+    ]);
+  });
+
+  /** The Catalog section is gone, and nothing is mounted under its segment. */
+  it('has no catalog section', () => {
+    expect(ADMIN_SECTIONS.map((section) => section.segment)).not.toContain(
+      'catalog'
+    );
+    expect(ADMIN_SECTIONS.map((section) => section.label)).not.toContain(
+      'shell.sections.catalog'
+    );
   });
 
   /**
@@ -207,11 +237,23 @@ describe('ADMIN_SECTIONS', () => {
     ]);
     expect(registry.rowPath('locations', 's1')).toBeNull();
 
-    expect(at('items')).toBe('catalog/items');
-    expect(at('categories')).toBe('catalog/categories');
-    expect(at('product-groups')).toBe('catalog/product-groups');
-    expect(at('prices')).toBe('catalog/prices');
-    expect(at('price-policies')).toBe('catalog/price-policies');
+    // A product and its prices (admin plan 0043): the products at the
+    // section's own address, and the other three lists one segment under it.
+    expect(at('items')).toBe('products');
+    expect(at('product-groups')).toBe('products/groups');
+    expect(at('categories')).toBe('products/categories');
+    expect(at('price-policies')).toBe('products/price-rules');
+    expect(registry.rowPath('items', 'i1')).toEqual(['/', 'products', 'i1']);
+    expect(registry.rowPath('product-groups', 'g1')).toEqual([
+      '/',
+      'products',
+      'groups',
+      'g1',
+    ]);
+    // A price is read on its product, so its list is that product's Prices
+    // tab. With no product named, it is the products.
+    expect(at('prices', { itemId: 'i1' })).toBe('products/i1/prices');
+    expect(at('prices')).toBe('products');
     expect(at('users')).toBe('shoppers/users');
     expect(at('zones')).toBe('shoppers/zones');
     expect(at('memberships')).toBe('shoppers/memberships');

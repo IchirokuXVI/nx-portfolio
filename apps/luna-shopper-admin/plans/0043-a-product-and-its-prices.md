@@ -1,3 +1,9 @@
+> **PR:** [#625](https://github.com/IchirokuXVI/nx-portfolio/pull/625)
+> Three things were left out, because the gateway does not serve them.
+> Target 2: the "Not sold here" state of the list. The price read takes `available=false` as true.
+> Target 3: the number of shops a scope covers.
+> Target 3: who typed a price, and a link to the run that wrote one.
+
 # 0043 A product and its prices
 
 > Third of the seven remodel plans. Needs `0041` (the frame) and `0042` (the "Chains" section,

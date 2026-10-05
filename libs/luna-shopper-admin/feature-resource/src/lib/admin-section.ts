@@ -57,6 +57,21 @@ export interface AdminSection {
    * declares a `parent`.
    */
   readonly held?: readonly AnyResourceDescriptor[];
+  /**
+   * Whether the held resources that have no parent are the section's tabs
+   * (admin plan 0043).
+   *
+   * The products, their groups, their categories and the price rules are four
+   * lists the section mounts itself, because one of them holds a page with
+   * tabs of its own. They are still the four screens of the section, so they
+   * are its tabs, in the order {@link held} names them.
+   *
+   * A held resource whose segment is empty sits at the section's own address:
+   * the products are at `/products` and their groups at `/products/groups`.
+   * Its tab is current only on exactly that address, since every other tab is
+   * under it.
+   */
+  readonly heldTabs?: boolean;
   /** Hand written screens under the segment. */
   readonly screens?: readonly Route[];
   /** Navigation entries for those hand written screens. */
@@ -135,9 +150,9 @@ export function sectionLink(section: AdminSection): string | null {
     return null;
   }
 
-  return section.segment === undefined
-    ? `/${root.segment}`
-    : `/${section.segment}/${root.segment}`;
+  return `/${[section.segment, root.segment]
+    .filter((segment) => segment !== undefined && segment !== '')
+    .join('/')}`;
 }
 
 /**
@@ -160,5 +175,20 @@ export function sectionScreens(section: AdminSection): readonly ShellLink[] {
       path: `${prefix}/${descriptor.segment}`,
       label: descriptor.labels.many,
     })),
+    ...(section.heldTabs === true ? (section.held ?? []) : [])
+      .filter((descriptor) => descriptor.parent === undefined)
+      .map((descriptor) =>
+        descriptor.segment === ''
+          ? // At the section's own address, which every other tab is under.
+            {
+              path: prefix === '' ? '/' : prefix,
+              label: descriptor.labels.many,
+              exact: true,
+            }
+          : {
+              path: `${prefix}/${descriptor.segment}`,
+              label: descriptor.labels.many,
+            }
+      ),
   ];
 }

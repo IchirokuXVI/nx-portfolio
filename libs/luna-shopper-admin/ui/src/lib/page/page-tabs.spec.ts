@@ -24,7 +24,7 @@ const TABS: readonly PageTab[] = [
   { path: '/chain/details', label: 'tabs.details' },
 ];
 
-async function render(url = '/chain/shops') {
+async function render(url = '/chain/shops', tabs: readonly PageTab[] = TABS) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [PageTabs, RokuTranslatorTestingModule.forTesting()],
@@ -37,7 +37,7 @@ async function render(url = '/chain/shops') {
   await TestBed.inject(Router).navigateByUrl(url);
 
   const fixture = TestBed.createComponent(PageTabs);
-  fixture.componentRef.setInput('tabs', TABS);
+  fixture.componentRef.setInput('tabs', tabs);
   fixture.componentRef.setInput('label', 'Mercadona');
   fixture.detectChanges();
   // `routerLinkActive` settles in a content hook, one pass after the links.
@@ -108,6 +108,44 @@ describe('PageTabs', () => {
     expect(plain?.getAttribute('aria-label')).toBeNull();
     expect(waits?.classList.contains('waiting')).toBe(true);
     expect(waits?.getAttribute('aria-label')).toBe('shell.waiting');
+  });
+
+  /**
+   * A tab at the address every other tab is under (admin plan 0043): the
+   * products at `/products`, with their groups at `/products/groups`. It is
+   * current on its own path and on none under it, and a filter in the query
+   * does not make it another screen.
+   */
+  describe('a tab that is current only on its own path', () => {
+    const SECTION: readonly PageTab[] = [
+      { path: '/products', label: 'tabs.products', exact: true },
+      { path: '/products/groups', label: 'tabs.groups' },
+    ];
+    const current = (fixture: { nativeElement: HTMLElement }) =>
+      links(fixture)
+        .filter((a) => a.classList.contains('current'))
+        .map((a) => a.getAttribute('href'));
+
+    it('is current on its path', async () => {
+      expect(current(await render('/products', SECTION))).toEqual([
+        '/products',
+      ]);
+    });
+
+    it('stays current when the list is narrowed in the query', async () => {
+      expect(
+        current(await render('/products?categoryId=milk', SECTION))
+      ).toEqual(['/products']);
+    });
+
+    it('is not current on a path under it', async () => {
+      expect(current(await render('/products/groups', SECTION))).toEqual([
+        '/products/groups',
+      ]);
+      expect(current(await render('/products/groups/g1', SECTION))).toEqual([
+        '/products/groups',
+      ]);
+    });
   });
 
   it('follows a count that changes', async () => {

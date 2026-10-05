@@ -7,7 +7,11 @@ import {
   viewChild,
   type Signal,
 } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import {
+  RouterLink,
+  RouterLinkActive,
+  type IsActiveMatchOptions,
+} from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 /** One tab under a page header. */
@@ -71,7 +75,7 @@ export const PAGE_FRAME_TABS = new InjectionToken<Signal<readonly PageTab[]>>(
             <a
               (isActiveChange)="$event && reveal(link)"
               [routerLink]="tab.path"
-              [routerLinkActiveOptions]="{ exact: tab.exact === true }"
+              [routerLinkActiveOptions]="tab.exact === true ? onItsPath : under"
               #link
               ariaCurrentWhenActive="page"
               routerLinkActive="current"
@@ -167,6 +171,32 @@ export const PAGE_FRAME_TABS = new InjectionToken<Signal<readonly PageTab[]>>(
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PageTabs {
+  /**
+   * A tab that is current on its own path and on none under it.
+   *
+   * The path alone: the query is left out of the question. A list that is
+   * opened narrowed carries its filter in the query (admin plan 0043), and it
+   * is the same screen. The router's own `exact` compares the query as well,
+   * so the Products tab went unmarked on `/products?categoryId=...`.
+   */
+  readonly onItsPath: IsActiveMatchOptions = {
+    paths: 'exact',
+    queryParams: 'ignored',
+    matrixParams: 'ignored',
+    fragment: 'ignored',
+  };
+
+  /**
+   * A tab that is current on its path and on every path under it, which is
+   * what the router means by a match that is not exact.
+   */
+  readonly under: IsActiveMatchOptions = {
+    paths: 'subset',
+    queryParams: 'subset',
+    matrixParams: 'ignored',
+    fragment: 'ignored',
+  };
+
   readonly tabs = input.required<readonly PageTab[]>();
   /** What the row of tabs is, already translated, for a screen reader. */
   readonly label = input('');

@@ -554,7 +554,10 @@ describe('sectionLink for a section that holds its resources', () => {
     expect(sectionLink({ ...chainsSection, held: [shops] })).toBeNull();
   });
 
-  /** A held resource is a page or a tab, never an entry of the second row. */
+  /**
+   * A held resource is a page or a tab of one, and no tab of its section,
+   * unless the section says its held resources are its tabs.
+   */
   it('draws no second row entry for a held resource', () => {
     expect(sectionScreens(chainsSection)).toEqual([]);
   });
@@ -569,5 +572,116 @@ describe('sectionLink for a section that holds its resources', () => {
         links: [{ path: '/runs', label: 'runs' }],
       })
     ).toBe('/runs');
+  });
+});
+
+/**
+ * A section whose held resources are its tabs, one of them at the section's
+ * own address (admin plan 0043): the products at `/products`, their groups at
+ * `/products/groups`, and a price under one product.
+ */
+const products = resource('items', '');
+const groups = resource('product-groups', 'groups');
+const rules = resource('price-policies', 'price-rules');
+const prices = resource('prices', 'prices', {
+  resource: 'items',
+  param: 'productId',
+  filter: 'itemId',
+});
+
+const productsSection: AdminSection = {
+  key: 'products',
+  label: 'shell.sections.products',
+  segment: 'products',
+  held: [products, groups, rules, prices],
+  heldTabs: true,
+  screens: [],
+};
+
+describe('a section whose held resources are its tabs', () => {
+  let registry: ResourceRegistry;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [ContentLocaleStore, provideSections(productsSection)],
+    });
+    registry = TestBed.inject(ResourceRegistry);
+  });
+
+  it('puts a resource with no segment at the address of its section', () => {
+    expect(registry.pathOf('items')).toEqual(['/', 'products']);
+    // A row of it is one segment under the section, with nothing between.
+    expect(registry.rowPath('items', 'i1')).toEqual(['/', 'products', 'i1']);
+  });
+
+  it('puts the others one segment under it', () => {
+    expect(registry.pathOf('product-groups')).toEqual([
+      '/',
+      'products',
+      'groups',
+    ]);
+    expect(registry.rowPath('price-policies', 'ADMIN')).toEqual([
+      '/',
+      'products',
+      'price-rules',
+      'ADMIN',
+    ]);
+  });
+
+  it('addresses a resource under a row of the one with no segment', () => {
+    expect(registry.pathOf('prices', { itemId: 'i1' })).toEqual([
+      '/',
+      'products',
+      'i1',
+      'prices',
+    ]);
+    // With no product named, the place a product is picked.
+    expect(registry.pathOf('prices')).toEqual(['/', 'products']);
+  });
+
+  it('draws one tab for each held resource that has no parent, in order', () => {
+    expect(sectionScreens(productsSection)).toEqual([
+      // Current only on exactly its own address: every other tab is under it.
+      { path: '/products', label: 'items.many', exact: true },
+      { path: '/products/groups', label: 'product-groups.many' },
+      { path: '/products/price-rules', label: 'price-policies.many' },
+    ]);
+  });
+
+  it('opens on the resource at its own address', () => {
+    expect(sectionLink(productsSection)).toBe('/products');
+  });
+
+  it('draws no tab for them unless the section says so', () => {
+    expect(sectionScreens({ ...productsSection, heldTabs: false })).toEqual([]);
+    // It still opens on the resource that has no parent.
+    expect(sectionLink({ ...productsSection, heldTabs: false })).toBe(
+      '/products'
+    );
+  });
+
+  it('keeps the tabs after the links a section wrote by hand', () => {
+    expect(
+      sectionScreens({
+        ...productsSection,
+        links: [{ path: '/products/import', label: 'import' }],
+      }).map((screen) => screen.path)
+    ).toEqual([
+      '/products/import',
+      '/products',
+      '/products/groups',
+      '/products/price-rules',
+    ]);
+  });
+
+  it('puts a resource with no segment at the root when its section has none', () => {
+    const { segment: _segment, ...rooted } = productsSection;
+
+    expect(sectionScreens(rooted)[0]).toEqual({
+      path: '/',
+      label: 'items.many',
+      exact: true,
+    });
+    expect(sectionLink(rooted)).toBe('/');
   });
 });
