@@ -65,8 +65,10 @@ All under `feature-people/src/lib/`.
 1. **A zone is a record page.** Its tabs are "Members", "Lists", "Shopping lists" and
    "Details", in that order, with the counts of today, and it opens on "Members".
 2. **Details of a zone** reads first: "Zone" (name, owner, join code), "State" (status,
-   when it was marked, the three counts) and "Settings" (the config, printed). The owner is
-   a link to the person. The Record block has "Added", "Last changed" and the ID.
+   when it was marked, the count of requests that wait) and "Settings" (the config,
+   printed). The counts of members and of lists are beside their tabs and in no section.
+   The owner is a link to the person. The Record block has "Added", "Last changed" and
+   the ID.
 3. **A person is a record page.** Its tabs are "Details", "Zones" and "Shopping lists", and
    it opens on "Details".
 4. **Details of a person** is the board `Actions`: "Account" (username, shown as, email,

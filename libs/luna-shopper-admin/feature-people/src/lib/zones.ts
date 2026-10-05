@@ -65,8 +65,8 @@ const ZONE_STATUS_OPTIONS = [
  * itself, as it does for every reference, and draws it as a link to the
  * person.
  *
- * **Every action is in the More menu of the page**, and "Delete this zone" is
- * last, in red.
+ * **Every action is in the More menu of the page.** The ones that harm are
+ * last and in red, and "Delete this zone" is the last of them.
  */
 export const ZONES = defineResource<Zone>({
   name: 'zones',
@@ -225,7 +225,7 @@ export const ZONES = defineResource<Zone>({
       ? [
           {
             label: 'people.zones.status.MARKED_FOR_DELETION',
-            tone: 'neutral' as const,
+            tone: 'danger' as const,
           },
         ]
       : []),
@@ -328,6 +328,9 @@ export const ZONES = defineResource<Zone>({
         {
           name: 'regenerate-join-code',
           label: 'people.zones.action.regenerateJoinCode',
+          // Every invitation that was sent stops working, and nothing brings
+          // the old code back.
+          danger: true,
           confirm: {
             heading: 'people.zones.confirm.regenerateJoinCode.heading',
             body: 'people.zones.confirm.regenerateJoinCode.body',
@@ -344,6 +347,7 @@ export const ZONES = defineResource<Zone>({
           // this is an act and not two fields (backend plan 0077, section 4.2).
           name: 'mark-for-deletion',
           label: 'people.zones.action.markForDeletion',
+          danger: true,
           available: (row) => row.status !== 'MARKED_FOR_DELETION',
           confirm: {
             heading: 'people.zones.confirm.markForDeletion.heading',

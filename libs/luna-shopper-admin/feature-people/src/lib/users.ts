@@ -182,11 +182,17 @@ export const USERS = defineResource<User>({
   },
 
   /**
-   * What a row says beside the handle: a guest, and an address nobody has
-   * confirmed. The second is on the waiting wash, because it is the one an
-   * operator can do something about.
+   * What a row says beside the handle: an admin, a guest, and an address
+   * nobody has confirmed. The last is on the waiting wash, because it is the
+   * one an operator can do something about.
+   *
+   * "Admin" is the one role said here (the `Actions` board of the record page
+   * mock): it is the role that opens this back office.
    */
   rowStates: () => (row) => [
+    ...((row.roles ?? []).includes('admin')
+      ? [{ label: 'people.users.roles.admin.name', tone: 'good' as const }]
+      : []),
     ...(row.kind === 'TEMPORARY'
       ? [{ label: 'people.users.state.guest', tone: 'neutral' as const }]
       : []),

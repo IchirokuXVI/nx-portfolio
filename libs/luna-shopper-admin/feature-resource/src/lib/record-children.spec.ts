@@ -461,6 +461,26 @@ describe('the tabs of a record', () => {
     }
   );
 
+  /** It has no control that takes it away, so another tab does. */
+  it('takes the refusal of an action away with another tab', async () => {
+    auditFails = new GatewayError({
+      code: 'conflict',
+      status: 409,
+      correlationId: '',
+    });
+    const harness = await mount('/chains/c1/notes');
+
+    await press(harness, '[data-action="audit"]');
+    await press(harness, '[data-action-question] [data-confirm]');
+    expect(all(harness, '[data-refusal]')).toHaveLength(1);
+
+    await harness.navigateByUrl('/chains/c1/details');
+    await drawn(harness);
+
+    expect(url()).toBe('/chains/c1/details');
+    expect(all(harness, '[data-refusal]')).toHaveLength(0);
+  });
+
   it('names the record in the heading of a question, and keeps red for an action that destroys', async () => {
     const harness = await mount('/chains/c1/notes');
 

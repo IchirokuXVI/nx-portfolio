@@ -627,7 +627,7 @@ describe('the zones descriptor', () => {
     ).toMatchObject({ format: 'code' });
   });
 
-  it('marks the delete as the one action that destroys, and leaves after it', () => {
+  it('marks the three actions that harm, and leaves after the delete', () => {
     expect(
       namedActionsOf(ZONES).map((action) => [
         action.name,
@@ -635,8 +635,8 @@ describe('the zones descriptor', () => {
         action.after ?? 'reload',
       ])
     ).toEqual([
-      ['regenerate-join-code', false, 'reload'],
-      ['mark-for-deletion', false, 'reload'],
+      ['regenerate-join-code', true, 'reload'],
+      ['mark-for-deletion', true, 'reload'],
       ['restore-zone', false, 'reload'],
       ['delete-zone', true, 'leave'],
     ]);

@@ -140,9 +140,10 @@ export interface RowState {
   readonly args?: Readonly<Record<string, string | number>>;
   /**
    * `good` is the accent wash, `waiting` is the amber one that means a person
-   * must decide, and `neutral` is grey.
+   * must decide, `danger` is the red one for a row that is on its way out,
+   * and `neutral` is grey.
    */
-  readonly tone: 'good' | 'neutral' | 'waiting';
+  readonly tone: 'danger' | 'good' | 'neutral' | 'waiting';
 }
 
 /**

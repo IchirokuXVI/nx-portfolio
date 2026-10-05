@@ -195,6 +195,7 @@ const ADDED_STATE = 'added';
       >
         @for (chip of chips(); track chip.label) {
           <span
+            [class.danger]="chip.tone === 'danger'"
             [class.good]="chip.tone === 'good'"
             [class.waiting]="chip.tone === 'waiting'"
             class="chip"
@@ -430,6 +431,11 @@ const ADDED_STATE = 'added';
       color: var(--admin-waiting-on-wash);
     }
 
+    .chip.danger {
+      background: var(--admin-danger-wash);
+      color: var(--admin-danger-on-wash);
+    }
+
     button {
       font-weight: 500;
       cursor: pointer;
@@ -661,6 +667,9 @@ export class RecordPage implements LeaveAware {
    * A named action that failed. A record with no tabs draws it above the
    * first section. A record with tabs draws it above the tab that is open,
    * so it is said on every tab.
+   *
+   * It goes with the next action, with Edit, with another record and with
+   * another tab.
    */
   readonly refusal = signal<RecordRefusal | null>(null);
 
@@ -921,6 +930,13 @@ export class RecordPage implements LeaveAware {
       }
       if (event instanceof NavigationEnd) {
         this.yielded.set(this._isYielded());
+        // A refusal is about what the operator did on the tab that was open.
+        // It has no control that takes it away, so another tab does.
+        const tab = this._openTab();
+        if (tab !== this._tab) {
+          this._tab = tab;
+          this.refusal.set(null);
+        }
       }
     });
 
@@ -1362,6 +1378,14 @@ export class RecordPage implements LeaveAware {
     }
     return false;
   }
+
+  /** The path of the tab that is open, or `null` when the page has none. */
+  private _openTab(): string | null {
+    return this._route.snapshot.firstChild?.routeConfig?.path ?? null;
+  }
+
+  /** The tab that was open when the last navigation ended. */
+  private _tab = this._openTab();
 
   /** Whether a route under the child this page gives way to is open. */
   private _isYielded(): boolean {
