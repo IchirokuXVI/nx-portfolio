@@ -1,0 +1,201 @@
+/* The parts of the record page. Every board of this mock links this one file,
+   so a part that looks different on two boards is a mistake in a board and
+   not a second style. The tokens are those of admin plan 0041. */
+
+body{margin:0}
+.ab{font-family:'IBM Plex Sans',system-ui,sans-serif;color:#14171a;background:#f3f4f1;font-size:14px;line-height:1.4;display:flex;overflow:hidden;position:relative}
+.ab,.ab *{box-sizing:border-box}
+.ab h1,.ab h2,.ab h3,.ab p,.ab dl,.ab dt,.ab dd,.ab ul,.ab li{margin:0}
+.ab ul{padding:0;list-style:none}
+.ab h1{font-size:20px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ab h2{font-size:15px;font-weight:600}
+.ab h3{font-size:12px;font-weight:600;color:#555c63}
+.ab button{font:inherit;color:inherit;cursor:pointer}
+.ab a{color:#0b6b53;text-decoration:none}
+.ab a.chip{color:#3d4348}
+.ab code,.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.mut{color:#555c63}
+.num{font-variant-numeric:tabular-nums}
+.col{display:flex;flex-direction:column}
+.rowx{display:flex;align-items:center}
+.grow{flex:1 1 0;min-width:0}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* The frame: rail, header, tabs. Unchanged from the remodel. */
+.rail{width:76px;background:#6b4605;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex:none}
+.rail a{width:64px;height:54px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.rail a.on{background:#8a5d0c;color:#fff}
+.rail svg,.bnav svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rb{width:44px;height:32px;border-radius:6px;border:1px solid #a67a2a;background:none;color:#f6e7c8 !important;font-size:12px !important;font-weight:600 !important;margin-top:6px}
+.badge{position:absolute;top:4px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fcfcfa;color:#14171a;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.env{font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;background:#fdf3e0;color:#7a4f05}
+.main{flex:1 1 0;min-width:0;display:flex;flex-direction:column;position:relative}
+.head{height:52px;padding:0 20px;display:flex;align-items:center;gap:12px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.back{display:inline-flex;align-items:center;gap:2px;height:36px;padding:0 8px 0 2px;margin-left:-6px;border-radius:6px;font-size:14px;font-weight:500;white-space:nowrap;flex:none}
+.tabs{display:flex;gap:4px;padding:0 20px;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.tab{height:40px;padding:0 12px;display:flex;align-items:center;gap:6px;font-size:14px;color:#555c63 !important;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:#14171a !important;font-weight:600;border-bottom-color:#0b6b53}
+.cnt{font-size:12px;font-weight:500;padding:1px 6px;border-radius:9px;background:#e9ebe6;color:#3d4348;font-variant-numeric:tabular-nums}
+
+/* Buttons, chips, panels. Unchanged from the remodel. */
+.btn{height:36px;padding:0 14px;border-radius:6px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:14px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;flex:none}
+.btn.pri{background:#0b6b53;border-color:#0b6b53;color:#fff !important}
+.btn.dan{border-color:#b4232a;color:#b4232a !important}
+.btn.dan.pri{background:#b4232a;color:#fff !important}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.btn.sq{width:36px;padding:0}
+.btn.grow{flex:1 1 0}
+.btn:disabled{background:#e9ebe6;border-color:#c3c8c0;color:#555c63 !important;cursor:default}
+.ibtn{width:28px;height:28px;border-radius:14px;border:1px solid #c3c8c0;background:#fcfcfa;font-size:13px;font-weight:600;color:#555c63 !important;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0}
+.panel{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid #e6e8e3;min-height:44px}
+.li.sel{background:#e3f1ec}
+.chip{font-size:12px;font-weight:500;padding:2px 8px;border-radius:4px;background:#e9ebe6;color:#3d4348;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.chip.ok{background:#e3f1ec;color:#085441}
+.chip.wait{background:#fdf3e0;color:#7a4f05}
+.chip.bad{background:#fbeaeb;color:#8f1b21}
+.lad{display:inline-flex;align-items:flex-end;gap:2px;height:14px;flex:none}
+.lad i{width:4px;background:#c3c8c0;border-radius:1px}
+.lad i:nth-child(1){height:5px}.lad i:nth-child(2){height:8px}.lad i:nth-child(3){height:11px}.lad i:nth-child(4){height:14px}
+.lad i.f{background:#0b6b53}
+
+/* The body of a record page: sections in one column, the record's own facts
+   beside them when there is room and after them when there is not. */
+.body{flex:1 1 0;min-height:0;display:flex;align-items:flex-start;gap:20px;padding:18px 20px;overflow:hidden}
+.secs{flex:1 1 0;min-width:0;max-width:760px;display:flex;flex-direction:column;gap:14px}
+.aside{width:288px;flex:none;display:flex;flex-direction:column;gap:14px}
+
+/* Section: a panel with a title and field rows. */
+.sec{background:#fcfcfa;border:1px solid #d9dcd6;border-radius:10px;overflow:hidden}
+.sec-h{display:flex;align-items:center;gap:8px;min-height:42px;padding:6px 16px}
+
+/* Field row: label on the left, value or control on the right. Reading and
+   editing use the same grid, so nothing moves when the mode changes. */
+.fr{display:grid;grid-template-columns:168px minmax(0,1fr);column-gap:16px;align-items:baseline;padding:9px 16px;border-top:1px solid #e6e8e3}
+.fl{font-size:13px;color:#555c63}
+.fv{min-width:0;overflow-wrap:anywhere}
+.fr.ed{align-items:start;padding:8px 16px}
+.fr.ed .fl{padding-top:8px}
+.req{color:#8f1b21;font-weight:600}
+.help{display:block;font-size:12.5px;color:#555c63;margin-top:4px}
+.err{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:#8f1b21;margin-top:4px}
+.err .ic{width:14px;height:14px}
+.locked{display:inline-flex;align-items:center;gap:6px;min-height:36px}
+.locked .ic{width:14px;height:14px;color:#555c63}
+.locked>a,.locked>code{white-space:nowrap}
+.none{color:#555c63}
+.fv a:not(.chip):not(.btn),.kv a{text-decoration:underline;text-decoration-color:#8fbfb1;text-underline-offset:3px}
+
+/* Controls. */
+.inp{height:36px;padding:0 10px;border-radius:6px;border:1px solid #c3c8c0;background:#fff;font:inherit;font-size:14px;color:#14171a;min-width:0;width:100%;max-width:420px;text-align:left}
+.inp::placeholder{color:#6a7178}
+.inp.bad{border-color:#b4232a;box-shadow:inset 0 0 0 1px #b4232a}
+.inp.focus{outline:2px solid #0b6b53;outline-offset:2px}
+.inp.s{max-width:168px}
+textarea.inp{height:76px;padding:8px 10px;line-height:1.4;resize:vertical;display:block}
+textarea.inp.code{height:112px;max-width:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12.5px}
+.pick{position:relative;display:block;max-width:420px}
+.pick.s{max-width:168px}
+.pick .inp{max-width:none;appearance:none;-webkit-appearance:none;padding-right:34px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.pick .chev{position:absolute;right:10px;top:10px;pointer-events:none;color:#555c63}
+.pop{position:absolute;left:0;right:0;top:40px;z-index:2;background:#fcfcfa;border:1px solid #c3c8c0;border-radius:8px;box-shadow:0 8px 24px rgba(20,23,26,.14);overflow:hidden}
+.pop .find{padding:8px;border-bottom:1px solid #e6e8e3}
+.pop .find .inp{max-width:none}
+.opt{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 12px;font-size:14px}
+.opt.on{background:#e3f1ec;font-weight:600}
+.opt.hot{background:#eef0ec}
+.opt .ic{color:#085441}
+.sw{width:36px;height:20px;border-radius:10px;background:#8d948c;position:relative;flex:none;border:0;padding:0}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:#0b6b53}.sw.on::after{left:18px}
+.swrow{display:inline-flex;align-items:center;gap:10px;min-height:36px}
+
+/* One text in several languages. */
+.loc{display:flex;flex-direction:column;gap:6px}
+.loc>div{display:flex;align-items:baseline;gap:8px}
+.fr.ed .loc>div{align-items:center}
+.lang{width:24px;flex:none;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12px;color:#555c63}
+
+/* Several references: one row each, in order when the order means something. */
+.refs{display:flex;flex-direction:column;gap:6px;max-width:420px}
+.rrow{display:flex;align-items:center;gap:8px;height:36px;padding:0 4px 0 10px;border:1px solid #d9dcd6;border-radius:6px;background:#fcfcfa}
+.xb{width:28px;height:28px;border:0;background:none;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none;color:#555c63 !important}
+.xb:disabled{color:#a9afa6 !important}
+.thumb{width:56px;height:56px;border-radius:6px;border:1px solid #d9dcd6;background:#e9ebe6;color:#555c63;font-size:11px;display:flex;align-items:center;justify-content:center;flex:none}
+
+/* The record's own facts: who made it, when it changed, its ID. */
+.kv{display:flex;flex-direction:column;gap:1px;padding:8px 16px;border-top:1px solid #e6e8e3}
+.kv>span,.kv>div{font-size:13.5px}
+
+/* Lines that speak: a caution, a refusal, a confirmation. */
+.caut{display:flex;align-items:flex-start;gap:8px;padding:8px 12px;border-radius:6px;background:#fdf3e0;color:#7a4f05}
+.ban{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:6px;border:1px solid #b4232a;background:#fbeaeb;color:#8f1b21}
+.ban a{color:#8f1b21;text-decoration:underline;font-weight:500}
+.okl{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;background:#e3f1ec;color:#085441}
+.okl a{color:#085441;text-decoration:underline;font-weight:500}
+.caut .ic,.ban .ic,.okl .ic{margin-top:2px}
+.okl .ic{margin-top:0}
+
+/* The save bar: the only place Save and Cancel live. */
+.save{height:56px;padding:0 20px;display:flex;align-items:center;gap:10px;background:#fcfcfa;border-top:1px solid #d9dcd6;flex:none}
+
+/* Things that open over the page. */
+.menu{position:absolute;z-index:3;width:264px;padding:6px;background:#fcfcfa;border:1px solid #c3c8c0;border-radius:8px;box-shadow:0 8px 24px rgba(20,23,26,.14);display:flex;flex-direction:column}
+.mi{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border:0;background:none;border-radius:6px;font-size:14px;text-align:left;width:100%}
+.mi.dan{color:#8f1b21 !important}
+.mi.hot{background:#eef0ec}
+.sep{height:1px;background:#e6e8e3;margin:6px 0}
+.scrim{position:absolute;inset:0;z-index:4;background:rgba(20,23,26,.45);display:flex;align-items:center;justify-content:center}
+.dlg{width:440px;max-width:100%;padding:20px;background:#fcfcfa;border-radius:10px;box-shadow:0 12px 32px rgba(20,23,26,.24);display:flex;flex-direction:column;gap:12px}
+.sk{display:block;height:12px;border-radius:4px;background:#e2e5df}
+
+/* Sheets of parts and states: a label over a framed piece of the page. */
+.sheet{flex-direction:column;padding:26px 30px;gap:18px}
+.frame{background:#f3f4f1;border:1px solid #c3c8c0;border-radius:10px;overflow:hidden;position:relative}
+.cap{font-size:13px;font-weight:600;color:#14171a}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:12px;font-weight:600;color:#555c63;padding:6px 10px;border-bottom:1px solid #d9dcd6;white-space:nowrap}
+.tbl td{padding:6px 10px;border-top:1px solid #e6e8e3;vertical-align:top}
+.tbl tr:first-child td{border-top:0}
+.new{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:#e3f1ec;color:#085441;margin-left:6px;white-space:nowrap}
+pre.src{margin:0;padding:12px 14px;border-radius:8px;background:#fff;border:1px solid #d9dcd6;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:12px;line-height:1.5;color:#14171a;white-space:pre;overflow:hidden}
+
+/* On a phone: one column, the label above the value, 44 px controls, 16 px
+   in a field, and the save bar above the bar of the app. */
+.ph{font-size:15px;flex-direction:column}
+.ph h1{font-size:17px}
+.phead{height:48px;padding:0 4px;display:flex;align-items:center;background:#fcfcfa;border-bottom:1px solid #d9dcd6;flex:none}
+.pb{width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center;padding:0;flex:none;color:#14171a !important}
+.pb .ic{width:20px;height:20px}
+.pb i{width:26px;height:26px;border-radius:13px;border:1px solid #c3c8c0;font-style:normal;font-size:13px;font-weight:600;color:#555c63;display:flex;align-items:center;justify-content:center}
+.ph .tabs{padding:0 6px;gap:0}
+.ph .tab{height:44px;padding:0 10px}
+.ph .btn{height:44px;font-size:15px}
+.ph .btn.sm{height:36px;font-size:14px}
+.ph .body{flex-direction:column;align-items:stretch;gap:12px;padding:12px}
+.ph .secs{flex:none;max-width:none;gap:12px}
+.ph .aside{width:auto}
+.ph .fr,.ph .fr.ed{display:block;padding:10px 16px}
+.ph .fl{display:block;margin-bottom:2px}
+.ph .fr.ed .fl{padding-top:0;margin-bottom:6px;color:#14171a;font-weight:500}
+.ph .inp{height:44px;font-size:16px;max-width:none}
+.ph textarea.inp{height:92px}
+.ph .pick,.ph .refs{max-width:none}
+.ph .pick .chev{top:14px}
+.ph .rrow{height:44px}
+.ph .xb{width:40px;height:40px}
+.ph .sw{width:44px;height:26px;border-radius:13px}
+.ph .sw::after{width:22px;height:22px;border-radius:11px}
+.ph .sw.on::after{left:20px}
+.ph .swrow,.ph .locked{min-height:44px}
+.ph .opt,.ph .mi{min-height:48px;height:auto;font-size:15px}
+.ph .save{height:60px;padding:0 12px;gap:8px}
+.pact{width:auto;padding:0 10px;color:#0b6b53 !important;font-size:15px;font-weight:600}
+.ph .phead h1+span{font-size:12px;line-height:1.2;color:#555c63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .li{min-height:48px}
+.bnav{height:58px;display:flex;background:#6b4605;flex:none}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:#f6e7c8;position:relative}
+.bnav a.on{color:#fff;box-shadow:inset 0 2px 0 #f6e7c8}
+.bnav .badge{top:5px;right:14px}
+.psheet{position:absolute;left:0;right:0;bottom:0;z-index:5;background:#fcfcfa;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(20,23,26,.18);display:flex;flex-direction:column}
+.psheet .grab{width:36px;height:4px;border-radius:2px;background:#c3c8c0;margin:8px auto 2px}

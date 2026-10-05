@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Change: the same page, with a picker open</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a href="Actions.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<form class="main" aria-label="Change the brand Hacendado">
+<header class="head">
+<a class="back" href="Main.dc.html" aria-label="Back to Brands"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Brands</a>
+<h1>Hacendado</h1>
+<span class="chip">Editing</span>
+<div class="grow"></div>
+<button type="button" class="ibtn" aria-label="How a brand page works">i</button>
+</header>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="s-name">
+<div class="sec-h"><h2 id="s-name">Name and key</h2></div>
+<div class="fr ed"><label class="fl" for="f-name">Name <span class="req" aria-hidden="true">*</span> <span class="chip ok" style="margin-left: 4px">Changed</span></label><div class="fv"><input id="f-name" class="inp" value="Hacendado (Mercadona)" required><span class="help">At most 120 characters.</span></div></div>
+<div class="fr ed"><span class="fl">Key</span><div class="fv"><span class="locked"><code>hacendado</code><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12v9H6zM9 11V8a3 3 0 016 0v3"/></svg><span class="mut" style="font-size: 12.5px">Set by the system</span></span></div></div>
+</section>
+
+<section class="sec" aria-labelledby="s-links" style="overflow: visible">
+<div class="sec-h"><h2 id="s-links">Links</h2></div>
+<div class="fr ed"><label class="fl" for="f-same">Same brand as</label><div class="fv"><span class="pick"><button type="button" id="f-same" class="inp" aria-haspopup="listbox">None</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span><span class="help">Pick the main spelling when this is another way to write it.</span></div></div>
+<div class="fr ed"><label class="fl" for="f-own">Own brand of</label><div class="fv">
+<span class="pick"><button type="button" id="f-own" class="inp" aria-haspopup="listbox" aria-expanded="true">Mercadona</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+<div class="pop">
+<div class="find"><input class="inp focus" placeholder="Find a chain" aria-label="Find a chain"></div>
+<ul role="listbox" aria-label="Chains">
+<li class="opt mut" role="option">None</li>
+<li class="opt" role="option">Aldi</li>
+<li class="opt" role="option">Carrefour</li>
+<li class="opt" role="option">DEZA</li>
+<li class="opt hot" role="option">DIA</li>
+<li class="opt" role="option">El Jamón</li>
+<li class="opt" role="option">Lidl</li>
+<li class="opt on" role="option" aria-selected="true"><span class="grow">Mercadona</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></li>
+</ul>
+</div>
+</span>
+</div></div>
+</section>
+
+<section class="sec" aria-labelledby="s-spell">
+<div class="sec-h"><h2 id="s-spell" class="grow">Other spellings <span class="cnt">3</span></h2><button type="button" class="btn sm">Link a spelling</button></div>
+<a class="li" href="#" style="color: #14171a"><span class="grow">HACENDADO</span><span class="mut num">41 products</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">Hacendado S.A.</span><span class="mut num">7 products</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">Hdo.</span><span class="mut num">2 products</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+</section>
+
+</div>
+
+<aside class="aside" aria-labelledby="s-rec">
+<section class="sec">
+<div class="sec-h"><h2 id="s-rec">Record</h2></div>
+<div class="kv"><h3>Added</h3><span>12 Sep 2026, 10:41</span><span class="mut">by Dev Admin</span></div>
+<div class="kv"><h3>Last changed</h3><span>2 Oct 2026, 16:05</span><span class="mut">by Dev Admin</span></div>
+<div class="kv"><h3>ID</h3><div class="rowx" style="gap: 8px"><code class="grow mut">7f3a91c2…c21e</code><button type="button" class="btn sm" aria-label="Copy the ID of Hacendado">Copy</button></div></div>
+</section>
+</aside>
+
+</div>
+
+<div class="save">
+<span class="grow" role="status">1 unsaved change</span>
+<a class="btn" href="Main.dc.html" style="color: #14171a">Cancel</a>
+<button type="submit" class="btn pri">Save</button>
+</div>
+</form>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

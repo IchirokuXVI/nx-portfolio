@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>States of a save, and the questions it asks</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab sheet" style="width: 1360px; height: 860px">
+
+<div style="display: flex; gap: 40px; align-items: flex-start">
+
+<section class="col" style="width: 760px; gap: 12px" aria-labelledby="ss-bar">
+<h2 id="ss-bar">The bar at the foot of the page</h2>
+
+<div class="col" style="gap: 5px"><span class="cap">1. Nothing changed yet</span>
+<div class="frame"><div class="save"><span class="grow mut" role="status">No changes yet</span><button class="btn">Cancel</button><button class="btn pri" disabled>Save</button></div></div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">2. Something changed</span>
+<div class="frame"><div class="save"><span class="grow" role="status">2 unsaved changes</span><button class="btn">Cancel</button><button class="btn pri">Save</button></div></div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">3. Saving. Every field is off until the gateway answers.</span>
+<div class="frame"><div class="save"><span class="grow" role="status">Saving…</span><button class="btn" disabled>Cancel</button><button class="btn pri" disabled>Saving…</button></div></div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">4. Refused by fields. Each field says why under itself.</span>
+<div class="frame"><div class="save"><span class="grow rowx" role="alert" style="gap: 8px; color: #8f1b21; font-weight: 500"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg>Not saved. 2 fields need a look. <a href="#" style="color: #8f1b21; text-decoration: underline">Go to the first</a></span><button class="btn">Cancel</button><button class="btn pri">Save</button></div></div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">5. Refused by the gateway. One line above the first section, and what was typed stays.</span>
+<div class="frame">
+<div style="padding: 12px 20px"><p class="ban" role="alert"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg><span>Another brand already holds the key <code>hacendado</code>. <a href="#">Open that brand</a></span></p></div>
+<div class="save"><span class="grow" role="status" style="color: #8f1b21; font-weight: 500">Not saved. Your changes are still here.</span><button class="btn">Cancel</button><button class="btn pri">Save</button></div>
+</div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">6. Saved. The page reads again, and one line under the header says so.</span>
+<div class="frame" style="padding: 12px 20px; display: flex; flex-direction: column; gap: 8px">
+<p class="okl" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Saved at 12:04.</p>
+<p class="okl" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>Product added. <a href="Create.dc.html">Add another product</a></span></p>
+</div></div>
+
+</section>
+
+<section class="col grow" style="gap: 12px" aria-labelledby="ss-ask">
+<h2 id="ss-ask">The questions</h2>
+
+<div class="col" style="gap: 5px"><span class="cap">Leaving with changes: the back link, a tab, the rail</span>
+<div class="dlg" style="width: auto; border: 1px solid #c3c8c0; box-shadow: none">
+<h2>Leave without saving?</h2>
+<p>You changed 2 fields of Hacendado. They are lost if you leave.</p>
+<div class="rowx" style="gap: 8px; justify-content: flex-end"><button class="btn dan">Leave and lose them</button><button class="btn pri">Stay here</button></div>
+</div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">Delete: it names the record and says what goes with it</span>
+<div class="dlg" style="width: auto; border: 1px solid #c3c8c0; box-shadow: none">
+<h2>Delete the brand Hdo.?</h2>
+<p>Its 2 products stay and lose their brand. This cannot be taken back.</p>
+<div class="rowx" style="gap: 8px; justify-content: flex-end"><button class="btn">Keep it</button><button class="btn dan pri">Delete Hdo.</button></div>
+</div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">Delete, refused: why, and a way to the rows that hold it</span>
+<div class="dlg" style="width: auto; border: 1px solid #c3c8c0; box-shadow: none">
+<h2>Hacendado cannot be deleted</h2>
+<p>212 products and 3 other spellings use it. Move them to another brand first.</p>
+<div class="rowx" style="gap: 8px; justify-content: flex-end"><a class="btn" href="#" style="color: #14171a">See the 212 products</a><button class="btn pri">Close</button></div>
+</div></div>
+
+<div class="col" style="gap: 5px"><span class="cap">A caution: one line above the first section while the page is a form</span>
+<p class="caut"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg>Saving a rule works out the shown price of every product again. Expect a short wait.</p>
+</div>
+
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

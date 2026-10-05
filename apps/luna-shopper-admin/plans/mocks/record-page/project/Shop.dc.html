@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Read: a shop, as a pane inside its chain</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a class="on" href="Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a href="Actions.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<aside class="col" style="width: 216px; flex: none; background: #fcfcfa; border-right: 1px solid #d9dcd6" aria-label="Chains">
+<div class="rowx" style="height: 52px; padding: 0 14px; gap: 8px; border-bottom: 1px solid #d9dcd6">
+<h1 class="grow">Chains</h1>
+<button class="btn sm" aria-label="Add a chain">Add</button>
+</div>
+<a class="li sel" href="#" style="color: #14171a; border-top: 0"><span class="grow" style="font-weight: 600">Mercadona</span><span class="mut num">1,612</span></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">DIA</span><span class="mut num">2,304</span></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">Lidl</span><span class="mut num">681</span></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">Carrefour</span><span class="mut num">1,145</span></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">DEZA</span><span class="mut num">9</span></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow">El Jamón</span><span class="mut num">237</span></a>
+<a class="li" href="#" style="color: #14171a; border-bottom: 1px solid #e6e8e3"><span class="grow">Aldi</span><span class="mut num">452</span></a>
+</aside>
+
+<div class="main">
+<header class="head">
+<h1>Mercadona</h1>
+<span class="chip ok">Fetched by the harvester</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How this page works">i</button>
+</header>
+<nav class="tabs" aria-label="Mercadona">
+<a class="tab on" href="#" aria-current="page">Shops <span class="cnt">1,612</span></a>
+<a class="tab" href="#">Sections <span class="cnt">24</span></a>
+<a class="tab" href="#">Price scopes <span class="cnt">3</span></a>
+<a class="tab" href="#">Details</a>
+</nav>
+
+<div class="grow" style="display: flex; min-height: 0">
+
+<section class="col" style="width: 340px; flex: none; border-right: 1px solid #d9dcd6; background: #fcfcfa" aria-label="Shops of Mercadona">
+<div class="rowx" style="padding: 10px 12px; gap: 8px">
+<input class="inp grow" style="max-width: none" placeholder="Address, city or postal code" aria-label="Find a shop">
+<button class="btn sm">Add a shop</button>
+</div>
+<a class="li sel col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span style="font-weight: 600">Av. de la Constitución 12</span><span class="rowx mut" style="gap: 8px; font-size: 12.5px"><span>Sevilla 41004</span><span class="chip wait">Postal code guessed</span></span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Feria 98</span><span class="mut" style="font-size: 12.5px">Sevilla 41002</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. Kansas City 32</span><span class="mut" style="font-size: 12.5px">Sevilla 41007</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Asunción 44</span><span class="mut" style="font-size: 12.5px">Sevilla 41011</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>Ronda de Triana 5</span><span class="mut" style="font-size: 12.5px">Sevilla 41010</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>Av. de la Palmera 61</span><span class="mut" style="font-size: 12.5px">Sevilla 41013</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a"><span>C. Luis Montoto 120</span><span class="mut" style="font-size: 12.5px">Sevilla 41005</span></a>
+<a class="li col" href="#" style="align-items: stretch; gap: 2px; color: #14171a; border-bottom: 1px solid #e6e8e3"><span>Av. de Andalucía 7</span><span class="mut" style="font-size: 12.5px">Sevilla 41006</span></a>
+</section>
+
+<section class="grow col" style="padding: 18px 20px 0; gap: 14px; min-height: 0; overflow: hidden" aria-label="Av. de la Constitución 12">
+<div class="rowx" style="gap: 10px; height: 44px; flex: none">
+<div class="grow col" style="gap: 2px">
+<h2 style="font-size: 17px">Av. de la Constitución 12</h2>
+<span class="mut">Sevilla 41004, Spain</span>
+</div>
+<button class="btn">Edit</button>
+<button class="btn sq" aria-label="More actions for this shop"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></button>
+</div>
+<nav class="rowx" style="gap: 4px; border-bottom: 1px solid #d9dcd6; flex: none" aria-label="Shop">
+<a class="tab on" href="#" aria-current="page">Details</a>
+<a class="tab" href="#">Sections <span class="cnt">9</span></a>
+<a class="tab" href="#">Products <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="secs" style="max-width: none; flex: none">
+
+<section class="sec" aria-labelledby="h-addr">
+<div class="sec-h"><h2 id="h-addr">Address</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Address</dt><dd class="fv">Av. de la Constitución 12</dd></div>
+<div class="fr"><dt class="fl">City</dt><dd class="fv">Sevilla</dd></div>
+<div class="fr"><dt class="fl">Postal code</dt><dd class="fv rowx" style="gap: 10px"><span class="num">41004</span><span class="chip wait">Guessed from the city. Check it.</span></dd></div>
+<div class="fr"><dt class="fl">Country</dt><dd class="fv">Spain</dd></div>
+<div class="fr"><dt class="fl">Latitude</dt><dd class="fv num">37.38614</dd></div>
+<div class="fr"><dt class="fl">Longitude</dt><dd class="fv rowx" style="gap: 14px"><span class="num">-5.99349</span><a href="#">Open on a map</a></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="h-price">
+<div class="sec-h"><h2 id="h-price">Prices</h2></div>
+<dl>
+<div class="fr" style="align-items: center"><dt class="fl">Priced by</dt><dd class="fv rowx" style="gap: 6px; flex-wrap: wrap"><a class="chip" href="#"><span class="lad"><i class="f"></i><i></i><i></i><i></i></span>Nationwide</a><a class="chip" href="#"><span class="lad"><i class="f"></i><i class="f"></i><i></i><i></i></span>Andalucía</a><a class="chip" href="#"><span class="lad"><i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i></span>This shop only</a></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="h-rec">
+<div class="sec-h"><h2 id="h-rec">Record</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Added</dt><dd class="fv">14 May 2026, 03:15 <span class="mut">by <a href="#">a run of Mercadona</a></span></dd></div>
+<div class="fr"><dt class="fl">Last changed</dt><dd class="fv">1 Oct 2026, 11:30 <span class="mut">by Dev Admin</span></dd></div>
+<div class="fr"><dt class="fl">Came from</dt><dd class="fv rowx" style="gap: 10px"><code>mercadona-api</code><span class="mut" style="font-size: 12.5px">Set by the harvester</span></dd></div>
+<div class="fr" style="align-items: center"><dt class="fl">ID</dt><dd class="fv rowx" style="gap: 10px"><code class="mut">9d2c06f4…77aa</code><button class="btn sm" aria-label="Copy the ID of this shop">Copy</button></dd></div>
+</dl>
+</section>
+
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
