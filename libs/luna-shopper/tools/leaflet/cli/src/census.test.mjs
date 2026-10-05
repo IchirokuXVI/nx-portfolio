@@ -105,6 +105,24 @@ test('with no readable page tree, a rewritten page is still one page', () => {
   assert.equal(scanned.sizes.length, 2);
 });
 
+test('a /Count held in another object is not read as a number, whatever its length', () => {
+  // The tree node names object 12 for its count. A pattern that gives a digit
+  // back reads "/Count 12 0 R" as "/Count 1" and answers one page.
+  const page =
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 467 794] /Contents 5 0 R >>';
+  const { pdf } = appendRevision('%PDF-1.4\n', [
+    [1, '<< /Type /Catalog /Pages 2 0 R >>'],
+    [2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 12 0 R >>'],
+    [3, page],
+    [4, page],
+    [5, '<< /Length 0 >>\nstream\n\nendstream'],
+    [12, '2'],
+  ]);
+  const scanned = scanPdf(Buffer.from(pdf, 'latin1'));
+  assert.equal(scanned.pageCount, 2);
+  assert.match(scanned.pageCountFrom, /distinct \/Type \/Page objects/);
+});
+
 test('the page sizes are read in points, with no space needed after /Type', () => {
   const sizes = groupSizes(scanPdf(THREE_PAGES).sizes);
   assert.deepEqual(sizes, [

@@ -54,8 +54,10 @@ const FROM_PAGE_OBJECTS = "the PDF's own distinct /Type /Page objects";
  * the copy nearest the end of the file is the one the document means. The map
  * is keyed on the number, so a page that was rewritten twice is one entry.
  *
- * A stream's bytes are left out, so nothing a content stream happens to spell
- * is read as part of a dictionary.
+ * An object's body ends where its own stream starts, so nothing that stream
+ * happens to spell is read as part of that object's dictionary. The stream is
+ * not skipped, though. The scan for the next header goes on through its bytes,
+ * and an uncompressed stream that spells `12 0 obj` is read as object 12.
  */
 function readObjects(text) {
   const objects = new Map();
@@ -104,7 +106,10 @@ function countFromPageTree(text, objects) {
   if (!tree) {
     return null;
   }
-  const count = /\/Count\s+(\d+)(?!\s+\d+\s+R)/.exec(tree);
+  // A `/Count 12 0 R` keeps the number in another object, and this answers null
+  // for it. The `\d` in the lookahead stops the pattern from giving a digit
+  // back and reading that reference as `/Count 1`.
+  const count = /\/Count\s+(\d+)(?!\d|\s+\d+\s+R)/.exec(tree);
   return count ? Number(count[1]) : null;
 }
 

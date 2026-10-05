@@ -97,7 +97,7 @@ Rules, in order of importance:
      "1,5 L"        -> unitSize 1.5,  sizeFormat "l"
      "400 g."       -> unitSize 400,  sizeFormat "g"
      "Bolsa 1 kg"   -> unitSize 1,    sizeFormat "kg"
-     "Pack-6"      -> unitSize 6,    sizeFormat "ud"
+     "Pack-6"       -> unitSize 6,    sizeFormat "ud"
      "2x1,5 L"      -> unitSize 3,    sizeFormat "l"
      "6x25 cl"      -> unitSize 1500, sizeFormat "ml"
      "44 lavados"   -> unitSize 44,   sizeFormat "ud"
