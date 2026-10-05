@@ -12,6 +12,7 @@ import {
   signal,
   untracked,
   viewChild,
+  type Signal,
 } from '@angular/core';
 import {
   ActivatedRoute,
@@ -37,6 +38,7 @@ import {
   hasDetailScreen,
   idOf,
   isEditable,
+  isRecordChildList,
   nounKeyOf,
   RECORD_DETAILS_TAB,
   recordChildCount,
@@ -489,11 +491,25 @@ export class RecordPage implements LeaveAware {
   /** The counts that no field of the record holds, built once here. */
   private readonly _countsOf = this.descriptor.record?.counts?.() ?? null;
 
-  /** Those counts for the record that is open. */
-  private readonly _counts = computed(() => {
-    const id = this.recordId();
-    return id === null || this._countsOf === null ? null : this._countsOf(id);
-  });
+  /**
+   * Those counts for the record that is open, asked for once when it opens.
+   *
+   * Never inside a `computed`: asking may start a read and write signals,
+   * which a computed refuses.
+   */
+  private readonly _counts = signal<Signal<
+    Readonly<Record<string, number | null>>
+  > | null>(null);
+
+  /**
+   * The resources of the lists this record holds. A row written in one of
+   * them can change a count that a field of this record holds.
+   */
+  private readonly _listResources: readonly string[] = (
+    (this.descriptor.record?.children ?? []) as readonly RecordChild[]
+  )
+    .filter(isRecordChildList)
+    .map((child) => child.resource);
 
   /** What every tab, panel and link of this page reads the record from. */
   readonly context: RecordContext = this._context();
@@ -545,7 +561,7 @@ export class RecordPage implements LeaveAware {
   private _mayLeave = false;
 
   /** The writes to this resource that the page has already seen. */
-  private _seen = this._changes.version(this.descriptor.name);
+  private _seen = this._version();
 
   /** What one row is called inside a sentence: "product". */
   readonly noun = computed(() => this._t(nounKeyOf(this.descriptor)));
@@ -725,10 +741,12 @@ export class RecordPage implements LeaveAware {
     });
 
     // Another screen that wrote this resource says so, and a page that reads
-    // then reads again. A form is never read again under the operator: it
+    // then reads again. So does a list tab that wrote a row of a list this
+    // record holds: the page stays alive under the tab, and a count that a
+    // field of the record holds would stay what it was. A form is never read again under the operator: it
     // catches up when it goes back to reading.
     effect(() => {
-      const version = this._changes.version(this.descriptor.name);
+      const version = this._version();
       const record = this._read();
       untracked(() => {
         if (record !== null && version !== this._seen) {
@@ -972,7 +990,13 @@ export class RecordPage implements LeaveAware {
     this.asking.set(null);
     this.refusal.set(null);
     this.refusedDelete.set(null);
-    this._seen = this._changes.version(this.descriptor.name);
+    this._seen = this._version();
+    // Under `untracked`, so that a read it starts and the signals it writes
+    // belong to no reader that happens to be running.
+    const countsOf = this._countsOf;
+    this._counts.set(
+      id === null || countsOf === null ? null : untracked(() => countsOf(id))
+    );
 
     // Said once, by the navigation that brought the new record. The state is
     // then taken out of the history entry, so a reload does not say it again.
@@ -1142,7 +1166,19 @@ export class RecordPage implements LeaveAware {
   /** This page wrote the resource, and has seen its own write. */
   private _wrote(): void {
     this._changes.wrote(this.descriptor.name);
-    this._seen = this._changes.version(this.descriptor.name);
+    this._seen = this._version();
+  }
+
+  /**
+   * How many writes this record could show: its own resource, and each list
+   * it holds. A sum, because a version only ever grows, so the sum changes
+   * exactly when one of them does.
+   */
+  private _version(): number {
+    return [this.descriptor.name, ...this._listResources].reduce(
+      (sum, resource) => sum + this._changes.version(resource),
+      0
+    );
   }
 
   /** Take "added" out of the history entry, and leave the rest of it. */

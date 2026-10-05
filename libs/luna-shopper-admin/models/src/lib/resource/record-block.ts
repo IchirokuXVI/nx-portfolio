@@ -33,8 +33,12 @@ export interface RecordBlock<T extends ResourceRow = ResourceRow> {
    */
   readonly details?: 'first' | 'last';
   /**
-   * The counts beside the tabs that no field of the record holds, by the
-   * `name` of the child. Built in an injection context, as `rowStates` is.
+   * The counts beside the children that no field of the record holds, by
+   * the key of the child: the `name` of a part, the `resource` of a list.
+   *
+   * The factory is called once, in an injection context, as `rowStates` is.
+   * What it answers is called once for each record that opens, outside any
+   * reactive reader, so it may start a read and write signals.
    */
   counts?(): (id: string) => Signal<Readonly<Record<string, number | null>>>;
 }

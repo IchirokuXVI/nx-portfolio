@@ -1,5 +1,11 @@
 import { Location } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import {
+  Component,
+  inject,
+  Injectable,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
@@ -12,6 +18,7 @@ import {
 import {
   defineResource,
   type NamedAction,
+  type RecordChildList,
   type ResourceGateway,
   type ResourceInput,
   type ResourceRow,
@@ -191,6 +198,66 @@ const LOGS = defineResource<Line>({
   actions: {},
 });
 
+interface Depot extends ResourceRow {
+  id: string;
+  name: string;
+  lineCount: number;
+}
+
+/** How many lines the server says a depot holds. A case changes it. */
+let depotLines = 2;
+
+/**
+ * The counts of a depot that no field holds, as a later plan writes them:
+ * asking writes a signal at once and starts a read that answers later.
+ */
+@Injectable({ providedIn: 'root' })
+class DepotCounts {
+  readonly asked = signal<readonly string[]>([]);
+
+  readonly of = (id: string): Signal<Record<string, number | null>> => {
+    const held = signal<Record<string, number | null>>({});
+    this.asked.update((ids) => [...ids, id]);
+    void Promise.resolve().then(() => held.set({ logs: 7 }));
+    return held.asReadonly();
+  };
+}
+
+const DEPOT_LINES: RecordChildList<Depot> = {
+  as: 'link',
+  resource: 'lines',
+  by: 'plantId',
+  count: 'lineCount',
+};
+const DEPOT_LOGS: RecordChildList<Depot> = {
+  as: 'link',
+  resource: 'logs',
+  by: 'plantId',
+};
+
+/** A record that holds two lists: one counted by a field, one by a read. */
+const DEPOTS = defineResource<Depot>({
+  name: 'depots',
+  segment: 'depots',
+  labels: { one: 'depots.one', many: 'depots.many' },
+  title: (row) => row.name,
+  fields: [
+    { kind: 'text', name: 'name', label: 'depots.name' },
+    { kind: 'number', name: 'lineCount', label: 'depots.lines' },
+  ],
+  list: { columns: ['name'], compact: ['name'] },
+  record: {
+    sections: [],
+    children: [DEPOT_LINES, DEPOT_LOGS],
+    counts: () => inject(DepotCounts).of,
+  },
+  actions: { edit: true },
+  gateway: () => ({
+    ...linesGateway,
+    read: async (id) => ({ id, name: 'North depot', lineCount: depotLines }),
+  }),
+});
+
 @Component({ template: 'the list' })
 class ListStub {}
 
@@ -214,7 +281,7 @@ async function mount(url: string, compact = false): Promise<Mounted> {
       provideSections({
         key: 'plants',
         label: '',
-        held: [PLANTS, LINES, BATCHES, LOGS],
+        held: [PLANTS, LINES, BATCHES, LOGS, DEPOTS],
       }),
       {
         provide: Viewport,
@@ -238,6 +305,7 @@ async function mount(url: string, compact = false): Promise<Mounted> {
         resourceFormBranch(BATCHES),
         { path: 'logs', pathMatch: 'full', component: ListStub },
         recordRoute(LOGS, { path: 'logs/:id' }),
+        recordRoute(DEPOTS, { path: 'depots/:id' }),
       ]),
     ],
   }).compileComponents();
@@ -298,6 +366,7 @@ beforeEach(() => {
   removes.length = 0;
   ran.length = 0;
   actionFails = null;
+  depotLines = 2;
   states.set([{ label: 'lines.state.running', tone: 'good' }]);
 });
 
@@ -932,6 +1001,71 @@ describe('RecordPage, a record another screen wrote', () => {
     await press(mounted, 'lib-save-bar [data-cancel]');
     expect(reads).toBe(1);
     expect(one(mounted, 'h1')?.textContent).toBe('Renamed elsewhere');
+  });
+});
+
+describe('RecordPage, the counts no field of the record holds', () => {
+  /**
+   * Asking for them writes a signal and starts a read. Inside a `computed`
+   * that is NG0600, so the page asks once as the record opens.
+   */
+  it('asks once as the record opens, and draws what arrives later', async () => {
+    const mounted = await mount('/depots/d1');
+
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1']);
+    expect(mounted.page.context.countOf(DEPOT_LOGS)).toBe(7);
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+  });
+
+  it('asks again for the next record of the same page', async () => {
+    const mounted = await mount('/depots/d1');
+
+    await TestBed.inject(Router).navigateByUrl('/depots/d2');
+    await drawn(mounted.harness);
+
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1', 'd2']);
+    expect(mounted.page.context.countOf(DEPOT_LOGS)).toBe(7);
+  });
+});
+
+describe('RecordPage, a row written in a list the record holds', () => {
+  it('reads the record again, so a count a field holds is not stale', async () => {
+    const mounted = await mount('/depots/d1');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('lines');
+    await drawn(mounted.harness);
+
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(3);
+    // The counts of another read are asked for when a record opens, and a
+    // reload opens none.
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1']);
+  });
+
+  /** A draft is never thrown away for a count. */
+  it('waits while the record is a form, and catches up afterwards', async () => {
+    const mounted = await mount('/depots/d1');
+    await press(mounted, '[data-edit]');
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('lines');
+    await drawn(mounted.harness);
+    expect(mounted.page.store().mode()).toBe('edit');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+
+    await press(mounted, 'lib-save-bar [data-cancel]');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(3);
+  });
+
+  it('does not read again for a resource it holds no list of', async () => {
+    const mounted = await mount('/depots/d1');
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('batches');
+    await drawn(mounted.harness);
+
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
   });
 });
 
