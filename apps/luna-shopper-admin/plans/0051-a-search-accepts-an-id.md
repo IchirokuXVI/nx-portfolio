@@ -1,3 +1,5 @@
+> **PR:** [#636](https://github.com/IchirokuXVI/nx-portfolio/pull/636)
+
 # 0051 A search accepts an ID
 
 > Needs `0041` to `0047`, all merged, and `0050` (the typeahead is a combobox), which this
