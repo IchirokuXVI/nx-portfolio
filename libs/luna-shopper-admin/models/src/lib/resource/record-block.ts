@@ -127,7 +127,14 @@ export interface RecordLayout {
  * a store must not read a component.
  */
 export type SaveBarState =
-  | { readonly kind: 'clean' }
+  | {
+      readonly kind: 'clean';
+      /**
+       * Save is on although nothing was typed: a new record whose values all
+       * came with the address is complete as it opened.
+       */
+      readonly canSave?: boolean;
+    }
   | { readonly kind: 'dirty'; readonly changes: number }
   | { readonly kind: 'missing'; readonly required: number }
   | { readonly kind: 'saving' }

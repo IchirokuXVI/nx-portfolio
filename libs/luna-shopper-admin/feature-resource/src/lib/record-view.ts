@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
@@ -64,6 +65,11 @@ export interface RecordRefusal {
   readonly key: string;
   readonly link: ErrorLinkTarget | null;
 }
+
+/** The first thing of the form that takes the focus, whatever its control is. */
+const FIRST_CONTROL = ['input', 'select', 'textarea', 'button', '[tabindex]']
+  .map((part) => `lib-field-control ${part}`)
+  .join(', ');
 
 const NO_MESSAGES: readonly FieldMessage[] = [];
 const NO_NAMES: Readonly<Record<string, string | null>> = {};
@@ -459,6 +465,9 @@ export class RecordView {
 
   readonly references = inject(ResourceReferences);
 
+  /** Whether the view is gone. A save can answer after that. */
+  private _destroyed = false;
+
   readonly descriptor = input.required<AnyResourceDescriptor>();
   readonly store = input.required<RecordStore<ResourceRow>>();
   /** The rows above this one that the address names. */
@@ -720,6 +729,8 @@ export class RecordView {
   });
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => (this._destroyed = true));
+
     // Every reference whose row carries no name is asked for once. The answer
     // is written from outside the effect, so the effect follows the values
     // and not its own writes.
@@ -822,6 +833,12 @@ export class RecordView {
   async save(): Promise<void> {
     const store = this.store();
     const row = await store.submit();
+    // The view can be gone by now: the operator left while the save was on
+    // its way. An output of a view that is gone throws, and so does a render
+    // hook. The store has already told whoever listens for the write.
+    if (this._destroyed) {
+      return;
+    }
     if (row !== null) {
       this.saved.emit(row);
       return;
@@ -845,6 +862,26 @@ export class RecordView {
       `[id="${this.labelledId(first)}"]`
     );
     element?.focus();
+  }
+
+  /**
+   * Put the focus on the first control of the form, in page order.
+   *
+   * For the page, after "Edit": the button that was pressed leaves the page,
+   * and the focus would fall to the document.
+   */
+  focusFirst(): void {
+    const first = this.layout()
+      .sections.flatMap((section) => section.fields)
+      .find((field) => this.isControl(field));
+    const host = this._host.nativeElement;
+    const named =
+      first === undefined
+        ? null
+        : host.querySelector<HTMLElement>(`[id="${this.labelledId(first)}"]`);
+    // A control whose id is on no element that takes the focus still has a
+    // first thing to press.
+    (named ?? host.querySelector<HTMLElement>(FIRST_CONTROL))?.focus();
   }
 
   /** Whether this field is the parent of a new record that the address names. */

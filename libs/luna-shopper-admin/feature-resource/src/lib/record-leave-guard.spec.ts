@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
@@ -61,6 +61,15 @@ async function mount(url: string): Promise<RouterTestingHarness> {
         { path: 'widgets', pathMatch: 'full', component: Elsewhere },
         resourceFormBranch(WIDGETS),
         { path: 'elsewhere', component: Elsewhere },
+        // A route that cannot be entered: the navigation fails after the
+        // operator has answered.
+        { path: 'shut', canActivate: [() => false], component: Elsewhere },
+        // A route that sends the navigation on, which runs the guards again.
+        {
+          path: 'moved',
+          canActivate: [() => inject(Router).parseUrl('/elsewhere')],
+          component: Elsewhere,
+        },
       ]),
     ],
   }).compileComponents();
@@ -163,6 +172,57 @@ describe('recordLeaveGuard', () => {
 
     expect(await leaving).toBe(true);
     expect(url()).toBe('/elsewhere');
+  });
+
+  /**
+   * "Leave and lose them" is an answer and not yet a navigation. One that
+   * fails afterwards must not have cost the operator what they typed.
+   */
+  it('keeps the draft when the navigation fails after "Leave and lose them"', async () => {
+    const harness = await mount('/widgets/w1');
+    const page = await changed(harness);
+
+    const leaving = TestBed.inject(Router).navigateByUrl('/shut');
+    await drawn(harness);
+    dialog(harness)?.querySelector<HTMLElement>('[data-confirm]')?.click();
+
+    expect(await leaving).toBe(false);
+    await drawn(harness);
+    expect(url()).toBe('/widgets/w1');
+    expect(pageOf(harness)).toBe(page);
+    expect(page.store().mode()).toBe('edit');
+    expect(page.store().draft()['name']).toBe('Typed and not saved');
+
+    // The yes was for that navigation. The next one asks again.
+    const again = TestBed.inject(Router).navigateByUrl('/elsewhere');
+    await drawn(harness);
+    expect(dialog(harness)).not.toBeNull();
+    dialog(harness)?.querySelector<HTMLElement>('[data-dismiss]')?.click();
+    expect(await again).toBe(false);
+  });
+
+  /** A redirect runs the guard a second time, for the same navigation. */
+  it('asks once for a navigation that is sent on to another address', async () => {
+    const harness = await mount('/widgets/w1');
+    await changed(harness);
+    const page = pageOf(harness);
+    let asked = 0;
+    const ask = page.canLeave.bind(page);
+    page.canLeave = () => {
+      asked += 1;
+      return ask();
+    };
+
+    const leaving = TestBed.inject(Router).navigateByUrl('/moved');
+    await drawn(harness);
+    dialog(harness)?.querySelector<HTMLElement>('[data-confirm]')?.click();
+    await leaving;
+    await drawn(harness);
+
+    expect(url()).toBe('/elsewhere');
+    // The guard ran twice, and the operator was asked one time.
+    expect(asked).toBe(2);
+    expect(dialog(harness)).toBeNull();
   });
 
   /**

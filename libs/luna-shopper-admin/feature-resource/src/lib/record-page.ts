@@ -6,13 +6,19 @@ import {
   computed,
   DestroyRef,
   effect,
+  ElementRef,
   inject,
   Injector,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import {
   ActivatedRoute,
+  NavigationCancel,
+  NavigationCancellationCode,
+  NavigationEnd,
+  NavigationError,
   Router,
   RouterLink,
   RouterOutlet,
@@ -415,6 +421,7 @@ const ADDED_STATE = 'added';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RecordPage implements LeaveAware {
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
   private readonly _location = inject(Location);
@@ -507,10 +514,35 @@ export class RecordPage implements LeaveAware {
   /** A named action that failed, drawn above the first section. */
   readonly refusal = signal<RecordRefusal | null>(null);
 
+  /** The body of the page, once it is drawn. */
+  private readonly _view = viewChild(RecordView);
+
+  /**
+   * The body of the page when it is the Details tab, which draws it at a
+   * route of its own and says so here. `null` on any other tab.
+   */
+  readonly tabView = signal<RecordView | null>(null);
+
   /** What the operator answers the leave question with. */
   private _answer: ((leave: boolean) => void) | null = null;
-  /** The leave question that is up, for whoever else asks meanwhile. */
-  private _question: Promise<boolean> | null = null;
+  /**
+   * The answer the guards wait for while the leave question is up.
+   *
+   * A record with tabs is asked by the route of Details and by its own, in
+   * one navigation. Both wait for this one answer, and the operator is asked
+   * once.
+   */
+  private _leaveAnswer: Promise<boolean> | null = null;
+
+  /**
+   * Whether the operator has said yes to leaving, for the navigation that is
+   * on its way.
+   *
+   * The draft is kept until the page is really left, so a navigation that
+   * fails after the answer loses nothing. A navigation that is redirected
+   * runs the guard a second time, and this is what stops a second question.
+   */
+  private _mayLeave = false;
 
   /** The writes to this resource that the page has already seen. */
   private _seen = this._changes.version(this.descriptor.name);
@@ -669,8 +701,26 @@ export class RecordPage implements LeaveAware {
     // One component serves every ID of its route. The first value arrives
     // here at once, and each later one is another record.
     const params = this._route.params.subscribe(() => this._open());
+
+    // The yes to leaving holds for one navigation. One that ends with the
+    // page still here did not leave it: it failed, another guard refused it,
+    // or it was replaced. The draft is still on the screen, so the next
+    // navigation asks again. A redirect is the same navigation, still on its
+    // way.
+    const navigations = this._router.events.subscribe((event) => {
+      if (
+        event instanceof NavigationEnd ||
+        event instanceof NavigationError ||
+        (event instanceof NavigationCancel &&
+          event.code !== NavigationCancellationCode.Redirect)
+      ) {
+        this._mayLeave = false;
+      }
+    });
+
     inject(DestroyRef).onDestroy(() => {
       params.unsubscribe();
+      navigations.unsubscribe();
       this._answer?.(false);
     });
 
@@ -710,7 +760,7 @@ export class RecordPage implements LeaveAware {
     const store = this.store();
     const details = this._tabPaths.get(RECORD_DETAILS_TAB);
     if (details === undefined) {
-      store.edit();
+      this._openForm(store);
       return;
     }
     void this._router
@@ -720,9 +770,20 @@ export class RecordPage implements LeaveAware {
       })
       .then(() => {
         if (this.store() === store) {
-          store.edit();
+          this._openForm(store);
         }
       });
+  }
+
+  private _openForm(store: RecordStore<ResourceRow>): void {
+    store.edit();
+    // "Edit" leaves the page with the press, and the focus would fall to the
+    // document. It goes to the first control of the form.
+    if (store.mode() === 'edit') {
+      afterNextRender(() => (this._view() ?? this.tabView())?.focusFirst(), {
+        injector: this._injector,
+      });
+    }
   }
 
   /**
@@ -739,7 +800,7 @@ export class RecordPage implements LeaveAware {
       void this._router.navigateByUrl(this.listUrl);
       return;
     }
-    if (await this.canLeave()) {
+    if (!this.dirty() || (await this._ask())) {
       store.cancel();
     }
   }
@@ -747,43 +808,44 @@ export class RecordPage implements LeaveAware {
   /**
    * Whether the route may be left. Nothing changed: at once. Something
    * changed: the question, and what the operator chose.
+   *
+   * **A yes throws nothing away.** The draft goes with the page when the
+   * navigation succeeds. One that fails afterwards, in a guard or a resolver
+   * of the next route, leaves the form as it was.
    */
   canLeave(): boolean | Promise<boolean> {
-    if (!this.dirty()) {
+    if (!this.dirty() || this._mayLeave) {
       return true;
     }
-    // One question at a time. A second navigation while it is up waits for
-    // the same answer, and so does a second guard of the same navigation: a
-    // record with tabs is asked by the route of Details and by its own.
-    this._question ??= new Promise<boolean>((resolve) => {
-      this._answer = (leave) => {
-        this._question = null;
-        resolve(leave);
-      };
-      this.leaving.set(true);
+    this._leaveAnswer ??= this._ask().then((leave) => {
+      this._leaveAnswer = null;
+      this._mayLeave = leave;
+      return leave;
     });
-    return this._question;
+    return this._leaveAnswer;
   }
 
   answerLeave(leave: boolean): void {
     const answer = this._answer;
     this._answer = null;
     this.leaving.set(false);
-    if (leave) {
-      // The draft goes before the navigation does, so nothing asks twice.
-      this.store().cancel();
-    }
     answer?.(leave);
   }
 
   /**
-   * A save went through. Whatever still shows this resource reads again, and
-   * then the page does what follows a save.
+   * A save went through, and the view is still here to say so. The page does
+   * what follows a save.
+   *
+   * Whoever shows this resource was told already, by the store (`_storeFor`):
+   * that must happen even when this page is gone before the answer.
    */
   saved(row: ResourceRow): void {
-    const added = this.store().mode() === 'create';
-    this._wrote();
-    if (!added) {
+    if (this.store().mode() !== 'create') {
+      // "Save" left the page with the bar, and the focus would fall to the
+      // document. It goes to the name of the record that was saved.
+      afterNextRender(() => this._focusHeading(), {
+        injector: this._injector,
+      });
       return;
     }
 
@@ -948,12 +1010,43 @@ export class RecordPage implements LeaveAware {
   }
 
   private _storeFor(id: string | null): RecordStore<ResourceRow> {
-    return new RecordStore<ResourceRow>(
+    const store = new RecordStore<ResourceRow>(
       this.descriptor,
       this._gateway,
       id,
       id === null && this._creates ? this._prefill() : {}
     );
+    // Said by the store and not by the view: a save that answers after the
+    // operator left still wrote the resource, and the list they are now on
+    // has to read again.
+    store.onSaved(() => this._wrote());
+    return store;
+  }
+
+  /** Ask the leave question, and answer what the operator chose. */
+  private _ask(): Promise<boolean> {
+    // A second question while the first is up. The first one stays.
+    this._answer?.(false);
+    return new Promise<boolean>((resolve) => {
+      this._answer = resolve;
+      this.leaving.set(true);
+    });
+  }
+
+  /**
+   * Put the focus on the heading of the page.
+   *
+   * A heading takes no focus by itself. `tabindex="-1"` lets a script put it
+   * there and keeps it out of the Tab order.
+   */
+  private _focusHeading(): void {
+    const heading =
+      this._host.nativeElement.querySelector<HTMLElement>('.page-title');
+    if (heading === null) {
+      return;
+    }
+    heading.tabIndex = -1;
+    heading.focus();
   }
 
   /**
@@ -1124,8 +1217,18 @@ function askBeforeUnload(event: BeforeUnloadEvent): void {
 export class RecordDetailsTab implements LeaveAware {
   readonly page = inject(RecordPage);
 
+  private readonly _view = viewChild(RecordView);
+
   constructor() {
+    // The page moves the focus into the view after "Edit", and the view is
+    // here and not in the page's own template.
+    effect(() => {
+      const view = this._view() ?? null;
+      untracked(() => this.page.tabView.set(view));
+    });
+
     inject(DestroyRef).onDestroy(() => {
+      this.page.tabView.set(null);
       const store = this.page.store();
       if (store.mode() === 'edit') {
         store.cancel();

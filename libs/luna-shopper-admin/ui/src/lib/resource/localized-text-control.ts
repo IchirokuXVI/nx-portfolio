@@ -140,6 +140,20 @@ export class LocalizedTextControl {
 
   readonly valueChange = output<Readonly<Record<string, string>>>();
 
+  /**
+   * What was last emitted, and the input it was built on.
+   *
+   * The input is what the owner last drew, and it is one change detection
+   * behind an emit. Two boxes changed in one frame would each spread the
+   * same old input, and the second would undo the first. So a change is
+   * spread over what was last emitted, for as long as the input is still the
+   * one it was built on. A new input is the owner's word, and wins.
+   */
+  private _sent: {
+    readonly over: Readonly<Record<string, string>>;
+    readonly value: Readonly<Record<string, string>>;
+  } | null = null;
+
   valueFor(locale: string): string {
     return this.value()[locale] ?? '';
   }
@@ -148,6 +162,10 @@ export class LocalizedTextControl {
     const text = (event.target as HTMLInputElement | HTMLTextAreaElement).value;
     // Every locale is emitted, not only the one that changed. The value is one
     // column, and a partial object would erase the other language on submit.
-    this.valueChange.emit({ ...this.value(), [locale]: text });
+    const given = this.value();
+    const held = this._sent?.over === given ? this._sent.value : given;
+    const value = { ...held, [locale]: text };
+    this._sent = { over: given, value };
+    this.valueChange.emit(value);
   }
 }

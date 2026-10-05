@@ -60,7 +60,14 @@ export class RecordStore<T extends ResourceRow> {
   private readonly _submitted = signal(false);
   private readonly _refusal = signal<Refusal>(null);
   private readonly _busy = signal(false);
+  /** Whether the write on its way is a save. A delete is busy and saves nothing. */
+  private readonly _saving = signal(false);
   private readonly _savedAt = signal<Date | null>(null);
+
+  /** The reads started so far. Only the answer of the newest one is applied. */
+  private _reads = 0;
+  /** Who is told about a save that went through. */
+  private _onSaved: ((row: T) => void) | null = null;
 
   private readonly _ordered: ReadonlySet<string>;
 
@@ -177,7 +184,8 @@ export class RecordStore<T extends ResourceRow> {
    * the table that fits wins.
    */
   readonly bar = computed<SaveBarState>(() => {
-    if (this._busy()) {
+    // Only a save. A delete is busy too, and the bar must not call it one.
+    if (this._saving()) {
       return { kind: 'saving' };
     }
 
@@ -196,8 +204,25 @@ export class RecordStore<T extends ResourceRow> {
     }
 
     const changes = this.changed().length;
-    return changes === 0 ? { kind: 'clean' } : { kind: 'dirty', changes };
+    if (changes > 0) {
+      return { kind: 'dirty', changes };
+    }
+    // A new record whose values all came with the address has nothing typed
+    // and is still worth adding. A record that exists has nothing to send.
+    return this._mode() === 'create'
+      ? { kind: 'clean', canSave: true }
+      : { kind: 'clean' };
   });
+
+  /**
+   * Name who is told about every save that goes through, with the saved row.
+   *
+   * Told by the store and not by the view that asked for the save: a view can
+   * be gone before the answer arrives, and the write still happened.
+   */
+  onSaved(listener: (row: T) => void): void {
+    this._onSaved = listener;
+  }
 
   /**
    * What to say under one field.
@@ -231,6 +256,10 @@ export class RecordStore<T extends ResourceRow> {
       return;
     }
 
+    // Two reads can overlap, and the older one can answer last. Each read
+    // takes a number, and only the newest one is applied.
+    const read = ++this._reads;
+
     if (this._row() === null) {
       this._status.set('loading');
     }
@@ -242,6 +271,9 @@ export class RecordStore<T extends ResourceRow> {
         this._gateway,
         this._id
       );
+      if (read !== this._reads) {
+        return;
+      }
       if (row === null) {
         this._row.set(null);
         this._status.set('missing');
@@ -250,8 +282,16 @@ export class RecordStore<T extends ResourceRow> {
       this._row.set(row);
       this._status.set('ready');
     } catch (error) {
-      this._row.set(null);
+      if (read !== this._reads) {
+        return;
+      }
       this._error.set(toGatewayError(error));
+      // A form holds a draft. A read that failed under it takes neither the
+      // row nor the form away: the failure is said, and the draft stays.
+      if (this._mode() !== 'read' && this._row() !== null) {
+        return;
+      }
+      this._row.set(null);
       this._status.set('error');
     }
   }
@@ -331,6 +371,7 @@ export class RecordStore<T extends ResourceRow> {
 
     this._refusal.set(null);
     this._busy.set(true);
+    this._saving.set(true);
 
     const input = toInput(
       this._descriptor,
@@ -356,6 +397,7 @@ export class RecordStore<T extends ResourceRow> {
         // ask about work that is on the server.
         this._original.set(this._draft());
       }
+      this._onSaved?.(saved);
       return saved;
     } catch (error) {
       const failure = toGatewayError(error);
@@ -365,6 +407,7 @@ export class RecordStore<T extends ResourceRow> {
       return null;
     } finally {
       this._busy.set(false);
+      this._saving.set(false);
     }
   }
 

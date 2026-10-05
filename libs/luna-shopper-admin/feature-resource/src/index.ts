@@ -12,7 +12,7 @@ export {
 } from './lib/admin-section';
 export { gatewayErrorKey } from './lib/gateway-error-key';
 export { RECORD_CONTEXT } from './lib/record-context';
-export { RecordPage } from './lib/record-page';
+export { RECORD_EDIT_PARAM, RecordPage } from './lib/record-page';
 export { RecordView } from './lib/record-view';
 export { ResourceChanges } from './lib/resource-changes';
 export { ResourceFormPage } from './lib/resource-form-page';

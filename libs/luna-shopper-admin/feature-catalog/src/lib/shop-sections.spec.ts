@@ -380,6 +380,26 @@ describe('the Sections tab of a chain', () => {
     ]);
   });
 
+  it('opens the form of a section from its "Edit"', async () => {
+    const fixture = await openTab();
+
+    const edit = fixture.nativeElement.querySelector(
+      'td.actions a'
+    ) as HTMLAnchorElement;
+    // "Edit" says a change, so its link opens the form.
+    expect(edit.getAttribute('href')).toMatch(
+      /^\/chains\/sm_mercadona\/sections\/[^/?]+\?edit=1$/
+    );
+
+    edit.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(
+      fixture.nativeElement.querySelector('lib-record-view lib-field-control')
+    ).not.toBeNull();
+  });
+
   it('opens a section as a page beside the chain’s, to be read first', async () => {
     const fixture = await boot(`/chains/sm_mercadona/sections/${OFFERS}`);
 
