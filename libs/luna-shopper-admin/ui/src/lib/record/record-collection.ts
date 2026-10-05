@@ -41,7 +41,8 @@ export interface CollectionLink {
  *
  * On a phone a panel is drawn as the link shape: one row that opens the list.
  * A short list under every section would push the next section off the
- * screen.
+ * screen. A panel with nowhere to lead stays a panel there, because one row
+ * that opens nothing would leave its rows out of reach.
  */
 @Component({
   selector: 'lib-record-collection',
@@ -81,7 +82,11 @@ export interface CollectionLink {
         </p>
       }
     } @else {
-      <lib-record-section [count]="count()" [heading]="heading()">
+      <lib-record-section
+        [count]="count()"
+        [heading]="heading()"
+        [level]="level()"
+      >
         <ng-content ngProjectAs="[sectionAction]" select="[sectionAction]" />
 
         @switch (status()) {
@@ -272,15 +277,25 @@ export class RecordCollection {
   /** A translation key for what an empty panel says. */
   readonly emptyKey = input<string | null>(null);
   readonly status = input<'loading' | 'ready' | 'error'>('ready');
+  /** The level of the heading of a panel. A pane uses 3. */
+  readonly level = input<2 | 3>(2);
 
   /** The read failed, and the operator asks again. */
   readonly retry = output<void>();
 
   private readonly _viewport = inject(Viewport);
 
-  /** One row that opens the list: the link shape, and every shape on a phone. */
+  /**
+   * One row that opens the list: the link shape, and a panel on a phone.
+   *
+   * A panel on a phone with nowhere to lead keeps its rows, its retry and its
+   * loading line, because the one row would be a line of text that opens
+   * nothing. An empty one is still the one line that says so.
+   */
   readonly asLink = computed(
-    () => this.shape() === 'link' || this._viewport.compact()
+    () =>
+      this.shape() === 'link' ||
+      (this._viewport.compact() && (this.all() !== null || this.nothing()))
   );
 
   /**

@@ -106,7 +106,10 @@ interface PickerRow {
     <!-- The open list, drawn once: under the field on a wide screen and in the
          sheet on a phone. The options take no focus and no key of their own.
          The search field holds the focus and its keys move through them,
-         which is what aria-activedescendant says to a screen reader. -->
+         which is what aria-activedescendant says to a screen reader. A sheet
+         opens with the focus on its panel, so that no keyboard covers the
+         list before the operator asks to type. The search field takes the
+         focus when it is pressed. -->
     <ng-template #list>
       <!-- eslint-disable @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
       <ul [attr.aria-label]="label()" [id]="listId()" role="listbox">

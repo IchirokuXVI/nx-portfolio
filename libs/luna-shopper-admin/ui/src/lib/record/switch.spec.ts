@@ -69,6 +69,26 @@ describe('Switch', () => {
     expect(emitted).toEqual([true, false]);
   });
 
+  it('names no line and no refusal until it is handed one', () => {
+    const { button } = render(true);
+
+    expect(button.hasAttribute('aria-describedby')).toBe(false);
+    expect(button.hasAttribute('aria-invalid')).toBe(false);
+  });
+
+  it('points at the lines under it, and says that it was refused', () => {
+    const { fixture, button } = render(true);
+
+    fixture.componentRef.setInput('describedBy', 'field-available-error');
+    fixture.componentRef.setInput('invalid', true);
+    fixture.detectChanges();
+
+    expect(button.getAttribute('aria-describedby')).toBe(
+      'field-available-error'
+    );
+    expect(button.getAttribute('aria-invalid')).toBe('true');
+  });
+
   it('says nothing while it is switched off', () => {
     const { button, emitted } = render(false, true);
 

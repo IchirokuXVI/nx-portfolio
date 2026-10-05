@@ -3,8 +3,10 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import type { RecordValue } from '@portfolio/luna-shopper-admin/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ScopeMark } from '../page/scope-mark';
-import { FieldValue } from './field-value';
+import { FieldValue, NAMED_LANGUAGES } from './field-value';
 
 /**
  * One value while the page reads (admin plan 0052, section 3.2). The testing
@@ -137,6 +139,31 @@ describe('FieldValue', () => {
     expect(
       lines[1].querySelector('[data-not-written]')?.textContent?.trim()
     ).toBe('record.value.notWritten');
+  });
+
+  /** A key that has no text would be read out as the key. */
+  it('says the code of a language that has no word', () => {
+    const { host } = render({
+      kind: 'lines',
+      lines: [{ locale: 'pt', text: 'Leite gordo' }],
+    });
+
+    expect(host.querySelector('.line .sr-only')?.textContent?.trim()).toBe(
+      'pt'
+    );
+  });
+
+  it('names exactly the languages the catalogue has a word for', () => {
+    const catalogue = JSON.parse(
+      readFileSync(
+        join(__dirname, '..', '..', '..', 'assets', 'i18n', 'en.json'),
+        'utf8'
+      )
+    ) as { record: { language: Record<string, string> } };
+
+    expect([...NAMED_LANGUAGES].sort()).toEqual(
+      Object.keys(catalogue.record.language).sort()
+    );
   });
 
   it('prints an object as it was printed for it', () => {

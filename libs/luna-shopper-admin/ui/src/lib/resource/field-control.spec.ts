@@ -85,6 +85,17 @@ describe('a yes or no of a form', () => {
     expect(host.querySelector('[role="switch"]')?.id).toBe('field-value');
   });
 
+  it('hands the switch the lines under it and whether it was refused', () => {
+    const { host } = render({ kind: 'boolean' }, true, {
+      describedBy: 'field-value-error',
+      invalid: true,
+    });
+    const toggle = host.querySelector('[role="switch"]');
+
+    expect(toggle?.getAttribute('aria-describedby')).toBe('field-value-error');
+    expect(toggle?.getAttribute('aria-invalid')).toBe('true');
+  });
+
   /** It says what was pressed. The form holds the value until Save. */
   it('emits the other value when the switch is pressed', () => {
     const { host, emitted } = render({ kind: 'boolean' }, false);
