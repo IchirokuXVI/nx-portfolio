@@ -9,7 +9,6 @@ import {
   type FieldDescriptor,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { CATEGORIES } from './categories';
 import {
   CATEGORY_KIND_OPTIONS,
   POSTAL_CODE_SOURCE_OPTIONS,
@@ -18,13 +17,14 @@ import {
   UNIT_OF_MEASURE_OPTIONS,
 } from './catalog-enums';
 import {
+  ITEM_SEED,
   LOCATION_ITEM_SEED,
   LOCATION_SEED,
   PRICE_POLICY_SEED,
-  ITEM_SEED,
   PRICE_SCOPE_SEED,
   PRICE_SEED,
 } from './catalog-seed';
+import { CATEGORIES } from './categories';
 import { ChainContext } from './chains/chain-context';
 import { CHAIN_PARAM } from './chains/chain-page';
 import { CHAIN_RESOURCES } from './chains/chains-routes';
@@ -370,7 +370,10 @@ describe('reference columns that name their target', () => {
     expect(PRICES.title(row, ENGLISH_FIRST)).toBe('Whole milk 1 L');
     expect(PRICES.title(row, SPANISH_FIRST)).toBe('Leche entera 1 L');
     expect(
-      PRICES.title({ ...row, itemName: { es: 'Leche entera 1 L' } }, ENGLISH_FIRST)
+      PRICES.title(
+        { ...row, itemName: { es: 'Leche entera 1 L' } },
+        ENGLISH_FIRST
+      )
     ).toBe('Leche entera 1 L');
   });
 });
@@ -484,6 +487,28 @@ describe('the shops', () => {
     );
   });
 
+  /**
+   * The label, the address and the town can each be null. A shop that had
+   * none of them was a row with no text in it, so the tab said two shops and
+   * the list showed one (admin plan 0049, target 3).
+   */
+  it('never draws a shop as a row with nothing in it', () => {
+    const [centro] = LOCATION_SEED;
+    const bare = { ...centro, label: null, address: null, city: null };
+    const say = (row: typeof centro) => [
+      LOCATIONS.title(row, ENGLISH_FIRST),
+      LOCATIONS.list.brief?.heading?.(row, ENGLISH_FIRST),
+    ];
+
+    expect(say({ ...bare, postalCode: '14001' })).toEqual(['14001', '14001']);
+    expect(
+      say({ ...bare, postalCode: null, externalRef: 'node/1156230891' })
+    ).toEqual(['node/1156230891', 'node/1156230891']);
+    expect(
+      say({ ...bare, address: '', postalCode: null, externalRef: null })
+    ).toEqual([centro.id, centro.id]);
+  });
+
   it('marks a shop with a map and a postal code that was guessed', () => {
     const statesOf = LOCATIONS.rowStates?.();
     const [centro, oeste, sierra] = LOCATION_SEED as unknown as ResourceRow[];
@@ -553,9 +578,9 @@ describe('the shop price scopes', () => {
     expect(
       scopes?.locked?.(shop, { kind: 'REGION', externalKey: 'loc_1' })
     ).toBe(false);
-    expect(
-      scopes?.locked?.({}, { kind: 'STORE', externalKey: 'loc_1' })
-    ).toBe(false);
+    expect(scopes?.locked?.({}, { kind: 'STORE', externalKey: 'loc_1' })).toBe(
+      false
+    );
   });
 
   it('lists the stack by name, and filters on one scope', () => {
@@ -620,9 +645,9 @@ describe('the price scope tier names', () => {
   it('translates the priority column through its read', () => {
     const priority = fieldOf(PRICE_SCOPES, 'priority');
 
-    expect(
-      priority?.read?.({ ...PRICE_SCOPE_SEED[0], priority: 200 })
-    ).toEqual(priorityBand(200));
+    expect(priority?.read?.({ ...PRICE_SCOPE_SEED[0], priority: 200 })).toEqual(
+      priorityBand(200)
+    );
   });
 });
 

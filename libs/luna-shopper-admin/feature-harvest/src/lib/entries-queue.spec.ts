@@ -1,4 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -15,7 +16,7 @@ import {
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
-import { QueueFrame } from '@portfolio/luna-shopper-admin/ui';
+import { QueueFrame, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { EntriesQueuePage } from './entries-queue-page';
 import { ReviewChain } from './review-chain';
 
@@ -98,7 +99,11 @@ const BREAD = {
   },
 };
 
-async function render(queryParams: Record<string, string> = {}) {
+async function render(
+  queryParams: Record<string, string> = {},
+  /** A wide screen, where the rows are a column beside the open row. */
+  wide = false
+) {
   const { service, calls } = recorded();
   dashboardReads = 0;
 
@@ -159,6 +164,11 @@ async function render(queryParams: Record<string, string> = {}) {
         },
       },
       DeploymentStore,
+      // jsdom has no width, so a spec that needs the column says so.
+      {
+        provide: Viewport,
+        useValue: { split: signal(wide), compact: signal(false) },
+      },
     ],
   }).compileComponents();
 
@@ -175,8 +185,8 @@ async function render(queryParams: Record<string, string> = {}) {
 }
 
 /** The queue, opened on one chain and read. */
-async function opened(chain: string) {
-  const { fixture, calls } = await render();
+async function opened(chain: string, wide = false) {
+  const { fixture, calls } = await render({}, wide);
 
   fixture.componentInstance.open(chain);
   await drain();
@@ -303,36 +313,19 @@ describe('the one queue, with no chain chosen', () => {
 
   /**
    * A chain's own name for a product means nothing outside that chain, so a
-   * mixed queue has to say which chain each row came from. Once a chain is
-   * chosen the filter says it, and the badge would be the same word on every
-   * row.
+   * mixed queue has to say which chain each row came from.
    */
-  it('names each row’s chain in the list, and stops once one chain is chosen', async () => {
-    const { fixture } = await render();
-    await drain();
-    fixture.detectChanges();
-    const toList = () => {
-      (
-        fixture.nativeElement.querySelector(
-          '.views [data-view="list"]'
-        ) as HTMLButtonElement
-      ).click();
-      fixture.detectChanges();
-    };
-
-    toList();
-    expect(
-      fixture.nativeElement.querySelectorAll('.rows .chain').length
-    ).toBeGreaterThan(0);
-    expect(text(fixture)).toContain('Mercadona');
-
-    fixture.componentInstance.open(DEZA);
+  it('names each row’s chain on its line of the column', async () => {
+    const { fixture } = await render({}, true);
     await drain();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelectorAll('.rows .chain').length).toBe(
-      0
-    );
+    const chains = [
+      ...fixture.nativeElement.querySelectorAll('.column .line-chain'),
+    ].map((chain: Element) => chain.textContent?.trim());
+
+    expect(chains.length).toBeGreaterThan(0);
+    expect(chains).toContain('Mercadona');
   });
 
   /** The card names the chain of the row in front, whatever the filter says. */
@@ -518,8 +511,6 @@ describe('the one queue, the card of a row', () => {
     const frame = frameOf(fixture);
 
     expect(frame.lineTemplate()).toBeDefined();
-    expect(frame.rowTemplate()).toBeDefined();
-    expect(frame.lineTemplate()).not.toBe(frame.rowTemplate());
   });
 
   /** "Apply a decisions file" is a button of this queue, beside the view switch. */
@@ -576,7 +567,9 @@ describe('the one queue, the two other ways to decide', () => {
     expect(page.panel()).toBe('pick');
     expect(link.getAttribute('aria-expanded')).toBe('true');
     expect(decide(fixture).hidden).toBe(false);
-    expect(decide(fixture).querySelector('lib-reference-picker')).not.toBeNull();
+    expect(
+      decide(fixture).querySelector('lib-reference-picker')
+    ).not.toBeNull();
     expect(decide(fixture).querySelector('[data-create]')).toBeNull();
 
     link.click();
@@ -596,7 +589,9 @@ describe('the one queue, the two other ways to decide', () => {
     expect(page.panel()).toBe('create');
     expect(decide(fixture).querySelector('[data-create]')).not.toBeNull();
     expect(decide(fixture).querySelector('#entries-item')).toBeNull();
-    expect(decide(fixture).querySelector('lib-references-control')).not.toBeNull();
+    expect(
+      decide(fixture).querySelector('lib-references-control')
+    ).not.toBeNull();
   });
 
   /** In the bar on a wide screen, as the frame's other actions. */
@@ -711,23 +706,6 @@ describe('the counts, after a decision on a source product', () => {
     await drain();
     await drain();
 
-    expect(dashboardReads).toBe(before + 1);
-  });
-
-  it('reads the counts again once after a batch, and not once per row', async () => {
-    const { page } = await opened(MERCADONA);
-    page.queue?.selectLoaded();
-    expect(page.queue?.selectedCount()).toBeGreaterThan(1);
-    const before = dashboardReads;
-
-    page.askReject();
-    const pending = page.pending();
-    page.go(pending as NonNullable<typeof pending>);
-    for (let round = 0; round < 6; round++) {
-      await drain();
-    }
-
-    expect(page.queue?.items()).toEqual([]);
     expect(dashboardReads).toBe(before + 1);
   });
 
@@ -1149,141 +1127,96 @@ describe('the one queue, saying what it wrote', () => {
 });
 
 /**
- * Plan 0020. The same rows as a list, with a checkbox, for the ordinary end of
- * a crawl where two hundred rows are obviously not products this shop tracks
- * and each one costs a separate press.
+ * Admin plan 0049, targets 5, 6 and 7. The queue had a second view, a list
+ * with a checkbox on each row and a bar of bulk actions (plan 0020). It is
+ * gone. The rows are a column beside the open row on a wide screen, and
+ * pressing one opens it where it sits.
  */
-describe('the source products queue as a list', () => {
-  /** The screen opens one at a time, so the list is reached through the toggle. */
-  async function listed(chain: string) {
-    const rendered = await opened(chain);
-    const toggles =
-      rendered.fixture.nativeElement.querySelectorAll('.views button');
-    toggles[1].click();
-    await drain();
-    rendered.fixture.detectChanges();
-    return rendered;
-  }
+describe('the source products queue, a column and no list', () => {
+  const lines = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    [
+      ...fixture.nativeElement.querySelectorAll('.column button.line'),
+    ] as HTMLButtonElement[];
 
-  it('draws one row per item, with a checkbox and the review view own columns', async () => {
-    const { fixture, page } = await listed(MERCADONA);
+  it('draws no list of checkboxes, no bulk action and no view switch', async () => {
+    const { fixture } = await opened(MERCADONA, true);
+    const host: HTMLElement = fixture.nativeElement;
 
-    const rows = fixture.nativeElement.querySelectorAll('.rows li');
-    expect(rows).toHaveLength(page.queue!.items().length);
-    expect(rows[0].querySelector('input[type="checkbox"]')).not.toBeNull();
-    expect(rows[0].textContent).toContain('Leche entera');
-    expect(rows[0].textContent).toContain('harvest.entries.timesSeen');
+    expect(host.querySelector('.subject')).not.toBeNull();
+    expect(host.querySelector('.rows')).toBeNull();
+    expect(host.querySelector('.bulk')).toBeNull();
+    expect(host.querySelector('.views')).toBeNull();
+    expect(text(fixture)).not.toContain('harvest.entries.bulk');
+    expect(text(fixture)).not.toContain('harvest.queue.view');
   });
 
-  it('opens a clicked row one at a time and points the controls at it', async () => {
-    const { fixture, page } = await listed(MERCADONA);
-    const second = page.listRows()[1];
+  it('says no count of rows left and decided', async () => {
+    const { fixture } = await opened(MERCADONA, true);
 
-    fixture.nativeElement.querySelectorAll('.rows .cells')[1].click();
+    expect(text(fixture)).not.toContain('harvest.queue.tally');
+  });
+
+  it('draws one line per row in the column, by name', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+
+    expect(lines(fixture)).toHaveLength(page.listRows().length);
+    expect(lines(fixture)[0].textContent).toContain('Leche entera');
+  });
+
+  /**
+   * The owner's words: "if you select row 5, the top 4 should still be
+   * available, and the list won't scroll or anything."
+   */
+  it('opens a pressed line where it sits, and points the controls at it', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+    const before = page.listRows().map((row) => row.id);
+    const at = before.length - 1;
+    expect(at).toBeGreaterThan(0);
+    const chosen = page.listRows()[at];
+
+    lines(fixture)[at].click();
     await drain();
     fixture.detectChanges();
 
-    expect(page.row()?.id).toBe(second.id);
+    expect(page.row()?.id).toBe(chosen.id);
     // The picker follows the subject. A picker still holding the last row's
     // product is exactly how a name gets bound to the wrong one.
-    expect(page.itemId()).toBe(second.itemId);
-  });
-
-  /**
-   * Section 4. Accepting to an item the operator picks and creating a product
-   * are each a choice about one row, so neither is offered over a selection.
-   */
-  it('offers exactly accept as proposed and reject', async () => {
-    const { fixture } = await listed(MERCADONA);
-
-    const labels = [
-      ...fixture.nativeElement.querySelectorAll('.bulk button'),
-    ].map((node: Element) => node.textContent?.trim());
-
-    expect(labels).toEqual([
-      'harvest.entries.bulk.accept',
-      'harvest.entries.bulk.reject',
-    ]);
-  });
-
-  /**
-   * A count that appears only in the failure report afterwards is a count that
-   * arrives too late to change the decision.
-   */
-  it('states what accepting will act on and what it will leave alone, before it runs', async () => {
-    const { page } = await listed(MERCADONA);
-
-    page.queue!.selectLoaded();
-
-    // Of the chain's queued rows only the one the ladder proposed a product for
-    // can be accepted as proposed; the rest carry no `itemId` to send.
-    expect(page.acceptable().map((entry) => entry.id)).toEqual(['entry-bread']);
-    expect(page.unproposed()).toBe(page.queue!.selectedCount() - 1);
-  });
-
-  it('names the action and the exact count in the confirmation', async () => {
-    const { fixture, page } = await listed(MERCADONA);
-
-    page.queue!.selectLoaded();
-    page.askAccept();
-    fixture.detectChanges();
-
-    expect(page.pending()).toMatchObject({
-      headingKey: 'harvest.entries.bulk.acceptConfirm.heading',
-      confirmKey: 'harvest.entries.bulk.accept',
-      count: 1,
-      leftAlone: page.queue!.selectedCount() - 1,
-    });
-  });
-
-  it('writes nothing until the confirmation is answered', async () => {
-    const { fixture, page, calls } = await listed(MERCADONA);
-
-    page.queue!.selectLoaded();
-    page.askReject();
-    fixture.detectChanges();
-    await drain();
-
-    expect(named(calls, 'rejectEntry')).toHaveLength(0);
-  });
-
-  it('rejects every selected row and takes them all out of the queue', async () => {
-    const { page, calls } = await listed(MERCADONA);
-
-    page.queue!.selectLoaded();
-    const wanted = page.queue!.items().map((entry) => entry.id);
-    page.askReject();
-    page.go(page.pending()!);
-    await drain();
-
+    expect(page.itemId()).toBe(chosen.itemId);
+    // No row changed its place, and the rows above the chosen one are there.
+    expect(page.listRows().map((row) => row.id)).toEqual(before);
     expect(
-      named(calls, 'rejectEntry')
-        .map((args) => args[0])
-        .sort()
-    ).toEqual([...wanted].sort());
-    expect(page.queue!.items()).toEqual([]);
-    expect(page.report()?.succeeded).toBe(wanted.length);
+      lines(fixture).map((line) => line.getAttribute('aria-current'))
+    ).toEqual(before.map((_, index) => (index === at ? 'true' : null)));
   });
 
-  /**
-   * The row's own proposal and nothing else, so a bulk accept is never one
-   * operator's choice applied to rows they did not look at.
-   */
-  it('accepts a proposed row with its own item, and leaves the rest alone', async () => {
-    const { page, calls } = await listed(MERCADONA);
+  it('goes to the next line on a skip, and moves no line', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+    const before = page.listRows().map((row) => row.id);
 
-    page.queue!.selectLoaded();
-    page.askAccept();
-    page.go(page.pending()!);
+    page.skip();
     await drain();
+    fixture.detectChanges();
 
-    expect(named(calls, 'acceptEntry')).toEqual([
-      ['entry-bread', { itemId: 'item-bread' }],
+    expect(page.row()?.id).toBe(before[1]);
+    expect(page.listRows().map((row) => row.id)).toEqual(before);
+  });
+
+  /** The row under a decided one comes up, and the rows above it stay. */
+  it('brings up the row under a rejected one and keeps the rows above it', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+    const before = page.listRows().map((row) => row.id);
+    expect(before.length).toBeGreaterThan(2);
+
+    lines(fixture)[1].click();
+    await drain();
+    page.reject();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.listRows().map((row) => row.id)).toEqual([
+      before[0],
+      ...before.slice(2),
     ]);
-    expect(page.report()?.skipped.map((line) => line.name)).toEqual([
-      'Leche entera',
-      'LECHE ENTERA HACENDADO',
-    ]);
-    expect(page.report()?.failed).toEqual([]);
+    expect(page.row()?.id).toBe(before[2]);
   });
 });

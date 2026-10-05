@@ -477,8 +477,10 @@ export class PriceRulesPage {
  * 6).
  *
  * The form every resource has, with no header: the row above it says which
- * rule it is. It draws the three columns a rule can change and carries the
- * caution, because saving works out the shown price of every product again.
+ * rule it is. It draws the two columns a rule can change here, the rank and
+ * the limit, and carries the caution, because saving works out the shown
+ * price of every product again. Whether the rule is on is the switch on the
+ * row, and the form does not ask it a second time (admin plan 0049).
  * Saving and cancelling both close it.
  */
 @Component({
@@ -545,7 +547,7 @@ export class PriceRulesPage {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PriceRuleForm extends ResourceFormPage {
-  /** The columns a rule can change. The row above the form names the source. */
+  /** The columns the form changes. The row above it names the source. */
   readonly ruleFields: readonly FieldDescriptor[] = this.fields.filter(
     (field) => isEditable(field, 'edit')
   );

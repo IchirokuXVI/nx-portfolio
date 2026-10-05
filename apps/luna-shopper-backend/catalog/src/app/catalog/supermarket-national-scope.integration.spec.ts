@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import {
@@ -8,6 +9,7 @@ import { DataSource } from 'typeorm';
 import { CATALOG_MIGRATIONS } from '../db/migrations';
 import {
   CATALOG_ENTITIES,
+  PostalCodePoint,
   PriceScope,
   Supermarket,
   SupermarketLocation,
@@ -18,8 +20,11 @@ import {
   type AuditFields,
 } from './catalog-audit.service';
 import { EffectivePriceService } from './effective-price.service';
+import { LocationScopeService } from './location-scopes';
 import { PlatformAdminService } from './platform-admin.service';
+import { PostalCodeService } from './postal-code.service';
 import { PriceScopeService } from './price-scope.service';
+import { SupermarketLocationService } from './supermarket-location.service';
 import { SupermarketService } from './supermarket.service';
 
 /**
@@ -230,6 +235,62 @@ describeIntegration(
         });
 
         expect(view.locationCount).toBe(1);
+      });
+
+      /**
+       * The count and the list are two queries, and they have to name the
+       * same rows (admin plan 0049, target 3). The back office draws the count
+       * on the Shops tab and the list under it, so a shop that one query holds
+       * and the other does not is a tab that says two over a list of one.
+       *
+       * The shops here have no label, no address and no town, which is the
+       * barest row the table allows. Nothing about a shop may take it out of
+       * either read.
+       */
+      it('counts exactly the shops the list of that chain returns', async () => {
+        const chains = chainsWith(new CatalogAuditService(dataSource));
+        const audit = new CatalogAuditService(dataSource);
+        const effective = new EffectivePriceService();
+        const config = {
+          getOrThrow: () => ({
+            authJwtPublicKey: '',
+            adminJwtPublicKey: '',
+            serviceActorIds: [OWNER],
+            postalCodeDeriveMaxMetres: 5_000,
+          }),
+        } as unknown as ConfigService;
+        const listed = new SupermarketLocationService(
+          dataSource.getRepository(SupermarketLocation),
+          dataSource.getRepository(Supermarket),
+          new PriceScopeService(
+            dataSource.getRepository(PriceScope),
+            dataSource.getRepository(Supermarket),
+            admin,
+            audit,
+            effective
+          ),
+          admin,
+          audit,
+          new PostalCodeService(
+            dataSource.getRepository(PostalCodePoint),
+            admin
+          ),
+          effective,
+          new LocationScopeService(),
+          config
+        );
+
+        for (const supermarketId of [many, one, none]) {
+          const page = await listed.list({
+            userId: OWNER,
+            supermarketId,
+            limit: 100,
+          });
+          const view = await chains.get({ userId: OWNER, supermarketId });
+
+          expect(page.nextCursor).toBeNull();
+          expect(view.locationCount).toBe(page.items.length);
+        }
       });
 
       it('follows a shop that is removed', async () => {

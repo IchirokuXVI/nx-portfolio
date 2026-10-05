@@ -223,7 +223,9 @@ describe('the places queue, when the catalog may already hold the shop', () => {
     const { fixture, page, calls } = await refused();
 
     expect(page.queue.current()?.id).toBe(LIBERTADOR);
-    expect(page.queue.decided()).toBe(0);
+    expect(page.queue.items().some((place) => place.id === LIBERTADOR)).toBe(
+      true
+    );
     expect(named(calls, 'linkPlace')).toHaveLength(0);
     expect(page.candidates()).toEqual([
       {
@@ -583,39 +585,5 @@ describe('the places queue, rejecting a place already imported', () => {
     expect(page.queue.current()?.id).toBe(LIBERTADOR);
     expect(page.errorKey()).toBe('harvest.places.error.alreadyImported');
     expect(text(fixture)).toContain('harvest.places.error.alreadyImported');
-  });
-});
-
-describe('the places queue, bulk import beside a candidate', () => {
-  it('leaves a place the catalog may hold in the queue and reports it', async () => {
-    const { page, calls } = await render();
-
-    page.queue.toggle(LIBERTADOR);
-    page.queue.toggle('place-dia-1');
-    await page.askImport();
-    const pending = page.pending();
-    if (pending === null) {
-      throw new Error('no bulk action is waiting');
-    }
-    page.go(pending);
-    await drain();
-
-    expect(named(calls, 'linkPlace')).toHaveLength(0);
-    expect(named(calls, 'importPlace').map((args) => args[1])).toEqual([
-      {},
-      {},
-    ]);
-    expect(page.queue.items().some((place) => place.id === LIBERTADOR)).toBe(
-      true
-    );
-    expect(page.report()).toMatchObject({
-      succeeded: 1,
-      failed: [
-        {
-          name: 'Mercadona Libertador',
-          reasonKey: 'harvest.places.error.matchesLocation',
-        },
-      ],
-    });
   });
 });

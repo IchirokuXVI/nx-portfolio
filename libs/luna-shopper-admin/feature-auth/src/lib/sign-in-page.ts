@@ -2,8 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -15,6 +18,18 @@ import {
 import type { SignInFailure } from '@portfolio/luna-shopper-admin/models';
 import { EntryCard } from '@portfolio/luna-shopper-admin/ui';
 import { signInMessage } from './sign-in-copy';
+
+/**
+ * How long this page waits before each new try of a passwordless sign in that
+ * got no answer, in milliseconds (admin plan 0049, target 1).
+ *
+ * Four more tries over fifteen seconds, which is about what a backend takes to
+ * finish starting. A fixed number and not a loop: a server that goes on not
+ * answering is a broken server, and the page then says so with the form.
+ */
+export const DEVELOPMENT_RETRY_WAITS_MS: readonly number[] = [
+  1000, 2000, 4000, 8000,
+];
 
 /**
  * A username, a password, and a button (plan 0002, section 1).
@@ -40,6 +55,19 @@ import { signInMessage } from './sign-in-copy';
  * staging tab, or the reverse. The card says the name above the form, and the
  * band above the card shows the color the rail takes once the operator is in
  * (admin plan 0046, target 8).
+ *
+ * **On a server that asks for no password this page signs in by itself**
+ * (admin plan 0049, target 1). `SessionBootstrap` takes that session before
+ * the first screen, and it tries once. When that one try got no answer, or
+ * was never made because nothing answered at all, the operator was left on
+ * this form in front of a server that would have let them in: a backend that
+ * is still starting is the ordinary case, and so is one that restarts while
+ * the tab is open. So the page asks whenever the server says it may, draws a
+ * line that says so in place of the form, and tries again a few times when
+ * nothing answers. It is still the server that decides, through
+ * `devAutologin`, and never the build. A sign in that the server refuses in
+ * words puts the form back with the reason, which is the fallback `0002`
+ * names.
  */
 @Component({
   selector: 'lib-sign-in-page',
@@ -59,42 +87,50 @@ import { signInMessage } from './sign-in-copy';
         headingId="sign-in-heading"
         showDeployment
       >
-        <form (ngSubmit)="submit()" #form="ngForm" novalidate>
-          <label for="username">{{ 'signIn.username' | rokuT }}</label>
-          <input
-            [(ngModel)]="username"
-            [disabled]="busy()"
-            autocapitalize="none"
-            autocomplete="username"
-            autocorrect="off"
-            id="username"
-            name="username"
-            required
-            spellcheck="false"
-            type="text"
-          />
+        @if (entering()) {
+          <!-- A server that asks for no password: the page is taking the
+               session by itself, and there is nothing to type. -->
+          <p role="status" data-entering>
+            {{ 'signIn.development' | rokuT }}
+          </p>
+        } @else {
+          <form (ngSubmit)="submit()" #form="ngForm" novalidate>
+            <label for="username">{{ 'signIn.username' | rokuT }}</label>
+            <input
+              [(ngModel)]="username"
+              [disabled]="busy()"
+              autocapitalize="none"
+              autocomplete="username"
+              autocorrect="off"
+              id="username"
+              name="username"
+              required
+              spellcheck="false"
+              type="text"
+            />
 
-          <label for="password">{{ 'signIn.password' | rokuT }}</label>
-          <input
-            [(ngModel)]="password"
-            [disabled]="busy()"
-            autocomplete="current-password"
-            id="password"
-            name="password"
-            required
-            type="password"
-          />
+            <label for="password">{{ 'signIn.password' | rokuT }}</label>
+            <input
+              [(ngModel)]="password"
+              [disabled]="busy()"
+              autocomplete="current-password"
+              id="password"
+              name="password"
+              required
+              type="password"
+            />
 
-          @if (message(); as copy) {
-            <p class="entry-error" role="alert">
-              {{ copy.key | rokuT: copy.args }}
-            </p>
-          }
+            @if (message(); as copy) {
+              <p class="entry-error" role="alert">
+                {{ copy.key | rokuT: copy.args }}
+              </p>
+            }
 
-          <button [disabled]="busy() || !complete()" type="submit">
-            {{ (busy() ? 'signIn.submitting' : 'signIn.submit') | rokuT }}
-          </button>
-        </form>
+            <button [disabled]="busy() || !complete()" type="submit">
+              {{ (busy() ? 'signIn.submitting' : 'signIn.submit') | rokuT }}
+            </button>
+          </form>
+        }
       </lib-entry-card>
     </main>
   `,
@@ -158,6 +194,40 @@ export class SignInPage {
     () => this.username().trim() !== '' && this.password() !== ''
   );
 
+  /**
+   * Whether the page is taking a passwordless session by itself, which is
+   * drawn in place of the form.
+   */
+  readonly entering = signal(false);
+
+  /** The wait before the next try, so that leaving the page cancels it. */
+  private _retry: ReturnType<typeof setTimeout> | null = null;
+  private _left = false;
+
+  constructor() {
+    // Whenever the server says it hands out a session with no password. That
+    // is true from the start on a page reached after the one try of
+    // `SessionBootstrap` failed, and it becomes true later on a page that was
+    // drawn under the cover of an outage, when the server answers again and
+    // the deployment is read a second time. `untracked`, because the sign in
+    // writes signals this effect must not follow.
+    effect(() => {
+      const offered = this._deployments.devAutologin();
+      untracked(() => {
+        if (offered && !this.entering()) {
+          void this._enter(0);
+        }
+      });
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      this._left = true;
+      if (this._retry !== null) {
+        clearTimeout(this._retry);
+      }
+    });
+  }
+
   async submit(): Promise<void> {
     // Guards a submit from the Enter key, which reaches here regardless of the
     // button's disabled state.
@@ -185,5 +255,43 @@ export class SignInPage {
     }
 
     await this._router.navigateByUrl('/');
+  }
+
+  /**
+   * Take the session a server offers with no password, and go in.
+   *
+   * `attempt` counts the tries that got no answer. A try that the server
+   * answered with a refusal is not tried again: the answer will not change,
+   * and the form with its reason is where the operator should then be. A try
+   * that got no answer is, after the wait {@link DEVELOPMENT_RETRY_WAITS_MS}
+   * names, until the waits run out.
+   */
+  private async _enter(attempt: number): Promise<void> {
+    this._retry = null;
+    if (this._left || this.busy()) {
+      return;
+    }
+
+    this.entering.set(true);
+    this.failure.set(null);
+
+    const failure = await this._sessions.signInForDevelopment();
+    if (this._left) {
+      return;
+    }
+
+    if (failure === null) {
+      await this._router.navigateByUrl('/');
+      return;
+    }
+
+    const wait = DEVELOPMENT_RETRY_WAITS_MS[attempt];
+    if (failure.reason === 'unknown' && wait !== undefined) {
+      this._retry = setTimeout(() => void this._enter(attempt + 1), wait);
+      return;
+    }
+
+    this.entering.set(false);
+    this.failure.set(failure);
   }
 }
