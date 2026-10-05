@@ -1,3 +1,5 @@
+> **PR:** [#635](https://github.com/IchirokuXVI/nx-portfolio/pull/635)
+
 # 0049 What the first walk found
 
 > Follows the seven remodel plans, `0041` to `0047`, which are merged. Prerequisite reading:
