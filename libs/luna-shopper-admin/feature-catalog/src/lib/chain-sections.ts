@@ -17,6 +17,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
+  RECORD_EDIT_PARAM,
   ResourceChanges,
   ResourceReferences,
   ResourceRegistry,
@@ -159,7 +160,7 @@ export function panelErrorKey(error: unknown): string {
                       {{ 'catalog.locationSections.downShort' | rokuT }}
                     </button>
                     @if (editLink(section.id); as link) {
-                      <a [routerLink]="link">{{
+                      <a [queryParams]="editQuery" [routerLink]="link">{{
                         'resource.action.edit' | rokuT
                       }}</a>
                     }
@@ -399,6 +400,12 @@ export class ChainSections {
       (id) => known.get(id) ?? { id, name: id, root: false }
     );
   }
+
+  /**
+   * What "Edit" adds to the address of a record, so that the page opens as
+   * the form and not to be read (admin plan 0053, section 2.3).
+   */
+  readonly editQuery = { [RECORD_EDIT_PARAM]: '1' };
 
   editLink(id: string): readonly string[] | null {
     return this._registry.rowPath('sections', id, {

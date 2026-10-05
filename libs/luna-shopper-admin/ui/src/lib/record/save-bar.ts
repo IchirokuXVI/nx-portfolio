@@ -21,7 +21,7 @@ import { Viewport } from '../viewport';
  *
  * | State | The bar says | Save | Cancel |
  * | --- | --- | --- | --- |
- * | `clean` | "No changes yet" | off | on |
+ * | `clean` | "No changes yet" | off, or on with `canSave` | on |
  * | `dirty` | "2 unsaved changes" | on | on |
  * | `missing` | "* Required. 2 required fields are still empty." | off | on |
  * | `saving` | "Saving…", and the button says it too | off | off |
@@ -223,7 +223,12 @@ export class SaveBar {
    * field still empty, and not twice.
    */
   readonly canSave = computed(() => {
-    const kind = this.state().kind;
-    return kind === 'dirty' || kind === 'invalid' || kind === 'refused';
+    const state = this.state();
+    return (
+      state.kind === 'dirty' ||
+      state.kind === 'invalid' ||
+      state.kind === 'refused' ||
+      (state.kind === 'clean' && state.canSave === true)
+    );
   });
 }

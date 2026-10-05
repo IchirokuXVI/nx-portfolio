@@ -14,6 +14,7 @@ import {
 import { toGatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
+  RECORD_EDIT_PARAM,
   ResourceChanges,
   ResourceReferences,
   ResourceRegistry,
@@ -166,6 +167,7 @@ export interface LineRow {
                   }
                   @if (entry.formPath; as path) {
                     <a
+                      [queryParams]="editQuery"
                       [routerLink]="path"
                       class="button small"
                       data-edit-line
@@ -238,6 +240,12 @@ export class ListPage {
   readonly info = this._lists?.info ?? null;
 
   readonly canDelete = this._lists?.actions?.delete === true;
+  /**
+   * What "Edit" adds to the address of a record, so that the page opens as
+   * the form and not to be read (admin plan 0053, section 2.3).
+   */
+  readonly editQuery = { [RECORD_EDIT_PARAM]: '1' };
+
   readonly canDeleteLines = this._lines?.actions?.delete === true;
 
   /** The line actions, built once in this injection context. */

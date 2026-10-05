@@ -571,6 +571,59 @@ describe('RecordView', () => {
       expect(saved.map((row) => row['slug'])).toEqual(['centre']);
     });
 
+    /**
+     * The operator left while the save was on its way. An output of a view
+     * that is gone throws, and the store has told its listener already.
+     */
+    it('says nothing, and does not throw, when it is gone before the answer', async () => {
+      let release: () => void = () => undefined;
+      hold = new Promise<void>((resolve) => (release = resolve));
+      drawn = await draw({ compact: true });
+      const saved: ResourceRow[] = [];
+      const heard: ResourceRow[] = [];
+      drawn.fixture.componentInstance.saved.subscribe((row) => saved.push(row));
+      drawn.store.onSaved((row) => heard.push(row));
+      drawn.store.edit();
+      drawn.store.set('slug', 'centre');
+      await settle(drawn.fixture);
+
+      const saving = drawn.fixture.componentInstance.save();
+      drawn.fixture.destroy();
+      release();
+
+      await expect(saving).resolves.toBeUndefined();
+      expect(saved).toEqual([]);
+      expect(heard.map((row) => row['slug'])).toEqual(['centre']);
+    });
+
+    it('does not throw when a refused save answers a view that is gone', async () => {
+      let release: () => void = () => undefined;
+      hold = new Promise<void>((resolve) => (release = resolve));
+      refuseWith = refusal('validation_failed', 422, { slug: ['Taken'] });
+      // A phone, where a refused save asks for a render hook.
+      drawn = await draw({ compact: true });
+      drawn.store.edit();
+      drawn.store.set('slug', 'centre');
+      await settle(drawn.fixture);
+
+      const saving = drawn.fixture.componentInstance.save();
+      drawn.fixture.destroy();
+      release();
+
+      await expect(saving).resolves.toBeUndefined();
+    });
+
+    it('puts the focus on the first control of the form when asked to', async () => {
+      drawn = await draw();
+      drawn.store.edit();
+      await settle(drawn.fixture);
+
+      drawn.fixture.componentInstance.focusFirst();
+
+      // The name is the first row the form can change.
+      expect(document.activeElement?.id).toBe('record-field-name-en');
+    });
+
     /** The page decides what Cancel does. The view only says it was pressed. */
     it('says that Cancel was pressed, and throws nothing away itself', async () => {
       drawn = await draw();

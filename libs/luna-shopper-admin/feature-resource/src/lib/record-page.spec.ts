@@ -407,6 +407,51 @@ describe('RecordPage, after a save', () => {
     expect(reads).toBe(0);
   });
 
+  /**
+   * The operator left while the save was on its way. The view is gone and
+   * can say nothing, and the list they are on still has to read again.
+   */
+  it('tells whoever shows the resource about a save that answers after the page is gone', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+    const changes = TestBed.inject(ResourceChanges);
+    let release: () => void = () => undefined;
+    const update = server.update;
+    server.update = async (id, input) => {
+      await new Promise<void>((resolve) => (release = resolve));
+      return update(id, input);
+    };
+
+    await press(mounted, '[data-edit]');
+    mounted.page.store().set('name', 'Capping');
+    const saving = mounted.view?.save();
+    await drawn(mounted.harness);
+
+    const leaving = TestBed.inject(Router).navigateByUrl('/plants/p1/lines');
+    await drawn(mounted.harness);
+    one(mounted, '[data-leave] [data-confirm]')?.click();
+    expect(await leaving).toBe(true);
+    await drawn(mounted.harness);
+    expect(at(mounted.harness).page).toBeUndefined();
+
+    release();
+    await expect(saving).resolves.toBeUndefined();
+
+    expect(updates).toHaveLength(1);
+    expect(changes.version('lines')).toBe(1);
+    expect(url()).toBe('/plants/p1/lines');
+  });
+
+  it('tells whoever shows the resource once, and not twice', async () => {
+    const mounted = await mount('/plants/p1/lines/new');
+    const changes = TestBed.inject(ResourceChanges);
+
+    mounted.page.store().set('name', 'Capping');
+    await mounted.view?.save();
+    await drawn(mounted.harness);
+
+    expect(changes.version('lines')).toBe(1);
+  });
+
   it('opens the new record after an add, and says so once', async () => {
     const mounted = await mount('/plants/p1/lines/new');
     const changes = TestBed.inject(ResourceChanges);
@@ -513,6 +558,48 @@ describe('RecordPage, a record under a parent row', () => {
       name: 'Cordoba plant',
     });
     expect(one(mounted, 'h1')?.textContent).toBe('Cordoba plant');
+  });
+});
+
+describe('RecordPage, where the focus goes', () => {
+  /** The button that was pressed leaves the page with the press. */
+  it('puts it on the first control of the form after "Edit"', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+
+    one(mounted, '[data-edit]')?.focus();
+    await press(mounted, '[data-edit]');
+
+    expect(one(mounted, '[data-edit]')).toBeNull();
+    // The plant is fixed once the line exists, so the name is the first.
+    expect(document.activeElement?.id).toBe('record-field-name');
+  });
+
+  /** The bar leaves the page with the save. */
+  it('puts it on the heading after a save', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+    await press(mounted, '[data-edit]');
+    mounted.page.store().set('name', 'Capping');
+    await drawn(mounted.harness);
+
+    await press(mounted, 'lib-save-bar [data-save]');
+
+    const heading = one(mounted, 'h1');
+    expect(heading?.textContent).toBe('Capping');
+    expect(document.activeElement).toBe(heading);
+    // Reachable by a script, and not a stop of the Tab key.
+    expect(heading?.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('leaves it alone when the save was refused', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+    server.update = () => Promise.reject(refusal('conflict', 409));
+    await press(mounted, '[data-edit]');
+    mounted.page.store().set('name', 'Capping');
+    await drawn(mounted.harness);
+
+    await press(mounted, 'lib-save-bar [data-save]');
+
+    expect(document.activeElement).not.toBe(one(mounted, 'h1'));
   });
 });
 

@@ -437,6 +437,28 @@ describe('RecordStore, adding a record', () => {
     expect(store.missing()).toEqual(['name']);
   });
 
+  /**
+   * Every value came with the address and nothing was typed. The record is
+   * complete as it opened, so it can be added.
+   */
+  it('lets a new record be added when nothing is missing and nothing was typed', async () => {
+    const gateway = gatewayOf();
+    const store = await adding(gateway, { name: 'Triana', slug: 'triana' });
+
+    expect(store.changed()).toEqual([]);
+    expect(store.missing()).toEqual([]);
+    expect(store.bar()).toEqual({ kind: 'clean', canSave: true });
+
+    await store.submit();
+    expect(gateway.created).toHaveLength(1);
+  });
+
+  it('does not offer it while a required field is empty', async () => {
+    const store = await adding(gatewayOf(), { slug: 'triana' });
+
+    expect(store.bar()).toEqual({ kind: 'missing', required: 1 });
+  });
+
   it('ignores what it was handed when the record exists', async () => {
     const store = new RecordStore<ResourceRow>(descriptor, gatewayOf(), 's1', {
       name: 'Hijacked',
@@ -496,7 +518,152 @@ describe('RecordStore, adding a record', () => {
   });
 });
 
+describe('RecordStore, a record read twice at once', () => {
+  /** Two reads overlap, and the older one answers last. */
+  it('applies only the answer of the newest read', async () => {
+    const answers: ((value: ResourceRow) => void)[] = [];
+    let reads = 0;
+    const store = await opened(
+      gatewayOf({
+        read: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve(row)
+            : new Promise<ResourceRow>((resolve) => answers.push(resolve));
+        },
+      })
+    );
+
+    const older = store.load();
+    const newer = store.load();
+    answers[1]({ ...row, name: 'Newer' });
+    await newer;
+    answers[0]({ ...row, name: 'Older' });
+    await older;
+
+    expect(store.row()?.['name']).toBe('Newer');
+  });
+
+  it('ignores the failure of a read that a newer one replaced', async () => {
+    const pending: {
+      resolve: (value: ResourceRow) => void;
+      reject: (reason: unknown) => void;
+    }[] = [];
+    let reads = 0;
+    const store = await opened(
+      gatewayOf({
+        read: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve(row)
+            : new Promise<ResourceRow>((resolve, reject) =>
+                pending.push({ resolve, reject })
+              );
+        },
+      })
+    );
+
+    const older = store.load();
+    const newer = store.load();
+    pending[1].resolve({ ...row, name: 'Newer' });
+    await newer;
+    pending[0].reject(refusal('internal', 500));
+    await older;
+
+    expect(store.status()).toBe('ready');
+    expect(store.error()).toBeNull();
+    expect(store.row()?.['name']).toBe('Newer');
+  });
+});
+
+describe('RecordStore, a read that fails under a form', () => {
+  const failingSecondRead = () => {
+    let reads = 0;
+    return gatewayOf({
+      read: () => {
+        reads += 1;
+        return reads === 1
+          ? Promise.resolve(row)
+          : Promise.reject(refusal('internal', 500));
+      },
+    });
+  };
+
+  it('keeps the row, the form and the draft, and says the failure', async () => {
+    const store = await opened(failingSecondRead());
+    store.edit();
+    store.set('name', 'Typed and not saved');
+
+    await store.load();
+
+    expect(store.status()).toBe('ready');
+    expect(store.mode()).toBe('edit');
+    expect(store.row()).toEqual(row);
+    expect(store.draft()['name']).toBe('Typed and not saved');
+    expect(store.changed()).toEqual(['name']);
+    expect(store.error()?.code).toBe('internal');
+  });
+
+  /** Reading holds no draft, so there the page says it has no answer. */
+  it('still takes the record away while the page reads', async () => {
+    const store = await opened(failingSecondRead());
+
+    await store.load();
+
+    expect(store.status()).toBe('error');
+    expect(store.row()).toBeNull();
+  });
+});
+
+describe('RecordStore, who hears about a save', () => {
+  it('tells the listener of a save that went through, with the row', async () => {
+    const store = await opened();
+    const heard: ResourceRow[] = [];
+    store.onSaved((saved) => heard.push(saved));
+    store.edit();
+    store.set('name', 'Triana');
+
+    await store.submit();
+
+    expect(heard.map((saved) => saved['name'])).toEqual(['Triana']);
+  });
+
+  it('tells nobody about a save that was refused, or about a delete', async () => {
+    const store = await opened(
+      gatewayOf({ update: () => Promise.reject(refusal('conflict', 409)) })
+    );
+    const heard: ResourceRow[] = [];
+    store.onSaved((saved) => heard.push(saved));
+    store.edit();
+    store.set('name', 'Triana');
+
+    await store.submit();
+    store.cancel();
+    await store.remove();
+
+    expect(heard).toEqual([]);
+  });
+});
+
 describe('RecordStore, deleting a record', () => {
+  /** A delete is busy, and it is not a save. */
+  it('does not let the bar say "saving" while a delete is on its way', async () => {
+    let done: () => void = () => undefined;
+    const store = await opened(
+      gatewayOf({
+        remove: () => new Promise<void>((resolve) => (done = resolve)),
+      })
+    );
+
+    const removing = store.remove();
+    expect(store.busy()).toBe(true);
+    expect(store.bar().kind).not.toBe('saving');
+
+    done();
+    await removing;
+    expect(store.busy()).toBe(false);
+  });
+
   it('answers true when the record was deleted', async () => {
     const gateway = gatewayOf();
     const store = await opened(gateway);
