@@ -1622,6 +1622,7 @@
         "map": "Map it to one of ours",
         "unmap": "Unmap it",
         "ignore": "We do not sell from here",
+        "ignoreShort": "Ignore",
         "unignore": "Put it back in the queue"
       },
       "map": {

@@ -204,6 +204,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         defaultView="list"
         emptyKey="harvest.shops.empty"
         rejectKey="harvest.shops.action.ignore"
+        rejectShortKey="harvest.shops.action.ignoreShort"
         titleKey="harvest.shops.heading"
       >
         <lib-harvest-notice

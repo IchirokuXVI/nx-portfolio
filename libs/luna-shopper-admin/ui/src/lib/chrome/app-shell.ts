@@ -457,13 +457,16 @@ export const BAR_SECTIONS = 4;
 
     /* In the rail the name has 4.75rem to sit in. "PRODUCTION" at the size
        above is as wide as the rail and touched both edges, so here it is a
-       size smaller, with a margin kept at each side whatever the name. The
-       physical property, because this file may not cap an inline size: the
-       page takes the whole width, and a spec reads the file for that. */
+       size smaller, with a margin kept at each side whatever the name: the
+       rail less 0.375rem at each edge. A length and not a share, because the
+       block that holds it is as narrow as the buttons under it. The physical
+       property, because this file may not cap an inline size: the page takes
+       the whole width, and a spec reads the file for that. */
     .rail .deployment {
       box-sizing: border-box;
-      max-width: calc(100% - 0.75rem);
-      padding-inline: 0.25rem;
+      max-width: 4rem;
+      padding-inline: 0.1875rem;
+      letter-spacing: -0.01em;
       overflow: hidden;
       font-size: 0.5625rem;
       text-overflow: ellipsis;
