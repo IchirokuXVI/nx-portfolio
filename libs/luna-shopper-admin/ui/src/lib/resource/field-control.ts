@@ -4,6 +4,7 @@ import {
   computed,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type {
@@ -12,6 +13,7 @@ import type {
   ReferenceScope,
   ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
+import { Switch } from '../record/switch';
 import { LocalizedTextControl } from './localized-text-control';
 import type { ReferenceLookup } from './reference-lookup';
 import { ReferencePicker, type ReferenceEmpty } from './reference-picker';
@@ -28,6 +30,11 @@ import { ReferencesControl } from './references-control';
  * unreadable entry as the empty string, so a mistyped price would arrive here
  * as a cleared field rather than as something to complain about, and on several
  * browsers a scroll wheel over a focused number input silently changes it.
+ *
+ * **A refusal is said by the row and carried by the control** (admin plan
+ * 0052, section 3.3). `invalid` sets `aria-invalid`, which the global rule
+ * draws as a red edge, and `describedBy` names the lines under the control
+ * that say why.
  */
 @Component({
   selector: 'lib-field-control',
@@ -36,6 +43,7 @@ import { ReferencesControl } from './references-control';
     LocalizedTextControl,
     ReferencePicker,
     ReferencesControl,
+    Switch,
   ],
   template: `
     @switch (field().kind) {
@@ -43,7 +51,10 @@ import { ReferencesControl } from './references-control';
         <lib-localized-text-control
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
+          [describedBy]="describedBy()"
           [disabled]="disabled()"
+          [invalid]="invalid()"
+          [label]="field().label | rokuT"
           [list]="isList()"
           [locales]="localesOf()"
           [maxLength]="maxLengthOf()"
@@ -56,10 +67,12 @@ import { ReferencesControl } from './references-control';
           <!-- Three answers, because the column has three. A per shop
                availability override is yes, no, or "nobody has checked this
                shop, use what the scope says", and the third is the ordinary
-               one. A checkbox can only say two of those, so it would submit
+               one. A switch can only say two of those, so it would submit
                "not available here" for every row an operator merely opened. -->
           <select
             (change)="onTriState($event)"
+            [attr.aria-describedby]="describedBy()"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
             [disabled]="disabled()"
             [id]="controlId()"
             [value]="triState()"
@@ -69,12 +82,17 @@ import { ReferencesControl } from './references-control';
             <option value="false">{{ 'resource.value.no' | rokuT }}</option>
           </select>
         } @else {
-          <input
-            (change)="onCheckbox($event)"
+          <!-- Two answers, so a switch. It says what was pressed, and the
+               form holds the value until Save (admin plan 0052, section
+               3.4). -->
+          <lib-switch
+            (checkedChange)="valueChange.emit($event)"
             [checked]="value() === true"
+            [controlId]="controlId()"
+            [describedBy]="describedBy()"
             [disabled]="disabled()"
-            [id]="controlId()"
-            type="checkbox"
+            [invalid]="invalid()"
+            [label]="field().label | rokuT"
           />
         }
       }
@@ -82,8 +100,11 @@ import { ReferencesControl } from './references-control';
       @case ('enum') {
         <select
           (change)="onInput($event)"
+          [attr.aria-describedby]="describedBy()"
+          [attr.aria-invalid]="invalid() ? 'true' : null"
           [disabled]="disabled()"
           [id]="controlId()"
+          [required]="required()"
           [value]="asText()"
         >
           <option value="">{{ 'resource.field.choose' | rokuT }}</option>
@@ -107,8 +128,11 @@ import { ReferencesControl } from './references-control';
         <lib-reference-picker
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
+          [describedBy]="describedBy()"
           [disabled]="disabled() || scopeOf() === null"
           [empty]="emptyOf()"
+          [invalid]="invalid()"
+          [label]="field().label | rokuT"
           [lookup]="lookup()"
           [resource]="resourceOf()"
           [scope]="scopeOf() ?? {}"
@@ -120,9 +144,12 @@ import { ReferencesControl } from './references-control';
         <lib-references-control
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
+          [describedBy]="describedBy()"
           [disabled]="disabled()"
+          [invalid]="invalid()"
           [locks]="locks()"
           [lookup]="lookup()"
+          [ordered]="isOrdered()"
           [resource]="resourceOf()"
           [scope]="scopeOf()"
           [value]="asIds()"
@@ -132,10 +159,14 @@ import { ReferencesControl } from './references-control';
       @case ('date') {
         <input
           (input)="onInput($event)"
+          [attr.aria-describedby]="describedBy()"
+          [attr.aria-invalid]="invalid() ? 'true' : null"
           [disabled]="disabled()"
           [id]="controlId()"
+          [required]="required()"
           [type]="dateType()"
           [value]="asText()"
+          class="short"
         />
       }
 
@@ -143,22 +174,47 @@ import { ReferencesControl } from './references-control';
         @if (multiline()) {
           <textarea
             (input)="onInput($event)"
+            [attr.aria-describedby]="describedBy()"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
             [attr.maxlength]="maxLengthOf() ?? null"
+            [class.mono]="field().kind === 'json'"
             [disabled]="disabled()"
             [id]="controlId()"
+            [required]="required()"
             [value]="asText()"
             rows="4"
           ></textarea>
         } @else {
-          <input
-            (input)="onInput($event)"
-            [attr.inputmode]="inputMode()"
-            [attr.maxlength]="maxLengthOf() ?? null"
-            [disabled]="disabled()"
-            [id]="controlId()"
-            [value]="asText()"
-            type="text"
-          />
+          <span class="line">
+            <input
+              (input)="onInput($event)"
+              [attr.aria-describedby]="describedBy()"
+              [attr.aria-invalid]="invalid() ? 'true' : null"
+              [attr.inputmode]="inputMode()"
+              [attr.maxlength]="maxLengthOf() ?? null"
+              [class.mono]="isCode()"
+              [class.short]="isShort()"
+              [disabled]="disabled()"
+              [id]="controlId()"
+              [required]="required()"
+              [value]="asText()"
+              type="text"
+            />
+            <!-- The picture an address points at, beside the field once it
+                 loads. An address that is half typed, or that names no
+                 picture, draws nothing: the field itself is the answer
+                 there. The alt is empty because the address names it. -->
+            @if (isImage() && asText() !== '') {
+              <img
+                (error)="pictured.set(null)"
+                (load)="pictured.set(asText())"
+                [class.loaded]="pictured() === asText()"
+                [src]="asText()"
+                alt=""
+                data-picture
+              />
+            }
+          </span>
         }
       }
     }
@@ -169,20 +225,54 @@ import { ReferencesControl } from './references-control';
     }
 
     /* What a control looks like is the global rule's (styles.scss). A field
-       of a form adds only that it fills its row. Restating the padding or the
-       background here would also wipe the arrow that rule draws on a select
-       (admin plan 0050). */
-    input[type='text'],
-    input[type='date'],
-    input[type='datetime-local'],
+       of a form adds only how wide it is: it fills its row, up to 420 px.
+       Restating the padding or the background here would also wipe the arrow
+       that rule draws on a select (admin plan 0050). */
+    input,
     select,
-    textarea {
+    textarea,
+    lib-reference-picker,
+    lib-references-control,
+    lib-localized-text-control {
       inline-size: 100%;
+      max-inline-size: 26.25rem;
     }
 
-    input[type='checkbox'] {
-      inline-size: 1.25rem;
-      block-size: 1.25rem;
+    textarea {
+      display: block;
+      resize: vertical;
+    }
+
+    /* A printed object is read across its lines, so it takes the row. */
+    textarea.mono {
+      max-inline-size: none;
+    }
+
+    .mono {
+      font-family: var(--admin-font-mono);
+    }
+
+    .line {
+      display: flex;
+      gap: var(--admin-space-3);
+      align-items: center;
+    }
+
+    /* Out of the row until it has loaded, so a broken address leaves no
+       hole beside the field. */
+    img {
+      display: none;
+      flex: none;
+      inline-size: 3.5rem;
+      block-size: 3.5rem;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-neutral-wash);
+      object-fit: contain;
+    }
+
+    img.loaded {
+      display: block;
     }
 
     input:focus-visible,
@@ -194,6 +284,26 @@ import { ReferencesControl } from './references-control';
 
     :disabled {
       opacity: 0.55;
+    }
+
+    /* A number, an amount, a date and a code are short, and a box as wide as
+       a name would say they are not. On a phone every control fills its
+       row. */
+    @media (min-width: 48rem) {
+      .short {
+        max-inline-size: 10.5rem;
+      }
+    }
+
+    @media (max-width: 47.99rem) {
+      input,
+      select,
+      textarea,
+      lib-reference-picker,
+      lib-references-control,
+      lib-localized-text-control {
+        max-inline-size: none;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -211,8 +321,18 @@ export class FieldControl {
    * and to ask which targets are locked (admin plan 0028, section 3).
    */
   readonly context = input<ResourceRow>({});
+  /** Whether the value was refused. Sets `aria-invalid` and the red edge. */
+  readonly invalid = input(false);
+  /**
+   * The ids of the lines that describe the control: its refusals and its
+   * help. The row draws them, and `describedByOf` beside it builds this.
+   */
+  readonly describedBy = input<string | null>(null);
 
   readonly valueChange = output<DraftValue>();
+
+  /** The address whose picture has loaded, for a field that holds one. */
+  readonly pictured = signal<string | null>(null);
 
   asText(): string {
     const value = this.value();
@@ -317,6 +437,35 @@ export class FieldControl {
     );
   }
 
+  /** Whether the control itself says it must be filled. */
+  required(): boolean {
+    return this.field().required === true;
+  }
+
+  /** Whether the order of a list of references is part of the answer. */
+  isOrdered(): boolean {
+    const field = this.field();
+    return field.kind === 'references' && field.ordered === true;
+  }
+
+  /** Text an operator copies character by character, in the mono face. */
+  isCode(): boolean {
+    const field = this.field();
+    return field.kind === 'text' && field.format === 'code';
+  }
+
+  /** Whether the text is the address of a picture, drawn beside the field. */
+  isImage(): boolean {
+    const field = this.field();
+    return field.kind === 'text' && field.format === 'image';
+  }
+
+  /** A number, an amount of money and a code take a short box. */
+  isShort(): boolean {
+    const kind = this.field().kind;
+    return kind === 'money' || kind === 'number' || this.isCode();
+  }
+
   dateType(): string {
     const field = this.field();
     return field.kind === 'date' && field.time === true
@@ -341,10 +490,6 @@ export class FieldControl {
       | HTMLSelectElement
       | HTMLTextAreaElement;
     this.valueChange.emit(target.value);
-  }
-
-  onCheckbox(event: Event): void {
-    this.valueChange.emit((event.target as HTMLInputElement).checked);
   }
 
   /** Which of the three answers a nullable boolean is showing. */

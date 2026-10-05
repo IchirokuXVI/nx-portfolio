@@ -1,5 +1,6 @@
 import type { Signal, Type } from '@angular/core';
 import type { InfoContent } from './info-content';
+import type { RecordBlock } from './record-block';
 import type {
   EnumOption,
   FieldDescriptor,
@@ -274,6 +275,17 @@ export interface NamedAction<T extends ResourceRow = ResourceRow> {
    * that resolves reference fields is exactly such a place.
    */
   available?(row: T): boolean;
+  /**
+   * Whether the action destroys (admin plan 0052, section 2.2). It is then
+   * drawn last, under a line, in red.
+   */
+  readonly danger?: true;
+  /**
+   * What the page does when the action went through. `'reload'` reads the
+   * record again and is the default. `'leave'` goes to the list, for an action
+   * after which the record is gone.
+   */
+  readonly after?: 'reload' | 'leave';
   run(row: T): Promise<void>;
 }
 
@@ -571,6 +583,14 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * different screen from the one that changes it.
    */
   readonly editor?: Type<unknown>;
+  /**
+   * What the record page draws for one row, and in which order (admin plan
+   * 0052, section 2.3).
+   *
+   * Absent means one section with every field in the order of {@link fields}.
+   * `recordLayout` is the one reader of the block.
+   */
+  readonly record?: RecordBlock<T>;
   /** Called in an injection context, so the gateway can inject what it needs. */
   gateway(): ResourceGateway<T>;
 }

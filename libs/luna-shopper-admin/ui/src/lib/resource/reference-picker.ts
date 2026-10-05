@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -20,6 +21,8 @@ import {
   recordIdIn,
 } from '@portfolio/luna-shopper-admin/models';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
+import { PopoverSheet } from '../page/popover-sheet';
+import { Viewport } from '../viewport';
 import type {
   ReferenceLookup,
   ReferenceOption,
@@ -83,113 +86,202 @@ interface PickerRow {
  * The keyboard and the names a screen reader hears are the combobox pattern
  * with a listbox: the focus stays in the field the whole time, and the active
  * option is named through `aria-activedescendant`.
+ *
+ * **On a phone it is a sheet** (admin plan 0052, section 3.5). The field is a
+ * button that shows the name, with the same arrow. A press opens a sheet from
+ * the bottom edge: the search field first, then the same list, with rows a
+ * thumb can hit. A choice closes the sheet and the focus goes back to the
+ * button. Escape, the scrim and Close change nothing. Every rule above holds
+ * in the sheet as it does in the combobox.
  */
 @Component({
   selector: 'lib-reference-picker',
-  imports: [RokuTranslatorPipe, ChevronLeftIcon],
+  imports: [
+    NgTemplateOutlet,
+    RokuTranslatorPipe,
+    ChevronLeftIcon,
+    PopoverSheet,
+  ],
   template: `
-    <div class="box">
-      <input
-        (blur)="leave()"
-        (click)="show()"
-        (input)="onType($event)"
-        (keydown)="onKey($event)"
-        [attr.aria-activedescendant]="activeId()"
-        [attr.aria-controls]="open() ? listId() : null"
-        [attr.aria-describedby]="missing() ? missingId() : null"
-        [attr.aria-expanded]="open()"
-        [attr.aria-label]="label()"
-        [disabled]="disabled()"
-        [id]="controlId()"
-        [placeholder]="placeholderKey() | rokuT"
-        [value]="
-          editing()
-            ? term()
-            : isNone()
-              ? ('resource.reference.none' | rokuT)
-              : shownTitle()
-        "
-        aria-autocomplete="list"
-        autocapitalize="none"
-        autocomplete="off"
-        autocorrect="off"
-        role="combobox"
-        spellcheck="false"
-        type="text"
-      />
-      <!-- Out of the tab order on purpose: the field opens the same list with
-           an arrow key, so a second stop would be a second name for one
-           control. The press is swallowed so the field keeps the focus. -->
-      <button
-        (click)="toggle()"
-        (mousedown)="$event.preventDefault()"
-        [attr.aria-controls]="open() ? listId() : null"
-        [attr.aria-expanded]="open()"
-        [attr.aria-label]="'resource.reference.open' | rokuT"
-        [disabled]="disabled()"
-        class="arrow"
-        tabindex="-1"
-        type="button"
-        data-arrow
-      >
-        <lib-chevron-left-icon />
-      </button>
+    <!-- The open list, drawn once: under the field on a wide screen and in the
+         sheet on a phone. The options take no focus and no key of their own.
+         The search field holds the focus and its keys move through them,
+         which is what aria-activedescendant says to a screen reader. A sheet
+         opens with the focus on its panel, so that no keyboard covers the
+         list before the operator asks to type. The search field takes the
+         focus when it is pressed. -->
+    <ng-template #list>
+      <!-- eslint-disable @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+      <ul [attr.aria-label]="label()" [id]="listId()" role="listbox">
+        @for (row of rows(); track row.id; let index = $index) {
+          <li
+            (click)="pick(row)"
+            (mousemove)="active.set(index)"
+            [attr.aria-selected]="row.id === value()"
+            [class.active]="index === active()"
+            [class.quiet]="row.kind !== 'option'"
+            [id]="optionId(index)"
+            role="option"
+          >
+            @switch (row.kind) {
+              @case ('empty') {
+                {{ emptyKey() | rokuT }}
+              }
+              @case ('none') {
+                {{ 'resource.reference.none' | rokuT }}
+              }
+              @default {
+                {{ row.option?.title }}
+              }
+            }
+          </li>
+        }
+      </ul>
+      <!-- eslint-enable @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
+      @if (searching()) {
+        <p class="state" role="status">
+          {{ 'resource.reference.searching' | rokuT }}
+        </p>
+      } @else if (idNotFound()) {
+        <!-- An ID was typed and no row of this resource has it. Not
+             "Nothing matched": that is the answer to a search by name,
+             and its remedy is another word. This one has none. -->
+        <p class="state" role="status" data-id-not-found>
+          @if (nounKey(); as noun) {
+            {{ 'resource.id.notFound' | rokuT: { thing: noun | rokuT } }}
+          } @else {
+            {{ 'resource.id.notFoundHere' | rokuT }}
+          }
+        </p>
+      } @else if (rows().length === 0) {
+        <p class="state" role="status">
+          {{ 'resource.reference.noResults' | rokuT }}
+        </p>
+      }
+    </ng-template>
+
+    @if (compact()) {
+      <!-- On a phone the field is a button and the list is a sheet from the
+           bottom edge (admin plan 0052, section 3.5). A list under the field
+           opened behind the keyboard. The label names the button, and the
+           value it holds is its description. -->
+      <div class="box">
+        <button
+          (click)="show()"
+          [attr.aria-describedby]="describedIds()"
+          [attr.aria-expanded]="open()"
+          [attr.aria-invalid]="invalid() ? 'true' : null"
+          [attr.aria-label]="label()"
+          [disabled]="disabled()"
+          [id]="controlId()"
+          aria-haspopup="dialog"
+          class="field"
+          type="button"
+          data-picker-button
+        >
+          <span
+            [class.quiet]="!isNone() && shownTitle() === ''"
+            [id]="shownId()"
+            class="name"
+          >
+            @if (isNone()) {
+              {{ 'resource.reference.none' | rokuT }}
+            } @else if (shownTitle() !== '') {
+              {{ shownTitle() }}
+            } @else {
+              {{ placeholderKey() | rokuT }}
+            }
+          </span>
+          <span class="arrow"><lib-chevron-left-icon /></span>
+        </button>
+      </div>
 
       @if (open()) {
-        <div (mousedown)="$event.preventDefault()" class="popup">
-          <!-- The options take no focus and no key of their own. The field
-               holds the focus and its keys move through them, which is what
-               aria-activedescendant says to a screen reader. -->
-          <!-- eslint-disable @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-          <ul [attr.aria-label]="label()" [id]="listId()" role="listbox">
-            @for (row of rows(); track row.id; let index = $index) {
-              <li
-                (click)="pick(row)"
-                (mousemove)="active.set(index)"
-                [attr.aria-selected]="row.id === value()"
-                [class.active]="index === active()"
-                [class.quiet]="row.kind !== 'option'"
-                [id]="optionId(index)"
-                role="option"
-              >
-                @switch (row.kind) {
-                  @case ('empty') {
-                    {{ emptyKey() | rokuT }}
-                  }
-                  @case ('none') {
-                    {{ 'resource.reference.none' | rokuT }}
-                  }
-                  @default {
-                    {{ row.option?.title }}
-                  }
-                }
-              </li>
-            }
-          </ul>
-          <!-- eslint-enable @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -->
-          @if (searching()) {
-            <p class="state" role="status">
-              {{ 'resource.reference.searching' | rokuT }}
-            </p>
-          } @else if (idNotFound()) {
-            <!-- An ID was typed and no row of this resource has it. Not
-                 "Nothing matched": that is the answer to a search by name,
-                 and its remedy is another word. This one has none. -->
-            <p class="state" role="status" data-id-not-found>
-              @if (nounKey(); as noun) {
-                {{ 'resource.id.notFound' | rokuT: { thing: noun | rokuT } }}
-              } @else {
-                {{ 'resource.id.notFoundHere' | rokuT }}
-              }
-            </p>
-          } @else if (rows().length === 0) {
-            <p class="state" role="status">
-              {{ 'resource.reference.noResults' | rokuT }}
-            </p>
-          }
-        </div>
+        <lib-popover-sheet
+          (closed)="dismiss()"
+          [heading]="label() ?? (placeholderKey() | rokuT)"
+          [sheet]="true"
+        >
+          <div class="find">
+            <input
+              (input)="onType($event)"
+              (keydown)="onKey($event)"
+              [attr.aria-activedescendant]="activeId()"
+              [attr.aria-controls]="listId()"
+              [attr.aria-label]="'resource.reference.search' | rokuT"
+              [value]="term()"
+              aria-autocomplete="list"
+              aria-expanded="true"
+              autocapitalize="none"
+              autocomplete="off"
+              autocorrect="off"
+              role="combobox"
+              spellcheck="false"
+              type="text"
+              data-picker-search
+            />
+          </div>
+          <div class="sheet-list">
+            <ng-container [ngTemplateOutlet]="list" />
+          </div>
+        </lib-popover-sheet>
       }
-    </div>
+    } @else {
+      <div class="box">
+        <input
+          (blur)="leave()"
+          (click)="show()"
+          (input)="onType($event)"
+          (keydown)="onKey($event)"
+          [attr.aria-activedescendant]="activeId()"
+          [attr.aria-controls]="open() ? listId() : null"
+          [attr.aria-describedby]="describedIds()"
+          [attr.aria-expanded]="open()"
+          [attr.aria-invalid]="invalid() ? 'true' : null"
+          [attr.aria-label]="label()"
+          [disabled]="disabled()"
+          [id]="controlId()"
+          [placeholder]="placeholderKey() | rokuT"
+          [value]="
+            editing()
+              ? term()
+              : isNone()
+                ? ('resource.reference.none' | rokuT)
+                : shownTitle()
+          "
+          aria-autocomplete="list"
+          autocapitalize="none"
+          autocomplete="off"
+          autocorrect="off"
+          role="combobox"
+          spellcheck="false"
+          type="text"
+        />
+        <!-- Out of the tab order on purpose: the field opens the same list with
+             an arrow key, so a second stop would be a second name for one
+             control. The press is swallowed so the field keeps the focus. -->
+        <button
+          (click)="toggle()"
+          (mousedown)="$event.preventDefault()"
+          [attr.aria-controls]="open() ? listId() : null"
+          [attr.aria-expanded]="open()"
+          [attr.aria-label]="'resource.reference.open' | rokuT"
+          [disabled]="disabled()"
+          class="arrow"
+          tabindex="-1"
+          type="button"
+          data-arrow
+        >
+          <lib-chevron-left-icon />
+        </button>
+
+        @if (open()) {
+          <div (mousedown)="$event.preventDefault()" class="popup">
+            <ng-container [ngTemplateOutlet]="list" />
+          </div>
+        }
+      </div>
+    }
 
     @if (missing()) {
       <p [id]="missingId()" class="missing">
@@ -210,12 +302,56 @@ interface PickerRow {
 
     /* The outline, the height and the padding are the global control rule's.
        Only the room for the arrow is added, by the sum the select uses. */
-    input {
+    .box input,
+    .field {
       inline-size: 100%;
       padding-inline-end: calc(
         var(--admin-space-3) + var(--admin-caret) + var(--admin-space-2)
       );
       text-overflow: ellipsis;
+    }
+
+    /* The button of a phone reads as the field it stands for: the text of a
+       field at the left, and the same arrow at the right. */
+    .field {
+      display: block;
+      overflow: hidden;
+      font-size: var(--admin-field-size);
+      text-align: start;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .field .quiet {
+      color: var(--admin-ink-muted);
+    }
+
+    .field .arrow {
+      pointer-events: none;
+    }
+
+    /* The search field stays at the top of the sheet while the list scrolls
+       under it. */
+    .find {
+      position: sticky;
+      inset-block-start: 0;
+      padding: var(--admin-space-2) var(--admin-space-4);
+      border-block-end: 1px solid var(--admin-border);
+      background: var(--admin-surface-raised);
+    }
+
+    .find input {
+      inline-size: 100%;
+    }
+
+    /* A row under a thumb is 48 px high. */
+    .sheet-list li {
+      min-block-size: 3rem;
+      padding-inline: var(--admin-space-4);
+    }
+
+    .sheet-list .state {
+      padding-inline: var(--admin-space-4);
     }
 
     input::placeholder {
@@ -261,7 +397,7 @@ interface PickerRow {
       max-block-size: 16rem;
       overflow-y: auto;
       scroll-margin-block: var(--admin-space-4);
-      border: 1px solid var(--admin-border-strong);
+      border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius-control);
       background: var(--admin-surface-raised);
       box-shadow: 0 0.375rem 1rem rgb(20 23 26 / 14%);
@@ -344,6 +480,15 @@ export class ReferencePicker implements OnDestroy {
    * `<label for>` pointing at {@link controlId}. Already translated.
    */
   readonly label = input<string | null>(null);
+  /**
+   * A translation key for what the empty field says, in place of "Choose…".
+   * The picker under a list of references says what it adds: "Add a category".
+   */
+  readonly prompt = input<string | null>(null);
+  /** Whether the value was refused. Sets `aria-invalid` and the red edge. */
+  readonly invalid = input(false);
+  /** The ids of the lines that describe the field: its refusals and its help. */
+  readonly describedBy = input<string | null>(null);
   readonly disabled = input(false);
 
   readonly valueChange = output<string>();
@@ -397,7 +542,29 @@ export class ReferencePicker implements OnDestroy {
     if (this.resolving()) {
       return 'resource.reference.resolving';
     }
+    const prompt = this.prompt();
+    if (prompt !== null) {
+      return prompt;
+    }
     return this.empty() === null ? 'resource.field.choose' : this.emptyKey();
+  });
+
+  /** The id of the name the button of a phone shows, which describes it. */
+  readonly shownId = computed(() => `${this.controlId()}-shown`);
+
+  /**
+   * What the field is described by: the lines its row handed it, the line
+   * that says its target is gone, and on a phone the value it holds. The
+   * label names the button there, so the value has to be said another way.
+   */
+  readonly describedIds = computed(() => {
+    const ids = [
+      this.compact() ? this.shownId() : null,
+      this.describedBy(),
+      this.missing() ? this.missingId() : null,
+    ].filter((id): id is string => id !== null && id !== '');
+
+    return ids.length === 0 ? null : ids.join(' ');
   });
 
   /** The open list, top to bottom. */
@@ -427,6 +594,12 @@ export class ReferencePicker implements OnDestroy {
 
   private readonly _host: ElementRef<HTMLElement> = inject(ElementRef);
   private readonly _injector = inject(Injector);
+
+  /**
+   * Whether the window is a phone's. The field is then a button, and the list
+   * is a sheet from the bottom edge.
+   */
+  readonly compact = inject(Viewport).compact;
   /**
    * Every row a list has shown, by id. A value chosen from the list is then
    * named from here, without a second read for a row already in hand.
@@ -485,8 +658,12 @@ export class ReferencePicker implements OnDestroy {
     this.open.set(true);
     this.active.set(-1);
     void this._search(this.typed() ? this.term() : '');
-    // On a phone the keyboard takes half the screen, and a list that opened
-    // under it would be a list nobody saw.
+    // A list near the bottom edge of the window opens below it, where nobody
+    // sees it. The sheet of a phone is placed by the window and needs none of
+    // this.
+    if (this.compact()) {
+      return;
+    }
     afterNextRender(
       () => {
         const popup = this._host.nativeElement.querySelector('.popup');
@@ -502,7 +679,7 @@ export class ReferencePicker implements OnDestroy {
       this.close();
       return;
     }
-    this._host.nativeElement.querySelector('input')?.focus();
+    this._host.nativeElement.querySelector<HTMLElement>('.box input')?.focus();
     this.show();
   }
 
@@ -518,14 +695,47 @@ export class ReferencePicker implements OnDestroy {
     this.active.set(-1);
   }
 
-  /** The field lost the focus. A press on the list or the arrow never gets here. */
+  /**
+   * The field lost the focus. A press on the list or the arrow never gets here.
+   *
+   * The search field of a sheet is never bound to this: a press on the heading
+   * of the sheet takes the focus from it, and that is no reason to close.
+   */
   leave(): void {
     this.close();
   }
 
+  /**
+   * The sheet was asked to close: Escape, the scrim or its Close button. It
+   * changes nothing, and the focus goes back to the button that opened it.
+   */
+  dismiss(): void {
+    this.close();
+    this._focusButton();
+  }
+
   pick(row: PickerRow): void {
     this.close();
+    this._focusButton();
     this.valueChange.emit(row.id);
+  }
+
+  /**
+   * On a phone, puts the focus back on the button once the sheet is gone. On
+   * a wide screen the field never lost it.
+   */
+  private _focusButton(): void {
+    if (!this.compact()) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        this._host.nativeElement
+          .querySelector<HTMLElement>('[data-picker-button]')
+          ?.focus();
+      },
+      { injector: this._injector }
+    );
   }
 
   onType(event: Event): void {
@@ -583,7 +793,7 @@ export class ReferencePicker implements OnDestroy {
           // field hears the next one.
           event.preventDefault();
           event.stopPropagation();
-          this.close();
+          this.dismiss();
         }
         return;
       }
@@ -664,6 +874,7 @@ export class ReferencePicker implements OnDestroy {
       // The record the ID names. There is nothing to choose between, so it is
       // chosen: the field shows its name, and the list closes.
       this.close();
+      this._focusButton();
       this.valueChange.emit(id);
       return;
     }

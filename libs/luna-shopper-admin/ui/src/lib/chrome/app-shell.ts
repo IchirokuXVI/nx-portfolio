@@ -480,7 +480,7 @@ export const BAR_SECTIONS = 4;
       gap: var(--admin-space-1);
       min-inline-size: 12rem;
       padding: var(--admin-space-2);
-      border: 1px solid var(--admin-border-strong);
+      border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
       box-shadow: 0 0.5rem 1.5rem rgb(20 33 29 / 16%);
@@ -592,7 +592,7 @@ export const BAR_SECTIONS = 4;
        section 2). The sheet is the near white too, so here it gets a line
        round it to stay a label. */
     .sheet-head .deployment {
-      border: 1px solid var(--admin-border-strong);
+      border: 1px solid var(--admin-border);
       font-size: 0.6875rem;
     }
 

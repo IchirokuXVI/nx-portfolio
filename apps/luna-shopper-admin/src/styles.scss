@@ -65,6 +65,18 @@ textarea {
   color: var(--admin-ink);
 }
 
+// A control whose value was refused (admin plan 0052, target 6). The edge is red
+// and twice as thick, drawn inside the box so that nothing moves. It is not the
+// only sign: the row writes the reason under the control, with a warning mark,
+// and `aria-describedby` ties the two together.
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'],
+button[aria-invalid='true'] {
+  border-color: var(--admin-danger);
+  box-shadow: inset 0 0 0 1px var(--admin-danger);
+}
+
 // The text in a field is 16 px on a phone, where iOS Safari zooms the viewport
 // on focus for anything smaller. The token holds both sizes, and the order
 // matters: `font: inherit` above takes the app's face, then this sets the size.

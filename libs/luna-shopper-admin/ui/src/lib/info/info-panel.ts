@@ -134,7 +134,7 @@ const GAP = 8;
       margin: 0;
       overflow-y: auto;
       padding: var(--admin-space-4);
-      border: 1px solid var(--admin-border-strong);
+      border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
       /* The one shadow in the app: this panel floats over the page it explains,

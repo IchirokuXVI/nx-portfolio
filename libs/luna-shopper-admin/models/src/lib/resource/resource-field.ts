@@ -123,6 +123,26 @@ interface FieldBase<T extends ResourceRow> {
    * which is the answer for a row whose scope the read did not describe.
    */
   scope?(row: T): ScopeMarkView | undefined;
+  /**
+   * A translation key for the words beside this value while the page is a form
+   * and the value cannot be changed: "Set by the harvester" (admin plan 0052,
+   * section 2.1).
+   */
+  readonly setBy?: string;
+  /**
+   * What a person must look at in this value, or `null`. Drawn as an amber
+   * state beside the value: "Guessed from the city. Check it."
+   *
+   * A method for the reason {@link read} is one.
+   */
+  check?(row: T): FieldCheck | null;
+}
+
+/** An amber state beside a value. Amber means only this. */
+export interface FieldCheck {
+  /** A translation key. */
+  readonly label: string;
+  readonly args?: Readonly<Record<string, string | number>>;
 }
 
 /** A single line, or a paragraph. */
@@ -130,8 +150,16 @@ export interface TextField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'text';
   readonly multiline?: boolean;
   readonly maxLength?: number;
-  /** `url` renders a link in the list and validates the shape in the form. */
-  readonly format?: 'plain' | 'url';
+  /**
+   * How the text reads and what the form checks (admin plan 0052, section
+   * 2.1).
+   *
+   * `url` renders a link in the list and validates the shape in the form.
+   * `code` is text an operator copies character by character, so it is drawn
+   * in the mono face. `image` is the address of a picture: it reads as the
+   * picture beside its address, and the form checks it as it checks a `url`.
+   */
+  readonly format?: 'plain' | 'url' | 'code' | 'image';
 }
 
 /** A count or a measure. Not money, which is its own kind for a reason. */

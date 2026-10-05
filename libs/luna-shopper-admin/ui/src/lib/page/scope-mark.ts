@@ -47,7 +47,7 @@ import type { ScopeLevel } from '@portfolio/luna-shopper-admin/models';
     i {
       inline-size: 0.25rem;
       border-radius: 1px;
-      background: var(--admin-border-strong);
+      background: var(--admin-border);
     }
 
     i:nth-child(1) {

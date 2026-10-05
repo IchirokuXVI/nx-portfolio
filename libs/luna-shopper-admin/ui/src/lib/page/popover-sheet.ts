@@ -105,7 +105,7 @@ let nextId = 0;
       margin: 0;
       overflow: hidden;
       padding: 0;
-      border: 1px solid var(--admin-border-strong);
+      border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
       box-shadow: 0 0.5rem 1.5rem rgb(20 33 29 / 16%);

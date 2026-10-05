@@ -145,7 +145,7 @@ the `design-taste-frontend` and `antislop` skills for the look.
 | `--admin-surface` | `#f3f4f1` | page ground |
 | `--admin-surface-raised` | `#fcfcfa` | panels, header, fields |
 | `--admin-border` | `#d9dcd6` | panel and row lines |
-| `--admin-border-strong` | `#c3c8c0` | control outlines |
+| `--admin-border-strong` | `#878e86` | control outlines |
 | `--admin-ink` | `#14171a` | text |
 | `--admin-ink-muted` | `#555c63` | second line, labels |
 | `--admin-accent` | `#0b6b53` | primary button, current tab, switch on, scope mark |

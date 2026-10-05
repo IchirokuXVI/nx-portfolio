@@ -92,6 +92,7 @@ export interface FilterChange {
                 "
                 [controlId]="controlId(filter.param)"
                 [empty]="emptyOf(filter)"
+                [label]="filter.label | rokuT"
                 [lookup]="lookup()"
                 [none]="offersNone(filter)"
                 [resource]="resourceOf(filter)"

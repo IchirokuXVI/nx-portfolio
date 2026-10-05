@@ -232,6 +232,35 @@ describe('validateDraft', () => {
     });
   });
 
+  /** Admin plan 0052, section 2.1: the address of a picture is an address. */
+  it('checks the address of a picture as it checks a website', () => {
+    const pictured: ResourceDescriptor<Product> = {
+      ...descriptor,
+      fields: [
+        {
+          kind: 'text',
+          name: 'websiteUrl',
+          label: 'products.picture',
+          format: 'image',
+        },
+      ],
+    };
+
+    expect(
+      validateDraft(pictured, { websiteUrl: 'logo.png' }, 'create', {})
+    ).toEqual({
+      websiteUrl: [{ kind: 'key', key: 'resource.error.notAUrl' }],
+    });
+    expect(
+      validateDraft(
+        pictured,
+        { websiteUrl: 'https://cdn.example/logo.png' },
+        'create',
+        {}
+      )
+    ).toEqual({});
+  });
+
   it('refuses a fractional count and a negative one', () => {
     expect(
       validateDraft(descriptor, draftWith({ stores: '2.5' }), 'create', {})

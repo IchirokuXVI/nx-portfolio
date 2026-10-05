@@ -443,7 +443,7 @@ describe('"Priced by"', () => {
       await open(fixture);
 
       const chips = [
-        ...editor(fixture).nativeElement.querySelectorAll('li.chip'),
+        ...editor(fixture).nativeElement.querySelectorAll('li.row'),
       ] as HTMLElement[];
       const [own, warehouse] = chips;
 
@@ -459,7 +459,7 @@ describe('"Priced by"', () => {
 
       // Take the warehouse out, and put the other warehouse in.
       const [, warehouse] = [
-        ...editor(fixture).nativeElement.querySelectorAll('li.chip'),
+        ...editor(fixture).nativeElement.querySelectorAll('li.row'),
       ] as HTMLElement[];
       warehouse.querySelector('button')?.click();
       await settle(fixture);

@@ -74,7 +74,9 @@ and `antislop-human` skills.
    nothing to return. A use that has no `<label for>` passes its visible label as `label`.
 8. **A reference that outlived its target** says so in a line under the field, as it does now.
 9. **Phone.** The field and every option are 44 px high. The list opens under the field, and
-   the page scrolls to show it.
+   the page scrolls to show it. **Plan `0052`, section 3.5, replaced this.** Below 48 rem the
+   field is a button. The list is a sheet from the bottom edge. The search field is at the
+   top of the sheet, and a row is 48 px high.
 10. **The select arrow.** The global rule draws the arrow of a select as a background image.
     The arrow sits `--admin-space-3` from the right edge of the box, and the text of the
     select stops before it. The arrow of the typeahead sits at the same distance. Both are

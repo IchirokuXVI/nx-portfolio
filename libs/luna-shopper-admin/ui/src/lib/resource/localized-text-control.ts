@@ -4,6 +4,7 @@ import {
   input,
   output,
 } from '@angular/core';
+import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 /**
  * One input per locale (plan 0004, section 2).
@@ -14,27 +15,37 @@ import {
  * scopes is a `jsonb` column with one string per language, and a form that
  * edited only one of them would have to be rewritten in fifteen places.
  *
- * The locale is shown beside its box and is not translated. `en` and `es` are
- * the language tags the column is keyed by, so an operator setting the Spanish
- * name needs to see which key they are writing, not the word for it in their
- * own interface language.
+ * The tag before each box is the code of the language, in capitals, and is
+ * not translated. `en` and `es` are the language tags the column is keyed by,
+ * so an operator setting the Spanish name sees which key they are writing.
+ *
+ * **The tag is for the eye and the name of the box is in words** (admin plan
+ * 0052, section 3.7). A screen reader that read "E S" before a box would say
+ * nothing about what the box holds, so each box is named "Name in Spanish":
+ * the label of the field, then the language.
  */
 @Component({
   selector: 'lib-localized-text-control',
+  imports: [RokuTranslatorPipe],
   template: `
-    @for (locale of locales(); track locale) {
-      <!-- The label points at its control by id rather than wrapping it. A
-           wrapping label whose control is inside an @if is associated with
-           nothing a linter, or a screen reader, can see. -->
+    @for (locale of locales(); track locale; let first = $first) {
       <div class="row">
-        <label [for]="controlId() + '-' + locale" class="locale">{{
-          locale
-        }}</label>
+        <span aria-hidden="true" class="locale">{{ locale }}</span>
         @if (list()) {
           <!-- One entry per line. A line break is the one separator a synonym
                cannot contain, so nothing has to guess where an entry ends. -->
           <textarea
             (input)="onInput(locale, $event)"
+            [attr.aria-describedby]="first ? describedBy() : null"
+            [attr.aria-invalid]="first && invalid() ? 'true' : null"
+            [attr.aria-label]="
+              'record.localized.in'
+                | rokuT
+                  : {
+                      label: label(),
+                      language: ('record.language.' + locale | rokuT),
+                    }
+            "
             [disabled]="disabled()"
             [id]="controlId() + '-' + locale"
             [value]="valueFor(locale)"
@@ -43,6 +54,16 @@ import {
         } @else {
           <input
             (input)="onInput(locale, $event)"
+            [attr.aria-describedby]="first ? describedBy() : null"
+            [attr.aria-invalid]="first && invalid() ? 'true' : null"
+            [attr.aria-label]="
+              'record.localized.in'
+                | rokuT
+                  : {
+                      label: label(),
+                      language: ('record.language.' + locale | rokuT),
+                    }
+            "
             [attr.maxlength]="maxLength() ?? null"
             [disabled]="disabled()"
             [id]="controlId() + '-' + locale"
@@ -67,22 +88,20 @@ import {
     }
 
     .locale {
-      min-inline-size: 2rem;
+      flex: none;
+      inline-size: 1.5rem;
+      font-family: var(--admin-font-mono);
       font-size: 0.75rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--admin-ink-muted);
     }
 
+    /* What a control looks like is the global rule's (styles.scss). Here a
+       box only takes the rest of its row. */
     input,
     textarea {
-      /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
-         smaller, which on a phone leaves the operator scrolled sideways. */
       flex: 1;
-      font: inherit;
-      font-size: var(--admin-field-size);
-      border: 1px solid var(--admin-border);
+      min-inline-size: 0;
     }
 
     textarea {
@@ -101,6 +120,19 @@ export class LocalizedTextControl {
   readonly controlId = input.required<string>();
   readonly locales = input.required<readonly string[]>();
   readonly value = input.required<Readonly<Record<string, string>>>();
+  /**
+   * The label of the field, already translated. It is the first word of the
+   * name of each box: "Name in Spanish".
+   */
+  readonly label = input('');
+  /**
+   * Whether the value was refused. The box of the first language carries it,
+   * with {@link describedBy}: a refusal is about the field, and one box has
+   * to be the place the sentence is tied to.
+   */
+  readonly invalid = input(false);
+  /** The ids of the lines that describe the field. */
+  readonly describedBy = input<string | null>(null);
   readonly disabled = input(false);
   readonly maxLength = input<number | undefined>(undefined);
   /** Whether each locale holds a list of entries, one per line. */
