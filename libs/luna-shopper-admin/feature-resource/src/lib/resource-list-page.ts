@@ -3,13 +3,19 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
   untracked,
   type Signal,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  ActivatedRoute,
+  NavigationEnd,
+  Router,
+  RouterLink,
+} from '@angular/router';
 import {
   RokuTranslatorPipe,
   RokuTranslatorService,
@@ -21,8 +27,10 @@ import {
 import {
   fieldOf,
   hasDetailScreen,
+  toCell,
   toRowView,
   type ActionConfirmation,
+  type BriefPresentation,
   type BulkAction,
   type BulkPanelInputs,
   type ErrorLinkTarget,
@@ -33,16 +41,29 @@ import {
   type ReferencesField,
   type ResourceCell,
   type ResourceRow,
+  type RowBrief,
+  type RowState,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   ResourceList,
   Viewport,
+  type ReferenceLookup,
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
-import { ResourceReferences, ResourceRegistry } from './resource-registry';
-import { RESOURCE_DESCRIPTOR } from './resource-route-data';
+import { ResourceChanges } from './resource-changes';
+import {
+  parentsFromRoute,
+  ResourceReferences,
+  ResourceRegistry,
+} from './resource-registry';
+import {
+  RESOURCE_DESCRIPTOR,
+  RESOURCE_LIST_EMBED,
+  SPLIT_UNDER_HEADER,
+  type ResourceListEmbed,
+} from './resource-route-data';
 
 /** A named action waiting on an answer, and what it would be done to. */
 interface PendingAction extends RowAction {
@@ -91,16 +112,22 @@ interface PendingAction extends RowAction {
       [columns]="columns()"
       [compact]="compact()"
       [compactColumns]="compactColumns()"
+      [createKey]="descriptor.labels.create ?? 'resource.action.create'"
+      [currentId]="openId()"
       [empty]="store.empty()"
       [errorKey]="errorKey()"
       [failed]="failed()"
-      [filters]="descriptor.filters ?? []"
+      [filters]="filters"
+      [filterScope]="embed === null ? '' : descriptor.name"
       [filterValues]="store.filters()"
       [hasMore]="store.hasMore()"
+      [heading]="heading()"
+      [headingLevel]="openId() === null ? 1 : 2"
       [info]="descriptor.info ?? null"
+      [layout]="embed === 'column' ? 'rows' : 'auto'"
       [loading]="store.status() === 'loading'"
       [loadingMore]="store.loadingMore()"
-      [lookup]="references"
+      [lookup]="lookup"
       [moreFailed]="moreFailed()"
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
@@ -270,6 +297,23 @@ export class ResourceListPage {
   /** Where a reference cell's target lives, for the link it draws. */
   private readonly _registry = inject(ResourceRegistry);
 
+  private readonly _changes = inject(ResourceChanges);
+
+  /** The last write to this resource that the rows on screen already show. */
+  private _seenVersion = this._changes.version(
+    this._route.snapshot.data[RESOURCE_DESCRIPTOR].name
+  );
+
+  /**
+   * Say that this list wrote to its resource, for whatever else shows it: the
+   * count on a tab, the page of the row's parent. The rows here already show
+   * the write, so this list does not read again for it.
+   */
+  private _wrote(): void {
+    this._changes.wrote(this.descriptor.name);
+    this._seenVersion = this._changes.version(this.descriptor.name);
+  }
+
   /**
    * The resource this screen is for, from route `data`.
    *
@@ -281,6 +325,58 @@ export class ResourceListPage {
   readonly descriptor = this._route.snapshot.data[RESOURCE_DESCRIPTOR];
 
   /**
+   * Whether the list is part of a larger page, and which part (admin plan
+   * 0042). `null` when it is the whole page.
+   */
+  readonly embed: ResourceListEmbed | null =
+    this._route.snapshot.data[RESOURCE_LIST_EMBED] ?? null;
+
+  /**
+   * The rows above this resource that the address names, by filter.
+   *
+   * A chain's shops sit at `/chains/{chainId}/shops`, so the chain is read
+   * from the route and is not a control on the list. Read once: the page that
+   * holds this list draws it again when the parent changes.
+   */
+  private readonly _parents = parentsFromRoute(
+    this._registry,
+    this.descriptor,
+    this._route.snapshot
+  );
+
+  /**
+   * The filters the list offers: the descriptor's, less the one the address
+   * already answered.
+   */
+  readonly filters: readonly FilterDescriptor[] = (
+    (this.descriptor.filters ?? []) as readonly FilterDescriptor[]
+  ).filter((filter) => filter.param !== this.descriptor.parent?.filter);
+
+  /**
+   * How a reference filter finds its rows, kept under the same parent.
+   *
+   * The shops of a chain can be narrowed to a price scope, and the scopes to
+   * pick from are that chain's. A target that lives under a parent this list
+   * is also under is searched under it. Any other target is searched as it
+   * always was, because a parameter its route does not declare is refused.
+   */
+  readonly lookup: ReferenceLookup = {
+    search: (resource, term, scope) => {
+      const filter = this._registry.byName(resource)?.parent?.filter;
+      const parent = filter === undefined ? undefined : this._parents[filter];
+
+      return this.references.search(
+        resource,
+        term,
+        filter === undefined || parent === undefined
+          ? scope
+          : { [filter]: parent, ...scope }
+      );
+    },
+    resolve: (resource, id) => this.references.resolve(resource, id),
+  };
+
+  /**
    * The gateway, built here because this is an injection context.
    *
    * A field initializer runs during construction, which is where `inject` works.
@@ -289,8 +385,38 @@ export class ResourceListPage {
   readonly store = new ResourceListStore<ResourceRow>(
     this.descriptor,
     this.descriptor.gateway(),
-    this._linkedFilters()
+    this._linkedFilters(),
+    this._fixedFilters()
   );
+
+  /**
+   * The row open beside the list, when the list is a column, or `null`.
+   *
+   * It is the first segment under the list's own route, which is the id the
+   * list navigated to when the row was pressed. Written by hand from the
+   * router's events, for the reason `AdminShellPage` gives.
+   */
+  readonly openId = signal<string | null>(this._childId());
+
+  /** What the list draws above itself. */
+  readonly heading = computed<'page' | 'pane' | 'none'>(() => {
+    if (this.embed === 'tab') {
+      return 'none';
+    }
+    if (this.embed === 'column') {
+      // Under a page's header and its tab the column needs no title: the tab
+      // says what is listed.
+      if (this._route.snapshot.data[SPLIT_UNDER_HEADER] === true) {
+        return 'none';
+      }
+      return this._viewport.split() ? 'pane' : 'page';
+    }
+    return 'page';
+  });
+
+  /** The states of one row, built once in this injection context. */
+  private readonly _statesOf: (row: ResourceRow) => readonly RowState[] =
+    this.descriptor.rowStates?.() ?? (() => []);
 
   /**
    * The delete the server refused, said once above the list, or `null`.
@@ -364,7 +490,16 @@ export class ResourceListPage {
     const names = this._names();
     return this.store.rows().map((row) => {
       const view = toRowView(this.descriptor, row, options);
-      return { ...view, cells: this._decorate(view.cells, names) };
+      const cells = this._decorate(view.cells, names, row);
+      const states = this._statesOf(row);
+      return {
+        ...view,
+        cells,
+        ...(states.length > 0 ? { states } : {}),
+        ...(this.embed === 'column'
+          ? { brief: this._brief(row, view.title, options) }
+          : {}),
+      };
     });
   });
 
@@ -395,7 +530,7 @@ export class ResourceListPage {
       return null;
     }
 
-    const filters: readonly FilterDescriptor[] = this.descriptor.filters ?? [];
+    const filters = this.filters;
     return missing
       .map((param) => {
         const filter = filters.find((entry) => entry.param === param);
@@ -509,6 +644,82 @@ export class ResourceListPage {
       const locale = this._content.locale();
       untracked(() => this._readAgainIn(locale));
     });
+
+    // A list that is still drawn while one of its rows is written reads again
+    // (admin plan 0042). A list that is the whole page is never on screen
+    // during a write, and the constructor's own read is all it needs.
+    if (this.embed !== null) {
+      effect(() => {
+        const version = this._changes.version(this.descriptor.name);
+        untracked(() => {
+          if (version !== this._seenVersion) {
+            this._seenVersion = version;
+            void this.store.load();
+          }
+        });
+      });
+    }
+
+    // A column follows the address, so that the open row stays marked through
+    // the browser's back button as well as through a press on a row.
+    if (this.embed === 'column') {
+      const events = this._router.events.subscribe((event) => {
+        if (event instanceof NavigationEnd) {
+          this.openId.set(this._childId());
+        }
+      });
+      inject(DestroyRef).onDestroy(() => events.unsubscribe());
+    }
+  }
+
+  /** The first segment under this list's route, or `null` on the list itself. */
+  private _childId(): string | null {
+    return this._route.snapshot.firstChild?.url[0]?.path ?? null;
+  }
+
+  /** What the address already decided, for every read. */
+  private _fixedFilters(): Record<string, string> {
+    const parent = this.descriptor.parent;
+    const value =
+      parent === undefined ? undefined : this._parents[parent.filter];
+
+    return parent === undefined || value === undefined
+      ? {}
+      : { [parent.filter]: value };
+  }
+
+  /**
+   * One row as a column draws it: a heading, one line, and a number.
+   *
+   * The line is the text of each named field, in order, with nothing between
+   * them but a space: "Sevilla 41004". A field whose value is a word and not
+   * data (none, yes, no) is left out, since a line of a column has no label to
+   * say what is none.
+   */
+  private _brief(
+    row: ResourceRow,
+    title: string,
+    options: Parameters<typeof toCell>[2]
+  ): RowBrief {
+    const brief: BriefPresentation | undefined = this.descriptor.list.brief;
+    const textOf = (name: string): string => {
+      const field = fieldOf(this.descriptor, name);
+      const cell =
+        field === undefined ? undefined : toCell(field, row, options);
+      return cell === undefined || cell.key !== undefined ? '' : cell.text;
+    };
+
+    const trailing =
+      brief?.trailing === undefined ? '' : textOf(brief.trailing);
+
+    return {
+      heading: brief?.heading?.(row, this._content.order()) || title,
+      line: (brief?.line ?? [])
+        .map(textOf)
+        .filter((text) => text !== '')
+        .join(' '),
+      trailing: trailing === '' ? null : trailing,
+    };
   }
 
   /**
@@ -555,6 +766,10 @@ export class ResourceListPage {
     this.busyRowId.set(null);
     this.deleting.set(null);
 
+    if (error === null) {
+      this._wrote();
+    }
+
     if (error !== null) {
       const declared = this.descriptor.errorLinks?.[error.code];
       // A link that names no detail is about the row the delete was for.
@@ -570,7 +785,10 @@ export class ResourceListPage {
         link:
           declared === undefined || id === null
             ? null
-            : this._registry.linkFor(declared, id),
+            : this._registry.linkFor(declared, id, {
+                ...row.row,
+                ...this._parents,
+              }),
       });
     }
   }
@@ -586,7 +804,7 @@ export class ResourceListPage {
   private _linkedFilters(): Record<string, string> {
     const params = this._route.snapshot.queryParamMap;
     const filters: Record<string, string> = {};
-    for (const filter of this.descriptor.filters ?? []) {
+    for (const filter of this.filters) {
       const value = params.get(filter.param);
       if (value !== null && value !== '') {
         filters[filter.param] = value;
@@ -629,6 +847,7 @@ export class ResourceListPage {
     } finally {
       this.busyRowId.set(null);
     }
+    this._wrote();
     await this.store.load();
   }
 
@@ -648,11 +867,12 @@ export class ResourceListPage {
    */
   private _decorate(
     cells: Readonly<Record<string, ResourceCell>>,
-    names: ReadonlyMap<string, string>
+    names: ReadonlyMap<string, string>,
+    row: ResourceRow
   ): Readonly<Record<string, ResourceCell>> {
     const next: Record<string, ResourceCell> = {};
     for (const [name, cell] of Object.entries(cells)) {
-      next[name] = this._decorateCell(name, cell, names);
+      next[name] = this._decorateCell(name, cell, names, row);
     }
     return next;
   }
@@ -660,7 +880,8 @@ export class ResourceListPage {
   private _decorateCell(
     name: string,
     cell: ResourceCell,
-    names: ReadonlyMap<string, string>
+    names: ReadonlyMap<string, string>,
+    row: ResourceRow
   ): ResourceCell {
     const several = cell.references;
     if (several !== undefined) {
@@ -692,7 +913,7 @@ export class ResourceListPage {
       }
     }
 
-    const link = this._linkTo(reference);
+    const link = this._linkTo(reference, row);
     if (link !== null) {
       decorated = { ...decorated, link };
     }
@@ -708,18 +929,25 @@ export class ResourceListPage {
    * A target with no detail screen gets no link, by the same test the row's
    * own click uses: a name without a link is still an answer, and a link to a
    * 404 is not.
+   *
+   * A target that lives under a parent has an address only when that parent is
+   * known (admin plan 0042). The row usually says it: a price names its scope
+   * and its chain. What the row does not say, the address this list sits at
+   * may. Neither means no link.
    */
-  private _linkTo(reference: {
-    readonly resource: string;
-    readonly id: string;
-  }): readonly string[] | null {
+  private _linkTo(
+    reference: { readonly resource: string; readonly id: string },
+    row: ResourceRow
+  ): readonly string[] | null {
     const target = this._registry.byName(reference.resource);
     if (target === undefined || !hasDetailScreen(target)) {
       return null;
     }
 
-    const path = this._registry.pathOf(reference.resource);
-    return path === null ? null : [...path, reference.id];
+    return this._registry.rowPath(reference.resource, reference.id, {
+      ...row,
+      ...this._parents,
+    });
   }
 
   /**

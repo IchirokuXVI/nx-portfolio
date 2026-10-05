@@ -104,13 +104,13 @@ export interface FilterChange {
 
       @if (sorts().length > 0) {
         <div class="filter">
-          <label class="label" for="resource-order">{{
+          <label [for]="orderId()" class="label">{{
             'resource.sort.label' | rokuT
           }}</label>
           <select
             (change)="onOrder($event)"
+            [id]="orderId()"
             [value]="order() ?? ''"
-            id="resource-order"
           >
             <option value="">{{ 'resource.sort.default' | rokuT }}</option>
             @for (sort of sorts(); track sort.value) {
@@ -221,9 +221,27 @@ export class ResourceFilters {
     return toDay(date);
   }
 
+  /**
+   * A name for this set of filters, for a page that draws more than one list
+   * (admin plan 0042): a chain's shops are a column beside the column of
+   * chains, and both search on `query`. Two controls with one id would leave
+   * the second label pointing at the first field. Empty for a list that is the
+   * whole page, whose ids stay what they always were.
+   */
+  readonly scope = input('');
+
   /** The control's id, which is also what its label points at. */
   controlId(param: string): string {
-    return `filter-${param}`;
+    return this.scope() === ''
+      ? `filter-${param}`
+      : `filter-${this.scope()}-${param}`;
+  }
+
+  /** The id of the order control. */
+  orderId(): string {
+    return this.scope() === ''
+      ? 'resource-order'
+      : `resource-order-${this.scope()}`;
   }
 
   /** The options of an enum filter, for a template that has lost the narrowing. */

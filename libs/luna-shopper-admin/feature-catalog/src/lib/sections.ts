@@ -29,15 +29,23 @@ export type Section = Wire.CatalogSupermarketSectionView;
  * address them, and two sections called "Frescos" in one chain is a mistake
  * worth refusing, so the chain refuses a slug it already holds.
  *
- * The chain's own screen has a Sections tab that reads these in order and
- * says what each covers by name. This list is the same rows, one chain at a
- * time. Deleting is done from that tab, whose confirmation says what goes with
- * a section: it leaves every shop's list and every pin.
+ * **The list is the chain's Sections tab** (admin plan 0042), which is
+ * `chain-sections.ts`: it reads these in order, says what each covers by name,
+ * moves one up or down and deletes one, with a confirmation that says what
+ * goes with a section. This descriptor is the form behind that tab, at
+ * `/chains/{chainId}/sections/new` and `/chains/{chainId}/sections/{id}`.
  */
 export const SECTIONS = defineResource<Section>({
   name: 'sections',
   segment: 'sections',
   labels: { one: 'catalog.sections.one', many: 'catalog.sections.many' },
+
+  // The chain is in the address.
+  parent: {
+    resource: 'supermarkets',
+    param: 'chainId',
+    filter: 'supermarketId',
+  },
 
   title: (row, locales) => localizedTextValue(row.name, locales),
 
@@ -117,16 +125,7 @@ export const SECTIONS = defineResource<Section>({
       param: 'query',
       label: 'catalog.sections.filter.query',
     },
-    {
-      kind: 'reference',
-      param: 'supermarketId',
-      label: 'catalog.sections.filter.supermarketId',
-      resource: 'supermarkets',
-    },
   ],
-
-  // There is no route listing every chain's sections at once.
-  requires: ['supermarketId'],
 
   // Said under the field the refusal is about.
   errorFields: {

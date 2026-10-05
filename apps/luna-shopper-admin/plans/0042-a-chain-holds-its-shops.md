@@ -1,3 +1,8 @@
+> **PR:** [#624](https://github.com/IchirokuXVI/nx-portfolio/pull/624)
+> Three things were left out, because the gateway does not serve them.
+> Target 4: a shop search by postal code, and the "Own section order" state on a shop row.
+> Target 7: price scopes ordered most general first.
+
 # 0042 A chain holds its shops
 
 > Second of the seven remodel plans. Needs `0041` (the frame, `PageHeader`, `PageTabs`,

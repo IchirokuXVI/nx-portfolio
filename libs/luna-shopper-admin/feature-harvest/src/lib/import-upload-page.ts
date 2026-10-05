@@ -273,18 +273,15 @@ export interface PreviewTally {
               @if (noNationalScope()) {
                 <p class="hint">
                   {{ 'harvest.imports.noNational' | rokuT }}
-                  <!-- Where the price scopes screen is, asked of the registry
-                     rather than written out: the resource moved into the catalog
-                     section and its segment never said which section held it
-                     (admin plan 0022, section 3). An app that did not mount it
-                     gets the sentence without the link. -->
+                  <!-- Where a new price scope of this chain is made, asked of
+                     the registry rather than written out: the scopes are a tab
+                     of their chain's page (admin plan 0042), so the chain is
+                     in the address. An app that did not mount it gets the
+                     sentence without the link. -->
                   @if (newScopeLink(); as link) {
-                    <a
-                      [queryParams]="{ supermarketId: supermarketId() }"
-                      [routerLink]="link"
-                      target="_blank"
-                      >{{ 'harvest.imports.createScope' | rokuT }}</a
-                    >
+                    <a [routerLink]="link" target="_blank">{{
+                      'harvest.imports.createScope' | rokuT
+                    }}</a>
                   }
                 </p>
                 <button (click)="refreshScopes()" type="button">
@@ -736,9 +733,16 @@ export class ImportUploadPage implements OnDestroy {
 
   readonly kinds = OFFICIAL_SOURCE_KINDS;
 
-  /** The create form for a price scope, wherever the catalog section mounted it. */
+  /**
+   * The create form for a price scope of the chosen chain. Scopes are listed
+   * under their chain, so with no chain chosen there is no form to point at.
+   */
   newScopeLink(): readonly string[] | null {
-    const path = this._registry.pathOf('price-scopes');
+    const supermarketId = this.supermarketId();
+    if (supermarketId === '') {
+      return null;
+    }
+    const path = this._registry.pathOf('price-scopes', { supermarketId });
 
     return path === null ? null : [...path, 'new'];
   }

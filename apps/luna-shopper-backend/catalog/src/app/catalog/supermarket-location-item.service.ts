@@ -88,7 +88,10 @@ export class SupermarketLocationItemService {
     req: UpsertSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
     const actor = await this.admin.requireAdmin(req);
-    await this.requireItemAndLocation(req.itemId, req.supermarketLocationId);
+    const item = await this.requireItemAndLocation(
+      req.itemId,
+      req.supermarketLocationId
+    );
 
     const existing = await this.rows.findOne({
       where: {
@@ -113,7 +116,9 @@ export class SupermarketLocationItemService {
         ? tx.update(SupermarketLocationItem, before, row)
         : tx.create(SupermarketLocationItem, row)
     );
-    return toSupermarketLocationItemView(saved);
+    // The product read for the existence check above is the one the answer
+    // names, so the name and brand cost no second read here.
+    return toSupermarketLocationItemView(saved, item);
   }
 
   /**
@@ -266,7 +271,10 @@ export class SupermarketLocationItemService {
         'No store specific entry for that item at that location'
       );
     }
-    return toSupermarketLocationItemView(row);
+    return toSupermarketLocationItemView(
+      row,
+      await this.items.findOne({ where: { id: row.itemId } })
+    );
   }
 
   async listByLocation(
@@ -294,8 +302,23 @@ export class SupermarketLocationItemService {
     const hasMore = found.length > limit;
     const page = found.slice(0, limit);
     const last = page[page.length - 1];
+
+    // The product's name and brand, joined on as the admin price list joins
+    // its name (admin plan 0042, section 2): a shop's page of products is a page
+    // of distinct products, so resolving them client side would cost a request
+    // per row. One batched read per page here instead, by distinct id. A row
+    // whose item is gone keeps both null and still lists.
+    const itemIds = [...new Set(page.map((row) => row.itemId))];
+    const named =
+      itemIds.length === 0
+        ? []
+        : await this.items.find({ where: { id: In(itemIds) } });
+    const byId = new Map(named.map((item) => [item.id, item]));
+
     return {
-      items: page.map(toSupermarketLocationItemView),
+      items: page.map((row) =>
+        toSupermarketLocationItemView(row, byId.get(row.itemId) ?? null)
+      ),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
@@ -468,10 +491,11 @@ export class SupermarketLocationItemService {
     };
   }
 
+  /** Refuses a product or a shop that does not exist, and answers the product. */
   private async requireItemAndLocation(
     itemId: string,
     supermarketLocationId: string
-  ): Promise<void> {
+  ): Promise<Item> {
     const [item, location] = await Promise.all([
       this.items.findOne({ where: { id: itemId } }),
       this.locations.findOne({ where: { id: supermarketLocationId } }),
@@ -482,6 +506,7 @@ export class SupermarketLocationItemService {
     if (!location) {
       throw new NotFoundException('Supermarket location not found');
     }
+    return item;
   }
 }
 

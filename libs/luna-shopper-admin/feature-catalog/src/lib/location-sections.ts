@@ -8,10 +8,22 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
-import { localizedTextValue } from '@portfolio/luna-shopper-admin/models';
-import { ConfirmDialog } from '@portfolio/luna-shopper-admin/ui';
+import { ResourceChanges } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  localizedTextValue,
+  type InfoContent,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  ConfirmDialog,
+  InfoButton,
+  Viewport,
+} from '@portfolio/luna-shopper-admin/ui';
+import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import { panelErrorKey } from './chain-sections';
 import {
   ShopSections,
@@ -68,7 +80,7 @@ export function moveId(
  */
 @Component({
   selector: 'lib-location-sections',
-  imports: [ConfirmDialog, RokuTranslatorPipe],
+  imports: [ConfirmDialog, InfoButton, ChevronLeftIcon, RokuTranslatorPipe],
   template: `
     <section aria-labelledby="location-sections-heading">
       <h2 id="location-sections-heading">
@@ -89,20 +101,57 @@ export function moveId(
       } @else if (chain().length === 0) {
         <p class="empty">{{ 'catalog.locationSections.noSections' | rokuT }}</p>
       } @else {
-        <p class="source">{{ sourceKey() | rokuT }}</p>
-
-        @if (hasMap()) {
-          <p class="notice" role="note">
-            {{ 'catalog.locationSections.mapNotice' | rokuT }}
-          </p>
-        }
+        <div class="lead">
+          <p class="source">{{ sourceKey() | rokuT }}</p>
+          @if (hasMap()) {
+            <!-- A waiting state and not a paragraph: what a map does to the
+                 list is behind the info button, and the same sentence is asked
+                 before the first edit. -->
+            <span class="waiting" data-map-notice>{{
+              'catalog.locationSections.mapState' | rokuT
+            }}</span>
+            <lib-info-button [info]="mapInfo" />
+          }
+        </div>
 
         <ol class="choices">
           @for (choice of choices(); track choice.section.id) {
-            <li [class.off]="!choice.ticked">
-              <span aria-hidden="true" class="place">{{
-                choice.place ?? ''
-              }}</span>
+            <li
+              (dragend)="dropped()"
+              (dragover)="draggedOver(choice, $event)"
+              (dragstart)="dragStarted(choice, $event)"
+              [attr.draggable]="
+                choice.ticked && !compact() && !busy() ? 'true' : null
+              "
+              [class.dragging]="dragging() === choice.section.id"
+              [class.off]="!choice.ticked"
+            >
+              @if (!compact()) {
+                @if (choice.ticked) {
+                  <!-- The handle a pointer drags the row by, and the control
+                       a keyboard moves it with: the arrow keys, one place at
+                       a time. -->
+                  <button
+                    (keydown.arrowdown)="keyMove(choice, 1, $event)"
+                    (keydown.arrowup)="keyMove(choice, -1, $event)"
+                    [attr.aria-label]="
+                      'catalog.locationSections.grip'
+                        | rokuT
+                          : {
+                              name: nameOf(choice.section),
+                              place: choice.place ?? 0,
+                              count: order().length,
+                            }
+                    "
+                    [disabled]="busy()"
+                    class="grip"
+                    type="button"
+                    data-grip
+                  ></button>
+                } @else {
+                  <span class="grip-space"></span>
+                }
+              }
               <label>
                 <input
                   (change)="toggle(choice.section.id, $event)"
@@ -110,9 +159,16 @@ export function moveId(
                   [disabled]="busy()"
                   type="checkbox"
                 />
+                <span aria-hidden="true" class="place">{{
+                  choice.place ?? ''
+                }}</span>
                 <span>{{ nameOf(choice.section) }}</span>
               </label>
-              @if (choice.ticked) {
+              @if (!choice.ticked) {
+                <span class="absent">{{
+                  'catalog.locationSections.notHere' | rokuT
+                }}</span>
+              } @else if (compact()) {
                 <span class="move">
                   <button
                     (click)="move(choice.section.id, -1)"
@@ -122,8 +178,9 @@ export function moveId(
                     "
                     [disabled]="busy() || choice.place === 1"
                     type="button"
+                    data-move-up
                   >
-                    {{ 'catalog.locationSections.upShort' | rokuT }}
+                    <lib-chevron-left-icon class="up" />
                   </button>
                   <button
                     (click)="move(choice.section.id, 1)"
@@ -133,14 +190,19 @@ export function moveId(
                     "
                     [disabled]="busy() || choice.place === order().length"
                     type="button"
+                    data-move-down
                   >
-                    {{ 'catalog.locationSections.downShort' | rokuT }}
+                    <lib-chevron-left-icon class="down" />
                   </button>
                 </span>
               }
             </li>
           }
         </ol>
+
+        <!-- What a move did, for a screen reader: the row has no other way to
+             say where it went. -->
+        <p aria-live="polite" class="visually-hidden">{{ moved() }}</p>
 
         @if (order().length === 0) {
           <p class="muted">
@@ -157,12 +219,50 @@ export function moveId(
           </p>
         }
 
+        <!-- On a phone the bar holds the two buttons of the edit in hand, and
+             the way back to the chain's order sits under the list. Three
+             buttons in 390 px wrap their own words. -->
+        @if (ownList() && compact()) {
+          <button
+            (click)="useChainDefault()"
+            [disabled]="busy()"
+            class="below"
+            type="button"
+            data-use-chain
+          >
+            {{ 'catalog.locationSections.useChain' | rokuT }}
+          </button>
+        }
+
+        <!-- A bar at the bottom of the tab, in view while the list scrolls
+             under it, so that a long list can be ordered and saved without
+             going back up. -->
         <div class="controls">
+          @if (ownList() && !compact()) {
+            <button
+              (click)="useChainDefault()"
+              [disabled]="busy()"
+              type="button"
+              data-use-chain
+            >
+              {{ 'catalog.locationSections.useChain' | rokuT }}
+            </button>
+          }
+          <span class="grow"></span>
+          <button
+            (click)="discard()"
+            [disabled]="busy() || !dirty()"
+            type="button"
+            data-discard
+          >
+            {{ 'catalog.locationSections.discard' | rokuT }}
+          </button>
           <button
             (click)="save()"
             [disabled]="busy() || !dirty() || order().length === 0"
             class="primary"
             type="button"
+            data-save
           >
             {{
               (busy()
@@ -171,20 +271,6 @@ export function moveId(
               ) | rokuT
             }}
           </button>
-          @if (dirty()) {
-            <button (click)="discard()" [disabled]="busy()" type="button">
-              {{ 'catalog.locationSections.discard' | rokuT }}
-            </button>
-          }
-          @if (ownList()) {
-            <button
-              (click)="useChainDefault()"
-              [disabled]="busy()"
-              type="button"
-            >
-              {{ 'catalog.locationSections.useChain' | rokuT }}
-            </button>
-          }
         </div>
       }
     </section>
@@ -202,14 +288,62 @@ export function moveId(
   `,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
     }
 
     section {
       display: flex;
+      flex: 1;
       flex-direction: column;
       gap: var(--admin-space-3);
-      max-inline-size: 36rem;
+    }
+
+    /* The list keeps a width a row can be read across. The bar under it
+       reaches the edges of the tab. */
+    .lead,
+    .choices,
+    section > p {
+      max-inline-size: 40rem;
+    }
+
+    .lead {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .lead .source {
+      flex: 1 1 16rem;
+    }
+
+    .waiting {
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-waiting-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--admin-waiting-on-wash);
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    .below {
+      align-self: flex-start;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      overflow: hidden;
+      clip-path: inset(50%);
+      inline-size: 1px;
+      block-size: 1px;
+      white-space: nowrap;
     }
 
     h2 {
@@ -230,14 +364,6 @@ export function moveId(
       border: 1px dashed var(--admin-border);
       border-radius: var(--admin-radius);
       color: var(--admin-ink-muted);
-    }
-
-    .notice {
-      padding: var(--admin-space-3);
-      border: 1px solid var(--admin-waiting-on-wash);
-      border-radius: var(--admin-radius);
-      background: var(--admin-waiting-wash);
-      color: var(--admin-ink);
     }
 
     .failure {
@@ -261,12 +387,11 @@ export function moveId(
     }
 
     .choices li {
-      display: grid;
-      grid-template-columns: 2rem 1fr auto;
-      gap: var(--admin-space-3);
+      display: flex;
+      gap: var(--admin-space-2);
       align-items: center;
-      min-block-size: 3rem;
-      padding: var(--admin-space-1) var(--admin-space-3);
+      min-block-size: 2.75rem;
+      padding-inline: var(--admin-space-3) var(--admin-space-1);
     }
 
     .choices li + li {
@@ -274,21 +399,60 @@ export function moveId(
     }
 
     .choices li.off {
+      padding-inline-end: var(--admin-space-3);
       color: var(--admin-ink-muted);
     }
 
+    /* The row being dragged stays where the list has put it, marked, so the
+       order under the pointer is the order that will be saved. */
+    .choices li.dragging {
+      background: var(--admin-accent-wash);
+    }
+
     .place {
+      min-inline-size: 1.25rem;
       font-variant-numeric: tabular-nums;
-      text-align: end;
       color: var(--admin-ink-muted);
     }
 
     label {
       display: flex;
+      flex: 1;
       gap: var(--admin-space-2);
       align-items: center;
+      min-inline-size: 0;
       min-block-size: var(--admin-control);
       cursor: pointer;
+    }
+
+    .absent {
+      font-size: 0.8125rem;
+      white-space: nowrap;
+    }
+
+    /* Six dots, drawn and not typed, so that no font decides what they are. */
+    .choices .grip,
+    .grip-space {
+      flex: none;
+      inline-size: 1.5rem;
+      min-block-size: 2.25rem;
+      padding: 0;
+    }
+
+    .choices .grip {
+      border: none;
+      background-color: transparent;
+      background-image: radial-gradient(
+        circle,
+        var(--admin-ink-muted) 1.25px,
+        transparent 1.5px
+      );
+      background-position: center;
+      background-size: 0.4375rem 0.4375rem;
+      background-repeat: space;
+      background-clip: content-box;
+      padding: 0.5rem 0.3125rem;
+      cursor: grab;
     }
 
     input[type='checkbox'] {
@@ -299,13 +463,32 @@ export function moveId(
 
     .move {
       display: flex;
-      gap: var(--admin-space-1);
     }
 
+    /* In view at the bottom of the tab while the list scrolls. On a phone it
+       sits above the navigation bar, which is fixed below it. */
     .controls {
+      position: sticky;
+      inset-block-end: 0;
       display: flex;
       flex-wrap: wrap;
-      gap: var(--admin-space-3);
+      gap: var(--admin-space-2);
+      align-items: center;
+      margin-block-start: auto;
+      margin-inline: calc(-1 * var(--admin-page-inline));
+      padding: var(--admin-space-2) var(--admin-page-inline);
+      border-block-start: 1px solid var(--admin-border);
+      background: var(--admin-surface-raised);
+    }
+
+    @media (max-width: 47.99rem) {
+      .controls {
+        inset-block-end: var(--admin-bar);
+      }
+
+      .controls .primary {
+        flex: 1;
+      }
     }
 
     button {
@@ -319,9 +502,29 @@ export function moveId(
       cursor: pointer;
     }
 
+    /* 44 px wide and as tall, which is what a thumb needs. */
     .move button {
-      min-block-size: 2.25rem;
-      padding: var(--admin-space-1) var(--admin-space-3);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      inline-size: 2.75rem;
+      min-block-size: 2.75rem;
+      padding: 0.75rem;
+      border: none;
+      background: none;
+    }
+
+    .move lib-chevron-left-icon {
+      inline-size: 1.25rem;
+      block-size: 1.25rem;
+    }
+
+    .move .up {
+      transform: rotate(90deg);
+    }
+
+    .move .down {
+      transform: rotate(-90deg);
     }
 
     button.primary {
@@ -351,6 +554,8 @@ export function moveId(
 export class LocationSections {
   private readonly _sections = inject(ShopSections);
   private readonly _content = inject(ContentLocaleStore);
+  private readonly _translator = inject(RokuTranslatorService);
+  private readonly _changes = inject(ResourceChanges);
 
   /** The shop. */
   readonly locationId = input.required<string>();
@@ -396,6 +601,21 @@ export class LocationSections {
 
   /** Whether the shop has a list of its own, rather than its chain's. */
   readonly ownList = computed(() => this.saved()?.source === 'LOCATION');
+
+  /** What the info button beside the map state says (admin plan 0040). */
+  readonly mapInfo: InfoContent = {
+    title: 'catalog.locationSections.info.title',
+    points: ['catalog.locationSections.info.map'],
+  };
+
+  /** A phone gets a button each way. A wider screen drags, or uses the keys. */
+  readonly compact = inject(Viewport).compact;
+
+  /** The section being dragged, or `null`. */
+  readonly dragging = signal<string | null>(null);
+
+  /** The last move, as a sentence for a screen reader. */
+  readonly moved = signal('');
 
   /** The sentence saying where the list comes from. */
   readonly sourceKey = computed(() =>
@@ -474,6 +694,84 @@ export class LocationSections {
     }
     this.savedNow.set(false);
     this.order.update((order) => moveId(order, id, step));
+    this._sayMoved(id);
+  }
+
+  /** An arrow key on a row's handle: one place up or down. */
+  keyMove(choice: SectionChoice, step: -1 | 1, event: Event): void {
+    // The page would scroll under the row otherwise.
+    event.preventDefault();
+    this.move(choice.section.id, step);
+  }
+
+  /**
+   * A drag began on a row.
+   *
+   * A list that follows a map asks before its first edit (admin plan 0040),
+   * and a drag is an edit. The drag is refused while the question is open, and
+   * the operator drags again after saying yes.
+   */
+  dragStarted(choice: SectionChoice, event: DragEvent): void {
+    if (!choice.ticked || this._needsMapConsent(() => undefined)) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer?.setData('text/plain', choice.section.id);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+    this.dragging.set(choice.section.id);
+  }
+
+  /**
+   * The dragged row is over another one, and takes its place.
+   *
+   * The list is reordered while the row is still held, so what the operator
+   * sees under the pointer is the order a drop leaves. Only a ticked row is a
+   * place: the rest are not in the shop's walk.
+   */
+  draggedOver(choice: SectionChoice, event: DragEvent): void {
+    const id = this.dragging();
+    if (id === null || !choice.ticked) {
+      return;
+    }
+    // Without this the browser refuses the drop and animates the row back.
+    event.preventDefault();
+
+    const order = this.order();
+    const to = order.indexOf(choice.section.id);
+    if (choice.section.id === id || to === -1) {
+      return;
+    }
+
+    this.savedNow.set(false);
+    const next = order.filter((held) => held !== id);
+    next.splice(to, 0, id);
+    this.order.set(next);
+  }
+
+  dropped(): void {
+    const id = this.dragging();
+    this.dragging.set(null);
+    if (id !== null) {
+      this._sayMoved(id);
+    }
+  }
+
+  private _sayMoved(id: string): void {
+    const section = this.chain().find((held) => held.id === id);
+    const place = this.order().indexOf(id) + 1;
+    if (section === undefined || place === 0) {
+      return;
+    }
+    this.moved.set(
+      this._translator.t(
+        'catalog.locationSections.movedTo',
+        undefined,
+        undefined,
+        { name: this.nameOf(section), place, count: this.order().length }
+      )
+    );
   }
 
   /** Back to what the server holds. */
@@ -534,6 +832,9 @@ export class LocationSections {
       this.saved.set(answer);
       this.order.set(answer.sections.map((section) => section.id));
       this.savedNow.set(true);
+      // The shop's own row carries its section names, and the page above
+      // counts them on the tab.
+      this._changes.wrote('location-sections');
     } catch (error) {
       // What was ticked stays, so a refusal costs a retry and not the work.
       this.saveErrorKey.set(panelErrorKey(error));

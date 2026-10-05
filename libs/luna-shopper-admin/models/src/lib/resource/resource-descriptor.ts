@@ -80,6 +80,64 @@ export interface ListPresentation<T extends ResourceRow = ResourceRow> {
   readonly columns: readonly FieldName<T>[];
   /** A subset of `columns`, in the order they appear on a card. */
   readonly compact: readonly FieldName<T>[];
+  /**
+   * What one row says when the list is a narrow column beside the open row
+   * (admin plan 0042). Absent means the row's title alone.
+   */
+  readonly brief?: BriefPresentation<T>;
+}
+
+/**
+ * One row of a list drawn as a column: a heading, one line under it, and a
+ * number at the end.
+ *
+ * A chain's shops are 340 px wide beside the shop that is open, which is no
+ * room for a table and too many rows for cards with a label on every value.
+ * So the descriptor names the few values that tell one row from the next.
+ */
+export interface BriefPresentation<T extends ResourceRow = ResourceRow> {
+  /**
+   * The first line, when it is not the row's title. A shop's title carries its
+   * city for a picker, and the column writes the city on the second line.
+   *
+   * A method for the reason {@link ResourceDescriptor.rowId} is one.
+   */
+  heading?(row: T, locales: readonly string[]): string;
+  /** The fields of the second line, in order, drawn without their labels. */
+  readonly line?: readonly FieldName<T>[];
+  /** A count at the end of the row, such as the shops a chain holds. */
+  readonly trailing?: FieldName<T>;
+}
+
+/** A short state of one row, drawn as a label beside its name. */
+export interface RowState {
+  /** A translation key. */
+  readonly label: string;
+  /**
+   * `good` is the accent wash, `waiting` is the amber one that means a person
+   * must decide, and `neutral` is grey.
+   */
+  readonly tone: 'good' | 'neutral' | 'waiting';
+}
+
+/**
+ * The row above this resource, when it lives under one (admin plan 0042).
+ *
+ * A chain's shops are read at `/supermarkets/{id}/locations`, so the list
+ * cannot be read without a chain. That chain used to be a filter the operator
+ * had to pick before the list said anything. It is the address now: the screen
+ * sits at `/chains/{chainId}/shops`, and the list reads the chain from there.
+ */
+export interface ResourceParent {
+  /** The `name` of the resource the parent row belongs to. */
+  readonly resource: string;
+  /** The route parameter that holds the parent row's id. */
+  readonly param: string;
+  /**
+   * The filter or path parameter the id feeds on a list, and the field it
+   * fills on a new row.
+   */
+  readonly filter: string;
 }
 
 /** A filter the list offers, and the query parameter it sets. */
@@ -298,8 +356,15 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   readonly name: string;
   /** The route segment, under the app's root. */
   readonly segment: string;
-  /** Translation keys for one row and for many. */
-  readonly labels: { readonly one: string; readonly many: string };
+  /**
+   * Translation keys for one row and for many, and for the button that adds
+   * one where "New" says too little ("Add a shop").
+   */
+  readonly labels: {
+    readonly one: string;
+    readonly many: string;
+    readonly create?: string;
+  };
   /** The property holding the row's id. `id` unless stated. */
   readonly idField?: FieldName<T>;
   /**
@@ -390,6 +455,24 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    */
   readonly errorFields?: Readonly<Record<string, FieldName<T>>>;
   readonly filters?: readonly FilterDescriptor[];
+  /**
+   * The row this resource lives under, read from the address (admin plan
+   * 0042). See {@link ResourceParent}.
+   *
+   * The list sends the parent's id on every read and offers no control for
+   * it, a new row is created under it, and the registry builds the resource's
+   * address below the parent row's own.
+   */
+  readonly parent?: ResourceParent;
+  /**
+   * The states of one row, built in an injection context.
+   *
+   * A factory for the reason {@link ResourceActions.named} is one: a state can
+   * depend on something outside the row. Whether a price scope is its chain's
+   * default is a fact about the chain. The function it answers runs while the
+   * rows are drawn, so a signal read inside it keeps the states current.
+   */
+  rowStates?(): (row: T) => readonly RowState[];
   /**
    * Filter parameters this list cannot be read without.
    *

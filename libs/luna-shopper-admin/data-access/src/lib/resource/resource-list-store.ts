@@ -43,7 +43,17 @@ export class ResourceListStore<T extends ResourceRow> {
      * that still holds products links to its products (admin plan 0036), and
      * the list has to open already filtered or the link says nothing.
      */
-    initialFilters: Readonly<Record<string, string>> = {}
+    initialFilters: Readonly<Record<string, string>> = {},
+    /**
+     * What the address already decided, sent on every read (admin plan 0042).
+     *
+     * A chain's shops sit at `/chains/{chainId}/shops`, so the chain is not a
+     * choice the operator makes on the list. It is kept apart from the filters
+     * for that reason: it is no control, clearing the filters keeps it, and a
+     * list narrowed by nothing else is still an empty list and not a list
+     * whose filter needs clearing.
+     */
+    private readonly _fixed: Readonly<Record<string, string>> = {}
   ) {
     this._filters.set(initialFilters);
   }
@@ -85,7 +95,7 @@ export class ResourceListStore<T extends ResourceRow> {
    * which is most of them.
    */
   readonly missingFilters = computed(() => {
-    const filters = this._filters();
+    const filters = { ...this._filters(), ...this._fixed };
     return (this._descriptor.requires ?? []).filter(
       (param) => (filters[param] ?? '') === ''
     );
@@ -217,7 +227,7 @@ export class ResourceListStore<T extends ResourceRow> {
       const page = await this._gateway.list({
         cursor,
         order: this._order(),
-        filters: this._filters(),
+        filters: { ...this._filters(), ...this._fixed },
       });
 
       apply(page.items);

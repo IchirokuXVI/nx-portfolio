@@ -389,6 +389,13 @@ const supermarketView = object(
     externalBrandKey: nullableString(),
     // The last rung of the scope ladder (plan 0049, section 3.1).
     defaultPriceScopeId: nullableString(),
+    // Deliberately NOT required (admin plan 0042, section 2): the reads of a
+    // chain itself carry it, and a chain inside another view does not.
+    locationCount: integer({
+      minimum: 0,
+      description:
+        'The shops the chain holds. Present on the reads of a chain itself, absent where a chain rides inside another view.',
+    }),
   },
   [
     'id',
@@ -886,6 +893,10 @@ const supermarketLocationItemView = object(
     availabilitySourceKind: nullableSourceKind(),
     availabilityObservedAt: nullableString(),
     availabilitySourceRunId: nullableString(),
+    // The product's name and brand, joined on as the admin price list joins
+    // `itemName` (admin plan 0042, section 2). Every read of the row fills both.
+    itemName: nullableLocalized(),
+    itemBrand: nullableString(),
   },
   [
     'id',
@@ -896,6 +907,8 @@ const supermarketLocationItemView = object(
     'availabilitySourceKind',
     'availabilityObservedAt',
     'availabilitySourceRunId',
+    'itemName',
+    'itemBrand',
   ]
 );
 

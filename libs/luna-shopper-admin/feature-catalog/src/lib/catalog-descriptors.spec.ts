@@ -1,3 +1,5 @@
+import { signal } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import {
   draftFor,
   fieldOf,
@@ -23,6 +25,10 @@ import {
   PRICE_SCOPE_SEED,
   PRICE_SEED,
 } from './catalog-seed';
+import { ChainContext } from './chains/chain-context';
+import { CHAIN_PARAM } from './chains/chain-page';
+import { CHAIN_RESOURCES } from './chains/chains-routes';
+import { SHOP_PARAM } from './chains/shop-page';
 import { ITEMS, withCategoryIds } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
@@ -30,7 +36,9 @@ import { PRICE_POLICIES } from './price-policies';
 import { PRICE_SCOPES, priorityBand } from './price-scopes';
 import { PRICES } from './prices';
 import { PRODUCT_GROUPS } from './product-groups';
+import { SECTIONS } from './sections';
 import { SUPERMARKETS } from './supermarkets';
+import { SUPERMARKET_SEED } from './supermarkets-seed';
 
 /**
  * What the seven catalog descriptors claim, checked without rendering anything
@@ -51,6 +59,7 @@ const SPANISH_FIRST: readonly string[] = ['es', 'en'];
 const ALL = [
   SUPERMARKETS,
   LOCATIONS,
+  SECTIONS,
   PRICE_SCOPES,
   ITEMS,
   CATEGORIES,
@@ -108,6 +117,201 @@ describe('every catalog descriptor', () => {
         ]);
       }
     }
+  });
+});
+
+/**
+ * A chain holds its shops (admin plan 0042).
+ *
+ * Five descriptors moved under `/chains`, and what the address decides is
+ * stated on each of them as `parent`. Every way to get one wrong is silent: a
+ * route parameter nobody declares reads as no parent, so the list would ask
+ * the gateway for every chain's rows, and a filter name that is not a field
+ * would create a row that belongs to nothing.
+ */
+describe('the resources a chain holds', () => {
+  const HELD = [
+    SUPERMARKETS,
+    LOCATIONS,
+    SECTIONS,
+    PRICE_SCOPES,
+    LOCATION_ITEMS,
+  ];
+
+  it('is the five the Chains section registers, the chain first', () => {
+    expect(CHAIN_RESOURCES).toEqual(HELD);
+  });
+
+  it('calls each one what its address calls it', () => {
+    expect(HELD.map((descriptor) => descriptor.segment)).toEqual([
+      'chains',
+      'shops',
+      'sections',
+      'scopes',
+      'products',
+    ]);
+  });
+
+  it('puts a shop, a section and a scope under a chain, and a product under a shop', () => {
+    const chain = {
+      resource: 'supermarkets',
+      param: CHAIN_PARAM,
+      filter: 'supermarketId',
+    };
+
+    expect(SUPERMARKETS.parent).toBeUndefined();
+    expect(LOCATIONS.parent).toEqual(chain);
+    expect(SECTIONS.parent).toEqual(chain);
+    expect(PRICE_SCOPES.parent).toEqual(chain);
+    expect(LOCATION_ITEMS.parent).toEqual({
+      resource: 'locations',
+      param: SHOP_PARAM,
+      filter: 'supermarketLocationId',
+    });
+  });
+
+  /**
+   * The parent's id fills a field on a new row, so the filter has to name one
+   * that a create may set. It also points at a resource the section holds.
+   */
+  it('names a parent that is held, and a field a new row can carry', () => {
+    const names = new Set(HELD.map((descriptor) => descriptor.name));
+
+    for (const descriptor of HELD) {
+      const parent = descriptor.parent;
+      if (parent === undefined) {
+        continue;
+      }
+      const field = fieldOf(descriptor, parent.filter);
+
+      expect([descriptor.name, names.has(parent.resource)]).toEqual([
+        descriptor.name,
+        true,
+      ]);
+      expect([
+        descriptor.name,
+        field !== undefined && isEditable(field, 'create'),
+      ]).toEqual([descriptor.name, true]);
+    }
+  });
+
+  /** Section 4 of the plan: the blocked state and the chain filter are gone. */
+  it('requires no filter and offers none for what the address decides', () => {
+    for (const descriptor of HELD) {
+      expect([descriptor.name, descriptor.requires]).toEqual([
+        descriptor.name,
+        undefined,
+      ]);
+
+      const params = (descriptor.filters ?? []).map((filter) => filter.param);
+      expect([
+        descriptor.name,
+        params.includes(descriptor.parent?.filter ?? ''),
+      ]).toEqual([descriptor.name, false]);
+    }
+  });
+
+  it('says "Add a shop" where "New" says too little', () => {
+    expect(SUPERMARKETS.labels.create).toBe('catalog.supermarkets.add');
+    expect(LOCATIONS.labels.create).toBe('catalog.locations.add');
+    expect(PRICE_SCOPES.labels.create).toBe('catalog.priceScopes.add');
+    expect(LOCATION_ITEMS.labels.create).toBe('catalog.locationItems.add');
+  });
+
+  /** In the column a chain is its name and the shops it holds. */
+  it('ends a chain’s row with its shop count', () => {
+    expect(SUPERMARKETS.list.brief).toEqual({ trailing: 'locationCount' });
+  });
+
+  /** The chain is the page the list is a tab of, so it is not a column. */
+  it('leaves the chain out of the price scope columns', () => {
+    expect(PRICE_SCOPES.list.columns).not.toContain('supermarketId');
+  });
+
+  /**
+   * Admin plan 0042, section 2: the read joins the product's name and brand
+   * on, so the Products tab never prints an id it could have named.
+   */
+  it('titles a shop product by the product, id only when the join found nothing', () => {
+    const [milk] = LOCATION_ITEM_SEED as unknown as ResourceRow[];
+    const itemId = fieldOf(LOCATION_ITEMS, 'itemId');
+
+    expect(LOCATION_ITEMS.title(milk, ENGLISH_FIRST)).toBe('Whole milk 1 L');
+    expect(LOCATION_ITEMS.title(milk, SPANISH_FIRST)).toBe('Leche entera 1 L');
+    expect(
+      LOCATION_ITEMS.title({ ...milk, itemName: null }, ENGLISH_FIRST)
+    ).toBe('it_milk_1l');
+    expect(itemId?.kind === 'reference' ? itemId.nameFrom : null).toBe(
+      'itemName'
+    );
+    expect(LOCATION_ITEMS.list.columns).toEqual([
+      'itemId',
+      'itemBrand',
+      'positionInStore',
+      'available',
+    ]);
+  });
+
+  /**
+   * "Default" and "Make default" are facts about the chain, so both read the
+   * chain's page and exist only on a list under one.
+   */
+  describe('the default scope of a chain', () => {
+    const [national, cordoba] = PRICE_SCOPE_SEED as unknown as ResourceRow[];
+
+    function under(chain: Partial<ChainContext> | null) {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers:
+          chain === null ? [] : [{ provide: ChainContext, useValue: chain }],
+      });
+      return TestBed.runInInjectionContext(() => ({
+        statesOf: PRICE_SCOPES.rowStates?.(),
+        actions: PRICE_SCOPES.actions?.named?.() ?? [],
+      }));
+    }
+
+    const mercadona = (setDefaultScope = jest.fn()) =>
+      ({
+        chain: signal(SUPERMARKET_SEED[0]),
+        setDefaultScope,
+      }) as unknown as Partial<ChainContext>;
+
+    it('marks the scope its chain falls back to, and no other', () => {
+      const { statesOf } = under(mercadona());
+
+      expect(statesOf?.(national)).toEqual([
+        { label: 'catalog.priceScopes.state.default', tone: 'good' },
+      ]);
+      expect(statesOf?.(cordoba)).toEqual([]);
+    });
+
+    it('offers to make another general scope the default, and writes the chain', async () => {
+      const write = jest.fn().mockResolvedValue(undefined);
+      const { actions } = under(mercadona(write));
+      const [makeDefault] = actions;
+      const store = PRICE_SCOPE_SEED.find(
+        (scope) => scope.kind === 'STORE'
+      ) as unknown as ResourceRow;
+
+      expect(actions.map((action) => action.name)).toEqual(['makeDefault']);
+      expect(makeDefault.available?.(national)).toBe(false);
+      expect(makeDefault.available?.(cordoba)).toBe(true);
+      // One shop's own scope is the most specific there is, so it is never
+      // what a chain falls back to.
+      expect(makeDefault.available?.(store)).toBe(false);
+
+      await makeDefault.run(cordoba);
+
+      expect(write).toHaveBeenCalledWith('ps_mercadona_4661');
+    });
+
+    it('says and offers nothing on a list that is under no chain', () => {
+      const { statesOf, actions } = under(null);
+
+      expect(statesOf?.(national)).toEqual([]);
+      expect(actions).toEqual([]);
+    });
   });
 });
 
@@ -266,8 +470,54 @@ describe('the shops', () => {
     );
   });
 
-  it('cannot be read until a chain is named', () => {
-    expect(LOCATIONS.requires).toEqual(['supermarketId']);
+  /**
+   * The list could not be read until a chain was picked in a filter, and said
+   * so in a state of its own. The chain is the address now (admin plan 0042),
+   * so nothing is required and no filter offers the chain.
+   */
+  it('takes its chain from the address, and waits for no filter', () => {
+    expect(LOCATIONS.parent).toEqual({
+      resource: 'supermarkets',
+      param: 'chainId',
+      filter: 'supermarketId',
+    });
+    expect(LOCATIONS.requires).toBeUndefined();
+    expect((LOCATIONS.filters ?? []).map((filter) => filter.param)).toEqual([
+      'query',
+      'postalCodeSource',
+      'priceScopeId',
+    ]);
+  });
+
+  /**
+   * The column beside the open shop: the address, then the town and the code,
+   * and at most two states. A label set by hand wins over the address, as it
+   * does in the title.
+   */
+  it('says a row in a few words when the list is a column', () => {
+    const [centro, , , consum] = LOCATION_SEED;
+
+    expect(LOCATIONS.list.brief?.line).toEqual(['city', 'postalCode']);
+    expect(LOCATIONS.list.brief?.heading?.(centro, ENGLISH_FIRST)).toBe(
+      'Avenida del Gran Capitán 12'
+    );
+    expect(LOCATIONS.list.brief?.heading?.(consum, ENGLISH_FIRST)).toBe(
+      'Consum Centro'
+    );
+  });
+
+  it('marks a shop with a map and a postal code that was guessed', () => {
+    const statesOf = LOCATIONS.rowStates?.();
+    const [centro, oeste, sierra] = LOCATION_SEED as unknown as ResourceRow[];
+
+    expect(statesOf?.(centro)).toEqual([
+      { label: 'catalog.locations.state.map', tone: 'neutral' },
+    ]);
+    expect(statesOf?.(oeste)).toEqual([
+      { label: 'catalog.locations.state.postalCodeGuessed', tone: 'waiting' },
+    ]);
+    // Neither known nor guessed is deliberate, and is not a state to act on.
+    expect(statesOf?.(sierra)).toEqual([]);
   });
 
   /**

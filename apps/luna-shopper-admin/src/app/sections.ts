@@ -7,15 +7,12 @@ import {
   CatalogDashboard,
   catalogRoutes,
   CATEGORIES,
+  CHAIN_RESOURCES,
+  chainsRoutes,
   ITEMS,
-  LOCATION_ITEMS,
-  LOCATIONS,
   PRICE_POLICIES,
-  PRICE_SCOPES,
   PRICES,
   PRODUCT_GROUPS,
-  SECTIONS,
-  SUPERMARKETS,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import {
@@ -42,6 +39,7 @@ import {
   PeopleIcon,
   ShieldIcon,
   StoreIcon,
+  TagIcon,
 } from '@portfolio/shared/ui';
 
 /**
@@ -100,20 +98,17 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * ## Order
  *
  * The sections run in the order an operator meets them: the overview, then the
- * catalog, which is the half that gets edited; then the people
- * and what they share, which is read far more often than it is touched; then the
- * harvester, which produces most of the catalog; then the admin table, which is
- * opened to answer one question and never to change anything.
+ * chains, which hold the shops, the sections and the price scopes (admin plan
+ * 0042); then the catalog, which is the products and their prices; then the
+ * people and what they share, which is read far more often than it is touched;
+ * then the harvester, which produces most of the catalog; then the admin
+ * table, which is opened to answer one question and never to change anything.
  *
  * Inside the catalog the order follows what an operator is holding in their head
- * rather than the alphabet. A chain, then the shops it has, the sections those
- * shops are laid out in (admin plan 0037) and the scopes it prices against,
- * because all three belong to a chain and none can be read without naming one. Then the products, then the categories they sit in (admin plan
- * 0036), then the groups that make two products comparable, then the prices,
- * which need a product and a scope to exist at all.
- * Backend plan 0080 puts the price policies straight after the prices they
- * decide between. The per shop rows are last: they are the narrowest question in
- * the catalog and the one asked least often.
+ * rather than the alphabet. The products, then the categories they sit in
+ * (admin plan 0036), then the groups that make two products comparable, then
+ * the prices, which need a product and a scope to exist at all. Backend plan
+ * 0080 puts the price policies straight after the prices they decide between.
  *
  * Among the shoppers, each nested collection follows the resource it hangs off:
  * a membership after zones, a line after lists. Neither can be listed from
@@ -130,25 +125,30 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     home: DashboardPage,
   },
   {
+    // A chain holds its shops (admin plan 0042). Second on the rail, after the
+    // overview, because a chain is where an operator starts: a shop, a section
+    // and a price scope each belong to one.
+    //
+    // **No segment and no tabs.** The chains are at `/chains`, which is the
+    // segment of the one resource here that has no parent, and a chain's own
+    // page draws its tabs. The five resources are held and not mounted: the
+    // section's own route table is where each of them is.
+    key: 'chains',
+    label: 'shell.sections.chains',
+    icon: StoreIcon,
+    held: CHAIN_RESOURCES,
+    screens: chainsRoutes(),
+  },
+  {
     key: 'catalog',
     label: 'shell.sections.catalog',
-    icon: StoreIcon,
+    icon: TagIcon,
     segment: CATALOG_SEGMENT,
     home: CatalogDashboard,
-    resources: [
-      SUPERMARKETS,
-      LOCATIONS,
-      SECTIONS,
-      PRICE_SCOPES,
-      ITEMS,
-      CATEGORIES,
-      PRODUCT_GROUPS,
-      PRICES,
-      PRICE_POLICIES,
-      LOCATION_ITEMS,
-    ],
+    resources: [ITEMS, CATEGORIES, PRODUCT_GROUPS, PRICES, PRICE_POLICIES],
     // One product at every scope (admin plan 0033), reached from the product
-    // and from a price's history rather than from the navigation.
+    // and from a price's history rather than from the navigation. Then the
+    // addresses the chain screens had here, as redirects (admin plan 0042).
     screens: catalogRoutes(),
   },
   {

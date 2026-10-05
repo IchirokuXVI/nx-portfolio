@@ -19,6 +19,7 @@ export * from './lib/upload-icon/upload-icon';
 export * from './lib/volume-icon/volume-icon';
 export * from './lib/dashboard-icon/dashboard-icon';
 export * from './lib/store-icon/store-icon';
+export * from './lib/tag-icon/tag-icon';
 export * from './lib/people-icon/people-icon';
 export * from './lib/inbox-icon/inbox-icon';
 export * from './lib/shield-icon/shield-icon';

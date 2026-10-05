@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import {
   provideSections,
   ResourceRegistry,
+  sectionLink,
   sectionScreens,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { ADMIN_SECTIONS } from './sections';
@@ -17,9 +18,11 @@ import { ADMIN_SECTIONS } from './sections';
  * would give the reference picker two answers to the same question.
  */
 describe('ADMIN_SECTIONS', () => {
-  it('is the five sections the plans name, in order', () => {
+  /** The chains are second, after the overview (admin plan 0042, target 1). */
+  it('is the six sections the plans name, in order', () => {
     expect(ADMIN_SECTIONS.map((section) => section.key)).toEqual([
       'overview',
+      'chains',
       'catalog',
       'shoppers',
       'harvest',
@@ -33,9 +36,12 @@ describe('ADMIN_SECTIONS', () => {
    * Admin plan 0027 added a sixth, Brands, and it went again: one tab for two
    * screens was a click for nothing, and the tab went unmarked on the
    * registered list. Both brand screens are in the harvester now.
+   *
+   * Admin plan 0042 added the chains, which took five screens out of the
+   * catalog's row with them. Six is still half a dozen.
    */
-  it('holds five, which is what one row holds', () => {
-    expect(ADMIN_SECTIONS).toHaveLength(5);
+  it('holds six, which is what one row holds', () => {
+    expect(ADMIN_SECTIONS).toHaveLength(6);
   });
 
   /**
@@ -49,13 +55,54 @@ describe('ADMIN_SECTIONS', () => {
     }
   });
 
-  it('gives every section at least one screen, counting its home', () => {
+  /**
+   * A home, a screen with a link, or a resource it holds and mounts itself:
+   * the chains have no home and no second row, and open on the list of chains.
+   * A section with none of the three would draw an entry that goes nowhere.
+   */
+  it('gives every section somewhere to open', () => {
     for (const section of ADMIN_SECTIONS) {
-      const screens = sectionScreens(section).length;
-      const home = section.home === undefined ? 0 : 1;
-
-      expect(screens + home).toBeGreaterThan(0);
+      expect([section.key, sectionLink(section) !== null]).toEqual([
+        section.key,
+        true,
+      ]);
     }
+  });
+
+  it('opens the chains on the list of chains, with no second row', () => {
+    const chains = ADMIN_SECTIONS.find((section) => section.key === 'chains');
+
+    expect(chains).toBeDefined();
+    if (chains === undefined) {
+      return;
+    }
+    expect(sectionLink(chains)).toBe('/chains');
+    expect(chains.segment).toBeUndefined();
+    expect(chains.home).toBeUndefined();
+    // Held and not mounted: a chain's own page draws the tabs.
+    expect(sectionScreens(chains)).toEqual([]);
+    expect((chains.held ?? []).map((descriptor) => descriptor.name)).toEqual([
+      'supermarkets',
+      'locations',
+      'sections',
+      'price-scopes',
+      'location-items',
+    ]);
+  });
+
+  /** The five screens left the catalog's row when the chains took them. */
+  it('lists none of the chain screens in the catalog any more', () => {
+    const catalog = ADMIN_SECTIONS.find((section) => section.key === 'catalog');
+
+    expect(
+      (catalog?.resources ?? []).map((descriptor) => descriptor.name)
+    ).toEqual([
+      'items',
+      'categories',
+      'product-groups',
+      'prices',
+      'price-policies',
+    ]);
   });
 
   /**
@@ -86,7 +133,13 @@ describe('ADMIN_SECTIONS', () => {
   it('gives no section the segment of a resource mounted at the root', () => {
     const rooted = new Set(
       ADMIN_SECTIONS.filter((section) => section.segment === undefined)
-        .flatMap((section) => section.resources ?? [])
+        // A held resource with no parent is at the root as well: `/chains`.
+        .flatMap((section) => [
+          ...(section.resources ?? []),
+          ...(section.held ?? []).filter(
+            (descriptor) => descriptor.parent === undefined
+          ),
+        ])
         .map((descriptor) => descriptor.segment)
     );
 
@@ -99,7 +152,9 @@ describe('ADMIN_SECTIONS', () => {
 
   it('mounts every resource in exactly one section', () => {
     const names = ADMIN_SECTIONS.flatMap((section) =>
-      (section.resources ?? []).map((descriptor) => descriptor.name)
+      [...(section.resources ?? []), ...(section.held ?? [])].map(
+        (descriptor) => descriptor.name
+      )
     );
 
     expect(new Set(names).size).toBe(names.length);
@@ -115,16 +170,48 @@ describe('ADMIN_SECTIONS', () => {
       providers: [provideSections(...ADMIN_SECTIONS)],
     });
     const registry = TestBed.inject(ResourceRegistry);
-    const at = (name: string) => registry.pathOf(name)?.slice(1).join('/');
+    const at = (name: string, known: Record<string, string> = {}) =>
+      registry.pathOf(name, known)?.slice(1).join('/');
+    const chain = { supermarketId: 'c1' };
+    const shop = { ...chain, supermarketLocationId: 's1' };
 
-    expect(at('supermarkets')).toBe('catalog/supermarkets');
-    expect(at('locations')).toBe('catalog/locations');
-    expect(at('price-scopes')).toBe('catalog/price-scopes');
+    // A chain holds its shops (admin plan 0042): the chains at the root, and
+    // everything a chain holds under one of them.
+    expect(at('supermarkets')).toBe('chains');
+    expect(at('locations', chain)).toBe('chains/c1/shops');
+    expect(at('sections', chain)).toBe('chains/c1/sections');
+    expect(at('price-scopes', chain)).toBe('chains/c1/scopes');
+    expect(at('location-items', shop)).toBe('chains/c1/shops/s1/products');
+    // With no chain named, each answers the place a chain is picked, so a
+    // dashboard tile that counts every shop still leads somewhere.
+    expect(at('locations')).toBe('chains');
+    expect(at('sections')).toBe('chains');
+    expect(at('price-scopes')).toBe('chains');
+    expect(at('location-items')).toBe('chains');
+    // A shop named without its chain: the chain is still what is missing.
+    expect(at('location-items', { supermarketLocationId: 's1' })).toBe(
+      'chains'
+    );
+    // One row, which has an address only when everything above it is known.
+    expect(registry.rowPath('supermarkets', 'c1')).toEqual([
+      '/',
+      'chains',
+      'c1',
+    ]);
+    expect(registry.rowPath('locations', 's1', chain)).toEqual([
+      '/',
+      'chains',
+      'c1',
+      'shops',
+      's1',
+    ]);
+    expect(registry.rowPath('locations', 's1')).toBeNull();
+
     expect(at('items')).toBe('catalog/items');
+    expect(at('categories')).toBe('catalog/categories');
     expect(at('product-groups')).toBe('catalog/product-groups');
     expect(at('prices')).toBe('catalog/prices');
     expect(at('price-policies')).toBe('catalog/price-policies');
-    expect(at('location-items')).toBe('catalog/location-items');
     expect(at('users')).toBe('shoppers/users');
     expect(at('zones')).toBe('shoppers/zones');
     expect(at('memberships')).toBe('shoppers/memberships');
@@ -150,9 +237,10 @@ describe('ADMIN_SECTIONS', () => {
    * drawn as the uuid it is and never opens a picker.
    */
   it('points every reference picker at a resource that exists', () => {
-    const resources = ADMIN_SECTIONS.flatMap(
-      (section) => section.resources ?? []
-    );
+    const resources = ADMIN_SECTIONS.flatMap((section) => [
+      ...(section.resources ?? []),
+      ...(section.held ?? []),
+    ]);
     const names = new Set(resources.map((resource) => resource.name));
     const targets = resources.flatMap((resource) => [
       ...resource.fields
@@ -166,6 +254,25 @@ describe('ADMIN_SECTIONS', () => {
     ]);
 
     expect(targets.filter((target) => !names.has(target))).toEqual([]);
+  });
+
+  /**
+   * A resource under a parent is addressed through it, so the parent has to be
+   * a resource the registry can find. One that could not would have no
+   * address at all, and every link to it would fall back to nothing.
+   */
+  it('points every parent at a resource that exists', () => {
+    const resources = ADMIN_SECTIONS.flatMap((section) => [
+      ...(section.resources ?? []),
+      ...(section.held ?? []),
+    ]);
+    const names = new Set(resources.map((resource) => resource.name));
+    const parents = resources.flatMap((resource) =>
+      resource.parent === undefined ? [] : [resource.parent.resource]
+    );
+
+    expect(parents.length).toBeGreaterThan(0);
+    expect(parents.filter((parent) => !names.has(parent))).toEqual([]);
   });
 
   /** A tab draws a key, never words, so a section can be renamed in `en.json`. */

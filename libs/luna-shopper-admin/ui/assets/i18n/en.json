@@ -81,6 +81,7 @@
     },
     "sections": {
       "overview": "Overview",
+      "chains": "Chains",
       "catalog": "Catalog",
       "shoppers": "Shoppers",
       "harvest": "Harvester",
@@ -115,7 +116,8 @@
       "blocked": "Choose {{filters}} to see the rows."
     },
     "filter": {
-      "any": "Any"
+      "any": "Any",
+      "more": "Filters"
     },
     "sort": {
       "label": "Order",
@@ -145,7 +147,8 @@
     "form": {
       "create": "New {{name}}",
       "edit": "Edit {{name}}",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "saved": "Saved."
     },
     "action": {
       "create": "Create",
@@ -222,8 +225,10 @@
   },
   "catalog": {
     "supermarkets": {
-      "one": "supermarket",
-      "many": "Supermarkets",
+      "one": "chain",
+      "many": "Chains",
+      "add": "Add a chain",
+      "locationCount": "Shops",
       "id": "Identifier",
       "name": "Name",
       "logoUrl": "Logo address",
@@ -245,6 +250,11 @@
     "locations": {
       "one": "shop",
       "many": "Shops",
+      "add": "Add a shop",
+      "state": {
+        "map": "Map",
+        "postalCodeGuessed": "Postal code guessed"
+      },
       "id": "Identifier",
       "supermarketId": "Chain",
       "priceScopeIds": "Price scopes",
@@ -263,8 +273,7 @@
       "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
       "externalProvider": "Source",
       "filter": {
-        "query": "Label, address or town contains",
-        "supermarketId": "Chain",
+        "query": "Name, address or town",
         "postalCodeSource": "Postal code source",
         "priceScopeId": "Price scope"
       }
@@ -284,14 +293,57 @@
       "locationCount": "Shops",
       "locationCountHelp": "How many of the chain's shops have this section: the shops whose own list names it, and the shops with no list of their own, which have every section of the chain.",
       "filter": {
-        "query": "Name or slug contains",
-        "supermarketId": "Chain"
+        "query": "Name or slug contains"
       }
     },
-    "chainTabs": {
-      "label": "Chain screens",
-      "details": "Details",
-      "sections": "Sections"
+    "chains": {
+      "back": "Back to chains",
+      "edit": "Edit chain",
+      "delete": "Delete chain",
+      "deleteHeading": "Delete this chain?",
+      "deleteBody": "{{name}} will be deleted. There is no undo. A chain that still holds shops or prices is refused.",
+      "deleteConfirm": "Delete the chain",
+      "choose": "Choose a chain to see its shops, its sections and its price scopes.",
+      "info": {
+        "title": "a chain",
+        "holds": "A chain holds its shops, its sections and its price scopes.",
+        "openShop": "Open a shop to set its section order, its products and the scopes that price it."
+      },
+      "source": {
+        "fetched": "Fetched by the harvester",
+        "off": "Harvester source is off",
+        "none": "No harvester source"
+      },
+      "tabs": {
+        "shops": "Shops",
+        "sections": "Sections",
+        "scopes": "Price scopes",
+        "details": "Details"
+      }
+    },
+    "shops": {
+      "back": "Back to {{chain}}",
+      "edit": "Edit shop",
+      "delete": "Delete shop",
+      "deleteHeading": "Delete this shop?",
+      "deleteBody": "{{name}} will be deleted, with its section order and its single shop price scope. There is no undo.",
+      "deleteConfirm": "Delete the shop",
+      "choose": "Choose a shop to see its details, its sections and its products.",
+      "tabs": {
+        "details": "Details",
+        "sections": "Sections",
+        "products": "Products"
+      },
+      "pricedBy": {
+        "heading": "Priced by",
+        "change": "Change",
+        "own": "This shop only",
+        "info": {
+          "title": "the scopes that price a shop",
+          "mostSpecific": "A shop shows the price of its most specific scope.",
+          "reach": "A chain region covers many shops. A single shop scope covers one."
+        }
+      }
     },
     "chainSections": {
       "heading": "Sections of this chain",
@@ -315,9 +367,17 @@
       "upShort": "Up",
       "downShort": "Down",
       "save": "Save this order",
-      "discard": "Discard changes",
-      "useChain": "Use the chain's default",
+      "discard": "Discard",
+      "useChain": "Use the chain's order",
       "saved": "Saved.",
+      "notHere": "Not in this shop",
+      "grip": "{{name}}, place {{place}} of {{count}}. Press the up or down arrow key to move it.",
+      "movedTo": "{{name}} is now at place {{place}} of {{count}}.",
+      "mapState": "A map writes this list",
+      "info": {
+        "title": "what a map does to this list",
+        "map": "This list follows the shop's map. The next save of the map's walk replaces any change made here."
+      },
       "mapNotice": "This list follows the shop's map. The next save of the map's walk replaces any change made here.",
       "mapConfirm": {
         "heading": "Change a list that follows a map?",
@@ -344,6 +404,11 @@
     "priceScopes": {
       "one": "price scope",
       "many": "Price scopes",
+      "add": "Add a scope",
+      "makeDefault": "Make default",
+      "state": {
+        "default": "Default"
+      },
       "id": "Identifier",
       "supermarketId": "Chain",
       "supermarketIdHelp": "The chain this scope prices for. It is fixed once the scope exists.",
@@ -357,7 +422,7 @@
       "priorityCustom": "Custom ({{priority}})",
       "priorityHelp": "Which of a shop's scopes it is quoted from. A shop can sell at several, and the most specific one that has a price for a product is the price that shop charges. It is set from the kind when the scope is made and changed through the API, because moving it re-ranks every shop that holds it.",
       "filter": {
-        "supermarketId": "Chain"
+        "kind": "Kind"
       }
     },
     "items": {
@@ -629,18 +694,17 @@
       "caution": "Saving a rule works out the shown price of every product again. Expect a short wait."
     },
     "locationItems": {
-      "one": "shop row",
+      "one": "shop product",
       "many": "Products in a shop",
+      "add": "Add a product",
       "id": "Identifier",
       "itemId": "Product",
+      "itemBrand": "Brand",
       "supermarketLocationId": "Shop",
       "positionInStore": "Shelf note",
       "positionInStoreHelp": "Free text for where on the shelf, such as bottom shelf by the fridges. The aisle is the shop's section, set on the shop and on the product; this note is the shelf.",
       "available": "Available in this shop",
-      "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so.",
-      "filter": {
-        "supermarketLocationId": "Shop"
-      }
+      "availableHelp": "Whether this shop carries the product. Unset means nobody has said, and the scope’s own answer stands, which is not the same as saying no. Read only here: it is written by whoever last observed it, so the row can record which of a person and a crawl said so."
     },
     "unit": {
       "UNIT": "Unit",

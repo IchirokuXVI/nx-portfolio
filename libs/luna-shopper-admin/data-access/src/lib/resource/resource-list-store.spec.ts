@@ -241,6 +241,145 @@ describe('ResourceListStore pagination', () => {
   });
 });
 
+/**
+ * What the address already decided (admin plan 0042). A chain's shops sit at
+ * `/chains/{chainId}/shops`, so the chain goes out on every read and is never
+ * one of the filters the operator set.
+ */
+describe('ResourceListStore fixed filters', () => {
+  const fixed = { supermarketId: 'sm_mercadona' };
+
+  const under = (gateway: FakeGateway, initial: Record<string, string> = {}) =>
+    new ResourceListStore<ResourceRow>(descriptor, gateway, initial, fixed);
+
+  it('sends them on the first read', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+
+    await store.load();
+
+    expect(gateway.queries[0].filters).toEqual(fixed);
+  });
+
+  it('sends them with the next page', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: 'c1' },
+      { items: [], nextCursor: null },
+    ];
+    const store = under(gateway);
+    await store.load();
+
+    await store.loadMore();
+
+    expect(gateway.queries[1].cursor).toBe('c1');
+    expect(gateway.queries[1].filters).toEqual(fixed);
+  });
+
+  it('sends them beside a filter and an order the operator set', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+    await store.load();
+
+    await store.setFilter('query', 'sevilla');
+    await store.setOrder('name');
+
+    expect(gateway.queries[1].filters).toEqual({ ...fixed, query: 'sevilla' });
+    expect(gateway.queries[2].filters).toEqual({ ...fixed, query: 'sevilla' });
+    expect(gateway.queries[2].order).toBe('name');
+  });
+
+  it('sends them beside the filters the link opened the list with', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway, { query: 'sevilla' });
+
+    await store.load();
+
+    expect(gateway.queries[0].filters).toEqual({ ...fixed, query: 'sevilla' });
+  });
+
+  /** The address wins: a filter cannot point the list at another chain. */
+  it('does not let a filter of the same name replace one', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+
+    await store.setFilter('supermarketId', 'sm_other');
+
+    expect(gateway.queries[0].filters).toEqual(fixed);
+  });
+
+  it('keeps them when the filters are cleared', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+    await store.setFilter('query', 'zzz');
+
+    await store.clear();
+
+    expect(store.filters()).toEqual({});
+    expect(gateway.queries[1].filters).toEqual(fixed);
+  });
+
+  it('does not show them among the filters the operator set', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+
+    await store.load();
+
+    expect(store.filters()).toEqual({});
+  });
+
+  /**
+   * A chain with no shops is an empty list. Counting the chain as a filter
+   * would draw "nothing matched" with a way out that clears nothing.
+   */
+  it('is empty and not a no match when nothing else narrows the list', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+
+    await store.load();
+
+    expect(store.narrowed()).toBe(false);
+    expect(store.empty()).toBe(true);
+    expect(store.noMatch()).toBe(false);
+  });
+
+  it('is a no match once the operator narrows it as well', async () => {
+    const gateway = new FakeGateway();
+    const store = under(gateway);
+
+    await store.setFilter('query', 'zzz');
+
+    expect(store.narrowed()).toBe(true);
+    expect(store.noMatch()).toBe(true);
+  });
+
+  /**
+   * A descriptor that still names the parent in `requires` is answered by the
+   * address, so the list reads and does not wait for a choice nobody can make.
+   */
+  it('answers a required filter, so the list is not blocked', async () => {
+    const requiring = { ...descriptor, requires: ['supermarketId'] };
+    const gateway = new FakeGateway();
+
+    const without = new ResourceListStore<ResourceRow>(requiring, gateway);
+    await without.load();
+    expect(without.missingFilters()).toEqual(['supermarketId']);
+    expect(without.blocked()).toBe(true);
+    expect(gateway.queries).toHaveLength(0);
+
+    const withParent = new ResourceListStore<ResourceRow>(
+      requiring,
+      gateway,
+      {},
+      fixed
+    );
+    await withParent.load();
+    expect(withParent.missingFilters()).toEqual([]);
+    expect(withParent.blocked()).toBe(false);
+    expect(gateway.queries).toHaveLength(1);
+  });
+});
+
 describe('ResourceListStore delete', () => {
   it('takes the row off the screen without reading the list again', async () => {
     const gateway = new FakeGateway();

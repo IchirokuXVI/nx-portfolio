@@ -3253,6 +3253,8 @@ export type CatalogSupermarketLocationItemView = {
   availabilitySourceKind: EnumsPriceSourceKind | null;
   availabilityObservedAt: string | null;
   availabilitySourceRunId: string | null;
+  itemName: CatalogLocalizedText | null;
+  itemBrand: string | null;
 };
 
 /**
@@ -3331,6 +3333,7 @@ export type CatalogSupermarketView = {
   websiteUrl: string | null;
   externalBrandKey: string | null;
   defaultPriceScopeId: string | null;
+  locationCount?: number;
 };
 
 /**
