@@ -211,6 +211,49 @@ describe('the places queue, importing under a scope', () => {
   });
 });
 
+/**
+ * Admin plan 0049. The picked chain, the scope and the chain form are answers
+ * about one place. Left in the panel when another place comes up, they file
+ * that one under the wrong chain in one press.
+ */
+describe('the places queue, the panel when another place comes up', () => {
+  it('clears the picked chain and scope when another line is opened', async () => {
+    const { page } = await render();
+    const other = page.queue.items()[1];
+
+    page.chooseChain(MERCADONA);
+    page.priceScopeId.set('ps_mercadona_4661');
+    page.open(other.id);
+
+    expect(page.queue.current()?.id).toBe(other.id);
+    expect(page.supermarketId()).toBe('');
+    expect(page.priceScopeId()).toBe('');
+  });
+
+  it('clears the picked chain and the chain form on a skip', async () => {
+    const { page } = await render();
+    const first = front(page);
+
+    page.chooseChain(MERCADONA);
+    page.startNewChain(first);
+    page.skip();
+
+    expect(page.queue.current()?.id).not.toBe(first.id);
+    expect(page.supermarketId()).toBe('');
+    expect(page.creatingChain()).toBe(false);
+    expect(page.newChainName()).toBe('');
+  });
+
+  it('keeps the panel when the line that is pressed is the open one', async () => {
+    const { page } = await render();
+
+    page.chooseChain(MERCADONA);
+    page.open(front(page).id);
+
+    expect(page.supermarketId()).toBe(MERCADONA);
+  });
+});
+
 describe('the places queue, when the catalog may already hold the shop', () => {
   async function refused() {
     const rendered = await render(LIBERTADOR);
@@ -223,7 +266,9 @@ describe('the places queue, when the catalog may already hold the shop', () => {
     const { fixture, page, calls } = await refused();
 
     expect(page.queue.current()?.id).toBe(LIBERTADOR);
-    expect(page.queue.decided()).toBe(0);
+    expect(page.queue.items().some((place) => place.id === LIBERTADOR)).toBe(
+      true
+    );
     expect(named(calls, 'linkPlace')).toHaveLength(0);
     expect(page.candidates()).toEqual([
       {
@@ -583,39 +628,5 @@ describe('the places queue, rejecting a place already imported', () => {
     expect(page.queue.current()?.id).toBe(LIBERTADOR);
     expect(page.errorKey()).toBe('harvest.places.error.alreadyImported');
     expect(text(fixture)).toContain('harvest.places.error.alreadyImported');
-  });
-});
-
-describe('the places queue, bulk import beside a candidate', () => {
-  it('leaves a place the catalog may hold in the queue and reports it', async () => {
-    const { page, calls } = await render();
-
-    page.queue.toggle(LIBERTADOR);
-    page.queue.toggle('place-dia-1');
-    await page.askImport();
-    const pending = page.pending();
-    if (pending === null) {
-      throw new Error('no bulk action is waiting');
-    }
-    page.go(pending);
-    await drain();
-
-    expect(named(calls, 'linkPlace')).toHaveLength(0);
-    expect(named(calls, 'importPlace').map((args) => args[1])).toEqual([
-      {},
-      {},
-    ]);
-    expect(page.queue.items().some((place) => place.id === LIBERTADOR)).toBe(
-      true
-    );
-    expect(page.report()).toMatchObject({
-      succeeded: 1,
-      failed: [
-        {
-          name: 'Mercadona Libertador',
-          reasonKey: 'harvest.places.error.matchesLocation',
-        },
-      ],
-    });
   });
 });

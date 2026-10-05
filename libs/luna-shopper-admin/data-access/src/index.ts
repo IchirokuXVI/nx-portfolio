@@ -98,7 +98,7 @@ export {
   type RunPriceQuery,
   type RunQuery,
 } from './lib/harvest/harvest-service';
-export { QueueStore, type QueueBulkResult } from './lib/harvest/queue-store';
+export { QueueStore } from './lib/harvest/queue-store';
 export { RunWatches } from './lib/harvest/run-watch';
 export { HealthApi } from './lib/health/health-api';
 export { HEALTH_SERVICE } from './lib/health/health-service';

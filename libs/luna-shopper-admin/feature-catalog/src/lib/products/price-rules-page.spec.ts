@@ -223,7 +223,11 @@ describe('the form of a price rule', () => {
   });
 
   /** The row above says which rule it is, so the form does not ask. */
-  it('draws the three columns a rule can change, and the caution', async () => {
+  /**
+   * Whether the rule is on is the switch on the row above, so the form has no
+   * checkbox for it (admin plan 0049, target 4).
+   */
+  it('draws the rank and the limit, the caution, and no second switch', async () => {
     const fixture = await boot('/products/price-rules/OFFICIAL_API');
     const form = fixture.debugElement.query(By.directive(PriceRuleForm))
       .componentInstance as PriceRuleForm;
@@ -231,8 +235,10 @@ describe('the form of a price rule', () => {
     expect(form.ruleFields.map((field) => field.name)).toEqual([
       'priority',
       'maxAgeDays',
-      'enabled',
     ]);
+    expect(
+      fixture.nativeElement.querySelector('lib-price-rule-form [type=checkbox]')
+    ).toBeNull();
     const caution = fixture.debugElement.query(By.directive(CautionLine))
       .componentInstance as CautionLine;
     expect(caution.text()).toBe('catalog.pricePolicies.caution');

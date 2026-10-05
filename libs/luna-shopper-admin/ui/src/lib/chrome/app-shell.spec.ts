@@ -178,16 +178,20 @@ describe('AppShell, the rail', () => {
     );
   });
 
-  it('opens one menu at a time', async () => {
+  /**
+   * Admin plan 0049, target 8: the foot of the rail holds the deployment and
+   * one button, the account. The language the catalog is read in had a button
+   * of its own there, and the account menu already says it.
+   */
+  it('has one button at the foot of the rail, and no language indicator', async () => {
     const fixture = await render();
 
-    all(fixture, '[data-menu="language"]')[0].click();
-    fixture.detectChanges();
-    all(fixture, '[data-menu="account"]')[0].click();
-    fixture.detectChanges();
-
-    expect(all(fixture, '.menu')).toHaveLength(1);
-    expect(fixture.componentInstance.menu()).toBe('account');
+    expect(all(fixture, '[data-menu="language"]')).toEqual([]);
+    expect(
+      all(fixture, 'nav.rail .foot button').map((button) =>
+        button.getAttribute('data-menu')
+      )
+    ).toEqual(['account']);
   });
 
   it('closes a menu on a press outside it', async () => {
@@ -429,13 +433,13 @@ describe('AppShell, where the focus goes when a menu closes', () => {
     const fixture = await render();
     document.body.append(fixture.nativeElement);
 
-    all(fixture, '[data-menu="language"]')[0].click();
+    all(fixture, '[data-menu="account"]')[0].click();
     fixture.detectChanges();
-    all(fixture, '.menu button')[1].click();
+    all(fixture, '.menu button[aria-pressed="false"]')[0].click();
     fixture.detectChanges();
 
     expect(document.activeElement).toBe(
-      all(fixture, '[data-menu="language"]')[0]
+      all(fixture, '[data-menu="account"]')[0]
     );
 
     fixture.nativeElement.remove();

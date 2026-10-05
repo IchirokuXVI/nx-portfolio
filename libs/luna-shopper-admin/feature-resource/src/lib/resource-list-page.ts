@@ -681,7 +681,7 @@ export class ResourceListPage {
    * The line is the text of each named field, in order, with nothing between
    * them but a space: "Sevilla 41004". A field whose value is a word and not
    * data (none, yes, no) is left out, since a line of a column has no label to
-   * say what is none.
+   * say what is none. So is a field whose text is the heading itself.
    */
   private _brief(
     row: ResourceRow,
@@ -702,9 +702,10 @@ export class ResourceListPage {
     // One sentence where the descriptor wrote one (admin plan 0045), and the
     // named fields side by side otherwise.
     const sentence = brief?.sentence?.(row);
+    const heading = brief?.heading?.(row, this._content.order()) || title;
 
     return {
-      heading: brief?.heading?.(row, this._content.order()) || title,
+      heading,
       line:
         sentence !== undefined
           ? sentence.kind === 'text'
@@ -717,7 +718,11 @@ export class ResourceListPage {
               )
           : (brief?.line ?? [])
               .map(textOf)
-              .filter((text) => text !== '')
+              // A field the heading already says is not said a second time
+              // under it. A shop with no address is headed by its postal
+              // code, and the line was that same code again (admin plan
+              // 0049).
+              .filter((text) => text !== '' && text !== heading)
               .join(' '),
       trailing: trailing === '' ? null : trailing,
     };

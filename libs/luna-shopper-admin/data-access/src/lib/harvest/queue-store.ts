@@ -23,58 +23,6 @@ export type QueueReader<T> = (
 const PREFETCH_AT = 3;
 
 /**
- * How many rows of a bulk run are in flight at once (plan 0020, section 5).
- *
- * There is no bulk route and this plan does not add one, so a bulk action is one
- * call per row from the browser. Four is the compromise the plan names: enough
- * that two hundred rows are not two hundred round trips end to end, few enough
- * that draining a queue does not arrive at the gateway as a burst.
- */
-const BULK_AT_ONCE = 4;
-
-/** One row a bulk run could not put through, and why. */
-export interface QueueBulkFailure {
-  readonly id: string;
-  readonly error: GatewayError;
-}
-
-/**
- * What a bulk run did, row by row (plan 0020, section 6).
- *
- * The rule the whole feature rests on: two hundred calls will not all succeed,
- * and a bulk that reports one word is a bulk an operator cannot recover from. So
- * three lists rather than a count, and the failed and the skipped are two lists
- * rather than one, because "I did not try" and "I tried and it was refused" are
- * different sentences.
- */
-export interface QueueBulkResult {
-  /** The rows that went through. They have left the selection. */
-  readonly succeeded: readonly string[];
-  /** The rows that were refused. They stay in the queue and stay selected. */
-  readonly failed: readonly QueueBulkFailure[];
-  /** The rows the act could not apply to. Never attempted, and still selected. */
-  readonly skipped: readonly string[];
-  /** How many rows the run set out to act on, which is everything but the skipped. */
-  readonly total: number;
-  /** Whether the operator stopped it. What had gone through stays through. */
-  readonly stopped: boolean;
-}
-
-/** How far a bulk run has got, counting rows rather than time. */
-export interface QueueBulkProgress {
-  readonly done: number;
-  readonly total: number;
-}
-
-const NOTHING: QueueBulkResult = {
-  succeeded: [],
-  failed: [],
-  skipped: [],
-  total: 0,
-  stopped: false,
-};
-
-/**
  * A decision queue: a list of things each needing confirm, reject, or a
  * correction, worked through in sequence (plan 0006, section 5).
  *
@@ -85,16 +33,20 @@ const NOTHING: QueueBulkResult = {
  * is what makes reviewing four thousand products impossible rather than merely
  * long.
  *
- * A decided item is removed rather than marked, so the count that is left is the
- * work that is left. The next page is fetched before the current one runs out,
- * so a queue does not stall at a page boundary.
+ * A decided item is removed rather than marked, so what is left is the work
+ * that is left. The next page is fetched before the current one runs out, so a
+ * queue does not stall at a page boundary.
  *
- * **The same rows are also a list** (plan 0020). One at a time is right when
- * each row is a judgement, and a list is right when the rows are alike and the
- * answer is the same for all of them, which is the ordinary end of a crawl. Both
- * views read this one store, so switching between them loads nothing, sends
- * nothing and loses no place: the selection, the cursor and the rows are all
- * here. That is why the selection lives on the store rather than on a screen.
+ * **The rows never change places** (admin plan 0049, target 5). The row being
+ * decided is named by its id, and the rows keep the order the gateway gave
+ * them. Choosing a row and skipping one both move that name and nothing else.
+ * The row in front used to be the first of the list, so choosing the fifth row
+ * turned the list until the fifth was first: the four above it went to the
+ * end, and the column the operator was reading jumped under the pointer.
+ *
+ * The same rows were also a list with a selection and a bulk runner (plan
+ * 0020). The owner removed that view in admin plan 0049, and the selection,
+ * the bulk run and its report went with it: nothing else read them.
  *
  * A plain class the screen constructs, for the same reason `ResourceListStore`
  * is one: a route's providers injector is never destroyed, so a route-scoped
@@ -106,16 +58,14 @@ export class QueueStore<T> {
   private readonly _loading = signal(true);
   private readonly _loadingMore = signal(false);
   private readonly _error = signal<GatewayError | null>(null);
-  /** The row a single decision is in flight for, so only its controls lock. */
+  /** The row a decision is in flight for. */
   private readonly _busyId = signal<string | null>(null);
-  private readonly _bulk = signal<QueueBulkProgress | null>(null);
-  private readonly _result = signal<QueueBulkResult | null>(null);
-  private readonly _selected = signal<ReadonlySet<string>>(new Set());
-  /** How many this session has decided, which is the only progress there is. */
-  private readonly _decided = signal(0);
+  /**
+   * The row being decided, by id. `null` means the first row, which is what a
+   * queue opens on.
+   */
+  private readonly _currentId = signal<string | null>(null);
   private _exhausted = false;
-  /** Set by `stopBulk`, read between rows rather than during one. */
-  private _stopping = false;
 
   constructor(
     private readonly _read: QueueReader<T>,
@@ -126,39 +76,46 @@ export class QueueStore<T> {
   readonly error: Signal<GatewayError | null> = this._error.asReadonly();
   readonly loading: Signal<boolean> = this._loading.asReadonly();
 
-  /** A later page is being read, which the list view's own button asked for. */
+  /** A later page is being read, which the column's own button asked for. */
   readonly loadingMore: Signal<boolean> = this._loadingMore.asReadonly();
 
   readonly busyId: Signal<string | null> = this._busyId.asReadonly();
 
-  /** How far a bulk run has got, or null when none is running. */
-  readonly bulk: Signal<QueueBulkProgress | null> = this._bulk.asReadonly();
+  /** A decision is in flight. The buttons are disabled rather than hidden. */
+  readonly busy = computed(() => this._busyId() !== null);
 
-  /** What the last bulk run did, until another one starts. */
-  readonly result: Signal<QueueBulkResult | null> = this._result.asReadonly();
-
-  /** The ids the operator has ticked. By id, so paging does not lose them. */
-  readonly selected: Signal<ReadonlySet<string>> = this._selected.asReadonly();
-
-  /** Anything is in flight. The buttons are disabled rather than hidden. */
-  readonly busy = computed(
-    () => this._busyId() !== null || this._bulk() !== null
-  );
-
-  readonly decided: Signal<number> = this._decided.asReadonly();
+  /** Where the row being decided sits in the list, or -1 when there is none. */
+  private readonly _at = computed(() => {
+    const items = this._items();
+    if (items.length === 0) {
+      return -1;
+    }
+    const id = this._currentId();
+    const at =
+      id === null ? 0 : items.findIndex((item) => this._idOf(item) === id);
+    // A name that no row answers to any more is the first row again.
+    return at < 0 ? 0 : at;
+  });
 
   /** The item being decided about, or null when there is nothing left. */
-  readonly current = computed<T | null>(() => this._items()[0] ?? null);
+  readonly current = computed<T | null>(
+    () => this._items()[this._at()] ?? null
+  );
 
   /**
-   * What is coming up.
+   * What is coming up: the rows after the current one, and then the rows
+   * before it, which is the order skipping walks them in.
    *
    * The places queue draws these beside the current one, because near duplicates
    * cannot be judged one at a time: a place offered as new is offered precisely
    * because nothing matched it, and the thing it might be a duplicate of is the
    * next row rather than a row anywhere else.
    */
-  readonly upcoming = computed<readonly T[]>(() => this._items().slice(1));
+  readonly upcoming = computed<readonly T[]>(() => {
+    const items = this._items();
+    const at = this._at();
+    return at < 0 ? [] : [...items.slice(at + 1), ...items.slice(0, at)];
+  });
 
   /** Nothing is drawable: the first read failed and no items arrived. */
   readonly failed = computed(
@@ -171,11 +128,8 @@ export class QueueStore<T> {
       !this._loading() && this._error() === null && this._items().length === 0
   );
 
-  /** Whether there is another page. The list view offers a button for it. */
+  /** Whether there is another page. The column offers a button for it. */
   readonly canLoadMore = computed(() => this._cursor() !== null);
-
-  /** How many of the loaded rows are ticked. */
-  readonly selectedCount = computed(() => this._selected().size);
 
   /** What this queue calls a row by, which callers outside it also need. */
   idOf(item: T): string {
@@ -188,8 +142,7 @@ export class QueueStore<T> {
     this._error.set(null);
     this._items.set([]);
     this._cursor.set(null);
-    this._selected.set(new Set());
-    this._result.set(null);
+    this._currentId.set(null);
     this._exhausted = false;
 
     await this._fetch(undefined, (items) => this._items.set(items));
@@ -197,12 +150,12 @@ export class QueueStore<T> {
   }
 
   /**
-   * Read one more page, because the list view asked for it.
+   * Read one more page, because the column asked for it.
    *
    * The queue's own prefetch happens when a decision empties it far enough, and
-   * a list view has no decisions to trigger it: an operator scanning two hundred
-   * rows decides nothing until the end. So the button, which says how many are
-   * loaded, and the prefetch, which is silent, both exist.
+   * an operator reading down the column decides nothing while they read. So
+   * the button, which says how many are loaded, and the prefetch, which is
+   * silent, both exist.
    */
   async loadMore(): Promise<void> {
     if (this._loadingMore() || !this.canLoadMore()) {
@@ -237,18 +190,14 @@ export class QueueStore<T> {
   }
 
   /**
-   * Decide a row that is not the one in front.
-   *
-   * The list view's rows are decided where they sit, and the bulk runner walks a
-   * selection rather than the head of the queue, so a decision has to be
-   * addressable by id.
+   * Decide a row by its id, which need not be the one in front.
    *
    * The act says what becomes of the row: `null` for one that leaves, or the row
-   * itself for one that stays, changed. Both are decisions and both count. The
-   * shops queue is the screen that needs the second: ignoring a shop on the
-   * default filter takes it out of the queue, and doing it with no filter on
-   * leaves it there wearing a new badge, and losing your place on every press is
-   * what the queue exists to avoid.
+   * itself for one that stays, changed. Both are decisions. The shops queue is
+   * the screen that needs the second: ignoring a shop on the default filter
+   * takes it out of the queue, and doing it with no filter on leaves it there
+   * wearing a new badge, and losing your place on every press is what the
+   * queue exists to avoid.
    */
   async decideAt(
     id: string,
@@ -264,9 +213,7 @@ export class QueueStore<T> {
       const kept = await act(item);
       this._error.set(null);
       this._settle(id, kept);
-      if (this._items().length <= PREFETCH_AT) {
-        void this._more();
-      }
+      this._readAhead();
       return true;
     } catch (error) {
       this._error.set(toGatewayError(error));
@@ -277,192 +224,125 @@ export class QueueStore<T> {
   }
 
   /**
-   * Do one act to every selected row, four at a time (plan 0020, sections 5 and
-   * 6).
+   * Make this row the one being decided, without deciding anything.
    *
-   * All of the partial failure rule lives here, so the three screens hold none
-   * of it and cannot each get it subtly wrong. A row `applies` refuses is never
-   * passed to the act at all: an entry with no proposal cannot be accepted as
-   * proposed, and reporting that as a failure would say the gateway refused
-   * something nobody sent.
-   */
-  async decideMany(
-    act: (item: T) => Promise<T | null>,
-    applies: (item: T) => boolean = () => true
-  ): Promise<QueueBulkResult> {
-    if (this.busy()) {
-      return NOTHING;
-    }
-
-    const selected = this._selected();
-    const chosen = this._items().filter((item) =>
-      selected.has(this._idOf(item))
-    );
-    const skipped = chosen
-      .filter((item) => !applies(item))
-      .map((item) => this._idOf(item));
-    const pending = chosen.filter(applies);
-
-    this._stopping = false;
-    this._error.set(null);
-    this._result.set(null);
-    this._bulk.set({ done: 0, total: pending.length });
-
-    const succeeded: string[] = [];
-    const failed: QueueBulkFailure[] = [];
-    let next = 0;
-
-    const worker = async (): Promise<void> => {
-      // Read between rows and not during one: a stop that abandoned a call in
-      // flight would leave the operator unable to say whether it landed.
-      while (!this._stopping) {
-        const item = pending[next++];
-        if (item === undefined) {
-          return;
-        }
-
-        const id = this._idOf(item);
-        try {
-          const kept = await act(item);
-          succeeded.push(id);
-          this._settle(id, kept);
-        } catch (error) {
-          failed.push({ id, error: toGatewayError(error) });
-        } finally {
-          this._bulk.update((run) =>
-            run === null ? null : { ...run, done: run.done + 1 }
-          );
-        }
-      }
-    };
-
-    await Promise.all(
-      Array.from({ length: Math.min(BULK_AT_ONCE, pending.length) }, worker)
-    );
-
-    const result: QueueBulkResult = {
-      succeeded,
-      failed,
-      skipped,
-      total: pending.length,
-      stopped: this._stopping,
-    };
-
-    this._stopping = false;
-    this._bulk.set(null);
-    this._result.set(result);
-
-    if (this._items().length <= PREFETCH_AT) {
-      void this._more();
-    }
-
-    return result;
-  }
-
-  /**
-   * Stop the bulk run between rows.
-   *
-   * What has already gone through stays through, and the screen says so in those
-   * words. A "cancel" read as an undo on a screen that writes to the catalog is
-   * the worst possible misreading.
-   */
-  stopBulk(): void {
-    this._stopping = true;
-  }
-
-  /** Tick or untick one row. */
-  toggle(id: string): void {
-    this._selected.update((selected) => {
-      const next = new Set(selected);
-      if (!next.delete(id)) {
-        next.add(id);
-      }
-      return next;
-    });
-  }
-
-  /**
-   * Tick every row that is loaded, and no more.
-   *
-   * The store holds the rows it has fetched and knows no more than that. A
-   * control that claimed four thousand rows would be claiming a number it cannot
-   * see and starting four thousand separate calls, so the button names the
-   * number it is actually about and an operator who wants more loads more first.
-   */
-  selectLoaded(): void {
-    this._selected.set(new Set(this._items().map((item) => this._idOf(item))));
-  }
-
-  clearSelection(): void {
-    this._selected.set(new Set());
-  }
-
-  /**
-   * Put this row in front, without deciding anything.
-   *
-   * What clicking a row in the list view does: the list is for the rows whose
-   * answer is obvious, and the way out of one that is not is to look at it
-   * properly. The rotation is the same one repeated skipping produces, so the
-   * order behind it is unchanged.
+   * What pressing a row of the column does. The rows stay where they are: only
+   * the mark moves, so the rows above the chosen one are still above it and
+   * the column does not scroll (admin plan 0049, target 5).
    */
   focus(id: string): void {
-    const items = this._items();
-    const at = items.findIndex((item) => this._idOf(item) === id);
-    if (at <= 0) {
-      return;
+    if (this._items().some((item) => this._idOf(item) === id)) {
+      this._currentId.set(id);
+      this._readAhead();
     }
-
-    this._items.set([...items.slice(at), ...items.slice(0, at)]);
   }
 
   /**
-   * Put the current item at the back without deciding it.
+   * Go to the next row without deciding this one, and from the last row of
+   * the queue back to the first.
    *
    * The way out of an item somebody cannot judge. Without it the only way past a
    * hard case is to answer it wrongly, and this queue writes to the catalog.
+   * The skipped row keeps its place, so it is where the operator left it when
+   * they come back to it.
+   *
+   * **The last row that is loaded is not the last row of the queue** while
+   * the gateway holds another page. Skipping it waits for that page and opens
+   * its first row. Going back to the first row there would hide every row
+   * that was not read yet behind a walk that looks complete. The promise
+   * settles when the next row is the open one.
    */
-  skip(): void {
-    const [first, ...rest] = this._items();
-    if (first !== undefined) {
-      this._items.set([...rest, first]);
+  async skip(): Promise<void> {
+    const at = this._at();
+    if (at < 0) {
+      return;
     }
+
+    const skipped = this._idOf(this._items()[at]);
+    if (at === this._items().length - 1 && this.canLoadMore()) {
+      await this._more();
+      // The operator chose another row, or decided this one, while the page
+      // was read. What they did stands.
+      const front = this.current();
+      if (front === null || this._idOf(front) !== skipped) {
+        return;
+      }
+    }
+
+    const items = this._items();
+    const now = items.findIndex((item) => this._idOf(item) === skipped);
+    const next = items[(now + 1) % items.length];
+    this._currentId.set(this._idOf(next));
+    this._readAhead();
   }
 
   /**
-   * A decided row, taken out or put back changed, and out of the selection.
+   * A decided row, taken out or put back changed.
    *
-   * A decided row always leaves the selection, whether or not it leaves the
-   * queue. Nothing stays ticked that has already been acted on, which is what
-   * makes pressing a bulk action a second time retry exactly the failures.
+   * When the row that leaves is the one in front, the row under it comes up in
+   * its place, and after the last row the first one does. Every other row
+   * keeps its place, so nothing above the decided row moves.
    */
   private _settle(id: string, kept: T | null): void {
-    this._items.update((items) =>
+    const items = this._items();
+    const at = this._at();
+    const front = items[at];
+
+    if (kept === null && front !== undefined && this._idOf(front) === id) {
+      const next = items[at + 1] ?? (at > 0 ? items[0] : undefined);
+      this._currentId.set(next === undefined ? null : this._idOf(next));
+    }
+
+    this._items.set(
       kept === null
         ? items.filter((item) => this._idOf(item) !== id)
         : items.map((item) => (this._idOf(item) === id ? kept : item))
     );
-
-    this._selected.update((selected) => {
-      if (!selected.has(id)) {
-        return selected;
-      }
-      const next = new Set(selected);
-      next.delete(id);
-      return next;
-    });
-
-    this._decided.update((count) => count + 1);
   }
 
-  private async _more(): Promise<void> {
+  /**
+   * Read the next page when few rows are left under the one in front.
+   *
+   * Counted from the row in front and not from the top, since an operator who
+   * chose a row far down the column, or skipped their way there, is as close
+   * to the end as one who decided every row above it.
+   */
+  private _readAhead(): void {
+    const left = this._items().length - 1 - Math.max(this._at(), 0);
+    if (left < PREFETCH_AT) {
+      void this._more();
+    }
+  }
+
+  /** The read of the next page that is in flight, and the cursor it is for. */
+  private _reading: { cursor: string; done: Promise<void> } | null = null;
+
+  /**
+   * Read the next page, once for each cursor.
+   *
+   * A press on a row, a skip and a decision can each ask for the next page,
+   * and quick presses ask several times before the first answer. Every one of
+   * them gets the same read, so a cursor is sent once and a page is added
+   * once.
+   */
+  private _more(): Promise<void> {
     const cursor = this._cursor();
     if (cursor === null || this._exhausted) {
-      return;
+      return Promise.resolve();
+    }
+    if (this._reading?.cursor === cursor) {
+      return this._reading.done;
     }
 
-    await this._fetch(cursor, (items) =>
+    const done = this._fetch(cursor, (items) =>
       this._items.update((shown) => dedupe([...shown, ...items], this._idOf))
-    );
+    ).finally(() => {
+      if (this._reading?.done === done) {
+        this._reading = null;
+      }
+    });
+    this._reading = { cursor, done };
+    return done;
   }
 
   private async _fetch(

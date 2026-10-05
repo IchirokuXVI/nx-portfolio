@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Actions: an account, with the More menu open</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a href="Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a class="on" href="Actions.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<a class="back" href="#" aria-label="Back to Admins"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Admins</a>
+<h1>marta</h1>
+<span class="chip ok">Admin</span>
+<span class="chip wait">Email not confirmed</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How an account page works">i</button>
+<button class="btn">Edit</button>
+<button class="btn sq" aria-label="More actions for marta" aria-expanded="true" style="background: #e9ebe6"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></button>
+</header>
+
+<div class="menu" role="menu" aria-label="More actions for marta" style="top: 48px; right: 20px">
+<button class="mi hot" role="menuitem">Send the confirmation email again</button>
+<button class="mi" role="menuitem">Take the admin role away</button>
+<div class="sep" role="separator"></div>
+<button class="mi dan" role="menuitem"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>Delete this account</button>
+</div>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="a-acc">
+<div class="sec-h"><h2 id="a-acc">Account</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Username</dt><dd class="fv">marta</dd></div>
+<div class="fr"><dt class="fl">Shown as</dt><dd class="fv">Marta Robledo</dd></div>
+<div class="fr"><dt class="fl">Email</dt><dd class="fv">[EMAIL]</dd></div>
+<div class="fr"><dt class="fl">Kind</dt><dd class="fv">Registered</dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="a-acs">
+<div class="sec-h"><h2 id="a-acs">Access</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Roles</dt><dd class="fv">Admin</dd></div>
+<div class="fr"><dt class="fl">Email confirmed</dt><dd class="fv"><span class="chip wait">Not yet</span></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-label="Used by">
+<a class="li" href="#" style="color: #14171a; border-top: 0"><span class="grow" style="font-weight: 600">Zones this account owns</span><span class="cnt">2</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+<a class="li" href="#" style="color: #14171a"><span class="grow" style="font-weight: 600">Zones it is a member of</span><span class="cnt">4</span><svg class="ic mut" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+</section>
+
+</div>
+
+<aside class="aside" aria-labelledby="a-rec">
+<section class="sec">
+<div class="sec-h"><h2 id="a-rec">Record</h2></div>
+<div class="kv"><h3>Signed up</h3><span>3 Aug 2026, 19:22</span></div>
+<div class="kv"><h3>ID</h3><div class="rowx" style="gap: 8px"><code class="grow mut">c08d5e11…9ab4</code><button class="btn sm" aria-label="Copy the ID of marta">Copy</button></div></div>
+</section>
+</aside>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

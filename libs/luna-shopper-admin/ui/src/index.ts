@@ -26,11 +26,7 @@ export { type BarChartView, type TileView } from './lib/dashboard/tile-view';
 export { EntryCard } from './lib/entry/entry-card';
 export { keepTabInside } from './lib/focus-trap';
 export { HarvestNotice } from './lib/harvest/harvest-notice';
-export {
-  QueueFrame,
-  type QueueExtraView,
-  type QueueReport,
-} from './lib/harvest/queue-frame';
+export { QueueFrame, type QueueExtraView } from './lib/harvest/queue-frame';
 export { RunProgressView } from './lib/harvest/run-progress';
 export { RunRowView, type RunRow } from './lib/harvest/run-row';
 export { CautionLine } from './lib/info/caution-line';

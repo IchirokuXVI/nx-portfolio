@@ -487,6 +487,28 @@ describe('the shops', () => {
     );
   });
 
+  /**
+   * The label, the address and the town can each be null. A shop that had
+   * none of them was a row with no text in it, so the tab said two shops and
+   * the list showed one (admin plan 0049, target 3).
+   */
+  it('never draws a shop as a row with nothing in it', () => {
+    const [centro] = LOCATION_SEED;
+    const bare = { ...centro, label: null, address: null, city: null };
+    const say = (row: typeof centro) => [
+      LOCATIONS.title(row, ENGLISH_FIRST),
+      LOCATIONS.list.brief?.heading?.(row, ENGLISH_FIRST),
+    ];
+
+    expect(say({ ...bare, postalCode: '14001' })).toEqual(['14001', '14001']);
+    expect(
+      say({ ...bare, postalCode: null, externalRef: 'node/1156230891' })
+    ).toEqual(['node/1156230891', 'node/1156230891']);
+    expect(
+      say({ ...bare, address: '', postalCode: null, externalRef: null })
+    ).toEqual([centro.id, centro.id]);
+  });
+
   it('marks a shop with a map and a postal code that was guessed', () => {
     const statesOf = LOCATIONS.rowStates?.();
     const [centro, oeste, sierra] = LOCATION_SEED as unknown as ResourceRow[];

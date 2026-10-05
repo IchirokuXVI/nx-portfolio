@@ -83,7 +83,7 @@ describe('ReviewChain', () => {
 
     it('keeps the other parameters of the address', async () => {
       const { chain, router } = await at(
-        '/harvest/review/products?brandKey=mahou&view=list'
+        '/harvest/review/products?brandKey=mahou&view=groups'
       );
 
       chain.choose('sm_deza');
@@ -92,7 +92,7 @@ describe('ReviewChain', () => {
       const params = router.parseUrl(router.url).queryParams;
       expect(params).toEqual({
         brandKey: 'mahou',
-        view: 'list',
+        view: 'groups',
         chain: 'sm_deza',
       });
     });
@@ -108,13 +108,13 @@ describe('ReviewChain', () => {
 
     it('takes the parameter away for no chain, and keeps the others', async () => {
       const { chain, router } = await at(
-        '/harvest/review/products?chain=sm_a&view=list'
+        '/harvest/review/products?chain=sm_a&view=groups'
       );
 
       chain.choose('');
       await settle();
 
-      expect(router.url).toBe('/harvest/review/products?view=list');
+      expect(router.url).toBe('/harvest/review/products?view=groups');
       expect(chain.chain()).toBe('');
     });
 

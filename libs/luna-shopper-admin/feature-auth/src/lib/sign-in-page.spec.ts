@@ -19,7 +19,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SignInPage } from './sign-in-page';
+import { DEVELOPMENT_RETRY_WAITS_MS, SignInPage } from './sign-in-page';
 
 /**
  * The login screen (plan 0002, sections 1 and 2).
@@ -71,9 +71,12 @@ async function render(
   deployment: DeploymentServiceI['read'] = async () => ({
     deployment: 'staging',
     devAutologin: false,
-  })
+  }),
+  /** What a passwordless sign in answers, one entry for each try. */
+  development: readonly (AdminSession | Error)[] = [session]
 ) {
   const attempts: Array<{ username: string; password: string }> = [];
+  const tries = { count: 0 };
 
   const sessionService: SessionServiceI = {
     signIn: async (username, password) => {
@@ -83,7 +86,14 @@ async function render(
       }
       return outcome.session;
     },
-    signInForDevelopment: async () => session,
+    signInForDevelopment: async () => {
+      const answer = development[Math.min(tries.count, development.length - 1)];
+      tries.count += 1;
+      if (answer instanceof Error) {
+        throw answer;
+      }
+      return answer;
+    },
     refresh: async () => session,
     readMe: async () => me,
   };
@@ -106,7 +116,7 @@ async function render(
   const fixture = TestBed.createComponent(SignInPage);
   fixture.detectChanges();
 
-  return { fixture, attempts, sessions: TestBed.inject(SessionStore) };
+  return { fixture, attempts, tries, sessions: TestBed.inject(SessionStore) };
 }
 
 const el = <T extends HTMLElement>(
@@ -426,6 +436,217 @@ describe('SignInPage', () => {
 
       await inFlight;
       await drain();
+    });
+  });
+
+  /**
+   * Admin plan 0049, target 1. On a server that asks for no password the form
+   * is never what the operator is left with: `SessionBootstrap` tries once
+   * before the first screen, and this page tries whenever that was not enough.
+   */
+  describe('a server that asks for no password', () => {
+    const passwordless: DeploymentServiceI['read'] = async () => ({
+      deployment: 'development',
+      devAutologin: true,
+    });
+
+    /** The deployment is read, and the page hears what it said. */
+    async function settle(fixture: ComponentFixture<SignInPage>) {
+      void TestBed.inject(DeploymentStore).load();
+      await drain();
+      fixture.detectChanges();
+      await drain();
+      fixture.detectChanges();
+    }
+
+    afterEach(() => jest.useRealTimers());
+
+    it('signs in by itself and goes in, with no form on the way', async () => {
+      const { fixture, tries, attempts, sessions } = await render(
+        { session },
+        passwordless
+      );
+      const navigate = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+
+      await settle(fixture);
+
+      expect(tries.count).toBe(1);
+      expect(attempts).toEqual([]);
+      expect(sessions.signedIn()).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('/');
+      expect(el(fixture, 'form')).toBeNull();
+    });
+
+    it('says what it is doing in place of the form', async () => {
+      const { fixture } = await render({ session }, passwordless, [
+        new Error('nothing answered'),
+      ]);
+      jest.useFakeTimers();
+
+      await settle(fixture);
+
+      expect(text(fixture, '[data-entering]')).toBe('signIn.development');
+      expect(el(fixture, '[data-entering]')?.getAttribute('role')).toBe(
+        'status'
+      );
+      expect(el(fixture, 'input')).toBeNull();
+    });
+
+    /**
+     * The case the owner hit: the backend was still starting, so the one try
+     * before the first screen got no answer.
+     */
+    it('tries again when nothing answered, and goes in when something does', async () => {
+      const { fixture, tries, sessions } = await render(
+        { session },
+        passwordless,
+        [new Error('nothing answered'), new Error('still nothing'), session]
+      );
+      const navigate = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      expect(tries.count).toBe(1);
+      expect(sessions.signedIn()).toBe(false);
+
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[0]);
+      await drain();
+      expect(tries.count).toBe(2);
+
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[1]);
+      await drain();
+      fixture.detectChanges();
+
+      expect(tries.count).toBe(3);
+      expect(sessions.signedIn()).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('/');
+    });
+
+    /**
+     * The form does not show on a development server at all, so a server that
+     * goes on not answering is asked for as long as the page is on screen.
+     */
+    it('goes on trying at the last wait, and never puts the form back', async () => {
+      const { fixture, tries } = await render({ session }, passwordless, [
+        new Error('nothing answered'),
+      ]);
+      const last =
+        DEVELOPMENT_RETRY_WAITS_MS[DEVELOPMENT_RETRY_WAITS_MS.length - 1];
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      for (const wait of DEVELOPMENT_RETRY_WAITS_MS) {
+        jest.advanceTimersByTime(wait);
+        await drain();
+      }
+      expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1);
+
+      for (let more = 1; more <= 5; more++) {
+        jest.advanceTimersByTime(last);
+        await drain();
+        expect(tries.count).toBe(DEVELOPMENT_RETRY_WAITS_MS.length + 1 + more);
+      }
+      fixture.detectChanges();
+
+      expect(el(fixture, 'form')).toBeNull();
+      expect(text(fixture, '[data-entering]')).toBe('signIn.development');
+    });
+
+    it('stops, with the form and the reason, when a later try is refused in words', async () => {
+      const { fixture, tries } = await render({ session }, passwordless, [
+        new Error('nothing answered'),
+        new Error('still nothing'),
+        refusal('rate_limited', 429, 60),
+      ]);
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[0]);
+      await drain();
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[1]);
+      await drain();
+      fixture.detectChanges();
+
+      expect(tries.count).toBe(3);
+      expect(el(fixture, 'form')).not.toBeNull();
+      expect(text(fixture, '.entry-error')).toBe('signIn.error.throttledFor');
+
+      jest.advanceTimersByTime(60_000);
+      await drain();
+      expect(tries.count).toBe(3);
+    });
+
+    /**
+     * The token is shared by every tab, and a failed sign in clears it. So a
+     * page that waits must not ask again once another tab holds a session:
+     * a try that failed then would sign that tab out.
+     */
+    it('goes in on a session another tab took, and asks for none of its own', async () => {
+      const { fixture, tries, sessions } = await render(
+        { session },
+        passwordless,
+        [new Error('nothing answered')]
+      );
+      const navigate = jest.spyOn(TestBed.inject(Router), 'navigateByUrl');
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      expect(tries.count).toBe(1);
+
+      // What the lifecycle does when another tab writes the shared token.
+      sessions.adopt(session);
+      jest.advanceTimersByTime(DEVELOPMENT_RETRY_WAITS_MS[0]);
+      await drain();
+
+      expect(tries.count).toBe(1);
+      expect(sessions.signedIn()).toBe(true);
+      expect(navigate).toHaveBeenCalledWith('/');
+
+      jest.advanceTimersByTime(60_000);
+      await drain();
+      expect(tries.count).toBe(1);
+    });
+
+    /** The server changed its mind between the two calls (plan 0002). */
+    it('does not try again a sign in the server refused in words', async () => {
+      const { fixture, tries } = await render({ session }, passwordless, [
+        refusal('not_configured', 501),
+      ]);
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      jest.advanceTimersByTime(60_000);
+      await drain();
+      fixture.detectChanges();
+
+      expect(tries.count).toBe(1);
+      expect(el(fixture, 'form')).not.toBeNull();
+      expect(text(fixture, '.entry-error')).toBe('signIn.error.notAvailable');
+    });
+
+    it('stops trying when the page is left', async () => {
+      const { fixture, tries } = await render({ session }, passwordless, [
+        new Error('nothing answered'),
+      ]);
+      jest.useFakeTimers();
+
+      await settle(fixture);
+      fixture.destroy();
+      jest.advanceTimersByTime(60_000);
+      await drain();
+
+      expect(tries.count).toBe(1);
+    });
+
+    /** Production and staging: the server offers nothing, so nothing is asked. */
+    it('asks for nothing on a server that wants a password', async () => {
+      const { fixture, tries } = await render({ session });
+
+      await settle(fixture);
+
+      expect(tries.count).toBe(0);
+      expect(el(fixture, 'form')).not.toBeNull();
+      expect(el(fixture, '[data-entering]')).toBeNull();
     });
   });
 

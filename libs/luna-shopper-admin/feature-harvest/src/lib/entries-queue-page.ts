@@ -46,7 +46,6 @@ import {
   ReferencePicker,
   ReferencesControl,
   ScopeMark,
-  type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
 import { DecisionsFilePanel } from './decisions-file-panel';
@@ -58,11 +57,6 @@ import {
 } from './entry-view';
 import { HarvestShell } from './harvest-shell';
 import { HarvestStatus } from './harvest-status';
-import {
-  runQueueBulk,
-  type PendingBulk,
-  type QueueBulkAct,
-} from './queue-bulk';
 import { ReviewChain } from './review-chain';
 
 /** One entry off the wire, which is what the queue holds. */
@@ -244,33 +238,21 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
     @if (queue !== null) {
       <lib-queue-frame
-        (clearSelection)="queue!.clearSelection()"
         (confirm)="primary()"
         (loadMore)="queue!.loadMore()"
         (openRow)="openRow($event)"
-        (pickRow)="queue!.toggle($event)"
         (reject)="rejecting.set(true)"
-        (selectAll)="queue!.selectLoaded()"
         (skip)="skip()"
-        (stop)="queue!.stopBulk()"
         [busy]="queue!.busy()"
         [canLoadMore]="queue!.canLoadMore()"
         [confirmKey]="confirmKey()"
         [currentId]="row()?.id ?? null"
-        [decided]="queue!.decided()"
         [empty]="queue!.empty()"
         [errorKey]="errorKey()"
         [failed]="queue!.failed()"
         [loading]="queue!.loading()"
         [loadingMore]="queue!.loadingMore()"
-        [progress]="queue!.bulk()"
-        [progressKey]="progressKey()"
-        [remaining]="queue!.items().length"
-        [report]="report()"
         [rows]="listRows()"
-        [selected]="queue!.selected()"
-        [selectedCount]="queue!.selectedCount()"
-        defaultView="review"
         emptyKey="harvest.entries.empty"
         rejectKey="harvest.entries.reject"
         rejectShortKey="harvest.entries.rejectShort"
@@ -606,80 +588,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
             'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
           }}</span>
         </ng-template>
-
-        <!-- Section 2's columns for this screen: whatever the review view leads
-             with. The chain where the queue holds several, the kind badge, the
-             name, the brand and size, the barcode, the proposal and how many
-             runs have seen it. -->
-        <ng-template #queueRow let-row>
-          @if (chosen() === '' && chainName(row.supermarketId); as chain) {
-            <span class="chain">{{ chain }}</span>
-          }
-          @if (row.sourceKind; as kind) {
-            <span [class]="kind" class="kind">{{
-              'harvest.sourceKind.' + kind | rokuT
-            }}</span>
-          }
-          <strong>{{ row.name }}</strong>
-          <span class="brand">{{ row.brand }}</span>
-          <span class="size">{{ row.sizeFormat }}</span>
-          @if (row.ean !== '') {
-            <span class="ean">{{ row.ean }}</span>
-          }
-          <span class="hint">{{
-            'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
-          }}</span>
-          <span class="seen">{{
-            'harvest.entries.timesSeen' | rokuT: { count: row.timesSeen }
-          }}</span>
-        </ng-template>
-
-        <div class="bulk" queueBulk>
-          <!-- The count the accept will act on, and the count it will leave
-               alone, before it runs. A count that appears only in the report
-               afterwards arrives too late to change the decision. -->
-          <p class="counts">
-            {{
-              'harvest.entries.bulk.counts'
-                | rokuT
-                  : {
-                      count: acceptable().length,
-                      selected: queue!.selectedCount(),
-                      unproposed: unproposed(),
-                    }
-            }}
-          </p>
-          <button
-            (click)="askAccept()"
-            [disabled]="acceptable().length === 0"
-            class="primary"
-            type="button"
-          >
-            {{ 'harvest.entries.bulk.accept' | rokuT }}
-          </button>
-          <button
-            (click)="askReject()"
-            [disabled]="queue!.selectedCount() === 0"
-            class="danger"
-            type="button"
-          >
-            {{ 'harvest.entries.bulk.reject' | rokuT }}
-          </button>
-        </div>
       </lib-queue-frame>
-
-      @if (pending(); as bulk) {
-        <lib-confirm-dialog
-          (confirm)="go(bulk)"
-          (dismiss)="pending.set(null)"
-          [bodyArgs]="{ count: bulk.count, unproposed: bulk.leftAlone }"
-          [bodyKey]="bulk.bodyKey"
-          [busy]="queue!.busy()"
-          [confirmKey]="bulk.confirmKey"
-          [headingKey]="bulk.headingKey"
-          [tone]="bulk.tone"
-        />
-      }
 
       @if (rejecting()) {
         <lib-confirm-dialog
@@ -962,36 +871,11 @@ const BRAND_SEARCH_DELAY_MS = 250;
       color: var(--admin-ink-muted);
     }
 
-    .bulk {
-      display: flex;
-      flex: 3;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: center;
-    }
-
-    .counts {
-      flex: 1 1 12rem;
-      font-size: 0.8125rem;
-      color: var(--admin-ink-muted);
-    }
-
-    .bulk button {
-      flex: 1 1 8rem;
-      align-self: stretch;
-      min-block-size: 2.5rem;
-    }
-
     .primary {
       border-color: var(--admin-accent);
       background: var(--admin-accent);
       font-weight: 600;
       color: var(--admin-accent-ink);
-    }
-
-    .bulk .danger {
-      border-color: var(--admin-danger);
-      color: var(--admin-danger-on-wash);
     }
 
     .field {
@@ -1139,12 +1023,6 @@ export class EntriesQueuePage implements OnDestroy {
   /** Whether the rejection confirmation is up. Nothing is decided until it is. */
   readonly rejecting = signal(false);
 
-  /** The bulk action waiting for an answer, or null when none is. */
-  readonly pending = signal<PendingBulk | null>(null);
-  /** What the last bulk run did, by name. Cleared when another one starts. */
-  readonly report = signal<QueueReport | null>(null);
-  readonly progressKey = signal('harvest.queue.bulk.progress');
-
   /**
    * What the last acceptance wrote, for the sentence that says so.
    *
@@ -1271,35 +1149,17 @@ export class EntriesQueuePage implements OnDestroy {
   });
 
   /**
-   * Every loaded row, mapped once, for the list view.
+   * Every loaded row, mapped once, for the column beside the open row.
    *
-   * The same mapper the review view uses, so the two views cannot disagree about
-   * what a row says. A row the mapper refuses is dropped rather than drawn as a
-   * gap: `toSourceEntryRow` answers null for something that is not a row at all,
+   * The same mapper the open row uses, so the two cannot disagree about what a
+   * row says. A row the mapper refuses is dropped rather than drawn as a gap:
+   * `toSourceEntryRow` answers null for something that is not a row at all,
    * and the queue is better nine rows long than a failure.
    */
   readonly listRows = computed<readonly SourceEntryRow[]>(() =>
     (this.queue?.items() ?? [])
       .map((entry) => toSourceEntryRow(entry))
       .filter((row): row is SourceEntryRow => row !== null)
-  );
-
-  /**
-   * The selected rows the ladder already proposed a product for.
-   *
-   * The only ones "accept as proposed" can act on, because it sends the row's
-   * own `itemId` and a row with none has nothing to send. The bar names both
-   * counts before the action runs.
-   */
-  readonly acceptable = computed<readonly Entry[]>(() => {
-    const selected = this.queue?.selected() ?? new Set<string>();
-    return (this.queue?.items() ?? []).filter(
-      (entry) => selected.has(entry.id) && proposed(entry)
-    );
-  });
-
-  readonly unproposed = computed(
-    () => (this.queue?.selectedCount() ?? 0) - this.acceptable().length
   );
 
   readonly proposal = computed(() => {
@@ -1501,7 +1361,6 @@ export class EntriesQueuePage implements OnDestroy {
     const brandKeyFilter = this._brandFilterValue();
 
     this.written.set(null);
-    this.report.set(null);
     const queue = new QueueStore<Entry>(
       async (cursor) => {
         try {
@@ -1634,16 +1493,30 @@ export class EntriesQueuePage implements OnDestroy {
   }
 
   /**
-   * Put this row at the back without deciding it, and re-point the controls.
+   * Go to the next row without deciding this one, and re-point the controls.
    *
-   * The queue's own `skip` moves the row and knows nothing about the form in
+   * The queue's own `skip` moves on and knows nothing about the form in
    * front of it, so calling it directly would leave the picker holding the
    * skipped row's product. That is exactly how a name gets bound to the wrong
    * product, which is this queue's whole hazard.
+   *
+   * On the last row that is loaded the queue first reads the next page, so
+   * the row changes a moment later. The controls are pointed again then.
    */
   skip(): void {
-    this.queue?.skip();
+    const queue = this.queue;
+    if (queue === null) {
+      return;
+    }
+
+    const moved = queue.skip();
     this._syncSubject();
+    const front = this.row()?.id ?? null;
+    void moved.then(() => {
+      if (this.queue === queue && (this.row()?.id ?? null) !== front) {
+        this._syncSubject();
+      }
+    });
   }
 
   /** Move the queue to the row the ladder proposed, without deciding this one. */
@@ -1655,77 +1528,19 @@ export class EntriesQueuePage implements OnDestroy {
   }
 
   /**
-   * Put one row in front and point the controls at it.
+   * Make one row the open one and point the controls at it.
    *
-   * What clicking a row in the list view does, and what opening a sibling does.
-   * A row that is no longer in the queue leaves the order alone, so a sibling
-   * somebody decided between the read and the press cannot move anything.
+   * What pressing a line of the column does, and what opening a sibling does.
+   * No row changes its place (admin plan 0049, target 5). A row that is no
+   * longer in the queue is ignored, so a sibling somebody decided between the
+   * read and the press changes nothing.
    */
   openRow(id: string): void {
     this.queue?.focus(id);
     this._syncSubject();
   }
 
-  /**
-   * Accept every selected row that already carries a proposal.
-   *
-   * The row's own `itemId`, which the ladder wrote when it proposed a match, so
-   * nothing here is one operator's choice applied to rows they did not look at.
-   * A selected row with no proposal is left alone rather than refused, and the
-   * bar says how many of those there are before this runs.
-   */
-  askAccept(): void {
-    const count = this.acceptable().length;
-    this.pending.set({
-      headingKey: 'harvest.entries.bulk.acceptConfirm.heading',
-      bodyKey: 'harvest.entries.bulk.acceptConfirm.body',
-      confirmKey: 'harvest.entries.bulk.accept',
-      progressKey: 'harvest.entries.bulk.accepting',
-      count,
-      leftAlone: this.unproposed(),
-      tone: 'primary',
-      run: () =>
-        this._run({
-          act: async (entry) => {
-            await this._service.acceptEntry(entry.id, {
-              itemId: entry.itemId ?? '',
-            });
-            return null;
-          },
-          applies: proposed,
-          nameOf: (entry) => entry.name,
-        }),
-    });
-  }
-
-  askReject(): void {
-    this.pending.set({
-      headingKey: 'harvest.entries.bulk.rejectConfirm.heading',
-      bodyKey: 'harvest.entries.bulk.rejectConfirm.body',
-      confirmKey: 'harvest.entries.bulk.reject',
-      progressKey: 'harvest.entries.bulk.rejecting',
-      count: this.queue?.selectedCount() ?? 0,
-      leftAlone: 0,
-      tone: 'danger',
-      run: () =>
-        this._run({
-          act: async (entry) => {
-            await this._service.rejectEntry(entry.id);
-            return null;
-          },
-          nameOf: (entry) => entry.name,
-        }),
-    });
-  }
-
-  /** Go through with the confirmed bulk action. */
-  go(bulk: PendingBulk): void {
-    this.pending.set(null);
-    this.progressKey.set(bulk.progressKey);
-    void bulk.run();
-  }
-
-  /** What the list view says about a row's proposal, in one word. */
+  /** What a line of the column says about a row's proposal, in one word. */
   proposalKind(row: SourceEntryRow): string {
     return proposalOf(row);
   }
@@ -1744,27 +1559,7 @@ export class EntriesQueuePage implements OnDestroy {
    * this screen chose.
    */
   /**
-   * Run a bulk action and put the report up, then point the controls again.
-   *
-   * The re-point matters as much here as it does after a single decision: a run
-   * that emptied the head of the queue leaves the picker holding a product that
-   * belongs to a row nobody is looking at any more, and binding a name to the
-   * wrong product is this queue's whole hazard.
-   */
-  private async _run(bulk: QueueBulkAct<Entry>): Promise<void> {
-    const queue = this.queue;
-    if (queue === null) {
-      return;
-    }
-
-    this.report.set(null);
-    this.report.set(await runQueueBulk(queue, bulk));
-    this.progressKey.set('harvest.queue.bulk.progress');
-    this._decided();
-  }
-
-  /**
-   * A decision or a batch of them went through: point the controls at the row
+   * A decision went through: point the controls at the row
    * that is in front now, and read the counts again, so that the rail and the
    * switch above say what the queue holds (admin plan 0044, target 2).
    */
@@ -1955,17 +1750,6 @@ export class EntriesQueuePage implements OnDestroy {
       (names) => new Map([...names, ...found.filter(([, name]) => name !== '')])
     );
   }
-}
-
-/**
- * Whether the ladder proposed a product for this row.
- *
- * The one thing "accept as proposed" needs, so it is the predicate the bulk
- * runner is given as well as the one the bar counts with. A row without one is
- * never passed to the act, because there is nothing to send.
- */
-function proposed(entry: Entry): boolean {
-  return (entry.itemId ?? '') !== '';
 }
 
 /**
