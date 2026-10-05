@@ -7,11 +7,14 @@ import {
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
+import { recordLeaveGuard } from './record-leave-guard';
+import { RecordPage } from './record-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
+  RESOURCE_ID_FROM,
   RESOURCE_LIST_EMBED,
   SPLIT_UNDER_HEADER,
 } from './resource-route-data';
@@ -130,8 +133,55 @@ export function resourceCreateRoute(descriptor: AnyResourceDescriptor): Route {
   };
 }
 
+/**
+ * One route that mounts the record page (admin plan 0053, section 2.7), for a
+ * caller that mounts by hand.
+ *
+ * `mode: 'create'` is the page that adds a record. Without it the page opens
+ * the record whose ID the route holds, and reads it first. Every route built
+ * here carries the leave guard, so a caller cannot mount the page without it.
+ */
+export function recordRoute(
+  descriptor: AnyResourceDescriptor,
+  options: {
+    readonly path: string;
+    readonly mode?: 'create';
+    /** The route parameter that holds the ID, when it is on a route above. */
+    readonly idFrom?: string;
+  }
+): Route {
+  return {
+    path: options.path,
+    component: RecordPage,
+    canDeactivate: [recordLeaveGuard],
+    data: {
+      [RESOURCE_DESCRIPTOR]: descriptor,
+      ...(options.mode === 'create' ? { [RESOURCE_FORM_MODE]: 'create' } : {}),
+      ...(options.idFrom === undefined
+        ? {}
+        : { [RESOURCE_ID_FROM]: options.idFrom }),
+    },
+  };
+}
+
 function resourceFormRoutes(descriptor: AnyResourceDescriptor): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
+
+  // A resource with no page of its own opens on the record page: one page
+  // that reads a row, changes it and adds one (admin plan 0053). A resource
+  // that names a `detail` or an `editor` keeps the routes it has, until the
+  // plan that moves it.
+  if (descriptor.detail === undefined && descriptor.editor === undefined) {
+    return [
+      // Only where there is something to add, for the reason given below.
+      ...(descriptor.actions?.create === true
+        ? [recordRoute(descriptor, { path: 'new', mode: 'create' })]
+        : []),
+      ...(hasDetailScreen(descriptor)
+        ? [recordRoute(descriptor, { path: ':id' })]
+        : []),
+    ];
+  }
 
   return [
     // A create screen only where there is something to create. A resource

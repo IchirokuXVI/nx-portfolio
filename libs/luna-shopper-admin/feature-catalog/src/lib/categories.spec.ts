@@ -16,7 +16,8 @@ import {
 import {
   adminRoutes,
   provideSections,
-  ResourceFormPage,
+  RecordPage,
+  RecordView,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
@@ -328,15 +329,19 @@ describe('the category tree', () => {
     expect(all(fixture, '.row.child').length).toBeLessThan(before);
   });
 
-  it('opens a category on its form, and the form of a new one', async () => {
+  it('opens a category to be read, and the page that adds a new one', async () => {
     const { fixture } = await boot('/products/categories');
     const router = TestBed.inject(Router);
 
     await click(fixture, '[data-category="cat_milk"]');
     expect(router.url).toBe('/products/categories/cat_milk');
+    expect(fixture.debugElement.query(By.directive(RecordPage))).not.toBeNull();
+    // A record opens to be read (admin plan 0053): no control on the page.
     expect(
-      fixture.debugElement.query(By.directive(ResourceFormPage))
-    ).not.toBeNull();
+      fixture.nativeElement.querySelector(
+        'lib-record-view input, lib-record-view select, lib-record-view textarea'
+      )
+    ).toBeNull();
 
     await router.navigateByUrl('/products/categories');
     await settle(fixture);
@@ -347,19 +352,24 @@ describe('the category tree', () => {
   /** A third level is said under the parent, not at the foot of the form. */
   it('says a third level under the parent it is about', async () => {
     const { fixture } = await boot('/products/categories/new');
-    const page = fixture.debugElement.query(By.directive(ResourceFormPage))
-      .componentInstance as ResourceFormPage;
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+    const view = fixture.debugElement.query(By.directive(RecordView))
+      .componentInstance as RecordView;
+    const store = page.store();
 
-    page.store.set('name', { en: 'Tubs', es: 'Tarrinas' });
-    page.store.set('slug', 'tubs');
-    page.store.set('parentId', 'cat_ice-creams-and-ice');
-    await page.store.submit();
+    store.set('name', { en: 'Tubs', es: 'Tarrinas' });
+    store.set('slug', 'tubs');
+    store.set('parentId', 'cat_ice-creams-and-ice');
+    await store.submit();
     await settle(fixture);
 
-    expect(page.messages()['parentId']).toEqual([
+    expect(view.messages()['parentId']).toEqual([
       { kind: 'key', key: 'resource.error.categoryTooDeep' },
     ]);
-    expect(page.bannerKey()).toBeNull();
+    // Said under the field, so not above the sections as well.
+    expect(view.shownRefusal()).toBeNull();
+    expect(store.bar()).toEqual({ kind: 'invalid', fields: 1 });
   });
 
   it('refuses to delete a category holding products, and links to them', async () => {

@@ -4,6 +4,7 @@ import {
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
   ResourceFormPage,
+  recordRoute,
   resourceSplitRoute,
   resourceTabRoute,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -66,12 +67,12 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /shoppers/zones                                  tab: the zones
  * /shoppers/zones/{zoneId}                         goes to its members
  * /shoppers/zones/{zoneId}/members                 tab: who is in it
- * /shoppers/zones/{zoneId}/members/{id}            one member's form
+ * /shoppers/zones/{zoneId}/members/{id}            one member, read first
  * /shoppers/zones/{zoneId}/lists                   tab: its lists
  * /shoppers/zones/{zoneId}/lists/{listId}          one list, and its lines
  * /shoppers/zones/{zoneId}/lists/{listId}/edit     the list's form
  * /shoppers/zones/{zoneId}/lists/{listId}/lines       goes to the list
- * /shoppers/zones/{zoneId}/lists/{listId}/lines/{id}   one line's form
+ * /shoppers/zones/{zoneId}/lists/{listId}/lines/{id}   one line, read first
  * /shoppers/zones/{zoneId}/shopping-lists          tab: drawn from the zone
  * /shoppers/zones/{zoneId}/shopping-lists/{id}     goes to it under its owner
  * /shoppers/zones/{zoneId}/details                 tab: the zone's facts
@@ -162,16 +163,12 @@ export function shoppersRoutes(): Route[] {
                   ],
                 },
                 formOf(ZONES, ZONE_PARAM),
-                {
-                  // One member's role and name in this zone. Its way back is
-                  // one segment up, which is the Members tab.
+                // One member's role and name in this zone, on the record
+                // page (admin plan 0053). Its way back is one segment up,
+                // which is the Members tab.
+                recordRoute(MEMBERSHIPS, {
                   path: `${MEMBERSHIPS.segment}/:id`,
-                  component: ResourceFormPage,
-                  data: {
-                    [RESOURCE_DESCRIPTOR]: MEMBERSHIPS,
-                    [RESOURCE_FORM_MODE]: 'edit',
-                  },
-                },
+                }),
                 {
                   path: `${LISTS.segment}/:${LIST_PARAM}`,
                   children: [
@@ -179,20 +176,15 @@ export function shoppersRoutes(): Route[] {
                     formOf(LISTS, LIST_PARAM),
                     {
                       // The lines are drawn on the list's own page, so their
-                      // segment alone is no screen. A line's form goes back
-                      // one segment up, as every form does, and lands here.
+                      // segment alone is no screen. A line's page goes back
+                      // one segment up, as every record does, and lands here.
                       path: LIST_LINES.segment,
                       pathMatch: 'full',
                       redirectTo: toListOfLine,
                     },
-                    {
+                    recordRoute(LIST_LINES, {
                       path: `${LIST_LINES.segment}/:id`,
-                      component: ResourceFormPage,
-                      data: {
-                        [RESOURCE_DESCRIPTOR]: LIST_LINES,
-                        [RESOURCE_FORM_MODE]: 'edit',
-                      },
-                    },
+                    }),
                   ],
                 },
                 {

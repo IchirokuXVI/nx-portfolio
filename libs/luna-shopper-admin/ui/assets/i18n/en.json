@@ -2261,8 +2261,49 @@
       "other": "Other"
     },
     "facts": {
+      "heading": "Record",
       "added": "Added",
-      "changed": "Last changed"
+      "changed": "Last changed",
+      "by": "by",
+      "id": "ID"
+    },
+    "locked": {
+      "fromAddress": "Set by where you came from",
+      "fixedOnAdd": "Fixed when it was added",
+      "system": "Set by the system"
+    },
+    "action": {
+      "add": "Add {{name}}"
+    },
+    "savedAt": "Saved at {{time}}.",
+    "added": "{{name}} added.",
+    "addAnother": "Add another {{name}}",
+    "more": "More actions for {{name}}",
+    "state": {
+      "editing": "Editing",
+      "loading": "Loading the {{name}}",
+      "noAnswer": "The gateway did not answer, so this {{name}} could not be read.",
+      "missing": {
+        "heading": "{{name}} not found",
+        "body": "This {{name}} is not here. It was deleted, or the link is old.",
+        "list": "Go to {{list}}"
+      }
+    },
+    "leave": {
+      "body_one": "You changed {{count}} field of {{name}}. It is lost if you leave.",
+      "body_other": "You changed {{count}} fields of {{name}}. They are lost if you leave.",
+      "bodyNew_one": "You filled in {{count}} field of a new {{name}}. It is lost if you leave.",
+      "bodyNew_other": "You filled in {{count}} fields of a new {{name}}. They are lost if you leave.",
+      "stay": "Stay here"
+    },
+    "delete": {
+      "action": "Delete this {{name}}",
+      "heading": "Delete the {{thing}} {{name}}?",
+      "body": "This cannot be taken back.",
+      "confirm": "Delete {{name}}",
+      "keep": "Keep it",
+      "refused": "{{name}} cannot be deleted",
+      "close": "Close"
     },
     "row": {
       "changed": "Changed",

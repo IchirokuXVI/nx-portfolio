@@ -35,6 +35,11 @@ export { PAGE_HEADING_LEVEL, PageHeader } from './lib/page/page-header';
 export { PAGE_FRAME_TABS, PageTabs, type PageTab } from './lib/page/page-tabs';
 export { PopoverSheet } from './lib/page/popover-sheet';
 export { ScopeMark } from './lib/page/scope-mark';
+export { FieldRow, describedByOf } from './lib/record/field-row';
+export { FieldValue } from './lib/record/field-value';
+export { LockedValue } from './lib/record/locked-value';
+export { RecordSection } from './lib/record/record-section';
+export { SaveBar } from './lib/record/save-bar';
 export { FieldControl } from './lib/resource/field-control';
 export { RecordId } from './lib/resource/record-id';
 export {

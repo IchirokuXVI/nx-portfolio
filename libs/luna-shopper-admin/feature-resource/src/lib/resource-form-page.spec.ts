@@ -7,6 +7,7 @@ import {
   provideRouter,
   Router,
   RouterOutlet,
+  type Route,
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -29,7 +30,6 @@ import {
   RESOURCE_ID_FROM,
   RESOURCE_ID_PARAM,
 } from './resource-route-data';
-import { resourceFormBranch } from './routes';
 
 /**
  * The banner's link (admin plan 0032, section 2.3).
@@ -313,6 +313,38 @@ const LINES = defineResource<Line>({
   gateway: () => linesGateway,
 });
 
+/**
+ * The old form at `new` and at `:id` of a resource, mounted by hand.
+ *
+ * The route factory mounts the record page there since admin plan 0053, and
+ * `record-page.spec.ts` holds these cases for that page. The old form still
+ * serves the pages that extend it, so what it does under a parent row is
+ * still asserted here, until plan 0060 deletes it.
+ */
+function oldFormBranch(descriptor: typeof LINES): Route {
+  return {
+    path: descriptor.segment,
+    children: [
+      {
+        path: 'new',
+        component: ResourceFormPage,
+        data: {
+          [RESOURCE_DESCRIPTOR]: descriptor,
+          [RESOURCE_FORM_MODE]: 'create',
+        },
+      },
+      {
+        path: ':id',
+        component: ResourceFormPage,
+        data: {
+          [RESOURCE_DESCRIPTOR]: descriptor,
+          [RESOURCE_FORM_MODE]: 'edit',
+        },
+      },
+    ],
+  };
+}
+
 /** The page the forms are under. It has a component, and that is the point. */
 @Component({
   imports: [RouterOutlet],
@@ -338,7 +370,7 @@ async function mount(url: string): Promise<Mounted> {
           path: 'plants/:plantId',
           component: PlantPage,
           children: [
-            resourceFormBranch(LINES),
+            oldFormBranch(LINES),
             // The parent's own form as a tab of its page: the id is the
             // page's parameter, under the page's name for it.
             {
@@ -353,7 +385,7 @@ async function mount(url: string): Promise<Mounted> {
           ],
         },
         // The same form with no parent in the address.
-        resourceFormBranch(LINES),
+        oldFormBranch(LINES),
       ]),
     ],
   }).compileComponents();

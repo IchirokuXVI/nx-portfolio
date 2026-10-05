@@ -16,8 +16,9 @@ import {
 import {
   adminRoutes,
   provideSections,
+  RecordPage,
+  RecordView,
   ResourceChanges,
-  ResourceFormPage,
   ResourceListPage,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -747,19 +748,23 @@ describe('the Products tab of a shop', () => {
   it('adds a product at the shop the address names, with no control for the shop', async () => {
     const sent = recordWrites('/location-items');
     const fixture = await boot(`${CENTRO}/products/new`);
-    const form = fixture.debugElement.query(By.directive(ResourceFormPage));
-    const formPage = form.componentInstance as ResourceFormPage;
+    const form = fixture.debugElement.query(By.directive(RecordPage));
+    const store = (form.componentInstance as RecordPage).store();
+    const view = fixture.debugElement.query(By.directive(RecordView))
+      .componentInstance as RecordView;
 
-    // A form is a page of its own, beside the shop's and not a tab of it.
+    // A record is a page of its own, beside the shop's and not a tab of it.
     expect(page(fixture)).toBeNull();
     expect(
-      form.nativeElement.querySelector('#field-supermarketLocationId')
+      form.nativeElement.querySelector('#record-field-supermarketLocationId')
     ).toBeNull();
-    expect(form.nativeElement.querySelector('#field-itemId')).not.toBeNull();
+    expect(
+      form.nativeElement.querySelector('#record-field-itemId')
+    ).not.toBeNull();
 
-    formPage.change({ name: 'itemId', value: 'it_dish_soap' });
-    formPage.change({ name: 'positionInStore', value: 'Aisle 9' });
-    await formPage.submit();
+    store.set('itemId', 'it_dish_soap');
+    store.set('positionInStore', 'Aisle 9');
+    await view.save();
     await settle(fixture);
     await settle(fixture);
 
@@ -769,8 +774,14 @@ describe('the Products tab of a shop', () => {
       supermarketLocationId: 'loc_cordoba_centro',
       positionInStore: 'Aisle 9',
     });
-    // Back to the tab the row is listed on.
-    expect(url()).toBe(`${CENTRO}/products`);
+    // The app opens the row that was added, and says so (admin plan 0053).
+    expect(url()).toBe(`${CENTRO}/products/it_dish_soap~loc_cordoba_centro`);
+    expect(fixture.nativeElement.querySelector('[data-added]')).not.toBeNull();
+
+    // And the tab the row is listed on now holds it.
+    await TestBed.inject(Router).navigateByUrl(`${CENTRO}/products`);
+    await settle(fixture);
+    await settle(fixture);
     expect(tableRows(fixture)).toHaveLength(3);
   });
 
@@ -785,9 +796,7 @@ describe('the Products tab of a shop', () => {
 
     expect(url()).toBe(`${CENTRO}/products/it_milk_1l~loc_cordoba_centro`);
     expect(page(fixture)).toBeNull();
-    expect(
-      fixture.debugElement.query(By.directive(ResourceFormPage))
-    ).not.toBeNull();
+    expect(fixture.debugElement.query(By.directive(RecordPage))).not.toBeNull();
   });
 });
 

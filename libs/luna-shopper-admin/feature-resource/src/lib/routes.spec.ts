@@ -5,11 +5,14 @@ import {
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
+import { recordLeaveGuard } from './record-leave-guard';
+import { RecordPage } from './record-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
+  RESOURCE_ID_FROM,
   RESOURCE_LIST_EMBED,
   SPLIT_UNDER_HEADER,
 } from './resource-route-data';
@@ -20,6 +23,7 @@ import {
 } from './resource-split-page';
 import {
   adminRoutes,
+  recordRoute,
   resourceCreateRoute,
   resourceFormBranch,
   resourceRoutes,
@@ -61,14 +65,24 @@ describe('resourceRoutes', () => {
   const [branch] = resourceRoutes(shops);
   const children = branch.children ?? [];
 
-  it('is a list, a create form and an edit form under the segment', () => {
+  /**
+   * A resource with no page of its own opens on the record page, which reads
+   * a row, changes it and adds one (admin plan 0053).
+   */
+  it('is a list, and the record page at `new` and at `:id`, under the segment', () => {
     expect(branch.path).toBe('shops');
     expect(children.map((route) => route.path)).toEqual(['', 'new', ':id']);
     expect(children.map((route) => route.component)).toEqual([
       ResourceListPage,
-      ResourceFormPage,
-      ResourceFormPage,
+      RecordPage,
+      RecordPage,
     ]);
+  });
+
+  /** Leaving a form with changes asks first, on both routes. */
+  it('puts the leave guard on both routes of the record page', () => {
+    expect(children[1].canDeactivate).toEqual([recordLeaveGuard]);
+    expect(children[2].canDeactivate).toEqual([recordLeaveGuard]);
   });
 
   /**
@@ -92,9 +106,38 @@ describe('resourceRoutes', () => {
     }
   });
 
-  it('tells the two forms apart by mode', () => {
+  /** `new` adds a record. `:id` opens one, and says no mode: it reads first. */
+  it('tells the page that adds from the page that opens a record', () => {
     expect(children[1].data?.[RESOURCE_FORM_MODE]).toBe('create');
-    expect(children[2].data?.[RESOURCE_FORM_MODE]).toBe('edit');
+    expect(children[2].data?.[RESOURCE_FORM_MODE]).toBeUndefined();
+  });
+
+  /** A resource that names a page of its own keeps the routes it had. */
+  it('keeps the old form for a resource with a detail or an editor', () => {
+    class ShopEditor {}
+    const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+    const withDetail = defineResource<Shop>({ ...shops, detail: NotFoundPage });
+
+    expect(
+      resourceRoutes(withEditor)[0].children?.map((route) => route.component)
+    ).toEqual([ResourceListPage, ShopEditor, ShopEditor]);
+    expect(
+      resourceRoutes(withDetail)[0].children?.map((route) => [
+        route.path,
+        route.component,
+      ])
+    ).toEqual([
+      ['', ResourceListPage],
+      ['new', ResourceFormPage],
+      [':id/edit', ResourceFormPage],
+      [':id', NotFoundPage],
+    ]);
+    for (const route of [
+      ...(resourceRoutes(withEditor)[0].children ?? []),
+      ...(resourceRoutes(withDetail)[0].children ?? []),
+    ]) {
+      expect(route.canDeactivate).toBeUndefined();
+    }
   });
 
   /**
@@ -437,6 +480,31 @@ describe('resourceTabRoute', () => {
   });
 });
 
+describe('recordRoute', () => {
+  /** A caller that mounts by hand cannot mount the page without its guard. */
+  it('is the record page at the path it was given, with the leave guard', () => {
+    const route = recordRoute(shops, { path: 'members/:id' });
+
+    expect(route.path).toBe('members/:id');
+    expect(route.component).toBe(RecordPage);
+    expect(route.canDeactivate).toEqual([recordLeaveGuard]);
+    expect(route.data).toEqual({ [RESOURCE_DESCRIPTOR]: shops });
+  });
+
+  it('says that the page adds a record, and where the ID is', () => {
+    expect(recordRoute(shops, { path: 'new', mode: 'create' }).data).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_FORM_MODE]: 'create',
+    });
+    expect(
+      recordRoute(shops, { path: 'details', idFrom: 'shopId' }).data
+    ).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RESOURCE_ID_FROM]: 'shopId',
+    });
+  });
+});
+
 describe('resourceFormBranch', () => {
   const branch = resourceFormBranch(shops);
   const children = branch.children ?? [];
@@ -445,25 +513,22 @@ describe('resourceFormBranch', () => {
    * Under the segment, so that one route up from a form, which is where the
    * form goes back to, is the address the list is at.
    */
-  it('is the forms under the segment, with no list', () => {
+  it('is the record page under the segment, with no list', () => {
     expect(branch.path).toBe('shops');
     expect(branch.component).toBeUndefined();
     expect(children.map((route) => route.path)).toEqual(['new', ':id']);
     expect(children.map((route) => route.component)).toEqual([
-      ResourceFormPage,
-      ResourceFormPage,
+      RecordPage,
+      RecordPage,
     ]);
   });
 
-  it('states the descriptor and the mode on each form', () => {
+  it('states the descriptor on each route, and the mode on the one that adds', () => {
     expect(children[0].data).toEqual({
       [RESOURCE_DESCRIPTOR]: shops,
       [RESOURCE_FORM_MODE]: 'create',
     });
-    expect(children[1].data).toEqual({
-      [RESOURCE_DESCRIPTOR]: shops,
-      [RESOURCE_FORM_MODE]: 'edit',
-    });
+    expect(children[1].data).toEqual({ [RESOURCE_DESCRIPTOR]: shops });
   });
 
   /** The rules of the three routes hold for the two of them. */

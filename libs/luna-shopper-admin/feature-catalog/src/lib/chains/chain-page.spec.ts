@@ -694,13 +694,20 @@ describe('the Price scopes tab of a chain', () => {
     await settle(fixture);
     await settle(fixture);
     expect(url()).toBe('/chains/sm_mercadona/scopes/new');
-    // A form is a page of its own, beside the chain's and not a tab of it.
+    // A record is a page of its own, beside the chain's and not a tab of it.
     expect(page(fixture)).toBeNull();
-    // The chain is the address, so the form draws no control for it.
+    // The chain is the address, so the page draws no control for it. It is
+    // a value with a lock, which says where it came from.
     expect(
-      fixture.nativeElement.querySelector('#field-supermarketId')
+      fixture.nativeElement.querySelector('#record-field-supermarketId')
     ).toBeNull();
-    expect(fixture.nativeElement.querySelector('#field-kind')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('lib-locked-value [data-reason]')
+        ?.textContent
+    ).toContain('record.locked.fromAddress');
+    expect(
+      fixture.nativeElement.querySelector('#record-field-kind')
+    ).not.toBeNull();
   });
 });
 

@@ -68,6 +68,49 @@ describe('LocalizedTextControl', () => {
     expect(emitted).toEqual([{ en: 'Milk', es: 'Leche entera' }]);
   });
 
+  /**
+   * The input is one change detection behind an emit. Two boxes changed in
+   * one frame must not each start from the same old input.
+   */
+  it('keeps the first change when two boxes change before a redraw', async () => {
+    const fixture = await render({ en: 'Milk', es: 'Leche' });
+    const emitted: Record<string, string>[] = [];
+    fixture.componentInstance.valueChange.subscribe((value) =>
+      emitted.push({ ...value })
+    );
+    const [english, spanish] = fixture.nativeElement.querySelectorAll('input');
+
+    english.value = 'Whole milk';
+    english.dispatchEvent(new Event('input'));
+    spanish.value = 'Leche entera';
+    spanish.dispatchEvent(new Event('input'));
+
+    expect(emitted).toEqual([
+      { en: 'Whole milk', es: 'Leche' },
+      { en: 'Whole milk', es: 'Leche entera' },
+    ]);
+  });
+
+  /** A new input is the owner's word: what was emitted before it is dropped. */
+  it('starts from the input again once the owner hands a new one', async () => {
+    const fixture = await render({ en: 'Milk', es: 'Leche' });
+    const emitted: Record<string, string>[] = [];
+    fixture.componentInstance.valueChange.subscribe((value) =>
+      emitted.push({ ...value })
+    );
+    const [english, spanish] = fixture.nativeElement.querySelectorAll('input');
+
+    english.value = 'Whole milk';
+    english.dispatchEvent(new Event('input'));
+    // The owner did not take the change: a reset, or a row read again.
+    fixture.componentRef.setInput('value', { en: 'Cream', es: 'Nata' });
+    fixture.detectChanges();
+    spanish.value = 'Nata fresca';
+    spanish.dispatchEvent(new Event('input'));
+
+    expect(emitted[1]).toEqual({ en: 'Cream', es: 'Nata fresca' });
+  });
+
   it('shows an empty box for a locale the value does not have', async () => {
     const fixture = await render({ en: 'Milk' });
     const inputs = fixture.nativeElement.querySelectorAll(

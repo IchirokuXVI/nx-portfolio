@@ -465,3 +465,275 @@ describe('PageHeader, the size it takes', () => {
     expect(source).not.toMatch(/position:\s*(sticky|fixed)/);
   });
 });
+
+/**
+ * The More menu (admin plan 0053, section 2.4). `overflow="menu"` puts every
+ * later action in it at every width, and the record page is its first user.
+ */
+@Component({
+  selector: 'lib-test-menu-page',
+  imports: [PageHeader],
+  template: `
+    <lib-page-header
+      [heading]="'Hacendado'"
+      [loading]="loading()"
+      [moreLabel]="'More actions for Hacendado'"
+      overflow="menu"
+    >
+      <button pageAction type="button" data-first>Edit</button>
+      @for (name of plain(); track name) {
+        <button
+          (click)="chosen.set(name)"
+          [attr.data-plain]="name"
+          pageMoreAction
+          type="button"
+        >
+          {{ name }}
+        </button>
+      }
+      @if (destroys()) {
+        <button
+          (click)="chosen.set('delete')"
+          pageMoreDanger
+          type="button"
+          data-danger
+        >
+          Delete this brand
+        </button>
+      }
+    </lib-page-header>
+  `,
+})
+class MenuPage {
+  readonly plain = signal<readonly string[]>(['Rename', 'Merge']);
+  readonly destroys = signal(true);
+  readonly loading = signal(false);
+  readonly chosen = signal<string | null>(null);
+}
+
+async function renderMenu(compact = false) {
+  TestBed.resetTestingModule();
+  await TestBed.configureTestingModule({
+    imports: [MenuPage, RokuTranslatorTestingModule.forTesting()],
+    providers: [
+      provideRouter([]),
+      {
+        provide: Viewport,
+        useValue: { compact: signal(compact), split: signal(!compact) },
+      },
+    ],
+  }).compileComponents();
+
+  const fixture = TestBed.createComponent(MenuPage);
+  document.body.append(fixture.nativeElement);
+  fixture.detectChanges();
+  return fixture;
+}
+
+const press = (element: Element | null, key: string) =>
+  element?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+
+describe('PageHeader, the More menu', () => {
+  let fixture: Awaited<ReturnType<typeof renderMenu>>;
+
+  afterEach(() => fixture.nativeElement.remove());
+
+  it('is a menu on a wide screen too, behind a button that says what it opens', async () => {
+    fixture = await renderMenu();
+    const toggle = one(fixture, '.page-overflow-toggle');
+    const menu = one(fixture, '.page-more-items');
+
+    expect(toggle?.getAttribute('aria-haspopup')).toBe('menu');
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.getAttribute('aria-label')).toBe(
+      'More actions for Hacendado'
+    );
+    expect(menu?.getAttribute('role')).toBe('menu');
+    expect(menu?.classList.contains('open')).toBe(false);
+    // "Edit" never moves into the menu.
+    expect(one(fixture, '.page-actions [data-first]')).not.toBeNull();
+  });
+
+  it('gives each entry the role of a menu item, and starts on the first', async () => {
+    fixture = await renderMenu();
+
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    const items = Array.from(
+      fixture.nativeElement.querySelectorAll('.page-more-items button')
+    ) as HTMLElement[];
+    expect(items.map((item) => item.getAttribute('role'))).toEqual([
+      'menuitem',
+      'menuitem',
+      'menuitem',
+    ]);
+    expect(one(fixture, '.page-more-items')?.classList.contains('open')).toBe(
+      true
+    );
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it('puts the actions that destroy last, in a part of their own', async () => {
+    fixture = await renderMenu();
+
+    const items = Array.from(
+      fixture.nativeElement.querySelectorAll('.page-more-items button')
+    ) as HTMLElement[];
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      'Rename',
+      'Merge',
+      'Delete this brand',
+    ]);
+    expect(items[2].closest('.page-more-danger')).not.toBeNull();
+    expect(items[0].closest('.page-more-danger')).toBeNull();
+  });
+
+  /** The line parts the two kinds, so it is drawn only between them. */
+  it('draws the line only under an entry, and the part in red', () => {
+    const source = readFileSync(join(__dirname, 'page-header.ts'), 'utf8');
+
+    expect(source).toMatch(
+      /\.as-menu > \* ~ \.page-more-danger:not\(:empty\) \{[^}]*border-block-start: 1px solid/
+    );
+    expect(source).toMatch(
+      /\.as-menu \.page-more-danger button,[^{]*\{[^}]*color: var\(--admin-danger\)/
+    );
+  });
+
+  it('moves with the arrows, and wraps at both ends', async () => {
+    fixture = await renderMenu();
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+    const items = Array.from(
+      fixture.nativeElement.querySelectorAll('.page-more-items button')
+    ) as HTMLElement[];
+
+    press(document.activeElement, 'ArrowDown');
+    expect(document.activeElement).toBe(items[1]);
+    press(document.activeElement, 'ArrowDown');
+    press(document.activeElement, 'ArrowDown');
+    expect(document.activeElement).toBe(items[0]);
+    press(document.activeElement, 'ArrowUp');
+    expect(document.activeElement).toBe(items[2]);
+  });
+
+  it('closes on Escape and gives the focus back to the button', async () => {
+    fixture = await renderMenu();
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+
+    expect(one(fixture, '.page-more-items')?.classList.contains('open')).toBe(
+      false
+    );
+    expect(document.activeElement).toBe(one(fixture, '.page-overflow-toggle'));
+  });
+
+  it('closes on a press outside', async () => {
+    fixture = await renderMenu();
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    document.body.click();
+    fixture.detectChanges();
+
+    expect(one(fixture, '.page-more-items')?.classList.contains('open')).toBe(
+      false
+    );
+  });
+
+  it('runs the entry that was chosen, and closes', async () => {
+    fixture = await renderMenu();
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    one(fixture, '[data-danger]')?.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.chosen()).toBe('delete');
+    expect(one(fixture, '.page-more-items')?.classList.contains('open')).toBe(
+      false
+    );
+  });
+
+  /** A menu with no entry is not drawn: the rule counts what the page put in. */
+  it('hides the button of a menu that holds nothing', () => {
+    const source = readFileSync(join(__dirname, 'page-header.ts'), 'utf8');
+
+    expect(source).toMatch(
+      /\.page-overflow:not\(\s*:has\(\s*\.page-more-items > :not\(\.page-more-danger\),\s*\.page-more-danger > \*\s*\)\s*\) \{\s*display: none;/
+    );
+  });
+
+  it('is a sheet from the bottom on a phone, with rows 48 px high', async () => {
+    fixture = await renderMenu(true);
+
+    expect(one(fixture, 'lib-popover-sheet')).toBeNull();
+
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    const sheet = one(fixture, 'lib-popover-sheet');
+    expect(sheet).not.toBeNull();
+    expect(sheet?.querySelector('.panel')?.classList.contains('sheet')).toBe(
+      true
+    );
+    expect(sheet?.querySelector('h2')?.textContent?.trim()).toBe(
+      'More actions for Hacendado'
+    );
+    const list = sheet?.querySelector('.page-more-items');
+    expect(list?.getAttribute('role')).toBe('menu');
+    expect(
+      Array.from(list?.querySelectorAll('button') ?? []).map((item) =>
+        item.getAttribute('role')
+      )
+    ).toEqual(['menuitem', 'menuitem', 'menuitem']);
+
+    const source = readFileSync(join(__dirname, 'page-header.ts'), 'utf8');
+    expect(source).toMatch(
+      /\.as-menu\.as-sheet button,[^{]*\{[^}]*min-block-size: 3rem;/
+    );
+  });
+
+  it('closes the sheet when an entry is chosen, and when it asks to close', async () => {
+    fixture = await renderMenu(true);
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+
+    one(fixture, '[data-plain="Rename"]')?.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.chosen()).toBe('Rename');
+    expect(one(fixture, 'lib-popover-sheet')).toBeNull();
+
+    one(fixture, '.page-overflow-toggle')?.click();
+    fixture.detectChanges();
+    (one(fixture, 'lib-popover-sheet .close') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(one(fixture, 'lib-popover-sheet')).toBeNull();
+    expect(document.activeElement).toBe(one(fixture, '.page-overflow-toggle'));
+  });
+});
+
+describe('PageHeader, a title that is on its way', () => {
+  it('keeps the words in the heading, and marks it as a bar', async () => {
+    const fixture = await renderMenu();
+    fixture.componentInstance.loading.set(true);
+    fixture.detectChanges();
+
+    // The words stay for a screen reader. The rule takes their ink away.
+    expect(one(fixture, 'h1')?.textContent).toBe('Hacendado');
+    expect(one(fixture, '.page-titles')?.classList.contains('pending')).toBe(
+      true
+    );
+
+    fixture.componentInstance.loading.set(false);
+    fixture.detectChanges();
+    expect(one(fixture, '.page-titles')?.classList.contains('pending')).toBe(
+      false
+    );
+    fixture.nativeElement.remove();
+  });
+});

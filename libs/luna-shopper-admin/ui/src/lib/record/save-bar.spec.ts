@@ -64,6 +64,17 @@ describe('SaveBar', () => {
     });
   });
 
+  /** A new record whose values all came with the address. */
+  it('offers Save with nothing typed when the state says it can be saved', () => {
+    expect(drawn({ kind: 'clean', canSave: true })).toEqual({
+      words: 'record.save.clean',
+      role: 'status',
+      save: true,
+      cancel: true,
+      saveSays: 'Save',
+    });
+  });
+
   it('counts the unsaved changes, and offers both', () => {
     expect(drawn({ kind: 'dirty', changes: 2 })).toEqual({
       words: 'record.save.dirty',

@@ -11,6 +11,7 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RECORD_EDIT_PARAM,
   ResourceChanges,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -40,6 +41,8 @@ export interface MemberMenuItem {
   readonly label: string;
   /** Where the entry goes, for one that is a link. */
   readonly path: readonly string[] | null;
+  /** The query string of a link, for one that opens a page in a state. */
+  readonly query: Readonly<Record<string, string>> | null;
   /** What the entry does, for one that is an action. */
   readonly action: NamedAction<ResourceRow> | null;
 }
@@ -204,6 +207,7 @@ const ANSWERS: readonly string[] = ['approve-member', 'reject-member'];
                             <a
                               (click)="closeMenu()"
                               [attr.data-link]="item.key"
+                              [queryParams]="item.query"
                               [routerLink]="item.path"
                               class="menu-item"
                               >{{ item.label | rokuT }}</a
@@ -329,6 +333,7 @@ export class ZoneMembersTab {
         key: action.name,
         label: action.label,
         path: null,
+        query: null,
         action,
       });
 
@@ -355,6 +360,7 @@ export class ZoneMembersTab {
                   key: 'person',
                   label: 'people.memberships.openPerson',
                   path: personPath,
+                  query: null,
                   action: null,
                 },
               ]),
@@ -368,6 +374,9 @@ export class ZoneMembersTab {
                   key: 'change',
                   label: 'people.memberships.change',
                   path: formPath,
+                  // The entry says "change", so it opens the form and not
+                  // the page that reads.
+                  query: { [RECORD_EDIT_PARAM]: '1' },
                   action: null,
                 },
               ]),

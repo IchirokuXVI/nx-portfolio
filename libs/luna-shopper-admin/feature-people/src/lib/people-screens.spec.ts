@@ -755,12 +755,31 @@ describe('the Members tab of a zone', () => {
       'people.memberships.action.kick',
       'people.memberships.action.ban',
     ]);
+    // "Change role or name" says a change, so it opens the form.
     expect(find(fixture, '[data-link="change"]')?.getAttribute('href')).toBe(
       `${ZONES}/${KITCHEN.id}/members/${compositeId([
         KITCHEN.id,
         member.membershipId,
-      ])}`
+      ])}?edit=1`
     );
+    // The person is opened to be read.
+    expect(
+      find(fixture, '[data-link="person"]')?.getAttribute('href')
+    ).not.toContain('edit=1');
+  });
+
+  it('opens the form of a member from "Change role or name"', async () => {
+    const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}/members`);
+
+    row(fixture, member.membershipId)
+      .querySelector<HTMLButtonElement>('[data-member-menu]')
+      ?.click();
+    await settle(fixture);
+    find<HTMLAnchorElement>(fixture, '[data-link="change"]')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(find(fixture, 'lib-record-view lib-field-control')).not.toBeNull();
   });
 
   it('bans a member through the service, once confirmed', async () => {
@@ -815,21 +834,27 @@ describe('the Members tab of a zone', () => {
     );
   });
 
-  it('opens the member form, which goes back to the Members tab', async () => {
+  it('opens a member to be read, and goes back to the Members tab', async () => {
     const address = `${ZONES}/${KITCHEN.id}/members/${compositeId([
       KITCHEN.id,
       member.membershipId,
     ])}`;
     const fixture = await bootShoppers(address);
 
-    expect(find(fixture, 'lib-resource-form')).not.toBeNull();
-    // The zone is the address, so the form does not ask for it again.
+    // The record page (admin plan 0053): read first, and no control.
+    expect(find(fixture, 'lib-record-view')).not.toBeNull();
+    expect(find(fixture, 'lib-field-control')).toBeNull();
+    // The zone is the address, so the page does not ask for it again.
     expect(textOf(fixture)).not.toContain('people.memberships.zoneIdHelp');
 
-    find<HTMLButtonElement>(
-      fixture,
-      'lib-resource-form-page .page-back'
-    )?.click();
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
+    await settle(fixture);
+    // "Edit" turns the same page into a form, with the one caution in sight.
+    expect(find(fixture, 'lib-field-control')).not.toBeNull();
+    expect(find(fixture, 'lib-record-view [data-caution]')).not.toBeNull();
+    expect(textOf(fixture)).not.toContain('people.memberships.zoneIdHelp');
+
+    find<HTMLAnchorElement>(fixture, 'lib-record-page .page-back')?.click();
     await settle(fixture);
     await settle(fixture);
 
@@ -996,26 +1021,38 @@ describe('a list of a zone', () => {
     expect(controlSaying(fixture, 'resource.action.create')).toBeUndefined();
   });
 
-  it('opens a line form under the list, which goes back to the list', async () => {
+  it('opens the form of a line from its "Edit"', async () => {
+    const fixture = await bootShoppers(address);
+    const [first] = WEEKLY.lines;
+
+    lineRow(fixture, first.id)
+      .querySelector<HTMLAnchorElement>('[data-edit-line]')
+      ?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(find(fixture, 'lib-record-view lib-field-control')).not.toBeNull();
+  });
+
+  it('opens a line under the list to be read, and goes back to the list', async () => {
     const fixture = await bootShoppers(address);
     const [first] = WEEKLY.lines;
     const form = `${address}/lines/${compositeId([WEEKLY.id, first.id])}`;
 
+    // "Edit" says a change, so its link opens the form.
     expect(
       lineRow(fixture, first.id)
         .querySelector('[data-edit-line]')
         ?.getAttribute('href')
-    ).toBe(form);
+    ).toBe(`${form}?edit=1`);
 
     await TestBed.inject(Router).navigateByUrl(form);
     await settle(fixture);
     await settle(fixture);
-    expect(find(fixture, 'lib-resource-form')).not.toBeNull();
+    expect(find(fixture, 'lib-record-view')).not.toBeNull();
+    expect(find(fixture, 'lib-field-control')).toBeNull();
 
-    find<HTMLButtonElement>(
-      fixture,
-      'lib-resource-form-page .page-back'
-    )?.click();
+    find<HTMLAnchorElement>(fixture, 'lib-record-page .page-back')?.click();
     await settle(fixture);
     await settle(fixture);
     expect(currentUrl()).toBe(address);
