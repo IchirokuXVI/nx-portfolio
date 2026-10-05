@@ -12,11 +12,7 @@ import {
   defineResource,
 } from '@portfolio/luna-shopper-admin/models';
 import { MEMBERSHIP_SEED, type MembershipRow } from './people-seed';
-import {
-  ZONE_CAUTION,
-  ZONE_MEMBERS_TAB,
-  ZONE_PARAM,
-} from './shopper-params';
+import { ZONE_CAUTION, ZONE_MEMBERS_TAB, ZONE_PARAM } from './shopper-params';
 
 /** One person's place in one household, as the back office reads it. */
 export type Membership = MembershipRow;

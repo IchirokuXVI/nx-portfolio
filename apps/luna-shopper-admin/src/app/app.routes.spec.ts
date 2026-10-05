@@ -297,8 +297,14 @@ describe('appRoutes', () => {
    * record opens on its first one, and the page then moves to Details.
    */
   it.each([
-    [`/shoppers/people/${ROSA}/edit`, `/shoppers/people/${ROSA}/details?edit=1`],
-    [`/shoppers/zones/${KITCHEN}/edit`, `/shoppers/zones/${KITCHEN}/members?edit=1`],
+    [
+      `/shoppers/people/${ROSA}/edit`,
+      `/shoppers/people/${ROSA}/details?edit=1`,
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/edit`,
+      `/shoppers/zones/${KITCHEN}/members?edit=1`,
+    ],
   ])(
     'sends the old address %s to the record, with its form open',
     async (old, record) => {

@@ -38,9 +38,9 @@ export function rolesCell(roles: readonly string[]): FieldMessage {
 }
 
 /** The name of the action that gives a role, and of the one that takes it away. */
-export const giveRoleAction = (role: AccountRole): string =>
+const giveRoleAction = (role: AccountRole): string =>
   `give-role-${role}`;
-export const takeRoleAction = (role: AccountRole): string =>
+const takeRoleAction = (role: AccountRole): string =>
   `take-role-${role}`;
 
 /**
@@ -70,8 +70,7 @@ export function roleActions(
     {
       name: giveRoleAction(role),
       label: `people.users.action.giveRole.${role}`,
-      available: (row) =>
-        row.kind !== 'TEMPORARY' && !holdsRole(row, role),
+      available: (row) => row.kind !== 'TEMPORARY' && !holdsRole(row, role),
       confirm: {
         heading: 'people.users.confirm.grantRole.heading',
         body: `people.users.confirm.grantRole.body.${role}`,

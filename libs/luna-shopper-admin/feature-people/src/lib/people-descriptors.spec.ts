@@ -440,7 +440,10 @@ describe('the roles of a person, as actions', () => {
         .map((action) => action.name)
         .filter((name) => name.includes('-role-'))
     ).toEqual(
-      ACCOUNT_ROLES.flatMap((role) => [`give-role-${role}`, `take-role-${role}`])
+      ACCOUNT_ROLES.flatMap((role) => [
+        `give-role-${role}`,
+        `take-role-${role}`,
+      ])
     );
   });
 

@@ -414,15 +414,11 @@ describe('a person', () => {
   });
 });
 
-/** The role switches of the Details tab, in the order the server lists roles. */
-const switches = (fixture: ComponentFixture<ShoppersTestHost>) =>
-  findAll<HTMLButtonElement>(fixture, 'button[role="switch"]');
-
 /**
- * An account's roles (admin plan 0038, on backend plan 0175).
+ * An account's roles (admin plans 0038 and 0057, on backend plan 0175).
  *
  * The in memory gateway holds one account with a role, `marc` with `admin`, so
- * the column, the filter and a switch that is already on each have something
+ * the column, the filter and an entry that takes a role away each have something
  * to show with no server.
  */
 describe("an account's roles", () => {
