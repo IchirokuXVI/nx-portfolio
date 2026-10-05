@@ -7,7 +7,10 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { RecordValue } from '@portfolio/luna-shopper-admin/models';
+import type {
+  RecordValue,
+  ScopeMarkView,
+} from '@portfolio/luna-shopper-admin/models';
 import { ScopeMark } from '../page/scope-mark';
 
 /**
@@ -23,6 +26,8 @@ interface ReferenceLine {
   /** The name, `null` for a record that is gone, `undefined` while it is read. */
   readonly name: string | null | undefined;
   readonly link: readonly string[] | null;
+  /** The scope mark before the name, for one of several references. */
+  readonly mark?: ScopeMarkView | null;
 }
 
 /**
@@ -79,7 +84,7 @@ interface ReferenceLine {
         <!-- rel="noopener" on every outbound link: the tab one opens must not
              be able to reach back into an admin session. -->
         <a [href]="shown.href" rel="noopener noreferrer" target="_blank">{{
-          shown.text
+          shown.label ? (shown.label | rokuT) : shown.text
         }}</a>
       }
 
@@ -151,6 +156,14 @@ interface ReferenceLine {
         <ul class="references">
           @for (target of several(); track target.id; let first = $first) {
             <li>
+              <!-- How far this target reaches, where the field says so. The
+                   mark names the kind, which the name beside it may not. -->
+              @if (target.mark; as mark) {
+                <lib-scope-mark
+                  [label]="mark.label | rokuT"
+                  [level]="mark.level"
+                />
+              }
               @if (target.name === undefined) {
                 <span class="none" data-resolving>{{
                   'resource.reference.resolving' | rokuT
@@ -269,6 +282,11 @@ interface ReferenceLine {
       align-items: baseline;
     }
 
+    /* The mark is a drawing and has no baseline of its own. */
+    li > lib-scope-mark {
+      align-self: center;
+    }
+
     .lang {
       flex: none;
       inline-size: 1.5rem;
@@ -322,6 +340,11 @@ export class FieldValue {
   readonly link = input<readonly string[] | null>(null);
   /** The same for several references, by ID. */
   readonly links = input<Readonly<Record<string, readonly string[]>>>({});
+  /**
+   * The scope mark before each of several references, by ID (admin plan
+   * 0056, section 2). An ID that is absent has no mark.
+   */
+  readonly marks = input<Readonly<Record<string, ScopeMarkView>>>({});
 
   /** Whether the catalogue has a word for this language. */
   named(locale: string): boolean {
@@ -371,10 +394,12 @@ export class FieldValue {
     }
     const names = this.names();
     const links = this.links();
+    const marks = this.marks();
     return value.ids.map((id) => ({
       id,
       name: id in names ? names[id] : undefined,
       link: links[id] ?? null,
+      mark: marks[id] ?? null,
     }));
   });
 }

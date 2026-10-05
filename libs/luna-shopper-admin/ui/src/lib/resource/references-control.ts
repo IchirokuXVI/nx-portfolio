@@ -15,8 +15,10 @@ import {
   isReferenceNone,
   type ReferenceScope,
   type ResourceRow,
+  type ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
 import { ChevronLeftIcon, CloseIcon } from '@portfolio/shared/ui';
+import { ScopeMark } from '../page/scope-mark';
 import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
 
@@ -43,7 +45,13 @@ import { ReferencePicker } from './reference-picker';
  */
 @Component({
   selector: 'lib-references-control',
-  imports: [RokuTranslatorPipe, ReferencePicker, ChevronLeftIcon, CloseIcon],
+  imports: [
+    RokuTranslatorPipe,
+    ReferencePicker,
+    ScopeMark,
+    ChevronLeftIcon,
+    CloseIcon,
+  ],
   template: `
     @if (value().length === 0) {
       <p class="muted">{{ 'resource.references.empty' | rokuT }}</p>
@@ -58,6 +66,12 @@ import { ReferencePicker } from './reference-picker';
             [class.locked]="isLocked(id)"
             class="row"
           >
+            @if (markOf(id); as mark) {
+              <lib-scope-mark
+                [label]="mark.label | rokuT"
+                [level]="mark.level"
+              />
+            }
             @if (!known(id)) {
               <span class="name muted">{{
                 'resource.reference.resolving' | rokuT
@@ -273,6 +287,13 @@ export class ReferencesControl {
    */
   readonly locks = input<((target: ResourceRow) => boolean) | null>(null);
   /**
+   * The scope mark to draw before a target, asked with the target's row, or
+   * `null` when the field draws none (admin plan 0056, section 2).
+   */
+  readonly marks = input<
+    ((target: ResourceRow) => ScopeMarkView | undefined) | null
+  >(null);
+  /**
    * Whether the order counts. Each row then has "Move up" and "Move down",
    * and the first row says "Main".
    */
@@ -321,6 +342,15 @@ export class ReferencesControl {
 
   optionOf(id: string): ReferenceOption | null {
     return this._resolved().get(id) ?? null;
+  }
+
+  /**
+   * The mark before one row. None until the lookup has read the row, since
+   * the mark is a fact about the row the id points at.
+   */
+  markOf(id: string): ScopeMarkView | null {
+    const row = this.optionOf(id)?.row;
+    return row === undefined ? null : (this.marks()?.(row) ?? null);
   }
 
   /** What the buttons of a row call the entry: its name, or its id. */

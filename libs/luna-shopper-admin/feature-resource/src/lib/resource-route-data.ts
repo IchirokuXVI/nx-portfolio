@@ -67,6 +67,18 @@ export const RESOURCE_LIST_FIXED = 'fixedBy';
 export const RECORD_TAB = 'recordTab';
 
 /**
+ * Route `data` key on the route of a record page: the path of the child
+ * route that the page gives way to (admin plan 0056, section 2).
+ *
+ * A chain's Shops tab is a split, and a shop opens inside it. Below 72 rem a
+ * split shows one pane, so the shop is the whole page: the chain then draws
+ * no header and no tabs, and the shop's own header stands where they were.
+ * The page gives way while any route under the named child is open, and only
+ * below 72 rem. `recordRoute` writes the key from its `yieldsTo` option.
+ */
+export const RECORD_YIELDS_TO = 'recordYieldsTo';
+
+/**
  * Route `data` key: whether a list drawn as a column sits under a page header
  * that the page holding it drew (admin plan 0042).
  *

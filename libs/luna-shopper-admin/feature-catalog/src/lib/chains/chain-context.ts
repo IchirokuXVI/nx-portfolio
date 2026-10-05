@@ -1,24 +1,28 @@
-import { inject, Injectable, signal } from '@angular/core';
+import {
+  computed,
+  effect,
+  inject,
+  Injectable,
+  signal,
+  untracked,
+  type Signal,
+} from '@angular/core';
 import {
   HARVEST_SERVICE,
   toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
-  gatewayErrorKey,
   ResourceChanges,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import { ShopSections } from '../shop-sections';
 
 /** What the harvester has for a chain. */
 export type ChainSourceState =
   /** A source exists and may be fetched. */
   | 'fetched'
-  /** A source exists and its switch is off. */
-  | 'off'
-  /** No source: every price of this chain is typed by a person. */
-  | 'none';
+  /** No source, or one whose switch is off: nothing fetches the chain. */
+  | 'off';
 
 /**
  * How many price scopes a count will read before it gives up.
@@ -29,32 +33,41 @@ export type ChainSourceState =
  */
 const SCOPE_COUNT_PAGE = 100;
 
+/** The key of the Sections tab of a chain: the `name` of the part. */
+export const CHAIN_SECTIONS_TAB = 'sections';
+
+/** What the tabs of a chain count, by the key of the tab. */
+export type ChainTabCounts = Readonly<Record<string, number | null>>;
+
 /**
- * The chain a page is about, held once for the page and every tab under it
- * (admin plan 0042).
+ * What a chain's page counts beside its tabs, and what the harvester has for
+ * the chain (admin plan 0056, section 3.1).
  *
- * Provided by `ChainPage`, so it lives exactly as long as a chain is open. The
- * header reads the name from it, the tabs read their counts from it, and the
- * Price scopes tab asks it which scope is the default and tells it to change
- * that. Without it each of those would read the chain for itself, and after a
- * write they would disagree until the next reload.
+ * The chain itself is the record page's: its row, its delete and its heading.
+ * What no field of the row holds is here, read once for the page. It is what
+ * is left of the context the chain's own page held before that plan.
  *
- * **A count is shown only when the gateway gave it.** The shop count comes on
- * the chain. The section count is the length of a list that is read whole.
- * The scope count is the length of the first page when that page is the last,
- * and nothing otherwise.
+ * `providedIn: 'root'`, because the page asks for it while it is built. It
+ * holds one chain, the one that is open: {@link of} is the page opening a
+ * chain, and everything read for the one before is dropped.
+ *
+ * **A count is shown only when the gateway gave it.** The section count is
+ * the length of a list that is read whole. The scope count is the length of
+ * the first page when that page is the last, and nothing otherwise. The shop
+ * count is a field of the chain and is not here.
+ *
+ * **The counts follow a write.** The page asks {@link of} once for each chain
+ * it opens, and not again when a tab adds a section or a scope. So this reads
+ * the two counts again when either resource says it was written.
  */
-@Injectable()
-export class ChainContext {
+@Injectable({ providedIn: 'root' })
+export class ChainCounts {
   private readonly _registry = inject(ResourceRegistry);
   private readonly _sections = inject(ShopSections);
   private readonly _harvest = inject(HARVEST_SERVICE);
   private readonly _changes = inject(ResourceChanges);
 
   private readonly _id = signal<string | null>(null);
-  private readonly _chain = signal<Wire.CatalogSupermarketView | null>(null);
-  private readonly _status = signal<'loading' | 'ready' | 'error'>('loading');
-  private readonly _errorKey = signal<string | null>(null);
   private readonly _sectionCount = signal<number | null>(null);
   private readonly _scopeCount = signal<number | null>(null);
   private readonly _source = signal<ChainSourceState | null>(null);
@@ -62,99 +75,102 @@ export class ChainContext {
   /** So that an answer for a chain the page has left is dropped. */
   private _generation = 0;
 
+  /** The chain that is open, or `null` before the first. */
   readonly id = this._id.asReadonly();
-  readonly chain = this._chain.asReadonly();
-  readonly status = this._status.asReadonly();
-  /** Why the chain could not be read, as a key. */
-  readonly errorKey = this._errorKey.asReadonly();
-  /** The sections of the chain, or `null` until they are read. */
-  readonly sectionCount = this._sectionCount.asReadonly();
-  /** The price scopes of the chain, or `null` when the list has more pages. */
-  readonly scopeCount = this._scopeCount.asReadonly();
   /** What the harvester has for the chain, or `null` when it did not answer. */
   readonly source = this._source.asReadonly();
 
-  /** Open a chain. Everything the page shows is read again. */
-  async open(id: string): Promise<void> {
-    this._generation += 1;
-    this._id.set(id);
-    this._chain.set(null);
-    this._status.set('loading');
-    this._errorKey.set(null);
-    this._sectionCount.set(null);
-    this._scopeCount.set(null);
-    this._source.set(null);
-    await this.reload();
-  }
+  constructor() {
+    // A section or a scope was written, so the number beside its tab moved.
+    let counted = this._counted();
+    effect(() => {
+      const version = this._counted();
+      untracked(() => {
+        const id = this._id();
+        if (version !== counted && id !== null) {
+          counted = version;
+          void this._readSectionCount(id, this._generation);
+          void this._readScopeCount(id, this._generation);
+        }
+      });
+    });
 
-  /** Read the chain and its counts again, keeping what is on screen meanwhile. */
-  async reload(): Promise<void> {
-    const id = this._id();
-    if (id === null) {
-      return;
-    }
-    const generation = this._generation;
-
-    // The three around the chain fail by themselves: a count that could not
-    // be read is a tab without a number, and never a page that will not open.
-    void this._readSectionCount(id, generation);
-    void this._readScopeCount(id, generation);
-    void this._readSource(id, generation);
-
-    try {
-      const row = await this._chains().read(id);
-      if (generation !== this._generation) {
-        return;
-      }
-      this._chain.set(row as Wire.CatalogSupermarketView);
-      this._status.set('ready');
-    } catch (error) {
-      if (generation !== this._generation) {
-        return;
-      }
-      this._errorKey.set(
-        gatewayErrorKey(toGatewayError(error)) ?? 'resource.error.unknown'
-      );
-      this._status.set('error');
-    }
+    // A shop was added or deleted, so the chain's count of them moved. The
+    // chain is said to have changed, which the column of chains follows.
+    let shops = this._changes.version('locations');
+    effect(() => {
+      const version = this._changes.version('locations');
+      untracked(() => {
+        if (version !== shops) {
+          shops = version;
+          this._changes.wrote('supermarkets');
+        }
+      });
+    });
   }
 
   /**
-   * Make one of the chain's scopes its default.
+   * The counts beside the tabs of one chain, for `record.counts`.
+   *
+   * The page asks once for each chain it opens, and asking is what starts
+   * the reads.
+   */
+  readonly of = (id: string): Signal<ChainTabCounts> => {
+    this.open(id);
+    return computed(() =>
+      this._id() === id
+        ? {
+            [CHAIN_SECTIONS_TAB]: this._sectionCount(),
+            'price-scopes': this._scopeCount(),
+          }
+        : { [CHAIN_SECTIONS_TAB]: null, 'price-scopes': null }
+    );
+  };
+
+  /** What the harvester has for one chain, or `null` when it is not the open one. */
+  sourceOf(id: string): ChainSourceState | null {
+    return this._id() === id ? this._source() : null;
+  }
+
+  /** Open a chain. Everything held about the one before is dropped. */
+  open(id: string): void {
+    this._generation += 1;
+    this._id.set(id);
+    this._sectionCount.set(null);
+    this._scopeCount.set(null);
+    this._source.set(null);
+
+    // Each of the three fails by itself: a count that could not be read is a
+    // tab without a number, and never a page that will not open.
+    void this._readSectionCount(id, this._generation);
+    void this._readScopeCount(id, this._generation);
+    void this._readSource(id, this._generation);
+  }
+
+  /**
+   * Make one of a chain's scopes its default.
    *
    * A write to the chain, so it throws what the gateway refused and the list
-   * that asked says so on the row.
+   * that asked says so. The chain is said to have changed, and the page that
+   * shows it then reads it again.
    */
-  async setDefaultScope(priceScopeId: string): Promise<void> {
-    const id = this._id();
-    if (id === null) {
-      return;
-    }
-
-    const row = await this._chains().update(id, {
-      defaultPriceScopeId: priceScopeId,
-    });
-    this._chain.set(row as Wire.CatalogSupermarketView);
-    this._changes.wrote('supermarkets');
-  }
-
-  /** Delete the chain. Throws what the gateway refused. */
-  async remove(): Promise<void> {
-    const id = this._id();
-    if (id === null) {
-      return;
-    }
-
-    await this._chains().remove(id);
-    this._changes.wrote('supermarkets');
-  }
-
-  private _chains() {
+  async setDefaultScope(chainId: string, priceScopeId: string): Promise<void> {
     const descriptor = this._registry.byName('supermarkets');
     if (descriptor === undefined) {
-      throw new Error('The chain page needs the supermarkets resource.');
+      throw new Error('A default scope needs the supermarkets resource.');
     }
-    return this._registry.gatewayFor(descriptor);
+
+    await this._registry.gatewayFor(descriptor).update(chainId, {
+      defaultPriceScopeId: priceScopeId,
+    });
+    this._changes.wrote('supermarkets');
+  }
+
+  /** The writes that change a count held here, as one number. */
+  private _counted(): number {
+    return (
+      this._changes.version('sections') + this._changes.version('price-scopes')
+    );
   }
 
   private async _readSectionCount(id: string, generation: number) {
@@ -201,9 +217,10 @@ export class ChainContext {
       }
     } catch (error) {
       if (generation === this._generation) {
-        // Not found is an answer: the chain has no source. Anything else is
-        // the harvester not answering, and the header then says nothing.
-        this._source.set(toGatewayError(error).status === 404 ? 'none' : null);
+        // Not found is an answer: the chain has no source, so nothing
+        // fetches it. Anything else is the harvester not answering, and the
+        // header then says nothing.
+        this._source.set(toGatewayError(error).status === 404 ? 'off' : null);
       }
     }
   }

@@ -26,9 +26,7 @@ import { join } from 'node:path';
 import { LOCATION_SEED } from './catalog-seed';
 import { sectionSource } from './catalog-sources';
 import { ChainSections } from './chain-sections';
-import { ChainPage } from './chains/chain-page';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
-import { ShopPage } from './chains/shop-page';
 import { ItemChainSections, previewSentence } from './item-sections-panel';
 import { LocationSections, moveId } from './location-sections';
 import {
@@ -42,7 +40,12 @@ import {
   toSectionsAtLocation,
   toShopSection,
 } from './shop-sections';
-import { SupermarketFormPage } from './supermarket-form-page';
+
+/** The resource each record page on the screen is about, outermost first. */
+const recordsOf = (fixture: ComponentFixture<TestHost>) =>
+  fixture.debugElement
+    .queryAll(By.directive(RecordPage))
+    .map((node) => (node.componentInstance as RecordPage).descriptor.name);
 
 /**
  * Shop sections in the back office (admin plan 0037), against the in memory
@@ -355,7 +358,7 @@ describe('the Sections tab of a chain', () => {
     await settle(fixture);
 
     expect(TestBed.inject(Router).url).toBe('/chains/sm_mercadona/sections');
-    expect(fixture.debugElement.query(By.directive(ChainPage))).not.toBeNull();
+    expect(recordsOf(fixture)).toEqual(['supermarkets']);
     expect(panelOf(fixture).supermarketId()).toBe('sm_mercadona');
   });
 
@@ -404,7 +407,7 @@ describe('the Sections tab of a chain', () => {
     const fixture = await boot(`/chains/sm_mercadona/sections/${OFFERS}`);
 
     // A sibling of the chain's page and not a tab of it.
-    expect(fixture.debugElement.query(By.directive(ChainPage))).toBeNull();
+    expect(recordsOf(fixture)).toEqual(['sections']);
     const record = fixture.debugElement.query(By.directive(RecordPage));
     expect(record).not.toBeNull();
     // Reading: no control anywhere on the page (admin plan 0053).
@@ -514,11 +517,11 @@ describe('the Sections tab of a chain', () => {
   it('has no tabs on a chain being created', async () => {
     const fixture = await boot('/chains/new');
 
-    expect(
-      fixture.debugElement.query(By.directive(SupermarketFormPage))
-    ).not.toBeNull();
-    // The tabs are the chain's page, and a chain that does not exist has none.
-    expect(fixture.debugElement.query(By.directive(ChainPage))).toBeNull();
+    const page = fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+    expect(page.store().mode()).toBe('create');
+    // A chain that does not exist holds nothing, so its page has no tabs.
+    expect(page.tabs()).toBeNull();
     expect(text(fixture)).not.toContain('catalog.chains.tabs.sections');
   });
 
@@ -589,7 +592,7 @@ describe('the sections of a shop', () => {
   it('is a tab of the shop’s page, under the chain', async () => {
     const { fixture, panel } = await openShop('loc_cordoba_oeste');
 
-    expect(fixture.debugElement.query(By.directive(ShopPage))).not.toBeNull();
+    expect(recordsOf(fixture)).toEqual(['supermarkets', 'locations']);
     expect(panel.locationId()).toBe('loc_cordoba_oeste');
     // The chain is read off the shop the page holds, never typed.
     expect(panel.supermarketId()).toBe('sm_mercadona');

@@ -12,6 +12,7 @@ import type {
   FieldDescriptor,
   ReferenceScope,
   ResourceRow,
+  ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
 import { Switch } from '../record/switch';
 import { LocalizedTextControl } from './localized-text-control';
@@ -149,6 +150,7 @@ import { ReferencesControl } from './references-control';
           [invalid]="invalid()"
           [locks]="locks()"
           [lookup]="lookup()"
+          [marks]="marks()"
           [ordered]="isOrdered()"
           [resource]="resourceOf()"
           [scope]="scopeOf()"
@@ -377,6 +379,17 @@ export class FieldControl {
     }
     const row = this.context();
     return (target) => field.locked?.(row, target) === true;
+  });
+
+  /** The descriptor's mark for one target, or `null` for none. */
+  readonly marks = computed<
+    ((target: ResourceRow) => ScopeMarkView | undefined) | null
+  >(() => {
+    const field = this.field();
+    if (field.kind !== 'references' || field.mark === undefined) {
+      return null;
+    }
+    return (target) => field.mark?.(target);
   });
 
   localesOf(): readonly string[] {

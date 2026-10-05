@@ -23,6 +23,7 @@ import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RECORD_TAB,
+  RECORD_YIELDS_TO,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
@@ -215,6 +216,11 @@ export function recordRoute(
     readonly tabs?: Readonly<Record<string, Route>>;
     /** The descriptor of a list tab that `tabs` does not mount. */
     readonly lists?: ResourceByName;
+    /**
+     * The path of the tab this page gives way to below 72 rem, while a route
+     * under that tab is open (`RECORD_YIELDS_TO`).
+     */
+    readonly yieldsTo?: string;
   }
 ): Route {
   const route: Route = {
@@ -227,6 +233,9 @@ export function recordRoute(
       ...(options.idFrom === undefined
         ? {}
         : { [RESOURCE_ID_FROM]: options.idFrom }),
+      ...(options.yieldsTo === undefined
+        ? {}
+        : { [RECORD_YIELDS_TO]: options.yieldsTo }),
     },
   };
 

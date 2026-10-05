@@ -12,6 +12,7 @@ import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RECORD_TAB,
+  RECORD_YIELDS_TO,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
@@ -515,6 +516,19 @@ describe('recordRoute', () => {
       [RESOURCE_DESCRIPTOR]: shops,
       [RESOURCE_ID_FROM]: 'shopId',
     });
+  });
+
+  /** Admin plan 0056, section 2: the page gives way to a child below 72 rem. */
+  it('names the child the page gives way to, only where the caller says one', () => {
+    expect(
+      recordRoute(shops, { path: ':id', yieldsTo: 'aisles' }).data
+    ).toEqual({
+      [RESOURCE_DESCRIPTOR]: shops,
+      [RECORD_YIELDS_TO]: 'aisles',
+    });
+    expect(recordRoute(shops, { path: ':id' }).data).not.toHaveProperty(
+      RECORD_YIELDS_TO
+    );
   });
 });
 

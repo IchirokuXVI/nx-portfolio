@@ -14,6 +14,8 @@ import {
 import {
   adminRoutes,
   provideSections,
+  RecordPage,
+  RecordView,
   sectionLink,
   sectionScreens,
   type AdminSection,
@@ -27,7 +29,6 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { FieldControl } from '@portfolio/luna-shopper-admin/ui';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains/chains-routes';
-import { SupermarketFormPage } from './supermarket-form-page';
 import { SUPERMARKETS, type Supermarket } from './supermarkets';
 import { SUPERMARKET_SEED } from './supermarkets-seed';
 
@@ -211,6 +212,13 @@ describe('supermarkets through the generic machinery', () => {
     [...fixture.nativeElement.querySelectorAll('[data-row]')] as HTMLElement[];
 
   /** The form's text boxes, by what they hold. */
+  const page = (fixture: ComponentFixture<TestHost>) =>
+    fixture.debugElement.query(By.directive(RecordPage))
+      .componentInstance as RecordPage;
+  const view = (fixture: ComponentFixture<TestHost>) =>
+    fixture.debugElement.query(By.directive(RecordView))
+      .componentInstance as RecordView;
+
   const typed = (fixture: ComponentFixture<TestHost>) =>
     (
       [
@@ -250,10 +258,10 @@ describe('supermarkets through the generic machinery', () => {
    */
   it('shows the brand key that tells two lookalike chains apart', async () => {
     const carrefour = await boot('/chains/sm_carrefour/details');
-    expect(typed(carrefour)).toContain('Q217599');
+    expect(text(carrefour)).toContain('Q217599');
 
     const express = await boot('/chains/sm_carrefour_express/details');
-    expect(typed(express)).toContain('Q2940602');
+    expect(text(express)).toContain('Q2940602');
   });
 
   /**
@@ -290,14 +298,24 @@ describe('supermarkets through the generic machinery', () => {
     ).not.toBeNull();
   });
 
-  it('opens one chain on a form built from the descriptor', async () => {
+  /** Admin plan 0056: a chain is read first, on the record page. */
+  it('opens one chain to be read, and as a form on Edit', async () => {
     const fixture = await boot('/chains/sm_mercadona/details');
-    const form = fixture.debugElement.query(By.directive(SupermarketFormPage))
-      .nativeElement as HTMLElement;
+    const view = () =>
+      fixture.nativeElement.querySelector('lib-record-view') as HTMLElement;
+
+    // Reading: the values, and no control anywhere under the header.
+    expect(view().textContent).toContain('Mercadona');
+    expect(view().textContent).toContain('https://www.mercadona.es');
+    expect(view().textContent).toContain('Q1888874');
+    expect(view().querySelector('lib-field-control')).toBeNull();
+
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
 
     // One box per content locale for the name, plus the two url fields and the
-    // brand key. The default scope is a picker, so the id and the shop count
-    // are what is shown and not edited.
+    // brand key. The default scope is a picker.
     expect(typed(fixture)).toEqual(
       expect.arrayContaining([
         'Mercadona',
@@ -305,13 +323,15 @@ describe('supermarkets through the generic machinery', () => {
         'Q1888874',
       ])
     );
-    expect(form.querySelectorAll('.readonly')).toHaveLength(2);
-    expect(form.querySelector('lib-reference-picker')).not.toBeNull();
+    expect(view().querySelector('lib-reference-picker')).not.toBeNull();
   });
 
   /** Admin plan 0034, section 2: the picker reads this chain's scopes only. */
   it('offers the default scope as a picker over this chain', async () => {
     const fixture = await boot('/chains/sm_mercadona/details');
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
 
     const control = fixture.debugElement
       .queryAll(By.directive(FieldControl))
@@ -325,7 +345,7 @@ describe('supermarkets through the generic machinery', () => {
    * A chain with no default scope is a gap to fix, and chains made before
    * backend plan 0153 have none. The flat list flagged each one in a column.
    * The column of names has no such cell, so the gap is read on the chain's
-   * Price scopes tab, where one scope is made the default: `chain-page.spec.ts`
+   * Price scopes tab, where one scope is made the default: `chain-record.spec.ts`
    * asserts that. What stays here is that the field still says what an unset
    * default reads as, for any list that draws the column.
    */
@@ -345,37 +365,35 @@ describe('supermarkets through the generic machinery', () => {
   it('offers a create form at `new` rather than reading a row called new', async () => {
     const fixture = await boot('/chains/new');
 
-    expect(
-      fixture.debugElement.query(By.directive(SupermarketFormPage))
-    ).not.toBeNull();
+    expect(page(fixture).store().mode()).toBe('create');
     expect(text(fixture)).toContain('resource.form.create');
     expect(text(fixture)).not.toContain('resource.error.notFound');
   });
 
-  /** Admin plan 0042, target 8: a new chain opens the page it was made as. */
+  /** Admin plan 0056, target 9: a new chain is open in its pane afterwards. */
   it('opens the chain that was made, and stays on the tab after a change', async () => {
     const created = await boot('/chains/new');
-    const page = created.debugElement.query(By.directive(SupermarketFormPage))
-      .componentInstance as SupermarketFormPage;
 
-    page.change({ name: 'name', value: { en: 'Deza', es: 'Deza' } });
-    await page.submit();
+    page(created).store().set('name', { en: 'Deza', es: 'Deza' });
+    await view(created).save();
     await settle(created);
     await settle(created);
 
-    expect(TestBed.inject(Router).url).toMatch(/^\/chains\/[^/]+\/shops$/);
-    expect(TestBed.inject(Router).url).not.toBe('/chains/new/shops');
+    expect(TestBed.inject(Router).url).toMatch(/^\/chains\/[^/]+\/details$/);
+    expect(TestBed.inject(Router).url).not.toBe('/chains/new/details');
 
     const changed = await boot('/chains/sm_mercadona/details');
-    const tab = changed.debugElement.query(By.directive(SupermarketFormPage))
-      .componentInstance as SupermarketFormPage;
+    page(changed).edit();
+    await settle(changed);
+    await settle(changed);
 
-    tab.change({ name: 'externalBrandKey', value: 'Q0' });
-    await tab.submit();
+    page(changed).store().set('externalBrandKey', 'Q0');
+    await view(changed).save();
     await settle(changed);
 
     expect(TestBed.inject(Router).url).toBe('/chains/sm_mercadona/details');
-    expect(text(changed)).toContain('resource.form.saved');
+    expect(page(changed).store().mode()).toBe('read');
+    expect(changed.nativeElement.querySelector('[data-saved]')).not.toBeNull();
   });
 
   /**

@@ -127,6 +127,9 @@ const SHOPS = defineResource<Shop>({
       name: 'tagIds',
       label: 'shops.tags',
       resource: 'tags',
+      // A mark before a tag, read off the tag's own row.
+      mark: (tag) =>
+        tag['name'] === 'Fresh' ? { level: 1, label: 'tags.fresh' } : undefined,
     },
     { kind: 'boolean', name: 'open', label: 'shops.open' },
     {
@@ -375,6 +378,20 @@ describe('RecordView', () => {
       // A reference whose record is gone says so, and does not keep looking.
       expect(entries[1].querySelector('[data-gone]')).not.toBeNull();
       expect(tags.querySelector('[data-resolving]')).toBeNull();
+    });
+
+    /** Admin plan 0056, section 2: the mark is a fact about the target. */
+    it('draws the mark a field states before each target it has read', async () => {
+      drawn = await draw();
+
+      const entries = Array.from(
+        rowOf(drawn.element, 'shops.tags').querySelectorAll('li')
+      );
+      expect(entries[0].firstElementChild?.tagName.toLowerCase()).toBe(
+        'lib-scope-mark'
+      );
+      // A record that is gone has no row to read a mark off.
+      expect(entries[1].querySelector('lib-scope-mark')).toBeNull();
     });
 
     it('says when the save went through, to a screen reader too', async () => {
