@@ -16409,6 +16409,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "withoutPriceAtScopeId",
+            "required": false,
+            "in": "query",
+            "description": "Only the products this price scope shows no price for: the scope holds no row for the product, or a row with no price that still says the product is sold. A row that says the scope does not sell the product is an answer, and keeps the product out. It combines with every other filter of this route. With it the page carries `total`, the number of products that match the whole request, on every page of it. An id that names no price scope answers 404.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -34484,6 +34494,11 @@
               "string",
               "null"
             ]
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many products match the whole request, on every page of it. Present only when the request named `withoutPriceAtScopeId`, and absent on every other read."
           }
         }
       },

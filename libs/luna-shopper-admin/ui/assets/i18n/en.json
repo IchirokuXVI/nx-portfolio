@@ -718,6 +718,7 @@
         "label": "Price state",
         "any": "Any price",
         "stale": "Out of date",
+        "noPrice": "No price",
         "note": "These rows show the product name and its price only. Choose Any price to search, filter and tick products again.",
         "suspended": "The category, the search and the order you set do not apply to these rows. They come back with Any price."
       }

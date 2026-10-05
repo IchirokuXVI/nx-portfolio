@@ -143,6 +143,35 @@ describe('ResourceMemoryGateways', () => {
     expect(none.items).toEqual([]);
   });
 
+  /**
+   * A rule can look across the tables, and can say that a narrowed list is
+   * counted, as the route it stands for is (backend plan 0187).
+   */
+  it('lets a rule read another table, and count the list it narrows', async () => {
+    const held = { path: '/test/held', seed: [{ id: 'h1', of: 'a' }] };
+    const gateway = gateways.for({
+      path: PATH,
+      seed,
+      memory: {
+        matches: (row, param, value, tables) =>
+          param === 'unheld'
+            ? !tables
+                .table(held)
+                .some((entry) => entry['of'] === row['id'] && value === 'yes')
+            : undefined,
+        counts: (filters) => filters['unheld'] === 'yes',
+      },
+    });
+
+    const unheld = await gateway.list({ filters: { unheld: 'yes' }, limit: 1 });
+    expect(unheld.items.map((row) => row['id'])).toEqual(['b']);
+    // Of everything that matches, not of the page.
+    expect(unheld.total).toBe(seed.length - 1);
+
+    const plain = await gateway.list({});
+    expect('total' in plain).toBe(false);
+  });
+
   it('matches any entry of a list filter, as a repeated parameter does', async () => {
     const gateway = gateways.for({ path: PATH, seed });
 

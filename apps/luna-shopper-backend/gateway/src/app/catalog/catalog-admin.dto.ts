@@ -87,6 +87,24 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @IsOptional()
   @IsUuidOrNone()
   productGroupId?: string;
+
+  /**
+   * The products one price scope shows no price for (plan 0187): what a crawl
+   * of the chain did not reach.
+   *
+   * **A uuid and nothing else.** The literal `none` has no meaning here, since
+   * the parameter does not name a reference of the product: it names the scope
+   * the question is asked at. It is also not a boolean beside `priceScopeId`,
+   * because this route takes no scope and prices nothing.
+   */
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Only the products this price scope shows no price for: the scope holds no row for the product, or a row with no price that still says the product is sold. A row that says the scope does not sell the product is an answer, and keeps the product out. It combines with every other filter of this route. With it the page carries `total`, the number of products that match the whole request, on every page of it. An id that names no price scope answers 404.',
+  })
+  @IsOptional()
+  @IsUUID()
+  withoutPriceAtScopeId?: string;
 }
 
 /**

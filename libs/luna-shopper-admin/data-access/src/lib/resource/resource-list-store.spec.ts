@@ -246,6 +246,71 @@ describe('ResourceListStore pagination', () => {
  * `/chains/{chainId}/shops`, so the chain goes out on every read and is never
  * one of the filters the operator set.
  */
+/**
+ * A count is what a route says beside a page, where it counts at all
+ * (backend plan 0187). The store holds it and decides nothing from it.
+ */
+describe('ResourceListStore total', () => {
+  const row = (id: string): ResourceRow => ({ id, name: id });
+
+  it('is null where the route does not count its rows', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [{ items: [row('a')], nextCursor: null }];
+    const store = storeWith(gateway);
+
+    await store.load();
+
+    expect(store.total()).toBeNull();
+  });
+
+  it('holds the count of the page, and keeps it across "Load more"', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a')], nextCursor: 'c1', total: 3 },
+      { items: [row('b')], nextCursor: null, total: 3 },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    expect(store.total()).toBe(3);
+    // The cursor alone says whether there is more, whatever the count says.
+    expect(store.hasMore()).toBe(true);
+
+    await store.loadMore();
+    expect(store.total()).toBe(3);
+    expect(store.hasMore()).toBe(false);
+  });
+
+  it('forgets the count when the next read carries none', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a')], nextCursor: null, total: 1 },
+      { items: [row('a'), row('b')], nextCursor: null },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    expect(store.total()).toBe(1);
+
+    await store.setFilter('query', 'x');
+    expect(store.total()).toBeNull();
+  });
+
+  it('takes the count a refresh reads', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [row('a'), row('b')], nextCursor: null, total: 2 },
+      { items: [row('a')], nextCursor: null, total: 1 },
+    ];
+    const store = storeWith(gateway);
+
+    await store.load();
+    await store.refresh();
+
+    expect(store.total()).toBe(1);
+  });
+});
+
 describe('ResourceListStore fixed filters', () => {
   const fixed = { supermarketId: 'sm_mercadona' };
 
@@ -483,6 +548,85 @@ describe('ResourceListStore delete', () => {
     expect(gateway.removed).toEqual(['a']);
     expect(store.rows().map((row) => row['id'])).toEqual(['b']);
     expect(gateway.queries).toHaveLength(1);
+  });
+
+  it('lowers the count by the row it took off', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      {
+        items: [
+          { id: 'a', name: 'Aldi' },
+          { id: 'b', name: 'Bonpreu' },
+        ],
+        nextCursor: 'c1',
+        total: 5,
+      },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.total()).toBe(4);
+    expect(gateway.queries).toHaveLength(1);
+  });
+
+  it('leaves the count alone for a row that was not on screen', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: 'c1', total: 5 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('z');
+
+    expect(gateway.removed).toEqual(['z']);
+    expect(store.rows()).toHaveLength(1);
+    expect(store.total()).toBe(5);
+  });
+
+  it('never counts below zero', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: null, total: 0 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.total()).toBe(0);
+  });
+
+  it('keeps no count where the route gave none', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [{ items: [{ id: 'a', name: 'Aldi' }], nextCursor: null }];
+    const store = storeWith(gateway);
+    await store.load();
+
+    await store.remove('a');
+
+    expect(store.rows()).toHaveLength(0);
+    expect(store.total()).toBeNull();
+  });
+
+  it('keeps the count when the delete fails', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [
+      { items: [{ id: 'a', name: 'Aldi' }], nextCursor: null, total: 1 },
+    ];
+    const store = storeWith(gateway);
+    await store.load();
+
+    gateway.failWith = new GatewayError({
+      code: 'conflict',
+      status: 409,
+      correlationId: '',
+    });
+    await store.remove('a');
+
+    expect(store.total()).toBe(1);
   });
 
   it('leaves the row exactly where it was when the delete fails', async () => {

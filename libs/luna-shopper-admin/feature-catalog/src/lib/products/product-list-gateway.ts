@@ -23,24 +23,50 @@ export const PRICES_AT_FILTER = 'priceScopeId';
 export const PRICE_STATE_FILTER = 'priceState';
 
 /**
+ * The filter of the product route that lists the products a scope has no
+ * price for (backend plan 0187). The route takes the scope under this name
+ * and not under {@link PRICES_AT_FILTER}, which it does not declare.
+ */
+export const WITHOUT_PRICE_FILTER = 'withoutPriceAtScopeId';
+
+/**
  * The states of a price that the gateway can list products by.
  *
- * One, and the plan names three:
+ * Two, and the plan names three:
  *
  * - **Out of date** (`stale`) is here: the price read takes `stale=true`.
+ * - **No price** (`noPrice`) is here: the product read takes
+ *   {@link WITHOUT_PRICE_FILTER} (backend plan 0187), and answers how many
+ *   products match beside the page.
  * - **Not sold here** is not. The price read declares `available`, and it
  *   reads `available=false` as true: the validation pipe converts the text
  *   to a boolean before the route's own reading of it runs, and any text that
  *   is not empty converts to true. So the read answers the products that are
  *   sold. A state the gateway cannot answer is not drawn. A row still says
  *   "Not sold here", from the `available` the gateway gives on it.
- * - **No price** is not: no read lists the products that lack a price at a
- *   scope (backend plan 0187).
  */
-export const PRICE_STATES = ['stale'] as const;
+export const PRICE_STATES = ['stale', 'noPrice'] as const;
 
-/** `stale`: the shown price is out of date. */
+/**
+ * `stale`: the shown price is out of date. `noPrice`: the scope shows no
+ * price for the product, and does not say that it does not sell it.
+ */
 export type PriceState = (typeof PRICE_STATES)[number];
+
+/** The states whose page is read from the prices and not from the products. */
+type PriceReadState = Exclude<PriceState, 'noPrice'>;
+
+/**
+ * Whether the page of a state is read from the prices.
+ *
+ * Such a row names its product and carries nothing else of it, and no filter
+ * of the product list reaches that read. "No price" is the other kind: its
+ * rows are whole products, read from the product route, so every filter of
+ * the list still applies to them.
+ */
+export function readsFromPrices(state: PriceState): state is PriceReadState {
+  return state !== 'noPrice';
+}
 
 /** A typed value as a state, or `null` for anything else. */
 export function toPriceState(value: unknown): PriceState | null {
@@ -50,9 +76,10 @@ export function toPriceState(value: unknown): PriceState | null {
 }
 
 /** What the price read is asked for each state. */
-const STATE_FILTERS: Readonly<Record<PriceState, Record<string, string>>> = {
-  stale: { stale: 'true' },
-};
+const STATE_FILTERS: Readonly<Record<PriceReadState, Record<string, string>>> =
+  {
+    stale: { stale: 'true' },
+  };
 
 /** The most products one price read may name, which the gateway enforces. */
 export const PRICE_IDS_PER_READ = 100;
@@ -83,12 +110,16 @@ export type ScopePriced = {
  * - With a scope, each page of products is followed by **one** read of the
  *   prices of those products at that scope, and each row gains its
  *   `scopePrice`. One request per page, never one per row.
- * - With a scope and a state, the page is read from the prices instead, since
- *   that is the read that can filter by state. Those rows name the product and
- *   carry nothing else of it, and say so with `partial`.
+ * - With a scope and the state "Out of date", the page is read from the
+ *   prices instead, since that is the read that can filter by that state.
+ *   Those rows name the product and carry nothing else of it, and say so with
+ *   `partial`.
+ * - With a scope and the state "No price", the page is read from the products,
+ *   narrowed by {@link WITHOUT_PRICE_FILTER} beside every other filter of the
+ *   list. The page carries `total`, the number of products that match.
  *
- * Neither filter reaches the product route, which declares neither and would
- * refuse the request.
+ * Neither filter reaches the product route under its own name, which that
+ * route does not declare and would refuse.
  *
  * Nothing here decides which price is shown. The row is the gateway's shown
  * price, as it gave it.
@@ -105,6 +136,20 @@ export function productListGateway<
 
       if (scopeId === null) {
         return products.list({ ...query, filters: rest });
+      }
+
+      if (state === 'noPrice') {
+        // The rows are whole products, and by the meaning of the state none
+        // of them has a price to show at the scope. So no price is read, and
+        // the count the route answered goes through with the page.
+        const page = await products.list({
+          ...query,
+          filters: { ...rest, [WITHOUT_PRICE_FILTER]: scopeId },
+        });
+        return {
+          ...page,
+          items: page.items.map((row) => ({ ...row, scopePrice: null })),
+        } satisfies ResourcePage<T & ScopePriced>;
       }
 
       if (state !== null) {
@@ -169,7 +214,12 @@ function split(filters: NonNullable<ResourceQuery['filters']>): {
 } {
   const rest: Record<string, FilterValue> = {};
   for (const [name, value] of Object.entries(filters)) {
-    if (name !== PRICES_AT_FILTER && name !== PRICE_STATE_FILTER) {
+    if (
+      name !== PRICES_AT_FILTER &&
+      name !== PRICE_STATE_FILTER &&
+      // Only this gateway sets it, from the scope and the state.
+      name !== WITHOUT_PRICE_FILTER
+    ) {
       rest[name] = value;
     }
   }

@@ -162,7 +162,7 @@ export function itemSource(): ResourceSource<Wire.CatalogItemView> {
   return {
     path: ITEMS_PATH,
     seed: ITEM_SEED,
-    memory: itemMemoryRules(categorySource),
+    memory: itemMemoryRules(categorySource, priceSource),
   };
 }
 

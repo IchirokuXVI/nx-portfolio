@@ -20,6 +20,13 @@ import type { ResourceRow, Wire } from '@portfolio/luna-shopper-admin/models';
 
 type Category = Wire.CatalogCategoryView;
 type ItemRow = Wire.CatalogItemView;
+type PriceRow = Wire.CatalogAdminSupermarketItemView;
+
+/**
+ * The filter of the product route that lists the products a scope has no
+ * price for (backend plan 0187).
+ */
+const WITHOUT_PRICE_PARAM = 'withoutPriceAtScopeId';
 
 /** A refusal, shaped as the gateway's own answer would be. */
 function refusal(
@@ -100,10 +107,23 @@ export function categoryMemoryRules(
 
 /** The products' rules, for the item table. */
 export function itemMemoryRules(
-  categories: () => ResourceSource<Category>
+  categories: () => ResourceSource<Category>,
+  prices: () => ResourceSource<PriceRow>
 ): ResourceMemoryRules<ItemRow> {
   return {
-    matches(row, param, value) {
+    matches(row, param, value, tables) {
+      if (param === WITHOUT_PRICE_PARAM) {
+        // As the route reads it: the scope holds no row for the product that
+        // is an answer. A price is one, and so is "not sold".
+        return !tables
+          .table(prices())
+          .some(
+            (price) =>
+              price.itemId === row.id &&
+              price.priceScopeId === value &&
+              (price.price !== null || price.available === false)
+          );
+      }
       if (param !== 'categoryId') {
         return undefined;
       }
@@ -111,6 +131,13 @@ export function itemMemoryRules(
       return (row.categories ?? []).some(
         (category) => category.id === value || category.parentId === value
       );
+    },
+
+    // The route says how many products match when it lists that worklist,
+    // and on no other read.
+    counts(filters) {
+      const scope = filters[WITHOUT_PRICE_PARAM];
+      return typeof scope === 'string' && scope !== '';
     },
 
     create(input, tables) {
