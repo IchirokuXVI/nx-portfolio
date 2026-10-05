@@ -680,6 +680,18 @@ describe('the list line descriptor', () => {
     ]);
   });
 
+  /** Admin plan 0045, target 5: on a line that waits, and on no other. */
+  it('offers the two acts on a line that waits alone', () => {
+    const line = (approvalStatus: string) =>
+      ({ ...LIST_LINE_SEED[0], approvalStatus }) as ResourceRow;
+
+    for (const action of namedActionsOf(LIST_LINES)) {
+      expect(action.available?.(line('PENDING'))).toBe(true);
+      expect(action.available?.(line('APPROVED'))).toBe(false);
+      expect(action.available?.(line('REJECTED'))).toBe(false);
+    }
+  });
+
   it('changes what a line says and how many, and nothing else', () => {
     const editable = LIST_LINES.fields
       .filter((field) => field.editable !== false)

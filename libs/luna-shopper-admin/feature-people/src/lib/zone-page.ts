@@ -70,9 +70,9 @@ import { ShoppersStatus } from './shoppers-status';
     <lib-page-header
       [backLabel]="split() ? null : ('people.zones.back' | rokuT)"
       [backLink]="listPath"
-      [heading]="name() || ('resource.form.loading' | rokuT)"
+      [heading]="name() || (headingKey() | rokuT)"
       [subtitle]="compact() ? summary() : null"
-      [tabs]="tabs()"
+      [tabs]="failed() ? [] : tabs()"
       [tabsLabel]="name()"
     >
       @if (!compact() && zone.row(); as row) {
@@ -94,9 +94,11 @@ import { ShoppersStatus } from './shoppers-status';
           'people.zones.status.MARKED_FOR_DELETION' | rokuT
         }}</span>
       }
-      <a [routerLink]="editPath()" class="button" pageMoreAction data-edit>{{
-        'people.zones.edit' | rokuT
-      }}</a>
+      @if (zone.row() !== null) {
+        <a [routerLink]="editPath()" class="button" pageAction data-edit>{{
+          'people.zones.edit' | rokuT
+        }}</a>
+      }
       @for (action of available(); track action.name) {
         <button
           (click)="run(action)"
@@ -192,6 +194,19 @@ export class ZonePage {
 
   readonly marked = computed(
     () => this.zone.row()?.status === 'MARKED_FOR_DELETION'
+  );
+
+  /** Whether the zone could not be read. The page then says why and nothing else. */
+  readonly failed = computed(() => this.zone.status() === 'error');
+
+  /**
+   * What the header says while there is no name to say: the section's own
+   * name when the read failed, and "Loading" only while a read is on its
+   * way. A failed read used to keep "Loading" as its heading, with "Edit"
+   * beside it.
+   */
+  readonly headingKey = computed(() =>
+    this.failed() ? 'people.zones.many' : 'resource.form.loading'
   );
 
   /** The actions this zone can have done to it right now. */

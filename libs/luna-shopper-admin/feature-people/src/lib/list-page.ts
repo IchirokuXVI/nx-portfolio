@@ -58,7 +58,8 @@ export interface LineRow {
  *
  * **Approve and reject are the line descriptor's.** They are the two named
  * actions `LIST_LINES` declares, with the rule for when each applies, drawn
- * beside the line they would change. A line that waits sits on the waiting
+ * beside the line they would change. That rule is a line that waits, so a
+ * line that was answered draws neither. A line that waits sits on the waiting
  * wash. Every line has "Edit", which opens its form, and "Delete".
  *
  * **Nothing here adds a line.** A line is written by somebody in the zone, and
@@ -83,7 +84,7 @@ export interface LineRow {
       [info]="info"
       [subtitle]="zoneName()"
     >
-      <a [routerLink]="editPath()" class="button" pageMoreAction data-edit>{{
+      <a [routerLink]="editPath()" class="button" pageAction data-edit>{{
         'people.lists.edit' | rokuT
       }}</a>
       @if (canDelete) {
@@ -366,8 +367,22 @@ export class ListPage {
       if (generation !== this._generation) {
         return;
       }
-      this.list.set(row as ListRow);
-      void this._nameMaker((row as ListRow).createdByUserId, generation);
+      const list = row as ListRow;
+      // A list is read by its own id, so an address that names another zone
+      // would draw this list under that zone. The list says which zone it is
+      // in: go to its own address.
+      const named = this._zoneId();
+      if (named !== null && list.zoneId !== named) {
+        const path = this._registry.rowPath('lists', id, {
+          zoneId: list.zoneId,
+        });
+        if (path !== null) {
+          void this._router.navigate([...path], { replaceUrl: true });
+          return;
+        }
+      }
+      this.list.set(list);
+      void this._nameMaker(list.createdByUserId, generation);
     } catch (error) {
       if (generation === this._generation) {
         this.list.set(null);
@@ -382,7 +397,7 @@ export class ListPage {
   run(action: NamedAction<ResourceRow>, line: ListLineRow): void {
     this.actions.start(action, line, {
       args: { name: line.content },
-      // Approving is undone by rejecting, and the other way round.
+      // Neither is a deletion: the line stays, with an answer on it.
       tone: 'primary',
       after: () => this._changed(),
     });

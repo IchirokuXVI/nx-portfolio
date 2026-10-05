@@ -195,7 +195,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         [loadingMore]="queue.loadingMore()"
         [progress]="queue.bulk()"
         [progressKey]="progressKey()"
-        [rejectKey]="rejectKey()"
+        [rejectDisabled]="!canReject()"
         [remaining]="rows().length"
         [report]="report()"
         [rows]="rows()"
@@ -203,6 +203,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         [selectedCount]="queue.selectedCount()"
         defaultView="list"
         emptyKey="harvest.shops.empty"
+        rejectKey="harvest.shops.action.ignore"
         titleKey="harvest.shops.heading"
       >
         <lib-harvest-notice
@@ -782,9 +783,12 @@ export class ShopsQueuePage {
       : 'harvest.shops.action.unignore';
   });
 
-  readonly rejectKey = computed(() =>
-    this.current()?.canIgnore === true ? 'harvest.shops.action.ignore' : null
-  );
+  /**
+   * Whether the row in front can be ignored. An ignored row cannot be ignored
+   * again, and the button stays in the bar, disabled: every button keeps its
+   * place from one row to the next.
+   */
+  readonly canReject = computed(() => this.current()?.canIgnore === true);
 
   /** The selected rows each bulk action can actually be applied to. */
   readonly ignorable = computed(() => this._selected(canIgnore));

@@ -631,7 +631,9 @@ export class ResourceListPage {
         untracked(() => {
           if (version !== this._seenVersion) {
             this._seenVersion = version;
-            void this.store.load();
+            // Every page that was loaded, so the row that is open beside
+            // the list stays in the column when it was on a later page.
+            void this.store.refresh();
           }
         });
       });

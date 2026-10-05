@@ -169,6 +169,24 @@ describe('waitingIn', () => {
     expect(waitingIn(waiting, 'brands')).toBeNull();
   });
 
+  /**
+   * The chain filter narrows all four queues, so the switch counts what the
+   * list behind it holds. Only the products and the shops are counted by
+   * chain.
+   */
+  it('answers the count of the chosen chain, where the queue is counted by chain', () => {
+    expect(waitingIn(waiting, 'products', A)).toBe(5);
+    expect(waitingIn(waiting, 'shops', A)).toBe(3);
+    // A chain with nothing waiting is a zero, which draws nothing.
+    expect(waitingIn(waiting, 'products', 'sm_other')).toBe(0);
+    expect(waitingIn(waiting, 'shops', 'sm_other')).toBe(0);
+  });
+
+  it('answers no count for a queue that is not counted by chain, once a chain is chosen', () => {
+    expect(waitingIn(waiting, 'places', A)).toBeNull();
+    expect(waitingIn(waiting, 'brands', A)).toBeNull();
+  });
+
   it('answers no count at all before anything is known', () => {
     expect(waitingIn(null, 'products')).toBeNull();
     expect(waitingIn(null, 'brands')).toBeNull();

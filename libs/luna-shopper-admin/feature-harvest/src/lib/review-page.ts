@@ -221,8 +221,11 @@ export class HarvestReviewPage {
 
   private readonly _waiting = computed(() => this._status.waiting());
 
-  /** How many wait in one queue. Nothing is drawn for none, or for unknown. */
+  /**
+   * How many wait in one queue, for the chain that is chosen when one is.
+   * Nothing is drawn for none, or for unknown.
+   */
   countOf(queue: ReviewQueue): number | null {
-    return waitingIn(this._waiting(), queue);
+    return waitingIn(this._waiting(), queue, this.chain.chain());
   }
 }

@@ -276,7 +276,7 @@ export interface QueueReport {
                 <button
                   (click)="reject.emit()"
                   [attr.aria-label]="key | rokuT"
-                  [disabled]="busy()"
+                  [disabled]="busy() || rejectDisabled()"
                   class="danger"
                   type="button"
                   data-action="reject"
@@ -806,6 +806,17 @@ export class QueueFrame {
    * nothing to call.
    */
   readonly rejectKey = input<string | null>(null);
+
+  /**
+   * Whether "no" cannot be said to the row in front, on a queue that has a
+   * "no" for other rows.
+   *
+   * The button is then drawn disabled and keeps its place. Taking it away
+   * moved Skip into its slot, so the second of two quick presses on Skip
+   * landed where the next row's "no" was about to be drawn. A queue with no
+   * such action at all states no {@link rejectKey}, and its bar never changes.
+   */
+  readonly rejectDisabled = input(false);
 
   /**
    * A shorter name for "no", for the bar on a phone, where three buttons share

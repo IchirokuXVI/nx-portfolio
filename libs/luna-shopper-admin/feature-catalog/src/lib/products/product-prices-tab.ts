@@ -10,6 +10,7 @@ import {
   ActivatedRoute,
   NavigationEnd,
   Router,
+  RouterLink,
   RouterOutlet,
 } from '@angular/router';
 import {
@@ -26,6 +27,7 @@ import {
   ResourceChanges,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  harvestRunPath,
   localizedTextValue,
   type ScopeLevel,
   type Wire,
@@ -128,6 +130,12 @@ export interface PriceRowView {
   readonly source: string;
   /** Whether a run wrote it, and when it was first seen, as a day. */
   readonly run: string;
+  /**
+   * Where that run is, or `null` when no run wrote the price. `sourceRunId`
+   * is the harvest run's own id: the harvester stamps it on every price it
+   * writes, and the undo of a run deletes by it.
+   */
+  readonly runPath: readonly string[] | null;
   /** "Seen" a day, or "Until" a day for a window that closed. */
   readonly whenKey: string;
   readonly when: string;
@@ -215,6 +223,7 @@ export interface ChainPanelView {
 @Component({
   selector: 'lib-product-prices-tab',
   imports: [
+    RouterLink,
     RouterOutlet,
     ScopeMark,
     PopoverSheet,
@@ -363,11 +372,11 @@ export interface ChainPanelView {
                       <span class="behind-main">
                         <span>{{ row.source }}</span>
                         <span class="muted small">
-                          @if (row.run !== '') {
-                            {{
+                          @if (row.runPath; as path) {
+                            <a [routerLink]="path" data-run>{{
                               'catalog.productPrices.run'
                                 | rokuT: { date: row.run }
-                            }}
+                            }}</a>
                           }
                           {{ row.whenKey | rokuT: { date: row.when } }}
                         </span>
@@ -1057,6 +1066,10 @@ export class ProductPricesTab {
             row.sourceRunId === null || row.sourceRunId === undefined
               ? ''
               : formatDay(row.observedAt, locale),
+          runPath:
+            row.sourceRunId === null || row.sourceRunId === undefined
+              ? null
+              : harvestRunPath(row.sourceRunId),
           whenKey:
             state === 'ended'
               ? 'catalog.productPrices.until'

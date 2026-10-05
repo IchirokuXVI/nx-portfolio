@@ -232,6 +232,9 @@ export class HarvestHeader {
   constructor() {
     this._status.followRuns(true);
     inject(DestroyRef).onDestroy(() => this._status.followRuns(false));
+    // Read at once. The rail's read is a minute apart while no Harvest tab is
+    // open, so without this the run line could be a minute old on entry.
+    this._status.refresh();
 
     effect(() => {
       const chain = this._run()?.supermarketId ?? '';

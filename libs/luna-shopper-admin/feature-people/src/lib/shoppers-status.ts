@@ -18,6 +18,11 @@ import {
  * the count on the rail is on every screen. The store counts its watchers, so
  * the overview opening and closing does not stop these reads.
  *
+ * **It never stops watching, and the store stops reading for it.** A sign out
+ * suspends the store, which drops the document and its timer, and the next
+ * sign in resumes it (`dashboardFollowsSession`). So the counts are `null`
+ * between two sessions, and the next admin never sees the last one's.
+ *
  * Root scoped, like the store it reads.
  */
 @Injectable({ providedIn: 'root' })

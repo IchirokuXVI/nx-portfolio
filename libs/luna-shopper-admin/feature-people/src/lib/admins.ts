@@ -3,6 +3,7 @@ import {
   type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type {
+  Deployment,
   InfoContent,
   ResourcePage,
 } from '@portfolio/luna-shopper-admin/models';
@@ -50,16 +51,53 @@ export function adminsPath(tab?: AdminsTab): readonly string[] {
 }
 
 /**
- * What the info button of Admins says (target 7).
+ * What the info button of Admins says (target 7), in a cluster.
  *
  * The command is the one that makes an account. It is text to copy and not a
  * sentence, so it is no translation key.
+ *
+ * **It runs inside the auth pod, with a terminal.** The command asks for the
+ * password twice and never takes it as an argument, so it needs a terminal to
+ * ask on: `-it`. The image holds the operator commands as `admin-cli.js`
+ * beside `main.js` (`apps/luna-shopper-backend/auth/src/admin-cli.ts`), the
+ * deployment is `luna-shopper-backend-auth`, and the namespace is the chart's
+ * (`k8s/helm/values.yaml`).
+ *
+ * It used to name `npx nx run luna-shopper-backend-auth:admin:create`. That
+ * target cannot read a password: Nx gives a run-commands target no terminal,
+ * as the auth project's own `project.json` says.
  */
 export const ADMINS_INFO: InfoContent = {
   title: 'people.admins.many',
   points: ['people.admins.info.readOnly', 'people.admins.info.add'],
-  command: 'npx nx run luna-shopper-backend-auth:admin:create',
+  command:
+    'kubectl -n nx-portfolio exec -it deploy/luna-shopper-backend-auth -- node admin-cli.js create <username>',
 };
+
+/**
+ * The same, on a developer machine, where the auth service runs from the
+ * checkout and there is no pod to enter. Run from the workspace root, and
+ * directly: the Nx target of the same name has no terminal to ask on.
+ */
+export const ADMINS_INFO_LOCAL: InfoContent = {
+  title: 'people.admins.many',
+  points: ['people.admins.info.readOnly', 'people.admins.info.addLocal'],
+  command:
+    'node apps/luna-shopper-backend/auth/src/app/admin/cli/cli.js create <username>',
+};
+
+/**
+ * Which of the two the page shows, by the deployment the app already knows.
+ *
+ * The cluster form for staging and production, and for a deployment that is
+ * not known: an operator who cannot tell where they are is more likely in
+ * front of a cluster than of a checkout.
+ */
+export function adminsInfo(
+  deployment: Deployment | null | undefined
+): InfoContent {
+  return deployment === 'development' ? ADMINS_INFO_LOCAL : ADMINS_INFO;
+}
 
 /**
  * Where the accounts are read from.

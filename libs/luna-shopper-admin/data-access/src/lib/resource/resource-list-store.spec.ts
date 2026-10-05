@@ -354,6 +354,114 @@ describe('ResourceListStore fixed filters', () => {
   });
 });
 
+/**
+ * A list that stays on screen while one of its rows is written reads again
+ * (admin plan 0042). It keeps as many rows as were loaded, so the row that is
+ * open beside it does not leave the column when it was on a later page.
+ */
+describe('ResourceListStore refresh', () => {
+  const page = (names: string[], nextCursor: string | null) => ({
+    items: names.map((name) => ({ id: name.toLowerCase(), name })),
+    nextCursor,
+  });
+
+  async function twoPages() {
+    const gateway = new FakeGateway();
+    gateway.pages = [page(['Aldi', 'Bonpreu'], 'c1'), page(['Consum'], null)];
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+    await store.load();
+    await store.loadMore();
+    expect(store.rows()).toHaveLength(3);
+    return { gateway, store };
+  }
+
+  it('reads every page that was loaded, and shows the rows as they are now', async () => {
+    const { gateway, store } = await twoPages();
+    gateway.queries.length = 0;
+    gateway.pages = [
+      page(['Aldi', 'Bonpreu'], 'c1'),
+      page(['Consum Centro'], null),
+    ];
+
+    await store.refresh();
+
+    expect(gateway.queries.map((query) => query.cursor)).toEqual([
+      undefined,
+      'c1',
+    ]);
+    expect(store.rows().map((row) => row['name'])).toEqual([
+      'Aldi',
+      'Bonpreu',
+      'Consum Centro',
+    ]);
+    expect(store.hasMore()).toBe(false);
+  });
+
+  it('keeps the rows on screen while it reads, with no loading state', async () => {
+    const { gateway, store } = await twoPages();
+    gateway.pages = [page(['Aldi', 'Bonpreu'], 'c1'), page(['Consum'], null)];
+
+    const reading = store.refresh();
+
+    expect(store.status()).toBe('ready');
+    expect(store.rows()).toHaveLength(3);
+    await reading;
+    expect(store.rows()).toHaveLength(3);
+  });
+
+  it('stops at as many rows as were shown, and still offers the rest', async () => {
+    const gateway = new FakeGateway();
+    gateway.pages = [page(['Aldi', 'Bonpreu'], 'c1')];
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+    await store.load();
+    gateway.queries.length = 0;
+    gateway.pages = [page(['Aldi', 'Bonpreu'], 'c1'), page(['Consum'], null)];
+
+    await store.refresh();
+
+    expect(gateway.queries).toHaveLength(1);
+    expect(store.rows()).toHaveLength(2);
+    expect(store.hasMore()).toBe(true);
+  });
+
+  it('keeps the rows and says so when the read fails', async () => {
+    const { gateway, store } = await twoPages();
+    gateway.failWith = new Error('nothing answered');
+
+    await store.refresh();
+
+    expect(store.rows()).toHaveLength(3);
+    expect(store.status()).toBe('ready');
+    expect(store.error()).not.toBeNull();
+  });
+
+  it('reads from the start when nothing is loaded', async () => {
+    const gateway = new FakeGateway();
+    const store = new ResourceListStore<ResourceRow>(descriptor, gateway);
+    gateway.pages = [page(['Aldi'], null)];
+
+    await store.refresh();
+
+    expect(store.rows()).toHaveLength(1);
+  });
+
+  it('gives way to a filter that is set while it reads', async () => {
+    const { gateway, store } = await twoPages();
+    gateway.pages = [
+      page(['Aldi', 'Bonpreu'], 'c1'),
+      page(['Zeta'], null),
+      page(['Consum'], null),
+    ];
+
+    const refreshing = store.refresh();
+    const filtering = store.setFilter('query', 'zeta');
+    await Promise.all([refreshing, filtering]);
+
+    // The filter's own read is what is left on screen.
+    expect(store.rows().map((row) => row['name'])).toEqual(['Zeta']);
+  });
+});
+
 describe('ResourceListStore delete', () => {
   it('takes the row off the screen without reading the list again', async () => {
     const gateway = new FakeGateway();

@@ -1,17 +1,21 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DestroyRef,
   inject,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { DashboardStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  DashboardStore,
+  DeploymentStore,
+} from '@portfolio/luna-shopper-admin/data-access';
 import { PageHeader, type PageTab } from '@portfolio/luna-shopper-admin/ui';
 import {
   ADMIN_ACCOUNTS_TAB,
   ADMIN_FAILED_SIGN_INS_TAB,
-  ADMINS_INFO,
+  adminsInfo,
   adminsPath,
 } from './admins';
 
@@ -39,7 +43,7 @@ import {
   template: `
     <lib-page-header
       [heading]="'shell.sections.admins' | rokuT"
-      [info]="info"
+      [info]="info()"
       [tabs]="tabs"
       [tabsLabel]="'shell.sections.admins' | rokuT"
     />
@@ -59,7 +63,10 @@ import {
 export class AdminsPage {
   private readonly _store = inject(DashboardStore);
 
-  readonly info = ADMINS_INFO;
+  private readonly _deployments = inject(DeploymentStore);
+
+  /** How an admin is added where this app is talking to. */
+  readonly info = computed(() => adminsInfo(this._deployments.deployment()));
 
   readonly tabs: readonly PageTab[] = [
     {

@@ -867,6 +867,28 @@ describe('the Lists tab of a zone', () => {
   });
 });
 
+/**
+ * A zone or a person that cannot be read says so, under the section's own
+ * name. It used to keep "Loading" as its heading, with "Edit" beside it.
+ */
+describe('a person and a zone that cannot be read', () => {
+  it.each([
+    [`${PEOPLE}/nobody`, 'lib-person-page', 'people.users.many'],
+    [`${ZONES}/nowhere`, 'lib-zone-page', 'people.zones.many'],
+  ])('says so at %s, with no Edit and no tabs', async (url, page, heading) => {
+    const fixture = await bootShoppers(url);
+    await settle(fixture);
+
+    const header = find(fixture, `${page} lib-page-header`);
+    expect(header?.textContent).toContain(heading);
+    expect(header?.textContent).not.toContain('resource.form.loading');
+    expect(find(fixture, `${page} [data-edit]`)).toBeNull();
+    expect(find(fixture, `${page} [data-action]`)).toBeNull();
+    expect(find(fixture, `${page} lib-page-tabs a`)).toBeNull();
+    expect(find(fixture, `${page} .state.error`)).not.toBeNull();
+  });
+});
+
 describe('a list of a zone', () => {
   const address = `${ZONES}/${KITCHEN.id}/lists/${WEEKLY.id}`;
   const lineRow = (fixture: ComponentFixture<ShoppersTestHost>, id: string) =>
@@ -874,6 +896,23 @@ describe('a list of a zone', () => {
   const pending = WEEKLY.lines.find(
     (line) => line.approvalStatus === 'PENDING'
   );
+
+  /**
+   * A list is read by its own id. So an address that names another zone goes
+   * to the list's own address, and never draws the list under that zone.
+   */
+  it('goes to the list own zone when the address names another one', async () => {
+    const other = ZONE_SEED.find((zone) => zone.id !== KITCHEN.id);
+    expect(other).toBeDefined();
+
+    const fixture = await bootShoppers(
+      `${ZONES}/${other?.id}/lists/${WEEKLY.id}`
+    );
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(currentUrl()).toBe(address);
+  });
 
   // The fixture is what makes the specs below mean anything.
   it('has a line that waits in the fixture', () => {
@@ -909,6 +948,24 @@ describe('a list of a zone', () => {
         button.getAttribute('data-action')
       )
     ).toEqual(['approve-line', 'reject-line']);
+  });
+
+  /** Target 5: "Approve" and "Reject" are on a line that waits, and on no other. */
+  it('offers neither answer on a line that was answered', async () => {
+    const fixture = await bootShoppers(address);
+    const answered = WEEKLY.lines.filter(
+      (line) => line.approvalStatus !== 'PENDING'
+    );
+
+    expect(answered.length).toBeGreaterThan(0);
+    for (const line of answered) {
+      const row = lineRow(fixture, line.id);
+
+      expect(row.classList).not.toContain('waiting');
+      expect([...row.querySelectorAll('[data-action]')]).toEqual([]);
+      // What every line has is still there.
+      expect(row.querySelector('[data-edit-line]')).not.toBeNull();
+    }
   });
 
   it('rejects a line through the service, once confirmed', async () => {

@@ -26,6 +26,11 @@ const REVIEW_LINK = harvestReviewPath().join('/').replace('//', '/');
  * again when the browser tab becomes visible, which is the "again when the tab
  * gains focus" of the plan.
  *
+ * **It never stops watching, and the store stops reading for it.** A sign out
+ * suspends the store, which drops the document and its timer, and the next
+ * sign in resumes it (`dashboardFollowsSession`). So the counts are `null`
+ * between two sessions, and the next admin never sees the last one's.
+ *
  * Root scoped, like the store it reads.
  */
 @Injectable({ providedIn: 'root' })
