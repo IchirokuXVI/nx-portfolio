@@ -266,13 +266,13 @@ class ListStub {}
 /**
  * The page the lines are under. It has a component, and that is the point.
  *
- * It also stands in for the split that holds a pane: a record page asks only
- * whether one is above it.
+ * It also stands in for the split whose column lists the lines: a record
+ * page asks the split above it which resource that column lists.
  */
 @Component({
   imports: [RouterOutlet],
   template: '<router-outlet />',
-  providers: [{ provide: ResourceSplitPage, useValue: {} }],
+  providers: [{ provide: ResourceSplitPage, useValue: { descriptor: LINES } }],
 })
 class PlantPage {}
 
@@ -515,6 +515,17 @@ describe('RecordPage, as a pane of a split', () => {
   it('draws the way back on a wide screen when no split holds the page', async () => {
     const mounted = await mount('/lines/l1', false, true);
 
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+
+  /**
+   * The column lists the lines. A plant in the same outlet is a page of its
+   * own, and nothing but its own link leads back from it.
+   */
+  it('draws the way back of a record of another resource inside the split', async () => {
+    const mounted = await mount('/plants/p1/details', false, true);
+
+    expect(one(mounted, 'h1')?.textContent).toBe('Cordoba plant');
     expect(one(mounted, 'a.page-back')).not.toBeNull();
   });
 });
