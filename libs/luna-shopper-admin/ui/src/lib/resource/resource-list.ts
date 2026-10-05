@@ -221,7 +221,7 @@ export interface RowAction {
         </button>
       </div>
     } @else if (empty()) {
-      <p class="state" role="status">{{ 'resource.list.empty' | rokuT }}</p>
+      <p class="state" role="status">{{ emptyKey() | rokuT }}</p>
     } @else if (layout() === 'rows') {
       <!-- A column beside the open row: a name, one line, and the row's
            states. No delete here, since the open row's own page has it. -->
@@ -880,6 +880,8 @@ export class ResourceList {
   /** The key for whatever went wrong, chosen by the page. */
   readonly errorKey = input('resource.error.unknown');
   readonly empty = input(false);
+  /** The key for what an empty list says, chosen by the page. */
+  readonly emptyKey = input('resource.list.empty');
   readonly noMatch = input(false);
   /** The search holds a record ID that no row of this resource has. */
   readonly idNotFound = input(false);

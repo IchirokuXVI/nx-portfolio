@@ -57,4 +57,11 @@ import { SourcesGateway } from './sources-gateway';
 export class SourcesTab {
   readonly gateway = inject(SourcesGateway);
   readonly shell = inject(HarvestShell);
+
+  constructor() {
+    // The gateway is one for the whole app and outlives this part, so a read
+    // that failed on an earlier visit would still be the answer on this one.
+    // Each visit reads again.
+    this.gateway.retryList();
+  }
 }

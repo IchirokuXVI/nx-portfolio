@@ -81,6 +81,9 @@ export const SOURCES = defineResource<Source>({
       name: 'workers',
       label: 'harvest.sources.field.workers',
       integer: true,
+      // The column takes no null. An emptied box was left out of what the
+      // form sent, so the save kept the old number and said it went through.
+      required: true,
       // The limits of `UpsertSupermarketSourceDto`.
       min: 1,
       max: 64,
@@ -89,6 +92,8 @@ export const SOURCES = defineResource<Source>({
       kind: 'number',
       name: 'maxRequestsPerSecond',
       label: 'harvest.sources.field.rate',
+      // For the reason `workers` is.
+      required: true,
       min: 0.1,
       max: 100,
     },
@@ -112,6 +117,10 @@ export const SOURCES = defineResource<Source>({
       name: 'config',
       label: 'harvest.sources.field.config',
       help: 'harvest.sources.config.hint',
+      // An emptied box is an answer: "no settings at all", as the help says.
+      // With this the form sends `{}` for it. Without it the form sent
+      // nothing, and the save kept the settings that were there.
+      nullable: true,
     },
     {
       kind: 'date',
@@ -147,6 +156,8 @@ export const SOURCES = defineResource<Source>({
     // The chain and how it is fetched. The state beside them says whether it
     // is, and the rest is on the record.
     compact: ['supermarketId', 'adapterKey'],
+    // A list with no source is why no run can be started, so it says that.
+    empty: 'harvest.sources.empty',
   },
 
   // Raising either number too far gets the chain to block the crawl, which

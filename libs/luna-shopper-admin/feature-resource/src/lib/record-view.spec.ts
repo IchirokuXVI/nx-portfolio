@@ -142,6 +142,7 @@ const SHOPS = defineResource<Shop>({
       label: 'shops.key',
       editable: false,
       setBy: 'shops.keySetBy',
+      help: 'shops.keyHelp',
     },
     { kind: 'number', name: 'visits', label: 'shops.visits', editable: false },
     { kind: 'text', name: 'note', label: 'shops.note', nullable: true },
@@ -335,6 +336,34 @@ describe('RecordView', () => {
       expect(rowOf(drawn.element, 'shops.open').textContent).toContain(
         'resource.value.yes'
       );
+    });
+
+    /**
+     * The help of a field says what its value means, and a value is read more
+     * often than it is changed. A field that is never a control ("May be
+     * fetched" of a chain source) had its help drawn nowhere at all.
+     */
+    it('draws the help of a field under its value', async () => {
+      drawn = await draw();
+
+      const helpOf = (label: string) =>
+        rowOf(drawn.element, label)
+          .querySelector('[data-help]')
+          ?.textContent?.trim();
+
+      expect(helpOf('shops.slug')).toBe('shops.slugHelp');
+      expect(helpOf('shops.key')).toBe('shops.keyHelp');
+      // A field with no help has no line.
+      expect(helpOf('shops.note')).toBeUndefined();
+
+      // And under a value the form cannot change, beside the lock.
+      drawn.store.edit();
+      await settle(drawn.fixture);
+
+      expect(helpOf('shops.key')).toBe('shops.keyHelp');
+      expect(
+        rowOf(drawn.element, 'shops.key').querySelector('lib-locked-value')
+      ).not.toBeNull();
     });
 
     it('holds the date and the ID in the Record block, and in no section', async () => {

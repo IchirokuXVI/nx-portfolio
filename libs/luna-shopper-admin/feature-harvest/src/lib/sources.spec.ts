@@ -13,6 +13,7 @@ import {
   isEditable,
   recordLayout,
   toInput,
+  validateDraft,
   type EnumField,
   type NamedAction,
   type ReferenceField,
@@ -256,6 +257,56 @@ describe('SOURCES, the descriptor', () => {
     expect(added).toMatchObject({
       supermarketId: NEW_CHAIN,
       adapterKey: 'manual',
+    });
+  });
+
+  /**
+   * The help says "An empty box means no settings at all". The box was left
+   * out of what the form sent, so the gateway put the old settings back and
+   * the save said it went through.
+   */
+  it('an emptied box is saved as no settings at all', async () => {
+    const { gateway, harvest } = setup();
+    await harvest.upsertSource(MERCADONA, {
+      adapterKey: 'mercadona-api',
+      config: { warehouse: 'mad1' },
+    });
+    const row: Source = {
+      ...(await harvest.readSource(MERCADONA)),
+      chainName: 'Mercadona',
+    };
+    const upsert = jest.spyOn(harvest, 'upsertSource');
+
+    const original = draftFor(SOURCES, row, 'edit');
+    const draft = { ...original, config: '' };
+
+    expect(validateDraft(SOURCES, draft, 'edit', original)).toEqual({});
+    const input = toInput(SOURCES, draft, 'edit', original);
+    expect(input).toEqual({ config: {} });
+
+    const saved = await gateway.update(MERCADONA, input);
+
+    expect(upsert.mock.calls[0][1]).toMatchObject({ config: {} });
+    expect(saved.config).toEqual({});
+  });
+
+  /**
+   * Neither column takes a null. An emptied box was left out of what the
+   * form sent, so the old number was kept and nothing said so.
+   */
+  it('refuses an emptied workers or rate box, under the box', () => {
+    const original = draftFor(SOURCES, source(), 'edit');
+
+    expect(
+      validateDraft(
+        SOURCES,
+        { ...original, workers: '', maxRequestsPerSecond: '' },
+        'edit',
+        original
+      )
+    ).toEqual({
+      workers: [{ kind: 'key', key: 'resource.error.required' }],
+      maxRequestsPerSecond: [{ kind: 'key', key: 'resource.error.required' }],
     });
   });
 

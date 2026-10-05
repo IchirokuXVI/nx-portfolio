@@ -200,7 +200,10 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
                   />
                 </lib-field-row>
               } @else {
-                <lib-field-row [label]="field.label | rokuT">
+                <lib-field-row
+                  [help]="field.help ?? null"
+                  [label]="field.label | rokuT"
+                >
                   @if (form) {
                     <lib-locked-value [reason]="lockReason(field)">
                       <lib-field-value

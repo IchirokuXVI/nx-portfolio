@@ -17,6 +17,7 @@ import {
   RESOURCE_LIST_EMBED,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { SOURCES } from './sources';
+import { SourcesGateway } from './sources-gateway';
 import { SourcesTab } from './sources-tab';
 
 /**
@@ -119,6 +120,50 @@ describe('the Sources part of Setup', () => {
       (list as Node).compareDocumentPosition(always as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
+  });
+
+  /** With no source, the list says what that costs: no run can be started. */
+  it('says that no chain has a source, when the list is empty', async () => {
+    const harvest = new HarvestMemory();
+    jest
+      .spyOn(harvest, 'listSources')
+      .mockResolvedValue({ items: [], nextCursor: null });
+
+    const { host } = await render(harvest);
+
+    expect(host.querySelector('lib-resource-list')?.textContent).toContain(
+      'harvest.sources.empty'
+    );
+    expect(host.textContent).not.toContain('resource.list.empty');
+  });
+
+  /**
+   * The gateway is one for the whole app, so what it remembers outlives this
+   * part. Where the harvester is not deployed the notice has no retry, so a
+   * read that failed once was the answer of every later visit.
+   */
+  it('reads the list again on each visit, after a read that failed', async () => {
+    const harvest = new HarvestMemory();
+    const list = jest
+      .spyOn(harvest, 'listSources')
+      .mockRejectedValueOnce(
+        new GatewayError({ code: '', status: 0, correlationId: '' })
+      );
+
+    const first = await render(harvest);
+    expect(first.host.querySelector('lib-harvest-notice')).not.toBeNull();
+    expect(TestBed.inject(SourcesGateway).listFailed()).toBe(true);
+    first.fixture.destroy();
+
+    // The same injector, so the same gateway: a second visit to the tab.
+    const fixture = TestBed.createComponent(SourcesTab);
+    fixture.detectChanges();
+    await settle(fixture);
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('lib-harvest-notice')).toBeNull();
+    expect(host.querySelector('lib-resource-list-page')).not.toBeNull();
   });
 
   /** The retry of the notice reads the list again, from the start. */

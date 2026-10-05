@@ -1623,6 +1623,7 @@
       "many": "Chain sources",
       "noun": "source",
       "add": "Add a source",
+      "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
       "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
       "exists": "This chain already has a source.",
       "adapterGone": "A source can no longer be fetched this way. Choose another.",
@@ -1655,12 +1656,12 @@
       },
       "confirm": {
         "stop": {
-          "heading": "Stop fetching {{name}}?",
+          "heading": "Stop fetching this chain?",
           "body": "No run may fetch {{name}} until somebody lets it be fetched again.",
           "confirm": "Stop fetching"
         },
         "allow": {
-          "heading": "Let {{name}} be fetched?",
+          "heading": "Let this chain be fetched?",
           "body": "A run may then fetch {{name}} from its storefront. This starts no run by itself.",
           "confirm": "Let it be fetched"
         }
@@ -1718,7 +1719,7 @@
       },
       "confirm": {
         "discoverAgain": {
-          "heading": "Discover {{name}} again?",
+          "heading": "Queue this postal code again?",
           "body": "This puts {{name}} back in the queue and ignores the thirty day wait, which is the only reason to press it. It fetches from a public service when its turn comes. The queue runs one code at a time, so the code is queued and not started.",
           "confirm": "Queue it again"
         }
