@@ -50,6 +50,21 @@ describe('toRecordValue', () => {
     });
   });
 
+  /** Admin plan 0056, section 2: "Open on a map" in place of the address. */
+  it('hands the words of a link on, for an address that states them', () => {
+    expect(
+      read(
+        { ...text, format: 'url', linkLabel: 'shops.openOnMap' },
+        'https://osm.test/1'
+      )
+    ).toEqual({
+      kind: 'link',
+      text: 'https://osm.test/1',
+      href: 'https://osm.test/1',
+      label: 'shops.openOnMap',
+    });
+  });
+
   it('reads a code in the mono face', () => {
     expect(read({ ...text, format: 'code' }, '8480000')).toEqual({
       kind: 'text',

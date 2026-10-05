@@ -1,5 +1,6 @@
-import { inject } from '@angular/core';
+import { inject, Injector } from '@angular/core';
 import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
+import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
   defineResource,
@@ -10,10 +11,23 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { PRICE_SCOPE_KIND_OPTIONS, priceScopeMark } from './catalog-enums';
 import { priceScopeSource } from './catalog-sources';
-import { ChainContext } from './chains/chain-context';
+import { ChainCounts } from './chains/chain-context';
 
 /** A set of shops that share one price, as the gateway describes it. */
 export type PriceScope = Wire.CatalogPriceScopeView;
+
+/**
+ * The page of the chain a list of scopes is a tab of, or `null` anywhere
+ * else (admin plan 0056, section 3.1).
+ *
+ * Asked when a row is drawn and not when the descriptor's states and actions
+ * are built: the page of one scope builds them while it is itself being
+ * built, and it cannot be asked for its own record then.
+ */
+function chainPage(injector: Injector) {
+  const page = injector.get(RECORD_CONTEXT, null, { optional: true });
+  return page !== null && page.descriptor.name === 'supermarkets' ? page : null;
+}
 
 /**
  * What a priority reads as (plan 0105, section 6).
@@ -196,10 +210,10 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
    * only on a list that is a tab of one.
    */
   rowStates: () => {
-    const chain = inject(ChainContext, { optional: true });
+    const injector = inject(Injector);
 
     return (row) =>
-      chain !== null && chain.chain()?.defaultPriceScopeId === row.id
+      chainPage(injector)?.row()?.['defaultPriceScopeId'] === row.id
         ? [{ label: 'catalog.priceScopes.state.default', tone: 'good' }]
         : [];
   },
@@ -221,20 +235,31 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
      * this is the screen declining to offer a mistake.
      */
     named: () => {
-      const chain = inject(ChainContext, { optional: true });
+      const injector = inject(Injector);
+      const counts = inject(ChainCounts);
 
-      return chain === null
-        ? []
-        : [
-            {
-              name: 'makeDefault',
-              label: 'catalog.priceScopes.makeDefault',
-              available: (row) =>
-                row.kind !== 'STORE' &&
-                chain.chain()?.defaultPriceScopeId !== row.id,
-              run: (row) => chain.setDefaultScope(row.id),
-            },
-          ];
+      return [
+        {
+          name: 'makeDefault',
+          label: 'catalog.priceScopes.makeDefault',
+          available: (row) => {
+            // Until the chain is read nobody knows which scope is the
+            // default, so nothing is offered.
+            const chain = chainPage(injector)?.row() ?? null;
+            return (
+              chain !== null &&
+              row.kind !== 'STORE' &&
+              chain['defaultPriceScopeId'] !== row.id
+            );
+          },
+          run: async (row) => {
+            const chain = chainPage(injector);
+            if (chain !== null) {
+              await counts.setDefaultScope(chain.id, row.id);
+            }
+          },
+        },
+      ];
     },
   },
 

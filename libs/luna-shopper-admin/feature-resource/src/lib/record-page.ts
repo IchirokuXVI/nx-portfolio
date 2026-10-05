@@ -35,6 +35,7 @@ import {
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  fieldOf,
   hasDetailScreen,
   idOf,
   isEditable,
@@ -43,10 +44,12 @@ import {
   RECORD_DETAILS_TAB,
   recordChildCount,
   recordTabs,
+  toCell,
   type AnyResourceDescriptor,
   type FieldDescriptor,
   type NamedAction,
   type RecordChild,
+  type RenderOptions,
   type ResourceDraft,
   type ResourceRow,
   type RowState,
@@ -55,6 +58,7 @@ import {
   CautionLine,
   ConfirmDialog,
   PageHeader,
+  Viewport,
   type PageTab,
 } from '@portfolio/luna-shopper-admin/ui';
 import { TrashIcon } from '@portfolio/shared/ui';
@@ -63,15 +67,21 @@ import { RECORD_CONTEXT, type RecordContext } from './record-context';
 import type { LeaveAware } from './record-leave-guard';
 import { RecordView, sentenceStart, type RecordRefusal } from './record-view';
 import { ResourceChanges } from './resource-changes';
-import { parentsFromRoute, ResourceRegistry } from './resource-registry';
+import {
+  parentsFromRoute,
+  ResourceReferences,
+  ResourceRegistry,
+} from './resource-registry';
 import {
   RECORD_TAB,
+  RECORD_YIELDS_TO,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
   RESOURCE_ID_PARAM,
   routeParam,
 } from './resource-route-data';
+import { ResourceSplitPage } from './resource-split-page';
 
 /**
  * The field kinds a query parameter can fill in on a new record.
@@ -122,6 +132,25 @@ const ADDED_STATE = 'added';
  * ID, so every tab and every panel is built again for another record. The
  * page provides `RECORD_CONTEXT`, which is how each of them learns the
  * record.
+ *
+ * **The page is also a pane** (admin plan 0056, section 2). Beside the column
+ * that lists its rows it draws no way back, because the column is the way
+ * back. Four rules hold for any record, and none of them names a resource:
+ *
+ * - **The way back names the parent.** A record under a row of another
+ *   resource says "Back to Mercadona", and a record under none says the name
+ *   of its list.
+ * - **The line under the heading** is the line the row has in a column, when
+ *   the descriptor states `list.brief`: "Sevilla 41004" for a shop. The
+ *   heading is then the heading of that row too, where the descriptor wrote
+ *   one, and every sentence about the record says that same name.
+ * - **A record under the wrong parent** goes to its own address. A shop is
+ *   read by its own ID, so an address that names another chain would draw it
+ *   under that chain's name.
+ * - **A page gives way to its child.** A route that states
+ *   `RECORD_YIELDS_TO` names one of its child routes. Below 72 rem, while a
+ *   route under that child is open, this page draws no header and no tabs:
+ *   the child is then the page.
  */
 @Component({
   selector: 'lib-record-page',
@@ -149,70 +178,75 @@ const ADDED_STATE = 'added';
          way back do not arrive a moment after the page. Each thing put in the
          header is the one element of its own block, which is what lets it
          reach its slot. -->
-    <lib-page-header
-      [backLabel]="descriptor.labels.many | rokuT"
-      [backLink]="listUrl"
-      [heading]="heading()"
-      [info]="descriptor.info ?? null"
-      [loading]="status === 'loading'"
-      [moreLabel]="moreLabel()"
-      [tabs]="tabs()"
-      [tabsLabel]="tabsLabel()"
-      overflow="menu"
-    >
-      @for (chip of chips(); track chip.label) {
-        <span
-          [class.good]="chip.tone === 'good'"
-          [class.waiting]="chip.tone === 'waiting'"
-          class="chip"
-          pageChip
-          >{{ chip.label | rokuT: chip.args ?? {} }}</span
-        >
-      }
+    <!-- The wrapper is no box of its own: it only takes the header away
+         while a child of this page is the page (RECORD_YIELDS_TO). -->
+    <div [class.yields]="givesWay()" class="head">
+      <lib-page-header
+        [backLabel]="backLabel()"
+        [backLink]="listUrl"
+        [heading]="heading()"
+        [info]="descriptor.info ?? null"
+        [loading]="status === 'loading'"
+        [moreLabel]="moreLabel()"
+        [subtitle]="subtitle()"
+        [tabs]="tabs()"
+        [tabsLabel]="tabsLabel()"
+        overflow="menu"
+      >
+        @for (chip of chips(); track chip.label) {
+          <span
+            [class.good]="chip.tone === 'good'"
+            [class.waiting]="chip.tone === 'waiting'"
+            class="chip"
+            pageChip
+            >{{ chip.label | rokuT: chip.args ?? {} }}</span
+          >
+        }
 
-      @if (canEdit()) {
-        <button (click)="edit()" pageAction type="button" data-edit>
-          {{ 'resource.action.edit' | rokuT }}
-        </button>
-      }
+        @if (canEdit()) {
+          <button (click)="edit()" pageAction type="button" data-edit>
+            {{ 'resource.action.edit' | rokuT }}
+          </button>
+        }
 
-      @for (action of plainActions(); track action.name) {
-        <button
-          (click)="run(action)"
-          [attr.data-action]="action.name"
-          [disabled]="working()"
-          pageMoreAction
-          type="button"
-        >
-          {{ action.label | rokuT }}
-        </button>
-      }
+        @for (action of plainActions(); track action.name) {
+          <button
+            (click)="run(action)"
+            [attr.data-action]="action.name"
+            [disabled]="working()"
+            pageMoreAction
+            type="button"
+          >
+            {{ action.label | rokuT }}
+          </button>
+        }
 
-      @for (action of dangerActions(); track action.name) {
-        <button
-          (click)="run(action)"
-          [attr.data-action]="action.name"
-          [disabled]="working()"
-          pageMoreDanger
-          type="button"
-        >
-          {{ action.label | rokuT }}
-        </button>
-      }
+        @for (action of dangerActions(); track action.name) {
+          <button
+            (click)="run(action)"
+            [attr.data-action]="action.name"
+            [disabled]="working()"
+            pageMoreDanger
+            type="button"
+          >
+            {{ action.label | rokuT }}
+          </button>
+        }
 
-      @if (canDelete()) {
-        <button
-          (click)="deleting.set(true)"
-          [disabled]="working()"
-          pageMoreDanger
-          type="button"
-          data-delete
-        >
-          <span class="mark"><lib-trash-icon /></span>
-          {{ 'record.delete.action' | rokuT: { name: noun() } }}
-        </button>
-      }
-    </lib-page-header>
+        @if (canDelete()) {
+          <button
+            (click)="deleting.set(true)"
+            [disabled]="working()"
+            pageMoreDanger
+            type="button"
+            data-delete
+          >
+            <span class="mark"><lib-trash-icon /></span>
+            {{ 'record.delete.action' | rokuT: { name: noun() } }}
+          </button>
+        }
+      </lib-page-header>
+    </div>
 
     @if (status === 'missing') {
       <section class="state" data-missing>
@@ -333,12 +367,28 @@ const ADDED_STATE = 'added';
       min-inline-size: 0;
     }
 
+    .head {
+      display: contents;
+    }
+
+    /* The child is the page below 72 rem, where a split shows one pane. */
+    @media (max-width: 71.99rem) {
+      .head.yields {
+        display: none;
+      }
+    }
+
     /* The tab that is open. The router puts it after its outlet. */
     .under {
       display: flex;
       flex: 1;
       flex-direction: column;
       min-inline-size: 0;
+    }
+
+    /* A tab that is a split draws its own edges, flush under the tabs. */
+    .under:has(> lib-resource-split-page) {
+      margin-block-start: calc(-1 * var(--admin-space-4));
     }
 
     .chip {
@@ -431,7 +481,19 @@ export class RecordPage implements LeaveAware {
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _content = inject(ContentLocaleStore);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _references = inject(ResourceReferences);
   private readonly _changes = inject(ResourceChanges);
+  private readonly _viewport = inject(Viewport);
+
+  /**
+   * Whether the page is the pane of a split: the nearest split above it
+   * lists the rows of this page's own resource. A page of another resource
+   * in the same outlet is no pane, and neither is a shop's page for the
+   * split of chains, which is two splits up.
+   */
+  private readonly _inSplit =
+    inject(ResourceSplitPage, { optional: true })?.descriptor ===
+    this._route.snapshot.data[RESOURCE_DESCRIPTOR];
 
   readonly descriptor: AnyResourceDescriptor =
     this._route.snapshot.data[RESOURCE_DESCRIPTOR];
@@ -463,6 +525,55 @@ export class RecordPage implements LeaveAware {
 
   /** The rows above this one that the address names, by filter. */
   readonly parents = signal<Record<string, string>>({});
+
+  /**
+   * The child route this page gives way to, by its path, or `null`.
+   * {@link RECORD_YIELDS_TO} says what that means.
+   */
+  private readonly _yieldsTo: string | null =
+    this._route.snapshot.data[RECORD_YIELDS_TO] ?? null;
+
+  /**
+   * Whether a route under that child is open. The header and the tabs are
+   * then not drawn below 72 rem.
+   *
+   * Written by hand from the router's events, for the reason
+   * `AdminShellPage` gives.
+   */
+  readonly yielded = signal(this._isYielded());
+
+  /**
+   * Whether the header is given up to that child. Only while the outlet that
+   * holds the child is drawn. A record that is gone, or that could not be
+   * read, draws no outlet: its header is then the one way back on the page.
+   */
+  readonly givesWay = computed(() => {
+    const status = this.store().status();
+    return this.yielded() && status !== 'missing' && status !== 'error';
+  });
+
+  /** The parent row the address names, and its name once it is read. */
+  private readonly _parent = signal<{
+    readonly key: string;
+    readonly name: string | null;
+  } | null>(null);
+
+  /**
+   * What the way back is called, or `null` for none.
+   *
+   * None beside the column that lists the rows: the column is the way back.
+   * Under a row of another resource it names that row, and until the name is
+   * read it names the list.
+   */
+  readonly backLabel = computed<string | null>(() => {
+    if (this._inSplit && this._viewport.split()) {
+      return null;
+    }
+    const name = this._parent()?.name ?? null;
+    return name === null
+      ? this._t(this.descriptor.labels.many)
+      : this._t('record.back', { name });
+  });
 
   readonly store = signal(this._storeFor(null));
 
@@ -560,6 +671,9 @@ export class RecordPage implements LeaveAware {
    */
   private _mayLeave = false;
 
+  /** Whether the page is gone. An answer that arrives then moves nothing. */
+  private _gone = false;
+
   /** The writes to this resource that the page has already seen. */
   private _seen = this._version();
 
@@ -569,13 +683,19 @@ export class RecordPage implements LeaveAware {
   /**
    * What this record is called, once it is read. A record whose title is
    * empty is still called something: "Product with no name".
+   *
+   * One name on the whole page: the heading the row has in a column, where
+   * the descriptor wrote one, is also what the menu, the tabs and every
+   * question call the record. A shop's title carries its town for a picker,
+   * and a question that said it would name the shop a second way.
    */
   readonly title = computed(() => {
     const row = this.store().row();
     if (row === null) {
       return '';
     }
-    const title = this.descriptor.title(row, this._content.order());
+    const title =
+      this._briefHeading() || this.descriptor.title(row, this._content.order());
     return title.trim() === ''
       ? this._t('record.unnamed', { name: sentenceStart(this.noun()) })
       : title;
@@ -603,8 +723,21 @@ export class RecordPage implements LeaveAware {
       case 'error':
         return sentenceStart(this.noun());
       default:
-        return this.title();
+        // The first line the row has in a column, where the descriptor
+        // wrote one: the line under the heading is the second, and the two
+        // are written to stand together. A shop's title carries its town
+        // for a picker, and the line under it says the town again.
+        return this._briefHeading() || this.title();
     }
+  });
+
+  /** The heading the row has in a column, or `''` when it has none. */
+  private readonly _briefHeading = computed(() => {
+    const row = this.store().row();
+    return row === null
+      ? ''
+      : (this.descriptor.list.brief?.heading?.(row, this._content.order()) ??
+          '');
   });
 
   readonly moreLabel = computed(() =>
@@ -651,6 +784,30 @@ export class RecordPage implements LeaveAware {
         },
       ];
     });
+  });
+
+  /**
+   * The line under the heading: the line the row has in a column (admin plan
+   * 0056, section 2). `null` for a descriptor with no `list.brief`, for a
+   * row whose line is empty, and until the record is read.
+   */
+  readonly subtitle = computed<string | null>(() => {
+    const store = this.store();
+    const row = store.row();
+    if (row === null || store.mode() === 'create') {
+      return null;
+    }
+    const line = briefLine(
+      this.descriptor,
+      row,
+      this._briefHeading() || this.title(),
+      {
+        locale: this._translator.locale(),
+        contentLocales: this._content.order(),
+      },
+      (key, args) => this._t(key, args)
+    );
+    return line === '' ? null : line;
   });
 
   /** What the row of tabs is, for a screen reader. */
@@ -739,9 +896,20 @@ export class RecordPage implements LeaveAware {
       ) {
         this._mayLeave = false;
       }
+      if (event instanceof NavigationEnd) {
+        this.yielded.set(this._isYielded());
+      }
+    });
+
+    // A record is read by its own ID, so the address can name a parent it
+    // does not belong to. The row says which parent it has.
+    effect(() => {
+      const row = this.store().row();
+      untracked(() => this._toOwnAddress(row));
     });
 
     inject(DestroyRef).onDestroy(() => {
+      this._gone = true;
       params.unsubscribe();
       navigations.unsubscribe();
       this._answer?.(false);
@@ -1001,6 +1169,8 @@ export class RecordPage implements LeaveAware {
       parentsFromRoute(this._registry, this.descriptor, snapshot)
     );
 
+    this._nameParent();
+
     const store = this._storeFor(id);
     this.store.set(store);
     this.recordId.set(id);
@@ -1025,8 +1195,13 @@ export class RecordPage implements LeaveAware {
       afterNextRender(() => this._forgetAdded(), { injector: this._injector });
     }
 
+    // Asked of the record the address ends at. A page that holds the page
+    // of another record is not that one, and would take the form away from
+    // it: a chain would open its own form over the shop that was asked for.
     const asForm =
-      id !== null && snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1';
+      id !== null &&
+      snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1' &&
+      !this._holdsRecord();
     // After the render and not now: the navigation that brought the
     // parameter is still on its way while the page is built.
     const rendered = new Promise<void>((resolve) =>
@@ -1035,32 +1210,45 @@ export class RecordPage implements LeaveAware {
         : resolve()
     );
     void Promise.all([store.load(), rendered]).then(() => {
-      // The read can answer after the operator went somewhere else. The
-      // parameter is then gone, and a navigation now would bring them back.
-      if (
-        !asForm ||
-        this.store() !== store ||
-        this._router.parseUrl(this._router.url).queryParams[
-          RECORD_EDIT_PARAM
-        ] !== '1'
-      ) {
-        return;
+      if (asForm) {
+        this._openAsked(store);
       }
-      // One navigation takes the parameter out, and it is the one that opens
-      // the form when the record can be edited.
-      if (this.canEdit()) {
-        this.edit(true);
-        return;
-      }
-      // On a record with tabs an empty path would be the record itself,
-      // which opens on its first tab.
-      const details = this._tabPaths.get(RECORD_DETAILS_TAB);
-      void this._router.navigate(details === undefined ? [] : [details], {
-        relativeTo: this._route,
-        queryParams: { [RECORD_EDIT_PARAM]: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
+    });
+  }
+
+  /**
+   * Open the form that `?edit=1` asked for, and take the parameter out of
+   * the address.
+   */
+  private _openAsked(store: RecordStore<ResourceRow>): void {
+    // The read can answer after the operator went somewhere else. The
+    // parameter is then gone, and a navigation now would bring them back.
+    if (
+      this._gone ||
+      this.store() !== store ||
+      this._holdsRecord() ||
+      this._router.parseUrl(this._router.url).queryParams[RECORD_EDIT_PARAM] !==
+        '1' ||
+      // The record is on its way to its own address, which keeps the
+      // parameter. The form opens there.
+      this._ownPath(store.row()) !== null
+    ) {
+      return;
+    }
+    // One navigation takes the parameter out, and it is the one that opens
+    // the form when the record can be edited.
+    if (this.canEdit()) {
+      this.edit(true);
+      return;
+    }
+    // On a record with tabs an empty path would be the record itself,
+    // which opens on its first tab.
+    const details = this._tabPaths.get(RECORD_DETAILS_TAB);
+    void this._router.navigate(details === undefined ? [] : [details], {
+      relativeTo: this._route,
+      queryParams: { [RECORD_EDIT_PARAM]: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
     });
   }
 
@@ -1136,6 +1324,132 @@ export class RecordPage implements LeaveAware {
     }
 
     return draft;
+  }
+
+  /** Whether the page of another record is open in a route under this one. */
+  private _holdsRecord(): boolean {
+    for (
+      let child = this._route.snapshot.firstChild;
+      child !== null;
+      child = child.firstChild
+    ) {
+      if (child.routeConfig?.component === RecordPage) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Whether a route under the child this page gives way to is open. */
+  private _isYielded(): boolean {
+    const child = this._route.snapshot.firstChild;
+    return (
+      this._yieldsTo !== null &&
+      child !== null &&
+      child.routeConfig?.path === this._yieldsTo &&
+      child.firstChild !== null
+    );
+  }
+
+  /**
+   * Read the name of the parent row the address names, once for each parent.
+   * The way back says it.
+   */
+  private _nameParent(): void {
+    const parent = this.descriptor.parent;
+    const id = parent === undefined ? undefined : this.parents()[parent.filter];
+    if (parent === undefined || typeof id !== 'string' || id === '') {
+      this._parent.set(null);
+      return;
+    }
+
+    const key = `${parent.resource} ${id}`;
+    if (this._parent()?.key === key) {
+      return;
+    }
+    this._parent.set({ key, name: null });
+    void this._references
+      .resolve(parent.resource, id)
+      .then((found) => {
+        if (this._parent()?.key === key) {
+          this._parent.set({ key, name: found?.title || null });
+        }
+      })
+      // The way back then names the list, which is still a way back.
+      .catch(() => undefined);
+  }
+
+  /**
+   * Go to the record's own address when the one that was typed names another
+   * parent. With `replaceUrl`, so the wrong address is not a step back. What
+   * the address asked for comes along: `?edit=1` still opens the form.
+   */
+  private _toOwnAddress(row: ResourceRow | null): void {
+    const path = this._ownPath(row);
+    if (path === null) {
+      return;
+    }
+    const store = this.store();
+    void this._router
+      .navigate([...path], {
+        queryParamsHandling: 'preserve',
+        replaceUrl: true,
+      })
+      .then((moved) => {
+        if (!moved || this._gone) {
+          return;
+        }
+        // After the render, which is when a page above this one builds what
+        // is under it again for the new address. This page is then gone.
+        afterNextRender(() => this._atOwnAddress(store), {
+          injector: this._injector,
+        });
+      });
+  }
+
+  /**
+   * The page is still here after it went to the record's own address: it
+   * names the right parent now, and the form the address asked for can open.
+   *
+   * A page the router built again for the new address does all of this by
+   * itself, and so does one whose route was opened again.
+   */
+  private _atOwnAddress(store: RecordStore<ResourceRow>): void {
+    if (this._gone || this.store() !== store) {
+      return;
+    }
+    this.parents.set(
+      parentsFromRoute(this._registry, this.descriptor, this._route.snapshot)
+    );
+    this._nameParent();
+    this._openAsked(store);
+  }
+
+  /**
+   * The record's own address, when the one that is open names another
+   * parent than the row does. `null` when the address is the right one.
+   */
+  private _ownPath(row: ResourceRow | null): readonly string[] | null {
+    const parent = this.descriptor.parent;
+    const id = this.recordId();
+    if (parent === undefined || row === null || id === null) {
+      return null;
+    }
+    const named = this.parents()[parent.filter];
+    const own = row[parent.filter];
+    if (
+      typeof named !== 'string' ||
+      named === '' ||
+      typeof own !== 'string' ||
+      own === '' ||
+      own === named ||
+      // The row of the record before this one, for a moment after the ID
+      // changed.
+      idOf(this.descriptor, row) !== id
+    ) {
+      return null;
+    }
+    return this._registry.rowPath(this.descriptor.name, id, row);
   }
 
   /** Built after the store, which every part of it reads. */
@@ -1238,6 +1552,42 @@ export class RecordPage implements LeaveAware {
     this._translator.locale();
     return this._translator.t(key, undefined, undefined, values);
   }
+}
+
+/**
+ * The line a row has in a column, as `ResourceListPage` writes it: one
+ * sentence where the descriptor wrote one, and the named fields side by side
+ * otherwise. A field whose value is a word and not data is left out, and so
+ * is one that says what the heading already says.
+ */
+function briefLine(
+  descriptor: AnyResourceDescriptor,
+  row: ResourceRow,
+  heading: string,
+  options: RenderOptions,
+  translate: (key: string, args?: Record<string, unknown>) => string
+): string {
+  const brief = descriptor.list.brief;
+  if (brief === undefined) {
+    return '';
+  }
+
+  const sentence = brief.sentence?.(row);
+  if (sentence !== undefined) {
+    return sentence.kind === 'text'
+      ? sentence.text
+      : translate(sentence.key, sentence.args);
+  }
+
+  return (brief.line ?? [])
+    .map((name) => {
+      const field = fieldOf(descriptor, name);
+      const cell =
+        field === undefined ? undefined : toCell(field, row, options);
+      return cell === undefined || cell.key !== undefined ? '' : cell.text;
+    })
+    .filter((text) => text !== '' && text !== heading)
+    .join(' ');
 }
 
 /** Ask the browser to ask. Old browsers want `returnValue` set as well. */

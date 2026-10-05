@@ -41,7 +41,13 @@ type BareValue =
       readonly key: string;
       readonly args?: Readonly<Record<string, string | number>>;
     }
-  | { readonly kind: 'link'; readonly text: string; readonly href: string }
+  | {
+      readonly kind: 'link';
+      readonly text: string;
+      readonly href: string;
+      /** A translation key for the words of the link, in place of `text`. */
+      readonly label?: string;
+    }
   | { readonly kind: 'image'; readonly src: string }
   | {
       readonly kind: 'lines';
@@ -125,7 +131,14 @@ function bareValue<T extends ResourceRow>(
       }
       switch (field.format) {
         case 'url':
-          return { kind: 'link', text: value, href: value };
+          return field.linkLabel === undefined
+            ? { kind: 'link', text: value, href: value }
+            : {
+                kind: 'link',
+                text: value,
+                href: value,
+                label: field.linkLabel,
+              };
         case 'image':
           return { kind: 'image', src: value };
         case 'code':

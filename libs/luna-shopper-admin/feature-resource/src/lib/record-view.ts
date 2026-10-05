@@ -25,12 +25,14 @@ import {
   type RecordStore,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  draftFor,
   fieldMessage,
   hasDetailScreen,
   idOf,
   isEditable,
   nounKeyOf,
   recordLayout,
+  toInput,
   toRecordValue,
   type AnyResourceDescriptor,
   type ErrorLinkTarget,
@@ -38,6 +40,7 @@ import {
   type FieldMessage,
   type RecordValue,
   type ResourceRow,
+  type ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   CautionLine,
@@ -74,6 +77,7 @@ const FIRST_CONTROL = ['input', 'select', 'textarea', 'button', '[tabindex]']
 const NO_MESSAGES: readonly FieldMessage[] = [];
 const NO_NAMES: Readonly<Record<string, string | null>> = {};
 const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
+const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
 
 /**
  * The body of the record page (admin plan 0053, section 2.2): the lines, the
@@ -211,6 +215,7 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
                   @if (form) {
                     <lib-locked-value [reason]="lockReason(field)">
                       <lib-field-value
+                        [marks]="marksOf(field)"
                         [names]="namesOf(field)"
                         [value]="valueOf(field)"
                       />
@@ -218,6 +223,7 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
                   } @else {
                     <lib-field-value
                       [links]="linksOf(field)"
+                      [marks]="marksOf(field)"
                       [names]="namesOf(field)"
                       [value]="valueOf(field)"
                     />
@@ -397,6 +403,11 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
       max-inline-size: 47.5rem;
     }
 
+    /* After the sections the Record block is one more of them, and as wide. */
+    .facts {
+      max-inline-size: 47.5rem;
+    }
+
     /* Beside the sections when the view is 60 rem wide or more, and after
        them when it is not. */
     @container (min-width: 60rem) {
@@ -542,15 +553,90 @@ export class RecordView {
   private readonly _values = computed<Readonly<Record<string, RecordValue>>>(
     () => {
       const row = this._shown();
+      const drafted = this._drafted();
       const options = {
         locale: this._translator.locale(),
         contentLocales: this._content.order(),
       };
       const values: Record<string, RecordValue> = {};
       for (const field of this._fields()) {
-        values[field.name] = toRecordValue(field, row, options);
+        // A value that is worked out from other fields follows the form.
+        values[field.name] = toRecordValue(
+          field,
+          field.read === undefined ? row : drafted,
+          options
+        );
       }
       return values;
+    }
+  );
+
+  /**
+   * The row a value that is worked out from other fields is read from.
+   *
+   * While the page changes a record, that is the row as a save would leave
+   * it: what was read, with what the form would send over it. The link to a
+   * map then follows the two numbers that were typed, and never shows the
+   * place that was saved beside the numbers of another one.
+   */
+  private readonly _drafted = computed<ResourceRow>(() => {
+    const store = this.store();
+    const row = store.row();
+    if (store.mode() !== 'edit' || row === null) {
+      return this._shown();
+    }
+    const descriptor = this.descriptor();
+    return {
+      ...row,
+      ...toInput(
+        descriptor,
+        store.draft(),
+        'edit',
+        draftFor(descriptor, row, 'edit')
+      ),
+    };
+  });
+
+  /**
+   * The values whose targets are read in an order of the field's own, by
+   * field (`readOrder`). Only while the page reads, and only once every
+   * target is read, so the rows never move while one of them arrives.
+   */
+  private readonly _ordered = computed<Readonly<Record<string, RecordValue>>>(
+    () => {
+      const ordered: Record<string, RecordValue> = {};
+      if (this.store().mode() !== 'read') {
+        return ordered;
+      }
+      const rows = this._rows();
+      const values = this._values();
+      for (const field of this._fields()) {
+        const value = values[field.name];
+        if (
+          field.kind !== 'references' ||
+          field.readOrder === undefined ||
+          value?.kind !== 'references'
+        ) {
+          continue;
+        }
+        const read = new Map<string, ResourceRow>();
+        for (const id of value.ids) {
+          const row = rows[referenceKey(value, id)];
+          if (row !== undefined) {
+            read.set(id, row);
+          }
+        }
+        if (read.size !== value.ids.length) {
+          continue;
+        }
+        const compare = (a: string, b: string): number =>
+          field.readOrder?.(
+            read.get(a) as ResourceRow,
+            read.get(b) as ResourceRow
+          ) ?? 0;
+        ordered[field.name] = { ...value, ids: [...value.ids].sort(compare) };
+      }
+      return ordered;
     }
   );
 
@@ -561,6 +647,12 @@ export class RecordView {
   private readonly _resolved = signal<Readonly<Record<string, string | null>>>(
     {}
   );
+  /**
+   * The rows the lookup answered, by resource and ID. A field that draws a
+   * mark before a target reads it off the target's own row (admin plan 0056,
+   * section 2).
+   */
+  private readonly _rows = signal<Readonly<Record<string, ResourceRow>>>({});
   /** What was asked for already, so one reference is one read. */
   private readonly _asked = new Set<string>();
 
@@ -577,6 +669,31 @@ export class RecordView {
         }
       }
       names[name] = held;
+    }
+
+    // What the field itself calls a target, once the target is read: a
+    // fact about the two rows, which the title of the target cannot say.
+    const rows = this._rows();
+    const context = this.context();
+    for (const field of this._fields()) {
+      const value = this._values()[field.name];
+      if (
+        field.kind !== 'references' ||
+        field.nameOf === undefined ||
+        value?.kind !== 'references'
+      ) {
+        continue;
+      }
+      const held = { ...names[field.name] };
+      for (const id of value.ids) {
+        const row = rows[referenceKey(value, id)];
+        const said = row === undefined ? undefined : field.nameOf(context, row);
+        if (said !== undefined) {
+          held[id] =
+            said.kind === 'text' ? said.text : this._t(said.key, said.args);
+        }
+      }
+      names[field.name] = held;
     }
     return names;
   });
@@ -610,6 +727,35 @@ export class RecordView {
       links[name] = held;
     }
     return links;
+  });
+
+  /**
+   * The scope mark before each target of one field, by ID. Only a field that
+   * states `mark`, and only a target the lookup has read.
+   */
+  private readonly _marks = computed(() => {
+    const rows = this._rows();
+    const marks: Record<string, Readonly<Record<string, ScopeMarkView>>> = {};
+    for (const field of this._fields()) {
+      const value = this._values()[field.name];
+      if (
+        field.kind !== 'references' ||
+        field.mark === undefined ||
+        value?.kind !== 'references'
+      ) {
+        continue;
+      }
+      const held: Record<string, ScopeMarkView> = {};
+      for (const id of value.ids) {
+        const row = rows[referenceKey(value, id)];
+        const mark = row === undefined ? undefined : field.mark(row);
+        if (mark !== undefined) {
+          held[id] = mark;
+        }
+      }
+      marks[field.name] = held;
+    }
+    return marks;
   });
 
   /** What to say under each field, by name. */
@@ -754,6 +900,10 @@ export class RecordView {
               ...names,
               [key]: found?.title ?? null,
             }));
+            const row = found?.row;
+            if (row !== undefined) {
+              this._rows.update((rows) => ({ ...rows, [key]: row }));
+            }
           });
         }
       }
@@ -794,7 +944,10 @@ export class RecordView {
   }
 
   valueOf(field: FieldDescriptor): RecordValue {
-    return this._values()[field.name] ?? { kind: 'none' };
+    return (
+      this._ordered()[field.name] ??
+      this._values()[field.name] ?? { kind: 'none' }
+    );
   }
 
   namesOf(field: FieldDescriptor): Readonly<Record<string, string | null>> {
@@ -803,6 +956,10 @@ export class RecordView {
 
   linksOf(field: FieldDescriptor): Readonly<Record<string, readonly string[]>> {
     return this._links()[field.name] ?? NO_LINKS;
+  }
+
+  marksOf(field: FieldDescriptor): Readonly<Record<string, ScopeMarkView>> {
+    return this._marks()[field.name] ?? NO_MARKS;
   }
 
   /** The id the control of a field is handed. */

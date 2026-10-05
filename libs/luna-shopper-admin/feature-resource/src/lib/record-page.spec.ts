@@ -29,6 +29,7 @@ import { provideSections } from './admin-section';
 import { RecordPage } from './record-page';
 import { RecordView } from './record-view';
 import { ResourceChanges } from './resource-changes';
+import { ResourceSplitPage } from './resource-split-page';
 import { recordRoute, resourceFormBranch } from './routes';
 
 /**
@@ -164,7 +165,8 @@ const LINES = defineResource<Line>({
     { kind: 'text', name: 'name', label: 'lines.name', required: true },
     { kind: 'text', name: 'kind', label: 'lines.kind' },
   ],
-  list: { columns: ['name'], compact: ['name'] },
+  // A line says its kind under its name in a column.
+  list: { columns: ['name'], compact: ['name'], brief: { line: ['kind'] } },
   parent: { resource: 'plants', param: 'plantId', filter: 'plantId' },
   info: { title: 'lines.info.title', points: ['lines.info.one'] },
   rowStates: () => () => states(),
@@ -261,8 +263,17 @@ const DEPOTS = defineResource<Depot>({
 @Component({ template: 'the list' })
 class ListStub {}
 
-/** The page the lines are under. It has a component, and that is the point. */
-@Component({ imports: [RouterOutlet], template: '<router-outlet />' })
+/**
+ * The page the lines are under. It has a component, and that is the point.
+ *
+ * It also stands in for the split whose column lists the lines: a record
+ * page asks the split above it which resource that column lists.
+ */
+@Component({
+  imports: [RouterOutlet],
+  template: '<router-outlet />',
+  providers: [{ provide: ResourceSplitPage, useValue: { descriptor: LINES } }],
+})
 class PlantPage {}
 
 interface Mounted {
@@ -272,7 +283,11 @@ interface Mounted {
   readonly element: HTMLElement;
 }
 
-async function mount(url: string, compact = false): Promise<Mounted> {
+async function mount(
+  url: string,
+  compact = false,
+  split = false
+): Promise<Mounted> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [RokuTranslatorTestingModule.forTesting()],
@@ -285,7 +300,7 @@ async function mount(url: string, compact = false): Promise<Mounted> {
       }),
       {
         provide: Viewport,
-        useValue: { compact: signal(compact), split: signal(false) },
+        useValue: { compact: signal(compact), split: signal(split) },
       },
       provideRouter([
         {
@@ -306,6 +321,18 @@ async function mount(url: string, compact = false): Promise<Mounted> {
         { path: 'logs', pathMatch: 'full', component: ListStub },
         recordRoute(LOGS, { path: 'logs/:id' }),
         recordRoute(DEPOTS, { path: 'depots/:id' }),
+        // A page that gives way to what is open under its `inside` route.
+        {
+          ...recordRoute(LOGS, { path: 'yards/:id', yieldsTo: 'inside' }),
+          children: [
+            {
+              path: 'inside',
+              component: PlantPage,
+              children: [{ path: ':shed', component: ListStub }],
+            },
+            { path: 'beside', component: ListStub },
+          ],
+        },
       ]),
     ],
   }).compileComponents();
@@ -386,11 +413,41 @@ describe('RecordPage, the header', () => {
 
   /** The way back names the list, and is a link: the guard is what asks. */
   it('leads back to the list, by a link that names it', async () => {
-    const mounted = await mount('/plants/p1/lines/l1');
+    const mounted = await mount('/lines/l1');
     const back = one<HTMLAnchorElement>(mounted, 'a.page-back');
 
     expect(back?.getAttribute('aria-label')).toBe('lines.many');
+    expect(back?.getAttribute('href')).toBe('/lines');
+  });
+
+  /** "Back to Cordoba plant": the testing translator answers the key. */
+  it('names the parent row in the way back of a record under one', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+    const back = one<HTMLAnchorElement>(mounted, 'a.page-back');
+
+    expect(back?.getAttribute('aria-label')).toBe('record.back');
     expect(back?.getAttribute('href')).toBe('/plants/p1/lines');
+  });
+
+  it('writes the line the row has in a column under the heading', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+
+    expect(one(mounted, '.page-subtitle')?.textContent).toBe('wet');
+  });
+
+  it('writes no line for a descriptor that states none, or a row with none', async () => {
+    expect(one(await mount('/depots/d1'), '.page-subtitle')).toBeNull();
+
+    server.read = async (id) => ({ ...LINE, id, kind: '' });
+    expect(
+      one(await mount('/plants/p1/lines/l1'), '.page-subtitle')
+    ).toBeNull();
+  });
+
+  it('writes no line on the page that adds a record', async () => {
+    const mounted = await mount('/plants/p1/lines/new');
+
+    expect(one(mounted, '.page-subtitle')).toBeNull();
   });
 
   it('changes: the same name, "Editing", and neither Edit nor More', async () => {
@@ -437,6 +494,128 @@ describe('RecordPage, the header', () => {
 
     expect(one(mounted, 'h1')?.textContent).toBe('Bottling');
     expect(one(mounted, '[data-edit]')).toBeNull();
+  });
+});
+
+describe('RecordPage, as a pane of a split', () => {
+  /** The column beside the pane is the way back. */
+  it('draws no way back beside the column that lists its rows', async () => {
+    const mounted = await mount('/plants/p1/lines/l1', false, true);
+
+    expect(one(mounted, '.page-back')).toBeNull();
+    expect(one(mounted, 'h1')?.textContent).toBe('Bottling');
+  });
+
+  it('draws the way back when the split shows one pane', async () => {
+    const mounted = await mount('/plants/p1/lines/l1', false, false);
+
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+
+  it('draws the way back on a wide screen when no split holds the page', async () => {
+    const mounted = await mount('/lines/l1', false, true);
+
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+
+  /**
+   * The column lists the lines. A plant in the same outlet is a page of its
+   * own, and nothing but its own link leads back from it.
+   */
+  it('draws the way back of a record of another resource inside the split', async () => {
+    const mounted = await mount('/plants/p1/details', false, true);
+
+    expect(one(mounted, 'h1')?.textContent).toBe('Cordoba plant');
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+});
+
+describe('RecordPage, a record under the wrong parent', () => {
+  /** A record is read by its own ID, so the address can name any parent. */
+  it('goes to the address of the parent the row names, and adds no step back', async () => {
+    const mounted = await mount('/plants/p9/lines/l1');
+    const location = TestBed.inject(Location);
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+    expect(one(at(mounted.harness), 'h1')?.textContent).toBe('Bottling');
+    // The wrong address was replaced: one step back leaves the record.
+    location.back();
+    await drawn(mounted.harness);
+    expect(url()).not.toBe('/plants/p9/lines/l1');
+  });
+
+  /** Another screen asked for the form, and the wrong address still gets it. */
+  it('keeps what the address asked for, so the form opens at the right address', async () => {
+    const mounted = await mount('/plants/p9/lines/l1?edit=1');
+    await drawn(mounted.harness);
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+    expect(at(mounted.harness).page.store().mode()).toBe('edit');
+  });
+
+  it('stays where the address and the row name the same parent', async () => {
+    await mount('/plants/p1/lines/l1');
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+  });
+
+  it('stays where the address names no parent, or the row names none', async () => {
+    await mount('/lines/l1');
+    expect(url()).toBe('/lines/l1');
+
+    server.read = async (id) => ({ ...LINE, id, plantId: '' });
+    await mount('/plants/p9/lines/l1');
+    expect(url()).toBe('/plants/p9/lines/l1');
+  });
+});
+
+describe('RecordPage, a page that gives way to its child', () => {
+  const yields = (mounted: Mounted) =>
+    one(mounted, '.head')?.classList.contains('yields');
+
+  it('gives way while a route under the named child is open', async () => {
+    const mounted = await mount('/yards/y1/inside/s1');
+
+    expect(yields(mounted)).toBe(true);
+    // The header is taken away by a rule of the style sheet, below 72 rem
+    // only, so the page is one page at every width.
+    expect(one(mounted, '.head lib-page-header')).not.toBeNull();
+  });
+
+  it('does not give way to the child itself, or to another child', async () => {
+    expect(yields(await mount('/yards/y1/inside'))).toBe(false);
+    expect(yields(await mount('/yards/y1/beside'))).toBe(false);
+  });
+
+  it('follows the address', async () => {
+    const mounted = await mount('/yards/y1/inside');
+
+    await TestBed.inject(Router).navigateByUrl('/yards/y1/inside/s1');
+    await drawn(mounted.harness);
+    expect(yields(mounted)).toBe(true);
+
+    await TestBed.inject(Router).navigateByUrl('/yards/y1/inside');
+    await drawn(mounted.harness);
+    expect(yields(mounted)).toBe(false);
+  });
+
+  /**
+   * A record that is gone draws no outlet, so its child is not drawn. Its
+   * header is then all there is on the page, and it stays.
+   */
+  it('keeps its header while the record is gone, whatever is open under it', async () => {
+    server.read = async () => {
+      throw refusal('not_found', 404);
+    };
+    const mounted = await mount('/yards/y1/inside/s1');
+
+    expect(mounted.page.yielded()).toBe(true);
+    expect(mounted.page.givesWay()).toBe(false);
+    expect(yields(mounted)).toBe(false);
+  });
+
+  it('never gives way on a route that names no child', async () => {
+    expect(yields(await mount('/plants/p1/lines/l1'))).toBe(false);
   });
 });
 

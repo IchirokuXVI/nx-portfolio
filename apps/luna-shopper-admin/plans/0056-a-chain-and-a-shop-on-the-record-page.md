@@ -1,3 +1,5 @@
+> **PR:** [#642](https://github.com/IchirokuXVI/nx-portfolio/pull/642)
+
 # 0056 A chain and a shop on the record page
 
 > Fifth plan of the record page series (`0052` to `0060`). Needs `0054` (the collections of

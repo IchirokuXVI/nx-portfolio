@@ -202,7 +202,6 @@ describe('recordLayout', () => {
       [
         'record.section.other',
         [
-          'supermarketId',
           'name',
           'note',
           'productCount',
@@ -214,6 +213,25 @@ describe('recordLayout', () => {
         ],
       ],
     ]);
+  });
+
+  /**
+   * A record that exists sits under its parent, and the way back names it
+   * (admin plan 0056, section 3.2). So a block that names the parent in no
+   * section draws it only while adding, as the locked value.
+   */
+  it('draws a parent that no section names only while adding', () => {
+    const block = {
+      sections: [{ title: 'shops.section.place', fields: ['city' as const] }],
+    };
+    const fields = (mode: 'read' | 'edit' | 'create') =>
+      recordLayout(shops(block), mode).sections.flatMap((section) =>
+        section.fields.map((field) => field.name)
+      );
+
+    expect(fields('read')).not.toContain('supermarketId');
+    expect(fields('edit')).not.toContain('supermarketId');
+    expect(fields('create')).toContain('supermarketId');
   });
 
   it('draws one section of every field for a descriptor with no block', () => {

@@ -152,8 +152,7 @@
     "form": {
       "create": "New {{name}}",
       "edit": "Edit {{name}}",
-      "loading": "Loading…",
-      "saved": "Saved."
+      "loading": "Loading…"
     },
     "action": {
       "create": "Create",
@@ -250,7 +249,11 @@
         "created": "Newest first",
         "updated": "Recently changed"
       },
-      "noDefaultScope": "No default scope"
+      "noDefaultScope": "No default scope",
+      "section": {
+        "name": "Chain",
+        "prices": "Prices"
+      }
     },
     "locations": {
       "one": "shop",
@@ -269,14 +272,24 @@
       "city": "Town",
       "postalCode": "Postal code",
       "postalCodeHelp": "Changing this does not move the shop to another price scope. The two are separate, and the pricing stays where it is.",
+      "postalCodeGuessed": "Guessed from the city. Check it.",
       "postalCodeSource": "Postal code source",
       "postalCodeSourceHelp": "Where the code came from. Guessed means it was taken from the nearest centroid and nobody has checked it. Empty means the shop has no code at all, which is deliberate: a wrong code is worse than none.",
       "country": "Country",
       "latitude": "Latitude",
       "longitude": "Longitude",
+      "mapUrl": "Map",
+      "openOnMap": "Open on a map",
+      "mapFollows": "Follows the two numbers above",
       "externalRef": "Source reference",
       "externalRefHelp": "The discovery provider’s own reference, such as node/1156230891. It changes when a shop is remapped, so it is not a reliable identity.",
       "externalProvider": "Source",
+      "section": {
+        "name": "Name",
+        "address": "Address",
+        "prices": "Prices",
+        "source": "Where it came from"
+      },
       "filter": {
         "query": "Name, address or town",
         "postalCodeSource": "Postal code source",
@@ -302,12 +315,7 @@
       }
     },
     "chains": {
-      "back": "Back to chains",
-      "edit": "Edit chain",
-      "delete": "Delete chain",
-      "deleteHeading": "Delete this chain?",
-      "deleteBody": "{{name}} will be deleted. There is no undo. A chain that still holds shops or prices is refused.",
-      "deleteConfirm": "Delete the chain",
+      "deleteBody": "A chain that still holds shops or prices is refused. This cannot be taken back.",
       "choose": "Choose a chain to see its shops, its sections and its price scopes.",
       "info": {
         "title": "a chain",
@@ -316,38 +324,21 @@
       },
       "source": {
         "fetched": "Fetched by the harvester",
-        "off": "Harvester source is off",
-        "none": "No harvester source"
+        "off": "Not fetched"
       },
       "tabs": {
-        "shops": "Shops",
-        "sections": "Sections",
-        "scopes": "Price scopes",
-        "details": "Details"
+        "sections": "Sections"
       }
     },
     "shops": {
-      "back": "Back to {{chain}}",
-      "edit": "Edit shop",
-      "delete": "Delete shop",
-      "deleteHeading": "Delete this shop?",
-      "deleteBody": "{{name}} will be deleted, with its section order and its single shop price scope. There is no undo.",
-      "deleteConfirm": "Delete the shop",
+      "deleteBody": "Its section order and its single shop price scope are deleted with it. This cannot be taken back.",
       "choose": "Choose a shop to see its details, its sections and its products.",
       "tabs": {
-        "details": "Details",
         "sections": "Sections",
         "products": "Products"
       },
       "pricedBy": {
-        "heading": "Priced by",
-        "change": "Change",
-        "own": "This shop only",
-        "info": {
-          "title": "the scopes that price a shop",
-          "mostSpecific": "A shop shows the price of its most specific scope.",
-          "reach": "A chain region covers many shops. A single shop scope covers one."
-        }
+        "own": "This shop only"
       }
     },
     "chainSections": {
@@ -413,6 +404,12 @@
       "makeDefault": "Make default",
       "state": {
         "default": "Default"
+      },
+      "unlabelled": {
+        "NATIONAL": "Nationwide {{key}}",
+        "REGION": "Chain region {{key}}",
+        "LOCAL_AREA": "Local area {{key}}",
+        "STORE": "Single shop {{key}}"
       },
       "id": "Identifier",
       "supermarketId": "Chain",
@@ -2307,6 +2304,7 @@
     "added": "{{name}} added.",
     "addAnother": "Add another {{name}}",
     "more": "More actions for {{name}}",
+    "back": "Back to {{name}}",
     "unnamed": "{{name}} with no name",
     "state": {
       "editing": "Editing",

@@ -85,7 +85,6 @@ describe('what an info button says', () => {
       'catalog.locationSections.info',
       'catalog.pricePolicies.info',
       'catalog.productPrices.info',
-      'catalog.shops.pricedBy.info',
       'harvest.imports.info',
       'harvest.places.info',
       'harvest.postalCodes.add.info',

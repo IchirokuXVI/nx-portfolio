@@ -7,9 +7,10 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, RouterOutlet } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import { PAGE_HEADING_LEVEL, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { ResourceListPage } from './resource-list-page';
-import { SPLIT_UNDER_HEADER } from './resource-route-data';
+import { RESOURCE_DESCRIPTOR, SPLIT_UNDER_HEADER } from './resource-route-data';
 
 /**
  * Route `data` key: how wide the list is beside the open row, as a CSS length.
@@ -172,6 +173,16 @@ export const SPLIT_EMPTY_KEY = 'splitEmptyKey';
 export class ResourceSplitPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _viewport = inject(Viewport);
+
+  /**
+   * The resource whose rows the column lists.
+   *
+   * A page in the outlet asks for it. The page of a row of this resource is
+   * the pane of the column, and the column is its way back. Any other page
+   * that the outlet holds is a page of its own, and draws its own way back.
+   */
+  readonly descriptor: AnyResourceDescriptor =
+    this._route.snapshot.data[RESOURCE_DESCRIPTOR];
 
   readonly underHeader = this._route.snapshot.data[SPLIT_UNDER_HEADER] === true;
 

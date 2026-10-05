@@ -13,10 +13,13 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   isReferenceNone,
+  type FieldMessage,
   type ReferenceScope,
   type ResourceRow,
+  type ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
 import { ChevronLeftIcon, CloseIcon } from '@portfolio/shared/ui';
+import { ScopeMark } from '../page/scope-mark';
 import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
 
@@ -43,7 +46,13 @@ import { ReferencePicker } from './reference-picker';
  */
 @Component({
   selector: 'lib-references-control',
-  imports: [RokuTranslatorPipe, ReferencePicker, ChevronLeftIcon, CloseIcon],
+  imports: [
+    RokuTranslatorPipe,
+    ReferencePicker,
+    ScopeMark,
+    ChevronLeftIcon,
+    CloseIcon,
+  ],
   template: `
     @if (value().length === 0) {
       <p class="muted">{{ 'resource.references.empty' | rokuT }}</p>
@@ -58,12 +67,28 @@ import { ReferencePicker } from './reference-picker';
             [class.locked]="isLocked(id)"
             class="row"
           >
+            @if (markOf(id); as mark) {
+              <lib-scope-mark
+                [label]="mark.label | rokuT"
+                [level]="mark.level"
+              />
+            }
             @if (!known(id)) {
               <span class="name muted">{{
                 'resource.reference.resolving' | rokuT
               }}</span>
             } @else if (optionOf(id); as option) {
-              <span class="name">{{ option.title }}</span>
+              @let said = saidOf(id);
+              <!-- What the field calls it, where the field says so. -->
+              @if (said === null) {
+                <span class="name">{{ option.title }}</span>
+              } @else if (said.kind === 'key') {
+                <span class="name">{{
+                  said.key | rokuT: said.args ?? {}
+                }}</span>
+              } @else {
+                <span class="name">{{ said.text }}</span>
+              }
             } @else {
               <span class="name missing">{{
                 'resource.reference.missing' | rokuT: { id: id }
@@ -273,6 +298,20 @@ export class ReferencesControl {
    */
   readonly locks = input<((target: ResourceRow) => boolean) | null>(null);
   /**
+   * The scope mark to draw before a target, asked with the target's row, or
+   * `null` when the field draws none (admin plan 0056, section 2).
+   */
+  readonly marks = input<
+    ((target: ResourceRow) => ScopeMarkView | undefined) | null
+  >(null);
+  /**
+   * What the field calls a target in place of the target's own title, asked
+   * with the target's row, or `null` when every target goes by its title.
+   */
+  readonly names = input<
+    ((target: ResourceRow) => FieldMessage | undefined) | null
+  >(null);
+  /**
    * Whether the order counts. Each row then has "Move up" and "Move down",
    * and the first row says "Main".
    */
@@ -321,6 +360,24 @@ export class ReferencesControl {
 
   optionOf(id: string): ReferenceOption | null {
     return this._resolved().get(id) ?? null;
+  }
+
+  /**
+   * The mark before one row. None until the lookup has read the row, since
+   * the mark is a fact about the row the id points at.
+   */
+  markOf(id: string): ScopeMarkView | null {
+    const row = this.optionOf(id)?.row;
+    return row === undefined ? null : (this.marks()?.(row) ?? null);
+  }
+
+  /**
+   * What the field calls one row, or `null` for the title of the row. None
+   * until the lookup has read the row, for the reason {@link markOf} gives.
+   */
+  saidOf(id: string): FieldMessage | null {
+    const row = this.optionOf(id)?.row;
+    return row === undefined ? null : (this.names()?.(row) ?? null);
   }
 
   /** What the buttons of a row call the entry: its name, or its id. */

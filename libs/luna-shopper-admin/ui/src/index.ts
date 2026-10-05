@@ -32,7 +32,7 @@ export { RunRowView, type RunRow } from './lib/harvest/run-row';
 export { CautionLine } from './lib/info/caution-line';
 export { InfoButton } from './lib/info/info-button';
 export { PAGE_HEADING_LEVEL, PageHeader } from './lib/page/page-header';
-export { PAGE_FRAME_TABS, PageTabs, type PageTab } from './lib/page/page-tabs';
+export { PAGE_FRAME_TABS, type PageTab } from './lib/page/page-tabs';
 export { PopoverSheet } from './lib/page/popover-sheet';
 export { ScopeMark } from './lib/page/scope-mark';
 export { FieldRow, describedByOf } from './lib/record/field-row';
