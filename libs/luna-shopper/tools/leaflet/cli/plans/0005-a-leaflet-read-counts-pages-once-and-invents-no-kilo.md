@@ -1,3 +1,5 @@
+> **PR:** [#646](https://github.com/IchirokuXVI/nx-portfolio/pull/646)
+
 # 0005: a leaflet read counts pages once and invents no kilo
 
 > Found by the Deza October 2026 leaflet read (44 page PDF, 196 offers, read by
