@@ -5,7 +5,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
@@ -14,76 +14,16 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
-  ResourceReferences,
+  RECORD_EDIT_PARAM,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { InfoContent, Wire } from '@portfolio/luna-shopper-admin/models';
-import {
-  CautionLine,
-  ConfirmDialog,
-  HarvestNotice,
-  InfoButton,
-  ReferencePicker,
-} from '@portfolio/luna-shopper-admin/ui';
+import { HarvestNotice, InfoButton } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
+import { isWritableAdapter } from './sources-gateway';
 
 type Source = Wire.HarvestSupermarketSourceView;
-
-/**
- * An adapter a source row may be written with.
- *
- * Narrower than the view's `EnumsAdapterKey`, which still lists `osm-places`
- * because rows written before backend plan 0153 hold it. OpenStreetMap is asked
- * for every postal code and has no row to switch it on, so the upsert refuses
- * the key and the document no longer offers it (admin plan 0034, section 4).
- */
-type SourceAdapterKey = Wire.UpsertSupermarketSourceDto['adapterKey'];
-
-/**
- * The adapters `UpsertSupermarketSourceDto` accepts, in the order the picker
- * offers them.
- *
- * It is a `Record` keyed on the wire union rather than an array of strings so
- * that a key the document declares and this screen does not is a compile error
- * here. The array form drifted twice: `lidl-api` (backend plan 0089) and
- * `carrefour-web` (backend plan 0090) both reached the contract, the gateway and
- * the generated types while this list still named four adapters, so two chains
- * shipped with a runner nobody could describe a source for.
- *
- * The values are the order, and nothing else reads them.
- */
-const ADAPTER_ORDER: Record<SourceAdapterKey, number> = {
-  'mercadona-api': 1,
-  'deza-web': 2,
-  'eljamon-web': 3,
-  'dia-api': 4,
-  'carrefour-web': 5,
-  'lidl-api': 6,
-  manual: 7,
-};
-
-const ADAPTERS: readonly SourceAdapterKey[] = (
-  Object.keys(ADAPTER_ORDER) as SourceAdapterKey[]
-).sort((a, b) => ADAPTER_ORDER[a] - ADAPTER_ORDER[b]);
-
-/** Whether a row's adapter is one a row may still be written with. */
-function writable(key: Wire.EnumsAdapterKey): key is SourceAdapterKey {
-  return key in ADAPTER_ORDER;
-}
-
-/**
- * The settings column as the text an operator edits.
- *
- * Indented, because the box is where somebody reads a setting as well as where
- * they type one, and a single line of JSON is not something a person checks a
- * warehouse id against.
- */
-function configTextOf(
-  config: Record<string, unknown> | null | undefined
-): string {
-  return JSON.stringify(config ?? {}, null, 2);
-}
 
 /**
  * Per chain fetching configuration (plan 0006, sections 3 and 8).
@@ -114,20 +54,15 @@ function configTextOf(
  *
  * **A part of the Setup tab** (admin plan 0044, target 6), so the page above
  * draws the header. One row per chain on a wide screen and one card per chain
- * on a phone. "Change" opens the form in the row, with the caution about
- * asking too fast. Each of the two switch columns has its own info button.
+ * on a phone. Each of the two switch columns has its own info button.
+ *
+ * **A row opens the record page of its source** (admin plan 0059), which is
+ * where a source is added, changed and deleted. The forms this page drew are
+ * gone. The two switches are still here, and each still writes at once.
  */
 @Component({
   selector: 'lib-sources-page',
-  imports: [
-    CautionLine,
-    FormsModule,
-    RokuTranslatorPipe,
-    ConfirmDialog,
-    HarvestNotice,
-    InfoButton,
-    ReferencePicker,
-  ],
+  imports: [HarvestNotice, InfoButton, RokuTranslatorPipe, RouterLink],
   template: `
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
@@ -138,85 +73,11 @@ function configTextOf(
         <p class="failure" role="alert">{{ key | rokuT }}</p>
       }
 
-      @if (creating()) {
-        <div class="create">
-          <div class="field">
-            <span>{{ 'harvest.sources.field.chain' | rokuT }}</span>
-            <lib-reference-picker
-              (valueChange)="newChainId.set($event)"
-              [controlId]="'source-chain'"
-              [label]="'harvest.sources.field.chain' | rokuT"
-              [lookup]="references"
-              [resource]="'supermarkets'"
-              [value]="newChainId()"
-            />
-          </div>
-
-          @if (duplicate()) {
-            <p class="hint">{{ 'harvest.sources.exists' | rokuT }}</p>
-          }
-
-          <div class="edit">
-            <label>
-              <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
-              <select [(ngModel)]="adapterKey" name="adapterKey">
-                @for (option of adapters; track option) {
-                  <option [value]="option">{{ option }}</option>
-                }
-              </select>
-            </label>
-            <label>
-              <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
-              <input
-                [(ngModel)]="workers"
-                min="1"
-                name="workers"
-                type="number"
-              />
-            </label>
-            <label>
-              <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
-              <input [(ngModel)]="rate" min="1" name="rate" type="number" />
-            </label>
-            <label class="wide">
-              <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
-              <textarea
-                [(ngModel)]="configText"
-                name="config"
-                rows="3"
-                spellcheck="false"
-              ></textarea>
-              <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
-            </label>
-
-            @if (formErrorKey(); as key) {
-              <p class="failure" role="alert">{{ key | rokuT }}</p>
-            }
-
-            <div class="controls">
-              <button
-                (click)="create()"
-                [disabled]="
-                  newChainId() === '' || duplicate() || busyId() !== null
-                "
-                class="primary"
-                type="button"
-              >
-                {{ 'harvest.sources.create' | rokuT }}
-              </button>
-              <button (click)="creating.set(false)" type="button">
-                {{ 'resource.action.cancel' | rokuT }}
-              </button>
-            </div>
-          </div>
-        </div>
-      } @else {
-        <div class="top">
-          <button (click)="startCreate()" class="new" type="button">
-            {{ 'harvest.sources.new' | rokuT }}
-          </button>
-        </div>
-      }
+      <div class="top">
+        <a class="button new" routerLink="new" data-add>
+          {{ 'harvest.sources.add' | rokuT }}
+        </a>
+      </div>
 
       @if (sources().length === 0) {
         <p class="state">{{ 'harvest.sources.empty' | rokuT }}</p>
@@ -258,11 +119,14 @@ function configTextOf(
 
           <ul class="sources">
             @for (source of sources(); track source.id) {
-              <li [class.open]="editing() === source.supermarketId">
+              <li>
                 <div class="row">
-                  <span class="cell chain">{{
-                    names.nameOf(source.supermarketId)
-                  }}</span>
+                  <a
+                    [routerLink]="[source.supermarketId]"
+                    class="cell chain"
+                    data-open
+                    >{{ names.nameOf(source.supermarketId) }}</a
+                  >
 
                   <span class="cell">
                     <span class="label">{{
@@ -353,86 +217,16 @@ function configTextOf(
                   </span>
 
                   <span class="cell act">
-                    @if (editing() !== source.supermarketId) {
-                      <button (click)="edit(source)" type="button" data-change>
-                        {{ 'harvest.sources.edit' | rokuT }}
-                      </button>
-                    }
+                    <a
+                      [queryParams]="editQuery"
+                      [routerLink]="[source.supermarketId]"
+                      class="button"
+                      data-change
+                    >
+                      {{ 'harvest.sources.edit' | rokuT }}
+                    </a>
                   </span>
                 </div>
-
-                @if (editing() === source.supermarketId) {
-                  <!-- The form opens in the row. Beside the two settings it
-                       warns about, and only while they can be changed (admin
-                       plan 0041, section 3). -->
-                  <div class="edit">
-                    <label>
-                      <span>{{ 'harvest.sources.field.adapter' | rokuT }}</span>
-                      <select [(ngModel)]="adapterKey" name="adapterKey">
-                        @for (option of adapters; track option) {
-                          <option [value]="option">{{ option }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label>
-                      <span>{{ 'harvest.sources.field.workers' | rokuT }}</span>
-                      <input
-                        [(ngModel)]="workers"
-                        min="1"
-                        name="workers"
-                        type="number"
-                      />
-                    </label>
-                    <label>
-                      <span>{{ 'harvest.sources.field.rate' | rokuT }}</span>
-                      <input
-                        [(ngModel)]="rate"
-                        min="1"
-                        name="rate"
-                        type="number"
-                      />
-                    </label>
-                    <label class="wide">
-                      <span>{{ 'harvest.sources.field.config' | rokuT }}</span>
-                      <textarea
-                        [(ngModel)]="configText"
-                        name="config"
-                        rows="3"
-                        spellcheck="false"
-                      ></textarea>
-                      <small>{{ 'harvest.sources.config.hint' | rokuT }}</small>
-                    </label>
-
-                    @if (formErrorKey(); as key) {
-                      <p class="failure" role="alert">{{ key | rokuT }}</p>
-                    }
-
-                    <div class="controls">
-                      <button
-                        (click)="save(source)"
-                        class="primary"
-                        type="button"
-                      >
-                        {{ 'resource.action.save' | rokuT }}
-                      </button>
-                      <button (click)="editing.set(null)" type="button">
-                        {{ 'resource.action.cancel' | rokuT }}
-                      </button>
-                      <button
-                        (click)="askDelete(source)"
-                        [disabled]="busyId() === source.supermarketId"
-                        class="danger"
-                        type="button"
-                      >
-                        {{ 'harvest.sources.remove.action' | rokuT }}
-                      </button>
-                    </div>
-
-                    <lib-caution-line
-                      [text]="'harvest.sources.caution' | rokuT"
-                    />
-                  </div>
-                }
               </li>
             }
           </ul>
@@ -443,18 +237,6 @@ function configTextOf(
            queue for every code, so there is nothing about it to switch or
            configure here (backend plan 0153). -->
       <p class="always">{{ 'harvest.sources.osmAlways' | rokuT }}</p>
-
-      @if (pendingDelete(); as target) {
-        <lib-confirm-dialog
-          (confirm)="confirmDelete(target)"
-          (dismiss)="pendingDelete.set(null)"
-          [bodyArgs]="{ chain: names.nameOf(target.supermarketId) }"
-          [busy]="busyId() === target.supermarketId"
-          bodyKey="harvest.sources.remove.body"
-          confirmKey="harvest.sources.remove.confirm"
-          headingKey="harvest.sources.remove.heading"
-        />
-      }
     }
   `,
   styles: `
@@ -493,18 +275,33 @@ function configTextOf(
       justify-content: flex-end;
     }
 
-    .create,
+    /* A link drawn as a button: it goes to the record page of a source. */
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--admin-control);
+      padding: 0 var(--admin-space-3);
+      border: 1px solid var(--admin-border-strong);
+      border-radius: var(--admin-radius-control);
+      background: var(--admin-surface-raised);
+      font-size: 0.875rem;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    a.chain {
+      color: inherit;
+    }
+
+    a:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
     .table {
       border: 1px solid var(--admin-border);
       border-radius: var(--admin-radius);
       background: var(--admin-surface-raised);
-    }
-
-    .create {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-3);
-      padding: var(--admin-space-4);
     }
 
     .table {
@@ -518,10 +315,6 @@ function configTextOf(
 
     .sources li + li {
       border-block-start: 1px solid var(--admin-border);
-    }
-
-    .sources li.open {
-      background: var(--admin-accent-wash);
     }
 
     /* Nine columns: the chain, how it is fetched, the two switches, the two
@@ -656,66 +449,8 @@ function configTextOf(
       box-shadow: none;
     }
 
-    .edit {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: flex-end;
-      padding: var(--admin-space-3) var(--admin-space-4) var(--admin-space-4);
-    }
-
-    .create .edit {
-      padding: 0;
-    }
-
-    .field,
-    label {
-      display: flex;
-      flex: 1 1 9rem;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-    }
-
-    .field > span,
-    label > span {
-      font-size: 0.8125rem;
-      color: var(--admin-ink-muted);
-    }
-
-    .wide {
-      flex: 3 1 18rem;
-    }
-
-    textarea {
-      font-family: var(--admin-font-mono);
-      font-size: 0.8125rem;
-    }
-
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-2);
-    }
-
-    .edit lib-caution-line,
-    .edit .failure {
-      flex-basis: 100%;
-    }
-
     button {
       cursor: pointer;
-    }
-
-    .primary {
-      border-color: var(--admin-accent);
-      background: var(--admin-accent);
-      font-weight: 600;
-      color: var(--admin-accent-ink);
-    }
-
-    .danger {
-      border-color: var(--admin-danger);
-      color: var(--admin-danger-on-wash);
     }
 
     button:disabled {
@@ -815,56 +550,17 @@ export class SourcesPage {
   };
 
   readonly shell = inject(HarvestShell);
-  /** Answers the create panel's chain picker, by descriptor name. */
-  readonly references = inject(ResourceReferences);
   /** Names the chain each row is about, so the list does not read as uuids. */
   readonly names = inject(ChainNames);
 
-  readonly adapters = ADAPTERS;
+  /** What opens the record of a source with its form: "Change". */
+  readonly editQuery = { [RECORD_EDIT_PARAM]: '1' };
 
   readonly sources = signal<readonly Source[]>([]);
   readonly loading = signal(true);
   readonly error = signal<GatewayError | null>(null);
   /** The chain a write is in flight for, so only its own control is disabled. */
   readonly busyId = signal<string | null>(null);
-  readonly editing = signal<string | null>(null);
-
-  /** Whether the create panel is open. Opening it closes any row edit. */
-  readonly creating = signal(false);
-  /** The chain the create panel points at, or empty until one is chosen. */
-  readonly newChainId = signal('');
-  /**
-   * Whether the chosen chain already has a row. The backend route is an upsert,
-   * so a create for such a chain would silently rewrite a configuration nobody
-   * was looking at. The panel refuses it and points at the list instead.
-   */
-  readonly duplicate = computed(() =>
-    this.sources().some((row) => row.supermarketId === this.newChainId())
-  );
-
-  readonly adapterKey = signal<SourceAdapterKey>('manual');
-  readonly workers = signal(1);
-  readonly rate = signal(1);
-  /**
-   * The adapter's own settings, as the JSON text an operator edits.
-   *
-   * It is free form on purpose, because the column is: `config` is whatever the
-   * adapter that reads it wants, and a form with a field per adapter would have
-   * to be extended in this screen every time a runner learns a setting. What
-   * the screen owes instead is that a value which is not JSON never reaches the
-   * backend, which is what {@link parsedConfig} is for.
-   */
-  readonly configText = signal('{}');
-  /**
-   * What is wrong with the form itself, as opposed to what the server said.
-   *
-   * Kept apart from {@link error} because the two are cleared at different
-   * times and mean different things: this one is answered by typing, and a
-   * gateway failure is not.
-   */
-  readonly formErrorKey = signal<string | null>(null);
-  /** The row a delete is being confirmed for, or null while nothing is asked. */
-  readonly pendingDelete = signal<Source | null>(null);
 
   readonly failed = computed(
     () => this.error() !== null && this.sources().length === 0
@@ -894,74 +590,6 @@ export class SourcesPage {
       this.shell.observeFailure();
     } finally {
       this.loading.set(false);
-    }
-  }
-
-  edit(source: Source): void {
-    this.creating.set(false);
-    this.editing.set(source.supermarketId);
-    // A row that still names `osm-places` opens on `manual`, which is what it
-    // can be saved as: the key it holds is refused on the way back in.
-    this.adapterKey.set(
-      writable(source.adapterKey) ? source.adapterKey : 'manual'
-    );
-    this.workers.set(source.workers);
-    this.rate.set(source.maxRequestsPerSecond);
-    this.configText.set(configTextOf(source.config));
-    this.formErrorKey.set(null);
-  }
-
-  /** Open the create panel, with the backend's own defaults in the fields. */
-  startCreate(): void {
-    this.editing.set(null);
-    this.creating.set(true);
-    this.newChainId.set('');
-    this.adapterKey.set('manual');
-    this.workers.set(4);
-    this.rate.set(4);
-    this.configText.set('{}');
-    this.formErrorKey.set(null);
-  }
-
-  /**
-   * Describe a chain that has no row yet.
-   *
-   * The row is created **disabled**, by the backend and on purpose: describing
-   * a chain and starting to fetch it are two decisions, and the second one is
-   * the toggle on the row this panel adds to the list. `config` is not sent, so
-   * the backend's empty default stands; the form does not edit it, for the
-   * reason `save` gives.
-   */
-  async create(): Promise<void> {
-    const chainId = this.newChainId();
-    if (chainId === '' || this.duplicate()) {
-      return;
-    }
-
-    const config = this.parsedConfig();
-    if (config === null) {
-      return;
-    }
-
-    this.busyId.set(chainId);
-    this.error.set(null);
-
-    try {
-      const created = await this._service.upsertSource(chainId, {
-        adapterKey: this.adapterKey(),
-        workers: this.workers(),
-        maxRequestsPerSecond: this.rate(),
-        config,
-      });
-      // First, which is where the server's newest first ordering would put it
-      // on the next load.
-      this.sources.update((rows) => [created, ...rows]);
-      void this.names.resolve([created.supermarketId]);
-      this.creating.set(false);
-    } catch (error) {
-      this.error.set(toGatewayError(error));
-    } finally {
-      this.busyId.set(null);
     }
   }
 
@@ -1003,7 +631,7 @@ export class SourcesPage {
     // the server refuses. Its control is disabled; this is the same rule for a
     // caller that is not the template.
     const adapterKey = source.adapterKey;
-    if (!writable(adapterKey)) {
+    if (!isWritableAdapter(adapterKey)) {
       return;
     }
 
@@ -1026,105 +654,16 @@ export class SourcesPage {
     }
   }
 
-  async save(source: Source): Promise<void> {
-    const config = this.parsedConfig();
-    if (config === null) {
-      return;
-    }
-
-    this.busyId.set(source.supermarketId);
-    this.error.set(null);
-
-    try {
-      const updated = await this._service.upsertSource(source.supermarketId, {
-        adapterKey: this.adapterKey(),
-        workers: this.workers(),
-        maxRequestsPerSecond: this.rate(),
-        config,
-      });
-      this._replace(updated);
-      this.editing.set(null);
-    } catch (error) {
-      this.error.set(toGatewayError(error));
-    } finally {
-      this.busyId.set(null);
-    }
-  }
-
-  /** Ask before a row goes, because nothing here has an undo. */
-  askDelete(source: Source): void {
-    this.error.set(null);
-    this.pendingDelete.set(source);
-  }
-
-  /**
-   * Undescribe a chain.
-   *
-   * The row is keyed on the chain, so a source created against the wrong chain
-   * cannot be moved onto the right one: the upsert would write a second row
-   * beside it. Deleting and describing it again is the way back, and before
-   * this screen had it a wrong pick in the create panel was permanent.
-   *
-   * The backend refuses while a run of that chain is in flight, which arrives
-   * as an ordinary conflict and leaves the row where it is.
-   */
-  async confirmDelete(source: Source): Promise<void> {
-    this.busyId.set(source.supermarketId);
-    this.error.set(null);
-
-    try {
-      await this._service.deleteSource(source.supermarketId);
-      this.sources.update((rows) => rows.filter((row) => row.id !== source.id));
-      if (this.editing() === source.supermarketId) {
-        this.editing.set(null);
-      }
-      this.pendingDelete.set(null);
-    } catch (error) {
-      // The dialog stays open with the failure beneath it, because the operator
-      // asked for this row and a dialog that closes on a refusal reads as a
-      // delete that worked.
-      this.error.set(toGatewayError(error));
-    } finally {
-      this.busyId.set(null);
-    }
-  }
-
   instant(value: string | null): string {
     return formatInstant(value);
   }
 
-  /** Whether the row can go back through the upsert as it stands. */
-  writable(source: Source): boolean {
-    return writable(source.adapterKey);
-  }
-
   /**
-   * The settings box as an object, or null when it is not JSON.
-   *
-   * Null is refused rather than sent: `config` reaches the harvester as it is
-   * written and is read at fetch time, so a broken value would be found by a
-   * run rather than by the person who typed it. A blank box is `{}`, which is
-   * the column's own default and is what clearing the settings means.
+   * Whether the row can go back through the upsert as it stands. A row that
+   * still names `osm-places` cannot: the server refuses the key.
    */
-  private parsedConfig(): Record<string, unknown> | null {
-    const text = this.configText().trim();
-    if (text === '') {
-      this.formErrorKey.set(null);
-      return {};
-    }
-
-    try {
-      const value: unknown = JSON.parse(text);
-      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-        this.formErrorKey.set('harvest.sources.config.invalid');
-        return null;
-      }
-      this.formErrorKey.set(null);
-      return value as Record<string, unknown>;
-    } catch {
-      this.formErrorKey.set('harvest.sources.config.invalid');
-      return null;
-    }
+  writable(source: Source): boolean {
+    return isWritableAdapter(source.adapterKey);
   }
 
   private _replace(source: Source): void {

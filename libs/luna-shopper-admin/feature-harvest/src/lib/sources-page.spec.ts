@@ -17,11 +17,6 @@ import {
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ChainNames } from './chain-names';
-import {
-  applyControlBase,
-  controlBaseProperties,
-  controlBaseStylesheet,
-} from './control-base.testing';
 import { SourcesPage } from './sources-page';
 
 /**
@@ -250,32 +245,32 @@ describe('the chain sources screen, in English', () => {
     expect(translate.t(page.enabledInfo.title)).toBe('May be fetched');
   });
 
-  /** Target 6: "Change" opens the form in the row, with the caution. */
-  it('opens the form in the row, with the caution about asking too fast', async () => {
+  /**
+   * A row opens the record page of its source, and "Change" opens it with
+   * its form (admin plan 0059). This page holds no form of its own.
+   */
+  it('links each row to its record, and "Change" to the form of it', async () => {
     const fixture = await render();
+    const host: HTMLElement = fixture.nativeElement;
 
-    expect(fixture.nativeElement.querySelector('lib-caution-line')).toBeNull();
-    const change: HTMLButtonElement =
-      fixture.nativeElement.querySelector('[data-change]');
-    expect(change.textContent).toContain('Change');
+    const open = host.querySelector<HTMLAnchorElement>('[data-open]');
+    expect(open?.getAttribute('href')).toBe(`/${MERCADONA}`);
 
-    change.click();
-    fixture.detectChanges();
+    const change = host.querySelector<HTMLAnchorElement>('[data-change]');
+    expect(change?.textContent).toContain('Change');
+    expect(change?.getAttribute('href')).toBe(`/${MERCADONA}?edit=1`);
 
-    const open: HTMLElement =
-      fixture.nativeElement.querySelector('.sources li.open');
-    expect(open).not.toBeNull();
-    expect(open.querySelector('.edit select[name="adapterKey"]')).not.toBeNull();
-    expect(open.querySelector('lib-caution-line')).not.toBeNull();
-    expect(open.textContent).toContain('A chain blocks a crawl');
-    // The row that is open offers no second "Change", and deleting the source
-    // is an action of the form.
-    expect(open.querySelector('[data-change]')).toBeNull();
-    expect(open.querySelector('.edit .danger')).not.toBeNull();
-    // Every other row is closed, and holds no delete.
-    expect(
-      fixture.nativeElement.querySelectorAll('.sources li .danger').length
-    ).toBe(1);
+    expect(host.querySelector('select, textarea, lib-caution-line')).toBeNull();
+    expect(host.querySelector('.danger')).toBeNull();
+  });
+
+  it('links to the page that adds a source', async () => {
+    const fixture = await render();
+    const add: HTMLAnchorElement =
+      fixture.nativeElement.querySelector('[data-add]');
+
+    expect(add.textContent).toContain('Add a source');
+    expect(add.getAttribute('href')).toBe('/new');
   });
 
   it('turns the trust switch on without touching the fetching settings', async () => {
@@ -314,163 +309,6 @@ describe('the chain sources screen, in English', () => {
     expect(text(fixture)).toContain('Mercadona');
     expect(text(fixture)).not.toContain(MERCADONA);
   });
-});
-
-describe('the chain sources screen, creating a row', () => {
-  const NEW_CHAIN = '99999999-9999-4999-8999-999999999999';
-
-  it('offers a create button, and the button opens the panel', async () => {
-    const fixture = await render();
-
-    const open: HTMLButtonElement =
-      fixture.nativeElement.querySelector('button.new');
-    expect(open).not.toBeNull();
-    expect(open.textContent).toContain('Add a chain source');
-
-    open.click();
-    fixture.detectChanges();
-
-    expect(
-      fixture.nativeElement.querySelector('lib-reference-picker')
-    ).not.toBeNull();
-    expect(text(fixture)).toContain('Create the source');
-  });
-
-  it('creates the row for the chosen chain and puts it first, disabled', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.startCreate();
-    page.newChainId.set(NEW_CHAIN);
-    await page.create();
-    await drain();
-    fixture.detectChanges();
-
-    const [first] = page.sources();
-    expect(first.supermarketId).toBe(NEW_CHAIN);
-    // Created disabled, by the backend and on purpose: describing a chain and
-    // starting to fetch it are two decisions.
-    expect(first.enabled).toBe(false);
-    expect(page.creating()).toBe(false);
-  });
-
-  /**
-   * The backend route is an upsert, so a "create" for a chain that already has
-   * a row would silently rewrite it. The panel refuses instead: the button is
-   * disabled, the sentence says why, and calling through anyway writes nothing.
-   */
-  it('refuses a chain that already has a row', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-    const before = page.sources();
-
-    page.startCreate();
-    page.newChainId.set(MERCADONA);
-    fixture.detectChanges();
-
-    expect(text(fixture)).toContain('already has a source row');
-    const create: HTMLButtonElement =
-      fixture.nativeElement.querySelector('.controls .primary');
-    expect(create.disabled).toBe(true);
-
-    await page.create();
-    expect(page.sources()).toEqual(before);
-  });
-});
-
-/**
- * The adapter picker, against the document rather than against a second list.
- *
- * The screen used to carry its own array of four adapter keys, and it fell
- * behind twice without anything going red: `lidl-api` (backend plan 0089) and
- * `carrefour-web` (backend plan 0090) reached the contract, the gateway and the
- * generated types while the picker still offered `mercadona-api`, `deza-web`,
- * `osm-places` and `manual`. Both chains shipped with a runner an operator could
- * not describe a source for, because the only screen that writes `adapterKey`
- * would not offer the value.
- *
- * So the expectation is read out of `wire-types.ts`, which is generated from the
- * gateway's OpenAPI document and is the admin's own account of what the route
- * accepts. A seventh adapter fails this file on the commit that generates it,
- * rather than on the day somebody looks for it in the dropdown.
- *
- * It reads the **upsert's** union and not the view's, since admin plan 0034:
- * `osm-places` stays in the view because old rows hold it, and the upsert no
- * longer takes it, so the picker offers what can be written.
- */
-describe('the chain sources screen, and the adapters it offers', () => {
-  const WIRE_TYPES = readFileSync(
-    join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'models',
-      'src',
-      'lib',
-      'wire',
-      'wire-types.ts'
-    ),
-    'utf8'
-  );
-
-  /** The members of a union in the generated file, in its own order. */
-  const members = (pattern: RegExp): readonly string[] => {
-    const union = pattern.exec(WIRE_TYPES);
-    if (union === null) {
-      throw new Error(`wire-types.ts has nothing matching ${pattern}`);
-    }
-
-    return [...union[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
-  };
-
-  /** What the upsert accepts, which is what the picker may offer. */
-  const declared = (): readonly string[] =>
-    members(
-      /export type UpsertSupermarketSourceDto = \{\s*adapterKey:([^;]+);/
-    );
-
-  const options = (fixture: ComponentFixture<SourcesPage>): readonly string[] =>
-    [
-      ...(fixture.nativeElement.querySelectorAll(
-        'select[name="adapterKey"] option'
-      ) as NodeListOf<HTMLOptionElement>),
-    ].map((option) => option.value);
-
-  it('reads a union of more than the four the screen used to name', () => {
-    // A guard on the guard: a regex that matched nothing useful would make the
-    // two tests below pass against an empty list.
-    expect(declared()).toContain('lidl-api');
-    expect(declared()).toContain('carrefour-web');
-    expect(declared().length).toBeGreaterThan(4);
-  });
-
-  it('offers every adapter the document declares, when creating a row', async () => {
-    const fixture = await render();
-
-    fixture.componentInstance.startCreate();
-    fixture.detectChanges();
-
-    expect([...options(fixture)].sort()).toEqual([...declared()].sort());
-  });
-
-  /**
-   * Backend plan 0153. OpenStreetMap is asked for every postal code and has no
-   * row to switch it on, so neither the upsert nor the picker offers it, while
-   * the view still reads it off a row written before.
-   */
-  it('offers no OpenStreetMap adapter, though a row may still hold one', async () => {
-    const fixture = await render();
-
-    fixture.componentInstance.startCreate();
-    fixture.detectChanges();
-
-    expect(options(fixture)).not.toContain('osm-places');
-    expect(declared()).not.toContain('osm-places');
-    expect(members(/export type EnumsAdapterKey =([^;]+);/)).toContain(
-      'osm-places'
-    );
-  });
 
   it('says OpenStreetMap is always asked, as a line and not a row', async () => {
     const fixture = await render();
@@ -486,275 +324,5 @@ describe('the chain sources screen, and the adapters it offers', () => {
     expect(
       table.compareDocumentPosition(always) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-  });
-
-  /**
-   * A row written before the adapter went: its edit form opens on `manual`,
-   * which is what it can be saved as, and its trust toggle sends nothing,
-   * because the upsert would resend a key the server refuses.
-   */
-  it('opens an old OpenStreetMap row on manual and never resends its key', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-    const service = TestBed.inject(HARVEST_SERVICE);
-    const upsert = jest.spyOn(service, 'upsertSource');
-    const old = { ...page.sources()[0], adapterKey: 'osm-places' as const };
-    page.sources.set([old]);
-    fixture.detectChanges();
-
-    page.edit(old);
-    expect(page.adapterKey()).toBe('manual');
-
-    await page.toggleTrust(old);
-    expect(upsert).not.toHaveBeenCalled();
-    expect(page.writable(old)).toBe(false);
-  });
-
-  it('offers every one of them when editing a row too', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.edit(
-      page.sources().filter((source) => source.supermarketId === MERCADONA)[0]
-    );
-    fixture.detectChanges();
-
-    expect([...options(fixture)].sort()).toEqual([...declared()].sort());
-  });
-});
-
-describe('the chain sources screen, and its controls', () => {
-  let remove: () => void;
-
-  beforeEach(() => {
-    remove = applyControlBase();
-  });
-
-  afterEach(() => remove());
-
-  /**
-   * The screen writes no control styles at all, which is the point: it gets them
-   * from the app's stylesheet, and this is the test that the stylesheet is where
-   * they come from. `min-block-size` is the declaration that proves the rule
-   * reached the element. It carries the control height token since admin plan
-   * 0041 (36 px beside a pointer, 44 px under a thumb), and jsdom hands a
-   * `var()` back as it was written, which is exactly what a rule that reached
-   * the element looks like here.
-   */
-  it('draws a select an operator can hit, at the size the pickers are', async () => {
-    const fixture = await render();
-
-    fixture.componentInstance.edit(
-      fixture.componentInstance
-        .sources()
-        .filter((source) => source.supermarketId === MERCADONA)[0]
-    );
-    fixture.detectChanges();
-
-    const select: HTMLSelectElement =
-      fixture.nativeElement.querySelector('select');
-    expect(select).not.toBeNull();
-    expect(getComputedStyle(select).getPropertyValue('min-block-size')).toBe(
-      'var(--admin-control)'
-    );
-  });
-
-  it('draws its buttons from the same rule', async () => {
-    const fixture = await render();
-    // The edit button and not the toggle, which sets a width of its own and
-    // would answer this whether or not the base ever reached it.
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector(
-      'button:not(.toggle)'
-    );
-
-    expect(button).not.toBeNull();
-    expect(getComputedStyle(button).getPropertyValue('min-block-size')).toBe(
-      'var(--admin-control)'
-    );
-  });
-
-  /**
-   * The other six, read out of the file rather than off the element.
-   *
-   * `font: inherit` takes the app's face and its size. A field then takes the
-   * field size from a rule of its own, which is a token that is 14 px beside a
-   * pointer and 1rem on a phone, so that iOS Safari does not zoom the viewport
-   * on focus (admin plan 0041, section 9). The order is the point of the pair,
-   * so the field rule is asserted to come after the base.
-   */
-  it('takes the whole base, not the one a spec can measure', () => {
-    expect(controlBaseProperties()).toEqual([
-      'min-block-size',
-      'padding',
-      'border',
-      'border-radius',
-      'background',
-      'font',
-      'color',
-    ]);
-
-    const sheet = controlBaseStylesheet();
-    const field =
-      /\ninput,\s*select,\s*textarea \{\s*font-size: var\(--admin-field-size\);/.exec(
-        sheet
-      );
-
-    expect(field).not.toBeNull();
-    expect(field?.index ?? -1).toBeGreaterThan(sheet.indexOf('font: inherit'));
-  });
-
-  /**
-   * The measurements above are worth having only if the screen has nothing of
-   * its own to answer them with, which is the state the plan put it in: the
-   * height of every control here comes from a file this component does not
-   * mention.
-   */
-  it('measures nothing at all without the rule', async () => {
-    remove();
-
-    const fixture = await render();
-    const button: HTMLButtonElement = fixture.nativeElement.querySelector(
-      'button:not(.toggle)'
-    );
-
-    expect(getComputedStyle(button).getPropertyValue('min-block-size')).toBe(
-      ''
-    );
-  });
-});
-
-/**
- * The two things a row could not do: change every one of its settings, and stop
- * existing.
- *
- * The screen could already change the adapter, the workers and the rate. What
- * it could not touch was `config`, where an adapter's own settings live, and
- * there was no way at all to take a row back: the row is keyed on the chain, so
- * a source described against the wrong chain cannot be moved and the upsert
- * would only write a second row beside it.
- */
-describe('the chain sources screen, editing and deleting a row', () => {
-  const row = (fixture: ComponentFixture<SourcesPage>) =>
-    fixture.componentInstance
-      .sources()
-      .filter((source) => source.supermarketId === MERCADONA)[0];
-
-  it('opens the settings of the row being edited, as readable JSON', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.edit(row(fixture));
-    fixture.detectChanges();
-
-    expect(page.configText()).toBe(
-      JSON.stringify(row(fixture).config, null, 2)
-    );
-    expect(
-      fixture.nativeElement.querySelector('textarea[name="config"]')
-    ).not.toBeNull();
-  });
-
-  it('saves the settings that were typed', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.edit(row(fixture));
-    page.configText.set('{ "warehouse": "4661" }');
-    await page.save(row(fixture));
-    await drain();
-    fixture.detectChanges();
-
-    expect(row(fixture).config).toEqual({ warehouse: '4661' });
-    expect(page.editing()).toBeNull();
-  });
-
-  it('refuses settings that are not a JSON object and saves nothing', async () => {
-    // The column is read when a run starts, so a broken value would be found by
-    // a crawl rather than by the person who typed it.
-    const fixture = await render();
-    const page = fixture.componentInstance;
-    const before = row(fixture).config;
-
-    page.edit(row(fixture));
-    page.configText.set('{ warehouse: 4661');
-    await page.save(row(fixture));
-    await drain();
-    fixture.detectChanges();
-
-    expect(page.formErrorKey()).toBe('harvest.sources.config.invalid');
-    expect(row(fixture).config).toEqual(before);
-    // Still open, because the operator has something to fix in it.
-    expect(page.editing()).toBe(MERCADONA);
-    expect(text(fixture)).toContain('That is not a JSON object');
-  });
-
-  it('reads an empty box as no settings at all', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.edit(row(fixture));
-    page.configText.set('   ');
-    await page.save(row(fixture));
-    await drain();
-    fixture.detectChanges();
-
-    expect(row(fixture).config).toEqual({});
-    expect(page.formErrorKey()).toBeNull();
-  });
-
-  it('asks before it deletes, and names the chain in the question', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-
-    page.askDelete(row(fixture));
-    fixture.detectChanges();
-
-    expect(
-      fixture.nativeElement.querySelector('lib-confirm-dialog')
-    ).not.toBeNull();
-    expect(text(fixture)).toContain("Delete this chain's source?");
-    expect(text(fixture)).toContain('will have no source row');
-    // The name itself is an interpolation, and the translator this file builds
-    // answers keys rather than filling arguments, so what is asserted here is
-    // that the row being asked about is the one that was clicked.
-    expect(page.pendingDelete()?.supermarketId).toBe(MERCADONA);
-  });
-
-  it('takes the row away once the question is answered', async () => {
-    const fixture = await render();
-    const page = fixture.componentInstance;
-    const target = row(fixture);
-
-    page.askDelete(target);
-    await page.confirmDelete(target);
-    await drain();
-    fixture.detectChanges();
-
-    expect(
-      page.sources().some((source) => source.supermarketId === MERCADONA)
-    ).toBe(false);
-    expect(page.pendingDelete()).toBeNull();
-  });
-
-  it('keeps the row and the question when the delete is refused', async () => {
-    // The backend refuses while a run of that chain is in flight. A dialog that
-    // closed on a refusal would read as a delete that worked.
-    const fixture = await render();
-    const page = fixture.componentInstance;
-    const target = row(fixture);
-    jest
-      .spyOn(TestBed.inject(HARVEST_SERVICE), 'deleteSource')
-      .mockRejectedValue({ status: 409, error: { code: 'conflict' } });
-
-    page.askDelete(target);
-    await page.confirmDelete(target);
-    await drain();
-    fixture.detectChanges();
-
-    expect(
-      page.sources().some((source) => source.supermarketId === MERCADONA)
-    ).toBe(true);
-    expect(page.pendingDelete()).not.toBeNull();
-    expect(page.errorKey()).toBe('resource.error.conflict');
   });
 });

@@ -27,6 +27,7 @@ import { RunPage } from './run-page';
 import { RunsPage } from './runs-page';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
+import { SOURCES } from './sources';
 import { SourcesPage } from './sources-page';
 
 export { HARVEST_SEGMENT };
@@ -66,6 +67,7 @@ export interface HarvestRouteParts {
  * /harvest/runs/{id}                    one run
  * /harvest/setup                        goes to the chain sources
  * /harvest/setup/sources                part: chain sources
+ * /harvest/setup/sources/new, /{id}       the record page of a source
  * /harvest/setup/brands                 part: registered brands
  * /harvest/setup/brands/new, /{id}        the record page of a brand
  * /harvest/setup/brands/{id}/edit         goes to /{id}?edit=1
@@ -133,7 +135,13 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
     // the page matched the rest of the address.
     {
       path: HARVEST_SETUP_TAB,
-      children: parts.setup.map(setupFormBranch),
+      children: [
+        // The chain sources are this library's own, so nothing hands them in
+        // (admin plan 0059). A source never had a form at `{id}/edit`, so it
+        // gets no redirect from there.
+        resourceFormBranch(SOURCES),
+        ...parts.setup.map(setupFormBranch),
+      ],
     },
   ];
 }
