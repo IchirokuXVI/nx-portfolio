@@ -337,6 +337,9 @@
       "tabs": {
         "sections": "Sections",
         "products": "Products"
+      },
+      "pricedBy": {
+        "own": "This shop only"
       }
     },
     "chainSections": {
@@ -402,6 +405,12 @@
       "makeDefault": "Make default",
       "state": {
         "default": "Default"
+      },
+      "unlabelled": {
+        "NATIONAL": "Nationwide {{key}}",
+        "REGION": "Chain region {{key}}",
+        "LOCAL_AREA": "Local area {{key}}",
+        "STORE": "Single shop {{key}}"
       },
       "id": "Identifier",
       "supermarketId": "Chain",

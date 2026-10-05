@@ -4,11 +4,17 @@ import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
   defineResource,
+  fieldMessage,
   localizedTextValue,
+  type FieldMessage,
   type ResourceRow,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { POSTAL_CODE_SOURCE_OPTIONS, priceScopeMark } from './catalog-enums';
+import {
+  POSTAL_CODE_SOURCE_OPTIONS,
+  PRICE_SCOPE_KIND_OPTIONS,
+  priceScopeMark,
+} from './catalog-enums';
 import { locationSource } from './catalog-sources';
 import { ShopSectionsTab } from './chains/section-tabs';
 
@@ -37,7 +43,14 @@ function postalCodeGuessed(row: Partial<Location>): boolean {
  */
 export function shopMapUrl(row: Partial<Location>): string | null {
   const { latitude, longitude } = row;
-  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+  // A number that does not read is no place either: the form hands over
+  // what was typed, and that can be anything.
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
     return null;
   }
   return (
@@ -75,6 +88,50 @@ export function isOwnStoreScope(
     scope['kind'] === 'STORE' &&
     scope['externalKey'] === shop.id
   );
+}
+
+/**
+ * What a shop calls one of the scopes that price it, where the title of the
+ * scope is not that name (admin plan 0056, target 7).
+ *
+ * Its own single shop scope is "This shop only". The title of that scope is
+ * its kind and the id of the shop, which says the same thing in a way nobody
+ * reads.
+ *
+ * A scope with no label is called by its kind in the words of this app, with
+ * the key its source gave it: "Chain region 3421". Its title says the kind
+ * as the gateway spells it, since a title has no translator. A kind this app
+ * has no word for keeps the title.
+ */
+export function shopScopeName(
+  shop: Partial<Location>,
+  scope: ResourceRow
+): FieldMessage | undefined {
+  if (isOwnStoreScope(shop, scope)) {
+    return fieldMessage('catalog.shops.pricedBy.own');
+  }
+
+  const kind = scope['kind'];
+  if (
+    localizedTextValue(scope['label'], CONTENT_LOCALES) !== '' ||
+    !PRICE_SCOPE_KIND_OPTIONS.some((option) => option.value === kind)
+  ) {
+    return undefined;
+  }
+
+  const key = scope['externalKey'];
+  return typeof key === 'string' && key !== ''
+    ? fieldMessage(`catalog.priceScopes.unlabelled.${kind}`, { key })
+    : fieldMessage(`catalog.priceScopeKind.${kind}`);
+}
+
+/**
+ * How far a price scope reaches, as the number catalog ranks it by. The
+ * widest scope has the highest.
+ */
+function scopePriority(scope: ResourceRow): number {
+  const priority = scope['priority'];
+  return typeof priority === 'number' ? priority : 0;
 }
 
 /** A column that holds something to read. */
@@ -214,6 +271,10 @@ export const LOCATIONS = defineResource<Location>({
       // How far each scope reaches, from the mark the price scope list
       // draws for the same kind.
       mark: (scope) => priceScopeMark(scope['kind']),
+      nameOf: (row, scope) => shopScopeName(row, scope),
+      // Most general first, as the line above the tabs of a shop read them
+      // before that plan: nationwide, then the region, then the shop's own.
+      readOrder: (a, b) => scopePriority(b) - scopePriority(a),
     },
     {
       kind: 'localized-text',

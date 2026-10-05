@@ -13,6 +13,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   isReferenceNone,
+  type FieldMessage,
   type ReferenceScope,
   type ResourceRow,
   type ScopeMarkView,
@@ -77,7 +78,17 @@ import { ReferencePicker } from './reference-picker';
                 'resource.reference.resolving' | rokuT
               }}</span>
             } @else if (optionOf(id); as option) {
-              <span class="name">{{ option.title }}</span>
+              @let said = saidOf(id);
+              <!-- What the field calls it, where the field says so. -->
+              @if (said === null) {
+                <span class="name">{{ option.title }}</span>
+              } @else if (said.kind === 'key') {
+                <span class="name">{{
+                  said.key | rokuT: said.args ?? {}
+                }}</span>
+              } @else {
+                <span class="name">{{ said.text }}</span>
+              }
             } @else {
               <span class="name missing">{{
                 'resource.reference.missing' | rokuT: { id: id }
@@ -294,6 +305,13 @@ export class ReferencesControl {
     ((target: ResourceRow) => ScopeMarkView | undefined) | null
   >(null);
   /**
+   * What the field calls a target in place of the target's own title, asked
+   * with the target's row, or `null` when every target goes by its title.
+   */
+  readonly names = input<
+    ((target: ResourceRow) => FieldMessage | undefined) | null
+  >(null);
+  /**
    * Whether the order counts. Each row then has "Move up" and "Move down",
    * and the first row says "Main".
    */
@@ -351,6 +369,15 @@ export class ReferencesControl {
   markOf(id: string): ScopeMarkView | null {
     const row = this.optionOf(id)?.row;
     return row === undefined ? null : (this.marks()?.(row) ?? null);
+  }
+
+  /**
+   * What the field calls one row, or `null` for the title of the row. None
+   * until the lookup has read the row, for the reason {@link markOf} gives.
+   */
+  saidOf(id: string): FieldMessage | null {
+    const row = this.optionOf(id)?.row;
+    return row === undefined ? null : (this.names()?.(row) ?? null);
   }
 
   /** What the buttons of a row call the entry: its name, or its id. */

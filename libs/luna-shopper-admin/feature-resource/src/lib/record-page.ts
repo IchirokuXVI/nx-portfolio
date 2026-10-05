@@ -143,7 +143,7 @@ const ADDED_STATE = 'added';
  * - **The line under the heading** is the line the row has in a column, when
  *   the descriptor states `list.brief`: "Sevilla 41004" for a shop. The
  *   heading is then the heading of that row too, where the descriptor wrote
- *   one. Every sentence about the record still says its title.
+ *   one, and every sentence about the record says that same name.
  * - **A record under the wrong parent** goes to its own address. A shop is
  *   read by its own ID, so an address that names another chain would draw it
  *   under that chain's name.
@@ -180,7 +180,7 @@ const ADDED_STATE = 'added';
          reach its slot. -->
     <!-- The wrapper is no box of its own: it only takes the header away
          while a child of this page is the page (RECORD_YIELDS_TO). -->
-    <div [class.yields]="yielded()" class="head">
+    <div [class.yields]="givesWay()" class="head">
       <lib-page-header
         [backLabel]="backLabel()"
         [backLink]="listUrl"
@@ -561,6 +561,16 @@ export class RecordPage implements LeaveAware {
    */
   readonly yielded = signal(this._isYielded());
 
+  /**
+   * Whether the header is given up to that child. Only while the outlet that
+   * holds the child is drawn. A record that is gone, or that could not be
+   * read, draws no outlet: its header is then the one way back on the page.
+   */
+  readonly givesWay = computed(() => {
+    const status = this.store().status();
+    return this.yielded() && status !== 'missing' && status !== 'error';
+  });
+
   /** The parent row the address names, and its name once it is read. */
   private readonly _parent = signal<{
     readonly key: string;
@@ -684,6 +694,9 @@ export class RecordPage implements LeaveAware {
    */
   private _mayLeave = false;
 
+  /** Whether the page is gone. An answer that arrives then moves nothing. */
+  private _gone = false;
+
   /** The writes to this resource that the page has already seen. */
   private _seen = this._version();
 
@@ -693,13 +706,19 @@ export class RecordPage implements LeaveAware {
   /**
    * What this record is called, once it is read. A record whose title is
    * empty is still called something: "Product with no name".
+   *
+   * One name on the whole page: the heading the row has in a column, where
+   * the descriptor wrote one, is also what the menu, the tabs and every
+   * question call the record. A shop's title carries its town for a picker,
+   * and a question that said it would name the shop a second way.
    */
   readonly title = computed(() => {
     const row = this.store().row();
     if (row === null) {
       return '';
     }
-    const title = this.descriptor.title(row, this._content.order());
+    const title =
+      this._briefHeading() || this.descriptor.title(row, this._content.order());
     return title.trim() === ''
       ? this._t('record.unnamed', { name: sentenceStart(this.noun()) })
       : title;
@@ -913,6 +932,7 @@ export class RecordPage implements LeaveAware {
     });
 
     inject(DestroyRef).onDestroy(() => {
+      this._gone = true;
       params.unsubscribe();
       navigations.unsubscribe();
       this._answer?.(false);
@@ -1198,8 +1218,13 @@ export class RecordPage implements LeaveAware {
       afterNextRender(() => this._forgetAdded(), { injector: this._injector });
     }
 
+    // Asked of the record the address ends at. A page that holds the page
+    // of another record is not that one, and would take the form away from
+    // it: a chain would open its own form over the shop that was asked for.
     const asForm =
-      id !== null && snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1';
+      id !== null &&
+      snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1' &&
+      !this._holdsRecord();
     // After the render and not now: the navigation that brought the
     // parameter is still on its way while the page is built.
     const rendered = new Promise<void>((resolve) =>
@@ -1208,32 +1233,45 @@ export class RecordPage implements LeaveAware {
         : resolve()
     );
     void Promise.all([store.load(), rendered]).then(() => {
-      // The read can answer after the operator went somewhere else. The
-      // parameter is then gone, and a navigation now would bring them back.
-      if (
-        !asForm ||
-        this.store() !== store ||
-        this._router.parseUrl(this._router.url).queryParams[
-          RECORD_EDIT_PARAM
-        ] !== '1'
-      ) {
-        return;
+      if (asForm) {
+        this._openAsked(store);
       }
-      // One navigation takes the parameter out, and it is the one that opens
-      // the form when the record can be edited.
-      if (this.canEdit()) {
-        this.edit(true);
-        return;
-      }
-      // On a record with tabs an empty path would be the record itself,
-      // which opens on its first tab.
-      const details = this._tabPaths.get(RECORD_DETAILS_TAB);
-      void this._router.navigate(details === undefined ? [] : [details], {
-        relativeTo: this._route,
-        queryParams: { [RECORD_EDIT_PARAM]: null },
-        queryParamsHandling: 'merge',
-        replaceUrl: true,
-      });
+    });
+  }
+
+  /**
+   * Open the form that `?edit=1` asked for, and take the parameter out of
+   * the address.
+   */
+  private _openAsked(store: RecordStore<ResourceRow>): void {
+    // The read can answer after the operator went somewhere else. The
+    // parameter is then gone, and a navigation now would bring them back.
+    if (
+      this._gone ||
+      this.store() !== store ||
+      this._holdsRecord() ||
+      this._router.parseUrl(this._router.url).queryParams[RECORD_EDIT_PARAM] !==
+        '1' ||
+      // The record is on its way to its own address, which keeps the
+      // parameter. The form opens there.
+      this._ownPath(store.row()) !== null
+    ) {
+      return;
+    }
+    // One navigation takes the parameter out, and it is the one that opens
+    // the form when the record can be edited.
+    if (this.canEdit()) {
+      this.edit(true);
+      return;
+    }
+    // On a record with tabs an empty path would be the record itself,
+    // which opens on its first tab.
+    const details = this._tabPaths.get(RECORD_DETAILS_TAB);
+    void this._router.navigate(details === undefined ? [] : [details], {
+      relativeTo: this._route,
+      queryParams: { [RECORD_EDIT_PARAM]: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
     });
   }
 
@@ -1311,6 +1349,20 @@ export class RecordPage implements LeaveAware {
     return draft;
   }
 
+  /** Whether the page of another record is open in a route under this one. */
+  private _holdsRecord(): boolean {
+    for (
+      let child = this._route.snapshot.firstChild;
+      child !== null;
+      child = child.firstChild
+    ) {
+      if (child.routeConfig?.component === RecordPage) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Whether a route under the child this page gives way to is open. */
   private _isYielded(): boolean {
     const child = this._route.snapshot.firstChild;
@@ -1352,13 +1404,59 @@ export class RecordPage implements LeaveAware {
 
   /**
    * Go to the record's own address when the one that was typed names another
-   * parent. With `replaceUrl`, so the wrong address is not a step back.
+   * parent. With `replaceUrl`, so the wrong address is not a step back. What
+   * the address asked for comes along: `?edit=1` still opens the form.
    */
   private _toOwnAddress(row: ResourceRow | null): void {
+    const path = this._ownPath(row);
+    if (path === null) {
+      return;
+    }
+    const store = this.store();
+    void this._router
+      .navigate([...path], {
+        queryParamsHandling: 'preserve',
+        replaceUrl: true,
+      })
+      .then((moved) => {
+        if (!moved || this._gone) {
+          return;
+        }
+        // After the render, which is when a page above this one builds what
+        // is under it again for the new address. This page is then gone.
+        afterNextRender(() => this._atOwnAddress(store), {
+          injector: this._injector,
+        });
+      });
+  }
+
+  /**
+   * The page is still here after it went to the record's own address: it
+   * names the right parent now, and the form the address asked for can open.
+   *
+   * A page the router built again for the new address does all of this by
+   * itself, and so does one whose route was opened again.
+   */
+  private _atOwnAddress(store: RecordStore<ResourceRow>): void {
+    if (this._gone || this.store() !== store) {
+      return;
+    }
+    this.parents.set(
+      parentsFromRoute(this._registry, this.descriptor, this._route.snapshot)
+    );
+    this._nameParent();
+    this._openAsked(store);
+  }
+
+  /**
+   * The record's own address, when the one that is open names another
+   * parent than the row does. `null` when the address is the right one.
+   */
+  private _ownPath(row: ResourceRow | null): readonly string[] | null {
     const parent = this.descriptor.parent;
     const id = this.recordId();
     if (parent === undefined || row === null || id === null) {
-      return;
+      return null;
     }
     const named = this.parents()[parent.filter];
     const own = row[parent.filter];
@@ -1372,12 +1470,9 @@ export class RecordPage implements LeaveAware {
       // changed.
       idOf(this.descriptor, row) !== id
     ) {
-      return;
+      return null;
     }
-    const path = this._registry.rowPath(this.descriptor.name, id, row);
-    if (path !== null) {
-      void this._router.navigate([...path], { replaceUrl: true });
-    }
+    return this._registry.rowPath(this.descriptor.name, id, row);
   }
 
   /** Built after the store, which every part of it reads. */
