@@ -125,13 +125,11 @@
       "unset": "Not set"
     },
     "reference": {
-      "search": "Search",
+      "open": "Show the options",
       "searching": "Searching…",
       "noResults": "Nothing matched.",
       "resolving": "Looking it up…",
       "missing": "This points at {{id}}, which no longer exists.",
-      "change": "Change",
-      "clear": "Clear",
       "none": "None"
     },
     "references": {

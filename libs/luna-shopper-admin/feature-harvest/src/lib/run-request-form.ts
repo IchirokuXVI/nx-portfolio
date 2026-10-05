@@ -23,12 +23,12 @@ import {
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   CONTENT_LOCALES,
-  localizedTextValue,
   // A value import, not a type one: the adapter capability table is a `const`
   // in the generated file, because the gateway publishes the answers and not
   // only the question (backend plan 0103, section 4.1).
   HARVEST_IMPORT,
   harvestRunsPath,
+  localizedTextValue,
   Wire,
   type HarvestRunMode,
 } from '@portfolio/luna-shopper-admin/models';
@@ -199,6 +199,7 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
           <lib-reference-picker
             (valueChange)="chooseChain($event)"
             [controlId]="'run-chain'"
+            [label]="'harvest.runs.start.supermarketId' | rokuT"
             [lookup]="references"
             [resource]="'supermarkets'"
             [value]="supermarketId()"
@@ -234,6 +235,7 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
           <lib-reference-picker
             (valueChange)="priceScopeId.set($event)"
             [controlId]="'run-scope'"
+            [label]="'harvest.runs.start.priceScope' | rokuT"
             [lookup]="references"
             [resource]="'price-scopes'"
             [scope]="scopeFilter()"

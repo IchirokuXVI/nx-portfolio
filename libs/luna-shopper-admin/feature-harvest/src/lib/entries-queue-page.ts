@@ -518,6 +518,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
               (valueChange)="itemId.set($event)"
               [controlId]="'entries-item'"
               [disabled]="queue!.busy()"
+              [label]="'harvest.entries.bind.heading' | rokuT"
               [lookup]="references"
               [resource]="'items'"
               [value]="itemId()"

@@ -35,12 +35,12 @@ import {
 import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
 import { HarvestStatus } from './harvest-status';
-import { ReviewChain } from './review-chain';
 import {
   runQueueBulk,
   type PendingBulk,
   type QueueBulkAct,
 } from './queue-bulk';
+import { ReviewChain } from './review-chain';
 import {
   toShopRow,
   type Shop,
@@ -313,6 +313,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
               <lib-reference-picker
                 (valueChange)="pickLocation($event)"
                 [controlId]="'shops-location-' + row.id"
+                [label]="'harvest.shops.map.pick' | rokuT"
                 [lookup]="references"
                 [resource]="'locations'"
                 [scope]="locationScope()"

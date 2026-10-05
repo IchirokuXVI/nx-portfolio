@@ -54,6 +54,11 @@
   --admin-control: 2.25rem;
   --admin-control-pad: 0.375rem;
 
+  // The arrow of a select and of a typeahead (admin plan 0050). One size, so the
+  // two sit at the same place: this far in from the edge of the box, and the
+  // text of the control stops before it.
+  --admin-caret: 1.25rem;
+
   // The size of the text in a field. 16 px exactly on a phone: iOS Safari zooms
   // the viewport on focus for anything smaller, which leaves the operator
   // scrolled sideways.
