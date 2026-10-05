@@ -1072,13 +1072,7 @@ const SEARCH_DELAY_MS = 250;
     }
 
     button {
-      min-block-size: var(--admin-control);
-      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      color: var(--admin-ink);
       cursor: pointer;
     }
 
@@ -1094,16 +1088,11 @@ const SEARCH_DELAY_MS = 250;
     }
 
     input {
-      min-block-size: var(--admin-control);
-      padding: var(--admin-control-pad) var(--admin-space-3);
       border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
       /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
          smaller, which on a phone leaves the operator scrolled sideways. */
       font: inherit;
       font-size: var(--admin-field-size);
-      color: var(--admin-ink);
     }
 
     button:focus-visible,
