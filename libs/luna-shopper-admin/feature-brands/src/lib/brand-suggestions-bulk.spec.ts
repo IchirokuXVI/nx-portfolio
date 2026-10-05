@@ -1,5 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -12,6 +12,7 @@ import {
   SessionStorage,
   SessionStore,
 } from '@portfolio/luna-shopper-admin/data-access';
+import { HarvestStatus } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   adminRoutes,
   provideSections,
@@ -22,13 +23,13 @@ import {
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { brandSource } from './brand-sources';
+import { BrandSuggestionsPage } from './brand-suggestions-page';
 import { BRANDS } from './brands';
 import {
   BrandsGateway,
   toBrandBatchResults,
   type Brand,
 } from './brands-gateway';
-import { brandsRoutes } from './routes';
 
 /**
  * Registering several suggested brands at once, rendered (admin plan 0035,
@@ -69,10 +70,17 @@ const SECTION: AdminSection = {
   key: 'brands',
   label: '',
   resources: [BRANDS, SUPERMARKETS],
-  screens: brandsRoutes(),
+  // The app mounts the queue inside Review (admin plan 0044). Here it is at
+  // an address of the spec's own, beside the resource it links to.
+  screens: [{ path: 'suggested-brands', component: BrandSuggestionsPage }],
 };
 
+/** The counts of the four queues, stood in for: what is owed is one call. */
+let refresh: jest.Mock;
+
 async function boot() {
+  refresh = jest.fn();
+
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
@@ -85,6 +93,10 @@ async function boot() {
       SessionStorage,
       SessionStore,
       DeploymentStore,
+      {
+        provide: HarvestStatus,
+        useValue: { refresh, waiting: signal(null), running: signal(null) },
+      },
     ],
   }).compileComponents();
 
@@ -231,6 +243,24 @@ describe('BrandSuggestionsPage, selecting several', () => {
     expect(listedKeys(fixture)).not.toContain('mahou');
     expect(listedKeys(fixture)).not.toContain('gallo');
     expect(all(fixture, '[data-pick]')).toHaveLength(0);
+  });
+
+  /**
+   * A batch takes rows out of the queue, and the count on the rail is that
+   * queue's length (admin plan 0044, target 2). Once for the batch, and not
+   * once for each name.
+   */
+  it('reads the counts again once, after the batch', async () => {
+    const { fixture } = await boot();
+    await click(fixture, '[data-select-mode]');
+    await pick(fixture, 'mahou');
+    await pick(fixture, 'borges');
+    await click(fixture, '[data-review]');
+    expect(refresh).not.toHaveBeenCalled();
+
+    await click(fixture, '[data-send]');
+
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a refused name ticked beside a created one', async () => {

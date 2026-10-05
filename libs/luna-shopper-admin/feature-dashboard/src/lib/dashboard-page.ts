@@ -32,6 +32,7 @@ import {
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { catalogTiles, pricesWrittenChart } from './catalog-view';
+import { runsByStatusChart } from './harvest-view';
 import {
   activityRows,
   loginFailureRows,
@@ -174,6 +175,21 @@ import {
             [bars]="pricesWritten().bars"
             [series]="pricesWritten().series"
             [title]="text('dashboard.catalog.pricesWritten')"
+          />
+        </section>
+      }
+
+      <!-- The harvester's runs by how they ended. It was the chart of the
+           harvester's own dashboard, which is the Runs tab now (admin plan
+           0044, target 7). Skipped when the harvester did not answer. -->
+      @if (doc.harvest !== null) {
+        <section class="block" data-harvest-block>
+          <h2>{{ 'dashboard.harvest.heading' | rokuT }}</h2>
+
+          <lib-bar-chart
+            [bars]="runsByStatus().bars"
+            [series]="runsByStatus().series"
+            [title]="text('dashboard.harvest.byStatusTitle')"
           />
         </section>
       }
@@ -554,6 +570,14 @@ export class DashboardPage {
     return catalog === null
       ? { bars: [], series: [] }
       : pricesWrittenChart(catalog, this._text, (day) => this._day(day));
+  });
+
+  /** The harvester's runs by status, over all time. */
+  readonly runsByStatus = computed(() => {
+    const harvest = this.document()?.harvest ?? null;
+    return harvest === null
+      ? { bars: [], series: [] }
+      : runsByStatusChart(harvest, this._text);
   });
 
   readonly failures = computed(() => {

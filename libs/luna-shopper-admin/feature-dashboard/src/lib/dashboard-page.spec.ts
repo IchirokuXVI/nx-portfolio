@@ -141,6 +141,9 @@ describe('DashboardPage against the seed', () => {
     expect(headings).toEqual([
       'dashboard.waiting.heading',
       'dashboard.catalog.heading',
+      // The chart of the harvester's own dashboard, which is gone (admin plan
+      // 0044, target 7).
+      'dashboard.harvest.heading',
       'dashboard.signIns.heading',
       'dashboard.activity.heading',
     ]);
@@ -154,9 +157,11 @@ describe('DashboardPage against the seed', () => {
     const fixture = await render();
 
     expect(fixture.debugElement.queryAll(By.directive(LineChart))).toEqual([]);
-    expect(fixture.debugElement.queryAll(By.directive(BarChart))).toHaveLength(
-      1
-    );
+    expect(
+      fixture.debugElement
+        .query(By.css('[data-catalog-block]'))
+        .queryAll(By.directive(BarChart))
+    ).toHaveLength(1);
     expect(
       fixture.componentInstance.catalog().map((tile) => tile.key)
     ).toEqual([
@@ -177,7 +182,68 @@ describe('DashboardPage against the seed', () => {
     expect(
       fixture.debugElement.query(By.css('[data-catalog-block]'))
     ).toBeNull();
-    expect(fixture.debugElement.queryAll(By.directive(BarChart))).toEqual([]);
+    // The one chart left is the harvester's, in its own block.
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(BarChart))
+        .map((chart) => (chart.componentInstance as BarChart).title())
+    ).toEqual(['dashboard.harvest.byStatusTitle']);
+  });
+
+  /**
+   * Admin plan 0044, target 7. The harvester's dashboard is removed: its
+   * running run and its recent runs are the Runs tab, and its chart is a
+   * block of this page.
+   */
+  it('draws the harvest block, with the runs by status and nothing else', async () => {
+    const fixture = await render();
+    const block = fixture.debugElement.query(By.css('[data-harvest-block]'));
+
+    expect(block).not.toBeNull();
+    expect(
+      (block.query(By.css('h2')).nativeElement as HTMLElement).textContent
+    ).toContain('dashboard.harvest.heading');
+
+    const charts = block.queryAll(By.directive(BarChart));
+    expect(charts).toHaveLength(1);
+    expect((charts[0].componentInstance as BarChart).title()).toBe(
+      'dashboard.harvest.byStatusTitle'
+    );
+
+    // Every status is a bar, in enum order, with the seed's counts.
+    const chart = fixture.componentInstance.runsByStatus();
+    expect(chart.bars.map((bar) => bar.key)).toEqual([
+      'PENDING',
+      'RUNNING',
+      'COMPLETED',
+      'FAILED',
+      'ABORTED',
+      'STALE',
+    ]);
+    expect(chart.bars.map((bar) => bar.values)).toEqual([
+      [0],
+      [1],
+      [34],
+      [6],
+      [2],
+      [1],
+    ]);
+    expect(block.queryAll(By.directive(StatTile))).toEqual([]);
+  });
+
+  it('draws no harvest block when the harvester did not answer', async () => {
+    const fixture = await render(dashboardSeedWithout('harvest'));
+
+    expect(
+      fixture.debugElement.query(By.css('[data-harvest-block]'))
+    ).toBeNull();
+    expect(fixture.componentInstance.runsByStatus().bars).toEqual([]);
+    // The catalog's chart is still there: one block missing costs one block.
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(BarChart))
+        .map((chart) => (chart.componentInstance as BarChart).title())
+    ).toEqual(['dashboard.catalog.pricesWritten']);
   });
 
   it('draws no run and no recent runs', async () => {
@@ -204,8 +270,8 @@ describe('DashboardPage against the seed', () => {
   });
 
   /**
-   * A resource tile goes wherever its section mounted the screen, and a hand
-   * written screen keeps the segment constant it has always built from.
+   * A resource tile goes wherever its section mounted the screen, and a queue
+   * goes to the Review tab of the harvester, on its chain (admin plan 0044).
    */
   it('links each of them where the work is done', async () => {
     const fixture = await render();
@@ -217,17 +283,27 @@ describe('DashboardPage against the seed', () => {
     expect(byKey.get(`entries-${MERCADONA}`)?.link).toEqual([
       '/',
       'harvest',
-      'entries',
+      'review',
+      'products',
     ]);
     expect(byKey.get(`entries-${MERCADONA}`)?.query).toEqual({
-      supermarketId: MERCADONA,
+      chain: MERCADONA,
     });
     expect(byKey.get(`shops-${MERCADONA}`)?.link).toEqual([
       '/',
       'harvest',
+      'review',
       'shops',
     ]);
-    expect(byKey.get('places')?.link).toEqual(['/', 'harvest', 'places']);
+    expect(byKey.get(`shops-${MERCADONA}`)?.query).toEqual({
+      chain: MERCADONA,
+    });
+    expect(byKey.get('places')?.link).toEqual([
+      '/',
+      'harvest',
+      'review',
+      'places',
+    ]);
     expect(byKey.get('stale')?.link).toEqual(['/', 'catalog', 'items']);
     expect(byKey.get('postalCodes')?.link).toEqual([
       '/',
@@ -298,7 +374,7 @@ describe('DashboardPage against the seed', () => {
     ]);
 
     const entries = fixture.debugElement.query(
-      By.css(`a.tile[href="/harvest/entries?supermarketId=${MERCADONA}"]`)
+      By.css(`a.tile[href="/harvest/review/products?chain=${MERCADONA}"]`)
     );
     expect(entries).not.toBeNull();
 

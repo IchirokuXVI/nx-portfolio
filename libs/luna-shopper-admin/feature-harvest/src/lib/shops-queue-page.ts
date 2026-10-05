@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -16,17 +18,24 @@ import {
   gatewayErrorKey,
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import type { InfoContent, Wire } from '@portfolio/luna-shopper-admin/models';
+import {
+  harvestRunPath,
+  harvestRunsPath,
+  type InfoContent,
+  type Wire,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
-  PageHeader,
+  InfoButton,
   QueueFrame,
   ReferencePicker,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
-import { HARVEST_SEGMENT } from './harvest-paths';
+import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
+import { HarvestStatus } from './harvest-status';
+import { ReviewChain } from './review-chain';
 import {
   runQueueBulk,
   type PendingBulk,
@@ -99,26 +108,10 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
     HarvestNotice,
     QueueFrame,
     ReferencePicker,
-    PageHeader,
+    InfoButton,
   ],
   template: `
-    <lib-page-header
-      [heading]="'harvest.shops.heading' | rokuT"
-      [info]="info"
-    />
-
     <div class="filters">
-      <div class="field">
-        <span>{{ 'harvest.shops.chain' | rokuT }}</span>
-        <lib-reference-picker
-          (valueChange)="chooseChain($event)"
-          [controlId]="'shops-chain'"
-          [lookup]="references"
-          [resource]="'supermarkets'"
-          [value]="supermarketId()"
-        />
-      </div>
-
       <label class="field">
         <span>{{ 'harvest.shops.filter.status' | rokuT }}</span>
         <select
@@ -128,16 +121,57 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         >
           <option value="">{{ 'harvest.shops.filter.any' | rokuT }}</option>
           @for (option of statuses; track option) {
-            <option [value]="option">
+            <option [selected]="option === status()" [value]="option">
               {{ 'harvest.shops.status.' + option | rokuT }}
             </option>
           }
         </select>
       </label>
+      <!-- What a row is and what the two answers do, behind an info button
+           (admin plan 0041, section 3). -->
+      <lib-info-button [info]="info" align="start" />
     </div>
 
     @if (queue === null) {
-      <p class="state">{{ 'harvest.shops.chooseChain' | rokuT }}</p>
+      <!-- This queue is read one chain at a time. With none chosen it lists
+           the chains that have shops waiting, and a press chooses the chain
+           (admin plan 0044, target 4). -->
+      <section class="chains">
+        <h2>{{ 'harvest.shops.chains.heading' | rokuT }}</h2>
+        @if (waitingChains().length === 0) {
+          <p class="state">
+            {{
+              (countsKnown()
+                ? 'harvest.shops.chains.none'
+                : 'harvest.shops.chains.unknown'
+              ) | rokuT
+            }}
+          </p>
+        } @else {
+          <ul>
+            @for (chain of waitingChains(); track chain.supermarketId) {
+              <li>
+                <button
+                  (click)="review.choose(chain.supermarketId)"
+                  [attr.data-chain]="chain.supermarketId"
+                  type="button"
+                >
+                  <span class="chain-name">{{
+                    names.nameOf(chain.supermarketId)
+                  }}</span>
+                  <span
+                    [attr.aria-label]="
+                      'shell.waiting' | rokuT: { count: chain.count }
+                    "
+                    class="waiting"
+                    >{{ chain.count }}</span
+                  >
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </section>
     } @else {
       <lib-queue-frame
         (clearSelection)="queue.clearSelection()"
@@ -152,6 +186,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
         [busy]="queue.busy()"
         [canLoadMore]="queue.canLoadMore()"
         [confirmKey]="confirmKey()"
+        [currentId]="current()?.id ?? null"
         [decided]="queue.decided()"
         [empty]="queue.empty()"
         [errorKey]="errorKey()"
@@ -402,13 +437,75 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
       display: flex;
       flex-wrap: wrap;
       gap: var(--admin-space-4);
+      align-items: flex-end;
     }
 
     .field {
       display: flex;
-      flex: 1 1 14rem;
+      flex: 0 1 14rem;
       flex-direction: column;
       gap: var(--admin-space-1);
+    }
+
+    .chains {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-3);
+    }
+
+    .chains h2 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+    }
+
+    .chains ul {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      max-inline-size: 32rem;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+      list-style: none;
+    }
+
+    .chains li + li {
+      border-block-start: 1px solid var(--admin-border);
+    }
+
+    .chains button {
+      display: flex;
+      gap: var(--admin-space-3);
+      align-items: center;
+      inline-size: 100%;
+      min-block-size: 2.75rem;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: none;
+      border-radius: 0;
+      background: none;
+      font: inherit;
+      text-align: start;
+      color: var(--admin-ink);
+      cursor: pointer;
+    }
+
+    .chains button:hover {
+      background: var(--admin-accent-wash);
+    }
+
+    .chain-name {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .waiting {
+      padding: 0.0625rem 0.375rem;
+      border-radius: 0.5625rem;
+      background: var(--admin-waiting-wash);
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--admin-waiting-on-wash);
     }
 
     .field > span {
@@ -705,9 +802,41 @@ export class ShopsQueuePage {
     supermarketId: this.supermarketId(),
   }));
 
+  /** The chain the four queues share, and the way to choose one. */
+  readonly review = inject(ReviewChain);
+  readonly names = inject(ChainNames);
+  private readonly _status = inject(HarvestStatus);
+
+  /** The chains that have shops waiting, most first, for when none is chosen. */
+  readonly waitingChains = computed(
+    () => this._status.waiting()?.shopsByChain ?? []
+  );
+
+  /** Whether the counts have been read, so that "none" is not said too soon. */
+  readonly countsKnown = computed(() => this._status.waiting() !== null);
+
+  constructor() {
+    // The chain comes from the filter the four queues share (admin plan
+    // 0044). Each change builds the queue again, and with no chain there is
+    // no queue: the page lists the chains instead.
+    effect(() => {
+      const chain = this.review.chain();
+      untracked(() => this.chooseChain(chain));
+    });
+
+    effect(() => {
+      const ids = this.waitingChains().map((chain) => chain.supermarketId);
+      untracked(() => void this.names.resolve(ids));
+    });
+  }
+
   chooseChain(supermarketId: string): void {
     this.supermarketId.set(supermarketId);
     this.cancelMapping();
+    if (supermarketId === '') {
+      this._queue.set(null);
+      return;
+    }
     void this.load();
   }
 
@@ -929,11 +1058,11 @@ export class ShopsQueuePage {
    * directly in its spec, where there is none.
    */
   runLink(runId: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', runId];
+    return harvestRunPath(runId);
   }
 
   runsLink(): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs'];
+    return harvestRunsPath();
   }
 
   private _ask(asked: {
@@ -973,6 +1102,8 @@ export class ShopsQueuePage {
     this.report.set(null);
     this.report.set(await runQueueBulk(queue, bulk));
     this.progressKey.set('harvest.queue.bulk.progress');
+    // The batch took rows out of the queue, so the counts are read again.
+    this._status.refresh();
   }
 
   /**
@@ -992,6 +1123,7 @@ export class ShopsQueuePage {
     decide: () => Promise<Shop>
   ): Promise<void> {
     await this.queue?.decideAt(id, async () => this._settled(await decide()));
+    this._status.refresh();
   }
 
   /** The decided row, or null when the filter no longer describes it. */

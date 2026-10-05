@@ -14,11 +14,12 @@ import {
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
-import { PresetsPage } from './presets-page';
+import { PRESETS_CHAIN_KEY, PresetsPanel } from './presets-panel';
 import { RunRequestForm } from './run-request-form';
 
 /**
- * The presets screen (admin plan 0030, section 3), over the memory back end.
+ * The presets (admin plan 0030, section 3), over the memory back end. A panel
+ * of the Runs tab since admin plan 0044, and no page of its own.
  *
  * The seed holds one Mercadona preset walking two warehouses with a copy, and
  * a run started from it, so the list has a summary and a latest run to draw.
@@ -68,8 +69,23 @@ interface Recorded {
   readonly started: string[];
 }
 
-async function render(): Promise<{
-  fixture: ComponentFixture<PresetsPage>;
+/** A second chain, which the seed holds no preset for. */
+const CARREFOUR = '22222222-2222-4222-8222-222222222222';
+
+/**
+ * Where the panel is opened, and whether a chain is chosen by hand afterwards.
+ * By default the spec chooses Mercadona, as a person does with the picker.
+ */
+interface RenderOptions {
+  readonly url?: string;
+  readonly choose?: boolean;
+}
+
+beforeEach(() => localStorage.removeItem(PRESETS_CHAIN_KEY));
+afterEach(() => localStorage.removeItem(PRESETS_CHAIN_KEY));
+
+async function render(options: RenderOptions = {}): Promise<{
+  fixture: ComponentFixture<PresetsPanel>;
   recorded: Recorded;
 }> {
   const memory = new HarvestMemory();
@@ -97,10 +113,10 @@ async function render(): Promise<{
 
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
-    imports: [PresetsPage, RokuTranslatorTestingModule.forTesting()],
+    imports: [PresetsPanel, RokuTranslatorTestingModule.forTesting()],
     providers: [
       ServerReachability,
-      provideRouter([]),
+      provideRouter([{ path: '**', component: PresetsPanel }]),
       provideLocationMocks(),
       { provide: HARVEST_SERVICE, useValue: service },
       {
@@ -134,25 +150,31 @@ async function render(): Promise<{
     ],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(PresetsPage);
+  if (options.url !== undefined) {
+    await TestBed.inject(Router).navigateByUrl(options.url);
+  }
+
+  const fixture = TestBed.createComponent(PresetsPanel);
   fixture.detectChanges();
-  fixture.componentInstance.chooseChain(MERCADONA);
+  if (options.choose !== false) {
+    fixture.componentInstance.chooseChain(MERCADONA);
+  }
   await settle(fixture);
 
   return { fixture, recorded };
 }
 
-async function settle(fixture: ComponentFixture<PresetsPage>) {
+async function settle(fixture: ComponentFixture<PresetsPanel>) {
   for (let round = 0; round < 4; round++) {
     await drain();
     fixture.detectChanges();
   }
 }
 
-const text = (fixture: ComponentFixture<PresetsPage>): string =>
+const text = (fixture: ComponentFixture<PresetsPanel>): string =>
   fixture.nativeElement.textContent;
 
-function formOf(fixture: ComponentFixture<PresetsPage>): RunRequestForm {
+function formOf(fixture: ComponentFixture<PresetsPanel>): RunRequestForm {
   return fixture.debugElement.query(By.directive(RunRequestForm))
     .componentInstance as RunRequestForm;
 }
@@ -160,7 +182,7 @@ function formOf(fixture: ComponentFixture<PresetsPage>): RunRequestForm {
 const ticked = (checked: boolean) =>
   ({ target: { checked } }) as unknown as Event;
 
-describe('the presets screen, the list', () => {
+describe('the presets panel, the list', () => {
   it('lists a chain presets with a summary and the latest run', async () => {
     const { fixture } = await render();
     const page = fixture.componentInstance;
@@ -185,23 +207,86 @@ describe('the presets screen, the list', () => {
   });
 });
 
-describe('the presets screen, starting a run', () => {
-  it('calls the route and goes to the runs page with the run highlighted', async () => {
+/**
+ * The chain is remembered (admin plan 0044, target 5). A person starts the
+ * same chain's presets day after day, so the panel opens where it was left.
+ */
+describe('the presets panel, the chain it opens on', () => {
+  it('opens on no chain in a browser that remembers none', async () => {
+    const { fixture } = await render({ choose: false });
+
+    expect(fixture.componentInstance.supermarketId()).toBe('');
+    expect(text(fixture)).toContain('harvest.presets.chooseChain');
+  });
+
+  it('remembers the chain that was chosen', async () => {
+    await render();
+
+    expect(localStorage.getItem(PRESETS_CHAIN_KEY)).toBe(MERCADONA);
+  });
+
+  it('opens on the remembered chain when the address names none', async () => {
+    localStorage.setItem(PRESETS_CHAIN_KEY, MERCADONA);
+
+    const { fixture } = await render({ choose: false });
+
+    expect(fixture.componentInstance.supermarketId()).toBe(MERCADONA);
+    expect(
+      fixture.componentInstance.presets().map((preset) => preset.name)
+    ).toEqual(['Weekly warehouses']);
+  });
+
+  /** A link that names a chain wins over the remembered one. */
+  it('opens on the chain the address names, whatever is remembered', async () => {
+    localStorage.setItem(PRESETS_CHAIN_KEY, CARREFOUR);
+
+    const { fixture } = await render({
+      url: `/?chain=${MERCADONA}&preset=${MERCADONA_WEEKLY_PRESET}`,
+      choose: false,
+    });
+
+    expect(fixture.componentInstance.supermarketId()).toBe(MERCADONA);
+    expect(fixture.componentInstance.highlighted()).toBe(
+      MERCADONA_WEEKLY_PRESET
+    );
+    expect(fixture.nativeElement.querySelector('li.highlighted')).not.toBeNull();
+  });
+
+  it('forgets the chain when the picker is cleared', async () => {
+    const { fixture } = await render();
+
+    fixture.componentInstance.chooseChain('');
+
+    expect(localStorage.getItem(PRESETS_CHAIN_KEY)).toBeNull();
+  });
+});
+
+describe('the presets panel, starting a run', () => {
+  /**
+   * The panel is on the Runs tab, so a start goes nowhere: it tells the page,
+   * and the page reads its runs again.
+   */
+  it('calls the route, says which run started and does not navigate', async () => {
     const { fixture, recorded } = await render();
-    const navigate = jest
-      .spyOn(TestBed.inject(Router), 'navigate')
-      .mockResolvedValue(true);
+    const router = TestBed.inject(Router);
+    const navigate = jest.spyOn(router, 'navigate');
+    const navigateByUrl = jest.spyOn(router, 'navigateByUrl');
+    const started: string[] = [];
+    fixture.componentInstance.started.subscribe((run) => started.push(run.id));
     // The seed holds a running walk, and one harvester runs one thing.
     await recorded.memory.abortRun('run-catalog-running');
 
     await fixture.componentInstance.start(
       fixture.componentInstance.presets()[0]
     );
+    await settle(fixture);
 
     expect(recorded.started).toEqual([MERCADONA_WEEKLY_PRESET]);
-    const [commands, extras] = navigate.mock.calls[0];
-    expect(commands).toEqual(['/', 'harvest', 'runs']);
-    expect(extras?.queryParams?.['run']).toEqual(expect.any(String));
+    expect(started).toEqual([expect.any(String)]);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(navigateByUrl).not.toHaveBeenCalled();
+    // The row says how its last run ended, and that is this run now.
+    expect(fixture.componentInstance.presets()[0].lastRun?.id).toBe(started[0]);
   });
 
   it('shows a refusal on the row, with the server words', async () => {
@@ -219,7 +304,63 @@ describe('the presets screen, starting a run', () => {
   });
 });
 
-describe('the presets screen, editing', () => {
+/**
+ * A row is a name, a line that says what it does, how its last run ended and
+ * "Start". Edit and delete are for the day the presets are put in order.
+ */
+describe('the presets panel, "Edit presets"', () => {
+  const query = (fixture: ComponentFixture<PresetsPanel>, selector: string) =>
+    fixture.nativeElement.querySelector(selector) as HTMLButtonElement | null;
+
+  it('shows Start alone on a row until it is on', async () => {
+    const { fixture } = await render();
+
+    expect(query(fixture, '[data-start]')).not.toBeNull();
+    expect(query(fixture, '[data-edit]')).toBeNull();
+    expect(query(fixture, '[data-delete]')).toBeNull();
+  });
+
+  it('shows edit and delete on each row while it is on, and hides them again', async () => {
+    const { fixture } = await render();
+    const toggle = query(fixture, '[data-edit-presets]') as HTMLButtonElement;
+
+    toggle.click();
+    fixture.detectChanges();
+
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(query(fixture, '[data-edit]')).not.toBeNull();
+    expect(query(fixture, '[data-delete]')).not.toBeNull();
+    expect(query(fixture, '[data-start]')).not.toBeNull();
+
+    toggle.click();
+    fixture.detectChanges();
+
+    expect(query(fixture, '[data-edit]')).toBeNull();
+    expect(query(fixture, '[data-delete]')).toBeNull();
+  });
+
+  it('opens the editor from a row\'s edit button', async () => {
+    const { fixture } = await render();
+
+    (query(fixture, '[data-edit-presets]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (query(fixture, '[data-edit]') as HTMLButtonElement).click();
+    await settle(fixture);
+
+    expect(fixture.componentInstance.editing()?.preset?.id).toBe(
+      MERCADONA_WEEKLY_PRESET
+    );
+  });
+
+  it('draws no page header of its own', async () => {
+    const { fixture } = await render();
+
+    expect(fixture.nativeElement.querySelector('lib-page-header')).toBeNull();
+    expect(fixture.nativeElement.querySelector('h1')).toBeNull();
+  });
+});
+
+describe('the presets panel, editing', () => {
   it('opens the form on the preset input and saves the changed input', async () => {
     const { fixture, recorded } = await render();
     const page = fixture.componentInstance;
@@ -287,7 +428,7 @@ describe('the presets screen, editing', () => {
   });
 });
 
-describe('the presets screen, deleting', () => {
+describe('the presets panel, deleting', () => {
   it('confirms, then removes the row', async () => {
     const { fixture } = await render();
     const page = fixture.componentInstance;

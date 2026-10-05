@@ -474,6 +474,31 @@ describe('the harvester state of a chain', () => {
     expect(head(fixture).querySelector('h1')?.textContent).toBe('Mercadona');
     expect(rowsOf(fixture)).toHaveLength(3);
   });
+
+  /**
+   * The state is a link to where it is set: the chain sources of the
+   * harvester's Setup tab (admin plan 0044; target 3 deferred the link to
+   * that plan). In each of the three states, because "no source" is fixed
+   * there as well: that is where a source is added.
+   */
+  it.each([
+    ['fetched', async () => ({ enabled: true })],
+    ['off', async () => ({ enabled: false })],
+    [
+      'none',
+      async () => {
+        throw refusal('not_found', 404);
+      },
+    ],
+  ] as const)('links the %s state to Setup', async (state, read) => {
+    const fixture = await boot('/chains/sm_mercadona/shops', [harvester(read)]);
+    const link = chip(fixture);
+
+    expect(link?.dataset['source']).toBe(state);
+    expect(link?.tagName).toBe('A');
+    expect(link?.classList.contains('chip')).toBe(true);
+    expect(link?.getAttribute('href')).toBe('/harvest/setup/sources');
+  });
 });
 
 describe('the Shops tab of a chain', () => {

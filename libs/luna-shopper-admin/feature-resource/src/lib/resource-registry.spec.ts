@@ -685,3 +685,124 @@ describe('a section whose held resources are its tabs', () => {
     expect(sectionLink(rooted)).toBe('/');
   });
 });
+
+/**
+ * A section that opens on one of its tabs and holds its resources under
+ * another (admin plan 0044): the harvester, whose own address goes to Review
+ * and whose brands and postal codes are parts of Setup.
+ */
+const brands = resource('brands', 'brands');
+const postalCodes = resource('postal-codes', 'postal-codes');
+
+const harvestSection: AdminSection = {
+  key: 'harvest',
+  label: 'shell.sections.harvest',
+  segment: 'harvest',
+  landing: 'review',
+  held: [brands, postalCodes],
+  heldUnder: 'setup',
+  screens: [],
+  links: [
+    { path: '/harvest/review', label: 'review' },
+    { path: '/harvest/runs', label: 'runs' },
+    { path: '/harvest/setup', label: 'setup' },
+  ],
+};
+
+describe('a section that holds its resources under one of its tabs', () => {
+  let registry: ResourceRegistry;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [
+        ContentLocaleStore,
+        provideSections(harvestSection, productsSection),
+      ],
+    });
+    registry = TestBed.inject(ResourceRegistry);
+  });
+
+  it('puts the tab between the section and the resource', () => {
+    expect(registry.pathOf('brands')).toEqual([
+      '/',
+      'harvest',
+      'setup',
+      'brands',
+    ]);
+    expect(registry.pathOf('postal-codes')).toEqual([
+      '/',
+      'harvest',
+      'setup',
+      'postal-codes',
+    ]);
+  });
+
+  it('puts a row one segment under that', () => {
+    expect(registry.rowPath('brands', 'br_1')).toEqual([
+      '/',
+      'harvest',
+      'setup',
+      'brands',
+      'br_1',
+    ]);
+  });
+
+  it('leaves a section that names no such tab as it was', () => {
+    expect(registry.pathOf('product-groups')).toEqual([
+      '/',
+      'products',
+      'groups',
+    ]);
+  });
+
+  /** Only what the section holds is under the tab. What it mounts is not. */
+  it('puts a resource the route factory mounts straight under the section', () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        ContentLocaleStore,
+        provideSections({
+          ...harvestSection,
+          held: [brands],
+          resources: [postalCodes],
+        }),
+      ],
+    });
+    const mixed = TestBed.inject(ResourceRegistry);
+
+    expect(mixed.pathOf('brands')).toEqual(['/', 'harvest', 'setup', 'brands']);
+    expect(mixed.pathOf('postal-codes')).toEqual([
+      '/',
+      'harvest',
+      'postal-codes',
+    ]);
+  });
+
+  it('holds no tab of its own for a held resource', () => {
+    expect(sectionScreens(harvestSection).map((link) => link.path)).toEqual([
+      '/harvest/review',
+      '/harvest/runs',
+      '/harvest/setup',
+    ]);
+  });
+});
+
+describe('sectionLink for a section that opens on one of its tabs', () => {
+  /**
+   * The entry in the rail points at the segment, and so stays marked on every
+   * tab. Pointing at the first tab would leave it unmarked on the two others.
+   */
+  it('answers the section own segment, and not its first tab', () => {
+    expect(sectionLink(harvestSection)).toBe('/harvest');
+  });
+
+  it('answers the first screen again once the landing is taken away', () => {
+    expect(sectionLink({ ...harvestSection, landing: undefined })).toBe(
+      '/harvest/review'
+    );
+  });
+
+  it('answers the root for such a section with no segment', () => {
+    expect(sectionLink({ ...harvestSection, segment: undefined })).toBe('/');
+  });
+});

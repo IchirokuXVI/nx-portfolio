@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   type OnDestroy,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -18,28 +19,33 @@ import {
   type CreateItemFromSourceEntryInput,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
+  formatSize,
   PRICE_SCOPES,
+  priceScopeMark,
   priceScopeSource,
   type PriceScope,
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import {
   gatewayErrorKey,
   ResourceReferences,
+  ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  harvestRunPath,
   OFFICIAL_SOURCE_KINDS,
   SOURCE_ENTRY_STATUSES,
   type OfficialSourceKind,
+  type ScopeMarkView,
   type SourceEntryStatus,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
   HarvestNotice,
-  PageHeader,
   QueueFrame,
   ReferencePicker,
   ReferencesControl,
+  ScopeMark,
   type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { brandKey } from '@portfolio/luna-shopper/contracts/brand-key';
@@ -50,16 +56,39 @@ import {
   type SourceEntryPriceLine,
   type SourceEntryRow,
 } from './entry-view';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
+import { HarvestStatus } from './harvest-status';
 import {
   runQueueBulk,
   type PendingBulk,
   type QueueBulkAct,
 } from './queue-bulk';
+import { ReviewChain } from './review-chain';
 
 /** One entry off the wire, which is what the queue holds. */
 type Entry = Wire.HarvestSourceCatalogEntryView;
+
+/** One line of a panel of the card: a label, a value, and how it is set. */
+interface CardLine {
+  readonly key: string;
+  readonly value: string;
+  /** A barcode or an id, which this app sets in the mono face. */
+  readonly mono?: boolean;
+}
+
+/** The product a row was matched to, as the panel beside the row draws it. */
+interface ProposedProduct {
+  readonly lines: readonly CardLine[];
+  /** Where the product is, or `null` when the app did not mount products. */
+  readonly link: readonly string[] | null;
+}
+
+/** A price scope, as a price line names it. */
+interface ScopeName {
+  readonly name: string;
+  /** How far the scope reaches, as the four bar mark. */
+  readonly mark: ScopeMarkView | null;
+}
 
 /**
  * What the category picker offers: only categories inside another, because a
@@ -134,47 +163,19 @@ const BRAND_SEARCH_DELAY_MS = 250;
     ReferencesControl,
     ConfirmDialog,
     DecisionsFilePanel,
-    PageHeader,
+    ScopeMark,
   ],
   template: `
-    <lib-page-header [heading]="'harvest.entries.heading' | rokuT" />
-
     <!-- A curation run's decisions file, applied from here (admin plan 0035,
          section 3). The panel reads and reviews it; only its own button sends. -->
     @if (decisionsOpen()) {
       <lib-decisions-file-panel
-        (applied)="reload()"
+        (applied)="applied()"
         (closed)="decisionsOpen.set(false)"
       />
-    } @else {
-      <button
-        (click)="decisionsOpen.set(true)"
-        class="decisions-open"
-        type="button"
-        data-open-decisions
-      >
-        {{ 'harvest.entries.decisionsFile.open' | rokuT }}
-      </button>
     }
 
     <section class="filters">
-      <div class="field">
-        <label for="entries-chain">{{
-          'harvest.entries.filter.chain' | rokuT
-        }}</label>
-        <lib-reference-picker
-          (valueChange)="open($event)"
-          [controlId]="'entries-chain'"
-          [lookup]="references"
-          [nullable]="true"
-          [resource]="'supermarkets'"
-          [value]="chosen()"
-        />
-        @if (chosen() === '') {
-          <p class="hint">{{ 'harvest.entries.filter.anyChain' | rokuT }}</p>
-        }
-      </div>
-
       <label>
         <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
         <select
@@ -255,6 +256,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
         [busy]="queue!.busy()"
         [canLoadMore]="queue!.canLoadMore()"
         [confirmKey]="confirmKey()"
+        [currentId]="row()?.id ?? null"
         [decided]="queue!.decided()"
         [empty]="queue!.empty()"
         [errorKey]="errorKey()"
@@ -271,8 +273,22 @@ const BRAND_SEARCH_DELAY_MS = 250;
         defaultView="review"
         emptyKey="harvest.entries.empty"
         rejectKey="harvest.entries.reject"
+        rejectShortKey="harvest.entries.rejectShort"
         titleKey="harvest.entries.heading"
       >
+        <!-- A button of this queue alone (admin plan 0044, target 4). -->
+        @if (!decisionsOpen()) {
+          <button
+            (click)="decisionsOpen.set(true)"
+            class="tool"
+            queueTool
+            type="button"
+            data-open-decisions
+          >
+            {{ 'harvest.entries.decisionsFile.open' | rokuT }}
+          </button>
+        }
+
         <lib-harvest-notice
           (retry)="queue!.load()"
           [absent]="shell.absent()"
@@ -280,96 +296,176 @@ const BRAND_SEARCH_DELAY_MS = 250;
         />
 
         @if (row(); as entry) {
-          <h2>{{ entry.name }}</h2>
-          <p class="identity">
-            <!-- The chain, while none is chosen, because that is when it says
-                 something the filters do not. -->
-            @if (chosen() === '' && chainName(entry.supermarketId); as chain) {
-              <span class="chain">{{ chain }}</span>
-            }
-            @if (entry.sourceKind; as kind) {
-              <span [class]="kind" class="kind">{{
-                'harvest.sourceKind.' + kind | rokuT
+          <div class="head">
+            <h2>{{ entry.name }}</h2>
+            <p class="identity">
+              @if (chainName(entry.supermarketId); as chain) {
+                <span class="chip chain">{{ chain }}</span>
+              }
+              @if (entry.sourceKind; as kind) {
+                <span [class]="kind" class="chip kind">{{
+                  'harvest.sourceKind.' + kind | rokuT
+                }}</span>
+              }
+              <span class="chip seen">{{
+                'harvest.entries.timesSeen' | rokuT: { count: entry.timesSeen }
               }}</span>
-            }
-            <span class="brand">{{ entry.brand }}</span>
-            <span class="size">{{ entry.sizeFormat }}</span>
-            @if (entry.ean !== '') {
-              <span class="ean">{{ entry.ean }}</span>
-            }
-            <span class="seen">{{
-              'harvest.entries.timesSeen' | rokuT: { count: entry.timesSeen }
-            }}</span>
-          </p>
+              @if (entry.lastRunId !== '') {
+                <a [routerLink]="runLink(entry.lastRunId)" class="run">{{
+                  'harvest.entries.lastRun' | rokuT
+                }}</a>
+              }
+            </p>
+          </div>
+
+          <!-- What the source said and what it was matched to, side by side
+               on a wide screen and one above the other on a phone. -->
+          <div class="pair">
+            <section class="says">
+              <h3>{{ 'harvest.entries.says.heading' | rokuT }}</h3>
+              <dl>
+                @for (line of lines(); track line.key) {
+                  @if (line.value !== '') {
+                    <div>
+                      <dt>{{ 'harvest.entries.field.' + line.key | rokuT }}</dt>
+                      <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                    </div>
+                  }
+                }
+              </dl>
+              @if (entry.url !== '') {
+                <a
+                  [href]="entry.url"
+                  class="out"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                  >{{ 'harvest.entries.says.openAtChain' | rokuT }}</a
+                >
+              }
+            </section>
+
+            <section [class.has]="proposal() !== 'none'" class="proposed">
+              <div class="proposed-head">
+                <h3>{{ 'harvest.entries.proposal.heading' | rokuT }}</h3>
+                <!-- Why this product was proposed, as a state. -->
+                @if (proposal() === 'none') {
+                  <span class="chip">{{
+                    'harvest.entries.proposalBadge.none' | rokuT
+                  }}</span>
+                } @else if (entry.matchedBy; as matchedBy) {
+                  <span class="chip good" data-reason>{{
+                    'harvest.entries.reason.' + matchedBy | rokuT
+                  }}</span>
+                }
+              </div>
+              @switch (proposal()) {
+                @case ('item') {
+                  @if (proposed(); as product) {
+                    <dl>
+                      @for (line of product.lines; track line.key) {
+                        @if (line.value !== '') {
+                          <div>
+                            <dt>
+                              {{
+                                'harvest.entries.proposed.' + line.key | rokuT
+                              }}
+                            </dt>
+                            <dd [class.mono]="line.mono">{{ line.value }}</dd>
+                          </div>
+                        }
+                      }
+                    </dl>
+                    @if (product.link; as link) {
+                      <a [routerLink]="link" class="out">{{
+                        'harvest.entries.proposed.open' | rokuT
+                      }}</a>
+                    }
+                  }
+                  <p class="hint">
+                    {{
+                      'harvest.entries.proposal.item'
+                        | rokuT: { confidence: entry.confidence }
+                    }}
+                  </p>
+                }
+                @case ('sibling') {
+                  <p class="hint">
+                    {{
+                      'harvest.entries.proposal.sibling'
+                        | rokuT: { name: siblingName() }
+                    }}
+                  </p>
+                  @if (siblingName() === '') {
+                    <p class="hint">
+                      {{
+                        'harvest.entries.proposal.siblingElsewhere'
+                          | rokuT: { id: entry.candidateEntryId }
+                      }}
+                    </p>
+                  }
+                }
+                @default {
+                  <p class="hint">
+                    {{ 'harvest.entries.proposal.none' | rokuT }}
+                  </p>
+                }
+              }
+            </section>
+          </div>
 
           <section class="prices">
-            <h3>{{ 'harvest.entries.prices.heading' | rokuT }}</h3>
+            <div class="prices-head">
+              <h3>{{ 'harvest.entries.prices.heading' | rokuT }}</h3>
+              @if (entry.prices.length > 0) {
+                <span class="hint">{{
+                  'harvest.entries.prices.writes' | rokuT
+                }}</span>
+              }
+            </div>
             @if (entry.prices.length === 0) {
               <p class="hint">{{ 'harvest.entries.prices.none' | rokuT }}</p>
             } @else {
               <ul>
                 @for (line of priceLines(); track line.scopeId) {
                   <li>
+                    @if (line.mark; as mark) {
+                      <lib-scope-mark
+                        [label]="mark.label | rokuT"
+                        [level]="mark.level"
+                      />
+                    }
                     <span class="scope">{{ line.scope }}</span>
-                    <span class="amount">{{ line.price }}</span>
-                    <span class="unit">{{ line.unitPrice }}</span>
                     <span class="window">{{ line.window }}</span>
+                    <span class="unit">{{ line.unitPrice }}</span>
+                    <span class="amount">{{ line.price }}</span>
                   </li>
                 }
               </ul>
             }
           </section>
 
-          <dl>
-            @for (line of lines(); track line.key) {
-              @if (line.value !== '') {
-                <div>
-                  <dt>{{ 'harvest.entries.field.' + line.key | rokuT }}</dt>
-                  <dd>{{ line.value }}</dd>
-                </div>
-              }
-            }
-          </dl>
-
-          <section class="proposal">
-            <h3>{{ 'harvest.entries.proposal.heading' | rokuT }}</h3>
-            @switch (proposal()) {
-              @case ('item') {
-                <p class="hint">
-                  {{
-                    'harvest.entries.proposal.item'
-                      | rokuT: { confidence: entry.confidence }
-                  }}
-                </p>
-              }
-              @case ('sibling') {
-                <p class="hint">
-                  {{
-                    'harvest.entries.proposal.sibling'
-                      | rokuT: { name: siblingName() }
-                  }}
-                </p>
-                @if (siblingName() === '') {
-                  <p class="hint">
-                    {{
-                      'harvest.entries.proposal.siblingElsewhere'
-                        | rokuT: { id: entry.candidateEntryId }
-                    }}
-                  </p>
-                }
-              }
-              @default {
-                <p class="hint">
-                  {{ 'harvest.entries.proposal.none' | rokuT }}
-                </p>
-              }
-            }
-            @if (entry.matchedBy; as matchedBy) {
-              <p class="hint">
-                {{ 'harvest.match.' + matchedBy | rokuT }}
-              </p>
-            }
-          </section>
+          <!-- On a phone the bar holds reject, skip and accept. These two are
+               links in the card (admin plan 0044, target 4). -->
+          <p class="links">
+            <button
+              (click)="openPanel('pick')"
+              [attr.aria-expanded]="panel() === 'pick'"
+              class="link"
+              type="button"
+              data-panel="pick"
+            >
+              {{ 'harvest.entries.pick' | rokuT }}
+            </button>
+            <button
+              (click)="openPanel('create')"
+              [attr.aria-expanded]="panel() === 'create'"
+              class="link"
+              type="button"
+              data-panel="create"
+            >
+              {{ 'harvest.entries.create.open' | rokuT }}
+            </button>
+          </p>
 
           @if (entry.extra.length > 0) {
             <details class="extra">
@@ -387,14 +483,6 @@ const BRAND_SEARCH_DELAY_MS = 250;
             </details>
           }
 
-          @if (entry.lastRunId !== '') {
-            <p class="run">
-              <a [routerLink]="runLink(entry.lastRunId)">{{
-                'harvest.entries.lastRun' | rokuT
-              }}</a>
-            </p>
-          }
-
           @if (written(); as result) {
             <p class="written" role="status">
               {{ writtenKey() | rokuT: result }}
@@ -402,81 +490,121 @@ const BRAND_SEARCH_DELAY_MS = 250;
           }
         }
 
-        <section class="decide" queueContext>
-          <h3>{{ 'harvest.entries.bind.heading' | rokuT }}</h3>
-          <lib-reference-picker
-            (valueChange)="itemId.set($event)"
-            [controlId]="'entries-item'"
-            [disabled]="queue!.busy()"
-            [lookup]="references"
-            [resource]="'items'"
-            [value]="itemId()"
-          />
+        <!-- The two other things that can be done with the row, in the bar on
+             a wide screen. -->
+        <button
+          (click)="openPanel('pick')"
+          [attr.aria-expanded]="panel() === 'pick'"
+          [disabled]="queue!.busy()"
+          queueAction
+          type="button"
+        >
+          {{ 'harvest.entries.pick' | rokuT }}
+        </button>
+        <button
+          (click)="openPanel('create')"
+          [attr.aria-expanded]="panel() === 'create'"
+          [disabled]="queue!.busy()"
+          queueAction
+          type="button"
+        >
+          {{ 'harvest.entries.create.open' | rokuT }}
+        </button>
 
-          <h3>{{ 'harvest.entries.create.heading' | rokuT }}</h3>
-          <p class="hint">{{ 'harvest.entries.create.help' | rokuT }}</p>
+        <section [hidden]="panel() === null" class="decide" queueContext>
+          @if (panel() === 'pick') {
+            <h3>{{ 'harvest.entries.bind.heading' | rokuT }}</h3>
+            <lib-reference-picker
+              (valueChange)="itemId.set($event)"
+              [controlId]="'entries-item'"
+              [disabled]="queue!.busy()"
+              [lookup]="references"
+              [resource]="'items'"
+              [value]="itemId()"
+            />
+            <p class="hint">{{ 'harvest.entries.bind.help' | rokuT }}</p>
+          }
 
-          <div class="row">
-            <label>
-              <span>{{ 'harvest.entries.create.nameEs' | rokuT }}</span>
-              <input [(ngModel)]="nameEs" name="nameEs" type="text" />
-            </label>
-            <label>
-              <span>{{ 'harvest.entries.create.nameEn' | rokuT }}</span>
-              <input [(ngModel)]="nameEn" name="nameEn" type="text" />
-            </label>
-            <label>
-              <span>{{ 'harvest.entries.create.brand' | rokuT }}</span>
-              <input [(ngModel)]="brand" name="brand" type="text" />
-            </label>
-            <label>
-              <span>{{ 'harvest.entries.create.ean' | rokuT }}</span>
-              <input [(ngModel)]="ean" name="ean" type="text" />
-            </label>
-            <label>
-              <span>{{ 'harvest.entries.create.unitSize' | rokuT }}</span>
-              <input [(ngModel)]="unitSize" name="unitSize" type="text" />
-            </label>
-            <div class="field categories">
-              <label for="entries-categories">{{
-                'harvest.entries.create.categories' | rokuT
-              }}</label>
-              <lib-references-control
-                (valueChange)="categoryIds.set($event)"
-                [controlId]="'entries-categories'"
-                [disabled]="queue!.busy()"
-                [lookup]="references"
-                [resource]="'categories'"
-                [scope]="leaves"
-                [value]="categoryIds()"
-              />
-              <p class="hint">
-                {{ 'harvest.entries.create.categoriesHelp' | rokuT }}
-              </p>
-            </div>
-            <label>
-              <span>{{ 'harvest.entries.create.defaultUnit' | rokuT }}</span>
-              <select [(ngModel)]="defaultUnit" name="defaultUnit">
-                <option value="">
-                  {{ 'harvest.entries.create.fromRow' | rokuT }}
-                </option>
-                @for (option of units; track option) {
-                  <option [value]="option">
-                    {{ 'harvest.unit.' + option | rokuT }}
+          @if (panel() === 'create') {
+            <h3>{{ 'harvest.entries.create.heading' | rokuT }}</h3>
+            <p class="hint">{{ 'harvest.entries.create.help' | rokuT }}</p>
+
+            <div class="row">
+              <label>
+                <span>{{ 'harvest.entries.create.nameEs' | rokuT }}</span>
+                <input [(ngModel)]="nameEs" name="nameEs" type="text" />
+              </label>
+              <label>
+                <span>{{ 'harvest.entries.create.nameEn' | rokuT }}</span>
+                <input [(ngModel)]="nameEn" name="nameEn" type="text" />
+              </label>
+              <label>
+                <span>{{ 'harvest.entries.create.brand' | rokuT }}</span>
+                <input [(ngModel)]="brand" name="brand" type="text" />
+              </label>
+              <label>
+                <span>{{ 'harvest.entries.create.ean' | rokuT }}</span>
+                <input [(ngModel)]="ean" name="ean" type="text" />
+              </label>
+              <label>
+                <span>{{ 'harvest.entries.create.unitSize' | rokuT }}</span>
+                <input [(ngModel)]="unitSize" name="unitSize" type="text" />
+              </label>
+              <div class="field categories">
+                <label for="entries-categories">{{
+                  'harvest.entries.create.categories' | rokuT
+                }}</label>
+                <lib-references-control
+                  (valueChange)="categoryIds.set($event)"
+                  [controlId]="'entries-categories'"
+                  [disabled]="queue!.busy()"
+                  [lookup]="references"
+                  [resource]="'categories'"
+                  [scope]="leaves"
+                  [value]="categoryIds()"
+                />
+                <p class="hint">
+                  {{ 'harvest.entries.create.categoriesHelp' | rokuT }}
+                </p>
+              </div>
+              <label>
+                <span>{{ 'harvest.entries.create.defaultUnit' | rokuT }}</span>
+                <select [(ngModel)]="defaultUnit" name="defaultUnit">
+                  <option value="">
+                    {{ 'harvest.entries.create.fromRow' | rokuT }}
                   </option>
-                }
-              </select>
-            </label>
-          </div>
+                  @for (option of units; track option) {
+                    <option [value]="option">
+                      {{ 'harvest.unit.' + option | rokuT }}
+                    </option>
+                  }
+                </select>
+              </label>
+            </div>
 
-          <button
-            (click)="createItem()"
-            [disabled]="queue!.busy() || nameEs().trim() === ''"
-            type="button"
-          >
-            {{ 'harvest.entries.create.submit' | rokuT }}
-          </button>
+            <button
+              (click)="createItem()"
+              [disabled]="queue!.busy() || nameEs().trim() === ''"
+              class="primary"
+              type="button"
+              data-create
+            >
+              {{ 'harvest.entries.create.submit' | rokuT }}
+            </button>
+          }
         </section>
+
+        <!-- One line of the column beside the open row: the name, then the
+             chain and whether a product was proposed. -->
+        <ng-template #queueLine let-row>
+          <span class="line-name">{{ row.name }}</span>
+          @if (chainName(row.supermarketId); as chain) {
+            <span class="line-chain">{{ chain }}</span>
+          }
+          <span [class.good]="proposalKind(row) !== 'none'" class="chip">{{
+            'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
+          }}</span>
+        </ng-template>
 
         <!-- Section 2's columns for this screen: whatever the review view leads
              with. The chain where the queue holds several, the kind badge, the
@@ -523,6 +651,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
           <button
             (click)="askAccept()"
             [disabled]="acceptable().length === 0"
+            class="primary"
             type="button"
           >
             {{ 'harvest.entries.bulk.accept' | rokuT }}
@@ -569,16 +698,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-3);
-    }
-
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--admin-space-1);
-      /* The picker is a search box until a chain is chosen, and a name with two
-         buttons afterwards. Both are wider than a select, and neither may push
-         the two selects off the row. */
-      min-inline-size: 16rem;
+      min-inline-size: 0;
     }
 
     /* A list of chips and a search box, so it takes the row's whole width
@@ -589,13 +709,13 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
     h2 {
       font-size: 1.125rem;
-      font-weight: 700;
+      font-weight: 600;
+      overflow-wrap: anywhere;
     }
 
     h3 {
-      font-size: 0.875rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 0.75rem;
+      font-weight: 600;
       color: var(--admin-ink-muted);
     }
 
@@ -604,7 +724,6 @@ const BRAND_SEARCH_DELAY_MS = 250;
     .size,
     .ean,
     .seen,
-    .scope,
     .unit,
     .window {
       color: var(--admin-ink-muted);
@@ -613,7 +732,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
     /* The key the typed brand makes, in the muted monospace a key wears
        everywhere in this app. */
     .live-key {
-      font-family: monospace;
+      font-family: var(--admin-font-mono, monospace);
       font-size: 0.8125rem;
     }
 
@@ -629,43 +748,122 @@ const BRAND_SEARCH_DELAY_MS = 250;
       align-items: flex-start;
     }
 
-    .decisions-open {
-      align-self: flex-start;
-    }
-
-    .identity {
-      align-items: baseline;
+    .head {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
       margin-block-end: var(--admin-space-3);
     }
 
-    .kind,
-    .chain {
-      padding: var(--admin-space-1) var(--admin-space-2);
-      border-radius: var(--admin-radius);
-      background: var(--admin-surface);
+    .identity {
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .chip {
+      padding: 0.125rem 0.5rem;
+      border-radius: var(--admin-radius-state);
+      background: var(--admin-neutral-wash);
       font-size: 0.75rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-weight: 500;
+      white-space: nowrap;
+      color: var(--admin-neutral-on-wash);
     }
 
-    .chain {
-      /* A chain is a proper name, so it keeps its own capitals. */
-      text-transform: none;
-      font-weight: 600;
-    }
-
-    .kind.OFFICIAL_LEAFLET {
+    .chip.good,
+    .chip.OFFICIAL_LEAFLET {
       background: var(--admin-accent-wash);
       color: var(--admin-accent-on-wash);
     }
 
-    .ean {
-      font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+    .kind,
+    .chain {
+      font-size: 0.75rem;
+    }
+
+    .chain {
+      font-weight: 600;
+    }
+
+    .ean,
+    .mono {
+      font-family: var(--admin-font-mono, monospace);
       font-size: 0.8125rem;
     }
 
+    .run,
+    .out {
+      font-size: 0.8125rem;
+      color: var(--admin-accent);
+    }
+
+    /* The source at the left and the proposal at the right. */
+    .pair {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--admin-space-3);
+      margin-block-end: var(--admin-space-3);
+    }
+
+    .says,
+    .proposed {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-2);
+      padding: var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+    }
+
+    .proposed.has {
+      border-color: var(--admin-accent);
+      background: var(--admin-accent-wash);
+    }
+
+    .proposed.has h3,
+    .proposed.has .hint,
+    .proposed.has dt {
+      color: var(--admin-accent-on-wash);
+    }
+
+    .proposed-head,
+    .prices-head {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: center;
+    }
+
+    .proposed-head h3,
+    .prices-head h3 {
+      flex: 1;
+    }
+
+    .proposed.has .chip.good {
+      background: var(--admin-surface-raised);
+    }
+
+    dl {
+      display: flex;
+      flex-direction: column;
+      gap: var(--admin-space-1);
+    }
+
+    dl > div {
+      display: grid;
+      grid-template-columns: 7.5rem minmax(0, 1fr);
+      gap: var(--admin-space-2);
+    }
+
+    dt {
+      font-size: 0.8125rem;
+      color: var(--admin-ink-muted);
+    }
+
+    dd {
+      overflow-wrap: anywhere;
+    }
+
     .prices,
-    .proposal,
     .decide {
       display: flex;
       flex-direction: column;
@@ -673,23 +871,64 @@ const BRAND_SEARCH_DELAY_MS = 250;
       margin-block-end: var(--admin-space-3);
     }
 
+    .decide {
+      padding: var(--admin-space-4);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius);
+      background: var(--admin-surface-raised);
+    }
+
+    .decide[hidden] {
+      display: none;
+    }
+
     .prices ul {
       display: flex;
       flex-direction: column;
-      gap: var(--admin-space-1);
+      gap: var(--admin-space-2);
       list-style: none;
     }
 
     .prices li {
       display: flex;
       flex-wrap: wrap;
-      gap: var(--admin-space-3);
-      align-items: baseline;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
+      padding: var(--admin-space-2) var(--admin-space-3);
+      border: 1px solid var(--admin-border);
+      border-radius: var(--admin-radius-control);
+    }
+
+    .scope {
+      flex: 1;
+      min-inline-size: 8rem;
+    }
+
+    .amount,
+    .unit {
+      font-variant-numeric: tabular-nums;
     }
 
     .amount {
-      font-variant-numeric: tabular-nums;
-      font-weight: 700;
+      font-weight: 600;
+    }
+
+    /* The two other actions are in the bar on a wide screen, so the links in
+       the card are for a phone alone. */
+    .links {
+      display: none;
+      flex-wrap: wrap;
+      gap: var(--admin-space-4);
+    }
+
+    .link {
+      min-block-size: 2.75rem;
+      padding: 0;
+      border: none;
+      background: none;
+      font-weight: 500;
+      text-decoration: underline;
+      color: var(--admin-accent);
     }
 
     .written {
@@ -700,36 +939,26 @@ const BRAND_SEARCH_DELAY_MS = 250;
       color: var(--admin-accent-on-wash);
     }
 
-    dl {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--admin-space-4);
-    }
-
-    dt {
-      font-size: 0.75rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: var(--admin-ink-muted);
-    }
-
-    dd {
-      overflow-wrap: anywhere;
-    }
-
     .extra {
       margin-block-start: var(--admin-space-3);
     }
 
     .extra pre {
       margin: 0;
-      font-family: ui-monospace, 'SFMono-Regular', 'Consolas', monospace;
+      font-family: var(--admin-font-mono, monospace);
       font-size: 0.8125rem;
       white-space: pre-wrap;
     }
 
-    .run a {
-      color: var(--admin-accent);
+    .line-name {
+      flex-basis: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .line-chain {
+      font-size: 0.8125rem;
+      font-weight: 400;
+      color: var(--admin-ink-muted);
     }
 
     .bulk {
@@ -749,7 +978,14 @@ const BRAND_SEARCH_DELAY_MS = 250;
     .bulk button {
       flex: 1 1 8rem;
       align-self: stretch;
-      min-block-size: 3rem;
+      min-block-size: 2.5rem;
+    }
+
+    .primary {
+      border-color: var(--admin-accent);
+      background: var(--admin-accent);
+      font-weight: 600;
+      color: var(--admin-accent-ink);
     }
 
     .bulk .danger {
@@ -766,9 +1002,21 @@ const BRAND_SEARCH_DELAY_MS = 250;
     }
 
     .field > span,
-    label > span {
+    label > span,
+    .field > label {
       font-size: 0.8125rem;
       color: var(--admin-ink-muted);
+    }
+
+    /* A label that only names the control under it takes its own height.
+       The rule below is for a label that wraps its control. */
+    .field > label {
+      flex: none;
+    }
+
+    .filters > label,
+    .filters > .field {
+      flex: 0 1 14rem;
     }
 
     label {
@@ -790,9 +1038,21 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
     button:focus-visible,
     input:focus-visible,
-    select:focus-visible {
+    select:focus-visible,
+    a:focus-visible {
       outline: 2px solid var(--admin-accent);
       outline-offset: 2px;
+    }
+
+    @media (max-width: 47.99rem) {
+      /* One above the other on a phone. */
+      .pair {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .links {
+        display: flex;
+      }
     }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -811,6 +1071,10 @@ export class EntriesQueuePage implements OnDestroy {
    */
   private readonly _scopes =
     inject(RESOURCE_GATEWAYS).for<PriceScope>(priceScopeSource());
+
+  private readonly _registry = inject(ResourceRegistry);
+  private readonly _status = inject(HarvestStatus);
+  private readonly _review = inject(ReviewChain);
 
   readonly shell = inject(HarvestShell);
   readonly references = inject(ResourceReferences);
@@ -911,7 +1175,9 @@ export class EntriesQueuePage implements OnDestroy {
    * Across every chain whose rows this page has drawn, not one chain's, because
    * a queue with no chain filter holds rows of several.
    */
-  private readonly _scopeNames = signal<ReadonlyMap<string, string>>(new Map());
+  private readonly _scopeNames = signal<ReadonlyMap<string, ScopeName>>(
+    new Map()
+  );
   /** The chains already read, so neither name is asked for twice. */
   private readonly _scopesAsked = new Set<string>();
   /** Chains by id, for the badge a row wears while no chain is chosen. */
@@ -938,20 +1204,42 @@ export class EntriesQueuePage implements OnDestroy {
   /** Whether the decisions file panel is open (admin plan 0035, section 3). */
   readonly decisionsOpen = signal(false);
 
+  /**
+   * Which of the two other ways to decide the row is open: pointing it at
+   * another product, or creating the product. Neither is open when a row comes
+   * up, so the card shows the row and its proposal and nothing to fill in.
+   */
+  readonly panel = signal<'pick' | 'create' | null>(null);
+
+  /** The products a proposal named, read once each, for the panel beside the row. */
+  private readonly _products = signal<
+    ReadonlyMap<string, ProposedProduct | null>
+  >(new Map());
+  private readonly _productsAsked = new Set<string>();
+
   constructor() {
-    // The chain a run's own link named, so an operator arriving from the run
-    // that queued these rows reads that chain and not every chain. Absent
-    // everywhere else, and then the queue opens on all of them.
-    this.chosen.set(
-      this._route.snapshot.queryParamMap.get('supermarketId') ?? ''
-    );
     // The brand a suggested brands chip named, beside the chain it named. Read
     // as text and shown as text, because the input holds a spelling and the key
     // is what it makes: a key is a legal spelling of itself.
     this.brandText.set(
       this._route.snapshot.queryParamMap.get('brandKey') ?? ''
     );
-    this.reload();
+
+    // The chain the four queues share (admin plan 0044). A run's own link
+    // names it, and so does the filter above the queue. Each change builds
+    // the queue again, and the first read is this effect's first run.
+    effect(() => {
+      const chain = this._review.chain();
+      untracked(() => this.open(chain));
+    });
+
+    // The product a proposal names, for the panel beside the row.
+    effect(() => {
+      const itemId = this.row()?.itemId ?? '';
+      if (itemId !== '') {
+        untracked(() => void this._readProduct(itemId));
+      }
+    });
 
     // The chain behind each row's id, for the badge. Read off the rows rather
     // than at the moment a chain is chosen, because with no chain chosen the
@@ -1056,29 +1344,60 @@ export class EntriesQueuePage implements OnDestroy {
       : 'harvest.entries.accept'
   );
 
-  /** The price lines with their scopes named. */
+  /** The price lines with their scopes named, and how far each one reaches. */
   readonly priceLines = computed(() => {
-    const names = this._scopeNames();
-    return (this.row()?.prices ?? []).map((line) => ({
-      ...line,
-      scope: names.get(line.scopeId) ?? line.scopeId,
-    }));
+    const scopes = this._scopeNames();
+    return (this.row()?.prices ?? []).map((line) => {
+      const scope = scopes.get(line.scopeId);
+      return {
+        ...line,
+        scope: scope?.name ?? line.scopeId,
+        mark: scope?.mark ?? null,
+      };
+    });
   });
 
-  readonly lines = computed(() => {
+  /**
+   * What the source says about the row, under that heading.
+   *
+   * The page at the chain is a link under these and not a line among them.
+   */
+  readonly lines = computed<readonly CardLine[]>(() => {
     const row = this.row();
     if (row === null) {
       return [];
     }
 
     return [
-      { key: 'externalId', value: row.externalId },
+      { key: 'name', value: row.name },
+      { key: 'brand', value: row.brand },
+      { key: 'size', value: row.sizeFormat },
+      { key: 'ean', value: row.ean, mono: true },
       { key: 'categoryPath', value: row.categoryPath },
-      { key: 'url', value: row.url },
-      { key: 'status', value: row.status },
+      { key: 'externalId', value: row.externalId, mono: true },
       { key: 'lastSeen', value: row.lastSeen },
     ];
   });
+
+  /**
+   * The product the row was matched to, for the panel beside it. `null` while
+   * it is being read, and when the catalog no longer has it.
+   */
+  readonly proposed = computed<ProposedProduct | null>(() => {
+    const itemId = this.row()?.itemId ?? '';
+    return itemId === '' ? null : (this._products().get(itemId) ?? null);
+  });
+
+  /** Open one of the two other ways to decide, or close it when it is open. */
+  openPanel(panel: 'pick' | 'create'): void {
+    this.panel.update((open) => (open === panel ? null : panel));
+  }
+
+  /** A decisions file was applied: the queue and its counts are read again. */
+  applied(): void {
+    this.reload();
+    this._status.refresh();
+  }
 
   /**
    * Which sentence the confirmation uses.
@@ -1238,7 +1557,13 @@ export class EntriesQueuePage implements OnDestroy {
   accept(): void {
     const queue = this.queue;
     const itemId = this.itemId();
-    if (queue === null || itemId === '') {
+    if (queue === null) {
+      return;
+    }
+    if (itemId === '') {
+      // Nothing to agree with yet, so the press opens the picker and decides
+      // nothing. The second press, with a product picked, is the accept.
+      this.panel.set('pick');
       return;
     }
 
@@ -1249,7 +1574,7 @@ export class EntriesQueuePage implements OnDestroy {
         this.written.set(accepted(decided, result.pricesWritten));
         return result;
       })
-      .then(() => this._syncSubject());
+      .then(() => this._decided());
   }
 
   /**
@@ -1282,7 +1607,7 @@ export class EntriesQueuePage implements OnDestroy {
         this.written.set(accepted(decided, result.pricesWritten));
         return result;
       })
-      .then(() => this._syncSubject());
+      .then(() => this._decided());
   }
 
   /**
@@ -1303,7 +1628,7 @@ export class EntriesQueuePage implements OnDestroy {
       .then(() => {
         this.written.set(null);
         this.rejecting.set(false);
-        this._syncSubject();
+        this._decided();
       });
   }
 
@@ -1406,7 +1731,7 @@ export class EntriesQueuePage implements OnDestroy {
 
   /** Where a run is read. Absolute, because this screen has no route to pop. */
   runLink(runId: string): readonly string[] {
-    return ['/', HARVEST_SEGMENT, 'runs', runId];
+    return harvestRunPath(runId);
   }
 
   /**
@@ -1434,7 +1759,54 @@ export class EntriesQueuePage implements OnDestroy {
     this.report.set(null);
     this.report.set(await runQueueBulk(queue, bulk));
     this.progressKey.set('harvest.queue.bulk.progress');
+    this._decided();
+  }
+
+  /**
+   * A decision or a batch of them went through: point the controls at the row
+   * that is in front now, and read the counts again, so that the rail and the
+   * switch above say what the queue holds (admin plan 0044, target 2).
+   */
+  private _decided(): void {
     this._syncSubject();
+    this._status.refresh();
+  }
+
+  /** Read the product a proposal names, once, for the panel beside the row. */
+  private async _readProduct(itemId: string): Promise<void> {
+    if (this._productsAsked.has(itemId)) {
+      return;
+    }
+    this._productsAsked.add(itemId);
+
+    const option = await this.references.resolve('items', itemId);
+    const row = option?.row ?? null;
+    const text = (value: unknown): string =>
+      typeof value === 'string' ? value : '';
+
+    const product: ProposedProduct | null =
+      option === null
+        ? null
+        : {
+            lines: [
+              { key: 'name', value: option.title },
+              { key: 'brand', value: text(row?.['brand']) },
+              {
+                key: 'size',
+                value:
+                  row === null
+                    ? ''
+                    : formatSize(
+                        row as Parameters<typeof formatSize>[0],
+                        this._content.locale()
+                      ),
+              },
+              { key: 'ean', value: text(row?.['ean']), mono: true },
+            ],
+            link: this._registry.rowPath('items', itemId),
+          };
+
+    this._products.update((held) => new Map([...held, [itemId, product]]));
   }
 
   private _changes(
@@ -1502,6 +1874,9 @@ export class EntriesQueuePage implements OnDestroy {
     this._sizeAsRead.set(size);
     this.categoryIds.set([]);
     this.defaultUnit.set('');
+    // A new row opens with neither panel, so a product picked for the last
+    // row is never one press away from the next.
+    this.panel.set(null);
   }
 
   /**
@@ -1532,8 +1907,11 @@ export class EntriesQueuePage implements OnDestroy {
               (scope) =>
                 [
                   scope.id,
-                  PRICE_SCOPES.title(scope, this._content.order()),
-                ] as [string, string]
+                  {
+                    name: PRICE_SCOPES.title(scope, this._content.order()),
+                    mark: priceScopeMark(scope.kind) ?? null,
+                  },
+                ] as [string, ScopeName]
             ),
           ])
       );

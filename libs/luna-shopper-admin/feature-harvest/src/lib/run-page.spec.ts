@@ -338,10 +338,12 @@ describe('RunPage, for a file import', () => {
     const page = fixture.componentInstance;
 
     expect(page.queued()).toBe(5);
-    // The one queue, not the leaflet one it replaced (admin plan 0014).
+    // The one queue, not the leaflet one it replaced (admin plan 0014). It
+    // is the products queue of Review now, on the chain the four queues share
+    // (admin plan 0044).
     expect(page.queueLink()).toEqual({
-      path: ['/', 'harvest', 'entries'],
-      params: { supermarketId: 'sm_deza' },
+      path: ['/', 'harvest', 'review', 'products'],
+      params: { chain: 'sm_deza' },
     });
     expect(text(fixture)).toContain('harvest.run.queue.open');
     page.watch.stop();

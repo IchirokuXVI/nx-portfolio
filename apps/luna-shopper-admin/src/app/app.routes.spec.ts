@@ -11,7 +11,28 @@ import {
   SessionStore,
   type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
-import { provideSections } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  BrandDetailPage,
+  BrandSuggestionsPage,
+} from '@portfolio/luna-shopper-admin/feature-brands';
+import {
+  EntriesQueuePage,
+  HarvestReviewPage,
+  HarvestSetupPage,
+  ImportUploadPage,
+  NewRunPage,
+  PlacesQueuePage,
+  PostalCodeAddPage,
+  PostalCodeDetailPage,
+  RunPage,
+  RunsPage,
+  ShopsQueuePage,
+  SourcesPage,
+} from '@portfolio/luna-shopper-admin/feature-harvest';
+import {
+  provideSections,
+  ResourceListPage,
+} from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   UNKNOWN_ENVIRONMENT,
   type AdminSession,
@@ -70,6 +91,21 @@ const service: SessionServiceI = {
     deployment: 'development',
   }),
 };
+
+/** The component of every route on the way down to where the router rests. */
+function componentsAt(router: Router): unknown[] {
+  const found: unknown[] = [];
+  let route = router.routerState.snapshot.root.firstChild;
+
+  while (route !== null) {
+    if (route.component !== null) {
+      found.push(route.component);
+    }
+    route = route.firstChild;
+  }
+
+  return found;
+}
 
 async function boot(signedIn: boolean) {
   TestBed.resetTestingModule();
@@ -196,15 +232,23 @@ describe('appRoutes', () => {
     ['/shoppers/lists', 'the lists'],
     ['/shoppers/list-lines', 'the list lines'],
     ['/shoppers/shopping-lists', 'the baskets'],
-    ['/harvest', 'the harvester dashboard'],
+    // The harvester in three tabs (admin plan 0044).
+    ['/harvest/review/products', 'the queue of source products'],
+    ['/harvest/review/shops', 'the queue of source shops'],
+    ['/harvest/review/places', 'the queue of discovered places'],
+    ['/harvest/review/brands', 'the queue of suggested brands'],
     ['/harvest/runs', 'the runs'],
-    ['/harvest/presets', 'the run presets'],
-    ['/harvest/places', 'the discovered places'],
-    ['/harvest/entries', 'the source products'],
-    ['/harvest/imports/upload', 'the import'],
-    ['/harvest/shops', 'the source shops'],
-    ['/harvest/sources', 'the chain sources'],
-    ['/harvest/postal-codes', 'the postal codes'],
+    ['/harvest/runs/new', 'the form of a new run'],
+    ['/harvest/runs/import', 'the file import'],
+    ['/harvest/runs/run-catalog-running', 'one run'],
+    ['/harvest/setup/sources', 'the chain sources'],
+    ['/harvest/setup/brands', 'the registered brands'],
+    ['/harvest/setup/brands/new', 'the form of a new brand'],
+    ['/harvest/setup/brands/br_1', 'a registered brand'],
+    ['/harvest/setup/brands/br_1/edit', 'the form of a brand'],
+    ['/harvest/setup/postal-codes', 'the postal codes'],
+    ['/harvest/setup/postal-codes/new', 'the form that adds postal codes'],
+    ['/harvest/setup/postal-codes/14001', 'a postal code'],
     ['/admins', 'the admins'],
   ])('draws %s at its own URL', async (url) => {
     const { router } = await boot(true);
@@ -212,6 +256,102 @@ describe('appRoutes', () => {
     await router.navigateByUrl(url);
 
     expect(router.url).toBe(url);
+  });
+
+  /**
+   * The three tabs of the harvester, each drawn by its own page, and what
+   * the switch of Review and of Setup opens inside it (admin plan 0044,
+   * targets 4 to 6). A form of a Setup resource is a page of its own, beside
+   * the Setup page and not inside it.
+   */
+  it.each([
+    ['/harvest/review/products', [HarvestReviewPage, EntriesQueuePage]],
+    ['/harvest/review/shops', [HarvestReviewPage, ShopsQueuePage]],
+    ['/harvest/review/places', [HarvestReviewPage, PlacesQueuePage]],
+    ['/harvest/review/brands', [HarvestReviewPage, BrandSuggestionsPage]],
+    ['/harvest/runs', [RunsPage]],
+    ['/harvest/runs/new', [NewRunPage]],
+    ['/harvest/runs/import', [ImportUploadPage]],
+    ['/harvest/runs/run-1', [RunPage]],
+    ['/harvest/setup/sources', [HarvestSetupPage, SourcesPage]],
+    ['/harvest/setup/brands', [HarvestSetupPage, ResourceListPage]],
+    ['/harvest/setup/postal-codes', [HarvestSetupPage, ResourceListPage]],
+    ['/harvest/setup/brands/br_1', [BrandDetailPage]],
+    ['/harvest/setup/postal-codes/new', [PostalCodeAddPage]],
+    ['/harvest/setup/postal-codes/14001', [PostalCodeDetailPage]],
+  ])('draws %s with its own pages', async (url, pages) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(url);
+    // Inside the chrome, which is the first component on the way down.
+    expect(componentsAt(router).slice(1)).toEqual(pages);
+  });
+
+  /** The section, and each tab that holds a switch, opens on its first entry. */
+  it.each([
+    ['/harvest', '/harvest/review/products'],
+    ['/harvest/review', '/harvest/review/products'],
+    ['/harvest/setup', '/harvest/setup/sources'],
+    // The chain the four queues share rides along.
+    [
+      '/harvest?chain=sm_mercadona',
+      '/harvest/review/products?chain=sm_mercadona',
+    ],
+    [
+      '/harvest/review?chain=sm_mercadona',
+      '/harvest/review/products?chain=sm_mercadona',
+    ],
+  ])('opens %s on %s', async (url, lands) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(url);
+
+    expect(router.url).toBe(lands);
+  });
+
+  /**
+   * The addresses the harvester's ten screens had (admin plan 0044, target
+   * 8), against the app's own sections. `old-addresses.spec.ts` in the
+   * harvester's library holds every case, and this is the proof that the app
+   * mounts them where the old screens were, with the query kept.
+   */
+  it.each([
+    ['/harvest/entries', '/harvest/review/products'],
+    [
+      '/harvest/entries?supermarketId=sm_carrefour&brandKey=mahou',
+      '/harvest/review/products?brandKey=mahou&chain=sm_carrefour',
+    ],
+    ['/harvest/shops', '/harvest/review/shops'],
+    ['/harvest/places', '/harvest/review/places'],
+    [
+      '/harvest/places?country=ES&postalCode=14001',
+      '/harvest/review/places?country=ES&postalCode=14001',
+    ],
+    ['/harvest/places/groups', '/harvest/review/places?view=groups'],
+    ['/harvest/suggested-brands', '/harvest/review/brands'],
+    ['/harvest/presets', '/harvest/runs'],
+    [
+      '/harvest/presets?chain=sm_mercadona&preset=p1',
+      '/harvest/runs?chain=sm_mercadona&preset=p1',
+    ],
+    ['/harvest/imports/upload', '/harvest/runs/import'],
+    ['/harvest/sources', '/harvest/setup/sources'],
+    ['/harvest/brands', '/harvest/setup/brands'],
+    ['/harvest/brands?query=mahou', '/harvest/setup/brands?query=mahou'],
+    ['/harvest/brands/new', '/harvest/setup/brands/new'],
+    ['/harvest/brands/br_1', '/harvest/setup/brands/br_1'],
+    ['/harvest/brands/br_1/edit', '/harvest/setup/brands/br_1/edit'],
+    ['/harvest/postal-codes', '/harvest/setup/postal-codes'],
+    ['/harvest/postal-codes/new', '/harvest/setup/postal-codes/new'],
+    ['/harvest/postal-codes/14001', '/harvest/setup/postal-codes/14001'],
+  ])('sends the old address %s to %s', async (old, now) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(old);
+
+    expect(router.url).toBe(now);
   });
 
   /** A chain, a shop and a product each open on their first tab. */

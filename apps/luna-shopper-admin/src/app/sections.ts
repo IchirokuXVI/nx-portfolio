@@ -1,7 +1,6 @@
 import {
   BRANDS,
-  BRANDS_LINKS,
-  brandsRoutes,
+  BrandSuggestionsPage,
 } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
   CHAIN_RESOURCES,
@@ -13,10 +12,10 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-catalog';
 import { DashboardPage } from '@portfolio/luna-shopper-admin/feature-dashboard';
 import {
-  HARVEST_LINKS,
   HARVEST_SEGMENT,
-  HarvestDashboard,
+  HARVEST_TABS,
   harvestRoutes,
+  HarvestStatus,
   POSTAL_CODES,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
@@ -30,6 +29,10 @@ import {
   ZONES,
 } from '@portfolio/luna-shopper-admin/feature-people';
 import type { AdminSection } from '@portfolio/luna-shopper-admin/feature-resource';
+import {
+  HARVEST_REVIEW_TAB,
+  HARVEST_SETUP_TAB,
+} from '@portfolio/luna-shopper-admin/models';
 import {
   DashboardIcon,
   InboxIcon,
@@ -87,10 +90,11 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * The sections run in the order an operator meets them: the overview, then the
  * chains, which hold the shops, the sections and the price scopes (admin plan
  * 0042); then the products, with their groups, their categories and the price
- * rules (admin plan 0043); then the people and what they share, which is read
- * far more often than it is touched; then the harvester, which produces most
- * of the catalog; then the admin table, which is opened to answer one question
- * and never to change anything.
+ * rules (admin plan 0043); then the harvester, which produces most of the
+ * catalog and is where work waits for a person (admin plan 0044); then the
+ * people and what they share, which is read far more often than it is
+ * touched; then the admin table, which is opened to answer one question and
+ * never to change anything. A phone shows the first four and "More".
  *
  * **There is no Catalog section any more.** It held ten screens. Five went to
  * the chains and five are the products, and its dashboard is a block of the
@@ -146,30 +150,45 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     screens: productsRoutes(),
   },
   {
+    // The harvester in three tabs (admin plan 0044). Fourth on the rail, and
+    // so the last of the four a phone shows before "More".
+    //
+    // **No home.** The section's own address goes to Review, where a person
+    // has work, and the three tabs are its links. The count on Review, and so
+    // on this section's entry in the rail, is what waits in the four queues:
+    // `HarvestStatus` reads it with the dashboard.
+    //
+    // The suggested brands are a queue of Review and the registered brands
+    // are a part of Setup, although a registered brand is catalog data. The
+    // suggestions are keys the harvested queue carries, and a person registers
+    // them while working that queue. Both are in `feature-brands`, which
+    // imports the harvester's library, so they are handed to its route table
+    // here, where both are in sight.
+    //
+    // The two resources are held and not mounted by the route factory: they
+    // are parts of the Setup tab, at `/harvest/setup/brands` and
+    // `/harvest/setup/postal-codes`, and the section's own table mounts them.
+    key: 'harvest',
+    label: 'shell.sections.harvest',
+    icon: InboxIcon,
+    segment: HARVEST_SEGMENT,
+    landing: HARVEST_REVIEW_TAB,
+    held: [BRANDS, POSTAL_CODES],
+    heldUnder: HARVEST_SETUP_TAB,
+    screens: harvestRoutes({
+      brandsQueue: BrandSuggestionsPage,
+      setup: [BRANDS, POSTAL_CODES],
+    }),
+    links: HARVEST_TABS,
+    counts: HarvestStatus,
+  },
+  {
     key: 'shoppers',
     label: 'shell.sections.shoppers',
     icon: PeopleIcon,
     segment: SHOPPERS_SEGMENT,
     home: PeopleDashboard,
     resources: [USERS, ZONES, MEMBERSHIPS, LISTS, LIST_LINES, BASKETS],
-  },
-  {
-    // The one section that moves nothing. `0006` gave it this prefix for its own
-    // reasons, and this plan makes the reason general rather than particular.
-    key: 'harvest',
-    label: 'shell.sections.harvest',
-    icon: InboxIcon,
-    segment: HARVEST_SEGMENT,
-    home: HarvestDashboard,
-    // The brands are here rather than in the catalog, although a registered
-    // brand is catalog data. The suggestions are keys the harvested queue
-    // carries, a person registers them while working that queue, and the
-    // catalog's row is already full. `BRANDS` comes before `POSTAL_CODES` and
-    // `BRANDS_LINKS` after `HARVEST_LINKS`, so the two brand screens sit side
-    // by side: hand written links are drawn first, then resources.
-    resources: [BRANDS, POSTAL_CODES],
-    screens: [...harvestRoutes(), ...brandsRoutes()],
-    links: [...HARVEST_LINKS, ...BRANDS_LINKS],
   },
   {
     // **A section with one screen has no segment**, so the admins list stays at

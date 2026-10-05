@@ -1,5 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, Injectable, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -22,7 +22,11 @@ import {
   NotFoundPage,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
-import { provideSections, type AdminSection } from './admin-section';
+import {
+  provideSections,
+  type AdminSection,
+  type SectionCounts,
+} from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { adminRoutes } from './routes';
 
@@ -523,5 +527,191 @@ describe('AdminShellPage content language', () => {
     fixture.detectChanges();
 
     expect(APP_AVAILABLE_LOCALES).toEqual(['en']);
+  });
+});
+
+/**
+ * The count on the rail (admin plan 0044, target 2).
+ *
+ * The list of sections is a constant written before any injector exists, and
+ * a count is read from the gateway. So a section names who counts, the frame
+ * resolves it once, and asks it for each link by the link's path.
+ */
+describe('AdminShellPage counts', () => {
+  /** What waits behind the first tab, as a signal a spec can move. */
+  const waiting = signal<number | null>(4);
+  let asked: string[] = [];
+
+  @Injectable({ providedIn: 'root' })
+  class Counter implements SectionCounts {
+    countAt(path: string): number | null {
+      asked.push(path);
+      return path === '/harvest/review' ? waiting() : null;
+    }
+  }
+
+  const counted: readonly AdminSection[] = [
+    { key: 'overview', label: 'shell.sections.overview', home: Overview },
+    {
+      key: 'harvest',
+      label: 'shell.sections.harvest',
+      segment: 'harvest',
+      landing: 'review',
+      screens: [
+        { path: 'review', component: NotFoundPage },
+        { path: 'runs', component: NotFoundPage },
+        { path: 'setup', component: NotFoundPage },
+      ],
+      links: [
+        { path: '/harvest/review', label: 'review' },
+        { path: '/harvest/runs', label: 'runs' },
+        { path: '/harvest/setup', label: 'setup' },
+      ],
+      counts: Counter,
+    },
+    { key: 'admins', label: 'shell.sections.admins', resources: [admins] },
+  ];
+
+  const railCount = (fixture: { nativeElement: HTMLElement }) =>
+    fixture.nativeElement
+      .querySelector('nav.rail a[href="/harvest"] .count')
+      ?.textContent?.trim() ?? null;
+
+  beforeEach(() => {
+    waiting.set(4);
+    asked = [];
+  });
+
+  it('shows on the section what waits behind its tabs', async () => {
+    const fixture = await render('/harvest/review', counted);
+
+    expect(fixture.componentInstance.sections()[1].badge?.()).toBe(4);
+    expect(railCount(fixture)).toBe('4');
+  });
+
+  /** On every screen of the app, and not only inside the section. */
+  it('shows it while another section is open', async () => {
+    const fixture = await render('/', counted);
+
+    expect(fixture.componentInstance.screens()).toEqual([]);
+    expect(railCount(fixture)).toBe('4');
+  });
+
+  it('shows the same count on the tab, and none on the two others', async () => {
+    const fixture = await render('/harvest/runs', counted);
+    const [review, runs, setup] = fixture.componentInstance.screens();
+
+    expect(review.path).toBe('/harvest/review');
+    expect(review.badge?.()).toBe(4);
+    expect(runs.badge?.()).toBeNull();
+    expect(setup.badge?.()).toBeNull();
+  });
+
+  it('asks the counter by the path of each link', async () => {
+    const fixture = await render('/harvest/review', counted);
+    asked = [];
+
+    fixture.componentInstance.sections()[1].badge?.();
+
+    expect(asked).toEqual([
+      '/harvest/review',
+      '/harvest/runs',
+      '/harvest/setup',
+    ]);
+  });
+
+  /** A decision takes a row out of a queue, and the rail says so at once. */
+  it('follows the count as it changes, on the rail and on the tab', async () => {
+    const fixture = await render('/harvest/review', counted);
+
+    waiting.set(3);
+    fixture.detectChanges();
+
+    expect(railCount(fixture)).toBe('3');
+    expect(fixture.componentInstance.screens()[0].badge?.()).toBe(3);
+
+    waiting.set(148);
+    fixture.detectChanges();
+
+    expect(railCount(fixture)).toBe('148');
+  });
+
+  /** A drained queue does not need a zero beside its name. */
+  it('draws nothing for a count of none', async () => {
+    waiting.set(0);
+    const fixture = await render('/harvest/review', counted);
+
+    expect(fixture.componentInstance.sections()[1].badge?.()).toBe(0);
+    expect(railCount(fixture)).toBeNull();
+  });
+
+  /** Not read yet, or the harvester did not answer: nothing is known. */
+  it('draws nothing, and answers null, while the count is not known', async () => {
+    waiting.set(null);
+    const fixture = await render('/harvest/review', counted);
+
+    expect(fixture.componentInstance.sections()[1].badge?.()).toBeNull();
+    expect(railCount(fixture)).toBeNull();
+  });
+
+  it('keeps the badge a link states for itself', async () => {
+    const own: readonly AdminSection[] = [
+      counted[0],
+      {
+        ...counted[1],
+        links: [
+          { path: '/harvest/review', label: 'review' },
+          { path: '/harvest/runs', label: 'runs', badge: () => 9 },
+          { path: '/harvest/setup', label: 'setup' },
+        ],
+      },
+    ];
+    const fixture = await render('/harvest/review', own);
+    asked = [];
+
+    const [review, runs] = fixture.componentInstance.screens();
+    expect(review.badge?.()).toBe(4);
+    expect(runs.badge?.()).toBe(9);
+    // The counter is not asked about a link that answers for itself.
+    expect(asked).not.toContain('/harvest/runs');
+    // The section sums both.
+    expect(fixture.componentInstance.sections()[1].badge?.()).toBe(13);
+    expect(railCount(fixture)).toBe('13');
+  });
+
+  /** A section that names no counter is as it was: no badge of its own. */
+  it('gives no badge to the links of a section with no counter', async () => {
+    const plain: readonly AdminSection[] = [
+      counted[0],
+      { ...counted[1], counts: undefined },
+    ];
+    const fixture = await render('/harvest/review', plain);
+
+    expect(
+      fixture.componentInstance.screens().map((screen) => screen.badge)
+    ).toEqual([undefined, undefined, undefined]);
+    expect(fixture.componentInstance.sections()[1].badge?.()).toBeNull();
+  });
+
+  /** The entry points at the segment, so it stays marked on every tab. */
+  it('marks the section on each of its tabs', async () => {
+    for (const url of ['/harvest/review', '/harvest/runs', '/harvest/setup']) {
+      const fixture = await render(url, counted);
+      const marked = [
+        ...fixture.nativeElement.querySelectorAll('nav.rail a.current'),
+      ].map((node: Element) => node.getAttribute('href'));
+
+      expect(marked).toEqual(['/harvest']);
+      expect(fixture.componentInstance.current()).toBe('/harvest');
+      expect(
+        fixture.componentInstance.screens().map((screen) => screen.label)
+      ).toEqual(['review', 'runs', 'setup']);
+    }
+  });
+
+  it('lands on the tab the section opens on', async () => {
+    await render('/harvest', counted);
+
+    expect(TestBed.inject(Router).url).toBe('/harvest/review');
   });
 });

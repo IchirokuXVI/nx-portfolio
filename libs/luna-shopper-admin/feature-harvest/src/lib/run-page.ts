@@ -17,9 +17,11 @@ import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resour
 import {
   exportFileName,
   failureBlockReason,
+  harvestReviewPath,
   isFileImportRun,
   PRICE_WRITING_MODES,
   queuedByRun,
+  REVIEW_CHAIN_PARAM,
   runWarningRows,
 } from '@portfolio/luna-shopper-admin/models';
 import {
@@ -29,7 +31,6 @@ import {
   RunProgressView,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 import { RunPricesTab } from './run-prices-tab';
 import { COPY_TARGETS_SHOWN, readRunReport } from './run-report';
@@ -738,8 +739,8 @@ export class RunPage {
     return run === null || run.supermarketId === null
       ? null
       : {
-          path: ['/', HARVEST_SEGMENT, 'entries'],
-          params: { supermarketId: run.supermarketId },
+          path: harvestReviewPath('products'),
+          params: { [REVIEW_CHAIN_PARAM]: run.supermarketId },
         };
   });
 

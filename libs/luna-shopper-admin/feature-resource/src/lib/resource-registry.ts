@@ -208,7 +208,14 @@ export class ResourceRegistry {
         // (admin plan 0043): the products are at `/products`.
         return [
           '/',
-          ...[section.segment, descriptor.segment].filter(
+          ...[
+            section.segment,
+            // A resource held under a tab of its section (admin plan 0044).
+            (section.held ?? []).includes(descriptor)
+              ? section.heldUnder
+              : undefined,
+            descriptor.segment,
+          ].filter(
             (segment): segment is string =>
               segment !== undefined && segment !== ''
           ),

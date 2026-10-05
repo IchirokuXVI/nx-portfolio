@@ -1,14 +1,13 @@
 import {
-  HARVEST_SEGMENT,
-  postalCodeCaption,
-} from '@portfolio/luna-shopper-admin/feature-harvest';
-import {
   activityTarget,
+  harvestReviewPath,
+  REVIEW_CHAIN_PARAM,
   type PathOf,
   type Translate,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import type { TileView } from '@portfolio/luna-shopper-admin/ui';
+import { postalCodeCaption } from './harvest-view';
 
 /**
  * The document turned into what the overview's components take (admin plan
@@ -140,11 +139,10 @@ export function waitingTiles(
               chain: nameChain(queue.supermarketId),
             }),
             count,
-            // The one queue that reads a chain from the query string, so this
-            // link opens it already on the chain (admin plan 0014). The others
-            // do not, so their tiles open the unfiltered screen.
-            ['/', HARVEST_SEGMENT, 'entries'],
-            { supermarketId: queue.supermarketId }
+            // The Review queue, already on the chain (admin plan 0044): the
+            // four queues share one chain filter, kept in the address.
+            harvestReviewPath('products'),
+            { [REVIEW_CHAIN_PARAM]: queue.supermarketId }
           )
         );
       }
@@ -159,7 +157,8 @@ export function waitingTiles(
               chain: nameChain(queue.supermarketId),
             }),
             queue.unmapped,
-            ['/', HARVEST_SEGMENT, 'shops']
+            harvestReviewPath('shops'),
+            { [REVIEW_CHAIN_PARAM]: queue.supermarketId }
           )
         );
       }
@@ -170,7 +169,7 @@ export function waitingTiles(
         'places',
         translate('dashboard.waiting.places'),
         harvest.queues.places,
-        ['/', HARVEST_SEGMENT, 'places']
+        harvestReviewPath('places')
       )
     );
   }

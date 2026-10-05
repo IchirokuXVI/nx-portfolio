@@ -84,7 +84,7 @@
       "chains": "Chains",
       "products": "Products",
       "shoppers": "Shoppers",
-      "harvest": "Harvester",
+      "harvest": "Harvest",
       "admins": "Admins"
     }
   },
@@ -799,9 +799,6 @@
     }
   },
   "brands": {
-    "nav": {
-      "suggested": "Suggested brands"
-    },
     "registered": {
       "one": "Brand",
       "many": "Registered brands",
@@ -908,16 +905,6 @@
     }
   },
   "harvest": {
-    "nav": {
-      "runs": "Runs",
-      "presets": "Presets",
-      "places": "Discovered places",
-      "entries": "Source products",
-      "import": "Import a file",
-      "shops": "Source shops",
-      "sources": "Chain sources",
-      "postalCodes": "Postal codes"
-    },
     "match": {
       "EAN": "Barcode",
       "NAME_BRAND_SIZE": "Name, brand and size",
@@ -947,6 +934,39 @@
       "MILLILITER": "Millilitre",
       "LITER": "Litre",
       "PACK": "Pack"
+    },
+    "tab": {
+      "review": "Review",
+      "runs": "Runs",
+      "setup": "Setup"
+    },
+    "running": {
+      "open": "Open the run in progress: {{what}}, {{processed}} processed"
+    },
+    "review": {
+      "queues": "Queue",
+      "chain": "Chain",
+      "queue": {
+        "products": "Products",
+        "shops": "Shops",
+        "places": "Places",
+        "brands": "Brands"
+      },
+      "info": {
+        "title": "How Review works",
+        "holds": "Each queue holds what a run found and could not place by itself.",
+        "decide": "Accept, point it at another row, or reject it. A rejected row is never offered again."
+      },
+      "anyChain": "Every chain"
+    },
+    "setup": {
+      "parts": "Setup",
+      "info": {
+        "title": "How Setup works",
+        "sources": "Chain sources say how each chain is fetched, and whether it may be.",
+        "brands": "Brands are the names that products are filed under. The Brands queue of Review feeds them.",
+        "postalCodes": "Postal codes are where the harvester looks for shops."
+      }
     },
     "warning": {
       "DUPLICATE_KEY": "Two products, one key",
@@ -981,23 +1001,10 @@
       "unknown": "The run could not start, and the server did not say which switch stopped it."
     },
     "switch": {
-      "heading": "What is allowed to happen",
+      "heading": "When a run may start",
       "info": {
         "both": "A run starts only when the service is on and runs are allowed. Both are set at deploy time.",
-        "chain": "Whether one chain may be fetched is a switch on the Chain sources screen."
-      },
-      "state": {
-        "on": "On",
-        "off": "Off",
-        "unknown": "Not known"
-      },
-      "name": {
-        "deployed": "Harvester deployed",
-        "harvestEnabled": "HARVEST_ENABLED"
-      },
-      "what": {
-        "deployed": "Whether the service exists in this environment at all. Set in the Helm chart.",
-        "harvestEnabled": "Whether a running service may start any run. Set in the service configuration."
+        "chain": "Whether one chain may be fetched is a switch in Setup."
       },
       "from": {
         "chart": "From the chart, which switches the harvester off in production and in staging.",
@@ -1011,11 +1018,13 @@
     },
     "queue": {
       "tally": "{{remaining}} left, {{decided}} decided",
-      "skip": "Skip for now",
+      "skip": "Skip",
       "view": {
         "review": "One at a time",
-        "list": "As a list"
+        "list": "As a list",
+        "label": "View"
       },
+      "column": "Rows of this queue",
       "select": "Select this row",
       "selectAll": "Select all {{loaded}} loaded",
       "clearSelection": "Clear the selection ({{count}})",
@@ -1031,12 +1040,32 @@
     },
     "runs": {
       "heading": "Harvest runs",
+      "new": "New run",
+      "state": {
+        "on": "Runs may start",
+        "off": "Runs are off",
+        "unknown": "Not known yet"
+      },
+      "earlier": "Earlier runs",
+      "running": {
+        "since": "Started {{when}}",
+        "open": "Open",
+        "stopHeading": "Stop this run?",
+        "stopBody": "What it has already fetched is kept. The run finishes as stopped.",
+        "stopFailed": "The run was not stopped. The server said:"
+      },
+      "import": {
+        "drop": "Drop a JSON file here",
+        "choose": "Choose a file"
+      },
       "empty": "No runs have been recorded.",
       "row": {
         "counts": "{{processed}} processed, {{failed}} failed",
         "reverted": "Reverted {{when}}",
         "preset": "From preset {{name}}",
-        "deletedPreset": "Deleted preset"
+        "deletedPreset": "Deleted preset",
+        "everyChain": "Every chain",
+        "wrote": "Wrote {{count}}"
       },
       "filter": {
         "reverted": "Reverted runs",
@@ -1100,10 +1129,10 @@
       }
     },
     "presets": {
-      "heading": "Run presets",
+      "title": "Presets",
       "chain": "Chain",
       "chooseChain": "Choose a chain to see its presets.",
-      "empty": "This chain has no presets. Save one from the runs page, or create one here.",
+      "empty": "This chain has no presets. Save one from a new run, or create one here.",
       "new": "New preset",
       "newHeading": "New preset",
       "editHeading": "Edit preset",
@@ -1115,6 +1144,8 @@
       "start": "Start",
       "starting": "Starting…",
       "edit": "Edit",
+      "editAll": "Edit presets",
+      "editDone": "Done",
       "more": "Show more presets",
       "neverRun": "Never run",
       "alreadyRunning": "A run is already in progress. Only one runs at a time, so wait for it or abort it first.",
@@ -1145,7 +1176,8 @@
         "heading": "Save as preset",
         "saved": "Saved as \"{{name}}\".",
         "open": "Open the preset"
-      }
+      },
+      "noChain": "Choose a chain"
     },
     "run": {
       "back": "Back to runs",
@@ -1250,6 +1282,7 @@
       "empty": "Every discovered place has been decided.",
       "import": "Add to the catalog",
       "reject": "Not a shop we want",
+      "chainHasNoKey": "This chain has no brand key, so its places cannot be told apart. Every place is shown.",
       "info": {
         "title": "What to do with this place",
         "found": "Discovery found this place and could not match it to a shop.",
@@ -1289,15 +1322,13 @@
         }
       },
       "groups": {
-        "open": "See them grouped by chain",
-        "heading": "Discovered places by chain",
-        "back": "Back to the queue",
         "empty": "Discovery has found no places yet.",
         "noBrand": "No brand",
         "count_one": "{{count}} place",
         "count_other": "{{count}} places",
         "unknownChain": "No chain in the catalog yet",
-        "knownChain": "Filed under {{chain}}"
+        "knownChain": "Filed under {{chain}}",
+        "view": "Grouped by chain"
       },
       "newChain": {
         "start": "Create a chain for it",
@@ -1348,12 +1379,16 @@
       "accept": "Yes, it is this product",
       "openSibling": "Open the row it points at",
       "reject": "Not a product we track",
+      "rejectShort": "Reject",
+      "pick": "Pick another product",
+      "says": {
+        "heading": "The source says",
+        "openAtChain": "Open the product page at the chain"
+      },
       "timesSeen": "Seen {{count}} times",
       "extra": "Everything else the source sent",
       "lastRun": "The run that last saw it",
       "filter": {
-        "chain": "Chain",
-        "anyChain": "Every chain, newest first. Pick one to work through a single chain, and each row says which chain named it until you do.",
         "status": "State",
         "queued": "Waiting for a decision",
         "sourceKind": "What named it",
@@ -1363,15 +1398,29 @@
         "brandNoKey": "This text makes no key, so nothing matches it."
       },
       "prices": {
-        "heading": "What it costs, by scope",
-        "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either."
+        "heading": "Prices it brings",
+        "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either.",
+        "writes": "Accepting writes these prices."
       },
       "proposal": {
-        "heading": "What was proposed",
-        "item": "A product was proposed by name, {{confidence}}% sure. Nothing was written: agreeing here is what binds it and writes the prices.",
+        "heading": "Proposed product",
+        "item": "The match is {{confidence}}% sure. Nothing is written until you accept.",
         "sibling": "This looks like {{name}}, another row of this chain. That row is the one with the barcode, so it is the one to create the product from.",
         "siblingElsewhere": "The row it points at ({{id}}) is not in this queue, which usually means somebody has already decided it. Accept or create here instead.",
         "none": "Nothing in the catalog looked like it, so find the product or create it."
+      },
+      "reason": {
+        "EAN": "Same barcode",
+        "NAME_BRAND_SIZE": "Same name, brand and size",
+        "NAME_SIZE": "Same name and size",
+        "MANUAL": "Set by a person"
+      },
+      "proposed": {
+        "name": "Name",
+        "brand": "Brand",
+        "size": "Size",
+        "ean": "Barcode",
+        "open": "Open the product"
       },
       "written": {
         "none": "Nothing was written for {{name}}, because this row carries no price. That is the truth for a chain that prints none, and it is not a failure.",
@@ -1383,17 +1432,20 @@
         "body": "The row stays as rejected, so no run asks about it again. You can find it later by asking for rejected rows."
       },
       "field": {
-        "externalId": "The source's own identifier",
-        "categoryPath": "Source category",
-        "url": "Product page",
-        "status": "State",
+        "name": "Name",
+        "brand": "Brand",
+        "size": "Size",
+        "ean": "Barcode",
+        "categoryPath": "Its category",
+        "externalId": "Its id",
         "lastSeen": "Last seen"
       },
       "bind": {
-        "heading": "Point it at a product we have"
+        "heading": "Point it at a product we have",
+        "help": "Choose the product, then press the accept button."
       },
       "create": {
-        "heading": "Or create the product",
+        "heading": "Create the product",
         "help": "Every field starts as the source stated it and only what you change is sent: the rest is filled in from the row. The English name may be left empty, and then the product lists with a missing translation tag and a shopper reading English sees the Spanish name. Whatever the product ends up called, the name the source printed is what the next run resolves against.",
         "fromRow": "As the row says",
         "nameEs": "Name in Spanish",
@@ -1404,12 +1456,13 @@
         "categories": "Categories",
         "categoriesHelp": "Empty uses the categories the row’s own path resolves to. Pick one or more to override them, first one first.",
         "defaultUnit": "Sold by",
-        "submit": "Create it and bind the row"
+        "submit": "Create it and bind the row",
+        "open": "Create the product"
       },
       "proposalBadge": {
-        "item": "A product was proposed",
+        "item": "Has a proposal",
         "sibling": "Points at another row",
-        "none": "Nothing proposed"
+        "none": "No proposal"
       },
       "bulk": {
         "accept": "Accept the proposals",
@@ -1482,6 +1535,7 @@
         "caution": "The same file is refused the second time, so do not edit a file to import it again."
       },
       "file": "The document",
+      "holds": "Reading {{name}}.",
       "rejected": {
         "not-json": "That file is not JSON. Check that it is the producer's output and not the PDF.",
         "not-a-document": "That file reads as JSON but has no products in it, so it did not come from a harvest producer."
@@ -1560,8 +1614,11 @@
         "map": "Map it to one of our shops, or ignore it.",
         "unmapped": "A run writes nothing for a shop that is not mapped."
       },
-      "chain": "Chain",
-      "chooseChain": "Choose a chain. A source's shops are only ever read one chain at a time, so there is nothing to show until you do.",
+      "chains": {
+        "heading": "Chains with shops waiting",
+        "none": "No chain has a shop waiting. Choose a chain above to see the shops it has mapped or ignored.",
+        "unknown": "Choose a chain above to see its shops."
+      },
       "empty": "No shop of this chain is in this state.",
       "filter": {
         "status": "State",
@@ -1621,16 +1678,27 @@
       "heading": "Chain sources",
       "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
       "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
-      "edit": "Change how it is fetched",
+      "edit": "Change",
       "new": "Add a chain source",
       "create": "Create the source",
       "exists": "That chain already has a source row. Change it in the list instead.",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "trusted": "Trusted",
-      "untrusted": "Not trusted",
-      "trust": {
-        "hint": "Trusted means the shops this chain names go straight into the catalog, with nobody looking first. A shop that is missing a position, its own postal code, a country or a chain still waits in the places queue. A name is not required, because many chains publish none. This is the only switch here that writes to the catalog without a review."
+      "never": "Never",
+      "enabled": {
+        "label": "{{chain}} may be fetched",
+        "info": {
+          "title": "May be fetched",
+          "allows": "A run may fetch this chain only while this is on.",
+          "off": "It is off for every chain until somebody turns it on."
+        }
+      },
+      "trusted": {
+        "label": "{{chain}} is trusted",
+        "info": {
+          "title": "Trusted",
+          "means": "Trusted means the shops this chain names go into the catalog with nobody looking first.",
+          "waits": "A shop with no position, postal code, country or chain still waits in the Places queue.",
+          "only": "This is the only switch here that writes to the catalog without a review."
+        }
       },
       "remove": {
         "action": "Delete this source",
@@ -1644,15 +1712,17 @@
       },
       "field": {
         "chain": "Chain",
-        "adapter": "Adapter",
+        "adapter": "Fetched as",
         "config": "Adapter settings",
         "workers": "Workers",
-        "rate": "Requests per second",
+        "rate": "Requests a second",
         "lastRunAt": "Last run",
-        "lastSuccessAt": "Last success",
-        "failures": "Failures in a row"
+        "lastSuccessAt": "Last good run",
+        "failures": "Failures in a row",
+        "enabled": "May be fetched",
+        "trusted": "Trusted"
       },
-      "osmAlways": "OpenStreetMap: always asked for every postal code."
+      "osmAlways": "OpenStreetMap is always asked for every postal code. It has no row here."
     },
     "postalCodes": {
       "one": "Postal code",
@@ -2144,14 +2214,9 @@
       "postalCodesOldest": "oldest queued {{since}}"
     },
     "harvest": {
-      "running": "Running now",
-      "noRun": "Nothing is running.",
-      "openRun": "Open this run",
-      "recent": "Recent runs",
-      "noRuns": "Nothing has run yet.",
+      "heading": "Harvest",
       "byStatus": "Runs",
-      "byStatusTitle": "Runs by status",
-      "sources": "{{enabled}} of {{total}} chains enabled"
+      "byStatusTitle": "Runs by status"
     },
     "catalog": {
       "heading": "Catalog",

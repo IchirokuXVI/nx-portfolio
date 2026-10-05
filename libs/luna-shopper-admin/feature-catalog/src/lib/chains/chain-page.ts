@@ -26,6 +26,7 @@ import {
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
+  harvestSetupPath,
   localizedTextValue,
   type InfoContent,
 } from '@portfolio/luna-shopper-admin/models';
@@ -95,19 +96,31 @@ export const CHAIN_INFO: InfoContent = {
       >
         @switch (chain.source()) {
           @case ('fetched') {
-            <span class="chip good" pageChip data-source="fetched">{{
-              'catalog.chains.source.fetched' | rokuT
-            }}</span>
+            <a
+              [routerLink]="setupLink"
+              class="chip good"
+              pageChip
+              data-source="fetched"
+              >{{ 'catalog.chains.source.fetched' | rokuT }}</a
+            >
           }
           @case ('off') {
-            <span class="chip" pageChip data-source="off">{{
-              'catalog.chains.source.off' | rokuT
-            }}</span>
+            <a
+              [routerLink]="setupLink"
+              class="chip"
+              pageChip
+              data-source="off"
+              >{{ 'catalog.chains.source.off' | rokuT }}</a
+            >
           }
           @case ('none') {
-            <span class="chip" pageChip data-source="none">{{
-              'catalog.chains.source.none' | rokuT
-            }}</span>
+            <a
+              [routerLink]="setupLink"
+              class="chip"
+              pageChip
+              data-source="none"
+              >{{ 'catalog.chains.source.none' | rokuT }}</a
+            >
           }
         }
         <a [routerLink]="detailsPath()" class="button" pageMoreAction>{{
@@ -197,6 +210,20 @@ export const CHAIN_INFO: InfoContent = {
       color: var(--admin-accent-on-wash);
     }
 
+    /* The state is a link to where it is set (admin plan 0044). */
+    a.chip {
+      text-decoration: none;
+    }
+
+    a.chip:hover {
+      text-decoration: underline;
+    }
+
+    a.chip:focus-visible {
+      outline: 2px solid var(--admin-accent);
+      outline-offset: 2px;
+    }
+
     .button {
       display: inline-flex;
       align-items: center;
@@ -273,6 +300,12 @@ export class ChainPage {
 
   readonly info = CHAIN_INFO;
   readonly split = this._viewport.split;
+
+  /**
+   * The chain sources of the harvester's Setup tab, which is where the state
+   * in the header is set (admin plan 0044; admin plan 0042, target 3).
+   */
+  readonly setupLink = harvestSetupPath();
 
   /** Where the list of chains is, for the way back on a narrow screen. */
   readonly listPath = this._registry.pathOf('supermarkets') ?? ['/'];

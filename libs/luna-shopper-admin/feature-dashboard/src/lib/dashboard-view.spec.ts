@@ -94,7 +94,7 @@ function harvest(
     runs: { byStatus: [], inWindow: 0 },
     running: null,
     recent: [],
-    queues: { entries: [], places: 0, shops: [] },
+    queues: { entries: [], places: 0, shops: [], brands: 0 },
     sources: { total: 2, enabled: 1 },
     ...over,
   };
@@ -151,6 +151,7 @@ describe('waitingTiles', () => {
             { supermarketId: 'a', unmapped: 4 },
             { supermarketId: 'b', unmapped: 0 },
           ],
+          brands: 0,
         },
       }),
     });
@@ -172,6 +173,7 @@ describe('waitingTiles', () => {
           entries: [{ supermarketId: 'a', candidate: 2, unresolved: 3 }],
           places: 0,
           shops: [],
+          brands: 0,
         },
       }),
     });
@@ -182,14 +184,20 @@ describe('waitingTiles', () => {
     expect(tile?.value).toBe(5);
   });
 
-  /** The one queue that reads its chain from the query string. */
-  it('opens the product queue on the chain and every other queue unfiltered', () => {
+  /**
+   * The queues are the Review tab's (admin plan 0044). They share one chain
+   * filter, kept in the address, so a tile about one chain opens its queue on
+   * that chain. The places are counted over every chain, so their tile opens
+   * the queue whole.
+   */
+  it('opens the products and the shops of Review on the chain, and the places whole', () => {
     const document = response({
       harvest: harvest({
         queues: {
           entries: [{ supermarketId: 'a', candidate: 1, unresolved: 0 }],
           places: 3,
           shops: [{ supermarketId: 'a', unmapped: 1 }],
+          brands: null,
         },
       }),
     });
@@ -198,11 +206,12 @@ describe('waitingTiles', () => {
     const shops = tiles.find((tile) => tile.key === 'shops-a');
     const places = tiles.find((tile) => tile.key === 'places');
 
-    expect(entries?.link).toEqual(['/', 'harvest', 'entries']);
-    expect(entries?.query).toEqual({ supermarketId: 'a' });
-    expect(shops?.link).toEqual(['/', 'harvest', 'shops']);
-    expect(shops?.query).toBeNull();
-    expect(places?.link).toEqual(['/', 'harvest', 'places']);
+    expect(entries?.link).toEqual(['/', 'harvest', 'review', 'products']);
+    expect(entries?.query).toEqual({ chain: 'a' });
+    expect(shops?.link).toEqual(['/', 'harvest', 'review', 'shops']);
+    expect(shops?.query).toEqual({ chain: 'a' });
+    expect(places?.link).toEqual(['/', 'harvest', 'review', 'places']);
+    expect(places?.query).toBeNull();
   });
 
   it('sends the stale prices to the products, wherever they are mounted', () => {

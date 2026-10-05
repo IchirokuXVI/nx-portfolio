@@ -12,9 +12,8 @@ import {
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { gatewayErrorKey } from '@portfolio/luna-shopper-admin/feature-resource';
-import { HarvestNotice, PageHeader } from '@portfolio/luna-shopper-admin/ui';
+import { HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
-import { HARVEST_SEGMENT } from './harvest-paths';
 import { HarvestShell } from './harvest-shell';
 import { placeGroupRows, type PlaceGroupRow } from './place-groups';
 
@@ -33,17 +32,16 @@ const SAMPLE_SIZE = 3;
  * Read only. Deciding a place is the queue's work, and a second screen that
  * imported would be a second place for the matching rules of backend plan 0152
  * to be got wrong.
+ *
+ * **A view of the Places queue, and not a page** (admin plan 0044, target 4).
+ * It was a routed page at `places/groups`. It is an entry of the queue's own
+ * view switch now, beside "One at a time" and "As a list", so it has no header
+ * and no way back of its own: the switch is the way back.
  */
 @Component({
-  selector: 'lib-place-groups-page',
-  imports: [PageHeader, RokuTranslatorPipe, HarvestNotice],
+  selector: 'lib-place-groups',
+  imports: [RokuTranslatorPipe, HarvestNotice],
   template: `
-    <lib-page-header
-      [backLabel]="'harvest.places.groups.back' | rokuT"
-      [backLink]="queueLink"
-      [heading]="'harvest.places.groups.heading' | rokuT"
-    />
-
     @if (failed()) {
       <lib-harvest-notice (retry)="load()" [absent]="shell.absent()" />
     } @else if (loading()) {
@@ -163,13 +161,11 @@ const SAMPLE_SIZE = 3;
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PlaceGroupsPage {
+export class PlaceGroupsView {
   private readonly _service = inject(HARVEST_SERVICE);
 
   readonly shell = inject(HarvestShell);
   readonly names = inject(ChainNames);
-
-  readonly queueLink = ['/', HARVEST_SEGMENT, 'places'];
 
   readonly rows = signal<readonly PlaceGroupRow[]>([]);
   readonly loading = signal(true);
