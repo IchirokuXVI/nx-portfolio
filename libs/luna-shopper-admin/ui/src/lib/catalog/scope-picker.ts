@@ -12,7 +12,10 @@ import {
   viewChild,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { ScopeLevel } from '@portfolio/luna-shopper-admin/models';
+import {
+  recordIdIn,
+  type ScopeLevel,
+} from '@portfolio/luna-shopper-admin/models';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import { PopoverSheet } from '../page/popover-sheet';
 import { ScopeMark } from '../page/scope-mark';
@@ -397,6 +400,13 @@ export class ScopePicker {
   readonly matching = computed(() => {
     const term = this.term().trim().toLowerCase();
     const listed = this.scopes() ?? [];
+    // A typed ID is the scope that has it, among the scopes held here (admin
+    // plan 0051). The list can be cut short, so one that is absent is not
+    // called missing: the note under the list stays the one it always was.
+    const id = recordIdIn(term);
+    if (id !== null) {
+      return listed.filter((scope) => scope.id === id);
+    }
     return term === ''
       ? listed
       : listed.filter((scope) =>

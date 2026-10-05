@@ -5,9 +5,13 @@ import {
   runInInjectionContext,
 } from '@angular/core';
 import type { ActivatedRouteSnapshot } from '@angular/router';
-import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  readRecordById,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   idOf,
+  recordIdFor,
   type AnyResourceDescriptor,
   type ErrorLink,
   type ErrorLinkTarget,
@@ -284,6 +288,20 @@ export class ResourceReferences implements ReferenceLookup {
       return [];
     }
 
+    // A typed ID is the record that has it, on this resource and within the
+    // scope, or nothing (admin plan 0051). No filter is sent: an ID is not a
+    // word a name could match.
+    const id = recordIdFor(descriptor, term);
+    if (id !== null) {
+      const row = await readRecordById(
+        descriptor,
+        this._registry.gatewayFor(descriptor),
+        id,
+        scope
+      );
+      return row === null ? [] : [this._option(descriptor, row)];
+    }
+
     const search = descriptor.filters?.find(
       (filter) => filter.kind === 'search'
     );
@@ -323,5 +341,21 @@ export class ResourceReferences implements ReferenceLookup {
       // draws rather than a failure, so it is `null` here and a sentence there.
       return null;
     }
+  }
+
+  /** What one row of a resource is called, for "No product has this ID." */
+  nounOf(resource: string): string | null {
+    return this._registry.byName(resource)?.labels.one ?? null;
+  }
+
+  private _option(
+    descriptor: AnyResourceDescriptor,
+    row: ResourceRow
+  ): ReferenceOption {
+    return {
+      id: idOf(descriptor, row),
+      title: descriptor.title(row, this._content.order()),
+      row,
+    };
   }
 }

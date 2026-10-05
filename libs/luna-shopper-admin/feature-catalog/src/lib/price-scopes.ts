@@ -77,6 +77,8 @@ export const PRICE_SCOPES = defineResource<PriceScope>({
     many: 'catalog.priceScopes.many',
     create: 'catalog.priceScopes.add',
   },
+  // No `GET /price-scopes/{id}`, so a typed ID stays text (admin plan 0051).
+  readById: false,
 
   /**
    * What one scope is called, which is mostly not its label.

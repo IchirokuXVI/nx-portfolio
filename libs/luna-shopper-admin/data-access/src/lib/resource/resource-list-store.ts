@@ -2,11 +2,14 @@ import { computed, signal, type Signal } from '@angular/core';
 import {
   appendPage,
   idOf,
+  searchedRecordId,
   type ResourceDescriptor,
   type ResourceGateway,
+  type ResourcePage,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import { GatewayError, toGatewayError } from '../gateway-error';
+import { readRecordById } from './read-record-by-id';
 
 /**
  * The rows one list is showing, and everything it knows about how they got
@@ -88,6 +91,31 @@ export class ResourceListStore<T extends ResourceRow> {
     Object.values(this._filters()).some((value) => value !== '')
   );
 
+  /**
+   * The record ID typed into the search box, or `null` (admin plan 0051).
+   *
+   * While there is one the list is not a search. It holds the one row of this
+   * resource that has the ID, read by the resource's own read route, and no
+   * other filter takes part: an ID names one record, and a record that a
+   * filter hid would be an ID that "does not exist" while it does.
+   */
+  readonly searchedId = computed(() =>
+    searchedRecordId(this._descriptor, this._filters())
+  );
+
+  /**
+   * No row of this resource has the typed ID.
+   *
+   * Its own state, because neither sentence beside it is true: the list is
+   * not empty, and no filter is hiding the row.
+   */
+  readonly idNotFound = computed(
+    () =>
+      this._status() === 'ready' &&
+      this._rows().length === 0 &&
+      this.searchedId() !== null
+  );
+
   /** Nothing is here, and nothing was excluded. */
   readonly empty = computed(
     () =>
@@ -105,7 +133,10 @@ export class ResourceListStore<T extends ResourceRow> {
    */
   readonly noMatch = computed(
     () =>
-      this._status() === 'ready' && this._rows().length === 0 && this.narrowed()
+      this._status() === 'ready' &&
+      this._rows().length === 0 &&
+      this.narrowed() &&
+      this.searchedId() === null
   );
 
   /** The first page, from the current filters and order. Replaces the rows. */
@@ -173,11 +204,7 @@ export class ResourceListStore<T extends ResourceRow> {
 
     try {
       do {
-        const page = await this._gateway.list({
-          cursor: cursor ?? undefined,
-          order: this._order(),
-          filters: { ...this._filters(), ...this._fixed },
-        });
+        const page: ResourcePage<T> = await this._page(cursor ?? undefined);
         if (read !== this._reads) {
           // A filter or an order changed meanwhile, and its own read is what
           // the screen shows.
@@ -239,16 +266,39 @@ export class ResourceListStore<T extends ResourceRow> {
     return null;
   }
 
+  /**
+   * One page of what the list shows, and the one place it is read.
+   *
+   * A typed record ID is read as that record, in a page of one or of none.
+   * The fixed values still hold: under a chain, the ID of another chain's
+   * shop finds nothing.
+   */
+  private async _page(cursor: string | undefined): Promise<ResourcePage<T>> {
+    const id = this.searchedId();
+    if (id !== null) {
+      const row = await readRecordById(
+        this._descriptor,
+        this._gateway,
+        id,
+        this._fixed,
+        { ...this._filters(), ...this._fixed }
+      );
+      return { items: row === null ? [] : [row], nextCursor: null };
+    }
+
+    return this._gateway.list({
+      cursor,
+      order: this._order(),
+      filters: { ...this._filters(), ...this._fixed },
+    });
+  }
+
   private async _fetch(
     cursor: string | undefined,
     apply: (items: readonly T[]) => void
   ): Promise<void> {
     try {
-      const page = await this._gateway.list({
-        cursor,
-        order: this._order(),
-        filters: { ...this._filters(), ...this._fixed },
-      });
+      const page = await this._page(cursor);
 
       apply(page.items);
       this._cursor.set(page.nextCursor);

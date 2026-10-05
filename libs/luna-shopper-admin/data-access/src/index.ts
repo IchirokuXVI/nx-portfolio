@@ -119,5 +119,6 @@ export {
   type ResourceMemoryRules,
   type ResourceSource,
 } from './lib/resource/resource-gateways';
+export { readRecordById } from './lib/resource/read-record-by-id';
 export { ResourceListStore } from './lib/resource/resource-list-store';
 export { ResourceMemoryGateways } from './lib/resource/resource-memory';

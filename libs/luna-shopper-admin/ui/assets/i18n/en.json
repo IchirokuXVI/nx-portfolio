@@ -112,6 +112,10 @@
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
       "actions": "Actions"
     },
+    "id": {
+      "notFound": "No {{thing}} has this ID.",
+      "notFoundHere": "Nothing here has this ID."
+    },
     "filter": {
       "any": "Any",
       "more": "Filters"

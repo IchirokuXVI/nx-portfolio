@@ -16,6 +16,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import {
   REFERENCE_NONE,
   isReferenceNone,
+  recordIdIn,
 } from '@portfolio/luna-shopper-admin/models';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import type {
@@ -67,6 +68,12 @@ interface PickerRow {
  * - {@link none} is a filter asking for the rows that point at nothing (plan
  *   0012, section 2). It holds {@link REFERENCE_NONE} as the value, which is
  *   drawn by name like any other choice and is never looked up.
+ *
+ * **A typed or pasted record ID chooses its record** (admin plan 0051). The ID
+ * is read on this picker's own resource, so the ID of a shop finds nothing in
+ * a picker of products. A record that is found is chosen at once, as if its
+ * row had been clicked. An ID that no record has leaves the value alone, and
+ * the list says so in a sentence.
  *
  * A reference whose target no longer exists says so under the field rather
  * than showing an empty box, because those are different problems and only one
@@ -162,6 +169,17 @@ interface PickerRow {
           @if (searching()) {
             <p class="state" role="status">
               {{ 'resource.reference.searching' | rokuT }}
+            </p>
+          } @else if (idNotFound()) {
+            <!-- An ID was typed and no row of this resource has it. Not
+                 "Nothing matched": that is the answer to a search by name,
+                 and its remedy is another word. This one has none. -->
+            <p class="state" role="status" data-id-not-found>
+              @if (nounKey(); as noun) {
+                {{ 'resource.id.notFound' | rokuT: { thing: noun | rokuT } }}
+              } @else {
+                {{ 'resource.id.notFoundHere' | rokuT }}
+              }
             </p>
           } @else if (rows().length === 0) {
             <p class="state" role="status">
@@ -340,6 +358,13 @@ export class ReferencePicker implements OnDestroy {
   readonly chosen = signal<ReferenceOption | null>(null);
   /** The index in {@link rows} the keys are on, or `-1` for none. */
   readonly active = signal(-1);
+  /** The last read was for a typed ID, and no row of the resource has it. */
+  readonly idNotFound = signal(false);
+
+  /** What one row of the resource is called, as a key, when the lookup knows. */
+  readonly nounKey = computed(
+    () => this.lookup().nounOf?.(this.resource()) ?? null
+  );
 
   readonly listId = computed(() => `${this.controlId()}-list`);
   readonly missingId = computed(() => `${this.controlId()}-missing`);
@@ -475,6 +500,7 @@ export class ReferencePicker implements OnDestroy {
     this._clearTimer();
     this._pending++;
     this.searching.set(false);
+    this.idNotFound.set(false);
     this.open.set(false);
     this.editing.set(false);
     this.term.set('');
@@ -497,8 +523,16 @@ export class ReferencePicker implements OnDestroy {
     this.editing.set(true);
     this.open.set(true);
     this.active.set(-1);
+    this.idNotFound.set(false);
 
     this._clearTimer();
+    // An ID is pasted whole, so there is no typing to wait out. Reading it at
+    // once also means Enter, pressed straight after the paste, finds the read
+    // already on its way.
+    if (recordIdIn(term) !== null) {
+      void this._search(term);
+      return;
+    }
     this._timer = setTimeout(() => void this._search(term), SEARCH_DELAY_MS);
   }
 
@@ -520,6 +554,10 @@ export class ReferencePicker implements OnDestroy {
           // Otherwise Enter would also submit the form the field is in.
           event.preventDefault();
           this.pick(row);
+        } else if (this.open() && this.typed() && this._typedId() !== null) {
+          // The read of a typed ID chooses by itself when it lands. Enter
+          // must not submit the form with the value the field held before.
+          event.preventDefault();
         }
         return;
       }
@@ -559,22 +597,31 @@ export class ReferencePicker implements OnDestroy {
   /**
    * The options for a term, and the one place this component reads them.
    *
-   * An empty term asks for the first page. Whatever else a term can come to
-   * mean (admin plan 0051: a record's id) is decided here and nowhere else.
+   * An empty term asks for the first page. A term that is a record ID asks
+   * for that record (admin plan 0051), and the lookup answers it from the
+   * resource's own read by ID: one row, or none.
    */
   private _read(term: string): Promise<readonly ReferenceOption[]> {
     return this.lookup().search(this.resource(), term, this.scope());
   }
 
+  /** The ID the typed text is, or `null` while it is a word. */
+  private _typedId(): string | null {
+    return recordIdIn(this.term());
+  }
+
   private async _search(term: string): Promise<void> {
     const request = ++this._pending;
     this.searching.set(true);
+    this.idNotFound.set(false);
 
     let options: readonly ReferenceOption[];
+    let failed = false;
     try {
       options = await this._read(term);
     } catch {
       options = [];
+      failed = true;
     }
 
     // A search the operator has already typed past must not overwrite a later
@@ -586,8 +633,20 @@ export class ReferencePicker implements OnDestroy {
     for (const option of options) {
       this._seen.set(option.id, option);
     }
+
+    const id = recordIdIn(term);
+    if (id !== null && options.length === 1 && options[0].id === id) {
+      // The record the ID names. There is nothing to choose between, so it is
+      // chosen: the field shows its name, and the list closes.
+      this.close();
+      this.valueChange.emit(id);
+      return;
+    }
+
     this.options.set(options);
     this.searching.set(false);
+    // A read that failed has not said the record is missing.
+    this.idNotFound.set(id !== null && options.length === 0 && !failed);
     this.active.set(this._startAt());
   }
 

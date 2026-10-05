@@ -63,7 +63,16 @@ export type ResourceInput = Record<string, unknown>;
  */
 export interface ResourceGateway<T extends ResourceRow = ResourceRow> {
   list(query: ResourceQuery): Promise<ResourcePage<T>>;
-  read(id: string): Promise<T>;
+  /**
+   * One row, by its address.
+   *
+   * `shown` is what the list around the read is narrowed by, and it is passed
+   * only when a list reads a row in place of a page (admin plan 0051). It
+   * narrows nothing. It is for a gateway whose list adds columns from a
+   * filter: the product list shows the price at a chosen scope, and a product
+   * found by its ID has to carry that price too.
+   */
+  read(id: string, shown?: ResourceQuery['filters']): Promise<T>;
   create(input: ResourceInput): Promise<T>;
   update(id: string, input: ResourceInput): Promise<T>;
   remove(id: string): Promise<void>;
@@ -392,6 +401,14 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
   };
   /** The property holding the row's id. `id` unless stated. */
   readonly idField?: FieldName<T>;
+  /**
+   * `false` where the gateway has no route that reads one row by its ID.
+   *
+   * A typed ID is then left as text (admin plan 0051). Such a resource is
+   * read by walking its collection, and the walk stops after a bound, so
+   * "no row has this ID" would be a guess there and not an answer.
+   */
+  readonly readById?: false;
   /**
    * The address one row has, when no single property is one.
    *

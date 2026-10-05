@@ -122,6 +122,7 @@ interface PendingAction extends RowAction {
       [hasMore]="store.hasMore()"
       [heading]="heading()"
       [headingLevel]="openId() === null ? 1 : 2"
+      [idNotFound]="store.idNotFound()"
       [info]="descriptor.info ?? null"
       [layout]="embed === 'column' ? 'rows' : 'auto'"
       [loading]="store.status() === 'loading'"
@@ -131,6 +132,7 @@ interface PendingAction extends RowAction {
       [namedActions]="namedActions"
       [noMatch]="store.noMatch()"
       [noticeKeys]="notices()"
+      [oneKey]="descriptor.labels.one"
       [order]="store.order()"
       [rows]="rows()"
       [selectable]="bulkActions.length > 0"
@@ -373,6 +375,7 @@ export class ResourceListPage {
       );
     },
     resolve: (resource, id) => this.references.resolve(resource, id),
+    nounOf: (resource) => this.references.nounOf(resource),
   };
 
   /**

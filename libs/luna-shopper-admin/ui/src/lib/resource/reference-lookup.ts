@@ -47,6 +47,12 @@ export interface ReferenceLookup {
    * `scope` sits **beside** the term rather than replacing it. The two answer
    * different questions: the scope says which collection is being read at all,
    * and the term narrows it.
+   *
+   * **A term that is a record ID is not a search** (admin plan 0051). It asks
+   * for the one row of `resource` with that ID, within `scope`, and the answer
+   * holds that row or nothing. `recordIdIn` of the models library is what says
+   * a term is one, and the picker reads the same function to know which
+   * question it asked.
    */
   search(
     resource: string,
@@ -62,4 +68,14 @@ export interface ReferenceLookup {
    * instead of drawing a blank box.
    */
   resolve(resource: string, id: string): Promise<ReferenceOption | null>;
+
+  /**
+   * The translation key of what one row of `resource` is called ("product"),
+   * or `null`.
+   *
+   * For the one sentence that names the table: "No product has this ID."
+   * Optional, because a lookup that cannot say gets a sentence without the
+   * noun, which is still true.
+   */
+  nounOf?(resource: string): string | null;
 }

@@ -134,7 +134,18 @@ export function productListGateway<
         nextCursor: page.nextCursor,
       } satisfies ResourcePage<T & ScopePriced>;
     },
-    read: (id) => products.read(id),
+    // A product the list found by its ID (admin plan 0051) is drawn in the
+    // same row as any other, so it carries the price at the chosen scope.
+    // Without it the row would say "no price" about a product that has one.
+    read: async (id, shown) => {
+      const row = await products.read(id);
+      const { scopeId } = split(shown ?? {});
+      if (scopeId === null) {
+        return row;
+      }
+      const priced = await pricesOf(prices, scopeId, [row.id]);
+      return { ...row, scopePrice: priced.get(row.id) ?? null };
+    },
     create: (input) => products.create(input),
     update: (id, input) => products.update(id, input),
     remove: (id) => products.remove(id),
