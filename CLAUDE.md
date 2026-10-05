@@ -8,10 +8,10 @@ An Nx monorepo hosting a personal portfolio built as an Angular **module-federat
 
 - `shell` — the host application. Owns the router and mounts remotes at runtime.
 - `odontogram`, `damoclesSword`, `landingV2`, `velista` — remote micro-frontend apps, each exposing routes via `./Routes` (module federation).
-- `apps/luna-shopper-backend/*` — velista's backend, seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS, with four Postgres instances and Redis. See the section at the bottom of this file.
+- `apps/luna-shopper-backend/*` — velista's backend, seven NestJS services (`gateway`, `realtime`, `auth`, `core`, `catalog`, `harvester`, `assistant`) over NATS, with four Postgres instances and Redis. See "Luna Shopper backend" below.
 - `apps/docker/*` — non-Angular Nx "app" projects (builder, local-http-server) that just wrap a Dockerfile; tagged `type:static-docker` or `type:dynamic-docker` and driven by CI (see below).
 - `tools/docker` — a custom Nx plugin (`@portfolio/docker`) providing the `build` and `push` executors used by every app's `build:docker` target, plus an `application` generator for scaffolding a Dockerfile into a new app.
-- `libs/<scope>/*` — Nx libraries grouped by scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
+- `libs/<scope>/*` — Nx libraries grouped by scope (`damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`) plus `shared`, following the `data-access` / `feature-*` / `ui` / `models` naming convention.
 - `k8s/helm` — Helm chart deployed via CI to a k3s cluster. Routing is the Gateway API (`Gateway` + one `HTTPRoute` per app); the data plane is provisioned by Envoy Gateway in its own namespace, not declared by the chart.
 - `k8s/bootstrap` — one-off per-cluster install of the Gateway API CRDs, Envoy Gateway, cert-manager and a ClusterIssuer (`install.sh` / `install.ps1`). Deliberately outside the chart, so the chart names the implementation only through `gateway.className`.
 
@@ -60,7 +60,7 @@ npx nx show project <project> --web
 npx nx run <project>:build:docker --configuration=production
 ```
 
-There are no top-level `package.json` scripts — run everything through Nx, either targeting a specific project, the whole workspace (`run-many --all`), or only what changed (`affected`, which is what CI uses).
+Target a specific project, the whole workspace (`run-many --all`), or only what changed (`affected`, which is what CI uses).
 
 ### Serving from a worktree: dev slots
 
@@ -74,7 +74,7 @@ tools/dev/ng-slot.sh --list
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --list
 
 # claim the lowest free slot and serve; --up writes the env files first if absent
-tools/dev/ng-slot.sh --up                       # all five Angular apps
+tools/dev/ng-slot.sh --up                       # all six Angular apps
 tools/dev/ng-slot.sh --up --apps shell,velista  # ...or just some
 tools/dev/ng-slot.sh --up 5 --backend-slot 1    # ...pointed at a named backend
 bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up   # compose + migrations + seven services
@@ -98,7 +98,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock 3   # ...and release it 
 
 **Check first, then claim, and bring instances up only through these scripts.** `--list` reads every worktree's claim and probes the ports, so it is the one accurate answer to what is already running; run it before taking a slot, and let `--up` with no number take the lowest free one. A hand rolled `nx serve` or `docker compose up` writes no claim and no per slot `.env`, so it collides with slot 0, which is the developer's own.
 
-**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes, is 3 GB to 4 GB) and a Luna slot is seven Nest services at roughly 230 MB each plus seven containers on the default compose profile (four Postgres, NATS, Redis, Mailpit, and more again under the `test` or `observability` profiles) with its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
+**A slot is cheap to ask for and expensive to run**, so take the least that does the job. An Angular dev server is 700 MB to 1 GB of RAM each (a full front end slot, shell plus four remotes and the admin app, is 4 GB to 6 GB) and a Luna slot is seven Nest services at roughly 230 MB each plus seven containers on the default compose profile (four Postgres, NATS, Redis, Mailpit, and more again under the `test` or `observability` profiles) with its own Postgres volumes, so a few unshared slots exhaust a 32 GB machine and Luna is the half that adds up fastest. Serve only the apps you are touching (`--apps shell,velista`); point at a backend that is already listening rather than starting one (a Luna slot of your own is for changing backend code, running disruptive migrations, or needing an isolated database); and `--down` when you are finished, including on an abandoned task.
 
 **Editing code needs none of those.** Everything is served with watch on, and each app or service watches its own sources _and_ the libraries it consumes, so a change recompiles and reloads by itself; only the app you edited rebuilds. The one thing a running process cannot pick up is a rewritten `.env` (a slot move, `--backend-slot`, `--app-slot`), because Nx loads `{projectRoot}/.env` when it starts the task and webpack reads its values once — and the rewrite _does_ trigger a rebuild that silently keeps the old values, so nothing looks wrong. That case is `--restart`. Use `--down` when you are finished with a slot, not to check your work.
 
@@ -108,7 +108,7 @@ bash k8s/e2e/luna-shopper-backend/luna-slot.sh --unlock 3   # ...and release it 
 
 **One checkout runs one slot, unless the slot is `--ephemeral`.** Everything above is per worktree: eight `.env` files and one claim, so pointing this checkout at another slot rewrites them. `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up 3` runs a slot without configuring the checkout for it — nothing under the worktree is written and no claim is made, because the slot's values are handed to the processes through their environment, where they outrank a `.env` (Nx and `@nestjs/config` both leave an already set variable alone). So a developer serving slot 0 keeps serving it while a tool drives slot 3 in the same checkout. The slot number is required on `--up`, `--down` and `--restart`, since nothing records it; slot 0 is refused; and the rendered files, logs and pids live in `$TMPDIR/luna-slot-ephemeral/slot<n>`, which `--down` removes. An ephemeral `--up` refuses a slot that a worktree claims, a lock keeps or another ephemeral run holds. It holds its own number with a record in the main `.git` directory, from before anything starts until `--ephemeral --down` removes it. `--list` prints that record as `ephemeral (pid N)`, and `--auto` skips it. A record whose pid is gone and whose ports are all closed is stale, and the next `--ephemeral --up` of that number takes it over (`tools/dev/plans/0004`). This is how `libs/luna-shopper/tools/curation/cli` takes its rehearsal slot.
 
-There are no `.ps1` twins any more: Git Bash is the supported shell on Windows. Everything the scripts write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
+The slot scripts are Bash only: Git Bash is the supported shell on Windows. Everything the scripts write is git ignored and per worktree. **Do not add a port override to a `project.json` to work around a collision**: use a slot. See `tools/dev/README.md` for why the remote ports cannot come from the project graph, and `k8s/e2e/luna-shopper-backend/parallel-worktree-testing.md` for the backend half.
 
 ## Architecture
 
@@ -120,9 +120,9 @@ There are no `.ps1` twins any more: Git Bash is the supported shell on Windows. 
 loadChildren: () => import('damoclesSword/Routes').then((m) => m.remoteRoutes);
 ```
 
-**Remotes render only through the shell — a remote served on its own port shows a blank page.** Each remote's `bootstrap.ts` bootstraps its `RemoteEntry` / `RemoteEntryComponent` as the root, and that component has an **empty template with no `<router-outlet>`** (`apps/<remote>/src/app/remote-entry/entry.ts`). The router still matches routes, but there is no outlet to render them into, so hitting e.g. `http://localhost:4203` directly yields ~200 bytes of empty host element. This is intentional: it stops users (and tests) from reaching a remote through its own port, where the shell's global styles are absent and the page renders differently from production. The shell supplies the outlet (and the locale/theme context) when it lazy-loads the remote, so **always develop and test remotes through the shell** (`npx nx serve <remote>` still boots the shell via `dependsOn`, so use the shell URL like `/<remote>/<locale>`, not the remote's own port). Consequently e2e projects point at the shell, not the remote's port.
+**Remotes render only through the shell — a remote served on its own port shows a blank page.** Each remote's `bootstrap.ts` bootstraps its `RemoteEntry` / `RemoteEntryComponent` as the root, and that component has an **empty template with no `<router-outlet>`** (`apps/<remote>/src/app/remote-entry/entry.ts`). The router still matches routes, but there is no outlet to render them into, so hitting e.g. `http://localhost:4203` directly yields ~200 bytes of empty host element. This is intentional: it stops users (and tests) from reaching a remote through its own port, where the shell's global styles are absent and the page renders differently from production. The shell supplies the outlet (and the locale/theme context) when it lazy-loads the remote, so **always develop and test remotes through the shell** (`npx nx serve <remote>` boots the shell via `dependsOn` for every remote except `odontogram`; use the shell URL like `/<remote>/<locale>`, not the remote's own port). Consequently e2e projects point at the shell, not the remote's port.
 
-**velista is the exception, and the only one.** It is a standalone app that is _also_ exposed as a remote (`apps/velista/plans/0013-own-origin-and-the-installable-app.md`). It is served from its own origin, it is installable there as a PWA, and `http://localhost:4205` renders the real app rather than a blank page: `AppRoot` (`apps/velista/src/app/app-root.ts`) has a `<router-outlet>` and there is no `RemoteEntry`. The blank page rule exists because a remote on its own port lacks the shell's global styles and renders differently from production; velista draws its own chrome and owns its own token scope inside `AppLayout`, so it borrows nothing from the shell and its own port is not a degraded view. The other three remotes are unchanged, and the rule still reads true for them.
+**velista is the exception, and the only one.** It is a standalone app that is _also_ exposed as a remote (`apps/velista/plans/0013-own-origin-and-the-installable-app.md`). It is served from its own origin, it is installable there as a PWA, and `http://localhost:4205` renders the real app rather than a blank page: `AppRoot` (`apps/velista/src/app/app-root.ts`) has a `<router-outlet>` and there is no `RemoteEntry`. The blank page rule exists because a remote on its own port lacks the shell's global styles and renders differently from production; velista draws its own chrome and owns its own token scope inside `AppLayout`, so it borrows nothing from the shell and its own port is not a degraded view. The rule holds for the other three remotes.
 
 Both of velista's modes come from **one** route factory, `appRootRoute(mount)` (`apps/velista/src/app/app-root-route.ts`), called with `'/velista'` by `remote-entry/entry.routes.ts` and with `''` by `app.routes.ts`. Anything that differs between mounted and standalone belongs in that factory as an argument, never as a literal in both files. `app-root-route.spec.ts` asserts the mount reaches both `data.mountPath` and `APP_BASE_PATH`. The service worker is the other half of that split: `provideServiceWorker` lives in `app.config.ts` only, never in `appProviders`, because `appProviders` is spread into both modes and registering there would make the portfolio's page register velista's worker on the portfolio's origin.
 
@@ -132,7 +132,7 @@ Both of velista's modes come from **one** route factory, `appRootRoute(mount)` (
 
 The shell owns no `:locale` route and no translator. Each app installs `localeGuard` (from `rokutranslator-angular`) on its own parent route, configured from route `data` (`appKey`, `supportedLocales`, `defaultLocale`) plus the mount, which the app's `entry.routes.ts` states as `data.mountPath`. The guard establishes one invariant before anything below it renders: **the segment immediately after the mount is a supported, canonical locale.** It never declines a URL and never routes to a not-found page — an app's own 404 is localized, so no page can be drawn until the language is settled. Its four cases (adopt / rewrite `en-US` to `en` / replace an unsupported locale / insert a missing one) are `resolveLocaleSegments`, which is pure and carries the tests.
 
-Two consequences worth knowing before editing a route table:
+Three consequences worth knowing before editing a route table:
 
 - **An app's parent route needs a child that always matches** (a trailing `**`). A parent with `children` matches only if one of them matches the remainder, so with `:locale` as the only child a locale-less URL fails to match the branch at all and the guard that would _insert_ the locale never runs.
 - **Nothing created per app may use `@angular/core/rxjs-interop`.** It is a secondary entry point that module federation does not dedupe: each remote bundles its own copy, carrying its own copy of core's internal module state. `toSignal` / `takeUntilDestroyed` call `assertInInjectionContext`, which reads that state, so the check runs against whichever remote loaded `rxjs-interop` first while the injector was set by the shell's core — a hard `NG0203` with a perfectly correct DI graph. `RokuLocaleStore` writes its signal by hand for exactly this reason. Components are fine in practice (they resolve within their own app), but a service provided by several remotes is not.
@@ -168,11 +168,11 @@ Popping is only safe onto an entry **this document pushed**. Below the entry a t
 
 - Namespaces are registered per-locale via lazy `LoaderFunction`s (`addNamespace`/`addTranslations`), so each library can contribute its own translation JSON (see `libs/damoclesSword/ui/assets/i18n/*.json`) without the app knowing where its assets live. A library that ships assets exports a `TranslationSource` descriptor next to them; the **app** (`apps/<app>/src/app/translation-providers.ts`) lists the descriptors and calls `composeTranslationLoader` — composition belongs to the app, and the app is the only place `app-providers.ts` can import from without crossing a library boundary by relative path.
 - `libs/shared/localization/rokutranslator-angular` wraps it for Angular (service, pipe, `provideRokuTranslator`).
-- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true` across the shell and all remotes. This is a **deduplication win, not a correctness rule**: the module exports a stateless class, so sharing it means one copy of i18next rather than one locale. (It was load-bearing when the module exported a pre-made instance.) The rule lives in **one** file, `module-federation.shared.ts` at the workspace root, which all six configs import; a `shared` callback only governs its own build, so declaring it in the host alone does nothing for the remotes. Do not add `strictVersion`: staging deploys only the affected remotes, so a version bump would leave a mixed fleet, and strict enforcement turns that ordinary window into a blank page. Read that file before editing the list — an earlier version of this rule named a library that did not exist and therefore never applied once, and `rokutranslator-angular` cannot be added the same way (Nx passes it under its project name, which nothing imports).
+- In module federation config, `@portfolio/localization/rokutranslator` is forced `singleton: true` across the shell and all remotes. This is a **deduplication win, not a correctness rule**: the module exports a stateless class, so sharing it means one copy of i18next rather than one locale. (It was load-bearing when the module exported a pre-made instance.) The rule lives in **one** file, `module-federation.shared.ts` at the workspace root, which all five configs import; a `shared` callback only governs its own build, so declaring it in the host alone does nothing for the remotes. Do not add `strictVersion`: staging deploys only the affected remotes, so a version bump would leave a mixed fleet, and strict enforcement turns that ordinary window into a blank page. Read that file before editing the list — an earlier version of this rule named a library that did not exist and therefore never applied once, and `rokutranslator-angular` cannot be added the same way (Nx passes it under its project name, which nothing imports).
 
 ### Library layout
 
-Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
+Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `landing-v2`, `velista`, `luna-shopper`, `luna-shopper-admin`. Within a scope, libraries follow Nx's convention: `data-access` (API/services), `feature-*` (routed feature libs / remote entry points), `ui` (presentational components + static assets), `models` / `models-localization` (types, and per-domain translation keys). Import via the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.json` — do not use relative paths across library boundaries.
 
 `@nx/enforce-module-boundaries` is configured permissively (`onlyDependOnLibsWithTags: ['*']`) — there's no hard tag-based dependency firewall today, so don't rely on lint to catch cross-scope layering mistakes.
 
@@ -189,7 +189,7 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 - `tools/docker`'s `build` executor (`tools/docker/src/executors/build/build.ts`) shells out to `docker buildx build`. **It is project-agnostic**: it knows nothing about micro-frontends or this repo. The only build args it injects itself are `NX_APP` (the project name) and `TARGET_REGISTRY` (the resolved registry). `push` runs after `build` when `pushToRegistry: true`.
 - Its own operational config comes from options and generic `DOCKER_*` env fallbacks: `DOCKER_REGISTRY`, `DOCKER_USERNAME`/`DOCKER_PASSWORD`/`DOCKER_SKIP_LOGIN`, `DOCKER_IMAGE_TAG` (overrides `versionTags`, comma-separated), and the cache options `cache`/`cacheMode`/`cacheScope` (env `DOCKER_BUILD_CACHE`/`_MODE`/`_SCOPE`; backends `local`/`gha`/`registry`).
 - Project-specific values reach the Dockerfile as ordinary build args: a target's `buildArgs` (`BUILDER_TAG` per configuration, which selects the base image tag) plus a **`forwardEnv`** option that lists env var names to forward as build args when set. Today every app forwards exactly `BUILDER_TAG`. The executor never references those names itself.
-- **`MFE_BASE_URL` and `MFE_REMOTE_URLS` are not build args and have not been since k8s plan 0007.** There is no build stage in an app's Dockerfile: `nx build` runs once for the whole workspace outside Docker, `build:docker` sets `"context": "dist"`, and the finished bundle is copied in. So `webpack.prod.config.ts` reads those two from the environment of that `nx build`, and both workflows set them with `docker run -e` on the builder container instead. Adding them to `forwardEnv` would do nothing.
+- **`MFE_BASE_URL` and `MFE_REMOTE_URLS` are not build args** (k8s plan 0007). There is no build stage in an app's Dockerfile: `nx build` runs once for the whole workspace outside Docker, `build:docker` sets `"context": "dist"`, and the finished bundle is copied in. So `webpack.prod.config.ts` reads those two from the environment of that `nx build`, and both workflows set them with `docker run -e` on the builder container instead. Adding them to `forwardEnv` would do nothing.
 - **Two environments on two separate k3s clusters, one VPS each** (k8s plan 0002): production (`ichirokuxvi.com`, `mfe.`, plus `velista.app`, `api.velista.app`, `rt.velista.app`) and staging (the same five names one label down: `staging.ichirokuxvi.com`, `mfe.staging.`, `staging.velista.app`, `api.staging.velista.app`, `rt.staging.velista.app`). The chart describes **one** environment; which one is decided by the cluster you point it at and the values file you pass beside `values.yaml` — `values.production.yaml` or `values.staging.yaml`. There is no `env` field, no `-staging` resource name and no `staging.enabled` switch; resource names are identical in both clusters. Hosts are derived from `baseDomain` + a per-entry `hostPrefix`, unless the environment file overrides that entry's host by name in `hostOverrides` — which is what puts velista and its two backend services on velista's own domain (an explicit `host` on an entry still wins over both, which is what the local values files use). `ichirokuxvi.com/velista` keeps working: the shell mounts the remote at that path and loads it from the new origin.
 - The **shell embeds its micro-frontend base URL at build time** (`apps/shell/webpack.prod.config.ts` reads `MFE_BASE_URL`, default the production host), so the shell image is environment-specific. Every other app image is environment-agnostic. Remote URLs are static module federation, not runtime — do not assume the shell can switch environments at runtime.
 - `.github/workflows/docker-ci.yml` (**staging, on push to `main`**) computes affected projects against the last successful run, builds/tests them, builds affected micro-frontends with `DOCKER_IMAGE_TAG=staging` and the staging URLs, runs **two e2e gates against the images it just pushed** (`e2e-frontend` over `k8s/e2e/portfolio-frontend/compose.yml`, `e2e-luna` over the Luna compose pair), then deploys over SSH to **`SSH_DEPLOY_HOST_STAGING`**: `provision-release.sh --check --env staging` first (a deploy that cannot work is rejected in seconds), then `helm upgrade --install --atomic --timeout 10m` with `values.staging.yaml`, then `kubectl rollout restart` for the changed deployments followed by a separate `rollout status` loop that actually observes them. A failure runs a diagnosis step dumping pods, events and logs.
@@ -250,17 +250,16 @@ Under `libs/<scope>/`, scopes are `shared`, `damoclesSword`, `odontogram`, `land
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket
 storefronts and store locations from OpenStreetMap, and writes what it finds into
-catalog over NATS. It was the sixth backend service to land (`assistant`, plan
-0039, is the seventh) and it owns the fourth Postgres, after auth, core and
+catalog over NATS. It owns the fourth Postgres, after auth, core and
 catalog. **Its fourth run mode fetches nothing at all**: `LEAFLET_IMPORT` (plan 0081) reads a JSON document an admin uploads. The output is identical to the
 output of a crawl and only the fetching differs, which is why it is a run here
 rather than a write in catalog.
 
-**It is deployed in both clusters, and both may now start a run.**
+**It is deployed in both clusters, and both may start a run.**
 `values.staging.yaml` and `values.production.yaml` both set `enabled: true` and
 `harvestEnabled: true`. No storefront is fetched from either, because that is a
 row per chain in the harvester's own database and every one of them is off
-(plan 0083). A catalog discovery run is 4,383 HTTP requests over about eighteen
+(plan 0083). A catalog discovery run is several thousand HTTP requests over many
 minutes, and price crawls still happen here against the compose stack, where the
 development machine has room for them. What a cluster runs is store discovery,
 which is two requests, and leaflet imports, which are none.
@@ -268,7 +267,7 @@ which is two requests, and leaflet imports, which are none.
 **The actor id is provisioned, not configured.** `provision-release.sh`
 generates the uuid catalog knows the harvester by once per cluster and keeps it
 in the per environment Secret; both `HARVESTER_ACTOR_ID` and catalog's
-`SERVICE_ACTOR_IDS` read that one key. It is not a values field any more, and
+`SERVICE_ACTOR_IDS` read that one key. It is not a values field, and
 `--check` fails when it is missing, which is the point: without it
 `CatalogClient.actor()` throws and an import writes nothing.
 
@@ -293,10 +292,10 @@ variable threaded through `app-config.ts`, the config map, `_env.tpl` and both
 `luna-slot` scripts before a run could start, so it was deleted in favour of the
 column that already existed. **Do not add a per chain environment variable.**
 
-Two rules that are easy to break by accident:
+Three rules that are easy to break by accident:
 
 - **`bulk_price` is stored verbatim and never recomputed.** The obvious
-  derivation disagrees with the chain on 110 of 4,232 products, in the field
+  derivation disagrees with the chain on some products, in the field
   whose only purpose is comparison.
 - **Every source's price is stored side by side, and nothing overwrites** (plan
   0080). A run writes rows of `item_prices` stamped with its run id, an operator
@@ -315,7 +314,7 @@ Two rules that are easy to break by accident:
   and never touches `printedName`, so renaming the product does not stop the
   next leaflet resolving.
 
-**One mode, two adapters** (plan 0085). `CATALOG_DISCOVERY` now runs against
+**One mode, two adapters** (plan 0085). `CATALOG_DISCOVERY` runs against
 either `mercadona-api` or `deza-web`, and the run picks between them on
 `supermarket_sources.adapterKey` rather than on the mode: a walk of a chain's
 whole assortment is a catalog discovery whether the chain answers JSON or renders
@@ -345,7 +344,7 @@ site publishes the week's offers rather than what a shop stocks, so a run is a
 snapshot of a rolling window and the catalog is built by running every week.
 Two rules follow, and both are easy to break by accident:
 
-- **A price belongs to an offer region, and there are 59 of them.** Every store
+- **A price belongs to an offer region, and there are dozens of them.** Every store
   record names its own region, so a shop's price scope is read from the source
   and never derived from its postal code. Do not collapse the regions into the
   two or three groups that happen to agree this week: the format allows a price
@@ -389,7 +388,7 @@ Two rules follow, and both are easy to break by accident:
 - **Finish a task by pushing it and opening a pull request against `dev`.** Commit, push the working branch, then `gh pr create --base dev`. No confirmation is needed for either step; this standing instruction is the authorization.
 - **Wait for the PR checks.** Opening the PR is not the end of the task. Watch the run (`gh pr checks --watch`), and if it fails, fix the cause and push again rather than handing back a red PR.
 - **Post the PR link in the conversation**, every time one is created, so it is in the transcript beside the work it came from.
-- `main` is still off limits: never push to it, never force-push, never merge. A pull request into `dev` is the only way work lands.
+- `main` is off limits: never push to it, never force-push, never merge. A pull request into `dev` is the only way work lands.
 - **Title the PR `type(scope): summary`** (Conventional Commits, Angular types), optionally `!` before the colon for a breaking change and a trailing `(plan 0045)` when a plan drove it. The release notes are generated from these titles, so a title that cannot be parsed is work missing from a release; `.github/workflows/pr-title.yml` rejects one on every PR, including stacked ones. The types, the scope list and the reasoning are in `CONTRIBUTING.md`, and `tools/release/rules.mjs` is the authority both the check and the generator read. Validate one before opening the PR:
 
   ```sh
@@ -408,11 +407,11 @@ Two rules follow, and both are easy to break by accident:
 - Prefix nx commands with the workspace's package manager (e.g., `pnpm nx build`, `npm exec nx test`) - avoids using globally installed CLI
 - You have access to the Nx MCP server and its tools, use them to help the user
 - For Nx plugin best practices, check `node_modules/@nx/<plugin>/PLUGIN.md`. Not all plugins have this file - proceed without it if unavailable.
-- NEVER guess CLI flags - always check nx_docs or `--help` first when unsure
+- Check `--help` (or nx_docs when it is available) for a CLI flag you are unsure of
 
 ## Scaffolding & Generators
 
-- For scaffolding tasks (creating apps, libs, project structure, setup), ALWAYS invoke the `nx-generate` skill FIRST before exploring or calling MCP tools
+- For scaffolding tasks (creating apps, libs, project structure, setup), invoke the `nx-generate` skill before exploring or calling MCP tools
 
 ## When to use nx_docs
 

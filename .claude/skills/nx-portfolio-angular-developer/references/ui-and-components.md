@@ -6,11 +6,11 @@ Presentational components live in the scope's `ui` lib. Copy shapes from
 ## Component conventions
 
 - **Standalone components, Angular 21.** No NgModules per component. The `ui` lib
-  aggregates its standalone components in one `*-ui-module.ts` NgModule that also
-  registers the RokuTranslator namespace (see `references/localization.md`) and
-  re-exports the components; consumers import that module (e.g. `LandingV2UiModule`).
+  aggregates its standalone components in one `*-ui-module.ts` NgModule that
+  re-exports them (the translations are registered by the app, see
+  `references/localization.md`); consumers import that module (e.g. `LandingV2UiModule`).
 - **Selectors.** Presentational components in a `ui` lib use `lib-<name>`
-  selectors (`lib-hero`, `lib-project-grid`). App-level components use the app
+  selectors that carry the scope (`lib-landing-v2-hero`). App-level components use the app
   prefix from its `project.json` (`app`, `ng-odtg`, …).
 - **Signals everywhere.** Use `signal` / `computed` / `input()` / `output()` for
   state and derived values; update signals yourself rather than relying on Angular
@@ -21,11 +21,12 @@ Presentational components live in the scope's `ui` lib. Copy shapes from
 
 ## Icons — always from `@portfolio/shared/ui`
 
-Icons are standalone components in `libs/shared/ui` (`home-icon`, `save-icon`,
+Icons are standalone components in `libs/shared/ui` (`home-icon`, `arrow-icon`,
 `trash-icon`, `upload-icon`, …), each inlining an `*-icon.svg` via
 `import('./x.svg?raw')` + `DomSanitizer`. **Never inline raw `<svg>` markup** in a
 feature/ui component. Before adding an icon, check whether one already exists and
-reuse it; if not, add a new icon component to `libs/shared/ui`, export it from that
+reuse it (check the directory listing, because `save-icon`, `close-icon` and
+`edit-icon` exist but are not exported; export one to reuse it); if not, add a new icon component to `libs/shared/ui`, export it from that
 lib's `index.ts`, and remember the asset-import-types tsconfig step (see
 `references/creating-a-new-app.md` → "Asset-import types gotcha").
 
@@ -46,5 +47,6 @@ content already-localized from the data-access services. Full detail:
 
 Any landing page, detail page, or visually significant component goes through the
 **`design-taste-frontend`** skill first — invoke it, get the direction, then
-implement to it. Do not hand-roll a look. Reuse the app's locked design system if
+implement to it in Angular and SCSS. That skill's React, Tailwind and icon
+library defaults do not apply here: this project's stack and its icon rule win. Reuse the app's locked design system if
 it has one (e.g. landingV2's dark / gold-accent palette).

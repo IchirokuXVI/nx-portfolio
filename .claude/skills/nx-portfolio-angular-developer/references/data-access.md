@@ -93,8 +93,9 @@ export class XApi extends ApiConsumer implements XServiceI {
 ```
 
 **Switch implementations per environment** at a route/remote injector with
-`provideService(X_SERVICE, XApi)` — do **not** change the token's default. Today
-everything runs in memory.
+`provideService(X_SERVICE, XApi)` — do **not** change the token's default. The
+portfolio apps (landingV2, damoclesSword, odontogram) run in memory. velista and
+`luna-shopper-admin` call the Luna gateway and follow their own plans.
 
 ## Testing
 

@@ -1,17 +1,17 @@
 # Creating a new app (remote)
 
 The full flow for standing up a new remote micro-frontend: generate the app, make
-it zoneless, empty the remote entry, wire the shell route, and generate its
+it zoneless, empty the remote entry, check the shell route, and generate its
 `libs/<app>/*` scope. (Adding a single lib to an **existing** app is just step 5's
 generator with the right `--directory`/`--importPath`, plus the zoneless test
 setup and asset-import-types step.) Reference files to copy from:
-`apps/landing-v2/{module-federation.config.ts,project.json,src/bootstrap.ts,src/app/app.config.ts,src/app/app.routes.ts,src/app/remote-entry/*}`
+`apps/landing-v2/{module-federation.config.ts,project.json,src/bootstrap.ts,src/app/app.config.ts,src/app/app-providers.ts,src/app/translation-providers.ts,src/app/app.routes.ts,src/app/remote-entry/*}`
 and `apps/shell/{module-federation.config.ts,src/app/app.routes.ts}`.
 
 ## 1. Generate the remote app
 
 Nx Angular **remote** generator, hosted by the shell. Name and folder are the same
-kebab-case string (see SKILL.md "Naming"):
+kebab-case string:
 
 ```sh
 npx nx g @nx/angular:remote --name=my-app --directory=apps/my-app \
@@ -25,10 +25,11 @@ adds `'my-app'` to `apps/shell/module-federation.config.ts` `remotes`, inserts a
 `my-app` route in `apps/shell/src/app/app.routes.ts`, and adds the `my-app/Routes`
 alias to `tsconfig.base.json`. Verify each landed.
 
-Confirm the rokutranslator singleton override is present in the shell's
-`module-federation.config.ts` (it already forces
-`@portfolio/localization/rokutranslator` to `singleton: true, strictVersion:
-true`). Every remote must agree, or locale state fragments across boundaries.
+Make the new `module-federation.config.ts` import `sharedSingletons` from
+`module-federation.shared.ts` at the workspace root and pass it as `shared`, as
+the other configs do. A `shared` callback governs only its own build, so the
+host's copy does nothing for the new remote. Do not add `strictVersion`; that
+file explains why.
 
 ## 2. Make it zoneless (required for new apps)
 
@@ -48,7 +49,7 @@ Mirror `apps/landing-v2` exactly:
 
 - **`src/app/app.config.ts`** must NOT use `provideZoneChangeDetection`. Match
   landing-v2's minimal config (`provideBrowserGlobalErrorListeners()` +
-  `provideRouter(appRoutes)`); if Angular needs an explicit zoneless provider for
+  `provideRouter(appRoutes)` + `...appProviders`); if Angular needs an explicit zoneless provider for
   the app to boot, add `provideZonelessChangeDetection()`. Verify the app serves
   with no NgZone warnings.
 
@@ -57,44 +58,53 @@ Mirror `apps/landing-v2` exactly:
 `apps/my-app/src/app/remote-entry/entry.ts` is a component with an **empty
 template and no `<router-outlet>`** (copy landing-v2's). **Delete** the generated
 `remote-entry/nx-welcome.ts` and any reference to it. Point the remote routes at
-the feature-shell wrapper:
+the feature-shell, with the app's providers and its mount:
 
 ```ts
 // apps/my-app/src/app/remote-entry/entry.routes.ts
 import { Route } from '@angular/router';
+import { appProviders } from '../app-providers';
+
 export const remoteRoutes: Route[] = [
   {
     path: '',
+    // The shell never bootstraps this remote, so this route's injector is the
+    // only one the app layer can reach while it runs as a remote.
+    providers: [...appProviders],
+    // Where the app is mounted. The locale guard reads it from here.
+    data: { mountPath: '/my-app' },
     loadChildren: () =>
-      import('@portfolio/my-app/feature-shell').then((m) => m.MyAppShellRoutes),
+      import('@portfolio/my-app/feature-shell').then((m) => m.MyAppRoutes),
   },
 ];
 ```
 
-## 4. Wire the shell route (locale-first)
+Add the two app-layer files beside it, copied from `apps/landing-v2/src/app/`:
 
-The shell's top-level route is `:locale`, a componentless route guarded by
-`localeGuard`. Its children render in the shell's root outlet under the active
-locale. Move the generator's root-level `my-app` route to be a **child of
-`:locale`** in `apps/shell/src/app/app.routes.ts`, at your own path segment,
-mirroring the existing entries:
+- **`app-providers.ts`** exports `appProviders`: `{ provide: APP_MOUNT_PATH,
+  useValue: '/my-app' }`, the translation providers, `provideHttpClient` and the
+  data-access providers. `app.config.ts` spreads the same list, so the standalone
+  build and the mounted build provide the same things.
+- **`translation-providers.ts`** lists the libraries that ship translations and
+  calls `provideRokuTranslator`. → `references/localization.md`.
+
+## 4. Check the shell route
+
+The generator inserts a top-level `my-app` route in
+`apps/shell/src/app/app.routes.ts`. Keep it top-level, with no `title` and no
+`data`, and keep it **above** the empty-path `landingV2` entry. An empty-path
+route with `loadChildren` is not terminal and swallows every sibling below it.
+`app.routes.spec.ts` asserts the order.
 
 ```ts
 {
-  path: 'my-app',                      // your own path segment
-  title: 'app-title',
-  data: { titleNs: 'my-app', titleFallback: 'My App' },
+  path: 'my-app',
   loadChildren: () => import('my-app/Routes').then((m) => m.remoteRoutes),
 },
 ```
 
-Keep the `**` NotFound child last. `localeGuard` redirects locale-less URLs
-(`/my-app` → `/<guess>/my-app`), so you do not handle that here.
-
-> Only mount at the empty `''` locale child if you are deliberately replacing the
-> root landing app — that was landingV2's one-off cutover, not the default. Then
-> namespace internal detail pages (e.g. under `projects/`) so they do not collide
-> with sibling remotes under `:locale`.
+The shell does nothing about the locale. The app's own `localeGuard` inserts a
+missing one (`/my-app` → `/my-app/en`) and the app sets its own document title.
 
 ## 5. Generate the lib scope
 
@@ -133,8 +143,8 @@ Lib roles (Nx convention):
 - **data-access** — static data + in-memory service + DI token. Depends on models
   + `@portfolio/shared/data-access` + `@portfolio/shared/util`. →
   `references/data-access.md`.
-- **ui** — presentational components + the i18n namespace + translation JSON
-  assets. → `references/localization.md`.
+- **ui** — presentational components + the `TranslationSource` descriptor +
+  translation JSON assets. → `references/localization.md`.
 - **feature-shell** — the routed, locale-aware wrapper. →
   `references/routing-and-locale.md`.
 
@@ -153,8 +163,9 @@ Mirror an existing app's `project.json`:
   `nx-portfolio/my-app`, `forwardEnv: ['BUILDER_TAG']`, dev/prod configurations);
 - `serve` / `serve-static` on your dev port, `serve` having
   `dependsOn: ['shell:serve']` (so serving the remote boots the shell too);
-- production + staging entries in `k8s/helm/values.yaml` under `apps` (staging
-  gated by `staging.enabled`).
+- one entry in `k8s/helm/values.yaml` under `apps` (`name`, `image`,
+  `hostPrefix`, `path`). The environment comes from the values file passed
+  beside it, so there is no second staging entry.
 
 CI picks up affected micro-frontends automatically. Remote URLs are static module
 federation, embedded at build time — not runtime.
@@ -163,7 +174,10 @@ federation, embedded at build time — not runtime.
 
 1. `npx nx lint my-app <each new lib>` and `npx nx test my-app <each new lib>` pass.
 2. `npx nx build my-app --configuration=development` compiles.
-3. `npx nx serve shell` (boots shell + dev remotes). Open
-   `http://localhost:<shellPort>/en/my-app` — the shell-hosted page renders with no
-   console errors. The remote's own port renders the intentional empty root.
-4. Commit locally (`feat(my-app): scaffold ...`). **Do not push.**
+3. Serve through a dev slot (`tools/dev/ng-slot.sh --up --apps shell,my-app`; see
+   `CLAUDE.md` "dev slots"; a new app also needs an entry in that script's
+   `APPS` list). Open `http://localhost:<shellPort>/my-app/en` — the
+   shell-hosted page renders with no console errors. The remote's own port
+   renders the intentional empty root.
+4. Commit (`feat(my-app): scaffold ...`) and finish as `CLAUDE.md` "Git
+   workflow" says.

@@ -9,11 +9,9 @@ description: |
   STE, ASD-STE100, or compliance. Use for documentation, READMEs, runbooks,
   procedures, error messages, release notes, incident reports, API guides,
   and explanations for readers outside the field. Also use when the user
-  says "STE", "Simplified Technical English", "ASD-STE100", "plain English",
-  "layman's terms", "explain it simply", "no jargon", "de-slop", "make this
-  readable", "write for non-native readers", or asks for docs that translate
-  well. The same rules govern the reply: answer first, five sentences or
-  fewer.
+  names the standard (STE, ASD-STE100), asks for plain or jargon-free
+  wording, asks to remove AI-sounding prose, or writes for non-native
+  readers or for translation.
 license: MIT
 compatibility: claude-code cursor codex gemini-cli opencode
 metadata:
@@ -34,7 +32,7 @@ When asked to write or rewrite text:
 3. **Fix your vocabulary before you draft.** Use `make sure that` for check/verify/confirm/validate/ensure as verbs, and `configuration` for config/settings/options. Use no other word for these concepts in the whole document.
 4. **Define a technical term at its first use** when a reader outside the field needs it: concept words, not product names or the tool the document is about.
 5. **Apply the catalog** that follows. For replies and explanations for outsiders, apply the Plain English rules first.
-6. **Do the self-check** before you deliver. This step is not optional.
+6. **Do the self-check** before you deliver.
 7. **Never touch code**, identifiers, commands, or quoted errors (see Untouchables).
 
 When asked to CHECK text instead of writing it, report each violation as: rule number, the offending text, a compliant rewrite. Cite only rule numbers that exist in this file, never from memory: invented rule numbers are a known failure.
@@ -253,8 +251,8 @@ Facts are untouchable too. Rewrite the style, not the content. When the source d
 
 The reply is Plain mode, in every mode: 25 words per sentence, simple tenses, active voice, no contractions, approved modals only. Three additions for the chat channel:
 
-1. Give the answer or name the deliverable in your first sentence. Answer in 5 sentences or fewer. Code blocks and list items do not count. If a concept term is necessary, define it in a few words. If more detail exists, name it in five words and stop.
-2. Do not restate the request. Do not add openers ("Certainly", "Great question", "You're absolutely right", "Let's dive in") or closers ("I hope this helps", "Let me know", "That being said"). After a deliverable, one sentence names the largest changes. Then stop.
+1. Give the answer or name the deliverable in your first sentence. Then give only the detail that changes what the reader does. If a concept term is necessary, define it in a few words. If more detail exists, name it in one short phrase and stop.
+2. Start with the answer and end when it is given: no restated request, no greeting, no sign-off. After a deliverable, one sentence names the largest changes. Then stop.
 3. Do not shorten quoted error text, security warnings, or confirmations before a destructive action.
 
 **Before:** The failure stems from control-plane leader election during pod churn.
@@ -269,7 +267,7 @@ This step is not optional. Run these six checks (checks 1-5 on your draft, check
 3. Search for every `if` and `when`. Each one stands at the START of its sentence, before the command. "Increase the timeout if the network is slow" → "If the network is slow, increase the timeout."
 4. Search for check, verify, confirm, ensure, and validate as verbs, and for config, settings, and options. Replace each hit with `make sure that` or `configuration`. Strict mode: route the rest with `references/strict-vocabulary.md`.
 5. Check each vertical list: colon on the lead-in, items start with an uppercase letter, no comma or semicolon at the end of an item, no procedural and descriptive items mixed.
-6. Read your reply with the same eyes. The first sentence gives the answer, each technical term has a definition, and the reply has 5 sentences or fewer (code and lists excluded). Over 5: cut, do not compress. Then scan it against the Signs of AI Writing. If your reply is only the rewritten text, this check passes.
+6. Read your reply with the same eyes. The first sentence gives the answer, each technical term has a definition, and no sentence repeats the request or the one before it. Too long: cut, do not compress. Then scan it against the Signs of AI Writing. If your reply is only the rewritten text, this check passes.
 
 Fix what you find, then deliver. For a full audit, run `references/checklist.md`.
 

@@ -13,7 +13,7 @@ Full template library for Prompt Master. Read the relevant template when the use
 | [E — Auditable Reasoning](#template-e--auditable-reasoning) | Logic, math, analysis, debugging |
 | [F — Few-Shot](#template-f--few-shot) | Consistent structured output, pattern replication |
 | [G — File-Scope](#template-g--file-scope) | Cursor, Windsurf, Copilot — code editing AI |
-| [H — ReAct + Stop Conditions](#template-h--react--stop-conditions) | Claude Code, Devin — autonomous agents |
+| [H — ReAct + Stop Conditions](#template-h--react--stop-conditions) | Devin, AutoGPT — autonomous agents not on a current Claude model (Claude Code uses Template M) |
 | [I — Visual Descriptor](#template-i--visual-descriptor) | Midjourney, DALL-E, Stable Diffusion, Sora |
 | [J — Reference Image Editing](#template-j--reference-image-editing) | Editing an existing image with a reference |
 | [K — ComfyUI](#template-k--comfyui) | ComfyUI node-based image workflows |
@@ -212,7 +212,7 @@ Done When:
 
 ## Template H — ReAct + Stop Conditions
 
-*Use for Claude Code, Devin, AutoGPT, and any AI that takes autonomous actions. Runaway loops and scope explosion are the biggest credit killers in agentic workflows — stop conditions are not optional.*
+*Use for Devin, AutoGPT, and other autonomous agents not on a current Claude model (Claude Code uses Template M). Runaway loops and scope explosion are the biggest credit killers in agentic workflows — stop conditions are not optional.*
 
 ```
 Objective:
@@ -229,11 +229,11 @@ Allowed Actions:
 - Install only packages listed in [requirements.txt / package.json]
 
 Forbidden Actions:
-- Do NOT modify files outside [directory/scope]
-- Do NOT run the dev server or deploy
-- Do NOT push to git
-- Do NOT delete files without showing a diff first
-- Do NOT make architecture decisions without human approval
+- Do not modify files outside [directory/scope]
+- Do not run the dev server or deploy
+- Do not push to git
+- Do not delete files without showing a diff first
+- Do not make architecture decisions without human approval
 
 Stop Conditions:
 Pause and ask for human review when:
@@ -244,7 +244,7 @@ Pause and ask for human review when:
 - The task requires changes outside the stated scope
 
 Checkpoints:
-After each major step, output: ✅ [what was completed]
+Report progress when a checkpoint is reached or the plan changes.
 At the end, output a full summary of every file changed.
 ```
 

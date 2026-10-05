@@ -1,12 +1,13 @@
 # Testing (zoneless, memory-backed)
 
 Unit and contract tests run on Jest, **zoneless** (new apps), backed by the
-in-memory services so no backend is needed. e2e runs on Playwright, pointed at the
-shell (never a remote's own port).
+in-memory services so no backend is needed. e2e runs on Cypress or Playwright per
+project, pointed at the shell (never a remote's own port).
 
 ## Zoneless setup
 
-Every app and lib uses `setupZonelessTestEnv` (not `setupZoneTestEnv`):
+Every new app and lib uses `setupZonelessTestEnv`. `shell`, `odontogram` and the
+older libraries still use `setupZoneTestEnv`. Do not copy that:
 
 ```ts
 // src/test-setup.ts
@@ -17,7 +18,7 @@ setupZonelessTestEnv({
 });
 ```
 
-Copy `jest.config.ts` from an existing lib. `passWithNoTests` is on, so stubs are
+Copy `jest.config.cts` from a zoneless lib (for example one under `libs/velista`). `passWithNoTests` is on, so stubs are
 fine early.
 
 ## Data-access: memory spec + shared contract

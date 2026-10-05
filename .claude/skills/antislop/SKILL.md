@@ -1,6 +1,6 @@
 ---
 name: antislop
-description: "Anti Slop: Rules for AI Coding Agents. The core filter. Load always to stop generic AI slop."
+description: "Anti Slop: Rules for AI Coding Agents. The core filter. Load whenever building, editing or reviewing UI, interface copy or code comments, together with the matching antislop-* skill."
 allowed-tools: Read Write Edit Glob Grep
 ---
 # antislop
@@ -17,7 +17,7 @@ allowed-tools: Read Write Edit Glob Grep
 
 antislop is a system: this core file plus optional **skills**, one per concern (`antislop-ui`, `antislop-copywriting`, and so on, each a folder with a `SKILL.md`). This section installs them once. It is an **offer, not a requirement**: if the user prefers, this file alone remains a complete filter.
 
-**Skip this section** if the project's entry file (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or the equivalent the running tool reads at session start) already contains an antislop pointer block. That means antislop is already installed. Come back only when the user asks to add or remove a skill.
+**Skip this section** if antislop is installed as skill folders or a plugin (the `antislop-*` skills are available to load), or if the project's entry file (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, or the equivalent the running tool reads at session start) already contains an antislop pointer block. Either means antislop is already installed. Come back only when the user asks to add or remove a skill.
 
 If no antislop pointer exists and this file is being read for the first time, run the wizard:
 
@@ -272,7 +272,7 @@ These are the most common patterns found in AI-generated designs. Use this table
 
 ## Part 2: Mandatory Rules (R-01 to R-38, grouped)
 
-All 38 rules still apply. They are grouped into three tiers so the mechanism is explicit: **Hard Gate** rules are absolute, **Purpose-Gate** rules allow the technique but require a written reason, **Quality Locks** are consistency requirements.
+The 38 rules are grouped into three tiers so the mechanism is explicit: **Hard Gate** rules are absolute, **Purpose-Gate** rules allow the technique but require a written reason, **Quality Locks** are consistency requirements.
 
 ### Group 1: Hard Gate (absolute, no exceptions)
 
@@ -284,7 +284,7 @@ These rules protect honesty, function, and accessibility. Breaking any of them i
 - Use comma (`,`), period (`.`), colon (`:`), or parentheses `()` instead
 - Text must feel natural and human
 - **Scope**: the ban governs text the agent writes. A user's own writing sample is a direction, not agent copy, so a sample that uses em dashes goes through R-37's conflict protocol: name the character, name the rule, ask. Never keep or cut them silently.
-- **Carve-out**: documentation of this rule is exempt: the numbered section headings in this file (`R-XX — Title` rules and `C-1` to `C-5` principles), the em dash example in Part 1, the rule's own definition, any Delivery Gate item that quotes it, and the `Em Dashes` section in the copywriting skill (`skills/antislop-copywriting/SKILL.md`). These are documentation structure, not UI text.
+- **Carve-out**: documentation of this rule is exempt: the numbered section headings in this file (`R-XX — Title` rules and `C-1` to `C-5` principles), the em dash example in Part 1, the rule's own definition, any Delivery Gate item that quotes it, and the `Em Dashes` section in the `antislop-copywriting` skill. These are documentation structure, not UI text.
 
 #### R-03 — Mobile Responsiveness
 
@@ -505,7 +505,7 @@ Each technique below is allowed. It FAILS only when it appears as a default with
 
 ### Group 3: Quality Locks (consistency)
 
-These are consistency requirements. They stay as-is, with two adjustments: R-05 now references the RHYTHM dial, and R-31 is upgraded to the keystone rule.
+These are consistency requirements. R-05 is tied to the RHYTHM dial, and R-31 is the keystone rule.
 
 #### R-05 — Layout & Page Structure
 
