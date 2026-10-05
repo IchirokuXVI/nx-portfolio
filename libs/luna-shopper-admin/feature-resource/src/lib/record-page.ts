@@ -309,10 +309,10 @@ const ADDED_STATE = 'added';
       <lib-confirm-dialog
         (confirm)="confirmDelete()"
         (dismiss)="deleting.set(false)"
+        [bodyKey]="descriptor.record?.deleteBody ?? 'record.delete.body'"
         [busy]="working()"
         [confirmArgs]="{ name: title() }"
         [headingArgs]="{ thing: noun(), name: title() }"
-        bodyKey="record.delete.body"
         confirmKey="record.delete.confirm"
         dismissKey="record.delete.keep"
         headingKey="record.delete.heading"
@@ -664,12 +664,19 @@ export class RecordPage implements LeaveAware {
   /** What one row is called inside a sentence: "product". */
   readonly noun = computed(() => this._t(nounKeyOf(this.descriptor)));
 
-  /** What this record is called, once it is read. */
+  /**
+   * What this record is called, once it is read. A record whose title is
+   * empty is still called something: "Product with no name".
+   */
   readonly title = computed(() => {
     const row = this.store().row();
-    return row === null
-      ? ''
-      : this.descriptor.title(row, this._content.order());
+    if (row === null) {
+      return '';
+    }
+    const title = this.descriptor.title(row, this._content.order());
+    return title.trim() === ''
+      ? this._t('record.unnamed', { name: sentenceStart(this.noun()) })
+      : title;
   });
 
   /**
@@ -917,19 +924,30 @@ export class RecordPage implements LeaveAware {
   /**
    * From reading to the form. The form is on Details, so a record with tabs
    * goes there first.
+   *
+   * `fromAddress` is the form that `?edit=1` asked for. The one navigation
+   * that goes to Details then also takes the parameter out of the address. A
+   * second navigation for that could be skipped as one to the same address,
+   * and the parameter would stay.
    */
-  edit(): void {
+  edit(fromAddress = false): void {
     this.refusal.set(null);
     const store = this.store();
     const details = this._tabPaths.get(RECORD_DETAILS_TAB);
-    if (details === undefined) {
+    if (details === undefined && !fromAddress) {
       this._openForm(store);
       return;
     }
     void this._router
-      .navigate([details], {
+      .navigate(details === undefined ? [] : [details], {
         relativeTo: this._route,
-        queryParamsHandling: 'preserve',
+        ...(fromAddress
+          ? {
+              queryParams: { [RECORD_EDIT_PARAM]: null },
+              queryParamsHandling: 'merge',
+              replaceUrl: true,
+            }
+          : { queryParamsHandling: 'preserve' }),
       })
       .then(() => {
         if (this.store() === store) {
@@ -1156,28 +1174,41 @@ export class RecordPage implements LeaveAware {
 
     const asForm =
       id !== null && snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1';
-    void store.load().then(() => {
-      if (asForm && this.store() === store && this.canEdit()) {
-        this.edit();
+    // After the render and not now: the navigation that brought the
+    // parameter is still on its way while the page is built.
+    const rendered = new Promise<void>((resolve) =>
+      asForm
+        ? afterNextRender(() => resolve(), { injector: this._injector })
+        : resolve()
+    );
+    void Promise.all([store.load(), rendered]).then(() => {
+      // The read can answer after the operator went somewhere else. The
+      // parameter is then gone, and a navigation now would bring them back.
+      if (
+        !asForm ||
+        this.store() !== store ||
+        this._router.parseUrl(this._router.url).queryParams[
+          RECORD_EDIT_PARAM
+        ] !== '1'
+      ) {
+        return;
       }
-    });
-    if (asForm) {
-      // After the render and not now: the navigation that brought the
-      // parameter is still on its way while the page is built.
-      // On a record with tabs the form is on Details, and an empty path
-      // would be the record itself, which opens on its first tab.
+      // One navigation takes the parameter out, and it is the one that opens
+      // the form when the record can be edited.
+      if (this.canEdit()) {
+        this.edit(true);
+        return;
+      }
+      // On a record with tabs an empty path would be the record itself,
+      // which opens on its first tab.
       const details = this._tabPaths.get(RECORD_DETAILS_TAB);
-      afterNextRender(
-        () =>
-          void this._router.navigate(details === undefined ? [] : [details], {
-            relativeTo: this._route,
-            queryParams: { [RECORD_EDIT_PARAM]: null },
-            queryParamsHandling: 'merge',
-            replaceUrl: true,
-          }),
-        { injector: this._injector }
-      );
-    }
+      void this._router.navigate(details === undefined ? [] : [details], {
+        relativeTo: this._route,
+        queryParams: { [RECORD_EDIT_PARAM]: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    });
   }
 
   private _storeFor(id: string | null): RecordStore<ResourceRow> {

@@ -33,6 +33,12 @@ export interface RecordBlock<T extends ResourceRow = ResourceRow> {
    */
   readonly details?: 'first' | 'last';
   /**
+   * A translation key: what the delete question says under its heading, for
+   * a record whose delete takes more than the record. The page says "This
+   * cannot be taken back." when left out.
+   */
+  readonly deleteBody?: string;
+  /**
    * The counts beside the children that no field of the record holds, by
    * the key of the child: the `name` of a part, the `resource` of a list.
    *
