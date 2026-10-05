@@ -1,9 +1,5 @@
 import type { Translate, Wire } from '@portfolio/luna-shopper-admin/models';
-import {
-  harvestStats,
-  postalCodeCaption,
-  runsByStatusChart,
-} from './harvest-view';
+import { harvestStats, postalCodeCaption } from './harvest-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -26,49 +22,6 @@ function harvest(
   };
 }
 
-describe('runsByStatusChart', () => {
-  it('draws every status in enum order whatever happened this month', () => {
-    const chart = runsByStatusChart(
-      harvest({
-        runs: {
-          byStatus: [{ status: 'COMPLETED', count: 4 }],
-          inWindow: 4,
-        },
-      }),
-      translate
-    );
-
-    expect(chart.bars.map((bar) => bar.key)).toEqual([
-      'PENDING',
-      'RUNNING',
-      'COMPLETED',
-      'FAILED',
-      'ABORTED',
-      'STALE',
-    ]);
-    expect(chart.bars.map((bar) => bar.values)).toEqual([
-      [0],
-      [0],
-      [4],
-      [0],
-      [0],
-      [0],
-    ]);
-  });
-
-  /** One series, so every bar is the first colour and none of them is identity. */
-  it('is one series', () => {
-    const chart = runsByStatusChart(harvest(), translate);
-
-    expect(chart.series).toHaveLength(1);
-    expect(chart.series[0].colour).toBe(1);
-  });
-});
-
-/**
- * A queue of three with one failure that has waited a month is one situation
- * rather than three, so neither number is worth a tile of its own.
- */
 describe('postalCodeCaption', () => {
   const summary = (
     over: Partial<Wire.HarvestPostalCodeDiscoverySummaryView> = {}

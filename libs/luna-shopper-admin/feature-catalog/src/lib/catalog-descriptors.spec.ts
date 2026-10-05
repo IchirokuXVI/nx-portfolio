@@ -102,22 +102,6 @@ describe('every catalog descriptor', () => {
       }
     }
   });
-
-  it('gives a filter that a list cannot be read without', () => {
-    for (const descriptor of ALL) {
-      const params = new Set(
-        (descriptor.filters ?? []).map((filter) => filter.param)
-      );
-
-      for (const required of descriptor.requires ?? []) {
-        expect([descriptor.name, required, params.has(required)]).toEqual([
-          descriptor.name,
-          required,
-          true,
-        ]);
-      }
-    }
-  });
 });
 
 /**
@@ -195,14 +179,9 @@ describe('the resources a chain holds', () => {
     }
   });
 
-  /** Section 4 of the plan: the blocked state and the chain filter are gone. */
-  it('requires no filter and offers none for what the address decides', () => {
+  /** Section 4 of the plan: the address decides the chain, and no filter does. */
+  it('offers no filter for what the address decides', () => {
     for (const descriptor of HELD) {
-      expect([descriptor.name, descriptor.requires]).toEqual([
-        descriptor.name,
-        undefined,
-      ]);
-
       const params = (descriptor.filters ?? []).map((filter) => filter.param);
       expect([
         descriptor.name,
@@ -481,7 +460,6 @@ describe('the shops', () => {
       param: 'chainId',
       filter: 'supermarketId',
     });
-    expect(LOCATIONS.requires).toBeUndefined();
     expect((LOCATIONS.filters ?? []).map((filter) => filter.param)).toEqual([
       'query',
       'postalCodeSource',
@@ -722,14 +700,6 @@ describe('the price form', () => {
     expect(shopPointing).toEqual([]);
   });
 
-  it('offers no shop among its filters either', () => {
-    const shopPointing = (PRICES.filters ?? []).filter(
-      (filter) => filter.kind === 'reference' && filter.resource === 'locations'
-    );
-
-    expect(shopPointing).toEqual([]);
-  });
-
   /**
    * The rule from `0004` section 5, restated because this is the screen it
    * exists for. `unit_price / unit_size` disagrees with the source on 110 of
@@ -782,19 +752,9 @@ describe('the price form', () => {
 
 describe('the price list', () => {
   /** "What have I overridden": the effective rows an operator's price won. */
-  it('shows where the shown price came from and offers it as a filter', () => {
+  it('shows where the shown price came from', () => {
     expect(PRICES.list.columns).toContain('sourceKind');
     expect(PRICES.list.compact).toContain('sourceKind');
-
-    const filter = (PRICES.filters ?? []).find(
-      (entry) => entry.param === 'sourceKind'
-    );
-    expect(filter?.kind).toBe('enum');
-    expect(
-      filter?.kind === 'enum'
-        ? filter.options.map((option) => option.value)
-        : []
-    ).toContain('ADMIN');
   });
 
   it('shows when the price was last seen', () => {
@@ -804,10 +764,10 @@ describe('the price list', () => {
 
   /**
    * Backend plan 0080, section 5: the flag is the server's judgement and the
-   * screen draws it as a column and offers it as a filter. It is never worked
-   * out here from the date, because only the policy knows which kinds age out.
+   * screen draws it as a column. It is never worked out here from the date,
+   * because only the policy knows which kinds age out.
    */
-  it('shows the stale flag as the server sent it and filters on it', () => {
+  it('shows the stale flag as the server sent it', () => {
     expect(PRICES.list.columns).toContain('stale');
     expect(PRICES.list.compact).toContain('stale');
     expect(fieldOf(PRICES, 'stale')?.kind).toBe('boolean');
@@ -817,11 +777,6 @@ describe('the price list', () => {
         'create'
       )
     ).toBe(false);
-
-    const filter = (PRICES.filters ?? []).find(
-      (entry) => entry.param === 'stale'
-    );
-    expect(filter?.kind).toBe('boolean');
   });
 });
 

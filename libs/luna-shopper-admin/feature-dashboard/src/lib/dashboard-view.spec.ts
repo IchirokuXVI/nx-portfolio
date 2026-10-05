@@ -292,8 +292,6 @@ describe('waitingTiles', () => {
       label: 'postal',
       value: 4,
       caption: null,
-      delta: null,
-      trend: null,
       link: null,
       query: null,
       tone: 'attention' as const,

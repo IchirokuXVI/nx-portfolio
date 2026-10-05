@@ -115,8 +115,8 @@ async function boot(signedIn: boolean) {
       ServerReachability,
       provideRouter(appRoutes),
       provideLocationMocks(),
-      // What `app.config.ts` provides. The redirects of the old chain
-      // addresses ask the registry where a chain is, and the registry reads
+      // What `app.config.ts` provides. A redirect under a zone asks the
+      // registry where a list or a shopping list is, and the registry reads
       // the sections from here: without them every one lands on `/`.
       provideSections(...ADMIN_SECTIONS),
       { provide: SESSION_SERVICE, useValue: service },
@@ -341,49 +341,6 @@ describe('appRoutes', () => {
   });
 
   /**
-   * The addresses the harvester's ten screens had (admin plan 0044, target
-   * 8), against the app's own sections. `old-addresses.spec.ts` in the
-   * harvester's library holds every case, and this is the proof that the app
-   * mounts them where the old screens were, with the query kept.
-   */
-  it.each([
-    ['/harvest/entries', '/harvest/review/products'],
-    [
-      '/harvest/entries?supermarketId=sm_carrefour&brandKey=mahou',
-      '/harvest/review/products?brandKey=mahou&chain=sm_carrefour',
-    ],
-    ['/harvest/shops', '/harvest/review/shops'],
-    ['/harvest/places', '/harvest/review/places'],
-    [
-      '/harvest/places?country=ES&postalCode=14001',
-      '/harvest/review/places?country=ES&postalCode=14001',
-    ],
-    ['/harvest/places/groups', '/harvest/review/places?view=groups'],
-    ['/harvest/suggested-brands', '/harvest/review/brands'],
-    ['/harvest/presets', '/harvest/runs'],
-    [
-      '/harvest/presets?chain=sm_mercadona&preset=p1',
-      '/harvest/runs?chain=sm_mercadona&preset=p1',
-    ],
-    ['/harvest/imports/upload', '/harvest/runs/import'],
-    ['/harvest/sources', '/harvest/setup/sources'],
-    ['/harvest/brands', '/harvest/setup/brands'],
-    ['/harvest/brands?query=mahou', '/harvest/setup/brands?query=mahou'],
-    ['/harvest/brands/new', '/harvest/setup/brands/new'],
-    ['/harvest/brands/br_1', '/harvest/setup/brands/br_1'],
-    ['/harvest/brands/br_1/edit', '/harvest/setup/brands/br_1/edit'],
-    ['/harvest/postal-codes', '/harvest/setup/postal-codes'],
-    ['/harvest/postal-codes/new', '/harvest/setup/postal-codes/new'],
-    ['/harvest/postal-codes/14001', '/harvest/setup/postal-codes/14001'],
-  ])('sends the old address %s to %s', async (old, now) => {
-    const { router } = await boot(true);
-
-    await router.navigateByUrl(old);
-
-    expect(router.url).toBe(now);
-  });
-
-  /**
    * A chain, a shop and a product each open on their first tab. So do the
    * Shoppers section, a person and a zone (admin plan 0045, targets 1, 3 and
    * 5).
@@ -407,100 +364,10 @@ describe('appRoutes', () => {
   });
 
   /**
-   * The addresses the five chain screens had under `/catalog` (admin plan
-   * 0042, target 9), against the app's own sections. Unlike the flat URLs
-   * below, these are redirects: a bookmark still lands where the rows are.
-   * `old-addresses.spec.ts` in the catalog library holds every case, and this
-   * is the proof that the app mounts them where the old screens were.
+   * Two addresses under a zone are no screen of their own (admin plan 0045),
+   * against the app's own sections.
    */
   it.each([
-    ['/catalog/supermarkets', '/chains'],
-    ['/catalog/supermarkets/sm_mercadona', '/chains/sm_mercadona/shops'],
-    [
-      '/catalog/locations/loc_cordoba_centro',
-      '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
-    ],
-    ['/catalog/locations/loc_nowhere', '/chains'],
-    ['/catalog/locations', '/chains'],
-    ['/catalog/sections', '/chains'],
-    ['/catalog/price-scopes', '/chains'],
-    ['/catalog/location-items', '/chains'],
-    ['/catalog/locations?supermarketId=sm_consum', '/chains/sm_consum/shops'],
-    ['/catalog/sections?supermarketId=sm_consum', '/chains/sm_consum/shops'],
-    [
-      '/catalog/price-scopes?supermarketId=sm_consum',
-      '/chains/sm_consum/shops',
-    ],
-    [
-      '/catalog/location-items?supermarketId=sm_consum',
-      '/chains/sm_consum/shops',
-    ],
-  ])('sends the old address %s to %s', async (old, now) => {
-    const { router } = await boot(true);
-
-    await router.navigateByUrl(old);
-
-    expect(router.url).toBe(now);
-  });
-
-  /**
-   * The addresses the five product screens had under `/catalog`, and the
-   * section's own (admin plan 0043, targets 7 and 8), against the app's own
-   * sections. `old-addresses.spec.ts` beside the product screens holds every
-   * case, and this is the proof that the app mounts them where the old
-   * screens were.
-   */
-  it.each([
-    ['/catalog', '/'],
-    ['/catalog/items', '/products'],
-    ['/catalog/items/it_milk_1l', '/products/it_milk_1l/details'],
-    ['/catalog/items/it_milk_1l/prices', '/products/it_milk_1l/prices'],
-    ['/catalog/categories', '/products/categories'],
-    ['/catalog/product-groups', '/products/groups'],
-    ['/catalog/prices', '/products'],
-    [
-      '/catalog/prices/it_milk_1l~ps_mercadona_4661',
-      '/products/it_milk_1l/prices?scope=ps_mercadona_4661',
-    ],
-    ['/catalog/price-policies', '/products/price-rules'],
-  ])('sends the old address %s to %s', async (old, now) => {
-    const { router } = await boot(true);
-
-    await router.navigateByUrl(old);
-
-    expect(router.url).toBe(now);
-  });
-
-  /**
-   * The addresses the six shoppers screens had (admin plan 0045, target 8),
-   * against the app's own sections. `old-addresses.spec.ts` in the people
-   * library holds every case, and this is the proof that the app mounts them
-   * where the old screens were.
-   */
-  it.each([
-    ['/shoppers/users', '/shoppers/people'],
-    [`/shoppers/users/${ROSA}`, `/shoppers/people/${ROSA}/details`],
-    ['/shoppers/memberships', '/shoppers/zones'],
-    [
-      `/shoppers/memberships?zoneId=${KITCHEN}`,
-      `/shoppers/zones/${KITCHEN}/members`,
-    ],
-    ['/shoppers/lists', '/shoppers/zones'],
-    [`/shoppers/lists?zoneId=${KITCHEN}`, `/shoppers/zones/${KITCHEN}/lists`],
-    [
-      '/shoppers/lists/l-kitchen-weekly',
-      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
-    ],
-    ['/shoppers/list-lines', '/shoppers/zones'],
-    [
-      '/shoppers/list-lines/l-kitchen-weekly~line-milk',
-      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
-    ],
-    ['/shoppers/shopping-lists', '/shoppers/people'],
-    [
-      '/shoppers/shopping-lists/b-saturday',
-      `/shoppers/people/${ROSA}/shopping-lists/b-saturday`,
-    ],
     // A row of a zone's Shopping lists tab opens under its owner.
     [
       `/shoppers/zones/${KITCHEN}/shopping-lists/b-saturday`,
@@ -511,20 +378,12 @@ describe('appRoutes', () => {
       `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines`,
       `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
     ],
-  ])('sends the old address %s to %s', async (old, now) => {
+  ])('sends %s to %s', async (from, to) => {
     const { router } = await boot(true);
 
-    await router.navigateByUrl(old);
+    await router.navigateByUrl(from);
 
-    expect(router.url).toBe(now);
-  });
-
-  it('sends an old chain address from a signed out operator to the login screen', async () => {
-    const { router } = await boot(false);
-
-    await router.navigateByUrl('/catalog/supermarkets');
-
-    expect(router.url).toBe('/sign-in');
+    expect(router.url).toBe(to);
   });
 
   /**

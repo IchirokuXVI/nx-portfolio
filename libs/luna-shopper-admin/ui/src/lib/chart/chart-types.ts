@@ -52,10 +52,3 @@ export interface ChartBar {
   /** One entry per series, in series order. A single series is an array of one. */
   readonly values: readonly number[];
 }
-
-/** What a stat tile shows beside its number, when there is one to show. */
-export interface ChartDelta {
-  readonly value: number;
-  /** Already translated, and it names the period: "in the last 7 days". */
-  readonly caption: string;
-}

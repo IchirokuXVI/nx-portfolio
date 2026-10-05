@@ -287,8 +287,6 @@ function waiting(
     label,
     value: count,
     caption: null,
-    delta: null,
-    trend: null,
     link,
     query,
     // Above zero is work, and work is what an operator opened this to find.

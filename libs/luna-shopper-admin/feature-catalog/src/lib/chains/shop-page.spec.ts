@@ -706,7 +706,6 @@ describe('the Products tab of a shop', () => {
     const fixture = await boot(`${OESTE}/products`);
 
     expect(tableRows(fixture)).toHaveLength(1);
-    expect(page(fixture).textContent).not.toContain('resource.list.blocked');
     // No control of any list filters by the shop: the address already did.
     expect(
       fixture.nativeElement.querySelector(

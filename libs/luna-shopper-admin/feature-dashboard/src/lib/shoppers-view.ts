@@ -9,7 +9,7 @@ import type { StatView } from './dashboard-view';
 /**
  * The people the product has, as the overview draws them.
  *
- * Admin plan 0022 moved the three functions to `feature-people`, for a
+ * Admin plan 0022 moved these functions to `feature-people`, for a
  * dashboard of the Shoppers section. That section opens on its People tab now
  * (admin plan 0045), so the numbers and the chart of sign ups are a panel of
  * the overview (admin plan 0046), and the functions are beside the page that
@@ -27,27 +27,6 @@ export function signUpsChart(
       label: translate('dashboard.shoppers.signUps'),
       colour: 1,
       points: toPoints(identity.signUps),
-    },
-  ];
-}
-
-/** Zones and lists created per day, as two lines on one chart. */
-export function zonesAndListsChart(
-  core: Wire.AdminDashboardAdminCoreDashboard,
-  translate: Translate
-): ChartSeries[] {
-  return [
-    {
-      key: 'zones',
-      label: translate('dashboard.shoppers.zonesSeries'),
-      colour: 1,
-      points: toPoints(core.zonesCreated),
-    },
-    {
-      key: 'lists',
-      label: translate('dashboard.shoppers.listsSeries'),
-      colour: 2,
-      points: toPoints(core.listsCreated),
     },
   ];
 }

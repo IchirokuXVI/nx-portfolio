@@ -539,10 +539,9 @@ describe('a list under a parent row (admin plan 0042)', () => {
   });
 
   /** The address is not something the operator narrowed the list by. */
-  it('is not blocked and not narrowed by the parent alone', async () => {
+  it('is not narrowed by the parent alone', async () => {
     const { page } = await mount('/plants/p1/lines', { embed: 'tab' });
 
-    expect(page.blockedBy()).toBeNull();
     expect(page.store.narrowed()).toBe(false);
   });
 

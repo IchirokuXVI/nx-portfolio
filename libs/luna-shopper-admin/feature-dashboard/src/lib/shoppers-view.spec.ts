@@ -3,11 +3,7 @@ import type {
   Translate,
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import {
-  shopperStats,
-  signUpsChart,
-  zonesAndListsChart,
-} from './shoppers-view';
+import { shopperStats, signUpsChart } from './shoppers-view';
 
 /** The testing translator does not interpolate, so a spec supplies its own. */
 const translate: Translate = (key, values) =>
@@ -121,17 +117,5 @@ describe('signUpsChart', () => {
     expect(series.key).toBe('signUps');
     expect(series.colour).toBe(1);
     expect(series.points.map((point) => point.value)).toEqual([1, 1, 1]);
-  });
-});
-
-describe('zonesAndListsChart', () => {
-  it('is two lines on one chart, in a fixed colour order', () => {
-    const series = zonesAndListsChart(core(), translate);
-
-    expect(series.map((entry) => [entry.key, entry.colour])).toEqual([
-      ['zones', 1],
-      ['lists', 2],
-    ]);
-    expect(series[1].points.map((point) => point.value)).toEqual([0, 3, 1]);
   });
 });

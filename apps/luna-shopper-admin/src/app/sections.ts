@@ -5,7 +5,6 @@ import {
 import {
   CHAIN_RESOURCES,
   chainsRoutes,
-  oldCatalogAddresses,
   PRODUCT_RESOURCES,
   PRODUCTS_SEGMENT,
   productsRoutes,
@@ -22,7 +21,6 @@ import {
   ADMIN_ACCOUNTS_TAB,
   ADMINS_SEGMENT,
   adminsRoutes,
-  oldShopperAddresses,
   SHOPPER_RESOURCES,
   shoppersRoutes,
   ShoppersStatus,
@@ -96,13 +94,13 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  *
  * **There is no Catalog section any more.** It held ten screens. Five went to
  * the chains and five are the products, and its dashboard is a block of the
- * overview. What is left of `/catalog` is redirects.
+ * overview. Nothing is left at `/catalog` (admin plan 0047).
  *
  * **The shoppers have two tabs, People and Zones** (admin plan 0045). The
  * section held six flat screens. The data had a shape they did not show: a
  * zone holds its members and its lists, a list holds its lines, and a person
  * is in zones and owns shopping lists. So the four other screens are tabs of a
- * zone or of a person, and what is left of their addresses is redirects.
+ * zone or of a person.
  */
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   {
@@ -126,11 +124,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: 'shell.sections.chains',
     icon: StoreIcon,
     held: CHAIN_RESOURCES,
-    // Beside the chains, at the root, everything that was under `/catalog`:
-    // redirects to where a chain or a product holds the same rows now (admin
-    // plans 0042 and 0043). They are here because this is the section whose
-    // screens are mounted at the root, and no section owns that segment.
-    screens: [...chainsRoutes(), oldCatalogAddresses()],
+    screens: chainsRoutes(),
   },
   {
     // A product and its prices (admin plan 0043). Third on the rail.
@@ -191,9 +185,6 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     //
     // The count on Zones, and so on this section's entry in the rail, is the
     // join requests that wait: `ShoppersStatus` reads it with the dashboard.
-    //
-    // Beside the route table, the addresses the six flat screens had, as
-    // redirects to where the same rows are now.
     key: 'shoppers',
     label: 'shell.sections.shoppers',
     icon: PeopleIcon,
@@ -201,7 +192,7 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     landing: USERS.segment,
     held: SHOPPER_RESOURCES,
     heldTabs: true,
-    screens: [...shoppersRoutes(), ...oldShopperAddresses()],
+    screens: shoppersRoutes(),
     counts: ShoppersStatus,
   },
   {

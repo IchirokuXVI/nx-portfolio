@@ -243,11 +243,10 @@ describe('the page of a chain', () => {
   });
 
   /**
-   * Target 10 and section 4 of the plan, read off the one file that holds the
-   * words: the two sentences of the chain's info and the two of "Priced by",
-   * and the texts that went with the screens this plan deleted.
+   * Target 10 of the plan, read off the one file that holds the words: the two
+   * sentences of the chain's info and the two of "Priced by".
    */
-  it('holds the plan’s sentences, and none of the notes it deleted', () => {
+  it('holds the plan’s sentences', () => {
     const { catalog } = JSON.parse(
       readFileSync(
         join(__dirname, '../../../../ui/assets/i18n/en.json'),
@@ -267,13 +266,6 @@ describe('the page of a chain', () => {
     expect(catalog.shops.pricedBy.info.reach).toBe(
       'A chain region covers many shops. A single shop scope covers one.'
     );
-
-    // "Choose a chain to begin", three times, and the tabs inside the form.
-    expect(catalog.locations.note).toBeUndefined();
-    expect(catalog.sections.note).toBeUndefined();
-    expect(catalog.locationItems.note).toBeUndefined();
-    expect(catalog.chainSections.says).toBeUndefined();
-    expect(catalog.chainTabs).toBeUndefined();
   });
 
   it('offers to edit the chain, on its Details tab', async () => {

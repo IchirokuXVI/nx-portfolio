@@ -16,7 +16,6 @@ import {
   provideSections,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { oldShopperAddresses } from './old-addresses';
 import { SHOPPER_RESOURCES, shoppersRoutes } from './shoppers-routes';
 import { USERS } from './users';
 
@@ -46,7 +45,7 @@ export const SHOPPERS_TEST_SECTION: AdminSection = {
   landing: USERS.segment,
   held: SHOPPER_RESOURCES,
   heldTabs: true,
-  screens: [...shoppersRoutes(), ...oldShopperAddresses()],
+  screens: shoppersRoutes(),
 };
 
 /** A directory that records what it was asked to do and does nothing else. */

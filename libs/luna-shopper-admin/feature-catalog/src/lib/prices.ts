@@ -245,39 +245,6 @@ export const PRICES = defineResource<Price>({
     compact: ['price', 'sourceKind', 'observedAt', 'stale'],
   },
 
-  filters: [
-    {
-      kind: 'reference',
-      param: 'itemId',
-      label: 'catalog.prices.filter.itemId',
-      resource: 'items',
-    },
-    {
-      kind: 'reference',
-      param: 'priceScopeId',
-      label: 'catalog.prices.filter.priceScopeId',
-      resource: 'price-scopes',
-    },
-    {
-      // "What have I overridden." The effective rows an operator's price won.
-      kind: 'enum',
-      param: 'sourceKind',
-      label: 'catalog.prices.filter.sourceKind',
-      options: PRICE_SOURCE_KIND_OPTIONS,
-    },
-    {
-      // "What is shown on sufferance."
-      kind: 'boolean',
-      param: 'stale',
-      label: 'catalog.prices.filter.stale',
-    },
-    {
-      kind: 'boolean',
-      param: 'available',
-      label: 'catalog.prices.filter.available',
-    },
-  ],
-
   // Add, and nothing else. There is no edit, because the row is derived, and
   // no delete, because what an operator removes is one of the prices behind
   // it, on the Prices tab, with every price of the scope in front of them.

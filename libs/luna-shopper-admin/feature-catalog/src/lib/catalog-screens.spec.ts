@@ -271,15 +271,10 @@ describe('the shops of a chain', () => {
     await settle(fixture);
   }
 
-  /**
-   * The list used to wait for a chain to be picked in a filter, and said so in
-   * a third state beside empty and no match. The chain is the address now, so
-   * the list reads at once and has nothing to wait for.
-   */
+  /** The chain is the address, so the list reads at once. */
   it('reads the chain’s shops from the address, with nothing to choose first', async () => {
     const fixture = await boot(MERCADONA_SHOPS);
 
-    expect(text(fixture)).not.toContain('resource.list.blocked');
     expect(text(fixture)).not.toContain('resource.list.empty');
     expect(rowsOf(fixture)).toHaveLength(3);
   });
@@ -474,7 +469,6 @@ describe('the products of a shop', () => {
     const fixture = await boot(`${CENTRO}/products`);
     await settle(fixture);
 
-    expect(text(fixture)).not.toContain('resource.list.blocked');
     // The seed holds two rows for this shop and one for another.
     expect(fixture.nativeElement.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(anyFilterFor(fixture, 'supermarketLocationId')).toBeNull();

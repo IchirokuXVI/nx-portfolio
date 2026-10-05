@@ -110,8 +110,7 @@
       "loadingMore": "Loading more…",
       "empty": "There is nothing here yet.",
       "noMatch": "Nothing matches the filter. There are rows here; the filter is hiding them.",
-      "actions": "Actions",
-      "blocked": "Choose {{filters}} to see the rows."
+      "actions": "Actions"
     },
     "filter": {
       "any": "Any",
@@ -639,13 +638,6 @@
       "observedAtHelp": "When the shown price was last observed by its source.",
       "stale": "Out of date",
       "staleHelp": "Nothing currently eligible prices this product, so the newest price anybody gave is shown and flagged. Set by the server from the price policies.",
-      "filter": {
-        "itemId": "Product",
-        "priceScopeId": "Price scope",
-        "sourceKind": "Source",
-        "stale": "Out of date",
-        "available": "Sold at this scope"
-      },
       "confirm": {
         "remove": {
           "heading": "Remove this price?",
@@ -1003,15 +995,6 @@
       "info": {
         "both": "A run starts only when the service is on and runs are allowed. Both are set at deploy time.",
         "chain": "Whether one chain may be fetched is a switch in Setup."
-      },
-      "from": {
-        "chart": "From the chart, which switches the harvester off in production and in staging.",
-        "reply": "Something answered a request on this screen.",
-        "silence": "Nothing answered a request on this screen.",
-        "refusal": "The server refused to start a run and named this switch.",
-        "run": "A run got far enough that this switch must have been on.",
-        "failure": "A run failed and named this switch.",
-        "nothing": "No route reports this, and nothing has been attempted that would reveal it."
       }
     },
     "queue": {
@@ -2099,7 +2082,6 @@
       }
     },
     "admins": {
-      "one": "admin",
       "many": "Admins",
       "name": "Name",
       "username": "Sign in name",
@@ -2261,8 +2243,6 @@
     },
     "harvest": {
       "heading": "Harvest",
-      "byStatus": "Runs",
-      "byStatusTitle": "Runs by status",
       "numbers": "Harvest numbers",
       "inWindow_one": "Runs in {{count}} day",
       "inWindow_other": "Runs in {{count}} days",
@@ -2316,9 +2296,6 @@
       "zones": "Zones",
       "lists": "Lists",
       "signUps": "Sign ups",
-      "zonesSeries": "Zones",
-      "listsSeries": "Lists",
-      "zonesAndLists": "Zones and lists created per day",
       "numbers": "Shopper numbers",
       "beingShopped": "Being shopped",
       "signUpsTitle_one": "Sign ups each day, last {{count}} day",
