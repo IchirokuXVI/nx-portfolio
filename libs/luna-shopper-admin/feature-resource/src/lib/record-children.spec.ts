@@ -19,7 +19,7 @@ import {
   type ResourceQuery,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import { Viewport } from '@portfolio/luna-shopper-admin/ui';
+import { ConfirmDialog, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { provideSections } from './admin-section';
 import { RECORD_CONTEXT } from './record-context';
 import { RecordPage } from './record-page';
@@ -100,6 +100,9 @@ class FactsPanel {
   readonly context = inject(RECORD_CONTEXT);
 }
 
+/** What the named action of a chain is refused with, or `null`. */
+let auditFails: GatewayError | null = null;
+
 const CHAINS = defineResource<Chain>({
   name: 'chains',
   segment: 'chains',
@@ -115,7 +118,27 @@ const CHAINS = defineResource<Chain>({
     },
   ],
   list: { columns: ['name'], compact: ['name'] },
-  actions: { create: true, edit: true },
+  actions: {
+    create: true,
+    edit: true,
+    named: () => [
+      {
+        // Asks first, and destroys nothing.
+        name: 'audit',
+        label: 'chains.audit',
+        confirm: {
+          heading: 'chains.audit.heading',
+          body: 'chains.audit.body',
+          confirm: 'chains.audit.confirm',
+        },
+        run: async () => {
+          if (auditFails !== null) {
+            throw auditFails;
+          }
+        },
+      },
+    ],
+  },
   record: {
     sections: [{ title: 'chains.section.name', fields: ['name'] }],
     children: [
@@ -312,6 +335,7 @@ beforeEach(() => {
   Object.assign(server, pristine);
   shopReads.length = 0;
   chainReads = 0;
+  auditFails = null;
   held.set({ notes: 3 });
 });
 
@@ -399,6 +423,58 @@ describe('the tabs of a record', () => {
     await drawn(harness);
 
     expect(text(one(harness, '[data-notes]'))).toBe('c2 Chain c2');
+  });
+
+  /**
+   * The More menu is over every tab, so what it was refused is too (admin
+   * plan 0057). Once, also on Details, where the view could say it again.
+   */
+  it.each(['notes', 'details'])(
+    'says the refusal of an action above the tab %s',
+    async (tab) => {
+      auditFails = new GatewayError({
+        code: 'conflict',
+        status: 409,
+        correlationId: '',
+      });
+      const harness = await mount(`/chains/c1/${tab}`);
+
+      await press(harness, '[data-action="audit"]');
+      await press(harness, '[data-action-question] [data-confirm]');
+
+      const said = all(harness, '[data-refusal]');
+      expect(said).toHaveLength(1);
+      expect(said[0].textContent).toContain('resource.error.conflict');
+      // Above the tab, and the tab is still drawn.
+      expect(
+        said[0].compareDocumentPosition(one(harness, '.under') as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(url()).toBe(`/chains/c1/${tab}`);
+
+      // The next action that goes through takes it away.
+      auditFails = null;
+      await press(harness, '[data-action="audit"]');
+      await press(harness, '[data-action-question] [data-confirm]');
+
+      expect(all(harness, '[data-refusal]')).toHaveLength(0);
+    }
+  );
+
+  it('names the record in the heading of a question, and keeps red for an action that destroys', async () => {
+    const harness = await mount('/chains/c1/notes');
+
+    await press(harness, '[data-action="audit"]');
+
+    const dialog = harness.fixture.debugElement.query(
+      By.directive(ConfirmDialog)
+    ).componentInstance as ConfirmDialog;
+    expect(dialog.headingArgs()).toEqual({ name: 'Alcampo' });
+    expect(dialog.bodyArgs()).toEqual({ name: 'Alcampo' });
+    expect(dialog.tone()).toBe('primary');
+    expect(
+      one(harness, '[data-action-question] [data-confirm]')?.classList
+    ).toContain('primary');
   });
 
   it('goes to Details for Edit, from whichever tab is open', async () => {

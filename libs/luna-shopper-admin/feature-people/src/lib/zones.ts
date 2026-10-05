@@ -164,6 +164,7 @@ export const ZONES = defineResource<Zone>({
       kind: 'date',
       name: 'updatedAt',
       label: 'people.zones.updatedAt',
+      help: 'people.field.updatedAtHelp',
       time: true,
       editable: false,
     },
@@ -183,12 +184,24 @@ export const ZONES = defineResource<Zone>({
     // question asked on the detail screen, where the lists are named.
     compact: ['ownerUserId', 'memberCount'],
     // Beside the open zone: who owns it and how much is in it, as a sentence.
+    //
+    // The owner is said by name and never by ID (admin plan 0057). A row of
+    // the list carries the name. The read of one zone carries none, and its
+    // members do, so the page of a zone names the owner as that member. An
+    // owner that neither names is left out of the sentence.
     brief: {
       sentence: (row) => {
-        const owner = row.ownerName ?? row.ownerUserId;
         const counts = { members: row.memberCount, lists: row.listCount };
+        if (row.ownerUserId === null) {
+          return fieldMessage('people.zones.brief.noOwner', counts);
+        }
+        const owner =
+          row.ownerName ??
+          row.members?.find((member) => member.userId === row.ownerUserId)
+            ?.username ??
+          null;
         return owner === null
-          ? fieldMessage('people.zones.brief.noOwner', counts)
+          ? fieldMessage('people.zones.brief.counts', counts)
           : fieldMessage('people.zones.brief.owned', { owner, ...counts });
       },
     },

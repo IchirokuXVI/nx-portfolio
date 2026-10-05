@@ -123,14 +123,17 @@ export const USERS = defineResource<User>({
       kind: 'boolean',
       name: 'hasPassword',
       label: 'people.users.hasPassword',
+      help: 'people.users.hasPasswordHelp',
       editable: false,
     },
     {
       kind: 'text',
       name: 'providers',
       label: 'people.users.providers',
+      help: 'people.users.providersHelp',
       editable: false,
-      read: (row) => row.providers.join(', '),
+      // The page also asks for a row it has not read yet, which holds none.
+      read: (row) => (row.providers ?? []).join(', '),
     },
     {
       kind: 'date',
@@ -143,6 +146,7 @@ export const USERS = defineResource<User>({
       kind: 'date',
       name: 'updatedAt',
       label: 'people.users.updatedAt',
+      help: 'people.field.updatedAtHelp',
       time: true,
       editable: false,
     },
@@ -155,7 +159,7 @@ export const USERS = defineResource<User>({
       label: 'people.users.roles.label',
       help: 'people.users.rolesHelp',
       editable: false,
-      read: (row) => rolesCell(row.roles),
+      read: (row) => rolesCell(row.roles ?? []),
     },
   ],
 
@@ -276,7 +280,7 @@ export const USERS = defineResource<User>({
       added: 'createdAt',
       changed: 'updatedAt',
       // "Signed up", which is what the date of an account is.
-      labels: { added: 'people.users.createdAt' },
+      labels: { added: 'people.users.record.signedUp' },
     },
   },
 
@@ -306,6 +310,9 @@ export const USERS = defineResource<User>({
           },
           run: (row) => directory.resendVerification(row.userId),
         },
+        // One to give and one to take away for each role, each with its own
+        // question. The list beside the page shows the roles as a column, and
+        // the page says that `users` was written after any action.
         ...roleActions(directory),
         {
           name: 'delete-account',

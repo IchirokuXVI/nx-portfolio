@@ -4,6 +4,7 @@ import {
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
   ResourceFormPage,
+  recordEditRedirect,
   recordRoute,
   resourceSplitRoute,
   resourceTabRoute,
@@ -15,23 +16,16 @@ import { LIST_LINES } from './list-lines';
 import { ListPage } from './list-page';
 import { LISTS } from './lists';
 import { MEMBERSHIPS } from './memberships';
-import { PersonPage } from './person-page';
-import { PersonDetailsTab, PersonZonesTab } from './person-tabs';
 import {
   BASKET_PARAM,
-  DETAILS_TAB,
   EDIT_SEGMENT,
   LIST_PARAM,
   PERSON_PARAM,
-  PERSON_ZONES_TAB,
   ZONE_PARAM,
 } from './shopper-params';
 import { toBasket, toListOfLine } from './shopper-redirects';
 import { ShoppersPage } from './shoppers-page';
 import { USERS } from './users';
-import { ZoneDetailsTab } from './zone-details-tab';
-import { ZoneMembersTab } from './zone-members-tab';
-import { ZonePage } from './zone-page';
 import { ZONES } from './zones';
 
 /**
@@ -59,11 +53,11 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /shoppers                                        goes to the people
  * /shoppers/people                                 tab: the people
  * /shoppers/people/{userId}                        goes to its details
- * /shoppers/people/{userId}/details                tab: the account
+ * /shoppers/people/{userId}/details                tab: the account, read or changed
  * /shoppers/people/{userId}/zones                  tab: the zones it is in
  * /shoppers/people/{userId}/shopping-lists         tab: what it owns
  * /shoppers/people/{userId}/shopping-lists/{id}    one shopping list
- * /shoppers/people/{userId}/edit                   the account's form
+ * /shoppers/people/{userId}/edit                   goes to its details, as a form
  * /shoppers/zones                                  tab: the zones
  * /shoppers/zones/{zoneId}                         goes to its members
  * /shoppers/zones/{zoneId}/members                 tab: who is in it
@@ -75,20 +69,28 @@ export const SHOPPER_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /shoppers/zones/{zoneId}/lists/{listId}/lines/{id}   one line, read first
  * /shoppers/zones/{zoneId}/shopping-lists          tab: drawn from the zone
  * /shoppers/zones/{zoneId}/shopping-lists/{id}     goes to it under its owner
- * /shoppers/zones/{zoneId}/details                 tab: the zone's facts
- * /shoppers/zones/{zoneId}/edit                    the zone's form
+ * /shoppers/zones/{zoneId}/details                 tab: the zone, read or changed
+ * /shoppers/zones/{zoneId}/edit                    goes to its details, as a form
  * ```
  *
  * Every segment but `details`, `zones` under a person, `edit` and the
  * parameters is a descriptor's own, so the table and the registry cannot
  * disagree about where a resource is.
  *
- * ## Why a form is beside the page and not inside it
+ * ## A person and a zone are the record page
  *
- * A form is a page of its own, with its own header and its way back. So it is
- * a sibling of the page whose tab lists the rows, and the router reaches it by
- * failing the tab first: the tab is a terminal route and cannot take the
- * segment after it. `chainsRoutes` is built the same way (admin plan 0042).
+ * Both are `RecordPage` (admin plan 0057), and their tabs are the children
+ * their descriptors name. The tabs that list another resource are handed over
+ * whole, because a row of each opens a page that belongs with it. The old
+ * address of the form of each, `edit`, leads to Details with its form open.
+ *
+ * ## Why a page of a row is beside the tab and not inside it
+ *
+ * The page of a member, of a list and of a shopping list has its own header
+ * and its way back. So it is a sibling of the page whose tab lists the rows,
+ * and the router reaches it by failing the tab first: the tab is a terminal
+ * route and cannot take the segment after it. `chainsRoutes` is built the
+ * same way (admin plan 0042).
  *
  * ## Why the page of a row is at the empty path under its parameter
  *
@@ -120,17 +122,12 @@ export function shoppersRoutes(): Route[] {
             {
               path: `:${PERSON_PARAM}`,
               children: [
-                {
+                recordRoute(USERS, {
                   path: '',
-                  component: PersonPage,
-                  children: [
-                    { path: '', pathMatch: 'full', redirectTo: DETAILS_TAB },
-                    { path: DETAILS_TAB, component: PersonDetailsTab },
-                    { path: PERSON_ZONES_TAB, component: PersonZonesTab },
-                    resourceTabRoute(BASKETS),
-                  ],
-                },
-                formOf(USERS, PERSON_PARAM),
+                  idFrom: PERSON_PARAM,
+                  tabs: { [BASKETS.name]: resourceTabRoute(BASKETS) },
+                }),
+                recordEditRedirect(EDIT_SEGMENT),
                 {
                   path: `${BASKETS.segment}/:${BASKET_PARAM}`,
                   component: BasketPage,
@@ -147,22 +144,15 @@ export function shoppersRoutes(): Route[] {
             {
               path: `:${ZONE_PARAM}`,
               children: [
-                {
+                recordRoute(ZONES, {
                   path: '',
-                  component: ZonePage,
-                  children: [
-                    {
-                      path: '',
-                      pathMatch: 'full',
-                      redirectTo: MEMBERSHIPS.segment,
-                    },
-                    { path: MEMBERSHIPS.segment, component: ZoneMembersTab },
-                    resourceTabRoute(LISTS),
-                    resourceTabRoute(ZONE_BASKETS),
-                    { path: DETAILS_TAB, component: ZoneDetailsTab },
-                  ],
-                },
-                formOf(ZONES, ZONE_PARAM),
+                  idFrom: ZONE_PARAM,
+                  tabs: {
+                    [LISTS.name]: resourceTabRoute(LISTS),
+                    [ZONE_BASKETS.name]: resourceTabRoute(ZONE_BASKETS),
+                  },
+                }),
+                recordEditRedirect(EDIT_SEGMENT),
                 // One member's role and name in this zone, on the record
                 // page (admin plan 0053). Its way back is one segment up,
                 // which is the Members tab.
@@ -204,8 +194,8 @@ export function shoppersRoutes(): Route[] {
 }
 
 /**
- * The form of the row a page is about, beside that page: `edit` under the
- * row's own address, reading its id from the page's parameter.
+ * The form of a list, beside its page: `edit` under the list's own address,
+ * reading its id from the page's parameter. Plan 0058 moves the list.
  */
 function formOf(descriptor: AnyResourceDescriptor, param: string): Route {
   return {

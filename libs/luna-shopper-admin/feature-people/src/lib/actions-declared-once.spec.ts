@@ -16,8 +16,8 @@ import { SHOPPER_RESOURCES } from './shoppers-routes';
  * about where code is and not about what it does. Three things are checked:
  *
  * - every write the directory service offers is called from exactly one file;
- * - that file is the descriptor of the resource the write is about, or the one
- *   tab that sets an account's roles, which no descriptor declares;
+ * - that file is the descriptor of the resource the write is about, or the
+ *   file that builds the role actions of that descriptor (admin plan 0057);
  * - no page names the label or the confirmation of a named action.
  */
 
@@ -51,9 +51,9 @@ const WRITES: Readonly<Record<string, string>> = {
   kickMember: 'memberships.ts',
   banMember: 'memberships.ts',
   setLineApproval: 'list-lines.ts',
-  // Not a named action: a role is one switch of the Details tab of a person,
-  // with a confirmation that names the role (admin plan 0038).
-  setUserRoles: 'person-tabs.ts',
+  // Two named actions for each role, built in one function that `USERS`
+  // spreads into its own list (admin plan 0057).
+  setUserRoles: 'user-roles.ts',
 };
 
 function namedActionsOf(resource: (typeof SHOPPER_RESOURCES)[number]) {
@@ -68,8 +68,8 @@ describe('where an action of the shoppers screens is declared', () => {
         'zones.ts',
         'memberships.ts',
         'list-lines.ts',
-        'person-page.ts',
-        'zone-page.ts',
+        'user-roles.ts',
+        'person-tabs.ts',
         'zone-members-tab.ts',
         'list-page.ts',
       ])
@@ -110,6 +110,10 @@ describe('where an action of the shoppers screens is declared', () => {
     expect(names).toEqual(
       expect.arrayContaining([
         'resend-verification',
+        'give-role-admin',
+        'take-role-admin',
+        'give-role-premium',
+        'take-role-premium',
         'delete-account',
         'regenerate-join-code',
         'mark-for-deletion',

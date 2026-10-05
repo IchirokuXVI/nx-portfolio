@@ -203,6 +203,7 @@
       "notAnObject": "Write a JSON object, in braces. A list or a bare value is not what this column holds.",
       "postalCodeUnknown": "That postal code is not in the national table, so it is almost certainly a typo. Nothing was written.",
       "runInProgress": "The harvester is working on that row right now. Wait for the run to finish and ask again.",
+      "guestHasNoRoles": "A guest account holds no roles, so the server refused. Give it one once the account has registered.",
       "brandLabelEmpty": "A brand name needs at least one letter or digit. Nothing was written.",
       "brandKeyTaken": "A brand with this key already exists.",
       "brandLinkToSelf": "A brand cannot be a spelling of itself.",
@@ -1764,22 +1765,30 @@
     "users": {
       "one": "person",
       "many": "People",
-      "back": "Back to people",
       "choose": "Choose a person to see their account.",
       "state": {
         "guest": "Guest",
         "unconfirmed": "Email not confirmed"
       },
       "tabs": {
-        "details": "Details",
         "zones": "Zones",
         "baskets": "Shopping lists"
       },
+      "section": {
+        "account": "Account",
+        "access": "Access"
+      },
+      "record": {
+        "zonesOwned": "Zones this account owns",
+        "zonesJoined": "Zones it is a member of",
+        "signedUp": "Signed up"
+      },
+      "notConfirmed": "Not yet",
       "userId": "Identifier",
       "username": "Username",
-      "displayName": "Display name",
-      "email": "Email address",
-      "emailVerifiedAt": "Address confirmed",
+      "displayName": "Shown as",
+      "email": "Email",
+      "emailVerifiedAt": "Email confirmed",
       "hasPassword": "Has a password",
       "providers": "Sign in methods",
       "createdAt": "Signed up",
@@ -1800,13 +1809,21 @@
         "role": "Holds the role"
       },
       "action": {
-        "resendVerification": "Resend confirmation",
-        "deleteAccount": "Delete account"
+        "resendVerification": "Send the confirmation email again",
+        "giveRole": {
+          "admin": "Give the admin role",
+          "premium": "Give the premium role"
+        },
+        "takeRole": {
+          "admin": "Take the admin role away",
+          "premium": "Take the premium role away"
+        },
+        "deleteAccount": "Delete this account"
       },
       "confirm": {
         "resendVerification": {
           "heading": "Send the confirmation email again?",
-          "body": "A new confirmation email goes to {{email}}, the address on {{name}}'s account. This skips the wait an ordinary resend has to sit through.",
+          "body": "A new confirmation email goes to the address on {{name}}'s account. This skips the wait an ordinary resend has to sit through.",
           "confirm": "Send it"
         },
         "deleteAccount": {
@@ -1816,41 +1833,44 @@
         },
         "grantRole": {
           "heading": "Give this account a role?",
-          "body": "{{role}}: {{grants}} {{name}}’s account gets it at its next token refresh, within 15 minutes.",
+          "body": {
+            "admin": "Admin: Can map shops. {{name}}’s account gets it at its next token refresh, within 15 minutes.",
+            "premium": "Premium: Nothing yet. {{name}}’s account gets it at its next token refresh, within 15 minutes."
+          },
           "confirm": "Give the role"
         },
         "removeRole": {
           "heading": "Take a role from this account?",
-          "body": "{{role}}: {{grants}} {{name}}’s account loses it at its next token refresh, within 15 minutes.",
+          "body": {
+            "admin": "Admin: Can map shops. {{name}}’s account loses it at its next token refresh, within 15 minutes.",
+            "premium": "Premium: Nothing yet. {{name}}’s account loses it at its next token refresh, within 15 minutes."
+          },
           "confirm": "Take the role away"
         }
       },
       "usernameHelp": "The handle this person is known by. Changing it reaches every zone they are in: the name on each of their memberships is rewritten to match, so this is not a private label.",
       "displayNameHelp": "Whatever the sign in provider supplied, which for a Google account is somebody’s real full name. It is kept off every listing for that reason, and clearing it is allowed.",
-      "emailHelp": "Fixed here. Nothing in velista changes a registered address, so there is no service to call: the four paths that write it each establish an identity, and writing the column alone would leave the credential, any linked provider and every outstanding confirmation pointing at an address the account no longer claims. Use “Resend confirmation” for an unconfirmed one.",
+      "emailHelp": "Fixed here. Nothing in velista changes a registered address, so there is no service to call: the four paths that write it each establish an identity, and writing the column alone would leave the credential, any linked provider and every outstanding confirmation pointing at an address the account no longer claims. Use “Send the confirmation email again” for an unconfirmed one.",
       "emailVerifiedAtHelp": "Fixed here. Setting it by hand asserts that somebody proved control of an address, which is the one thing this column exists to record and the one thing an operator cannot observe.",
+      "hasPasswordHelp": "Fixed here. It says whether the account can sign in with a password, and only the person sets or changes one.",
+      "providersHelp": "Fixed here. A provider is linked by the person, by signing in with it.",
       "kindHelp": "Fixed here. A temporary account becomes registered by upgrading, which needs a password or a linked provider and writes a credential in the same transaction; flipping the value alone would leave an account nobody can sign in to. Nothing goes the other way at all.",
       "roles": {
         "label": "Roles",
         "admin": {
-          "name": "Admin",
-          "grants": "Can map shops."
+          "name": "Admin"
         },
         "premium": {
-          "name": "Premium",
-          "grants": "Nothing yet."
+          "name": "Premium"
         },
         "cell": {
           "none": "No roles",
           "admin": "Admin",
           "premium": "Premium",
           "adminPremium": "Admin, Premium"
-        },
-        "guest": "A guest account holds no roles. Once it registers, its roles can be set here.",
-        "guestRefused": "A guest account holds no roles, so the server refused. Set them once the account has registered.",
-        "saved": "Saved. The account sees the change at its next token refresh, within 15 minutes."
+        }
       },
-      "rolesHelp": "Set on the Details tab of the person, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
+      "rolesHelp": "Given and taken away in the More menu of the person’s page, one role at a time and each confirmed. A role grants permissions in velista, which reach the account within 15 minutes."
     },
     "zones": {
       "one": "zone",
@@ -1864,23 +1884,18 @@
       "markedForDeletionAt": "Marked for deletion",
       "createdAt": "Created",
       "updatedAt": "Last changed",
-      "back": "Back to zones",
       "choose": "Choose a zone to see its members and its lists.",
-      "edit": "Edit zone",
-      "ownedBy": "Owner {{name}}",
-      "noOwner": "No owner",
-      "summary_one": "Owner {{owner}}, {{count}} member",
-      "summary_other": "Owner {{owner}}, {{count}} members",
-      "summaryNoOwner_one": "No owner, {{count}} member",
-      "summaryNoOwner_other": "No owner, {{count}} members",
       "pendingCount": "Requests waiting",
       "noMembers": "This zone has no members.",
-      "noConfig": "This zone has set nothing.",
       "tabs": {
         "members": "Members",
         "lists": "Lists",
-        "baskets": "Shopping lists",
-        "details": "Details"
+        "baskets": "Shopping lists"
+      },
+      "section": {
+        "zone": "Zone",
+        "state": "State",
+        "settings": "Settings"
       },
       "state": {
         "requests_one": "{{count}} request",
@@ -1888,7 +1903,8 @@
       },
       "brief": {
         "owned": "Owner {{owner}}. Members {{members}}, lists {{lists}}",
-        "noOwner": "No owner. Members {{members}}, lists {{lists}}"
+        "noOwner": "No owner. Members {{members}}, lists {{lists}}",
+        "counts": "Members {{members}}, lists {{lists}}"
       },
       "status": {
         "label": "State",
@@ -1916,7 +1932,7 @@
       },
       "action": {
         "regenerateJoinCode": "New join code",
-        "deleteZone": "Delete zone",
+        "deleteZone": "Delete this zone",
         "markForDeletion": "Mark for deletion",
         "restore": "Restore"
       },
@@ -2069,7 +2085,8 @@
     },
     "field": {
       "idHelp": "The identifier this row is addressed by. It is generated when the row is created and nothing changes it.",
-      "createdAtHelp": "When the row was created. It records what happened and is never rewritten."
+      "createdAtHelp": "When the row was created. It records what happened and is never rewritten.",
+      "updatedAtHelp": "When the row last changed. The server writes it with every change, and nothing sets it by hand."
     },
     "memberships": {
       "one": "membership",
