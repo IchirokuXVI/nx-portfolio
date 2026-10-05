@@ -28,7 +28,7 @@ import { RunsPage } from './runs-page';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
 import { SOURCES } from './sources';
-import { SourcesPage } from './sources-page';
+import { SourcesTab } from './sources-tab';
 
 export { HARVEST_SEGMENT };
 
@@ -126,7 +126,9 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
       component: HarvestSetupPage,
       children: [
         { path: '', pathMatch: 'full', redirectTo: SETUP_SOURCES_PART },
-        { path: SETUP_SOURCES_PART, component: SourcesPage },
+        // The generic list of the sources, inside the part that says what the
+        // harvester says around it (admin plan 0059).
+        { ...resourceTabRoute(SOURCES), component: SourcesTab },
         ...parts.setup.map(resourceTabRoute),
       ],
     },

@@ -92,8 +92,6 @@ describe('what an info button says', () => {
       'harvest.review.info',
       'harvest.setup.info',
       'harvest.shops.info',
-      'harvest.sources.enabled.info',
-      'harvest.sources.trusted.info',
       'harvest.switch.info',
       'people.admins.info',
       'people.baskets.info',

@@ -21,4 +21,4 @@ export { RunsPage } from './lib/runs-page';
 export { HarvestSetupPage } from './lib/setup-page';
 export { ShopsQueuePage } from './lib/shops-queue-page';
 export { SOURCES } from './lib/sources';
-export { SourcesPage } from './lib/sources-page';
+export { SourcesTab } from './lib/sources-tab';

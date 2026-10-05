@@ -1624,8 +1624,6 @@
       "noun": "source",
       "add": "Add a source",
       "caution": "A chain blocks a crawl that asks too fast. Raise workers and requests one step at a time, and watch the failures count.",
-      "empty": "No chain has a source row yet. A run can only be started for a chain that has one.",
-      "edit": "Change",
       "exists": "This chain already has a source.",
       "adapterGone": "A source can no longer be fetched this way. Choose another.",
       "enabledSetBy": "Changed from the More menu",
@@ -1667,24 +1665,6 @@
           "confirm": "Let it be fetched"
         }
       },
-      "never": "Never",
-      "enabled": {
-        "label": "{{chain}} may be fetched",
-        "info": {
-          "title": "May be fetched",
-          "allows": "A run may fetch this chain only while this is on.",
-          "off": "It is off for every chain until somebody turns it on."
-        }
-      },
-      "trusted": {
-        "label": "{{chain}} is trusted",
-        "info": {
-          "title": "Trusted",
-          "means": "Trusted means the shops this chain names go into the catalog with nobody looking first.",
-          "waits": "A shop with no position, postal code, country or chain still waits in the Places queue.",
-          "only": "This is the only switch here that writes to the catalog without a review."
-        }
-      },
       "config": {
         "hint": "Adapter specific settings, as JSON. An empty box means no settings at all. The harvester reads this when a run starts, so a value that is wrong is found by the run rather than here."
       },
@@ -1698,8 +1678,7 @@
         "lastSuccessAt": "Last good run",
         "failures": "Failures in a row",
         "enabled": "May be fetched",
-        "autoImportPlaces": "Places are added with no review",
-        "trusted": "Trusted"
+        "autoImportPlaces": "Places are added with no review"
       },
       "osmAlways": "OpenStreetMap is always asked for every postal code. It has no row here."
     },

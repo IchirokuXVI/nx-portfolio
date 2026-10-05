@@ -27,7 +27,7 @@ import { RunsPage } from './runs-page';
 import { HarvestSetupPage } from './setup-page';
 import { ShopsQueuePage } from './shops-queue-page';
 import { SOURCES } from './sources';
-import { SourcesPage } from './sources-page';
+import { SourcesTab } from './sources-tab';
 
 /**
  * The harvester in three tabs (admin plan 0044, target 1).
@@ -201,9 +201,21 @@ describe('harvestRoutes, Setup', () => {
   it('is a page with the three parts as its children', () => {
     expect(page.component).toBe(HarvestSetupPage);
     expect(childPaths(page)).toEqual(['', 'sources', 'brands', 'postal-codes']);
-    expect(
-      page.children?.find((child) => child.path === 'sources')?.component
-    ).toBe(SourcesPage);
+  });
+
+  /**
+   * The chain sources are the generic list too (admin plan 0059), inside a
+   * part of this library that draws the notice of the harvester and the line
+   * about OpenStreetMap around it.
+   */
+  it('draws the chain sources as the generic list, inside their own part', () => {
+    const tab = page.children?.find((child) => child.path === 'sources');
+
+    expect(SOURCES.segment).toBe('sources');
+    expect(tab?.component).toBe(SourcesTab);
+    expect(tab?.data?.[RESOURCE_DESCRIPTOR]).toBe(SOURCES);
+    expect(tab?.data?.[RESOURCE_LIST_EMBED]).toBe('tab');
+    expect(tab?.children).toBeUndefined();
   });
 
   it('opens on the chain sources when the address names no part', () => {

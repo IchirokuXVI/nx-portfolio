@@ -24,7 +24,7 @@ import {
   RunPage,
   RunsPage,
   ShopsQueuePage,
-  SourcesPage,
+  SourcesTab,
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   provideSections,
@@ -314,7 +314,7 @@ describe('appRoutes', () => {
     ['/harvest/runs/new', [NewRunPage]],
     ['/harvest/runs/import', [ImportUploadPage]],
     ['/harvest/runs/run-1', [RunPage]],
-    ['/harvest/setup/sources', [HarvestSetupPage, SourcesPage]],
+    ['/harvest/setup/sources', [HarvestSetupPage, SourcesTab]],
     [
       '/harvest/setup/sources/11111111-1111-4111-8111-111111111111',
       [RecordPage],
