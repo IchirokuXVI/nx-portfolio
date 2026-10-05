@@ -5,6 +5,8 @@ import {
   fieldOf,
   idOf,
   isEditable,
+  recordLayout,
+  recordTabs,
   toInput,
   type FieldDescriptor,
   type ResourceRow,
@@ -990,6 +992,141 @@ describe('the product list', () => {
     expect(group?.kind === 'reference' ? group.nullable : null).toBe(true);
     expect((ITEMS.filters ?? []).map((filter) => filter.param)).not.toContain(
       'withoutProductGroup'
+    );
+  });
+});
+
+/**
+ * The product and the product group on the record page (admin plan 0055).
+ *
+ * Both had a page of their own over the old form. What they draw is now what
+ * their descriptors say, so it is checked here.
+ */
+describe('the record of a product', () => {
+  it('names no page of its own, so the record page draws it', () => {
+    expect(ITEMS.editor).toBeUndefined();
+    expect(ITEMS.detail).toBeUndefined();
+  });
+
+  it('draws three sections, and every field it can change is in one', () => {
+    const sections = recordLayout(ITEMS, 'edit').sections;
+
+    expect(
+      sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      ['catalog.items.section.name', ['name', 'brand', 'ean', 'sku']],
+      ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
+      ['catalog.items.section.sold', ['defaultUnit', 'unitSize', 'imageUrl']],
+    ]);
+  });
+
+  it('draws the two codes in the mono face and the picture with a preview', () => {
+    expect(fieldOf(ITEMS, 'ean')).toMatchObject({ format: 'code' });
+    expect(fieldOf(ITEMS, 'sku')).toMatchObject({ format: 'code' });
+    expect(fieldOf(ITEMS, 'imageUrl')).toMatchObject({ format: 'image' });
+  });
+
+  /** The gateway reads the brand as text (plan 0055, section 3). */
+  it('keeps the brand a text and never a picker', () => {
+    expect(fieldOf(ITEMS, 'brand')?.kind).toBe('text');
+  });
+
+  it('keeps the categories ordered, so the first is the main one', () => {
+    expect(fieldOf(ITEMS, 'categoryIds')).toMatchObject({
+      kind: 'references',
+      ordered: true,
+      required: true,
+    });
+  });
+
+  it('starts a new product sold by the unit, and works out no other field', () => {
+    const draft = draftFor(ITEMS, null, 'create');
+
+    expect(draft['defaultUnit']).toBe('UNIT');
+    expect(draft['unitSize']).toBe('');
+    expect(draft['brand']).toBe('');
+    // A product that exists shows what it holds.
+    expect(
+      draftFor(
+        ITEMS,
+        { defaultUnit: 'LITER' } as unknown as Parameters<
+          typeof ITEMS.title
+        >[0],
+        'edit'
+      )['defaultUnit']
+    ).toBe('LITER');
+  });
+
+  it('has Details first, then its prices, where it is and its sources', () => {
+    expect(recordTabs(ITEMS).map((tab) => tab.key)).toEqual([
+      'details',
+      'prices',
+      'where',
+      'sources',
+    ]);
+    expect(
+      (ITEMS.record?.children ?? []).map((child) => [child.as, child.label])
+    ).toEqual([
+      ['tab', 'catalog.products.tabs.prices'],
+      ['tab', 'catalog.products.tabs.where'],
+      ['tab', 'catalog.products.tabs.sources'],
+    ]);
+  });
+
+  /** The view of a product carries no date, so the block names none. */
+  it('states no fact that the view does not carry', () => {
+    expect(ITEMS.record?.facts).toBeUndefined();
+  });
+
+  it('says three refusals under the categories', () => {
+    expect(ITEMS.errorFields).toEqual({
+      category_not_a_leaf: 'categoryIds',
+      item_needs_a_category: 'categoryIds',
+      category_not_found: 'categoryIds',
+    });
+  });
+});
+
+describe('the record of a product group', () => {
+  it('names no page of its own, so the record page draws it', () => {
+    expect(PRODUCT_GROUPS.detail).toBeUndefined();
+    expect(PRODUCT_GROUPS.editor).toBeUndefined();
+  });
+
+  it('draws its four fields in one section, the handle in the mono face', () => {
+    expect(
+      recordLayout(PRODUCT_GROUPS, 'edit').sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      [
+        'catalog.productGroups.section.name',
+        ['name', 'slug', 'synonyms', 'referenceUnit'],
+      ],
+    ]);
+    expect(fieldOf(PRODUCT_GROUPS, 'slug')).toMatchObject({ format: 'code' });
+  });
+
+  /** Four fields: the collections are in the page, and not behind tabs. */
+  it('holds "Add items" as a panel and its products as a link, with no tab', () => {
+    expect(recordTabs(PRODUCT_GROUPS)).toEqual([]);
+    expect(
+      (PRODUCT_GROUPS.record?.children ?? []).map((child) => [
+        child.as,
+        child.label,
+        child.count,
+      ])
+    ).toEqual([
+      ['panel', 'catalog.productGroups.addItems.heading', undefined],
+      ['link', 'catalog.productGroups.products', undefined],
+    ]);
+    // The link is the products list narrowed by a filter that list has.
+    expect((ITEMS.filters ?? []).map((filter) => filter.param)).toContain(
+      'productGroupId'
     );
   });
 });

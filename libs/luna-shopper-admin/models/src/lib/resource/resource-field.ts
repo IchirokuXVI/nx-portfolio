@@ -209,6 +209,12 @@ export interface BooleanField<T extends ResourceRow> extends FieldBase<T> {
 export interface EnumField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'enum';
   readonly options: readonly EnumOption[];
+  /**
+   * The option a new record starts at (admin plan 0055, target 6): "Sold by"
+   * of a product starts at "Unit". Left out, a new record starts with no
+   * option chosen. A record that exists shows what it holds.
+   */
+  readonly initial?: string;
 }
 
 /**

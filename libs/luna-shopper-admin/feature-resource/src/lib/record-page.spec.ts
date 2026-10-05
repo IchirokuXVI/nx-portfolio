@@ -417,6 +417,21 @@ describe('RecordPage, the header', () => {
   });
 
   /** "Edit" needs the action and a field the form could change. */
+  /** A title of nothing, or of spaces, would leave the header empty. */
+  it.each(['', '   '])(
+    'calls a record whose title is "%s" by its noun',
+    async (name) => {
+      server.read = async (id) => ({ ...LINE, id, name });
+
+      const mounted = await mount('/plants/p1/lines/l1');
+
+      // The testing translator answers the key.
+      expect(mounted.page.title()).toBe('record.unnamed');
+      expect(one(mounted, 'h1')?.textContent).toBe('record.unnamed');
+      expect(mounted.page.leaveArgs().name).toBe('record.unnamed');
+    }
+  );
+
   it('offers no Edit for a resource that cannot be changed', async () => {
     const mounted = await mount('/logs/l1');
 

@@ -8,20 +8,18 @@ import {
   ContentLocaleStore,
   DeploymentStore,
   GatewayError,
-  HARVEST_SERVICE,
-  HarvestMemory,
   RESOURCE_GATEWAYS,
   ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
   SessionStore,
-  type HarvestServiceI,
   type ResourceGatewaysI,
   type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
   provideSections,
+  RecordPage,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type {
@@ -30,17 +28,14 @@ import type {
   Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
-  PageHeader,
+  InfoButton,
   PopoverSheet,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import type { ItemScopePrices } from '../catalog-seed';
 import { ITEM_PRICES_PATH, ITEM_SCOPE_PRICES_PATH } from '../catalog-sources';
 import { CHAIN_RESOURCES, chainsRoutes } from '../chains/chains-routes';
-import { ItemFormPage } from '../item-form-page';
-import { toItemSourceEntryRow } from '../item-source-entries';
 import { PriceFormPage } from '../price-form-page';
-import { ProductPage } from './product-page';
 import {
   priceRowState,
   ProductPricesTab,
@@ -53,9 +48,13 @@ import {
 } from './products-routes';
 
 /**
- * A product as a page, against the in memory gateways (admin plan 0043,
- * target 3): its four tabs, the summary beside them, its prices by chain and
- * scope, and the form that adds a price.
+ * The Prices tab of a product, against the in memory gateways (admin plan
+ * 0043, target 3): its prices by chain and scope, and the form that adds a
+ * price. The tab is a part of the product's record page (admin plan 0055),
+ * so every case mounts it through the routes of the app.
+ *
+ * The page around it, its tabs and its other two parts are in
+ * `product-record.spec.ts`.
  *
  * Each read is also made to fail on its own, because that is the rule admin
  * plan 0033 set and this page keeps: an error in one read never blanks the
@@ -85,7 +84,7 @@ const SECTIONS: readonly AdminSection[] = [
   },
 ];
 
-/** A wide screen, where the summary sits beside the tabs. */
+/** A wide screen, where the form that adds a price is a panel. */
 const WIDE: Provider = {
   provide: Viewport,
   useValue: { compact: signal(false), split: signal(true) },
@@ -256,8 +255,12 @@ const text = (fixture: ComponentFixture<TestHost>) =>
   fixture.nativeElement.textContent as string;
 
 const page = (fixture: ComponentFixture<TestHost>) =>
-  fixture.debugElement.query(By.directive(ProductPage))
-    .componentInstance as ProductPage;
+  fixture.debugElement.query(By.directive(RecordPage))
+    .componentInstance as RecordPage;
+
+/** The tabs of the page. A product that is read always has them. */
+const tabs = (fixture: ComponentFixture<TestHost>) =>
+  page(fixture).tabs() ?? [];
 
 const pricesTab = (fixture: ComponentFixture<TestHost>) =>
   fixture.debugElement.query(By.directive(ProductPricesTab))
@@ -272,236 +275,6 @@ const buttonSaying = (
   ) as HTMLButtonElement | undefined;
 
 afterEach(() => TestBed.resetTestingModule());
-
-describe('a product, as a page', () => {
-  it('opens on its details, under a header that names it', async () => {
-    const fixture = await boot('/products/it_milk_1l');
-
-    expect(TestBed.inject(Router).url).toBe('/products/it_milk_1l/details');
-    const header = fixture.debugElement.query(By.directive(PageHeader))
-      .componentInstance as PageHeader;
-    expect(header.heading()).toBe('Whole milk 1 L');
-    // The brand and the size, which is what tells two products apart.
-    expect(header.subtitle()).toBe('Hacendado, 1 L');
-    expect(header.backLink()).toEqual(['/', 'products']);
-  });
-
-  it('has four tabs, each at an address under the product', async () => {
-    const fixture = await boot('/products/it_milk_1l');
-    const tabs = page(fixture).tabs();
-
-    expect(tabs.map((tab) => tab.label)).toEqual([
-      'catalog.products.tabs.details',
-      'catalog.products.tabs.prices',
-      'catalog.products.tabs.where',
-      'catalog.products.tabs.sources',
-    ]);
-    expect(
-      tabs.map((tab) => (tab.path as readonly string[]).join('/'))
-    ).toEqual([
-      '//products/it_milk_1l/details',
-      '//products/it_milk_1l/prices',
-      '//products/it_milk_1l/where',
-      '//products/it_milk_1l/sources',
-    ]);
-  });
-
-  /** A count is shown only when the gateway gave it: here, both did. */
-  it('counts the scopes that price it and the source rows that name it', async () => {
-    const fixture = await boot('/products/it_milk_1l');
-    const [, prices, , sources] = page(fixture).tabs();
-
-    expect(prices.count?.()).toBe(2);
-    expect(sources.count?.()).toBe(3);
-  });
-
-  it('draws the form alone on Details, with no panel under it', async () => {
-    const fixture = await boot('/products/it_milk_1l/details');
-
-    expect(
-      fixture.debugElement.query(By.directive(ItemFormPage))
-    ).not.toBeNull();
-    expect(
-      fixture.nativeElement.querySelector('lib-resource-form')
-    ).not.toBeNull();
-    // The two panels are tabs now, and the link to the prices is one too.
-    expect(
-      fixture.nativeElement.querySelector('lib-item-source-entries')
-    ).toBeNull();
-    expect(
-      fixture.nativeElement.querySelector('lib-item-sections-panel')
-    ).toBeNull();
-    // One header: the page's. The form draws none on a tab.
-    expect(
-      fixture.debugElement.queryAll(By.directive(PageHeader))
-    ).toHaveLength(1);
-  });
-
-  it('keeps the product on its tab after a save, and renames the header', async () => {
-    const fixture = await boot('/products/it_dish_soap/details');
-    const form = fixture.debugElement.query(By.directive(ItemFormPage))
-      .componentInstance as ItemFormPage;
-
-    form.store.set('brand', 'Bosque Verde Eco');
-    await form.submit();
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(TestBed.inject(Router).url).toBe('/products/it_dish_soap/details');
-    expect(form.savedNow()).toBe(true);
-    expect(page(fixture).subtitle()).toBe('Bosque Verde Eco, 750 ml');
-  });
-
-  it('draws a summary beside the tabs on a wide screen', async () => {
-    const fixture = await boot('/products/it_milk_1l/prices', [WIDE]);
-    const summary = page(fixture).summary();
-
-    expect(summary).toMatchObject({
-      brand: 'Hacendado',
-      size: '1 L',
-      barcode: '8480000123459',
-      groupPath: ['/', 'products', 'groups', 'pg_whole_milk'],
-    });
-    expect(summary?.categories.length).toBeGreaterThan(0);
-    const aside = fixture.nativeElement.querySelector('aside') as HTMLElement;
-    expect(aside).not.toBeNull();
-    // The barcode in the mono face, and the group by its name.
-    expect(aside.querySelector('.mono')?.textContent).toBe('8480000123459');
-    expect(page(fixture).groupName()).toBe('Whole milk');
-  });
-
-  it('draws no summary where there is no room for it', async () => {
-    const fixture = await boot('/products/it_milk_1l/prices', [PHONE]);
-
-    expect(fixture.nativeElement.querySelector('aside')).toBeNull();
-  });
-
-  it('says so for a product in no group', async () => {
-    const fixture = await boot('/products/it_dish_soap/prices', [WIDE]);
-
-    expect(page(fixture).summary()?.groupPath).toBeNull();
-    expect(text(fixture)).toContain('catalog.products.noGroup');
-  });
-
-  it('has the info button on the Prices tab and on no other', async () => {
-    const fixture = await boot('/products/it_milk_1l/prices');
-    expect(page(fixture).info()?.points).toHaveLength(3);
-
-    await TestBed.inject(Router).navigateByUrl('/products/it_milk_1l/details');
-    await settle(fixture);
-    expect(page(fixture).info()).toBeNull();
-  });
-
-  it('draws another product when the address names one', async () => {
-    const fixture = await boot('/products/it_milk_1l/prices');
-
-    await TestBed.inject(Router).navigateByUrl(
-      '/products/it_olive_oil_1l/prices'
-    );
-    await settle(fixture);
-    await settle(fixture);
-
-    expect(page(fixture).name()).toBe('Extra virgin olive oil 1 L');
-    expect(
-      pricesTab(fixture)
-        .chains()
-        .flatMap((chain) => chain.scopes.map((scope) => scope.id))
-    ).toEqual(['ps_mercadona_4661']);
-  });
-
-  it('deletes the product after asking, and goes back to the list', async () => {
-    const fixture = await boot('/products/it_dish_soap/details');
-
-    page(fixture).deleting.set(true);
-    await page(fixture).confirmDelete();
-    await settle(fixture);
-
-    expect(TestBed.inject(Router).url).toBe('/products');
-  });
-
-  it('says so when the product cannot be read', async () => {
-    const fixture = await boot('/products/it_nowhere/details');
-
-    expect(
-      fixture.nativeElement.querySelector('[role="alert"]')
-    ).not.toBeNull();
-  });
-});
-
-describe('the Sources tab of a product', () => {
-  it('lists the chain rows that name it', async () => {
-    const fixture = await boot('/products/it_milk_1l/sources');
-
-    expect(text(fixture)).toContain('catalog.items.sources.heading');
-    expect(text(fixture)).toContain('Leche entera Hacendado');
-  });
-
-  it('warns on a barcode more than one row of the chain lists', async () => {
-    const fixture = await boot('/products/it_milk_1l/sources');
-
-    const chips = [
-      ...fixture.nativeElement.querySelectorAll('.chip.shared'),
-    ] as HTMLElement[];
-    // The two Mercadona rows share one barcode. The DEZA row has none.
-    expect(chips).toHaveLength(2);
-    expect(chips[0].textContent).toContain('catalog.items.sources.sharedEan');
-  });
-
-  it('says so for a product nothing names', async () => {
-    const fixture = await boot('/products/it_dish_soap/sources');
-
-    expect(text(fixture)).toContain('catalog.items.sources.empty');
-    expect(page(fixture).tabs()[3].count?.()).toBe(0);
-  });
-
-  it('keeps the page when the harvester does not answer', async () => {
-    const harvest = Object.assign(new HarvestMemory(), {
-      listItemEntries: async () => {
-        throw unavailable();
-      },
-    }) as HarvestServiceI;
-    const fixture = await boot('/products/it_milk_1l/sources', [
-      { provide: HARVEST_SERVICE, useValue: harvest },
-    ]);
-
-    // The panel's own failure, with its own retry.
-    expect(
-      fixture.nativeElement.querySelector(
-        'lib-item-source-entries [role="alert"]'
-      )
-    ).not.toBeNull();
-    // The header still names the product, and the tab shows no number.
-    expect(page(fixture).name()).toBe('Whole milk 1 L');
-    expect(page(fixture).tabs()[3].count?.()).toBeNull();
-  });
-
-  it('maps a source row from the wire and drops one with no id', () => {
-    expect(toItemSourceEntryRow({ name: 'x' })).toBeNull();
-    expect(
-      toItemSourceEntryRow({
-        id: 'e1',
-        status: 'SOMETHING',
-        matchedBy: 'SHARED_EAN',
-        eanSharedBy: 1,
-      })
-    ).toMatchObject({
-      status: 'UNRESOLVED',
-      matchKey: 'catalog.items.sources.matchSharedEan',
-      // One row is its own barcode, not a shared one.
-      sharedBy: 0,
-    });
-  });
-});
-
-describe('the Where it is tab of a product', () => {
-  it('draws where the product is in each chain', async () => {
-    const fixture = await boot('/products/it_milk_1l/where');
-
-    expect(
-      fixture.nativeElement.querySelector('lib-item-sections-panel')
-    ).not.toBeNull();
-  });
-});
 
 describe('the prices of a product', () => {
   it('draws one panel for each chain, with the scopes that price it', async () => {
@@ -672,7 +445,7 @@ describe('the prices of a product', () => {
     expect(mercadona.scopes[0].rows[0].inherited).toBe(false);
     expect(text(fixture)).toContain('catalog.productPrices.followers');
     // The tab counts the scopes a price was written at.
-    expect(page(fixture).tabs()[1].count?.()).toBe(1);
+    expect(tabs(fixture)[1].count?.()).toBe(1);
   });
 
   it('draws a price written at a wider scope, with no Remove at the narrower one', async () => {
@@ -745,7 +518,7 @@ describe('the prices of a product', () => {
 
     expect(tab.product.scopes()).toHaveLength(5);
     expect(tab.product.moreScopes()).toBe(true);
-    expect(page(fixture).tabs()[1].count?.()).toBeNull();
+    expect(tabs(fixture)[1].count?.()).toBeNull();
     expect(tab.chains()[0].scopes[0].followers).toBeNull();
     // A chain that has shown no price yet may still hold one further on, so
     // no chain is drawn as holding none.
@@ -756,7 +529,7 @@ describe('the prices of a product', () => {
     await settle(fixture);
 
     expect(tab.product.scopes()).toHaveLength(7);
-    expect(page(fixture).tabs()[1].count?.()).toBe(7);
+    expect(tabs(fixture)[1].count?.()).toBe(7);
   });
 
   it('removes a price after asking, and reads the scopes again', async () => {
@@ -782,7 +555,8 @@ describe('the prices of a product', () => {
 
     expect(removed).toEqual(['ip_oil_4661_api']);
     // The shown price is the server's to work out, so the scopes are read.
-    expect(reads).toHaveBeenCalled();
+    // The tab follows the write itself: nothing above it reads for it.
+    expect(reads).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the header when the scopes cannot be read, and offers the read again', async () => {
@@ -795,10 +569,36 @@ describe('the prices of a product', () => {
         'lib-product-prices-tab [role="alert"]'
       )
     ).not.toBeNull();
-    expect(page(fixture).name()).toBe('Extra virgin olive oil 1 L');
+    expect(page(fixture).heading()).toBe('Extra virgin olive oil 1 L');
     expect(buttonSaying(fixture, 'resource.action.retry')).toBeDefined();
     // No number that nobody read.
-    expect(page(fixture).tabs()[1].count?.()).toBeNull();
+    expect(tabs(fixture)[1].count?.()).toBeNull();
+  });
+
+  /** The header is the record's, so the tab holds the button itself. */
+  it('has the info button, which says three things about a row', async () => {
+    const fixture = await boot('/products/it_milk_1l/prices');
+    const info = fixture.debugElement.query(By.directive(InfoButton))
+      .componentInstance as InfoButton;
+
+    expect(info.info().points).toHaveLength(3);
+  });
+
+  it('draws the prices of another product when the address names one', async () => {
+    const fixture = await boot('/products/it_milk_1l/prices');
+
+    await TestBed.inject(Router).navigateByUrl(
+      '/products/it_olive_oil_1l/prices'
+    );
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(page(fixture).heading()).toBe('Extra virgin olive oil 1 L');
+    expect(
+      pricesTab(fixture)
+        .chains()
+        .flatMap((chain) => chain.scopes.map((scope) => scope.id))
+    ).toEqual(['ps_mercadona_4661']);
   });
 
   it('reads an unknown reason as unknown rather than as one of the four', () => {

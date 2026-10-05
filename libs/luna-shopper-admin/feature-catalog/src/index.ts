@@ -8,7 +8,7 @@ export { CHAIN_RESOURCES, chainsRoutes } from './lib/chains/chains-routes';
 export { LOCATIONS } from './lib/locations';
 export { PRICE_SCOPES, type PriceScope } from './lib/price-scopes';
 export { formatSize } from './lib/products/product-format';
-export { PRODUCT_SCOPE_QUERY } from './lib/products/product-page';
+export { PRODUCT_SCOPE_QUERY } from './lib/products/product-prices-tab';
 export {
   PRODUCTS_SEGMENT,
   PRODUCT_RESOURCES,

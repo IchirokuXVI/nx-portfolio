@@ -1,3 +1,5 @@
+> **PR:** [#640](https://github.com/IchirokuXVI/nx-portfolio/pull/640)
+
 # 0055 A product on the record page
 
 > Fourth plan of the record page series (`0052` to `0060`). Needs `0054` (the collections of
