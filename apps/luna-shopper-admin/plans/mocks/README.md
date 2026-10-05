@@ -7,7 +7,7 @@ board, a self contained page with its own styles. There is no build step.
 | Folder | Plans | Published at |
 | --- | --- | --- |
 | `remodel/` | `0041` to `0047` | <https://claude.ai/artifact/KJTKDyRWfdJTL9PCUPwjQv> |
-| `record-page/` | none yet, the plan follows the mock | <https://claude.ai/artifact/9w1HHBNWQHyy3GTJWtjcYM> |
+| `record-page/` | `0052` to `0060` | <https://claude.ai/artifact/9w1HHBNWQHyy3GTJWtjcYM> |
 
 The published page is private to its owner until it is shared from the page.
 
