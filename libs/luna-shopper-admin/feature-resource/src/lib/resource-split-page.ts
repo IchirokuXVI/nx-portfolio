@@ -128,6 +128,22 @@ export const SPLIT_EMPTY_KEY = 'splitEmptyKey';
       .split:not(.under) > .list {
         min-block-size: 100dvh;
       }
+
+      /* A split under a header starts lower than the window does, so it has
+         no height of its own to state. Its column takes the height of the
+         row it is in, and the row is as tall as the pane that holds this
+         split, which the rule below stretches to the bottom of the page
+         (admin plan 0049, target 2). The column was as tall as its rows, so
+         a chain with two shops drew a white panel two rows high. */
+      .split.under > .list {
+        align-self: stretch;
+      }
+
+      /* The open row fills its pane to the bottom, so that a split drawn
+         inside it has the whole height to give to its own column. */
+      .detail {
+        align-self: stretch;
+      }
     }
 
     .hint {

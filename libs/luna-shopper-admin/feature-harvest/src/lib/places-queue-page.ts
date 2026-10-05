@@ -27,13 +27,11 @@ import {
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
-  ConfirmDialog,
   HarvestNotice,
   InfoButton,
   QueueFrame,
   ReferencePicker,
   type QueueExtraView,
-  type QueueReport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { HarvestShell } from './harvest-shell';
 import { HarvestStatus } from './harvest-status';
@@ -48,11 +46,6 @@ import {
   type NearbyShop,
   type PlaceCandidate,
 } from './place-view';
-import {
-  runQueueBulk,
-  type PendingBulk,
-  type QueueBulkAct,
-} from './queue-bulk';
 import { ReviewChain } from './review-chain';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
@@ -69,8 +62,7 @@ type ChainLocale = Wire.NewChainDto['locale'];
 const CATALOG_SHOPS_READ = 100;
 
 /**
- * Discovered places, one decision at a time and as a list (plan 0006, section 5;
- * plan 0020; plan 0034).
+ * Discovered places, one decision at a time (plan 0006, section 5; plan 0034).
  *
  * Locations found in OpenStreetMap are **offered rather than silently created**.
  * A place is offered when it matched neither the provider's own reference nor
@@ -100,15 +92,17 @@ const CATALOG_SHOPS_READ = 100;
  *
  * Importing takes a supermarket id, and the field is offered rather than
  * required: a place whose chain catalog already knows can be imported without
- * one. The picked chain applies to the single decision **and** to a bulk import;
- * see {@link askImport}. A bulk import never links: a place that answers
- * `place_matches_location` stays in the queue and is named in the report.
+ * one.
+ *
+ * **The rows are a column beside the open place, and there is no list of
+ * checkboxes** (admin plan 0049). The list view and its bulk import and bulk
+ * reject were removed with the list view of the other two queues. "Grouped by
+ * chain" stays: it is a view of this queue's own.
  */
 @Component({
   selector: 'lib-places-queue-page',
   imports: [
     RokuTranslatorPipe,
-    ConfirmDialog,
     QueueFrame,
     HarvestNotice,
     ReferencePicker,
@@ -125,34 +119,22 @@ const CATALOG_SHOPS_READ = 100;
     }
 
     <lib-queue-frame
-      (clearSelection)="queue.clearSelection()"
       (confirm)="importPlace()"
       (loadMore)="queue.loadMore()"
       (openRow)="open($event)"
-      (pickRow)="queue.toggle($event)"
       (reject)="reject()"
-      (selectAll)="queue.selectLoaded()"
-      (skip)="queue.skip()"
-      (stop)="queue.stopBulk()"
+      (skip)="skip()"
       [busy]="queue.busy()"
       [canLoadMore]="queue.canLoadMore()"
       [currentId]="queue.current()?.id ?? null"
-      [decided]="queue.decided()"
       [empty]="queue.empty()"
       [errorKey]="errorKey()"
       [extraViews]="extraViews"
       [failed]="queue.failed()"
       [loading]="queue.loading()"
       [loadingMore]="queue.loadingMore()"
-      [progress]="queue.bulk()"
-      [progressKey]="progressKey()"
-      [remaining]="queue.items().length"
-      [report]="report()"
       [rows]="queue.items()"
-      [selected]="queue.selected()"
-      [selectedCount]="queue.selectedCount()"
       confirmKey="harvest.places.import"
-      defaultView="review"
       emptyKey="harvest.places.empty"
       rejectKey="harvest.places.reject"
       titleKey="harvest.places.heading"
@@ -357,34 +339,15 @@ const CATALOG_SHOPS_READ = 100;
         }
       </section>
 
-      <!-- Section 2's columns for this screen: the name, the street, the city
-           and the provider's own reference. The same facts the review view
-           leads with, because a list whose columns are a different four is a
-           second thing to learn. -->
-      <ng-template #queueRow let-row>
+      <!-- One line of the column: the name, the street, the city and the
+           provider's own reference. The same facts the open place leads
+           with. -->
+      <ng-template #queueLine let-row>
         <strong>{{ row.name ?? row.externalRef }}</strong>
         <span>{{ row.street }}</span>
         <span>{{ row.city }}</span>
         <span class="ref">{{ row.externalRef }}</span>
       </ng-template>
-
-      <div class="bulk" queueBulk>
-        <button
-          (click)="askImport()"
-          [disabled]="nothingPicked()"
-          type="button"
-        >
-          {{ 'harvest.places.bulk.import' | rokuT }}
-        </button>
-        <button
-          (click)="askReject()"
-          [disabled]="nothingPicked()"
-          class="danger"
-          type="button"
-        >
-          {{ 'harvest.places.bulk.reject' | rokuT }}
-        </button>
-      </div>
 
       <!-- The same places read by chain (admin plan 0034). A view of this
            queue, built when it is first opened and not before. -->
@@ -392,19 +355,6 @@ const CATALOG_SHOPS_READ = 100;
         <lib-place-groups queueExtra />
       }
     </lib-queue-frame>
-
-    @if (pending(); as bulk) {
-      <lib-confirm-dialog
-        (confirm)="go(bulk)"
-        (dismiss)="pending.set(null)"
-        [bodyArgs]="{ count: bulk.count, chain: bulk.chain }"
-        [bodyKey]="bulk.bodyKey"
-        [busy]="queue.busy()"
-        [confirmKey]="bulk.confirmKey"
-        [headingKey]="bulk.headingKey"
-        [tone]="bulk.tone"
-      />
-    }
   `,
   styles: `
     :host {
@@ -639,35 +589,6 @@ const CATALOG_SHOPS_READ = 100;
     .ref {
       color: var(--admin-ink-muted);
     }
-
-    .bulk {
-      display: flex;
-      flex: 2;
-      gap: var(--admin-space-3);
-    }
-
-    .bulk button {
-      flex: 1;
-      min-block-size: 3rem;
-      padding: var(--admin-control-pad) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
-      font: inherit;
-      font-size: var(--admin-field-size);
-      color: var(--admin-ink);
-      cursor: pointer;
-    }
-
-    .bulk .danger {
-      border-color: var(--admin-danger);
-      color: var(--admin-danger-on-wash);
-    }
-
-    .bulk button:disabled {
-      opacity: 0.55;
-      cursor: default;
-    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -725,7 +646,7 @@ export class PlacesQueuePage {
   /**
    * The chain the picker holds, or `''`.
    *
-   * Reset after every decision that went through, single or bulk: a visible
+   * Reset after every decision that went through: a visible
    * leftover choice quietly filing the next place under the previous chain is
    * the mistake the reset prevents, and the picker makes re-choosing cheap. It
    * survives a refusal, so "Create a new shop anyway" sends what was asked.
@@ -755,12 +676,6 @@ export class PlacesQueuePage {
     this._route.snapshot.queryParamMap.get('postalCode') ?? '';
   private readonly _country =
     this._route.snapshot.queryParamMap.get('country') ?? '';
-
-  /** The bulk action waiting for an answer, or null when none is. */
-  readonly pending = signal<PendingPlacesBulk | null>(null);
-  /** What the last bulk run did, by name. Cleared when another one starts. */
-  readonly report = signal<QueueReport | null>(null);
-  readonly progressKey = signal('harvest.queue.bulk.progress');
 
   /**
    * The queue, behind a signal and read through a getter (admin plan 0044).
@@ -842,8 +757,6 @@ export class PlacesQueuePage {
 
   /** An import was refused because the place cannot name its own chain. */
   private readonly _needsChain = signal(false);
-
-  readonly nothingPicked = computed(() => this.queue.selectedCount() === 0);
 
   readonly lines = computed(() => {
     const place = this.queue.current();
@@ -989,9 +902,43 @@ export class PlacesQueuePage {
     await queue.load();
   }
 
-  /** A row the operator wants to look at properly, rather than tick. */
+  /**
+   * A line of the column was pressed: that place is the one in front.
+   *
+   * The panel is cleared when the place changes. The picked chain, the scope
+   * and the chain form were answers about the place before it, and left in
+   * place they would file this one under the wrong chain in one press.
+   */
   open(id: string): void {
-    this.queue.focus(id);
+    this._follow(() => this.queue.focus(id));
+  }
+
+  /** The next place, without deciding this one, with the panel cleared. */
+  skip(): void {
+    const queue = this.queue;
+    const moved = this._follow(() => queue.skip());
+    const front = queue.current()?.id ?? null;
+    // On the last place that is loaded, the queue reads the next page first
+    // and the place changes a moment later.
+    void moved.then(() => {
+      if (this.queue === queue && this._changedFrom(front)) {
+        this._reset();
+      }
+    });
+  }
+
+  /** Move the queue, and clear the panel when another place came up. */
+  private _follow<R>(move: () => R): R {
+    const front = this.queue.current()?.id ?? null;
+    const result = move();
+    if (this._changedFrom(front)) {
+      this._reset();
+    }
+    return result;
+  }
+
+  private _changedFrom(id: string | null): boolean {
+    return (this.queue.current()?.id ?? null) !== id;
   }
 
   /** Name the chain here, starting from the brand the place prints. */
@@ -1017,93 +964,6 @@ export class PlacesQueuePage {
     this.newChainLocale.set(
       (event.target as HTMLSelectElement).value as ChainLocale
     );
-  }
-
-  /**
-   * Import every selected place, under the picked chain when one is picked.
-   *
-   * The bulk path used to send an empty body always, because one operator's
-   * typed answer applied to rows they did not look at. The owner weighed that
-   * and the chain applies now (admin plan 0024, section 3.2); what makes it
-   * acceptable is the control's nature. A typed uuid was opaque, where the
-   * picker shows the chosen chain **by name**, and the confirm dialog seals it:
-   * with a chain picked, the body names it beside the count, so the operator
-   * confirms "import 12 places under Mercadona" and not just "import 12
-   * places". With none picked the body and the behaviour are exactly the old
-   * ones: catalog resolves each place from its brand, and a place whose brand
-   * it cannot resolve is refused and named in the report.
-   *
-   * **It never links, and never forces** (admin plan 0034). A place the catalog
-   * may already hold answers `place_matches_location`, stays in the queue and
-   * is named in the report with that reason, for a person to settle one at a
-   * time. A picked scope and a new chain are single decisions too: a scope is
-   * one warehouse and a chain name is one place's brand.
-   */
-  async askImport(): Promise<void> {
-    const supermarketId = this.supermarketId().trim();
-    const body = supermarketId === '' ? {} : { supermarketId };
-    // The name for the dialog's sentence. The id, when the lookup answered
-    // nothing: a blank would ask the operator to confirm filing under nothing
-    // in particular.
-    const chain =
-      supermarketId === ''
-        ? ''
-        : ((await this.references.resolve('supermarkets', supermarketId))
-            ?.title ?? supermarketId);
-
-    this.pending.set({
-      headingKey: 'harvest.places.bulk.importConfirm.heading',
-      bodyKey:
-        supermarketId === ''
-          ? 'harvest.places.bulk.importConfirm.body'
-          : 'harvest.places.bulk.importConfirm.bodyChained',
-      confirmKey: 'harvest.places.bulk.import',
-      progressKey: 'harvest.places.bulk.importing',
-      count: this.queue.selectedCount(),
-      leftAlone: 0,
-      tone: 'primary',
-      chain,
-      run: () =>
-        this._run({
-          act: async (place) => {
-            await this._service.importPlace(place.id, body);
-            return null;
-          },
-          nameOf: (place) => place.name ?? place.externalRef,
-          reasonOf: placeRefusalKey,
-          // The picker resets after a bulk run for the same reason it resets
-          // after a single decision.
-        }).then(() => this._decided()),
-    });
-  }
-
-  askReject(): void {
-    this.pending.set({
-      chain: '',
-      headingKey: 'harvest.places.bulk.rejectConfirm.heading',
-      bodyKey: 'harvest.places.bulk.rejectConfirm.body',
-      confirmKey: 'harvest.places.bulk.reject',
-      progressKey: 'harvest.places.bulk.rejecting',
-      count: this.queue.selectedCount(),
-      leftAlone: 0,
-      tone: 'danger',
-      run: () =>
-        this._run({
-          act: async (place) => {
-            await this._service.rejectPlace(place.id);
-            return null;
-          },
-          nameOf: (place) => place.name ?? place.externalRef,
-          reasonOf: placeRefusalKey,
-        }),
-    });
-  }
-
-  /** Go through with the confirmed bulk action. */
-  go(bulk: PendingBulk): void {
-    this.pending.set(null);
-    this.progressKey.set(bulk.progressKey);
-    void bulk.run();
   }
 
   /**
@@ -1254,21 +1114,4 @@ export class PlacesQueuePage {
       return null;
     }
   }
-
-  private async _run(bulk: QueueBulkAct<Place>): Promise<void> {
-    this.report.set(null);
-    this.report.set(await runQueueBulk(this.queue, bulk));
-    this.progressKey.set('harvest.queue.bulk.progress');
-    this._status.refresh();
-  }
-}
-
-/**
- * This screen's pending bulk, which also carries the chain by name.
- *
- * `''` for the actions that file under none, so the dialog's arguments always
- * have the field and the chained body key is the only reader of it.
- */
-interface PendingPlacesBulk extends PendingBulk {
-  readonly chain: string;
 }

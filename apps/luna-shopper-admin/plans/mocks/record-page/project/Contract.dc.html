@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What a descriptor can state</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab sheet" style="width: 1360px; height: 860px; gap: 12px">
+
+<p class="mut" style="font-size: 13px">A record page is drawn from the descriptor of its resource and from nothing else. <span class="new" style="margin-left: 0">New</span> marks what the descriptor does not have today. The rest is <code>ResourceDescriptor</code> as it is in <code>dev</code>.</p>
+
+<div style="display: flex; gap: 24px; align-items: flex-start">
+
+<div class="col" style="width: 790px; gap: 12px">
+
+<section class="panel" aria-labelledby="k-kinds" style="padding: 10px 6px 4px">
+<h2 id="k-kinds" style="padding: 0 10px 6px">A field states its kind</h2>
+<table class="tbl">
+<thead><tr><th scope="col">Kind</th><th scope="col">Reads as</th><th scope="col">Changes with</th><th scope="col">It can also state</th></tr></thead>
+<tbody>
+<tr><td><code>text</code></td><td>The text</td><td>One line</td><td><code>maxLength</code>, <code>multiline</code>, and a <code>format</code>: <code>url</code> is a link, <code>code</code> is mono with Copy <span class="new">New</span>, <code>image</code> is a picture beside its address <span class="new">New</span></td></tr>
+<tr><td><code>number</code></td><td>The number</td><td>A short field</td><td><code>min</code>, <code>max</code>, <code>integer</code></td></tr>
+<tr><td><code>money</code></td><td>The amount and its currency</td><td>A short field</td><td><code>decimals</code></td></tr>
+<tr><td><code>boolean</code></td><td>Yes or No</td><td>A switch</td><td><code>initial</code>, for a new record</td></tr>
+<tr><td><code>enum</code></td><td>The label of the choice</td><td>A select</td><td><code>options</code></td></tr>
+<tr><td><code>date</code></td><td>The day</td><td>A date field</td><td><code>time</code>, to show the hour too</td></tr>
+<tr><td><code>reference</code></td><td>The name, as a link</td><td>A picker</td><td><code>resource</code>, <code>nullable</code> (None comes first), <code>scopeFrom</code></td></tr>
+<tr><td><code>references</code></td><td>The names, one per line</td><td>One row each and a picker</td><td><code>ordered</code> (arrows, and Main on the first), <code>locked</code></td></tr>
+<tr><td><code>localized-text</code></td><td>One line per language</td><td>One field per language</td><td><code>locales</code>, <code>list</code></td></tr>
+<tr><td><code>json</code></td><td>The object, printed</td><td>A box in mono</td><td>Nothing</td></tr>
+</tbody>
+</table>
+</section>
+
+<section class="panel" aria-labelledby="k-every" style="padding: 10px 6px 4px">
+<h2 id="k-every" style="padding: 0 10px 6px">Every field can state</h2>
+<table class="tbl">
+<tbody>
+<tr><td style="width: 130px"><code>label</code>, <code>help</code></td><td>The words beside the field and the line under its control.</td></tr>
+<tr><td><code>required</code></td><td>A star, and a refusal when it is empty.</td></tr>
+<tr><td><code>nullable</code></td><td>Empty is a normal answer. It reads None, and a picker offers None first.</td></tr>
+<tr><td><code>editable</code></td><td>Yes, no, <code>'create'</code> (set once, then locked) or <code>'edit'</code> (not drawn on a new record).</td></tr>
+<tr><td><code>setBy</code> <span class="new">New</span></td><td>The words beside a value that cannot be changed, such as "Set by the harvester".</td></tr>
+<tr><td><code>check</code> <span class="new">New</span></td><td>An amber state beside the value when a person must look at it, such as a guessed postal code.</td></tr>
+</tbody>
+</table>
+</section>
+
+</div>
+
+<div class="col grow" style="gap: 12px">
+
+<section class="col" style="gap: 6px" aria-labelledby="k-rec">
+<h2 id="k-rec">The record block of a brand <span class="new">New</span></h2>
+<pre class="src">record: &#123;
+  sections: [
+    &#123; title: 'brands.section.name',
+      fields: ['label', 'key'] &#125;,
+    &#123; title: 'brands.section.links',
+      fields: ['canonicalBrandId',
+               'privateLabelSupermarketId'] &#125;,
+  ],
+  children: [
+    &#123; resource: 'brands', by: 'canonicalBrandId',
+      as: 'panel', rows: 5 &#125;,
+    &#123; resource: 'items', by: 'brandId', as: 'link' &#125;,
+  ],
+  facts: &#123; added: 'createdAt', changed: 'updatedAt',
+           also: [] &#125;,
+  afterAdd: 'open',
+&#125;</pre>
+</section>
+
+<section class="panel" aria-labelledby="k-means" style="padding: 10px 6px 4px">
+<h2 id="k-means" style="padding: 0 10px 6px">What each line decides</h2>
+<table class="tbl">
+<tbody>
+<tr><td style="width: 96px"><code>sections</code></td><td>The order of the page. A section with no field in this mode is not drawn. With no <code>record</code> block, every field is one section in the order of <code>fields</code>.</td></tr>
+<tr><td><code>children</code></td><td><code>tab</code> is a tab beside Details. <code>panel</code> is a short list in the page. <code>link</code> is a count that opens the filtered list.</td></tr>
+<tr><td><code>facts</code></td><td>The Record block. The ID is always in it. <code>also</code> adds fields such as the source of a row.</td></tr>
+<tr><td><code>afterAdd</code></td><td><code>open</code> the new record, or go back to the <code>list</code>.</td></tr>
+</tbody>
+</table>
+</section>
+
+<section class="panel" aria-labelledby="k-has" style="padding: 10px 16px 12px">
+<h2 id="k-has" style="padding-bottom: 6px">What the page reads that is there today</h2>
+<p style="font-size: 13px"><code>title</code> is the heading. <code>rowStates</code> are the states beside it. <code>info</code> is the info button. <code>caution</code> is the line above the first section of a form. <code>parent</code> is the back link and a locked field on a new record. <code>actions.named</code> is the More menu, and <code>danger: true</code> <span class="new">New</span> puts an action under the line in red. <code>errorFields</code> and <code>errorLinks</code> place a refusal.</p>
+</section>
+
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

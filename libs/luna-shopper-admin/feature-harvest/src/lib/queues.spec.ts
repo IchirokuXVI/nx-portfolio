@@ -1,4 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -8,14 +9,12 @@ import {
   DeploymentStore,
   HARVEST_SERVICE,
   HarvestMemory,
-  type HarvestServiceI,
   ServerReachability,
+  type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { SUPERMARKETS } from '@portfolio/luna-shopper-admin/feature-catalog';
-import {
-  provideResources,
-  ResourceReferences,
-} from '@portfolio/luna-shopper-admin/feature-resource';
+import { provideResources } from '@portfolio/luna-shopper-admin/feature-resource';
+import { Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { PlacesQueuePage } from './places-queue-page';
 
 /** A chain the catalog seed holds, so the picker's lookup can name it. */
@@ -67,7 +66,10 @@ function recorded(): {
   return { service, calls };
 }
 
-async function render<T>(component: new (...args: never[]) => T) {
+async function render<T>(
+  component: new (...args: never[]) => T,
+  options: { split?: boolean } = {}
+) {
   const { service, calls } = recorded();
 
   TestBed.resetTestingModule();
@@ -92,6 +94,15 @@ async function render<T>(component: new (...args: never[]) => T) {
         },
       },
       DeploymentStore,
+      // The column of a queue is drawn at the split width only, and jsdom has
+      // no width. A spec that needs the column says so.
+      {
+        provide: Viewport,
+        useValue: {
+          split: signal(options.split === true),
+          compact: signal(false),
+        },
+      },
     ],
   }).compileComponents();
 
@@ -125,7 +136,9 @@ describe('the discovered places queue', () => {
 
     expect(named(calls, 'importPlace')[0][0]).toBe(first?.id);
     expect(page.queue.current()?.id).not.toBe(first?.id);
-    expect(page.queue.decided()).toBe(1);
+    expect(page.queue.items().map((place) => place.id)).not.toContain(
+      first?.id
+    );
   });
 
   it('rejects the current place and advances to the next', async () => {
@@ -177,188 +190,94 @@ describe('the discovered places queue', () => {
 });
 
 /**
- * Plan 0020. The places queue is the interesting one: the question it asks is
- * whether two rows are one shop, and a list is a better answer to that than one
- * row at a time is. The near duplicates panel stays in review for the cases
- * where it is not, and the screen still opens in review.
+ * Admin plan 0049, targets 5, 6 and 7. The queue had a second view, a list
+ * with a checkbox on each row and a bar of bulk actions (plan 0020). It is
+ * gone. The rows are a column beside the open place on a wide screen, and
+ * pressing one opens it where it sits.
  */
-describe('the discovered places queue as a list', () => {
-  async function listed() {
-    const rendered = await render(PlacesQueuePage);
-    const toggles =
-      rendered.fixture.nativeElement.querySelectorAll('.views button');
-    toggles[1].click();
-    await drain();
-    rendered.fixture.detectChanges();
-    return { ...rendered, page: rendered.fixture.componentInstance };
-  }
+describe('the discovered places queue, a column and no list', () => {
+  const lines = (fixture: ComponentFixture<PlacesQueuePage>) =>
+    [
+      ...fixture.nativeElement.querySelectorAll('.column button.line'),
+    ] as HTMLButtonElement[];
 
-  it('opens one at a time, and reaches the list through the toggle', async () => {
-    const { fixture } = await render(PlacesQueuePage);
+  it('draws no list of checkboxes and no bulk action', async () => {
+    const { fixture } = await render(PlacesQueuePage, { split: true });
+    const host: HTMLElement = fixture.nativeElement;
 
-    expect(fixture.nativeElement.querySelector('.rows')).toBeNull();
-    expect(fixture.nativeElement.querySelector('.subject')).not.toBeNull();
+    expect(host.querySelector('.subject')).not.toBeNull();
+    expect(host.querySelector('.rows')).toBeNull();
+    expect(host.querySelector('input[type="checkbox"]')).toBeNull();
+    expect(host.querySelector('.bulk')).toBeNull();
+    expect(host.textContent).not.toContain('harvest.places.bulk');
   });
 
-  it('draws one row per place, with a checkbox and the review view own columns', async () => {
-    const { fixture, page } = await listed();
+  /** "Grouped by chain" is a view of this queue's own, and it stays. */
+  it('offers one at a time and grouped by chain, and no "As a list"', async () => {
+    const { fixture } = await render(PlacesQueuePage);
 
-    const rows = fixture.nativeElement.querySelectorAll('.rows li');
-    expect(rows).toHaveLength(page.queue.items().length);
-    expect(rows[0].querySelector('input[type="checkbox"]')).not.toBeNull();
-    expect(rows[0].textContent).toContain(
+    const views = [
+      ...fixture.nativeElement.querySelectorAll('.views button'),
+    ].map((button: HTMLElement) => button.dataset['view']);
+
+    expect(views).toEqual(['review', 'groups']);
+  });
+
+  it('says no count of places left and decided', async () => {
+    const { fixture } = await render(PlacesQueuePage, { split: true });
+
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'harvest.queue.tally'
+    );
+  });
+
+  it('draws one line per place in the column, by name', async () => {
+    const { fixture } = await render(PlacesQueuePage, { split: true });
+    const page = fixture.componentInstance;
+
+    expect(lines(fixture)).toHaveLength(page.queue.items().length);
+    expect(lines(fixture)[0].textContent).toContain(
       page.queue.items()[0].name ?? page.queue.items()[0].externalRef
     );
   });
 
-  it('opens a clicked row one at a time, with that row in front', async () => {
-    const { fixture, page } = await listed();
-    const second = page.queue.items()[1];
+  /**
+   * The owner's words: "if you select row 5, the top 4 should still be
+   * available, and the list won't scroll or anything."
+   */
+  it('opens a pressed line where it sits, and moves no other line', async () => {
+    const { fixture } = await render(PlacesQueuePage, { split: true });
+    const page = fixture.componentInstance;
+    const before = page.queue.items().map((place) => place.id);
+    const said = lines(fixture).map((line) => line.textContent);
+    const at = before.length - 1;
 
-    fixture.nativeElement.querySelectorAll('.rows .cells')[1].click();
+    lines(fixture)[at].click();
     await drain();
     fixture.detectChanges();
 
-    expect(page.queue.current()?.id).toBe(second.id);
-    expect(fixture.nativeElement.querySelector('.subject')).not.toBeNull();
-  });
-
-  /**
-   * Section 4. Both calls take everything they need off the row, so both are
-   * offered; nothing else here is.
-   */
-  it('offers exactly import and reject', async () => {
-    const { fixture } = await listed();
-
-    const labels = [
-      ...fixture.nativeElement.querySelectorAll('.bulk button'),
-    ].map((node: Element) => node.textContent?.trim());
-
-    expect(labels).toEqual([
-      'harvest.places.bulk.import',
-      'harvest.places.bulk.reject',
-    ]);
-  });
-
-  it('names the action and the exact count in the confirmation', async () => {
-    const { fixture, page } = await listed();
-
-    page.queue.selectLoaded();
-    page.askReject();
-    fixture.detectChanges();
-
-    expect(page.pending()).toMatchObject({
-      headingKey: 'harvest.places.bulk.rejectConfirm.heading',
-      confirmKey: 'harvest.places.bulk.reject',
-      count: page.queue.selectedCount(),
-    });
-  });
-
-  it('writes nothing until the confirmation is answered', async () => {
-    const { fixture, page, calls } = await listed();
-
-    page.queue.selectLoaded();
-    page.askReject();
-    fixture.detectChanges();
-    await drain();
-
-    expect(named(calls, 'rejectPlace')).toHaveLength(0);
-  });
-
-  /**
-   * With no chain picked, the bulk body stays empty and catalog resolves the
-   * chain from each place's own brand, exactly as before admin plan 0024.
-   *
-   * Two seeded places are refused, and that is admin plan 0034's bulk rule:
-   * the Libertador Mercadona answers `place_matches_location`, and an
-   * unbranded OpenStreetMap place cannot name its chain. Both stay in the
-   * queue and are named in the report; nothing is linked or forced.
-   */
-  it('imports every selected place with no chain named when the picker is empty', async () => {
-    const { page, calls } = await listed();
-
-    page.queue.selectLoaded();
-    const wanted = page.queue.items().map((place) => place.id);
-    await page.askImport();
-
-    expect(page.pending()).toMatchObject({
-      bodyKey: 'harvest.places.bulk.importConfirm.body',
-      chain: '',
-    });
-
-    page.go(page.pending()!);
-    await drain();
-
-    expect(named(calls, 'importPlace')).toHaveLength(wanted.length);
-    for (const args of named(calls, 'importPlace')) {
-      expect(args[1]).toEqual({});
-    }
-    expect(named(calls, 'linkPlace')).toHaveLength(0);
-    expect(page.queue.items().map((place) => place.id)).toEqual([
-      'place-mercadona-libertador',
-      'place-osm-unbranded',
-    ]);
-    expect(page.report()?.succeeded).toBe(wanted.length - 2);
-    expect(page.report()?.failed).toEqual([
-      {
-        name: 'Mercadona Libertador',
-        reasonKey: 'harvest.places.error.matchesLocation',
-      },
-      { name: 'Supermercado Deza', reasonKey: 'resource.error.conflict' },
-    ]);
-  });
-
-  /**
-   * The reversal admin plan 0024 section 3.2 records: a picked chain applies
-   * to the bulk import too, and the dialog's body names it beside the count so
-   * the operator confirms "import 12 places under Mercadona" and not just
-   * "import 12 places".
-   */
-  it('imports every selected place under the picked chain, named in the dialog', async () => {
-    const { page, calls } = await listed();
-    const title = (
-      await TestBed.inject(ResourceReferences).resolve(
-        'supermarkets',
-        MERCADONA
-      )
-    )?.title;
-
-    page.supermarketId.set(MERCADONA);
-    page.queue.selectLoaded();
-    const wanted = page.queue.items().map((place) => place.id);
-    await page.askImport();
-
-    expect(page.pending()).toMatchObject({
-      bodyKey: 'harvest.places.bulk.importConfirm.bodyChained',
-      chain: title,
-    });
-
-    page.go(page.pending()!);
-    await drain();
-
-    expect(named(calls, 'importPlace')).toHaveLength(wanted.length);
-    for (const args of named(calls, 'importPlace')) {
-      expect(args[1]).toEqual({ supermarketId: MERCADONA });
-    }
-    // The picker resets after the run, for the same reason it resets after a
-    // single decision.
-    expect(page.supermarketId()).toBe('');
-  });
-
-  it('rejects every selected place and takes them out of the queue', async () => {
-    const { page, calls } = await listed();
-
-    page.queue.selectLoaded();
-    const wanted = page.queue.items().map((place) => place.id);
-    page.askReject();
-    page.go(page.pending()!);
-    await drain();
-
+    expect(page.queue.current()?.id).toBe(before[at]);
+    expect(page.queue.items().map((place) => place.id)).toEqual(before);
+    expect(lines(fixture).map((line) => line.textContent)).toEqual(said);
     expect(
-      named(calls, 'rejectPlace')
-        .map((args) => args[0])
-        .sort()
-    ).toEqual([...wanted].sort());
-    expect(page.queue.items()).toEqual([]);
+      lines(fixture).map((line) => line.getAttribute('aria-current'))
+    ).toEqual(before.map((_, index) => (index === at ? 'true' : null)));
+  });
+
+  it('goes to the next line on a skip, and moves no line', async () => {
+    const { fixture } = await render(PlacesQueuePage, { split: true });
+    const page = fixture.componentInstance;
+    const before = page.queue.items().map((place) => place.id);
+
+    (
+      fixture.nativeElement.querySelector(
+        '[data-action="skip"]'
+      ) as HTMLButtonElement
+    ).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue.current()?.id).toBe(before[1]);
+    expect(page.queue.items().map((place) => place.id)).toEqual(before);
   });
 });

@@ -701,6 +701,33 @@ describe('a list that is a column beside the open row', () => {
   });
 
   /**
+   * Admin plan 0049. A shop with no address is headed by its postal code, and
+   * the line under it named that same code again. A field the heading already
+   * says is left out of the line.
+   */
+  it('does not say under the heading what the heading already says', async () => {
+    const second = LINE_ROWS[1];
+    const name = second.name;
+    second.name = second.city;
+    try {
+      const { page } = await mount('/plants/p1/lines', {
+        embed: 'column',
+        split: true,
+      });
+
+      expect(page.rows()[1].brief).toEqual({
+        heading: 'Cordoba',
+        line: '',
+        trailing: '4',
+      });
+      // A row that repeats nothing keeps its line.
+      expect(page.rows()[0].brief?.line).toBe('Sevilla');
+    } finally {
+      second.name = name;
+    }
+  });
+
+  /**
    * Beside the open row the column says what it lists. It is the title of the
    * page until a row is open, and one level down once that row titles it. On a
    * narrow screen the column is the page.

@@ -445,35 +445,38 @@ describe('AdminShellPage on a wide screen', () => {
     fixture.detectChanges();
 
     expect(account.getAttribute('aria-expanded')).toBe('true');
-    expect(
-      fixture.nativeElement.querySelector('.menu').textContent
-    ).toContain('shell.signOut');
+    expect(fixture.nativeElement.querySelector('.menu').textContent).toContain(
+      'shell.signOut'
+    );
   });
 });
 
 /**
  * The content language control (admin plan 0026, section 7).
  *
- * In the rail beside the account, because it is a property of who is reading
+ * In the account menu of the rail, because it is a property of who is reading
  * and not of what is on screen. It offers the **content** locales and never
  * `APP_AVAILABLE_LOCALES`, which is the interface's list and is one entry
  * long: conflating the two is exactly what the plan exists to avoid.
+ *
+ * It had a button of its own beside the account. Admin plan 0049 removed it:
+ * the menu says the language, and marks the one in use.
  */
 describe('AdminShellPage content language', () => {
   const button = (fixture: { nativeElement: HTMLElement }) =>
     fixture.nativeElement.querySelector(
-      '[data-menu="language"]'
+      '[data-menu="account"]'
     ) as HTMLButtonElement;
 
   const options = (fixture: { nativeElement: HTMLElement }) =>
     [
-      ...fixture.nativeElement.querySelectorAll('.menu button'),
+      ...fixture.nativeElement.querySelectorAll('.menu button[aria-pressed]'),
     ] as HTMLButtonElement[];
 
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
 
-  it('offers one option per content locale, beside the account', async () => {
+  it('offers one option per content locale, in the account menu', async () => {
     const fixture = await render('/');
 
     button(fixture).click();
@@ -484,12 +487,12 @@ describe('AdminShellPage content language', () => {
     ).toEqual(CONTENT_LOCALES.map((locale) => `shell.language.${locale}`));
   });
 
-  it('shows the language the operator is reading in', async () => {
+  it('marks the language the operator is reading in', async () => {
     const fixture = await render('/');
 
-    expect(button(fixture).textContent?.trim()).toBe(
-      CONTENT_LOCALES[0].toUpperCase()
-    );
+    expect(
+      fixture.nativeElement.querySelector('[data-menu="language"]')
+    ).toBeNull();
 
     button(fixture).click();
     fixture.detectChanges();
@@ -509,9 +512,14 @@ describe('AdminShellPage content language', () => {
 
     expect(TestBed.inject(ContentLocaleStore).locale()).toBe('es');
     expect(TestBed.inject(ContentLocaleStore).order()).toEqual(['es', 'en']);
-    // Choosing closes the menu, and the button now says the new language.
+    // Choosing closes the menu, and the menu marks the new language when it
+    // is opened again.
     expect(options(fixture)).toEqual([]);
-    expect(button(fixture).textContent?.trim()).toBe('ES');
+    button(fixture).click();
+    fixture.detectChanges();
+    expect(
+      options(fixture).map((option) => option.getAttribute('aria-pressed'))
+    ).toEqual(['false', 'true']);
   });
 
   /**

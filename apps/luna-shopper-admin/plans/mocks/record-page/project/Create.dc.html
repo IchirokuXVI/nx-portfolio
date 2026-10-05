@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add: a new product</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a href="Actions.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<form class="main" aria-label="Add a product">
+<header class="head">
+<a class="back" href="Product.dc.html" aria-label="Back to Products"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Products</a>
+<h1>New product</h1>
+<div class="grow"></div>
+<button type="button" class="ibtn" aria-label="How to add a product">i</button>
+</header>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="c-name">
+<div class="sec-h"><h2 id="c-name">Name and codes</h2></div>
+<div class="fr ed"><span class="fl" id="c-name-l">Name <span class="req" aria-hidden="true">*</span></span><div class="fv">
+<div class="loc" role="group" aria-labelledby="c-name-l">
+<div><span class="lang" aria-hidden="true">ES</span><input class="inp focus" aria-label="Name in Spanish" required></div>
+<div><span class="lang" aria-hidden="true">EN</span><input class="inp" aria-label="Name in English"></div>
+</div>
+<span class="help">Without the brand and without the size. Spanish is required.</span>
+</div></div>
+<div class="fr ed"><label class="fl" for="c-brand">Brand</label><div class="fv"><span class="pick"><button type="button" id="c-brand" class="inp" aria-haspopup="listbox">None</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+<div class="fr ed"><label class="fl" for="c-ean">Barcode</label><div class="fv"><input id="c-ean" class="inp s mono" inputmode="numeric" aria-describedby="c-ean-h"><span class="help" id="c-ean-h">8 or 13 digits.</span></div></div>
+</section>
+
+<section class="sec" aria-labelledby="c-where">
+<div class="sec-h"><h2 id="c-where">Where it belongs</h2></div>
+<div class="fr ed"><label class="fl" for="c-cat">Categories <span class="req" aria-hidden="true">*</span></label><div class="fv">
+<div class="refs">
+<span class="pick"><button type="button" id="c-cat" class="inp mut" aria-haspopup="listbox">Add a category</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+</div>
+<span class="help">The first one you add is the main category.</span>
+</div></div>
+<div class="fr ed"><label class="fl" for="c-group">Product group</label><div class="fv"><span class="pick"><button type="button" id="c-group" class="inp" aria-haspopup="listbox">None</button><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span></div></div>
+</section>
+
+<section class="sec" aria-labelledby="c-sold">
+<div class="sec-h"><h2 id="c-sold">How it is sold</h2></div>
+<div class="fr ed"><label class="fl" for="c-unit">Sold by <span class="req" aria-hidden="true">*</span></label><div class="fv"><span class="pick s"><select id="c-unit" class="inp" required><option selected>Unit</option><option>Kilogram</option><option>Litre</option></select><svg class="ic chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span><span class="help">Filled in for you. Change it for a product sold by weight.</span></div></div>
+<div class="fr ed"><label class="fl" for="c-size">Size</label><div class="fv"><input id="c-size" class="inp s num" inputmode="decimal" aria-describedby="c-size-h"><span class="help" id="c-size-h">A number, in the unit above. Leave it empty when the size varies.</span></div></div>
+<div class="fr ed"><label class="fl" for="c-img">Picture</label><div class="fv"><input id="c-img" class="inp" type="url" placeholder="https://" aria-describedby="c-img-h"><span class="help" id="c-img-h">The address of a picture. It is shown here once it loads.</span></div></div>
+</section>
+
+</div>
+</div>
+
+<div class="save">
+<span class="grow" role="status"><span class="req" aria-hidden="true">*</span> Required. 2 required fields are still empty.</span>
+<a class="btn" href="Product.dc.html" style="color: #14171a">Cancel</a>
+<button type="submit" class="btn pri" disabled>Add product</button>
+</div>
+</form>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

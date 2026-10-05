@@ -27,6 +27,7 @@
     "password": "Password",
     "submit": "Sign in",
     "submitting": "Signing in…",
+    "development": "This server asks for no password. Signing you in as its development admin.",
     "error": {
       "invalidCredentials": "That username and password did not match. Check both and try again.",
       "throttled": "Too many attempts from here. Wait a moment and try again.",
@@ -733,8 +734,6 @@
       "priorityHelp": "Lower wins. A leaflet at 10 outranks a website crawl at 30 whenever both are eligible.",
       "maxAgeDays": "Maximum age, in days",
       "maxAgeDaysHelp": "How old a price of this source may be before it stops being eligible. Empty means it never ages out. Typed in prices have none on purpose: for a chain with no automated source they are the only truth.",
-      "enabled": "Enabled",
-      "enabledHelp": "Off removes this source from every read at once.",
       "info": {
         "wins": "One rule for each kind of source. When two sources price the same product, the higher rule wins.",
         "age": "A price older than the limit of its rule is out of date. A newer price from a lower rule then replaces it.",
@@ -997,26 +996,13 @@
       }
     },
     "queue": {
-      "tally": "{{remaining}} left, {{decided}} decided",
       "skip": "Skip",
       "view": {
         "review": "One at a time",
-        "list": "As a list",
         "label": "View"
       },
       "column": "Rows of this queue",
-      "select": "Select this row",
-      "selectAll": "Select all {{loaded}} loaded",
-      "clearSelection": "Clear the selection ({{count}})",
-      "loadMore": "Load more ({{loaded}} loaded)",
-      "bulk": {
-        "progress": "Working through {{done}} of {{total}}",
-        "stop": "Stop",
-        "stopped": "Stopped. The {{succeeded}} of {{total}} that went through are done, and stopping does not undo them.",
-        "finished": "{{succeeded}} of {{total}} went through.",
-        "refused": "These were refused and are still in the queue",
-        "leftAlone": "These were left alone and nothing was sent for them"
-      }
+      "loadMore": "Load more ({{loaded}} loaded)"
     },
     "runs": {
       "heading": "Harvest runs",
@@ -1286,21 +1272,6 @@
         "externalRef": "Provider reference",
         "coordinates": "Coordinates"
       },
-      "bulk": {
-        "import": "Add them to the catalog",
-        "importing": "Adding {{done}} of {{total}}",
-        "reject": "Reject them",
-        "rejecting": "Rejecting {{done}} of {{total}}",
-        "importConfirm": {
-          "heading": "Add {{count}} places to the catalog?",
-          "body": "No chain is named for any of them, so the catalog works each one out from the brand the place carries. A place whose brand it cannot place is refused and named afterwards, and the rest still go through.",
-          "bodyChained": "Every one of them is filed under {{chain}}, whatever brand it carries. Clear the chain first if the catalog should work each place out from its own brand."
-        },
-        "rejectConfirm": {
-          "heading": "Reject {{count}} places?",
-          "body": "Each place stays as rejected, so no run offers it again."
-        }
-      },
       "groups": {
         "empty": "Discovery has found no places yet.",
         "noBrand": "No brand",
@@ -1443,21 +1414,6 @@
         "item": "Has a proposal",
         "sibling": "Points at another row",
         "none": "No proposal"
-      },
-      "bulk": {
-        "accept": "Accept the proposals",
-        "accepting": "Accepting {{done}} of {{total}}",
-        "reject": "Reject them",
-        "rejecting": "Rejecting {{done}} of {{total}}",
-        "counts": "Accept {{count}} of {{selected}} picked. {{unproposed}} have no proposal and are left alone.",
-        "acceptConfirm": {
-          "heading": "Accept the proposals?",
-          "body": "Each of the {{count}} rows is bound to the product its own row proposed, and its prices are written. The {{unproposed}} with no proposal are left alone. This is one call per row and it can be stopped, but what has gone through stays through."
-        },
-        "rejectConfirm": {
-          "heading": "Reject {{count}} products?",
-          "body": "Each row stays as rejected, so no run asks about it again. You can find them later by asking for rejected rows."
-        }
       },
       "decisionsFile": {
         "open": "Apply a decisions file",
@@ -1629,23 +1585,6 @@
         "notBackfilled": "{{shop}} will point at {{location}}. This does not fill in what the last run skipped: the next run writes it.",
         "startRun": "Start a run",
         "submit": "Map it"
-      },
-      "bulk": {
-        "ignoring": "Ignoring {{done}} of {{total}}",
-        "unignoring": "Putting back {{done}} of {{total}}",
-        "unmapping": "Unmapping {{done}} of {{total}}",
-        "ignoreConfirm": {
-          "heading": "Ignore {{count}} shops?",
-          "body": "No run writes availability for an ignored shop. {{leftAlone}} of the picked rows are ignored already and are left alone."
-        },
-        "unignoreConfirm": {
-          "heading": "Put {{count}} shops back in the queue?",
-          "body": "Each one goes back to waiting to be mapped. {{leftAlone}} of the picked rows are not ignored and are left alone."
-        },
-        "unmapConfirm": {
-          "heading": "Unmap {{count}} shops?",
-          "body": "Each one stops pointing at a shop of ours, and the next run writes no availability for it until somebody maps it again. {{leftAlone}} of the picked rows are not mapped and are left alone."
-        }
       },
       "candidates": {
         "heading": "Shops of ours it may be",
