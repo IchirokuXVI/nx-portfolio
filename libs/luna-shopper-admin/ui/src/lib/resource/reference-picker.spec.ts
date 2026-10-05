@@ -143,6 +143,45 @@ describe('ReferencePicker with a value', () => {
     );
   });
 
+  /**
+   * The parent can put another id in the field. The name of the one before it
+   * is not the name of this one, so the field says it is looking.
+   */
+  it('drops the old name while a new value is being read', async () => {
+    let answer: (row: ReferenceOption | null) => void = () => undefined;
+    const fixture = await render('ps_1', {
+      lookup: lookupOf({
+        resolve: (_resource, id) =>
+          id === 'ps_1'
+            ? Promise.resolve(scopes[0])
+            : new Promise((resolve) => (answer = resolve)),
+      }),
+    });
+    expect(field(fixture).value).toBe('Catalonia');
+
+    fixture.componentRef.setInput('value', 'ps_2');
+    fixture.detectChanges();
+    await settle(fixture);
+
+    expect(field(fixture).value).toBe('');
+    expect(field(fixture).placeholder).toBe('resource.reference.resolving');
+    expect(fixture.nativeElement.querySelector('.missing')).toBeNull();
+
+    answer(scopes[1]);
+    await settle(fixture);
+    expect(field(fixture).value).toBe('Madrid');
+  });
+
+  it('closes its list when it is switched off', async () => {
+    const fixture = await render('');
+    await open(fixture);
+
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.open()).toBe(false);
+  });
+
   /** A value picked from the list is named from the list, with no second read. */
   it('does not read a row again that the list already showed', async () => {
     const resolved: string[] = [];
@@ -376,6 +415,86 @@ describe('ReferencePicker typing', () => {
 
     press(fixture, 'Enter');
     expect(emitted).toEqual(['ps_2']);
+  });
+
+  /**
+   * A search that lands after newer typing answers a text the field no longer
+   * holds. Enter on its first row would pick a record nobody asked for.
+   */
+  it('drops the first page that lands after something was typed', async () => {
+    let answerFirstPage: (rows: readonly ReferenceOption[]) => void = () =>
+      undefined;
+    const fixture = await render('', {
+      lookup: lookupOf({
+        search: (_resource, term) =>
+          term === ''
+            ? new Promise((resolve) => (answerFirstPage = resolve))
+            : Promise.resolve(
+                scopes.filter((scope) =>
+                  scope.title.toLowerCase().includes(term.toLowerCase())
+                )
+              ),
+      }),
+    });
+    const emitted = collect(fixture);
+
+    field(fixture).click();
+    fixture.detectChanges();
+    field(fixture).value = 'mad';
+    field(fixture).dispatchEvent(new Event('input'));
+    answerFirstPage(scopes);
+    await settle(fixture);
+
+    expect(shown(fixture)).toEqual([]);
+    press(fixture, 'Enter');
+    expect(emitted).toEqual([]);
+
+    jest.advanceTimersByTime(300);
+    await settle(fixture);
+    press(fixture, 'Enter');
+    expect(emitted).toEqual(['ps_2']);
+  });
+
+  it('drops the answer for a shorter text that lands after a longer one', async () => {
+    const answers = new Map<
+      string,
+      (rows: readonly ReferenceOption[]) => void
+    >();
+    const fixture = await render('', {
+      lookup: lookupOf({
+        search: (_resource, term) =>
+          new Promise((resolve) => answers.set(term, resolve)),
+      }),
+    });
+    const emitted = collect(fixture);
+
+    field(fixture).value = 'a';
+    field(fixture).dispatchEvent(new Event('input'));
+    jest.advanceTimersByTime(300);
+    field(fixture).value = 'ad';
+    field(fixture).dispatchEvent(new Event('input'));
+    answers.get('a')?.(scopes);
+    await settle(fixture);
+
+    expect(shown(fixture)).toEqual([]);
+    expect(fixture.nativeElement.textContent).toContain(
+      'resource.reference.searching'
+    );
+    press(fixture, 'Enter');
+    expect(emitted).toEqual([]);
+  });
+
+  /** `ResourceForm` is a native form with a submit button. */
+  it('keeps Enter from the form while the list is open and nothing is active', async () => {
+    const fixture = await render('');
+
+    field(fixture).value = 'mad';
+    field(fixture).dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    const enter = press(fixture, 'Enter');
+
+    expect(fixture.componentInstance.open()).toBe(true);
+    expect(enter.defaultPrevented).toBe(true);
   });
 
   /**

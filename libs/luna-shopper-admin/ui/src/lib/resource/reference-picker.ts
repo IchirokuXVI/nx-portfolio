@@ -10,6 +10,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   type OnDestroy,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
@@ -454,7 +455,17 @@ export class ReferencePicker implements OnDestroy {
         this.resolving.set(false);
         return;
       }
+      // The name of the value before this one must not stand in the field
+      // while the read for this one is out.
+      this.chosen.set(null);
       void this._resolve(id, request);
+    });
+
+    // A field that is switched off while its list is open closes it.
+    effect(() => {
+      if (this.disabled() && untracked(this.open)) {
+        this.close();
+      }
     });
   }
 
@@ -524,11 +535,15 @@ export class ReferencePicker implements OnDestroy {
     this.open.set(true);
     this.active.set(-1);
     this.idNotFound.set(false);
+    // A search that is still out answers a text the field no longer holds.
+    // Its answer is dropped, and the rows it would replace are hidden until
+    // the search for this text lands: Enter on a stale row picks the wrong
+    // record.
+    this._pending++;
+    this.searching.set(true);
 
     this._clearTimer();
-    // An ID is pasted whole, so there is no typing to wait out. Reading it at
-    // once also means Enter, pressed straight after the paste, finds the read
-    // already on its way.
+    // An ID is pasted whole, so there is no typing to wait out.
     if (recordIdIn(term) !== null) {
       void this._search(term);
       return;
@@ -549,15 +564,16 @@ export class ReferencePicker implements OnDestroy {
         return;
       }
       case 'Enter': {
-        const row = this.open() ? this.rows()[this.active()] : undefined;
+        if (!this.open()) {
+          return;
+        }
+        // An open list owns Enter, with or without an active option.
+        // Otherwise Enter during a search would submit the form the field is
+        // in.
+        event.preventDefault();
+        const row = this.rows()[this.active()];
         if (row !== undefined) {
-          // Otherwise Enter would also submit the form the field is in.
-          event.preventDefault();
           this.pick(row);
-        } else if (this.open() && this.typed() && this._typedId() !== null) {
-          // The read of a typed ID chooses by itself when it lands. Enter
-          // must not submit the form with the value the field held before.
-          event.preventDefault();
         }
         return;
       }
@@ -603,11 +619,6 @@ export class ReferencePicker implements OnDestroy {
    */
   private _read(term: string): Promise<readonly ReferenceOption[]> {
     return this.lookup().search(this.resource(), term, this.scope());
-  }
-
-  /** The ID the typed text is, or `null` while it is a word. */
-  private _typedId(): string | null {
-    return recordIdIn(this.term());
   }
 
   private async _search(term: string): Promise<void> {
