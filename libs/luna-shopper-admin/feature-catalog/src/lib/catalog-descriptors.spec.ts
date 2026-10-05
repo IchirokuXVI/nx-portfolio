@@ -1,11 +1,15 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { RECORD_CONTEXT } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   draftFor,
   fieldOf,
   idOf,
   isEditable,
+  recordLayout,
+  recordTabs,
   toInput,
+  toRecordValue,
   type FieldDescriptor,
   type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
@@ -14,6 +18,7 @@ import {
   POSTAL_CODE_SOURCE_OPTIONS,
   PRICE_SCOPE_KIND_OPTIONS,
   PRICE_SOURCE_KIND_OPTIONS,
+  priceScopeMark,
   UNIT_OF_MEASURE_OPTIONS,
 } from './catalog-enums';
 import {
@@ -25,10 +30,8 @@ import {
   PRICE_SEED,
 } from './catalog-seed';
 import { CATEGORIES } from './categories';
-import { ChainContext } from './chains/chain-context';
-import { CHAIN_PARAM } from './chains/chain-page';
+import { ChainCounts } from './chains/chain-context';
 import { CHAIN_RESOURCES } from './chains/chains-routes';
-import { SHOP_PARAM } from './chains/shop-page';
 import { ITEMS, withCategoryIds } from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
@@ -139,7 +142,7 @@ describe('the resources a chain holds', () => {
   it('puts a shop, a section and a scope under a chain, and a product under a shop', () => {
     const chain = {
       resource: 'supermarkets',
-      param: CHAIN_PARAM,
+      param: 'chainId',
       filter: 'supermarketId',
     };
 
@@ -149,7 +152,7 @@ describe('the resources a chain holds', () => {
     expect(PRICE_SCOPES.parent).toEqual(chain);
     expect(LOCATION_ITEMS.parent).toEqual({
       resource: 'locations',
-      param: SHOP_PARAM,
+      param: 'shopId',
       filter: 'supermarketLocationId',
     });
   });
@@ -233,16 +236,31 @@ describe('the resources a chain holds', () => {
 
   /**
    * "Default" and "Make default" are facts about the chain, so both read the
-   * chain's page and exist only on a list under one.
+   * page of the chain and say nothing on a list under none.
+   *
+   * The page is looked for when a row is asked about and not when the states
+   * and the actions are built: the page of one scope builds them while it is
+   * itself being built, and cannot be asked for its own record then.
    */
   describe('the default scope of a chain', () => {
     const [national, cordoba] = PRICE_SCOPE_SEED as unknown as ResourceRow[];
 
-    function under(chain: Partial<ChainContext> | null) {
+    /** The page of a record, as `RECORD_CONTEXT` hands it over. */
+    const pageOf = (descriptor: { name: string }, row: unknown) => ({
+      descriptor,
+      id: 'sm_mercadona',
+      row: signal(row),
+    });
+
+    function under(page: unknown, setDefaultScope = jest.fn()) {
       TestBed.resetTestingModule();
       TestBed.configureTestingModule({
-        providers:
-          chain === null ? [] : [{ provide: ChainContext, useValue: chain }],
+        providers: [
+          { provide: ChainCounts, useValue: { setDefaultScope } },
+          ...(page === null
+            ? []
+            : [{ provide: RECORD_CONTEXT, useValue: page }]),
+        ],
       });
       return TestBed.runInInjectionContext(() => ({
         statesOf: PRICE_SCOPES.rowStates?.(),
@@ -250,11 +268,7 @@ describe('the resources a chain holds', () => {
       }));
     }
 
-    const mercadona = (setDefaultScope = jest.fn()) =>
-      ({
-        chain: signal(SUPERMARKET_SEED[0]),
-        setDefaultScope,
-      }) as unknown as Partial<ChainContext>;
+    const mercadona = () => pageOf(SUPERMARKETS, SUPERMARKET_SEED[0]);
 
     it('marks the scope its chain falls back to, and no other', () => {
       const { statesOf } = under(mercadona());
@@ -267,7 +281,7 @@ describe('the resources a chain holds', () => {
 
     it('offers to make another general scope the default, and writes the chain', async () => {
       const write = jest.fn().mockResolvedValue(undefined);
-      const { actions } = under(mercadona(write));
+      const { actions } = under(mercadona(), write);
       const [makeDefault] = actions;
       const store = PRICE_SCOPE_SEED.find(
         (scope) => scope.kind === 'STORE'
@@ -282,14 +296,209 @@ describe('the resources a chain holds', () => {
 
       await makeDefault.run(cordoba);
 
-      expect(write).toHaveBeenCalledWith('ps_mercadona_4661');
+      expect(write).toHaveBeenCalledWith('sm_mercadona', 'ps_mercadona_4661');
     });
 
-    it('says and offers nothing on a list that is under no chain', () => {
-      const { statesOf, actions } = under(null);
+    it('offers nothing until the chain is read', () => {
+      const { actions } = under(pageOf(SUPERMARKETS, null));
+
+      expect(actions[0].available?.(cordoba)).toBe(false);
+    });
+
+    it.each([
+      ['under no page', null],
+      ['on the page of a scope', pageOf(PRICE_SCOPES, national)],
+    ])('says and offers nothing %s', async (_where, page) => {
+      const write = jest.fn();
+      const { statesOf, actions } = under(page, write);
 
       expect(statesOf?.(national)).toEqual([]);
-      expect(actions).toEqual([]);
+      expect(actions.map((action) => action.available?.(cordoba))).toEqual([
+        false,
+      ]);
+      await actions[0].run(cordoba);
+      expect(write).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * What the record page draws for a chain and for a shop (admin plan 0056,
+   * section 3).
+   */
+  describe('a chain and a shop on the record page', () => {
+    const options = { locale: 'en', contentLocales: ['en', 'es'] };
+    const names = (layout: ReturnType<typeof recordLayout>) =>
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ]);
+    const valueOf = (
+      descriptor: typeof LOCATIONS | typeof SUPERMARKETS,
+      name: string,
+      row: ResourceRow
+    ) =>
+      toRecordValue(
+        fieldOf(descriptor as never, name) as FieldDescriptor,
+        row,
+        options
+      );
+
+    it('opens a chain on its shops, with Details last', () => {
+      expect(recordTabs(SUPERMARKETS).map((tab) => tab.key)).toEqual([
+        'locations',
+        'sections',
+        'price-scopes',
+        'details',
+      ]);
+    });
+
+    it('draws a chain in two sections, and its count of shops in none', () => {
+      expect(names(recordLayout(SUPERMARKETS, 'read'))).toEqual([
+        [
+          'catalog.supermarkets.section.name',
+          ['name', 'websiteUrl', 'logoUrl', 'externalBrandKey'],
+        ],
+        ['catalog.supermarkets.section.prices', ['defaultPriceScopeId']],
+      ]);
+      // A new chain has no scope to pick yet.
+      expect(names(recordLayout(SUPERMARKETS, 'create'))).toEqual([
+        [
+          'catalog.supermarkets.section.name',
+          ['name', 'websiteUrl', 'logoUrl', 'externalBrandKey'],
+        ],
+      ]);
+    });
+
+    it('reads the logo as a picture and the key as code', () => {
+      const row = {
+        ...SUPERMARKET_SEED[0],
+        logoUrl: 'https://example.test/logo.png',
+        externalBrandKey: 'Q377705',
+      } as unknown as ResourceRow;
+
+      expect(valueOf(SUPERMARKETS, 'logoUrl', row)).toEqual({
+        kind: 'image',
+        src: 'https://example.test/logo.png',
+      });
+      expect(valueOf(SUPERMARKETS, 'externalBrandKey', row)).toEqual({
+        kind: 'text',
+        text: 'Q377705',
+        mono: true,
+      });
+    });
+
+    it('flags a chain with no default scope where the scope reads', () => {
+      const row = SUPERMARKET_SEED[0] as unknown as ResourceRow;
+
+      expect(
+        valueOf(SUPERMARKETS, 'defaultPriceScopeId', {
+          ...row,
+          defaultPriceScopeId: null,
+        })
+      ).toEqual({
+        kind: 'none',
+        check: { label: 'catalog.supermarkets.noDefaultScope' },
+      });
+      expect(
+        valueOf(SUPERMARKETS, 'defaultPriceScopeId', {
+          ...row,
+          defaultPriceScopeId: 'ps_1',
+        }).check
+      ).toBeUndefined();
+    });
+
+    it('opens a shop on Details, then its sections and its products', () => {
+      expect(recordTabs(LOCATIONS).map((tab) => tab.key)).toEqual([
+        'details',
+        'sections',
+        'location-items',
+      ]);
+    });
+
+    it('draws a shop in four sections, its chain in none, and the source of its code as a fact', () => {
+      const layout = recordLayout(LOCATIONS, 'read');
+
+      expect(names(layout)).toEqual([
+        ['catalog.locations.section.name', ['label']],
+        [
+          'catalog.locations.section.address',
+          [
+            'address',
+            'city',
+            'postalCode',
+            'country',
+            'latitude',
+            'longitude',
+            'mapUrl',
+          ],
+        ],
+        ['catalog.locations.section.prices', ['priceScopeIds']],
+        [
+          'catalog.locations.section.source',
+          ['externalProvider', 'externalRef'],
+        ],
+      ]);
+      // The chain is drawn only on a new shop, as the locked value.
+      expect(names(recordLayout(LOCATIONS, 'create')).at(-1)).toEqual([
+        'record.section.other',
+        ['supermarketId'],
+      ]);
+      expect(layout.facts.also.map((field) => field.name)).toEqual([
+        'postalCodeSource',
+      ]);
+    });
+
+    it('says a guessed postal code must be checked, and nothing of a known one', () => {
+      const row = LOCATION_SEED[0] as unknown as ResourceRow;
+
+      expect(
+        valueOf(LOCATIONS, 'postalCode', {
+          ...row,
+          postalCode: '41004',
+          postalCodeSource: 'DERIVED',
+        }).check
+      ).toEqual({ label: 'catalog.locations.postalCodeGuessed' });
+      expect(
+        valueOf(LOCATIONS, 'postalCode', {
+          ...row,
+          postalCode: '41004',
+          postalCodeSource: 'SOURCE',
+        }).check
+      ).toBeUndefined();
+    });
+
+    it('links the two coordinates to a map, and reads none when one is missing', () => {
+      const row = LOCATION_SEED[0] as unknown as ResourceRow;
+      const map = fieldOf(LOCATIONS, 'mapUrl');
+
+      expect(map !== undefined && isEditable(map, 'edit')).toBe(false);
+      expect(
+        valueOf(LOCATIONS, 'mapUrl', {
+          ...row,
+          latitude: 37.38614,
+          longitude: -5.99349,
+        })
+      ).toEqual({
+        kind: 'link',
+        label: 'catalog.locations.openOnMap',
+        text: 'https://www.openstreetmap.org/?mlat=37.38614&mlon=-5.99349#map=18/37.38614/-5.99349',
+        href: 'https://www.openstreetmap.org/?mlat=37.38614&mlon=-5.99349#map=18/37.38614/-5.99349',
+      });
+      expect(
+        valueOf(LOCATIONS, 'mapUrl', { ...row, latitude: null, longitude: 4 })
+      ).toEqual({ kind: 'none' });
+    });
+
+    it('marks each scope of a shop by the kind of the scope', () => {
+      const scopes = fieldOf(LOCATIONS, 'priceScopeIds');
+      const mark =
+        scopes?.kind === 'references'
+          ? (row: ResourceRow) => scopes.mark?.(row)
+          : () => undefined;
+
+      expect(mark({ kind: 'STORE' })).toEqual(priceScopeMark('STORE'));
+      expect(mark({ kind: 'NATIONAL' })).toEqual(priceScopeMark('NATIONAL'));
+      expect(mark({ kind: 'SOMETHING_NEW' })).toBeUndefined();
     });
   });
 });
@@ -990,6 +1199,141 @@ describe('the product list', () => {
     expect(group?.kind === 'reference' ? group.nullable : null).toBe(true);
     expect((ITEMS.filters ?? []).map((filter) => filter.param)).not.toContain(
       'withoutProductGroup'
+    );
+  });
+});
+
+/**
+ * The product and the product group on the record page (admin plan 0055).
+ *
+ * Both had a page of their own over the old form. What they draw is now what
+ * their descriptors say, so it is checked here.
+ */
+describe('the record of a product', () => {
+  it('names no page of its own, so the record page draws it', () => {
+    expect(ITEMS.editor).toBeUndefined();
+    expect(ITEMS.detail).toBeUndefined();
+  });
+
+  it('draws three sections, and every field it can change is in one', () => {
+    const sections = recordLayout(ITEMS, 'edit').sections;
+
+    expect(
+      sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      ['catalog.items.section.name', ['name', 'brand', 'ean', 'sku']],
+      ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
+      ['catalog.items.section.sold', ['defaultUnit', 'unitSize', 'imageUrl']],
+    ]);
+  });
+
+  it('draws the two codes in the mono face and the picture with a preview', () => {
+    expect(fieldOf(ITEMS, 'ean')).toMatchObject({ format: 'code' });
+    expect(fieldOf(ITEMS, 'sku')).toMatchObject({ format: 'code' });
+    expect(fieldOf(ITEMS, 'imageUrl')).toMatchObject({ format: 'image' });
+  });
+
+  /** The gateway reads the brand as text (plan 0055, section 3). */
+  it('keeps the brand a text and never a picker', () => {
+    expect(fieldOf(ITEMS, 'brand')?.kind).toBe('text');
+  });
+
+  it('keeps the categories ordered, so the first is the main one', () => {
+    expect(fieldOf(ITEMS, 'categoryIds')).toMatchObject({
+      kind: 'references',
+      ordered: true,
+      required: true,
+    });
+  });
+
+  it('starts a new product sold by the unit, and works out no other field', () => {
+    const draft = draftFor(ITEMS, null, 'create');
+
+    expect(draft['defaultUnit']).toBe('UNIT');
+    expect(draft['unitSize']).toBe('');
+    expect(draft['brand']).toBe('');
+    // A product that exists shows what it holds.
+    expect(
+      draftFor(
+        ITEMS,
+        { defaultUnit: 'LITER' } as unknown as Parameters<
+          typeof ITEMS.title
+        >[0],
+        'edit'
+      )['defaultUnit']
+    ).toBe('LITER');
+  });
+
+  it('has Details first, then its prices, where it is and its sources', () => {
+    expect(recordTabs(ITEMS).map((tab) => tab.key)).toEqual([
+      'details',
+      'prices',
+      'where',
+      'sources',
+    ]);
+    expect(
+      (ITEMS.record?.children ?? []).map((child) => [child.as, child.label])
+    ).toEqual([
+      ['tab', 'catalog.products.tabs.prices'],
+      ['tab', 'catalog.products.tabs.where'],
+      ['tab', 'catalog.products.tabs.sources'],
+    ]);
+  });
+
+  /** The view of a product carries no date, so the block names none. */
+  it('states no fact that the view does not carry', () => {
+    expect(ITEMS.record?.facts).toBeUndefined();
+  });
+
+  it('says three refusals under the categories', () => {
+    expect(ITEMS.errorFields).toEqual({
+      category_not_a_leaf: 'categoryIds',
+      item_needs_a_category: 'categoryIds',
+      category_not_found: 'categoryIds',
+    });
+  });
+});
+
+describe('the record of a product group', () => {
+  it('names no page of its own, so the record page draws it', () => {
+    expect(PRODUCT_GROUPS.detail).toBeUndefined();
+    expect(PRODUCT_GROUPS.editor).toBeUndefined();
+  });
+
+  it('draws its four fields in one section, the handle in the mono face', () => {
+    expect(
+      recordLayout(PRODUCT_GROUPS, 'edit').sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      [
+        'catalog.productGroups.section.name',
+        ['name', 'slug', 'synonyms', 'referenceUnit'],
+      ],
+    ]);
+    expect(fieldOf(PRODUCT_GROUPS, 'slug')).toMatchObject({ format: 'code' });
+  });
+
+  /** Four fields: the collections are in the page, and not behind tabs. */
+  it('holds "Add items" as a panel and its products as a link, with no tab', () => {
+    expect(recordTabs(PRODUCT_GROUPS)).toEqual([]);
+    expect(
+      (PRODUCT_GROUPS.record?.children ?? []).map((child) => [
+        child.as,
+        child.label,
+        child.count,
+      ])
+    ).toEqual([
+      ['panel', 'catalog.productGroups.addItems.heading', undefined],
+      ['link', 'catalog.productGroups.products', undefined],
+    ]);
+    // The link is the products list narrowed by a filter that list has.
+    expect((ITEMS.filters ?? []).map((filter) => filter.param)).toContain(
+      'productGroupId'
     );
   });
 });

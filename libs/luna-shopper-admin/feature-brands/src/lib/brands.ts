@@ -26,12 +26,14 @@ export type { Brand };
  * products move with the link. That is the "Same brand as" field, the column
  * beside it and the filter above.
  *
- * **There is no delete for a brand in general**, and the reason has narrowed
- * and not gone. A brand with products on it is not a row to remove. A
- * **spelling** of another brand is: its products belong to the brand it
- * spells, so deleting it gives them back to nobody and returns the spelling to
- * the suggestions. The gateway takes only that one. So it is a named action,
- * "Delete this spelling", offered only for a row that is a spelling, and
+ * **This page offers no delete for a brand in general**, and the reason has
+ * narrowed and not gone. A brand with products on it is not a row to remove.
+ * A **spelling** of another brand is: its products belong to the brand it
+ * spells, so deleting it gives them back to no brand and returns the spelling
+ * to the suggestions. The gateway deletes one other brand: a main brand that
+ * no product holds and no spelling is linked to. For any other main brand it
+ * answers 409 `brand_in_use`. This page offers only the first, as a named
+ * action, "Delete this spelling", for a row that is a spelling, and
  * `actions.delete` stays off (admin plan 0054, section 4.1).
  *
  * **The page of a brand is the record page** (admin plan 0054). The `record`
@@ -194,8 +196,9 @@ export const BRANDS = defineResource<Brand>({
     },
   },
 
-  // Create and edit, and no delete: the gateway deletes a brand only when it
-  // is a spelling of another one. That one case is the named action, which
+  // Create and edit, and no delete. The gateway deletes a spelling of another
+  // brand, and a main brand that nothing points at (409 `brand_in_use`
+  // otherwise). Only the first is offered here: the named action, which
   // `available` offers for a spelling and for nothing else.
   actions: {
     create: true,

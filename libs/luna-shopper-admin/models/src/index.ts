@@ -113,6 +113,7 @@ export {
   RECORD_DETAILS_TAB,
   isRecordChildList,
   recordChildCount,
+  recordChildKey,
   recordLayout,
   recordTabs,
   type RecordChild,

@@ -253,7 +253,7 @@ describe('the shops of a chain', () => {
    * same kind of rows beside it: hidden on a narrow screen, and never removed.
    */
   const page = (fixture: ComponentFixture<TestHost>) =>
-    fixture.nativeElement.querySelector('lib-chain-page') as HTMLElement;
+    fixture.nativeElement.querySelector('lib-record-page') as HTMLElement;
 
   const rowsOf = (fixture: ComponentFixture<TestHost>) =>
     [...page(fixture).querySelectorAll('[data-row]')] as HTMLElement[];
@@ -419,6 +419,15 @@ describe('the shop price scopes', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
+  /** The shop's Details tab as a form: the address that opens it so. */
+  async function editing(): Promise<ComponentFixture<TestHost>> {
+    const fixture = await boot(`${CENTRO}/details?edit=1`);
+    await settle(fixture);
+    await settle(fixture);
+    await settle(fixture);
+    return fixture;
+  }
+
   /**
    * The list is a column of addresses now, so the scopes are named where the
    * shop is open: on its Details tab, as the rows of the field (chips until admin plan
@@ -429,7 +438,18 @@ describe('the shop price scopes', () => {
     await settle(fixture);
     await settle(fixture);
 
-    const control = fixture.debugElement.query(By.directive(ReferencesControl));
+    // Reading, each scope is a name, and nothing on the page can change one.
+    expect(
+      fixture.debugElement.query(By.directive(ReferencesControl))
+    ).toBeNull();
+    const read = fixture.nativeElement.querySelector(
+      'lib-record-view .references'
+    ) as HTMLElement;
+    expect(read.textContent).toContain('Córdoba warehouse');
+    expect(read.textContent).not.toContain('ps_mercadona_4661');
+
+    const form = await editing();
+    const control = form.debugElement.query(By.directive(ReferencesControl));
     const chips = control.nativeElement.textContent as string;
     expect(chips).toContain('Córdoba warehouse');
     expect(chips).not.toContain('ps_mercadona_4661');
@@ -437,8 +457,7 @@ describe('the shop price scopes', () => {
 
   it('keeps the store scope when a region is removed, and sends the stack whole', async () => {
     const sent = recordUpdates();
-    const fixture = await boot(`${CENTRO}/details`);
-    await settle(fixture);
+    const fixture = await editing();
 
     const control = fixture.debugElement.query(By.directive(ReferencesControl));
     const chips = [
@@ -452,7 +471,12 @@ describe('the shop price scopes', () => {
     region.querySelector('button')?.click();
     await settle(fixture);
 
-    buttonSaying(fixture, 'resource.action.save')?.click();
+    (
+      fixture.nativeElement.querySelector(
+        'lib-save-bar [data-save]'
+      ) as HTMLButtonElement
+    ).click();
+    await settle(fixture);
     await settle(fixture);
 
     expect(sent).toEqual([{ priceScopeIds: ['ps_store_loc_cordoba_centro'] }]);

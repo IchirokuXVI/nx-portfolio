@@ -9,9 +9,13 @@ import {
 } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import { ContentLocaleStore } from '@portfolio/luna-shopper-admin/data-access';
+import {
+  ContentLocaleStore,
+  GatewayError,
+} from '@portfolio/luna-shopper-admin/data-access';
 import {
   defineResource,
+  type NamedAction,
   type ResourceGateway,
   type ResourcePage,
   type ResourceQuery,
@@ -842,5 +846,120 @@ describe('a list that is still drawn during a write', () => {
 
     expect(fixture.componentInstance.embed).toBeNull();
     expect(gadgetListCalls).toHaveLength(before);
+  });
+});
+
+/**
+ * A named action of a row that the gateway refuses. It used to be a promise
+ * nobody caught, with the question left open over the list.
+ */
+describe('a named action of a row that is refused', () => {
+  const refused = new GatewayError({
+    code: 'valve_stuck',
+    status: 409,
+    correlationId: '',
+  });
+  const ran: string[] = [];
+  let lists = 0;
+
+  const ACTIONS: readonly NamedAction<ResourceRow>[] = [
+    {
+      name: 'open',
+      label: 'valves.open',
+      run: async (row) => {
+        ran.push(String(row['id']));
+        throw refused;
+      },
+    },
+    {
+      name: 'drain',
+      label: 'valves.drain',
+      confirm: {
+        heading: 'valves.drain.heading',
+        body: 'valves.drain.body',
+        confirm: 'valves.drain.confirm',
+      },
+      run: async () => {
+        throw refused;
+      },
+    },
+  ];
+
+  const VALVES = defineResource<{ id: string; name: string }>({
+    name: 'valves',
+    segment: 'valves',
+    labels: { one: 'valves.one', many: 'valves.many' },
+    title: (row) => row.name,
+    fields: [{ kind: 'text', name: 'name', label: 'valves.name' }],
+    list: { columns: ['name'], compact: ['name'] },
+    actions: { named: () => ACTIONS },
+    gateway: () => ({
+      ...notesGateway,
+      list: async () => {
+        lists += 1;
+        return pageOf([{ id: 'v1', name: 'Inlet' }]);
+      },
+    }),
+  });
+
+  async function valves(): Promise<ComponentFixture<ResourceListPage>> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ResourceListPage, RokuTranslatorTestingModule.forTesting()],
+      providers: [
+        ContentLocaleStore,
+        provideRouter([]),
+        provideSections({ key: 'stuff', label: '', resources: [VALVES] }),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { data: { [RESOURCE_DESCRIPTOR]: VALVES } } },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ResourceListPage);
+    fixture.detectChanges();
+    await settle(fixture);
+    return fixture;
+  }
+
+  beforeEach(() => {
+    ran.length = 0;
+    lists = 0;
+  });
+
+  it('says the refusal above the list, and does not reject', async () => {
+    const fixture = await valves();
+    const page = fixture.componentInstance;
+    const [row] = page.rows();
+
+    await expect(
+      page.run({ action: ACTIONS[0], row })
+    ).resolves.toBeUndefined();
+    fixture.detectChanges();
+
+    expect(ran).toEqual(['v1']);
+    expect(page.refusal()?.name).toBe('Inlet');
+    expect(page.refusal()?.link).toBeNull();
+    expect(page.busyRowId()).toBeNull();
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('[data-refusal]')
+    ).not.toBeNull();
+    // Nothing was written, so the list is not read again.
+    expect(lists).toBe(1);
+  });
+
+  it('closes the question of an action that asked first', async () => {
+    const fixture = await valves();
+    const page = fixture.componentInstance;
+    const [row] = page.rows();
+
+    await page.run({ action: ACTIONS[1], row });
+    expect(page.asking()).not.toBeNull();
+
+    await expect(page.confirmAction()).resolves.toBeUndefined();
+
+    expect(page.asking()).toBeNull();
+    expect(page.refusal()?.name).toBe('Inlet');
   });
 });

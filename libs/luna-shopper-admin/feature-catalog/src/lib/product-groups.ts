@@ -8,7 +8,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { productGroupSource } from './catalog-sources';
-import { ProductGroupDetailPage } from './product-group-detail-page';
+import { GroupAddItemsPanel } from './product-group-add-items';
 
 /** A set of comparable products, as the gateway describes it. */
 export type ProductGroup = Wire.CatalogProductGroupView;
@@ -63,6 +63,7 @@ export const PRODUCT_GROUPS = defineResource<ProductGroup>({
       name: 'slug',
       label: 'catalog.productGroups.slug',
       help: 'catalog.productGroups.slugHelp',
+      format: 'code',
       required: true,
       maxLength: 80,
     },
@@ -107,8 +108,34 @@ export const PRODUCT_GROUPS = defineResource<ProductGroup>({
 
   actions: { create: true, edit: true, delete: true },
 
-  // The generic form, with "Add items" under it (admin plan 0035, section 2).
-  detail: ProductGroupDetailPage,
+  // What the record page draws (admin plan 0055, section 2.3). A group has
+  // four fields, so its collections are in the page and not behind tabs.
+  record: {
+    sections: [
+      {
+        title: 'catalog.productGroups.section.name',
+        fields: ['name', 'slug', 'synonyms', 'referenceUnit'],
+      },
+    ],
+    children: [
+      // Find products, tick them and move them here through one reviewed
+      // request, which no list of a resource does (admin plan 0035).
+      {
+        as: 'panel',
+        name: 'add-items',
+        label: 'catalog.productGroups.addItems.heading',
+        component: GroupAddItemsPanel,
+      },
+      // The products list, narrowed to this group. No count: the view of a
+      // group carries none.
+      {
+        as: 'link',
+        resource: 'items',
+        by: 'productGroupId',
+        label: 'catalog.productGroups.products',
+      },
+    ],
+  },
 
   gateway: () =>
     inject(RESOURCE_GATEWAYS).for<ProductGroup>(productGroupSource()),

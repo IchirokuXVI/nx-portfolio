@@ -33,8 +33,18 @@ export interface RecordBlock<T extends ResourceRow = ResourceRow> {
    */
   readonly details?: 'first' | 'last';
   /**
-   * The counts beside the tabs that no field of the record holds, by the
-   * `name` of the child. Built in an injection context, as `rowStates` is.
+   * A translation key: what the delete question says under its heading, for
+   * a record whose delete takes more than the record. The page says "This
+   * cannot be taken back." when left out.
+   */
+  readonly deleteBody?: string;
+  /**
+   * The counts beside the children that no field of the record holds, by
+   * the key of the child: the `name` of a part, the `resource` of a list.
+   *
+   * The factory is called once, in an injection context, as `rowStates` is.
+   * What it answers is called once for each record that opens, outside any
+   * reactive reader, so it may start a read and write signals.
    */
   counts?(): (id: string) => Signal<Readonly<Record<string, number | null>>>;
 }
@@ -164,6 +174,10 @@ export const CHANGED_LABEL_KEY = 'record.facts.changed';
  * - A field no section names goes in a last section, in the order of
  *   `fields`. A field added to a descriptor later can then never be missing
  *   from the page.
+ * - The parent field is the exception, in a block that names it in no
+ *   section (admin plan 0056, section 3.2): it is drawn only while adding,
+ *   as the locked value that says where the record will belong. A record
+ *   that exists sits under its parent, and the way back names it.
  * - While adding, the facts are empty. A record that does not exist has no ID
  *   and no date.
  */
@@ -222,7 +236,11 @@ export function recordLayout<T extends ResourceRow>(
   }
   add(
     block === undefined ? DETAILS_SECTION_KEY : OTHER_SECTION_KEY,
-    fields.map((field) => field.name)
+    fields
+      .map((field) => field.name)
+      .filter(
+        (name) => block === undefined || mode === 'create' || name !== parent
+      )
   );
 
   const fact = (name: string | undefined): FieldDescriptor | null =>

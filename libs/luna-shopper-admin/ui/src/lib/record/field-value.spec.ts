@@ -78,6 +78,18 @@ describe('FieldValue', () => {
     expect(link?.textContent?.trim()).toBe('https://dia.es');
   });
 
+  it('draws the words of a link in place of its address, where it has them', () => {
+    const link = render({
+      kind: 'link',
+      text: 'https://osm.test/1',
+      href: 'https://osm.test/1',
+      label: 'shops.openOnMap',
+    }).host.querySelector('a');
+
+    expect(link?.getAttribute('href')).toBe('https://osm.test/1');
+    expect(link?.textContent?.trim()).toBe('shops.openOnMap');
+  });
+
   it('draws a picture with an empty alt beside its address, which is a link', () => {
     const { host } = render({ kind: 'image', src: 'https://cdn/x.png' });
     const picture = host.querySelector('img');
@@ -316,5 +328,25 @@ describe('FieldValue for several references', () => {
     );
     expect(lines[2].querySelector('a')).toBeNull();
     expect(lines[2].textContent).toContain('Desayuno, Leche');
+  });
+
+  /** Admin plan 0056, section 2: how far each price scope reaches. */
+  it('draws the mark the page gave before a target, and none before the others', () => {
+    const { fixture, host } = render(categories, {
+      names: { ...names, c_3: 'Desayuno, Leche' },
+      marks: { c_1: { level: 2, label: 'scope.kind.region' } },
+    });
+    const lines = [...host.querySelectorAll('li')];
+    const marks = fixture.debugElement.queryAll(By.directive(ScopeMark));
+
+    expect(marks).toHaveLength(1);
+    expect(lines[0].firstElementChild?.tagName.toLowerCase()).toBe(
+      'lib-scope-mark'
+    );
+    expect((marks[0].componentInstance as ScopeMark).level()).toBe(2);
+    expect((marks[0].componentInstance as ScopeMark).label()).toBe(
+      'scope.kind.region'
+    );
+    expect(lines[1].querySelector('lib-scope-mark')).toBeNull();
   });
 });

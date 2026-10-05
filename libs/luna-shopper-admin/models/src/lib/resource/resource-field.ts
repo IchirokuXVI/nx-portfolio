@@ -160,6 +160,12 @@ export interface TextField<T extends ResourceRow> extends FieldBase<T> {
    * picture beside its address, and the form checks it as it checks a `url`.
    */
   readonly format?: 'plain' | 'url' | 'code' | 'image';
+  /**
+   * A translation key for the words of the link, in place of its address
+   * (admin plan 0056, section 2). Only for `format: 'url'`, and only where the
+   * page reads: "Open on a map" says more than the address of a map does.
+   */
+  readonly linkLabel?: string;
 }
 
 /** A count or a measure. Not money, which is its own kind for a reason. */
@@ -209,6 +215,12 @@ export interface BooleanField<T extends ResourceRow> extends FieldBase<T> {
 export interface EnumField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'enum';
   readonly options: readonly EnumOption[];
+  /**
+   * The option a new record starts at (admin plan 0055, target 6): "Sold by"
+   * of a product starts at "Unit". Left out, a new record starts with no
+   * option chosen. A record that exists shows what it holds.
+   */
+  readonly initial?: string;
 }
 
 /**
@@ -347,6 +359,15 @@ export interface ReferencesField<T extends ResourceRow> extends FieldBase<T> {
    * target be removed.
    */
   locked?(row: Partial<T>, target: ResourceRow): boolean;
+  /**
+   * The scope mark to draw before one target, read from the target's own row
+   * (admin plan 0056, section 2). A shop's price scopes each show how far
+   * they reach.
+   *
+   * A method for the reason {@link locked} is one. The page asks it once the
+   * lookup has read the target, as it asks `locked`.
+   */
+  mark?(target: ResourceRow): ScopeMarkView | undefined;
 }
 
 /** A `jsonb` column with one string per locale. */

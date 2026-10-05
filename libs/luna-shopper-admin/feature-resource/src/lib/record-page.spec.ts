@@ -1,5 +1,11 @@
 import { Location } from '@angular/common';
-import { Component, signal } from '@angular/core';
+import {
+  Component,
+  inject,
+  Injectable,
+  signal,
+  type Signal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
@@ -12,6 +18,7 @@ import {
 import {
   defineResource,
   type NamedAction,
+  type RecordChildList,
   type ResourceGateway,
   type ResourceInput,
   type ResourceRow,
@@ -22,6 +29,7 @@ import { provideSections } from './admin-section';
 import { RecordPage } from './record-page';
 import { RecordView } from './record-view';
 import { ResourceChanges } from './resource-changes';
+import { ResourceSplitPage } from './resource-split-page';
 import { recordRoute, resourceFormBranch } from './routes';
 
 /**
@@ -157,7 +165,8 @@ const LINES = defineResource<Line>({
     { kind: 'text', name: 'name', label: 'lines.name', required: true },
     { kind: 'text', name: 'kind', label: 'lines.kind' },
   ],
-  list: { columns: ['name'], compact: ['name'] },
+  // A line says its kind under its name in a column.
+  list: { columns: ['name'], compact: ['name'], brief: { line: ['kind'] } },
   parent: { resource: 'plants', param: 'plantId', filter: 'plantId' },
   info: { title: 'lines.info.title', points: ['lines.info.one'] },
   rowStates: () => () => states(),
@@ -191,11 +200,80 @@ const LOGS = defineResource<Line>({
   actions: {},
 });
 
+interface Depot extends ResourceRow {
+  id: string;
+  name: string;
+  lineCount: number;
+}
+
+/** How many lines the server says a depot holds. A case changes it. */
+let depotLines = 2;
+
+/**
+ * The counts of a depot that no field holds, as a later plan writes them:
+ * asking writes a signal at once and starts a read that answers later.
+ */
+@Injectable({ providedIn: 'root' })
+class DepotCounts {
+  readonly asked = signal<readonly string[]>([]);
+
+  readonly of = (id: string): Signal<Record<string, number | null>> => {
+    const held = signal<Record<string, number | null>>({});
+    this.asked.update((ids) => [...ids, id]);
+    void Promise.resolve().then(() => held.set({ logs: 7 }));
+    return held.asReadonly();
+  };
+}
+
+const DEPOT_LINES: RecordChildList<Depot> = {
+  as: 'link',
+  resource: 'lines',
+  by: 'plantId',
+  count: 'lineCount',
+};
+const DEPOT_LOGS: RecordChildList<Depot> = {
+  as: 'link',
+  resource: 'logs',
+  by: 'plantId',
+};
+
+/** A record that holds two lists: one counted by a field, one by a read. */
+const DEPOTS = defineResource<Depot>({
+  name: 'depots',
+  segment: 'depots',
+  labels: { one: 'depots.one', many: 'depots.many' },
+  title: (row) => row.name,
+  fields: [
+    { kind: 'text', name: 'name', label: 'depots.name' },
+    { kind: 'number', name: 'lineCount', label: 'depots.lines' },
+  ],
+  list: { columns: ['name'], compact: ['name'] },
+  record: {
+    sections: [],
+    children: [DEPOT_LINES, DEPOT_LOGS],
+    counts: () => inject(DepotCounts).of,
+  },
+  actions: { edit: true },
+  gateway: () => ({
+    ...linesGateway,
+    read: async (id) => ({ id, name: 'North depot', lineCount: depotLines }),
+  }),
+});
+
 @Component({ template: 'the list' })
 class ListStub {}
 
-/** The page the lines are under. It has a component, and that is the point. */
-@Component({ imports: [RouterOutlet], template: '<router-outlet />' })
+/**
+ * The page the lines are under. It has a component, and that is the point.
+ *
+ * It also stands in for the split that holds a pane: a record page asks only
+ * whether one is above it.
+ */
+@Component({
+  imports: [RouterOutlet],
+  template: '<router-outlet />',
+  providers: [{ provide: ResourceSplitPage, useValue: {} }],
+})
 class PlantPage {}
 
 interface Mounted {
@@ -205,7 +283,11 @@ interface Mounted {
   readonly element: HTMLElement;
 }
 
-async function mount(url: string, compact = false): Promise<Mounted> {
+async function mount(
+  url: string,
+  compact = false,
+  split = false
+): Promise<Mounted> {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [RokuTranslatorTestingModule.forTesting()],
@@ -214,11 +296,11 @@ async function mount(url: string, compact = false): Promise<Mounted> {
       provideSections({
         key: 'plants',
         label: '',
-        held: [PLANTS, LINES, BATCHES, LOGS],
+        held: [PLANTS, LINES, BATCHES, LOGS, DEPOTS],
       }),
       {
         provide: Viewport,
-        useValue: { compact: signal(compact), split: signal(false) },
+        useValue: { compact: signal(compact), split: signal(split) },
       },
       provideRouter([
         {
@@ -238,6 +320,19 @@ async function mount(url: string, compact = false): Promise<Mounted> {
         resourceFormBranch(BATCHES),
         { path: 'logs', pathMatch: 'full', component: ListStub },
         recordRoute(LOGS, { path: 'logs/:id' }),
+        recordRoute(DEPOTS, { path: 'depots/:id' }),
+        // A page that gives way to what is open under its `inside` route.
+        {
+          ...recordRoute(LOGS, { path: 'yards/:id', yieldsTo: 'inside' }),
+          children: [
+            {
+              path: 'inside',
+              component: PlantPage,
+              children: [{ path: ':shed', component: ListStub }],
+            },
+            { path: 'beside', component: ListStub },
+          ],
+        },
       ]),
     ],
   }).compileComponents();
@@ -298,6 +393,7 @@ beforeEach(() => {
   removes.length = 0;
   ran.length = 0;
   actionFails = null;
+  depotLines = 2;
   states.set([{ label: 'lines.state.running', tone: 'good' }]);
 });
 
@@ -317,11 +413,41 @@ describe('RecordPage, the header', () => {
 
   /** The way back names the list, and is a link: the guard is what asks. */
   it('leads back to the list, by a link that names it', async () => {
-    const mounted = await mount('/plants/p1/lines/l1');
+    const mounted = await mount('/lines/l1');
     const back = one<HTMLAnchorElement>(mounted, 'a.page-back');
 
     expect(back?.getAttribute('aria-label')).toBe('lines.many');
+    expect(back?.getAttribute('href')).toBe('/lines');
+  });
+
+  /** "Back to Cordoba plant": the testing translator answers the key. */
+  it('names the parent row in the way back of a record under one', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+    const back = one<HTMLAnchorElement>(mounted, 'a.page-back');
+
+    expect(back?.getAttribute('aria-label')).toBe('record.back');
     expect(back?.getAttribute('href')).toBe('/plants/p1/lines');
+  });
+
+  it('writes the line the row has in a column under the heading', async () => {
+    const mounted = await mount('/plants/p1/lines/l1');
+
+    expect(one(mounted, '.page-subtitle')?.textContent).toBe('wet');
+  });
+
+  it('writes no line for a descriptor that states none, or a row with none', async () => {
+    expect(one(await mount('/depots/d1'), '.page-subtitle')).toBeNull();
+
+    server.read = async (id) => ({ ...LINE, id, kind: '' });
+    expect(
+      one(await mount('/plants/p1/lines/l1'), '.page-subtitle')
+    ).toBeNull();
+  });
+
+  it('writes no line on the page that adds a record', async () => {
+    const mounted = await mount('/plants/p1/lines/new');
+
+    expect(one(mounted, '.page-subtitle')).toBeNull();
   });
 
   it('changes: the same name, "Editing", and neither Edit nor More', async () => {
@@ -348,11 +474,113 @@ describe('RecordPage, the header', () => {
   });
 
   /** "Edit" needs the action and a field the form could change. */
+  /** A title of nothing, or of spaces, would leave the header empty. */
+  it.each(['', '   '])(
+    'calls a record whose title is "%s" by its noun',
+    async (name) => {
+      server.read = async (id) => ({ ...LINE, id, name });
+
+      const mounted = await mount('/plants/p1/lines/l1');
+
+      // The testing translator answers the key.
+      expect(mounted.page.title()).toBe('record.unnamed');
+      expect(one(mounted, 'h1')?.textContent).toBe('record.unnamed');
+      expect(mounted.page.leaveArgs().name).toBe('record.unnamed');
+    }
+  );
+
   it('offers no Edit for a resource that cannot be changed', async () => {
     const mounted = await mount('/logs/l1');
 
     expect(one(mounted, 'h1')?.textContent).toBe('Bottling');
     expect(one(mounted, '[data-edit]')).toBeNull();
+  });
+});
+
+describe('RecordPage, as a pane of a split', () => {
+  /** The column beside the pane is the way back. */
+  it('draws no way back beside the column that lists its rows', async () => {
+    const mounted = await mount('/plants/p1/lines/l1', false, true);
+
+    expect(one(mounted, '.page-back')).toBeNull();
+    expect(one(mounted, 'h1')?.textContent).toBe('Bottling');
+  });
+
+  it('draws the way back when the split shows one pane', async () => {
+    const mounted = await mount('/plants/p1/lines/l1', false, false);
+
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+
+  it('draws the way back on a wide screen when no split holds the page', async () => {
+    const mounted = await mount('/lines/l1', false, true);
+
+    expect(one(mounted, 'a.page-back')).not.toBeNull();
+  });
+});
+
+describe('RecordPage, a record under the wrong parent', () => {
+  /** A record is read by its own ID, so the address can name any parent. */
+  it('goes to the address of the parent the row names, and adds no step back', async () => {
+    const mounted = await mount('/plants/p9/lines/l1');
+    const location = TestBed.inject(Location);
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+    expect(one(at(mounted.harness), 'h1')?.textContent).toBe('Bottling');
+    // The wrong address was replaced: one step back leaves the record.
+    location.back();
+    await drawn(mounted.harness);
+    expect(url()).not.toBe('/plants/p9/lines/l1');
+  });
+
+  it('stays where the address and the row name the same parent', async () => {
+    await mount('/plants/p1/lines/l1');
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+  });
+
+  it('stays where the address names no parent, or the row names none', async () => {
+    await mount('/lines/l1');
+    expect(url()).toBe('/lines/l1');
+
+    server.read = async (id) => ({ ...LINE, id, plantId: '' });
+    await mount('/plants/p9/lines/l1');
+    expect(url()).toBe('/plants/p9/lines/l1');
+  });
+});
+
+describe('RecordPage, a page that gives way to its child', () => {
+  const yields = (mounted: Mounted) =>
+    one(mounted, '.head')?.classList.contains('yields');
+
+  it('gives way while a route under the named child is open', async () => {
+    const mounted = await mount('/yards/y1/inside/s1');
+
+    expect(yields(mounted)).toBe(true);
+    // The header is taken away by a rule of the style sheet, below 72 rem
+    // only, so the page is one page at every width.
+    expect(one(mounted, '.head lib-page-header')).not.toBeNull();
+  });
+
+  it('does not give way to the child itself, or to another child', async () => {
+    expect(yields(await mount('/yards/y1/inside'))).toBe(false);
+    expect(yields(await mount('/yards/y1/beside'))).toBe(false);
+  });
+
+  it('follows the address', async () => {
+    const mounted = await mount('/yards/y1/inside');
+
+    await TestBed.inject(Router).navigateByUrl('/yards/y1/inside/s1');
+    await drawn(mounted.harness);
+    expect(yields(mounted)).toBe(true);
+
+    await TestBed.inject(Router).navigateByUrl('/yards/y1/inside');
+    await drawn(mounted.harness);
+    expect(yields(mounted)).toBe(false);
+  });
+
+  it('never gives way on a route that names no child', async () => {
+    expect(yields(await mount('/plants/p1/lines/l1'))).toBe(false);
   });
 });
 
@@ -932,6 +1160,71 @@ describe('RecordPage, a record another screen wrote', () => {
     await press(mounted, 'lib-save-bar [data-cancel]');
     expect(reads).toBe(1);
     expect(one(mounted, 'h1')?.textContent).toBe('Renamed elsewhere');
+  });
+});
+
+describe('RecordPage, the counts no field of the record holds', () => {
+  /**
+   * Asking for them writes a signal and starts a read. Inside a `computed`
+   * that is NG0600, so the page asks once as the record opens.
+   */
+  it('asks once as the record opens, and draws what arrives later', async () => {
+    const mounted = await mount('/depots/d1');
+
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1']);
+    expect(mounted.page.context.countOf(DEPOT_LOGS)).toBe(7);
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+  });
+
+  it('asks again for the next record of the same page', async () => {
+    const mounted = await mount('/depots/d1');
+
+    await TestBed.inject(Router).navigateByUrl('/depots/d2');
+    await drawn(mounted.harness);
+
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1', 'd2']);
+    expect(mounted.page.context.countOf(DEPOT_LOGS)).toBe(7);
+  });
+});
+
+describe('RecordPage, a row written in a list the record holds', () => {
+  it('reads the record again, so a count a field holds is not stale', async () => {
+    const mounted = await mount('/depots/d1');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('lines');
+    await drawn(mounted.harness);
+
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(3);
+    // The counts of another read are asked for when a record opens, and a
+    // reload opens none.
+    expect(TestBed.inject(DepotCounts).asked()).toEqual(['d1']);
+  });
+
+  /** A draft is never thrown away for a count. */
+  it('waits while the record is a form, and catches up afterwards', async () => {
+    const mounted = await mount('/depots/d1');
+    await press(mounted, '[data-edit]');
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('lines');
+    await drawn(mounted.harness);
+    expect(mounted.page.store().mode()).toBe('edit');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
+
+    await press(mounted, 'lib-save-bar [data-cancel]');
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(3);
+  });
+
+  it('does not read again for a resource it holds no list of', async () => {
+    const mounted = await mount('/depots/d1');
+    depotLines = 3;
+
+    TestBed.inject(ResourceChanges).wrote('batches');
+    await drawn(mounted.harness);
+
+    expect(mounted.page.context.countOf(DEPOT_LINES)).toBe(2);
   });
 });
 

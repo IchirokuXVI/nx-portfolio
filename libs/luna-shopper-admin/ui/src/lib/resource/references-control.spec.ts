@@ -5,7 +5,9 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import type {
   ReferenceScope,
   ResourceRow,
+  ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
+import { ScopeMark } from '../page/scope-mark';
 import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
 import { ReferencesControl } from './references-control';
@@ -62,6 +64,7 @@ async function render(
     scope?: ReferenceScope | null;
     ordered?: boolean;
     addKey?: string;
+    marks?: (target: ResourceRow) => ScopeMarkView | undefined;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -83,6 +86,9 @@ async function render(
   }
   if (options.ordered !== undefined) {
     fixture.componentRef.setInput('ordered', options.ordered);
+  }
+  if (options.marks !== undefined) {
+    fixture.componentRef.setInput('marks', options.marks);
   }
   if (options.addKey !== undefined) {
     fixture.componentRef.setInput('addKey', options.addKey);
@@ -376,6 +382,59 @@ class Host {
   ]);
   readonly lookup = lookupOf();
 }
+
+/** Admin plan 0056, section 2: the mark before a target, off its own row. */
+describe('ReferencesControl with a mark for each target', () => {
+  const byKind = (target: ResourceRow): ScopeMarkView | undefined =>
+    target['kind'] === 'STORE'
+      ? { level: 4, label: 'scope.kind.store' }
+      : target['kind'] === 'REGION'
+        ? { level: 2, label: 'scope.kind.region' }
+        : undefined;
+
+  it('draws the mark before the name of each row whose target has one', async () => {
+    const { fixture } = await render(['ps_store', 'ps_region', 'ps_local'], {
+      marks: byKind,
+    });
+    const marks = rows(fixture).map((row) => {
+      const mark = fixture.debugElement
+        .queryAll(By.directive(ScopeMark))
+        .find((found) => row.contains(found.nativeElement));
+      return mark === undefined
+        ? null
+        : (mark.componentInstance as ScopeMark).level();
+    });
+
+    expect(marks).toEqual([4, 2, null]);
+    expect(rows(fixture)[0].firstElementChild?.tagName.toLowerCase()).toBe(
+      'lib-scope-mark'
+    );
+  });
+
+  it('draws no mark until the lookup has read the target', async () => {
+    let answer: (option: ReferenceOption | null) => void = () => undefined;
+    const { fixture } = await render(['ps_store'], {
+      marks: byKind,
+      lookup: lookupOf({
+        resolve: () =>
+          new Promise<ReferenceOption | null>((resolve) => (answer = resolve)),
+      }),
+    });
+
+    expect(fixture.debugElement.query(By.directive(ScopeMark))).toBeNull();
+
+    answer(scopes[0]);
+    await settle(fixture);
+
+    expect(fixture.debugElement.query(By.directive(ScopeMark))).not.toBeNull();
+  });
+
+  it('draws none for a field that states no mark', async () => {
+    const { fixture } = await render(['ps_store', 'ps_region']);
+
+    expect(fixture.debugElement.query(By.directive(ScopeMark))).toBeNull();
+  });
+});
 
 describe('ReferencesControl after a move', () => {
   async function host() {

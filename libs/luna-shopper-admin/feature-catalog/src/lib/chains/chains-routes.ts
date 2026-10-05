@@ -1,24 +1,26 @@
 import type { Route } from '@angular/router';
 import {
-  RESOURCE_DESCRIPTOR,
-  RESOURCE_FORM_MODE,
-  RESOURCE_ID_FROM,
-  resourceCreateRoute,
+  recordRoute,
   resourceFormBranch,
   resourceSplitRoute,
   resourceTabRoute,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
-import { LocationFormPage } from '../location-form-page';
 import { LOCATION_ITEMS } from '../location-items';
 import { LOCATIONS } from '../locations';
 import { PRICE_SCOPES } from '../price-scopes';
 import { SECTIONS } from '../sections';
-import { SupermarketFormPage } from '../supermarket-form-page';
 import { SUPERMARKETS } from '../supermarkets';
-import { CHAIN_PARAM, ChainPage, DETAILS_TAB } from './chain-page';
-import { ChainSectionsTab, ShopSectionsTab } from './section-tabs';
-import { SHOP_PARAM, SHOP_SECTIONS_TAB, ShopPage } from './shop-page';
+
+/**
+ * The route parameter that holds the chain. The descriptors under a chain
+ * name it as the parameter of their parent, and
+ * `catalog-descriptors.spec.ts` holds the two together.
+ */
+const CHAIN_PARAM = 'chainId';
+
+/** The route parameter that holds the shop, for the reason above. */
+const SHOP_PARAM = 'shopId';
 
 /**
  * The five resources the Chains section holds, in the order the registry
@@ -43,7 +45,7 @@ export const CHAIN_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /chains/{chainId}/shops                       tab: the chain's shops
  * /chains/{chainId}/shops/new                   a new shop of the chain
  * /chains/{chainId}/shops/{shopId}              goes to its details
- * /chains/{chainId}/shops/{shopId}/details      tab: the shop's form
+ * /chains/{chainId}/shops/{shopId}/details      tab: the shop, read or changed
  * /chains/{chainId}/shops/{shopId}/sections     tab: the order it walks
  * /chains/{chainId}/shops/{shopId}/products     tab: its products
  * /chains/{chainId}/shops/{shopId}/products/new       a product at the shop
@@ -52,11 +54,22 @@ export const CHAIN_RESOURCES: readonly AnyResourceDescriptor[] = [
  * /chains/{chainId}/sections/new, /{id}         a section's form
  * /chains/{chainId}/scopes                      tab: the chain's price scopes
  * /chains/{chainId}/scopes/new, /{id}           a scope's form
- * /chains/{chainId}/details                     tab: the chain's form
+ * /chains/{chainId}/details                     tab: the chain, read or changed
  * ```
  *
  * Every segment but `details` and the two parameters is a descriptor's own,
  * so the table and the registry cannot disagree about where a resource is.
+ *
+ * ## A chain and a shop are the record page
+ *
+ * Both are `RecordPage` (admin plan 0056), and their tabs are the children
+ * their descriptors name. Three tabs are handed over whole, because each has
+ * routes that belong with it:
+ *
+ * - **The shops of a chain** are a split, and a shop opens inside it.
+ * - **The price scopes of a chain** and **the products of a shop** are lists
+ *   whose rows open and that add rows. The factory mounts by itself only a
+ *   list that reads.
  *
  * ## Why a form is beside the page and not inside it
  *
@@ -78,56 +91,21 @@ export function chainsRoutes(): Route[] {
       listWidth: '13.5rem',
       emptyKey: 'catalog.chains.choose',
       children: [
-        resourceCreateRoute(SUPERMARKETS),
+        recordRoute(SUPERMARKETS, { path: 'new', mode: 'create' }),
         {
           path: `:${CHAIN_PARAM}`,
           children: [
-            {
+            recordRoute(SUPERMARKETS, {
               path: '',
-              component: ChainPage,
-              children: [
-                {
-                  path: '',
-                  pathMatch: 'full',
-                  redirectTo: LOCATIONS.segment,
-                },
-                resourceSplitRoute(LOCATIONS, {
-                  // The 340 px of the mock.
-                  listWidth: '21.25rem',
-                  underHeader: true,
-                  emptyKey: 'catalog.shops.choose',
-                  children: [
-                    resourceCreateRoute(LOCATIONS),
-                    {
-                      path: `:${SHOP_PARAM}`,
-                      children: [
-                        {
-                          path: '',
-                          component: ShopPage,
-                          children: [
-                            {
-                              path: '',
-                              pathMatch: 'full',
-                              redirectTo: DETAILS_TAB,
-                            },
-                            detailsTab(LOCATIONS, LocationFormPage, SHOP_PARAM),
-                            {
-                              path: SHOP_SECTIONS_TAB,
-                              component: ShopSectionsTab,
-                            },
-                            resourceTabRoute(LOCATION_ITEMS),
-                          ],
-                        },
-                        resourceFormBranch(LOCATION_ITEMS),
-                      ],
-                    },
-                  ],
-                }),
-                { path: SECTIONS.segment, component: ChainSectionsTab },
-                resourceTabRoute(PRICE_SCOPES),
-                detailsTab(SUPERMARKETS, SupermarketFormPage, CHAIN_PARAM),
-              ],
-            },
+              idFrom: CHAIN_PARAM,
+              // Below 72 rem an open shop is the page, and the chain draws
+              // no header over it.
+              yieldsTo: LOCATIONS.segment,
+              tabs: {
+                [LOCATIONS.name]: shopsTab(),
+                [PRICE_SCOPES.name]: resourceTabRoute(PRICE_SCOPES),
+              },
+            }),
             resourceFormBranch(SECTIONS),
             resourceFormBranch(PRICE_SCOPES),
           ],
@@ -138,21 +116,30 @@ export function chainsRoutes(): Route[] {
 }
 
 /**
- * The Details tab: the form of the row the page is about, reading its id from
- * the page's own parameter.
+ * The Shops tab of a chain: the shops as a column under the chain's header,
+ * with the shop that is open beside it.
  */
-function detailsTab(
-  descriptor: AnyResourceDescriptor,
-  component: Route['component'],
-  param: string
-): Route {
-  return {
-    path: DETAILS_TAB,
-    component,
-    data: {
-      [RESOURCE_DESCRIPTOR]: descriptor,
-      [RESOURCE_FORM_MODE]: 'edit',
-      [RESOURCE_ID_FROM]: param,
-    },
-  };
+function shopsTab(): Route {
+  return resourceSplitRoute(LOCATIONS, {
+    // The 340 px of the mock.
+    listWidth: '21.25rem',
+    underHeader: true,
+    emptyKey: 'catalog.shops.choose',
+    children: [
+      recordRoute(LOCATIONS, { path: 'new', mode: 'create' }),
+      {
+        path: `:${SHOP_PARAM}`,
+        children: [
+          recordRoute(LOCATIONS, {
+            path: '',
+            idFrom: SHOP_PARAM,
+            tabs: {
+              [LOCATION_ITEMS.name]: resourceTabRoute(LOCATION_ITEMS),
+            },
+          }),
+          resourceFormBranch(LOCATION_ITEMS),
+        ],
+      },
+    ],
+  });
 }

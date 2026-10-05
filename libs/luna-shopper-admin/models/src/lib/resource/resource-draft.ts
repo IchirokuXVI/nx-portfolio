@@ -62,6 +62,8 @@ export function emptyValue<T extends ResourceRow>(
       return emptyLocalizedText(field.locales);
     case 'references':
       return [];
+    case 'enum':
+      return field.initial ?? '';
     default:
       return '';
   }

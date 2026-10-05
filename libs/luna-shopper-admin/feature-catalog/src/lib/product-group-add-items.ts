@@ -9,7 +9,6 @@ import {
   signal,
   type OnDestroy,
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
@@ -19,8 +18,7 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
-  RESOURCE_ID_PARAM,
-  ResourceFormPage,
+  RECORD_CONTEXT,
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
@@ -29,6 +27,7 @@ import {
   REFERENCE_NONE,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { RecordSection } from '@portfolio/luna-shopper-admin/ui';
 import { itemSource, productGroupSource } from './catalog-sources';
 import {
   GroupAssignReview,
@@ -45,13 +44,13 @@ const SEARCH_DELAY_MS = 250;
 const SEARCH_PAGE_SIZE = 25;
 
 /**
- * One product group: the form that edits it, and "Add items" under it (admin
- * plan 0035, section 2).
+ * "Add items" of a product group (admin plan 0035, section 2), as a panel of
+ * the group's record page (admin plan 0055, section 2.3).
  *
- * **The group half is the generic detail view**, embedded as the brand screen
- * embeds it, so editing a group is exactly what it was. The block underneath is
- * what a descriptor cannot say: find products, tick them, and move them into
- * this group through one reviewed request.
+ * It was the block under the form of `ProductGroupDetailPage`, and is that
+ * block as it was. It is what a descriptor cannot say: find products, tick
+ * them, and move them into this group through one reviewed request. It
+ * learns the group from `RECORD_CONTEXT`.
  *
  * The search opens on the products in no group, because those are the ones
  * curation has not reached and the reason somebody opens a group to add to it.
@@ -59,141 +58,129 @@ const SEARCH_PAGE_SIZE = 25;
  * so moving it is a decision made while seeing where it is now.
  */
 @Component({
-  selector: 'lib-product-group-detail-page',
-  imports: [ResourceFormPage, RokuTranslatorPipe, GroupAssignReview],
+  selector: 'lib-group-add-items-panel',
+  imports: [RecordSection, RokuTranslatorPipe, GroupAssignReview],
   template: `
-    <lib-resource-form-page />
-
-    <section
-      [attr.aria-label]="'catalog.productGroups.addItems.heading' | rokuT"
-      class="panel"
-      data-add-items
+    <lib-record-section
+      [heading]="'catalog.productGroups.addItems.heading' | rokuT"
     >
-      <h2>{{ 'catalog.productGroups.addItems.heading' | rokuT }}</h2>
-
-      @if (!adding()) {
-        <button (click)="startAdding()" type="button" data-add-items-open>
-          {{ 'catalog.productGroups.addItems.open' | rokuT }}
-        </button>
-      } @else if (reviewing(); as target) {
-        <lib-group-assign-review
-          (cancelled)="backToPicking()"
-          (closed)="finish($event)"
-          [candidates]="pickedList()"
-          [group]="target"
-        />
-      } @else {
-        <label class="search">
-          <span>{{ 'catalog.productGroups.addItems.search' | rokuT }}</span>
-          <input
-            (input)="onSearch($event)"
-            [value]="query()"
-            autocomplete="off"
-            type="search"
-            data-item-search
+      <div class="panel" data-add-items>
+        @if (!adding()) {
+          <button (click)="startAdding()" type="button" data-add-items-open>
+            {{ 'catalog.productGroups.addItems.open' | rokuT }}
+          </button>
+        } @else if (reviewing(); as target) {
+          <lib-group-assign-review
+            (cancelled)="backToPicking()"
+            (closed)="finish($event)"
+            [candidates]="pickedList()"
+            [group]="target"
           />
-        </label>
-        <p class="muted">
-          {{
-            (query().trim() === ''
-              ? 'catalog.productGroups.addItems.showingUngrouped'
-              : 'catalog.productGroups.addItems.showingMatches'
-            ) | rokuT
-          }}
-        </p>
-
-        @if (searching()) {
-          <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
-        } @else if (searchErrorKey(); as key) {
-          <p class="failure" role="alert">{{ key | rokuT }}</p>
-        } @else if (idNotFound()) {
-          <p class="state" data-id-not-found>
-            {{ 'resource.id.notFound' | rokuT: { thing: oneKey | rokuT } }}
-          </p>
-        } @else if (found().length === 0) {
-          <p class="state">{{ 'resource.list.noMatch' | rokuT }}</p>
         } @else {
-          <ul class="found">
-            @for (candidate of found(); track candidate.id) {
-              <li [class.picked]="isPicked(candidate.id)">
-                <label>
-                  <input
-                    (change)="toggle(candidate)"
-                    [checked]="isPicked(candidate.id)"
-                    [disabled]="candidate.currentGroupId === groupId"
-                    type="checkbox"
-                    data-pick-item
-                  />
-                  <span class="title">{{ candidate.title }}</span>
-                  <span class="muted">
-                    {{
-                      (candidate.currentGroupId === groupId
-                        ? 'catalog.productGroups.addItems.inThisGroup'
-                        : candidate.currentGroupId === null
-                          ? 'catalog.productGroups.addItems.inNoGroup'
-                          : 'catalog.productGroups.addItems.inGroup'
-                      )
-                        | rokuT
-                          : {
-                              group:
-                                candidate.currentGroupName ??
-                                candidate.currentGroupId,
-                            }
-                    }}
-                  </span>
-                </label>
-              </li>
-            }
-          </ul>
-        }
-
-        <div class="controls">
-          <p aria-live="polite" class="count">
+          <label class="search">
+            <span>{{ 'catalog.productGroups.addItems.search' | rokuT }}</span>
+            <input
+              (input)="onSearch($event)"
+              [value]="query()"
+              autocomplete="off"
+              type="search"
+              data-item-search
+            />
+          </label>
+          <p class="muted">
             {{
-              'catalog.productGroups.addItems.selected'
-                | rokuT: { count: pickedList().length }
+              (query().trim() === ''
+                ? 'catalog.productGroups.addItems.showingUngrouped'
+                : 'catalog.productGroups.addItems.showingMatches'
+              ) | rokuT
             }}
           </p>
-          <button
-            (click)="review()"
-            [disabled]="pickedList().length === 0 || target() === null"
-            class="primary"
-            type="button"
-            data-add-review
-          >
-            {{
-              'catalog.productGroups.addItems.review'
-                | rokuT: { count: pickedList().length }
-            }}
-          </button>
-          <button (click)="stopAdding()" type="button" data-add-cancel>
-            {{ 'resource.action.cancel' | rokuT }}
-          </button>
-        </div>
-      }
-    </section>
+
+          @if (searching()) {
+            <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
+          } @else if (searchErrorKey(); as key) {
+            <p class="failure" role="alert">{{ key | rokuT }}</p>
+          } @else if (idNotFound()) {
+            <p class="state" data-id-not-found>
+              {{ 'resource.id.notFound' | rokuT: { thing: oneKey | rokuT } }}
+            </p>
+          } @else if (found().length === 0) {
+            <p class="state">{{ 'resource.list.noMatch' | rokuT }}</p>
+          } @else {
+            <ul class="found">
+              @for (candidate of found(); track candidate.id) {
+                <li [class.picked]="isPicked(candidate.id)">
+                  <label>
+                    <input
+                      (change)="toggle(candidate)"
+                      [checked]="isPicked(candidate.id)"
+                      [disabled]="candidate.currentGroupId === groupId"
+                      type="checkbox"
+                      data-pick-item
+                    />
+                    <span class="title">{{ candidate.title }}</span>
+                    <span class="muted">
+                      {{
+                        (candidate.currentGroupId === groupId
+                          ? 'catalog.productGroups.addItems.inThisGroup'
+                          : candidate.currentGroupId === null
+                            ? 'catalog.productGroups.addItems.inNoGroup'
+                            : 'catalog.productGroups.addItems.inGroup'
+                        )
+                          | rokuT
+                            : {
+                                group:
+                                  candidate.currentGroupName ??
+                                  candidate.currentGroupId,
+                              }
+                      }}
+                    </span>
+                  </label>
+                </li>
+              }
+            </ul>
+          }
+
+          <div class="controls">
+            <p aria-live="polite" class="count">
+              {{
+                'catalog.productGroups.addItems.selected'
+                  | rokuT: { count: pickedList().length }
+              }}
+            </p>
+            <button
+              (click)="review()"
+              [disabled]="pickedList().length === 0 || target() === null"
+              class="primary"
+              type="button"
+              data-add-review
+            >
+              {{
+                'catalog.productGroups.addItems.review'
+                  | rokuT: { count: pickedList().length }
+              }}
+            </button>
+            <button (click)="stopAdding()" type="button" data-add-cancel>
+              {{ 'resource.action.cancel' | rokuT }}
+            </button>
+          </div>
+        }
+      </div>
+    </lib-record-section>
   `,
   styles: `
     :host {
-      display: flex;
-      flex: 1;
-      flex-direction: column;
-      gap: var(--admin-space-6);
+      display: block;
     }
 
+    /* Under the heading of the section, inside its frame. */
     .panel {
       display: flex;
       flex-direction: column;
       gap: var(--admin-space-3);
       align-items: flex-start;
-      max-inline-size: 48rem;
-      padding-block-start: var(--admin-space-4);
+      padding: var(--admin-space-3) var(--admin-space-4) var(--admin-space-4);
       border-block-start: 1px solid var(--admin-border);
-    }
-
-    h2 {
-      font-size: 1.125rem;
-      font-weight: 700;
     }
 
     .muted,
@@ -307,8 +294,7 @@ const SEARCH_PAGE_SIZE = 25;
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ProductGroupDetailPage implements OnDestroy {
-  private readonly _route = inject(ActivatedRoute);
+export class GroupAddItemsPanel implements OnDestroy {
   private readonly _content = inject(ContentLocaleStore);
   private readonly _gateways = inject(RESOURCE_GATEWAYS);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -319,7 +305,8 @@ export class ProductGroupDetailPage implements OnDestroy {
     this._gateways.for<Wire.CatalogProductGroupView>(productGroupSource());
   private readonly _names = new GroupNames(inject(ResourceReferences));
 
-  readonly groupId = this._route.snapshot.paramMap.get(RESOURCE_ID_PARAM) ?? '';
+  /** The group, from the page. The page builds this panel again for another. */
+  readonly groupId = inject(RECORD_CONTEXT).id;
 
   readonly adding = signal(false);
   readonly query = signal('');

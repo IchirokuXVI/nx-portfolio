@@ -3,8 +3,10 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import {
   ActivatedRoute,
@@ -24,16 +26,19 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
+  RECORD_CONTEXT,
   ResourceChanges,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   harvestRunPath,
   localizedTextValue,
+  type InfoContent,
   type ScopeLevel,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
+  InfoButton,
   PopoverSheet,
   ScopeMark,
   Viewport,
@@ -45,15 +50,30 @@ import {
 } from '../catalog-enums';
 import type { ItemScopePrices } from '../catalog-seed';
 import { itemPriceSource, pricePolicySource } from '../catalog-sources';
-import { holdsOwnPrice, ProductContext } from './product-context';
+import { holdsOwnPrice, ProductCounts } from './product-context';
 import {
   formatDay,
   formatPrice,
   formatSeen,
   formatUnitPrice,
 } from './product-format';
-import { PRODUCT_SCOPE_QUERY } from './product-page';
 import { ScopeChoices, scopeLevel, scopeName } from './scope-choices';
+
+/**
+ * The query parameter that names the scope the Prices tab opens with (admin
+ * plan 0043, target 7): the address of one product at one scope.
+ */
+export const PRODUCT_SCOPE_QUERY = 'scope';
+
+/** What the info button says on the Prices tab (admin plan 0043, target 9). */
+const PRODUCT_PRICES_INFO: InfoContent = {
+  title: 'catalog.productPrices.info.title',
+  points: [
+    'catalog.productPrices.info.row',
+    'catalog.productPrices.info.open',
+    'catalog.productPrices.info.held',
+  ],
+};
 
 /** The reasons the gateway gives for the shown price, each with a sentence. */
 const SHOWN_BECAUSE = [
@@ -228,12 +248,16 @@ export interface ChainPanelView {
     ScopeMark,
     PopoverSheet,
     ConfirmDialog,
+    InfoButton,
     ChevronLeftIcon,
     RokuTranslatorPipe,
   ],
   template: `
     <div class="tools">
       <p class="hint">{{ 'catalog.productPrices.hint' | rokuT }}</p>
+      <!-- It was in the header of the page while only this tab had one. The
+           header is the record's now, so the tab holds its own. -->
+      <lib-info-button [info]="info" align="end" />
       <button (click)="add(null)" class="primary" type="button" data-add-price>
         {{ 'catalog.productPrices.add' | rokuT }}
       </button>
@@ -809,8 +833,14 @@ export class ProductPricesTab {
   private readonly _changes = inject(ResourceChanges);
   private readonly _viewport = inject(Viewport);
 
-  readonly product = inject(ProductContext);
+  /**
+   * The price scopes of the product. The service holds the product that is
+   * open, and the record page opened it for the counts beside the tabs.
+   */
+  readonly product = inject(ProductCounts);
   readonly compact = this._viewport.compact;
+
+  readonly info = PRODUCT_PRICES_INFO;
 
   /** The scopes whose prices are open, by id. */
   private readonly _open = signal<ReadonlySet<string>>(this._linkedScope());
@@ -912,8 +942,28 @@ export class ProductPricesTab {
   });
 
   constructor() {
+    // The page opened the product for its counts. A tab that is drawn with no
+    // count read before it opens the product itself.
+    const id = inject(RECORD_CONTEXT).id;
+    if (untracked(this.product.id) !== id) {
+      void this.product.open(id);
+    }
+
     void this._choices.loadChains();
     void this._readPolicies();
+
+    // A price was added by the form under this tab, or removed here: the
+    // scopes and their count are read again.
+    let seen = this._changes.version('prices');
+    effect(() => {
+      const version = this._changes.version('prices');
+      untracked(() => {
+        if (version !== seen) {
+          seen = version;
+          void this.product.reloadPrices();
+        }
+      });
+    });
 
     const events = this._router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
@@ -972,7 +1022,7 @@ export class ProductPricesTab {
     try {
       await this._gateways.for(itemPriceSource()).remove(target.row.id);
       this.removing.set(null);
-      // The page that holds the product follows this and reads the scopes.
+      // The effect above follows this and reads the scopes.
       this._changes.wrote('prices');
     } catch (error) {
       this.removing.set(null);

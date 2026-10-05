@@ -9,6 +9,7 @@ import {
   hasDetailScreen,
   isRecordChildList,
   RECORD_DETAILS_TAB,
+  recordChildKey,
   recordTabs,
   type AnyResourceDescriptor,
   type RecordChild,
@@ -22,6 +23,7 @@ import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RECORD_TAB,
+  RECORD_YIELDS_TO,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
@@ -191,6 +193,17 @@ export function resourceCreateRoute(descriptor: AnyResourceDescriptor): Route {
  * A list tab with neither a route nor a descriptor cannot be mounted, and the
  * factory says so when the route table is built and not when the tab is
  * pressed.
+ *
+ * **A list mounted from `lists` is one that only reads.** The tab has no
+ * routes under it, so a row that opens, or a button that adds, would lead to
+ * an address nothing answers. A list whose rows open, that adds rows, or
+ * whose child names `add`, is refused here: its route comes through `tabs`.
+ *
+ * **Two children that are found by one key cannot share it.** A tab is
+ * found by its key in the address and in `tabs`. A child with no `count`
+ * field is found by its key in `record.counts`. The factory refuses two tabs
+ * with one key, such as two tabs of one resource, and two children that
+ * `counts` would count under one key.
  */
 export function recordRoute(
   descriptor: AnyResourceDescriptor,
@@ -203,6 +216,11 @@ export function recordRoute(
     readonly tabs?: Readonly<Record<string, Route>>;
     /** The descriptor of a list tab that `tabs` does not mount. */
     readonly lists?: ResourceByName;
+    /**
+     * The path of the tab this page gives way to below 72 rem, while a route
+     * under that tab is open (`RECORD_YIELDS_TO`).
+     */
+    readonly yieldsTo?: string;
   }
 ): Route {
   const route: Route = {
@@ -215,8 +233,13 @@ export function recordRoute(
       ...(options.idFrom === undefined
         ? {}
         : { [RESOURCE_ID_FROM]: options.idFrom }),
+      ...(options.yieldsTo === undefined
+        ? {}
+        : { [RECORD_YIELDS_TO]: options.yieldsTo }),
     },
   };
+
+  assertChildKeys(descriptor);
 
   const tabs = options.mode === 'create' ? [] : recordTabs(descriptor);
   if (tabs.length === 0) {
@@ -237,6 +260,43 @@ export function recordRoute(
       ...children,
     ],
   };
+}
+
+/**
+ * Refuse a record where two children that are found by one key share it.
+ *
+ * Two uses of the key, and a clash is within one of them: the tabs, which
+ * the address and `tabs` find by it, and the children with no `count` field
+ * on a record that states `counts`, which finds their count by it. A link or
+ * a panel that takes its count from a field is found by nothing, so any
+ * number of those may be of the same resource.
+ */
+function assertChildKeys(descriptor: AnyResourceDescriptor): void {
+  const block = descriptor.record;
+  const children = (block?.children ?? []) as readonly RecordChild[];
+  const refuse = (found: readonly RecordChild[], what: string): void => {
+    const seen = new Set<string>();
+    for (const key of found.map(recordChildKey)) {
+      if (seen.has(key)) {
+        throw new Error(
+          `Two ${what} of "${descriptor.name}" are known by "${key}", ` +
+            'and each is found by that key alone.'
+        );
+      }
+      seen.add(key);
+    }
+  };
+
+  refuse(
+    children.filter((child) => child.as === 'tab'),
+    'tabs'
+  );
+  if (block?.counts !== undefined) {
+    refuse(
+      children.filter((child) => child.count === undefined),
+      'children counted by `counts`'
+    );
+  }
 }
 
 /** The Details tab: the view of the record, which asks before it is left. */
@@ -281,6 +341,17 @@ function childTabRoute(
       `The tab "${child.resource}" of "${descriptor.name}" has no route. ` +
         'Hand its route to recordRoute through `tabs`, or its descriptor ' +
         'through `lists`.'
+    );
+  }
+  if (
+    child.add !== undefined ||
+    list.actions?.create === true ||
+    hasDetailScreen(list)
+  ) {
+    throw new Error(
+      `The tab "${child.resource}" of "${descriptor.name}" opens or adds ` +
+        'rows, and a tab mounted from `lists` has no route for either. ' +
+        'Hand its route to recordRoute through `tabs`, and mount its forms.'
     );
   }
   const tab = resourceTabRoute(list);
