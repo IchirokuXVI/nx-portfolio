@@ -272,8 +272,7 @@ export class ListLinesPanel {
   run(action: NamedAction<ResourceRow>, line: ListLineRow): void {
     this.actions.start(action, line, {
       args: { name: line.content },
-      // Red only for an action that says it harms, as the record page does.
-      tone: action.danger === true ? 'danger' : 'primary',
+      // The tone is the descriptor's: red only for an action marked `danger`.
       after: () => this._changed(),
     });
   }
@@ -302,12 +301,19 @@ export class ListLinesPanel {
   }
 
   /**
-   * A line moved. The list is read again, because its lines and its count
-   * come with that read, and whoever lists the lists is told.
+   * A line moved, and the lines and their count come with the read of the
+   * list.
+   *
+   * Saying that `lists` was written is what reads the list again: the page
+   * watches the resource it shows, while it reads. A page that is a form
+   * reads nothing again by itself, so the panel asks for that read. The
+   * draft of the form is kept.
    */
   private async _changed(): Promise<void> {
     this._changes.wrote('list-lines');
     this._changes.wrote('lists');
-    await this._record.reload();
+    if (this._record.mode() !== 'read') {
+      await this._record.reload();
+    }
   }
 }

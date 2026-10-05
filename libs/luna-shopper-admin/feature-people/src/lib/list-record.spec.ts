@@ -246,6 +246,40 @@ describe('a list as a form', () => {
     expect(recordPage(fixture).store().mode()).toBe('read');
   });
 
+  /**
+   * The lines are no part of the form. An answer given while the page is a
+   * form still shows in the panel, and the form keeps what was typed.
+   */
+  it('answers a line while the page is a form, and keeps the form', async () => {
+    const fixture = await bootShoppers(address);
+
+    find<HTMLButtonElement>(fixture, '[data-edit]')?.click();
+    await settle(fixture);
+    const [, shared] = findAll<HTMLButtonElement>(
+      fixture,
+      'lib-record-view lib-switch button'
+    );
+    shared.click();
+    await settle(fixture);
+
+    lineRow(fixture, pending?.id ?? '')
+      .querySelector<HTMLButtonElement>('[data-action="approve-line"]')
+      ?.click();
+    await settle(fixture);
+    controlSaying(fixture, 'people.lines.confirm.approve.confirm')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(lineRow(fixture, pending?.id ?? '').classList).not.toContain(
+      'waiting'
+    );
+    expect(recordPage(fixture).store().mode()).toBe('edit');
+    expect(recordPage(fixture).store().bar()).toEqual({
+      kind: 'dirty',
+      changes: 1,
+    });
+  });
+
   /** The old address of the form, which links out in the world still name. */
   it('leads the old address of the form to the list as a form', async () => {
     const fixture = await bootShoppers(`${address}/edit`);
