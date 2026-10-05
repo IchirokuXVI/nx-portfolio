@@ -1,3 +1,5 @@
+> **PR:** [#639](https://github.com/IchirokuXVI/nx-portfolio/pull/639)
+
 # 0054 A record holds its collections
 
 > Third plan of the record page series (`0052` to `0060`). Needs `0053` (the page), merged.
@@ -164,6 +166,16 @@ export const RECORD_CONTEXT: InjectionToken<RecordContext>;
 - A part tab mounts `child.component`.
 - The forms of the rows of a list tab are not children of the record. The caller mounts
   them beside it, as `resourceFormBranch` does today.
+- A list tab that `recordRoute` mounts by itself, from `lists`, is a list that only reads.
+  Nothing mounts forms beside it, so a row that opens or a button that adds would lead to
+  an address with no route. `recordRoute` throws when the route table is built for such a
+  tab whose resource has a detail screen or `actions.create`, or whose child names `add`.
+  The caller hands the route of that tab through `tabs` and mounts its forms.
+- Two children that are found by one key cannot share it. `recordRoute` throws for two
+  tabs with the same key, such as two tabs of one resource. It also throws for two children
+  with no `count` field that have the same key, on a record that states `counts`. Links and
+  panels counted by a field are found by no key, and any number of them may be of one
+  resource.
 - A caller that mounts by hand can hand over the whole route of a tab. `recordRoute` gains
   the option `tabs?: Readonly<Record<string, Route>>`, by the `name` of a part or the
   `resource` of a list. The descriptor still says that the tab exists, what it is called
@@ -253,9 +265,11 @@ Other changes to the descriptor:
   "41 products".
 - `detail` is deleted.
 - One named action is added: `delete-spelling`, with `danger`, `after: 'leave'`, a
-  `confirm` that says the products of the spelling move to the main brand, and
-  `available: (row) => row.canonicalBrandId !== null`. It calls `BrandsGateway.remove`.
-  `actions.delete` stays off, because the gateway deletes no other brand.
+  `confirm` that says the products of the spelling go back to no brand and the spelling
+  returns to Suggested brands, and `available: (row) => row.canonicalBrandId !== null`. It
+  calls `BrandsGateway.remove`. `actions.delete` stays off. The gateway also deletes a main
+  brand that no product holds and no spelling is linked to, and answers 409 `brand_in_use`
+  for any other. This page does not offer that.
 - `afterAdd` is left out, so a new brand opens.
 
 ### 4.2 `BrandSpellingsPanel`

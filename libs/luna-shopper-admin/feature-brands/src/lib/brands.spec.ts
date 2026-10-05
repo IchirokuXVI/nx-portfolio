@@ -1,7 +1,11 @@
+import { TestBed } from '@angular/core/testing';
+import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   isEditable,
+  recordLayout,
   type ReferenceField,
 } from '@portfolio/luna-shopper-admin/models';
+import { BrandSpellingsPanel } from './brand-spellings-panel';
 import { BRANDS } from './brands';
 
 /**
@@ -166,12 +170,109 @@ describe('BRANDS', () => {
   });
 
   /**
-   * A spelling can be deleted and nothing else can, so the list offers no
-   * delete at all: the control is on the detail screen, where the link that
-   * makes it legal is on the page.
+   * A spelling can be deleted and nothing else can, so the resource has no
+   * delete: the one legal case is a named action (admin plan 0054).
    */
-  it('offers create and edit, and no delete on the list', () => {
-    expect(BRANDS.actions).toEqual({ create: true, edit: true });
+  it('offers create and edit, and no delete', () => {
+    expect(BRANDS.actions?.create).toBe(true);
+    expect(BRANDS.actions?.edit).toBe(true);
+    expect(BRANDS.actions?.delete).toBeUndefined();
+    // No page of its own, so the route factory mounts the record page.
+    expect(BRANDS.detail).toBeUndefined();
+    expect(BRANDS.editor).toBeUndefined();
+  });
+
+  /**
+   * The gateway deletes a brand only when it is a spelling of another one, so
+   * the action is offered for a spelling and for nothing else.
+   */
+  it('offers "Delete this spelling" only for a spelling, and leaves afterwards', () => {
+    TestBed.configureTestingModule({
+      imports: [RokuTranslatorTestingModule.forTesting()],
+    });
+    const named = TestBed.runInInjectionContext(
+      () => BRANDS.actions?.named?.() ?? []
+    );
+
+    expect(named.map((action) => action.name)).toEqual(['delete-spelling']);
+    const [action] = named;
+    expect(action.danger).toBe(true);
+    expect(action.after).toBe('leave');
+    expect(action.confirm).toEqual({
+      heading: 'brands.registered.links.delete',
+      body: 'brands.registered.links.deleteBody',
+      confirm: 'brands.registered.links.deleteConfirm',
+    });
+    expect(action.available?.({ canonicalBrandId: 'br_deborah' })).toBe(true);
+    expect(action.available?.({ canonicalBrandId: null })).toBe(false);
+  });
+
+  /** The `record` block of admin plan 0054, section 4.1. */
+  it('lays the record page out in two sections, with the dates in the Record block', () => {
+    const layout = recordLayout(BRANDS, 'read');
+
+    expect(
+      layout.sections.map((section) => [
+        section.title,
+        section.fields.map((field) => field.name),
+      ])
+    ).toEqual([
+      ['brands.section.name', ['label', 'key']],
+      [
+        'brands.section.links',
+        ['canonicalBrandId', 'privateLabelSupermarketId'],
+      ],
+    ]);
+    // `itemCount` is the count of a child, so it is in no section.
+    expect(layout.facts.added?.name).toBe('createdAt');
+    expect(layout.facts.changed?.name).toBe('updatedAt');
+  });
+
+  it('holds its spellings and its sources as panels, and its products as a count', () => {
+    expect(BRANDS.record?.children).toEqual([
+      {
+        as: 'panel',
+        resource: 'brands',
+        by: 'canonicalBrandId',
+        rows: 5,
+        count: 'linkCount',
+        label: 'brands.record.spellings',
+        empty: 'brands.record.noSpellings',
+        add: 'brands.record.addSpelling',
+      },
+      {
+        as: 'panel',
+        name: 'sources',
+        label: 'brands.record.sources',
+        component: BrandSpellingsPanel,
+      },
+      {
+        as: 'link',
+        resource: 'items',
+        by: 'brandId',
+        count: 'itemCount',
+        label: 'brands.record.products',
+      },
+    ]);
+    // A new brand opens, which is what leaving `afterAdd` out means.
+    expect(BRANDS.record?.afterAdd).toBeUndefined();
+  });
+
+  /** The panel of spellings narrows this same list, by a filter it declares. */
+  it('can narrow its own list by the brand a spelling belongs to', () => {
+    expect(
+      (BRANDS.filters ?? []).some(
+        (filter) => filter.param === 'canonicalBrandId'
+      )
+    ).toBe(true);
+    expect(BRANDS.list.brief?.trailing).toBe('itemCount');
+  });
+
+  it('prints the key as a code, and says who sets it', () => {
+    const key = BRANDS.fields.find((field) => field.name === 'key');
+
+    expect(key?.kind === 'text' ? key.format : null).toBe('code');
+    expect(key?.setBy).toBe('brands.field.keySetBy');
   });
 
   it('calls a row by its label', () => {

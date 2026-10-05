@@ -1,6 +1,6 @@
 import { inject } from '@angular/core';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
-import { BrandDetailPage } from './brand-detail-page';
+import { BrandSpellingsPanel } from './brand-spellings-panel';
 import { BrandsGateway, type Brand } from './brands-gateway';
 
 export type { Brand };
@@ -26,13 +26,20 @@ export type { Brand };
  * products move with the link. That is the "Same brand as" field, the column
  * beside it and the filter above.
  *
- * **There is no delete on the list**, and the reason has narrowed rather than
- * gone. A brand with products on it is not a row to remove. A **spelling** of
- * another brand is: its products belong to the brand it spells, so deleting it
- * gives them back to nobody and returns the spelling to the suggestions. The
- * gateway takes only that one, and the control is on the detail screen where the
- * link that makes it legal is on the page. A list control would be a button
- * offered on every row and refused on all but a few.
+ * **This page offers no delete for a brand in general**, and the reason has
+ * narrowed and not gone. A brand with products on it is not a row to remove.
+ * A **spelling** of another brand is: its products belong to the brand it
+ * spells, so deleting it gives them back to no brand and returns the spelling
+ * to the suggestions. The gateway deletes one other brand: a main brand that
+ * no product holds and no spelling is linked to. For any other main brand it
+ * answers 409 `brand_in_use`. This page offers only the first, as a named
+ * action, "Delete this spelling", for a row that is a spelling, and
+ * `actions.delete` stays off (admin plan 0054, section 4.1).
+ *
+ * **The page of a brand is the record page** (admin plan 0054). The `record`
+ * block says what it holds: the brands that are spellings of this one as a
+ * panel, what each chain's source calls it as a panel of its own, and the
+ * count of its products.
  */
 export const BRANDS = defineResource<Brand>({
   name: 'brands',
@@ -69,6 +76,8 @@ export const BRANDS = defineResource<Brand>({
       // A control the server ignores would be worse than none: the operator
       // would type a key, watch the form succeed, and find it unchanged.
       editable: false,
+      format: 'code',
+      setBy: 'brands.field.keySetBy',
     },
     {
       kind: 'reference',
@@ -107,6 +116,13 @@ export const BRANDS = defineResource<Brand>({
     },
     {
       kind: 'date',
+      name: 'createdAt',
+      label: 'brands.registered.field.createdAt',
+      time: true,
+      editable: false,
+    },
+    {
+      kind: 'date',
       name: 'updatedAt',
       label: 'brands.registered.field.updatedAt',
       time: true,
@@ -126,6 +142,9 @@ export const BRANDS = defineResource<Brand>({
     // from the label by eye, and the chain is what the filter above already
     // fixed in the one search where it matters.
     compact: ['label', 'itemCount'],
+    // How much of the catalog is behind one spelling, at the end of its row
+    // in the panel of the brand it spells: "41 products".
+    brief: { trailing: 'itemCount' },
   },
 
   sorts: [
@@ -177,16 +196,81 @@ export const BRANDS = defineResource<Brand>({
     },
   },
 
-  // Create and edit. Deleting a spelling is on the detail screen, because it is
-  // legal for a linked brand alone and the list cannot say which rows those are
-  // without a control refused on most of them.
-  actions: { create: true, edit: true },
+  // Create and edit, and no delete. The gateway deletes a spelling of another
+  // brand, and a main brand that nothing points at (409 `brand_in_use`
+  // otherwise). Only the first is offered here: the named action, which
+  // `available` offers for a spelling and for nothing else.
+  actions: {
+    create: true,
+    edit: true,
+    named: () => {
+      const brands = inject(BrandsGateway);
+      return [
+        {
+          name: 'delete-spelling',
+          label: 'brands.registered.links.delete',
+          danger: true,
+          // The row is gone afterwards, so the page goes to the list.
+          after: 'leave',
+          confirm: {
+            heading: 'brands.registered.links.delete',
+            body: 'brands.registered.links.deleteBody',
+            confirm: 'brands.registered.links.deleteConfirm',
+          },
+          available: (row) => row.canonicalBrandId !== null,
+          run: (row) => brands.remove(row.id),
+        },
+      ];
+    },
+  },
 
-  // The generic form, plus the two blocks the generic form cannot draw.
-  detail: BrandDetailPage,
+  // What the record page draws (admin plan 0054, section 4.1).
+  record: {
+    sections: [
+      { title: 'brands.section.name', fields: ['label', 'key'] },
+      {
+        title: 'brands.section.links',
+        fields: ['canonicalBrandId', 'privateLabelSupermarketId'],
+      },
+    ],
+    children: [
+      // The brands that are spellings of this one: this same list, narrowed
+      // by the column the link is stored in. `linkCount` is on the row, so
+      // the heading says how many without a second read.
+      {
+        as: 'panel',
+        resource: 'brands',
+        by: 'canonicalBrandId',
+        rows: 5,
+        count: 'linkCount',
+        label: 'brands.record.spellings',
+        empty: 'brands.record.noSpellings',
+        add: 'brands.record.addSpelling',
+      },
+      // What each chain's source calls it, which no list of a resource
+      // answers.
+      {
+        as: 'panel',
+        name: 'sources',
+        label: 'brands.record.sources',
+        component: BrandSpellingsPanel,
+      },
+      // A count and not a link, until the products list can be narrowed by
+      // brand (section 5 of the plan). The row becomes a link by itself when
+      // `ITEMS` gains a filter whose parameter is `brandId`.
+      {
+        as: 'link',
+        resource: 'items',
+        by: 'brandId',
+        count: 'itemCount',
+        label: 'brands.record.products',
+      },
+    ],
+    facts: { added: 'createdAt', changed: 'updatedAt' },
+  },
 
-  // What a create linked, or what an edit moved, said once on the list it
-  // returns to.
+  // What a create linked, or what an edit moved, said once on the record the
+  // save leaves the operator on.
   notices: () => inject(BrandsGateway).notices,
 
   gateway: () => inject(BrandsGateway),

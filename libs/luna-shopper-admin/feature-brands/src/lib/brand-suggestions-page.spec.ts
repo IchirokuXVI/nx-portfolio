@@ -51,7 +51,7 @@ import {
 })
 class TestHost {}
 
-/** A chains descriptor, local to this file (see `brand-detail-page.spec.ts`). */
+/** A chains descriptor, local to this file (see `brand-spellings-panel.spec.ts`). */
 const SUPERMARKETS = defineResource<Wire.CatalogSupermarketView>({
   name: 'supermarkets',
   segment: 'supermarkets',

@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import {
   defineResource,
   type AnyResourceDescriptor,
@@ -6,14 +7,16 @@ import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { recordLeaveGuard } from './record-leave-guard';
-import { RecordPage } from './record-page';
+import { RecordDetailsTab, RecordPage } from './record-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
+  RECORD_TAB,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
   RESOURCE_LIST_EMBED,
+  RESOURCE_LIST_FIXED,
   SPLIT_UNDER_HEADER,
 } from './resource-route-data';
 import {
@@ -23,6 +26,7 @@ import {
 } from './resource-split-page';
 import {
   adminRoutes,
+  recordEditRedirect,
   recordRoute,
   resourceCreateRoute,
   resourceFormBranch,
@@ -54,6 +58,15 @@ const items = defineResource<Shop>({
   name: 'items',
   segment: 'items',
   labels: { one: 'items.one', many: 'items.many' },
+});
+
+/** A list that only reads: no row of it opens, and nothing adds one. */
+const logs = defineResource<Shop>({
+  ...shops,
+  name: 'logs',
+  segment: 'logs',
+  labels: { one: 'logs.one', many: 'logs.many' },
+  actions: {},
 });
 
 /** One section with no segment, which mounts its resources at the root. */
@@ -712,5 +725,273 @@ describe('adminRoutes with a section that opens on one of its tabs', () => {
       [];
 
     expect(children.map((route) => route.path)).toEqual(['review', '']);
+  });
+});
+
+/**
+ * The routes of a record that holds tabs (admin plan 0054, section 2.2).
+ *
+ * A tab is a child route, so it has an address and a reload stays on it. The
+ * page reads the address of each tab from the route that carries its key.
+ */
+describe('recordRoute, for a record with tabs', () => {
+  class NotesTab {}
+
+  const withTabs = (
+    children: NonNullable<
+      NonNullable<
+        Parameters<typeof defineResource<Shop>>[0]['record']
+      >['children']
+    >,
+    details?: 'last'
+  ) =>
+    defineResource<Shop>({
+      ...(shops as unknown as Parameters<typeof defineResource<Shop>>[0]),
+      name: 'chains',
+      segment: 'chains',
+      record: { sections: [], children, details },
+    });
+
+  const byName = (name: string) =>
+    [shops, items, logs].find((descriptor) => descriptor.name === name);
+
+  it('is the page alone for a record with no tab', () => {
+    const chains = withTabs([{ as: 'link', resource: 'items', by: 'chainId' }]);
+
+    const route = recordRoute(chains, { path: ':id' });
+
+    expect(route.component).toBe(RecordPage);
+    expect(route.children).toBeUndefined();
+  });
+
+  it('mounts Details, then a part at its name, and opens on the first', () => {
+    const chains = withTabs([
+      { as: 'tab', name: 'notes', label: 'chains.notes', component: NotesTab },
+    ]);
+
+    const route = recordRoute(chains, { path: ':id' });
+    const [first, details, notes] = route.children ?? [];
+
+    expect(route.component).toBe(RecordPage);
+    expect(route.canDeactivate).toEqual([recordLeaveGuard]);
+    expect(first).toEqual({
+      path: '',
+      pathMatch: 'full',
+      redirectTo: 'details',
+    });
+    expect(details).toEqual({
+      path: 'details',
+      component: RecordDetailsTab,
+      canDeactivate: [recordLeaveGuard],
+      data: { [RECORD_TAB]: 'details' },
+    });
+    expect(notes).toEqual({
+      path: 'notes',
+      component: NotesTab,
+      data: { [RECORD_TAB]: 'notes' },
+    });
+  });
+
+  it('puts Details last, and opens on the first tab, when the block says so', () => {
+    const chains = withTabs(
+      [
+        {
+          as: 'tab',
+          name: 'notes',
+          label: 'chains.notes',
+          component: NotesTab,
+        },
+      ],
+      'last'
+    );
+
+    const children = recordRoute(chains, { path: ':id' }).children ?? [];
+
+    expect(children.map((route) => route.path)).toEqual([
+      '',
+      'notes',
+      'details',
+    ]);
+    expect(children[0].redirectTo).toBe('notes');
+  });
+
+  it('mounts a list tab at the segment of its resource, fixed by `by`', () => {
+    const chains = withTabs([{ as: 'tab', resource: 'logs', by: 'chainId' }]);
+
+    const route = recordRoute(chains, { path: ':id', lists: byName });
+    const list = route.children?.[2];
+
+    expect(list).toEqual({
+      path: 'logs',
+      component: ResourceListPage,
+      data: {
+        [RESOURCE_DESCRIPTOR]: logs,
+        [RESOURCE_LIST_EMBED]: 'tab',
+        [RECORD_TAB]: 'logs',
+        [RESOURCE_LIST_FIXED]: 'chainId',
+      },
+    });
+  });
+
+  /**
+   * A tab mounted from `lists` has no routes under it, so a row that opens
+   * or a button that adds would lead to an address nothing answers.
+   */
+  it('refuses to mount by itself a list tab that opens or adds rows', () => {
+    const opens = withTabs([{ as: 'tab', resource: 'items', by: 'chainId' }]);
+    const adds = withTabs([
+      { as: 'tab', resource: 'logs', by: 'chainId', add: 'logs.add' },
+    ]);
+
+    expect(() => recordRoute(opens, { path: ':id', lists: byName })).toThrow(
+      /The tab "items" of "chains" opens or adds rows/
+    );
+    expect(() => recordRoute(adds, { path: ':id', lists: byName })).toThrow(
+      /The tab "logs" of "chains" opens or adds rows/
+    );
+    // The same tab through `tabs` is the caller's to mount, with its forms.
+    expect(() =>
+      recordRoute(opens, {
+        path: ':id',
+        tabs: { items: resourceTabRoute(items) },
+      })
+    ).not.toThrow();
+  });
+
+  it('refuses two tabs that are known by the same key', () => {
+    const chains = withTabs([
+      { as: 'tab', resource: 'logs', by: 'chainId' },
+      { as: 'tab', resource: 'logs', by: 'ownerId' },
+    ]);
+
+    expect(() => recordRoute(chains, { path: ':id', lists: byName })).toThrow(
+      /Two tabs of "chains" are known by "logs"/
+    );
+  });
+
+  it('refuses two children that `counts` would count under one key', () => {
+    const chains = defineResource<Shop>({
+      ...(shops as unknown as Parameters<typeof defineResource<Shop>>[0]),
+      name: 'chains',
+      segment: 'chains',
+      record: {
+        sections: [],
+        children: [
+          { as: 'link', resource: 'logs', by: 'chainId' },
+          { as: 'panel', resource: 'logs', by: 'ownerId' },
+        ],
+        counts: () => () => signal({}),
+      },
+    });
+
+    expect(() => recordRoute(chains, { path: ':id' })).toThrow(
+      /Two children counted by `counts` of "chains" are known by "logs"/
+    );
+  });
+
+  it('allows children of one resource that are found by no key', () => {
+    const children = [
+      { as: 'tab', resource: 'logs', by: 'chainId', count: 'name' },
+      { as: 'link', resource: 'logs', by: 'chainId', count: 'name' },
+      { as: 'panel', resource: 'logs', by: 'ownerId', count: 'name' },
+      // One tab and one child that `counts` counts may share a key: the
+      // address finds the first by it, and `counts` the second.
+      { as: 'link', resource: 'logs', by: 'ownerId' },
+    ] as const;
+    const counted = defineResource<Shop>({
+      ...(shops as unknown as Parameters<typeof defineResource<Shop>>[0]),
+      name: 'chains',
+      segment: 'chains',
+      record: { sections: [], children, counts: () => () => signal({}) },
+    });
+    // With no `counts`, a child with no `count` field is found by nothing.
+    const uncounted = withTabs([
+      { as: 'link', resource: 'logs', by: 'chainId' },
+      { as: 'link', resource: 'logs', by: 'ownerId' },
+    ]);
+
+    expect(() =>
+      recordRoute(counted, { path: ':id', lists: byName })
+    ).not.toThrow();
+    expect(() => recordRoute(uncounted, { path: ':id' })).not.toThrow();
+  });
+
+  it('takes the whole route of a tab from the caller, and marks it', () => {
+    const chains = withTabs([
+      { as: 'tab', resource: 'items', by: 'chainId' },
+      { as: 'tab', name: 'notes', label: 'chains.notes', component: NotesTab },
+    ]);
+    class PricesTab {}
+    class PriceForm {}
+
+    const route = recordRoute(chains, {
+      path: ':id',
+      tabs: {
+        items: resourceSplitRoute(items, { children: [], listWidth: '20rem' }),
+        notes: {
+          path: 'prices',
+          component: PricesTab,
+          children: [{ path: ':scope', component: PriceForm }],
+        },
+      },
+    });
+    const [, , split, notes] = route.children ?? [];
+
+    expect(split.component).toBe(ResourceSplitPage);
+    expect(split.data?.[RECORD_TAB]).toBe('items');
+    expect(split.data?.[RESOURCE_LIST_FIXED]).toBe('chainId');
+    expect(split.data?.[RESOURCE_LIST_EMBED]).toBe('column');
+    // The route says how the tab is mounted, down to its own path.
+    expect(notes.path).toBe('prices');
+    expect(notes.component).toBe(PricesTab);
+    expect(notes.children).toHaveLength(1);
+    expect(notes.data).toEqual({ [RECORD_TAB]: 'notes' });
+  });
+
+  it('says so at once when a list tab has neither a route nor a descriptor', () => {
+    const chains = withTabs([{ as: 'tab', resource: 'items', by: 'chainId' }]);
+
+    expect(() => recordRoute(chains, { path: ':id' })).toThrow(
+      /The tab "items" of "chains" has no route/
+    );
+  });
+
+  it('gives the page that adds a record no tabs', () => {
+    const chains = withTabs([
+      { as: 'tab', name: 'notes', label: 'chains.notes', component: NotesTab },
+    ]);
+
+    const route = recordRoute(chains, { path: 'new', mode: 'create' });
+
+    expect(route.children).toBeUndefined();
+  });
+
+  it('finds the list of a tab among every resource the app names', () => {
+    const chains = withTabs([{ as: 'tab', resource: 'logs', by: 'chainId' }]);
+
+    const [shell] = adminRoutes([
+      { key: 'a', label: 'a', segment: 'a', resources: [chains] },
+      { key: 'b', label: 'b', segment: 'b', held: [logs] },
+    ]);
+    const record = shell.children
+      ?.find((route) => route.path === 'a')
+      ?.children?.find((route) => route.path === 'chains')
+      ?.children?.find((route) => route.path === ':id');
+
+    expect(record?.children?.map((route) => route.path)).toEqual([
+      '',
+      'details',
+      'logs',
+    ]);
+  });
+});
+
+describe('recordEditRedirect', () => {
+  it('is a route at `:id/edit` that draws nothing of its own', () => {
+    const route = recordEditRedirect();
+
+    expect(route.path).toBe(':id/edit');
+    expect(route.component).toBeUndefined();
+    expect(route.canActivate).toHaveLength(1);
   });
 });

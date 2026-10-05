@@ -1,21 +1,33 @@
-import type { Type } from '@angular/core';
-import type { Route } from '@angular/router';
+import { inject, type Type } from '@angular/core';
+import {
+  PRIMARY_OUTLET,
+  Router,
+  type CanActivateFn,
+  type Route,
+} from '@angular/router';
 import {
   hasDetailScreen,
+  isRecordChildList,
+  RECORD_DETAILS_TAB,
+  recordChildKey,
+  recordTabs,
   type AnyResourceDescriptor,
+  type RecordChild,
 } from '@portfolio/luna-shopper-admin/models';
 import { NotFoundPage } from '@portfolio/luna-shopper-admin/ui';
 import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { recordLeaveGuard } from './record-leave-guard';
-import { RecordPage } from './record-page';
+import { RECORD_EDIT_PARAM, RecordDetailsTab, RecordPage } from './record-page';
 import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
+  RECORD_TAB,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
   RESOURCE_LIST_EMBED,
+  RESOURCE_LIST_FIXED,
   SPLIT_UNDER_HEADER,
 } from './resource-route-data';
 import {
@@ -23,6 +35,16 @@ import {
   SPLIT_EMPTY_KEY,
   SPLIT_LIST_WIDTH,
 } from './resource-split-page';
+
+/**
+ * How the route factory finds the descriptor of a list tab by its name.
+ *
+ * A record names the resource of a list tab and holds no descriptor of it,
+ * and a route table is built before there is a registry to ask.
+ */
+export type ResourceByName = (
+  name: string
+) => AnyResourceDescriptor | undefined;
 
 /**
  * The three routes every resource has.
@@ -44,6 +66,18 @@ import {
  * called "new".
  */
 export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
+  return routesOf(descriptor);
+}
+
+/**
+ * {@link resourceRoutes}, for a caller that knows the other resources. It is
+ * a function of its own because `resourceRoutes` is handed to `flatMap`,
+ * which would pass an index where the resolver goes.
+ */
+function routesOf(
+  descriptor: AnyResourceDescriptor,
+  lists?: ResourceByName
+): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
 
   return [
@@ -51,7 +85,7 @@ export function resourceRoutes(descriptor: AnyResourceDescriptor): Route[] {
       path: descriptor.segment,
       children: [
         { path: '', component: ResourceListPage, data },
-        ...resourceFormRoutes(descriptor),
+        ...resourceFormRoutes(descriptor, lists),
       ],
     },
   ];
@@ -140,6 +174,35 @@ export function resourceCreateRoute(descriptor: AnyResourceDescriptor): Route {
  * `mode: 'create'` is the page that adds a record. Without it the page opens
  * the record whose ID the route holds, and reads it first. Every route built
  * here carries the leave guard, so a caller cannot mount the page without it.
+ *
+ * **A record whose block names a tab gets child routes** (admin plan 0054,
+ * section 2.2): `details` for the view of the record, one for each tab in
+ * the order of `children`, and an empty path that goes to the first of them.
+ * A record with no tab is the page alone, as before. The page that adds a
+ * record never has tabs, because a record that does not exist holds nothing.
+ *
+ * - A part is mounted at its `name`, as its `component`.
+ * - A list is mounted at the segment of its resource, as that resource's
+ *   list, fixed to the record. Its descriptor comes from `lists`.
+ * - `tabs` hands over the whole route of a tab, by the `name` of a part or
+ *   the `resource` of a list, for a tab with routes of its own under it. The
+ *   descriptor still says that the tab exists, what it is called and where
+ *   its count is. The route says how it is mounted.
+ *
+ * A list tab with neither a route nor a descriptor cannot be mounted, and the
+ * factory says so when the route table is built and not when the tab is
+ * pressed.
+ *
+ * **A list mounted from `lists` is one that only reads.** The tab has no
+ * routes under it, so a row that opens, or a button that adds, would lead to
+ * an address nothing answers. A list whose rows open, that adds rows, or
+ * whose child names `add`, is refused here: its route comes through `tabs`.
+ *
+ * **Two children that are found by one key cannot share it.** A tab is
+ * found by its key in the address and in `tabs`. A child with no `count`
+ * field is found by its key in `record.counts`. The factory refuses two tabs
+ * with one key, such as two tabs of one resource, and two children that
+ * `counts` would count under one key.
  */
 export function recordRoute(
   descriptor: AnyResourceDescriptor,
@@ -148,9 +211,13 @@ export function recordRoute(
     readonly mode?: 'create';
     /** The route parameter that holds the ID, when it is on a route above. */
     readonly idFrom?: string;
+    /** The whole route of a tab, by the key of its child. */
+    readonly tabs?: Readonly<Record<string, Route>>;
+    /** The descriptor of a list tab that `tabs` does not mount. */
+    readonly lists?: ResourceByName;
   }
 ): Route {
-  return {
+  const route: Route = {
     path: options.path,
     component: RecordPage,
     canDeactivate: [recordLeaveGuard],
@@ -162,9 +229,158 @@ export function recordRoute(
         : { [RESOURCE_ID_FROM]: options.idFrom }),
     },
   };
+
+  assertChildKeys(descriptor);
+
+  const tabs = options.mode === 'create' ? [] : recordTabs(descriptor);
+  if (tabs.length === 0) {
+    return route;
+  }
+
+  const children = tabs.map((tab) =>
+    tab.child === null
+      ? detailsTabRoute()
+      : childTabRoute(descriptor, tab.child, tab.key, options)
+  );
+
+  return {
+    ...route,
+    children: [
+      // A record opens on its first tab.
+      { path: '', pathMatch: 'full', redirectTo: children[0].path },
+      ...children,
+    ],
+  };
 }
 
-function resourceFormRoutes(descriptor: AnyResourceDescriptor): Route[] {
+/**
+ * Refuse a record where two children that are found by one key share it.
+ *
+ * Two uses of the key, and a clash is within one of them: the tabs, which
+ * the address and `tabs` find by it, and the children with no `count` field
+ * on a record that states `counts`, which finds their count by it. A link or
+ * a panel that takes its count from a field is found by nothing, so any
+ * number of those may be of the same resource.
+ */
+function assertChildKeys(descriptor: AnyResourceDescriptor): void {
+  const block = descriptor.record;
+  const children = (block?.children ?? []) as readonly RecordChild[];
+  const refuse = (found: readonly RecordChild[], what: string): void => {
+    const seen = new Set<string>();
+    for (const key of found.map(recordChildKey)) {
+      if (seen.has(key)) {
+        throw new Error(
+          `Two ${what} of "${descriptor.name}" are known by "${key}", ` +
+            'and each is found by that key alone.'
+        );
+      }
+      seen.add(key);
+    }
+  };
+
+  refuse(
+    children.filter((child) => child.as === 'tab'),
+    'tabs'
+  );
+  if (block?.counts !== undefined) {
+    refuse(
+      children.filter((child) => child.count === undefined),
+      'children counted by `counts`'
+    );
+  }
+}
+
+/** The Details tab: the view of the record, which asks before it is left. */
+function detailsTabRoute(): Route {
+  return {
+    path: RECORD_DETAILS_TAB,
+    component: RecordDetailsTab,
+    canDeactivate: [recordLeaveGuard],
+    data: { [RECORD_TAB]: RECORD_DETAILS_TAB },
+  };
+}
+
+/** The route of one tab that is not Details, marked with its key. */
+function childTabRoute(
+  descriptor: AnyResourceDescriptor,
+  child: RecordChild,
+  key: string,
+  options: {
+    readonly tabs?: Readonly<Record<string, Route>>;
+    readonly lists?: ResourceByName;
+  }
+): Route {
+  // What the list is fixed by rides every list tab, also one a caller
+  // mounted: the route says which filter, and the page says which record.
+  const marks = {
+    [RECORD_TAB]: key,
+    ...(isRecordChildList(child) ? { [RESOURCE_LIST_FIXED]: child.by } : {}),
+  };
+
+  const handed = options.tabs?.[key];
+  if (handed !== undefined) {
+    return { ...handed, data: { ...handed.data, ...marks } };
+  }
+
+  if (!isRecordChildList(child)) {
+    return { path: child.name, component: child.component, data: marks };
+  }
+
+  const list = options.lists?.(child.resource);
+  if (list === undefined) {
+    throw new Error(
+      `The tab "${child.resource}" of "${descriptor.name}" has no route. ` +
+        'Hand its route to recordRoute through `tabs`, or its descriptor ' +
+        'through `lists`.'
+    );
+  }
+  if (
+    child.add !== undefined ||
+    list.actions?.create === true ||
+    hasDetailScreen(list)
+  ) {
+    throw new Error(
+      `The tab "${child.resource}" of "${descriptor.name}" opens or adds ` +
+        'rows, and a tab mounted from `lists` has no route for either. ' +
+        'Hand its route to recordRoute through `tabs`, and mount its forms.'
+    );
+  }
+  const tab = resourceTabRoute(list);
+  return { ...tab, data: { ...tab.data, ...marks } };
+}
+
+/**
+ * The old address of the form of a record, `…/:id/edit`, as a redirect to
+ * the record with its form open (admin plan 0054, section 4.3).
+ *
+ * A guard and not `redirectTo`: a relative redirect keeps the query of the
+ * address it came from and cannot add to it, and the mount of the resource is
+ * not known here for an absolute one.
+ *
+ * The route factory adds none by itself. Only a resource that had a form at
+ * that address has links to it out in the world, so the caller that moved
+ * the resource onto the record page mounts this beside it.
+ */
+export function recordEditRedirect(path = ':id/edit'): Route {
+  return { path, canActivate: [toRecordForm], children: [] };
+}
+
+/** One segment up, with the parameter that opens the form. */
+const toRecordForm: CanActivateFn = (_route, state) => {
+  const router = inject(Router);
+  const tree = router.parseUrl(state.url);
+  const segments = tree.root.children[PRIMARY_OUTLET]?.segments ?? [];
+
+  return router.createUrlTree(
+    ['/', ...segments.slice(0, -1).map((segment) => segment.path)],
+    { queryParams: { ...tree.queryParams, [RECORD_EDIT_PARAM]: '1' } }
+  );
+};
+
+function resourceFormRoutes(
+  descriptor: AnyResourceDescriptor,
+  lists?: ResourceByName
+): Route[] {
   const data = { [RESOURCE_DESCRIPTOR]: descriptor };
 
   // A resource with no page of its own opens on the record page: one page
@@ -178,7 +394,7 @@ function resourceFormRoutes(descriptor: AnyResourceDescriptor): Route[] {
         ? [recordRoute(descriptor, { path: 'new', mode: 'create' })]
         : []),
       ...(hasDetailScreen(descriptor)
-        ? [recordRoute(descriptor, { path: ':id' })]
+        ? [recordRoute(descriptor, { path: ':id', lists })]
         : []),
     ];
   }
@@ -280,6 +496,15 @@ export function adminRoutes(
   sections: readonly AdminSection[],
   home?: Type<unknown>
 ): Route[] {
+  // Every resource the app names, for a record whose tab is the list of
+  // another one. The registry reads the same sections once the app runs.
+  const named = sections.flatMap((section) => [
+    ...(section.resources ?? []),
+    ...(section.held ?? []),
+  ]);
+  const lists: ResourceByName = (name) =>
+    named.find((descriptor) => descriptor.name === name);
+
   return [
     {
       path: '',
@@ -298,7 +523,7 @@ export function adminRoutes(
         // of them activated. Declared after the branches, a redirect here would
         // never be reached by an app whose first section has no segment.
         ...emptyPath(sections, home),
-        ...sections.map(sectionBranch),
+        ...sections.map((section) => sectionBranch(section, lists)),
         { path: '**', component: NotFoundPage },
       ],
     },
@@ -318,11 +543,13 @@ export function adminRoutes(
  * matches only the branch's own URL, so the order cannot be wrong; reading the
  * branch in the order an operator meets it is what makes the file answerable.
  */
-function sectionBranch(section: AdminSection): Route {
+function sectionBranch(section: AdminSection, lists: ResourceByName): Route {
   return {
     path: section.segment ?? '',
     children: [
-      ...(section.resources ?? []).flatMap(resourceRoutes),
+      ...(section.resources ?? []).flatMap((descriptor) =>
+        routesOf(descriptor, lists)
+      ),
       ...(section.screens ?? []),
       ...(section.home === undefined
         ? []
