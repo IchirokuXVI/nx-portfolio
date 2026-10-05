@@ -21,6 +21,9 @@ const TOKENS = readFileSync(join(__dirname, '_tokens.scss'), 'utf8');
 /** The smallest ratio that counts as readable, for text at these sizes. */
 const READABLE = 4.5;
 
+/** The smallest ratio for something that is not text: the edge of a control. */
+const OUTLINE = 3;
+
 /** What plan 0041 asks of an entry at rest on its rail. */
 const NAVIGATION = 6.5;
 
@@ -250,6 +253,45 @@ describe('an ink is readable on what it is drawn on', () => {
    */
   it('has retired the attention pair', () => {
     expect(TOKENS).not.toContain('--admin-status-attention');
+  });
+
+  /**
+   * The outline of a control (admin plan 0052, section 4). It is not text, so
+   * its bar is 3 to 1, and it is measured against the raised surface because
+   * that is what every control is filled with: the edge always has that fill
+   * on its inner side, wherever the control stands.
+   *
+   * It was `#c3c8c0`, which is 1.66 to 1 there: a field read as a pale box.
+   */
+  it('draws the outline of a control at 3 to 1 on the fill of a control', () => {
+    const outline = contrast(
+      token('--admin-border-strong'),
+      token('--admin-surface-raised')
+    );
+
+    expect(outline).toBe(3.03);
+    expect(outline).toBeGreaterThanOrEqual(OUTLINE);
+  });
+
+  /**
+   * The same outline against the ground of the page, which is the outer side
+   * of a control in a filter bar. Measured so that a change to either token
+   * shows here. It is under 3 to 1 by itself, and the fill inside the edge is
+   * what carries the control there.
+   */
+  it('measures the outline of a control against the ground', () => {
+    expect(
+      contrast(token('--admin-border-strong'), token('--admin-surface'))
+    ).toBe(2.82);
+  });
+
+  /** A line between rows and the edge of a panel stay light: they are not controls. */
+  it('keeps the line of a panel lighter than the outline of a control', () => {
+    expect(
+      contrast(token('--admin-border'), token('--admin-surface-raised'))
+    ).toBeLessThan(
+      contrast(token('--admin-border-strong'), token('--admin-surface-raised'))
+    );
   });
 
   /**

@@ -70,9 +70,11 @@ describe('ResourceForm', () => {
   it('draws a control for every editable field', async () => {
     const fixture = await render();
 
-    // Two locale boxes for the name, one for the website, one checkbox.
+    // Two locale boxes for the name, one for the website, and one switch for
+    // the yes or no (a check box until admin plan 0052).
     expect(query(fixture, 'input[type="text"]')).toHaveLength(3);
-    expect(query(fixture, 'input[type="checkbox"]')).toHaveLength(1);
+    expect(query(fixture, 'input[type="checkbox"]')).toHaveLength(0);
+    expect(query(fixture, 'button[role="switch"]')).toHaveLength(1);
   });
 
   /**

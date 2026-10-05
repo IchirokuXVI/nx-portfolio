@@ -391,7 +391,11 @@ function validateField<T extends ResourceRow>(
           fieldMessage('resource.error.tooLong', { max: field.maxLength })
         );
       }
-      if (field.format === 'url' && !isUrl(text)) {
+      // The address of a picture is an address, and is checked as one.
+      if (
+        (field.format === 'url' || field.format === 'image') &&
+        !isUrl(text)
+      ) {
         messages.push(fieldMessage('resource.error.notAUrl'));
       }
       break;

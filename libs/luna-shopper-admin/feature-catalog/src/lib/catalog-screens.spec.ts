@@ -421,7 +421,8 @@ describe('the shop price scopes', () => {
 
   /**
    * The list is a column of addresses now, so the scopes are named where the
-   * shop is open: on its Details tab, as the chips of the field.
+   * shop is open: on its Details tab, as the rows of the field (chips until admin plan
+   * 0052).
    */
   it('names the shop’s scopes on its Details tab', async () => {
     const fixture = await boot(`${CENTRO}/details`);
@@ -441,7 +442,7 @@ describe('the shop price scopes', () => {
 
     const control = fixture.debugElement.query(By.directive(ReferencesControl));
     const chips = [
-      ...control.nativeElement.querySelectorAll('li.chip'),
+      ...control.nativeElement.querySelectorAll('li.row'),
     ] as HTMLElement[];
     expect(chips).toHaveLength(2);
 

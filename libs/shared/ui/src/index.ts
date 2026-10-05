@@ -27,3 +27,6 @@ export * from './lib/menu-icon/menu-icon';
 export * from './lib/chevron-left-icon/chevron-left-icon';
 export * from './lib/more-icon/more-icon';
 export * from './lib/warning-icon/warning-icon';
+export * from './lib/lock-icon/lock-icon';
+export * from './lib/check-icon/check-icon';
+export * from './lib/close-icon/close-icon';

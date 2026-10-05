@@ -109,12 +109,14 @@ export {
   type LocalizedText,
 } from './lib/resource/localized-text';
 export { formatCurrencyAmount, parseMoney } from './lib/resource/money';
+export { type SaveBarState } from './lib/resource/record-block';
 export {
   recordIdFor,
   recordIdIn,
   rowWithin,
   searchedRecordId,
 } from './lib/resource/record-id';
+export { type RecordValue } from './lib/resource/record-value';
 export { REFERENCE_NONE, isReferenceNone } from './lib/resource/reference-none';
 export {
   defineResource,

@@ -136,14 +136,18 @@
       "noResults": "Nothing matched.",
       "resolving": "Looking it up…",
       "missing": "This points at {{id}}, which no longer exists.",
-      "none": "None"
+      "none": "None",
+      "search": "Search"
     },
     "references": {
       "empty": "None yet.",
       "remove": "Remove {{name}}",
-      "removeShort": "Remove",
       "locked": "Always kept. This one cannot be removed.",
-      "needsScope": "Fill in the fields above before you add any."
+      "needsScope": "Fill in the fields above before you add any.",
+      "add": "Add another",
+      "main": "Main",
+      "moveUp": "Move {{name}} up",
+      "moveDown": "Move {{name}} down"
     },
     "form": {
       "create": "New {{name}}",
@@ -2250,5 +2254,50 @@
       "signUpsTitle_other": "Sign ups each day, last {{count}} days"
     },
     "partOf": "{{part}} of {{whole}}"
+  },
+  "record": {
+    "section": {
+      "details": "Details",
+      "other": "Other"
+    },
+    "facts": {
+      "added": "Added",
+      "changed": "Last changed"
+    },
+    "row": {
+      "changed": "Changed",
+      "loading": "Loading…"
+    },
+    "value": {
+      "notWritten": "Not written yet",
+      "gone": "This points at a record that is gone"
+    },
+    "language": {
+      "en": "English",
+      "es": "Spanish"
+    },
+    "localized": {
+      "in": "{{label}} in {{language}}"
+    },
+    "collection": {
+      "seeAll": "See all",
+      "seeAllCount": "See all {{count}}",
+      "none": "None yet",
+      "failed": "This list could not be read.",
+      "loading": "Loading…"
+    },
+    "save": {
+      "clean": "No changes yet",
+      "dirty_one": "{{count}} unsaved change",
+      "dirty_other": "{{count}} unsaved changes",
+      "missing_one": "* Required. {{count}} required field is still empty.",
+      "missing_other": "* Required. {{count}} required fields are still empty.",
+      "invalid_one": "Not saved. {{count}} field needs a look.",
+      "invalid_other": "Not saved. {{count}} fields need a look.",
+      "refused": "Not saved. Your changes are still here.",
+      "goToFirst": "Go to the first",
+      "saveCount_one": "Save {{count}} change",
+      "saveCount_other": "Save {{count}} changes"
+    }
   }
 }
