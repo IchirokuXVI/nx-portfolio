@@ -22,16 +22,21 @@ export const LIST_PARAM = 'listId';
 /** The route parameter that holds the shopping list. */
 export const BASKET_PARAM = 'basketId';
 
-/**
- * The segment of the Details tab, of a person and of a zone alike: the one tab
- * that is no resource of its own.
- */
-export const DETAILS_TAB = 'details';
-
 /** The segment of a person's Zones tab. */
 export const PERSON_ZONES_TAB = 'zones';
 
-/** The segment of the form that changes the row a page is about. */
+/**
+ * The segment of a zone's Members tab. The members of a zone are a resource,
+ * and its descriptor takes its segment from here, so the tab and the address
+ * of one member cannot disagree.
+ */
+export const ZONE_MEMBERS_TAB = 'members';
+
+/**
+ * The segment of the form that changes the row a page is about. For a list it
+ * is still a form of its own. For a person and a zone it is an old address
+ * that leads to the record with its form open (admin plan 0057).
+ */
 export const EDIT_SEGMENT = 'edit';
 
 /**
