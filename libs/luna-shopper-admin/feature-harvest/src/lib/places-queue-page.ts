@@ -201,8 +201,9 @@ const CATALOG_SHOPS_READ = 100;
             <lib-reference-picker
               (valueChange)="chooseChain($event)"
               [controlId]="'places-chain'"
+              [empty]="'none'"
+              [label]="'harvest.places.supermarketId' | rokuT"
               [lookup]="references"
-              [nullable]="true"
               [resource]="'supermarkets'"
               [value]="supermarketId()"
             />
@@ -231,8 +232,9 @@ const CATALOG_SHOPS_READ = 100;
             <lib-reference-picker
               (valueChange)="priceScopeId.set($event)"
               [controlId]="'places-scope'"
+              [empty]="'none'"
+              [label]="'harvest.places.scope.heading' | rokuT"
               [lookup]="references"
-              [nullable]="true"
               [resource]="'price-scopes'"
               [scope]="scopeOfChain()"
               [value]="priceScopeId()"

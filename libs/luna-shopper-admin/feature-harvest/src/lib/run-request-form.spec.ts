@@ -209,8 +209,8 @@ async function chooseChainByName(
   fixture.detectChanges();
 
   const option = Array.from(
-    picker.querySelectorAll<HTMLButtonElement>('ul button')
-  ).find((button) => button.textContent?.trim() === title);
+    picker.querySelectorAll<HTMLElement>('[role="option"]')
+  ).find((row) => row.textContent?.trim() === title);
   option!.click();
 
   await drain();

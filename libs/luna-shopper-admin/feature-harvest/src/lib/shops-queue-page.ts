@@ -299,6 +299,7 @@ type StatusFilter = Wire.EnumsSourceLocationStatus | '';
               <lib-reference-picker
                 (valueChange)="pickLocation($event)"
                 [controlId]="'shops-location-' + row.id"
+                [label]="'harvest.shops.map.pick' | rokuT"
                 [lookup]="references"
                 [resource]="'locations'"
                 [scope]="locationScope()"

@@ -417,7 +417,9 @@ const SEARCH_DELAY_MS = 250;
                 @for (chain of row.chains; track chain.supermarketId) {
                   <li>
                     <a
-                      [queryParams]="entriesParams(chain.supermarketId, row.key)"
+                      [queryParams]="
+                        entriesParams(chain.supermarketId, row.key)
+                      "
                       [routerLink]="entriesLink"
                       class="chip"
                     >
@@ -669,8 +671,9 @@ const SEARCH_DELAY_MS = 250;
           <lib-reference-picker
             (valueChange)="chainId.set($event)"
             [controlId]="'suggestion-chain'"
+            [empty]="'none'"
+            [label]="'brands.suggested.register.privateLabel' | rokuT"
             [lookup]="references"
-            [nullable]="true"
             [resource]="'supermarkets'"
             [value]="chainId()"
           />

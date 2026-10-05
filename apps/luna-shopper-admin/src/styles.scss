@@ -74,6 +74,27 @@ textarea {
   font-size: var(--admin-field-size);
 }
 
+// The arrow of a select (admin plan 0050).
+//
+// The arrow a browser draws sits at the edge of the box and ignores the padding,
+// so it is switched off and drawn here, `--admin-space-3` in from the right edge.
+// The text stops before it. A typeahead puts its own arrow at the same distance
+// (`ReferencePicker`), with the same chevron: the path below is
+// `chevron-left-icon.svg` of the shared icons turned a quarter, in
+// `--admin-ink-muted`. A data URI cannot read a custom property, so the colour
+// is written out, and `select-arrow.spec.ts` fails when either drifts.
+select {
+  appearance: none;
+  padding-inline-end: calc(
+    var(--admin-space-3) + var(--admin-caret) + var(--admin-space-2)
+  );
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23555c63' transform='rotate(-90 12 12)' d='M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-position: right var(--admin-space-3) center;
+  background-size: var(--admin-caret) var(--admin-caret);
+}
+
 // A link is pine, like everything else that takes the operator somewhere. A
 // screen that drew no link style of its own used to show the browser's blue.
 a {

@@ -131,8 +131,8 @@ function numberOrNull(value: unknown): number | null {
       <lib-reference-picker
         (valueChange)="narrow($event)"
         [controlId]="'run-prices-item'"
+        [empty]="'any'"
         [lookup]="references"
-        [nullable]="true"
         [resource]="'items'"
         [value]="itemId()"
       />

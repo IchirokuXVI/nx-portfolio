@@ -211,6 +211,16 @@ export type FilterDescriptor =
        * route has to accept the literal before the screen may send it.
        */
       readonly nullable?: boolean;
+      /**
+       * Whether the list starts with "Any", the choice that clears the filter
+       * (admin plan 0050, section 2).
+       *
+       * True when left out. It is not {@link nullable}: "Any" takes the filter
+       * away and every row comes back, and "none" keeps the filter and asks
+       * for the rows that point at nothing. `false` is for a filter a screen
+       * cannot be read without.
+       */
+      readonly emptyOption?: boolean;
     };
 
 /**

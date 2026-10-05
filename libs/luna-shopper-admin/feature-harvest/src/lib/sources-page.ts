@@ -145,6 +145,7 @@ function configTextOf(
             <lib-reference-picker
               (valueChange)="newChainId.set($event)"
               [controlId]="'source-chain'"
+              [label]="'harvest.sources.field.chain' | rokuT"
               [lookup]="references"
               [resource]="'supermarkets'"
               [value]="newChainId()"

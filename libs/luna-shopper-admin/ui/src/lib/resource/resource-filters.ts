@@ -10,7 +10,7 @@ import type {
   FilterDescriptor,
 } from '@portfolio/luna-shopper-admin/models';
 import type { ReferenceLookup } from './reference-lookup';
-import { ReferencePicker } from './reference-picker';
+import { ReferencePicker, type ReferenceEmpty } from './reference-picker';
 
 /** One filter changing. */
 export interface FilterChange {
@@ -91,9 +91,9 @@ export interface FilterChange {
                   filterChange.emit({ param: filter.param, value: $event })
                 "
                 [controlId]="controlId(filter.param)"
+                [empty]="emptyOf(filter)"
                 [lookup]="lookup()"
                 [none]="offersNone(filter)"
-                [nullable]="true"
                 [resource]="resourceOf(filter)"
                 [value]="valueOf(filter.param)"
               />
@@ -191,6 +191,17 @@ export class ResourceFilters {
    */
   offersNone(filter: FilterDescriptor): boolean {
     return filter.kind === 'reference' && filter.nullable === true;
+  }
+
+  /**
+   * Whether a reference filter starts its list with "Any", which clears it
+   * (admin plan 0050, section 2). It does unless the descriptor says no: a
+   * filter nobody can put back to every row is a trap.
+   */
+  emptyOf(filter: FilterDescriptor): ReferenceEmpty {
+    return filter.kind === 'reference' && filter.emptyOption === false
+      ? null
+      : 'any';
   }
 
   /**

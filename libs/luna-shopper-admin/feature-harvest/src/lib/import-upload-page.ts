@@ -258,6 +258,7 @@ export interface PreviewTally {
           <lib-reference-picker
             (valueChange)="chooseChain($event)"
             [controlId]="'import-chain'"
+            [label]="'harvest.imports.chain' | rokuT"
             [lookup]="references"
             [resource]="'supermarkets'"
             [value]="supermarketId()"
@@ -280,6 +281,7 @@ export interface PreviewTally {
               <lib-reference-picker
                 (valueChange)="priceScopeId.set($event)"
                 [controlId]="'import-scope'"
+                [label]="'harvest.imports.scope' | rokuT"
                 [lookup]="references"
                 [resource]="'price-scopes'"
                 [scope]="scopeFilter()"
@@ -1031,9 +1033,7 @@ export class ImportUploadPage implements OnDestroy {
    * what the file wanted instead.
    */
   chooseFile(event: Event): Promise<void> {
-    return this.readFile(
-      (event.target as HTMLInputElement).files?.[0] ?? null
-    );
+    return this.readFile((event.target as HTMLInputElement).files?.[0] ?? null);
   }
 
   /**

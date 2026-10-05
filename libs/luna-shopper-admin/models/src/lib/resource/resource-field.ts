@@ -195,6 +195,16 @@ export interface ReferenceField<T extends ResourceRow> extends FieldBase<T> {
   /** The `name` of the resource being pointed at. */
   readonly resource: string;
   /**
+   * Whether the picker starts its list with "None", the choice that clears
+   * the field (admin plan 0050, section 2).
+   *
+   * Left out, it follows {@link FieldBase.nullable}: a column that takes null
+   * offers it and a column that does not offers nothing. Say `false` on a
+   * nullable field that a screen must not empty, and `true` only where the
+   * server accepts the empty value.
+   */
+  readonly emptyOption?: boolean;
+  /**
    * The row property that carries the target's name, for a read that joins it
    * on (admin plan 0023, section 3).
    *

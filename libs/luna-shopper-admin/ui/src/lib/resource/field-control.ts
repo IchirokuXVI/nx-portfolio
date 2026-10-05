@@ -14,7 +14,7 @@ import type {
 } from '@portfolio/luna-shopper-admin/models';
 import { LocalizedTextControl } from './localized-text-control';
 import type { ReferenceLookup } from './reference-lookup';
-import { ReferencePicker } from './reference-picker';
+import { ReferencePicker, type ReferenceEmpty } from './reference-picker';
 import { ReferencesControl } from './references-control';
 
 /**
@@ -108,8 +108,8 @@ import { ReferencesControl } from './references-control';
           (valueChange)="valueChange.emit($event)"
           [controlId]="controlId()"
           [disabled]="disabled() || scopeOf() === null"
+          [empty]="emptyOf()"
           [lookup]="lookup()"
-          [nullable]="field().nullable === true"
           [resource]="resourceOf()"
           [scope]="scopeOf() ?? {}"
           [value]="asText()"
@@ -168,22 +168,16 @@ import { ReferencesControl } from './references-control';
       display: block;
     }
 
+    /* What a control looks like is the global rule's (styles.scss). A field
+       of a form adds only that it fills its row. Restating the padding or the
+       background here would also wipe the arrow that rule draws on a select
+       (admin plan 0050). */
     input[type='text'],
     input[type='date'],
     input[type='datetime-local'],
     select,
     textarea {
-      /* 1rem exactly: iOS Safari zooms the viewport on focus for anything
-         smaller, which on a phone leaves the operator scrolled sideways. */
       inline-size: 100%;
-      font: inherit;
-      font-size: var(--admin-field-size);
-      min-block-size: var(--admin-control);
-      padding: var(--admin-control-pad) var(--admin-space-3);
-      border: 1px solid var(--admin-border);
-      border-radius: var(--admin-radius-control);
-      background: var(--admin-surface-raised);
-      color: var(--admin-ink);
     }
 
     input[type='checkbox'] {
@@ -280,6 +274,20 @@ export class FieldControl {
     const field = this.field();
     return field.kind === 'enum' ? field.options : [];
   }
+
+  /**
+   * Whether a reference field offers "None", which clears it (admin plan
+   * 0050, section 2). The descriptor says so with `emptyOption`, and a field
+   * that says nothing follows `nullable`: null is an answer of the column or
+   * it is not.
+   */
+  readonly emptyOf = computed<ReferenceEmpty>(() => {
+    const field = this.field();
+    if (field.kind !== 'reference') {
+      return null;
+    }
+    return (field.emptyOption ?? field.nullable === true) ? 'none' : null;
+  });
 
   resourceOf(): string {
     const field = this.field();
