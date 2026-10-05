@@ -180,6 +180,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
         {
           name: 'reject-member',
           label: 'people.memberships.action.reject',
+          danger: true,
           available: (row) => row.status === 'PENDING',
           confirm: {
             heading: 'people.memberships.confirm.reject.heading',
@@ -194,6 +195,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
           // in it.
           name: 'transfer-ownership',
           label: 'people.memberships.action.transfer',
+          danger: true,
           available: (row) => row.role !== 'OWNER' && row.status === 'APPROVED',
           confirm: {
             heading: 'people.memberships.confirm.transfer.heading',
@@ -208,6 +210,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
           // one. An owner leaves by handing the zone on first.
           name: 'kick-member',
           label: 'people.memberships.action.kick',
+          danger: true,
           available: (row) => row.role !== 'OWNER' && row.status !== 'KICKED',
           confirm: {
             heading: 'people.memberships.confirm.kick.heading',
@@ -219,6 +222,7 @@ export const MEMBERSHIPS = defineResource<Membership>({
         {
           name: 'ban-member',
           label: 'people.memberships.action.ban',
+          danger: true,
           available: (row) => row.role !== 'OWNER' && row.status !== 'BANNED',
           confirm: {
             heading: 'people.memberships.confirm.ban.heading',

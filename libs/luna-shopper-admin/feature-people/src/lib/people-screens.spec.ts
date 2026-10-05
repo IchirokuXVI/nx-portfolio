@@ -174,11 +174,16 @@ describe('a person', () => {
     );
     expect(headerStates(confirmed)).toEqual([]);
 
-    // Amber, because it is the one an operator can do something about.
+    // An admin says so. Amber for the address, because it is the one an
+    // operator can do something about.
     const waiting = await bootShoppers(`${PEOPLE}/${MARC.userId}`);
     expect(headerStates(waiting)).toEqual([
+      { label: 'people.users.roles.admin.name', waiting: false },
       { label: 'people.users.state.unconfirmed', waiting: true },
     ]);
+    expect(
+      find(waiting, 'lib-record-page lib-page-header .chip.good')?.textContent
+    ).toContain('people.users.roles.admin.name');
 
     const guest = await bootShoppers(`${PEOPLE}/${GUEST.userId}`);
     expect(headerStates(guest)).toEqual([
@@ -645,6 +650,10 @@ describe('a zone', () => {
     expect(headerStates(marked)).toEqual([
       { label: 'people.zones.status.MARKED_FOR_DELETION', waiting: false },
     ]);
+    // In red, as the page of a zone always drew it.
+    expect(
+      find(marked, 'lib-record-page lib-page-header .chip.danger')?.textContent
+    ).toContain('people.zones.status.MARKED_FOR_DELETION');
   });
 
   it('draws the owner on Details as a link to the person, by name', async () => {
@@ -715,7 +724,7 @@ describe('a zone', () => {
     expect(recordPage(fixture).store().mode()).toBe('edit');
   });
 
-  it('puts every action in the More menu, and the one that destroys last', async () => {
+  it('puts every action in the More menu, the ones that harm in red and the delete last', async () => {
     const fixture = await bootShoppers(`${ZONES}/${KITCHEN.id}`);
 
     expect(menuEntries(fixture)).toEqual([
@@ -727,7 +736,7 @@ describe('a zone', () => {
       findAll(fixture, 'lib-record-page [pageMoreDanger][data-action]').map(
         (entry) => entry.getAttribute('data-action')
       )
-    ).toEqual(['delete-zone']);
+    ).toEqual(['regenerate-join-code', 'mark-for-deletion', 'delete-zone']);
   });
 
   it('offers marking for an active zone and restoring for a marked one', async () => {
@@ -1001,9 +1010,17 @@ describe('the Members tab of a zone', () => {
       .querySelector<HTMLButtonElement>('[data-member-menu]')
       ?.click();
     await settle(fixture);
+    // Red in the menu and red in the question, because the descriptor says
+    // `danger`. Nothing here names the action a second time.
+    expect(
+      findAll(fixture, '.menu-item.danger').map((item) =>
+        item.getAttribute('data-action')
+      )
+    ).toEqual(['transfer-ownership', 'kick-member', 'ban-member']);
     find(fixture, '.menu-item[data-action="ban-member"]')?.click();
     await settle(fixture);
     expect(calls).toEqual([]);
+    expect(question(fixture).tone()).toBe('danger');
 
     controlSaying(fixture, 'people.memberships.confirm.ban.confirm')?.click();
     await settle(fixture);

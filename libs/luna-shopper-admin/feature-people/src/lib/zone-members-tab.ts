@@ -424,8 +424,8 @@ export class ZoneMembersTab {
     this.closeMenu();
     this.actions.start(action, member, {
       args: { name: member.username, zone: member.zoneName },
-      // Letting somebody in is undone by removing them. The others are not.
-      tone: action.name === 'approve-member' ? 'primary' : 'danger',
+      // The tone is the descriptor's: letting somebody in is undone by
+      // removing them, and the others are marked `danger`.
       after: () => this._changed(),
     });
   }
@@ -433,11 +433,14 @@ export class ZoneMembersTab {
   /**
    * A membership moved. The zone is read again, the column of zones reads its
    * count of requests again, and so does the rail.
+   *
+   * Saying that `zones` was written is what reads the zone again: the page
+   * watches the resource it shows. A `reload()` beside it was a second read
+   * of the same zone.
    */
-  private async _changed(): Promise<void> {
+  private _changed(): void {
     this._changes.wrote('memberships');
     this._changes.wrote('zones');
     this._status.refresh();
-    await this._record.reload();
   }
 }

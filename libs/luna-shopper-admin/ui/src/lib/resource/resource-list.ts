@@ -624,6 +624,11 @@ export interface RowAction {
       color: var(--admin-waiting-on-wash);
     }
 
+    .state-chip[data-tone='danger'] {
+      background: var(--admin-danger-wash);
+      color: var(--admin-danger-on-wash);
+    }
+
     .state {
       display: flex;
       flex-direction: column;

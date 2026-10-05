@@ -205,6 +205,7 @@ export const LIST_LINES = defineResource<ListLine>({
         {
           name: 'reject-line',
           label: 'people.lines.action.reject',
+          danger: true,
           available: waits,
           confirm: {
             heading: 'people.lines.confirm.reject.heading',
