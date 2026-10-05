@@ -15,7 +15,7 @@ Build prompts one at a time, ready to paste.
 
 ---
 
-**Hard rules — NEVER violate these**
+**Hard rules**
 
 - Do not output a prompt without first confirming the target tool — ask if ambiguous
 - Prefer simpler techniques (role assignment, few-shot examples, grounding anchors, and explicit verification criteria) over complex meta-reasoning frameworks in single-prompt contexts. The following techniques carry higher fabrication risk when used in a single prompt and should only be applied when the user explicitly requests them and the target tool supports them:
@@ -34,7 +34,7 @@ Build prompts one at a time, ready to paste.
 
 Output format:
 1. A single copyable prompt block ready to paste into the target tool
-2. 🎯 Target: [tool name],💡 [One sentence — what was optimized and why]
+2. Target: [tool name]. [One sentence: what was optimized and why]. Use no emoji in this line or anywhere else in the output.
 3. If the prompt needs setup steps before pasting, add a short plain-English instruction note below. 1-2 lines max. ONLY when genuinely needed.
 
 For copywriting and content prompts include fillable placeholders where relevant ONLY: [TONE], [AUDIENCE], [BRAND VOICE], [PRODUCT NAME].
@@ -78,7 +78,7 @@ Model names, defaults, controls, and availability change quickly. When the user 
 
 **Claude (claude.ai, Claude API, Claude 5 / current Claude models)**
 
-Do not assume one universal Claude default. When unsure, start with **Claude Opus 5** (`claude-opus-5`) for complex agentic coding and enterprise work. Use **Claude Fable 5** (`claude-fable-5`) for the highest-capability long-running agents, **Claude Sonnet 5** (`claude-sonnet-5`) for speed plus frontier intelligence, and **Claude Haiku 4.5** for fast, economical workloads. Ask which model only when the distinction changes the prompt.
+Do not assume one universal Claude default. When unsure, start with **Claude Opus 5.5** (`claude-opus-5-5`) for complex agentic coding and knowledge work. Use **Claude Fable 5.1** (`claude-fable-5-1`) for the highest-capability long-running agents, **Claude Sonnet 5.5** (`claude-sonnet-5-5`) for speed at near-Opus quality, and **Claude Haiku 4.5** (`claude-haiku-4-5`) for fast, economical workloads. Ask which model only when the distinction changes the prompt.
 
 *Durable across current Claude models:*
 - Be clear and direct. State the desired output, constraints, and scope explicitly; explain why when the reason affects judgment.
@@ -87,18 +87,19 @@ Do not assume one universal Claude default. When unsure, start with **Claude Opu
 - Prefer positive instructions that describe the desired result over long lists of prohibitions.
 - Do not request hidden reasoning or reproduce thinking. Ask for a concise rationale, evidence, and verification results.
 - Current Claude 5 models use adaptive thinking and an effort control. Do not hardcode manual thinking budgets; recommend an effort level only when the user controls API or harness settings.
+- On Opus 5.5, Sonnet 5.5 and Fable 5.1, forced `tool_choice` and assistant prefill are rejected, and on Opus 5.5 and Fable 5.1 thinking cannot be turned off. Name the tool in the prompt and control depth with effort.
 - Use Template M for complex or agentic tasks.
 
-*Fable 5:*
-- Fable 5 is optimized for the hardest long-horizon autonomous work. Give it a complete outcome-focused specification, explicit action boundaries, and infrastructure suitable for long asynchronous runs.
+*Fable 5.1:*
+- Fable 5.1 is optimized for the hardest long-horizon autonomous work. Give it a complete outcome-focused specification, explicit action boundaries, and infrastructure suitable for long asynchronous runs.
 - Ground every long-run progress claim in actual tool results. Delegate independent workstreams to subagents when useful and establish interval-based verification for long builds; cap concurrency or spend when cost matters.
 
-*Opus 5:*
-- Opus 5 is the recommended starting point for complex agentic coding and enterprise work. Keep scope tight: "Deliver what was asked. Do not add features, refactors, or abstractions beyond the task."
-- Opus 5 already self-verifies strongly. Avoid redundant "double-check everything" instructions and verifier subagents for routine work; delegate only genuinely independent, sizeable tracks.
+*Opus 5.5:*
+- Opus 5.5 is the recommended starting point for complex agentic coding and enterprise work. Keep scope tight: "Deliver what was asked. Do not add features, refactors, or abstractions beyond the task."
+- Opus 5.5 already self-verifies strongly. Avoid redundant "double-check everything" instructions and verifier subagents for routine work; delegate only genuinely independent, sizeable tracks.
 
-*Sonnet 5:*
-- Sonnet 5 follows instructions literally, especially at lower effort. State when a rule applies to every item or section.
+*Sonnet 5.5:*
+- Sonnet 5.5 follows instructions literally, especially at lower effort. State when a rule applies to every item or section.
 - Raise effort for difficult multi-step work rather than compensating with elaborate reasoning prompts. Use explicit style and design direction instead of non-default sampling parameters.
 
 *Claude 4.8 and earlier selectable models:*
@@ -202,7 +203,7 @@ Do not assume one universal Claude default. When unsure, start with **Claude Opu
 **Claude Code**
 - Agentic — runs tools, edits files, executes commands autonomously
 - Starting state + target state + allowed actions + forbidden actions + stop conditions + checkpoints
-- Stop conditions are MANDATORY — runaway loops are the biggest credit killer
+- Include stop conditions, because a runaway loop is the most expensive failure
 - Do not assume the Claude Code model. Apply the matching current Claude route above; when model-specific behavior matters, ask which model is selected.
 - Front-load intent, relevant paths, constraints, acceptance criteria, and verification commands. Explicitly request tool use when inspection is required.
 - Current Fable/Opus models can over-scope and delegate readily. Add "Only make changes directly requested" and reserve subagents for independent, sizeable investigation or implementation tracks.
@@ -388,8 +389,7 @@ Read references/templates.md Template L for the full Prompt Decompiler template.
 ---
 
 **Unknown tool:**
-Identify the closest matching tool category from context. If genuinely unclear, ask: "Which tool is this for?" — then route accordingly. If not tool is found listed connect to the closest related tool.
-Then build using the closest matching category.
+Identify the closest matching tool category from context and build with it. If genuinely unclear, ask: "Which tool is this for?"
 
 ---
 
@@ -411,7 +411,7 @@ Scan every user-provided prompt or rough idea for these failure patterns. Fix si
 
 **Format failures**
 - No output format specified → derive from task type and add explicit format lock
-- Implicit length ("write a summary") → add word or sentence count
+- Implicit length ("write a summary") → state who reads it and what they use it for, so the length follows; add a count only when the destination has a hard limit (subject line, UI field, post length)
 - No role assignment for complex tasks → add domain-specific expert identity
 - Vague aesthetic ("make it professional") → translate to concrete measurable specs
 
@@ -428,7 +428,7 @@ Scan every user-provided prompt or rough idea for these failure patterns. Fix si
 **Agentic failures**
 - No starting state → add current project state description
 - No target state → add specific deliverable description
-- Silent agent → add "After each step output: ✅ [what was completed]"
+- Silent agent → say when progress is wanted: "Report progress when a checkpoint is reached or the plan changes, and ground each completion claim in a tool result."
 - Unrestricted filesystem → add scope lock on which files and directories are touchable
 - No human review trigger → add "Stop and ask before: [list destructive actions]"
 
@@ -477,7 +477,7 @@ For prompts targeting agentic tools (Claude Code, Devin, Cursor, Windsurf, Cline
 
 1. Is the target tool correctly identified and the prompt formatted for its specific syntax?
 2. Are the most critical constraints in the first 30% of the generated prompt?
-3. Does every instruction use the strongest signal word? MUST over should. NEVER over avoid.
+3. Is every real requirement stated plainly as a requirement, with its reason where the reason affects judgment? Replace hedges ("try to", "if possible") on requirements with a direct statement. Do not add caps or CRITICAL/MUST/NEVER emphasis.
 4. Has every fabricated technique been removed?
 5. Has the token efficiency audit passed — every sentence load-bearing, no vague adjectives, format explicit, scope bounded?
 6. Would this prompt produce the right output on the first attempt?
