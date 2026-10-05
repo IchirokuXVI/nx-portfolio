@@ -2069,6 +2069,10 @@
         "at": "at {{shop}}",
         "by": "by {{name}}",
         "byParticipant": "by participant {{id}}",
+        "shopGone": "at a shop that is gone",
+        "shopUnread": "the shop could not be read",
+        "byGone": "by a person who is gone",
+        "byUnread": "the person could not be read",
         "reverted": "Taken back"
       }
     },
@@ -2358,7 +2362,8 @@
     },
     "value": {
       "notWritten": "Not written yet",
-      "gone": "This points at a record that is gone"
+      "gone": "This points at a record that is gone",
+      "unread": "This name could not be read"
     },
     "language": {
       "en": "English",

@@ -35,6 +35,27 @@ interface Named {
   readonly path: readonly string[] | null;
 }
 
+/**
+ * What the read of one name answered: the name, a record that is gone (the
+ * read answered 404), or a read that failed. An id with no entry is still
+ * being read. The same states `FieldValue` draws for a reference.
+ */
+type NameRead = Named | 'gone' | 'unread';
+
+/** What is said in place of a name, by what is named and by its state. */
+const SAID = {
+  locations: {
+    reading: 'resource.reference.resolving',
+    gone: 'people.baskets.settlement.shopGone',
+    unread: 'people.baskets.settlement.shopUnread',
+  },
+  users: {
+    reading: 'resource.reference.resolving',
+    gone: 'people.baskets.settlement.byGone',
+    unread: 'people.baskets.settlement.byUnread',
+  },
+} as const;
+
 /** One settlement of one row, formatted for the screen. */
 export interface SettlementLine {
   readonly id: string;
@@ -42,13 +63,21 @@ export interface SettlementLine {
   readonly quantity: number;
   /** What was paid, as money, or empty for a settlement with no price. */
   readonly paid: string;
-  /** The shop it was settled at, or empty. */
+  /** The shop it was settled at, or empty. Its name and never its id. */
   readonly shop: string;
+  /**
+   * A translation key drawn in place of the shop, while its name is read,
+   * when the shop is gone and when the read failed. `null` otherwise.
+   */
+  readonly shopSaid: string | null;
   /** The shop's page under its chain, when the shop could be read. */
   readonly shopPath: readonly string[] | null;
   /** Whether only a participant id is known, and no account. */
   readonly byParticipant: boolean;
+  /** The name of the account, or the id of the participant. */
   readonly by: string;
+  /** The same as {@link shopSaid}, for the account that settled. */
+  readonly bySaid: string | null;
   readonly settledAt: string;
   readonly reverted: boolean;
 }
@@ -117,7 +146,11 @@ export interface SettlementLine {
                             'people.baskets.settlement.noPrice' | rokuT
                           }}</span>
                         }
-                        @if (settlement.shop !== '') {
+                        @if (settlement.shopSaid; as said) {
+                          <span class="muted" data-shop>{{
+                            said | rokuT
+                          }}</span>
+                        } @else if (settlement.shop !== '') {
                           @if (settlement.shopPath; as path) {
                             <a [routerLink]="path" class="link" data-shop>{{
                               'people.baskets.settlement.at'
@@ -130,14 +163,18 @@ export interface SettlementLine {
                             }}</span>
                           }
                         }
-                        <span class="muted">
-                          {{
-                            settlement.byParticipant
-                              ? ('people.baskets.settlement.byParticipant'
-                                | rokuT: { id: settlement.by })
-                              : ('people.baskets.settlement.by'
-                                | rokuT: { name: settlement.by })
-                          }}
+                        <span class="muted" data-by>
+                          @if (settlement.bySaid; as said) {
+                            {{ said | rokuT }}
+                          } @else {
+                            {{
+                              settlement.byParticipant
+                                ? ('people.baskets.settlement.byParticipant'
+                                  | rokuT: { id: settlement.by })
+                                : ('people.baskets.settlement.by'
+                                  | rokuT: { name: settlement.by })
+                            }}
+                          }
                         </span>
                         <span class="muted">{{ settlement.settledAt }}</span>
                         @if (settlement.reverted) {
@@ -260,7 +297,7 @@ export class BasketLinesPanel {
   readonly rows = computed(() => this._basket()?.lines ?? []);
 
   /** Names read for the shops and people the panel names, by `resource:id`. */
-  private readonly _names = signal<ReadonlyMap<string, Named>>(new Map());
+  private readonly _names = signal<ReadonlyMap<string, NameRead>>(new Map());
   private readonly _asked = new Set<string>();
 
   /** Every row's settlements, mapped from the wire (rule D4), by row key. */
@@ -290,10 +327,8 @@ export class BasketLinesPanel {
     const locale = this._translator.locale();
 
     return (this._settlements().get(rowKey) ?? []).map((settlement) => {
-      const shop =
-        settlement.supermarketLocationId === null
-          ? undefined
-          : names.get(`locations:${settlement.supermarketLocationId}`);
+      const shop = nameOf(names, 'locations', settlement.supermarketLocationId);
+      const by = nameOf(names, 'users', settlement.settledByUserId);
 
       return {
         id: settlement.id,
@@ -304,8 +339,9 @@ export class BasketLinesPanel {
           settlement.currency,
           locale
         ),
-        shop: shop?.title ?? settlement.supermarketLocationId ?? '',
-        shopPath: shop?.path ?? null,
+        shop: shop.named?.title ?? '',
+        shopSaid: shop.said,
+        shopPath: shop.named?.path ?? null,
         // Only a participant id: the view does not say whether that
         // participant is a guest or a signed in member, so the screen does
         // not guess.
@@ -314,9 +350,9 @@ export class BasketLinesPanel {
           settlement.settledByParticipantId !== null,
         by:
           settlement.settledByUserId !== null
-            ? (names.get(`users:${settlement.settledByUserId}`)?.title ??
-              settlement.settledByUserId)
+            ? (by.named?.title ?? '')
             : (settlement.settledByParticipantId ?? ''),
+        bySaid: by.said,
         settledAt: instant(settlement.settledAt, locale),
         reverted: settlement.revertedAt !== null,
       };
@@ -324,14 +360,14 @@ export class BasketLinesPanel {
   }
 
   /**
-   * Resolve one id through the resource it belongs to. The id stays where
-   * nothing answers, which is what an unmounted resource or a reaped row
-   * shows anyway (plan 0007, section 4).
+   * Resolve one id through the resource it belongs to. The id itself is
+   * never drawn: where there is no name, the panel says why there is none.
+   * "Gone" is said only of a row the server said is gone.
    *
    * The row comes back with the name, and it is what gives a shop an address:
    * a shop lives under its chain, and the row says which chain that is.
    */
-  private _name(resource: string, id: string | null): void {
+  private _name(resource: keyof typeof SAID, id: string | null): void {
     if (id === null) {
       return;
     }
@@ -340,19 +376,48 @@ export class BasketLinesPanel {
       return;
     }
     this._asked.add(key);
+    const hold = (read: NameRead) =>
+      this._names.update((held) => new Map(held).set(key, read));
+
     this._references
-      .resolve(resource, id)
-      .then((option) => {
-        if (option !== null) {
-          const named: Named = {
-            title: option.title,
-            path: this._registry.rowPath(resource, id, option.row ?? {}),
-          };
-          this._names.update((held) => new Map(held).set(key, named));
-        }
-      })
-      .catch(() => {
-        // The id stays.
-      });
+      .read(resource, id)
+      .then((read) =>
+        hold(
+          read.state === 'found'
+            ? {
+                title: read.option.title,
+                path: this._registry.rowPath(
+                  resource,
+                  id,
+                  read.option.row ?? {}
+                ),
+              }
+            : read.state === 'gone'
+              ? 'gone'
+              : 'unread'
+        )
+      )
+      .catch(() => hold('unread'));
   }
+}
+
+/**
+ * The name of one id, or the key of what is said in its place. Neither for
+ * an id that is `null`: the settlement names no shop, or no account.
+ */
+function nameOf(
+  names: ReadonlyMap<string, NameRead>,
+  resource: keyof typeof SAID,
+  id: string | null
+): { readonly named: Named | null; readonly said: string | null } {
+  if (id === null) {
+    return { named: null, said: null };
+  }
+  const read = names.get(`${resource}:${id}`);
+  if (read === undefined) {
+    return { named: null, said: SAID[resource].reading };
+  }
+  return typeof read === 'string'
+    ? { named: null, said: SAID[resource][read] }
+    : { named: read, said: null };
 }

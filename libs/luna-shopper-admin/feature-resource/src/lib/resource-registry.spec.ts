@@ -6,6 +6,7 @@ import {
 } from '@angular/router';
 import {
   ContentLocaleStore,
+  GatewayError,
   RESOURCE_GATEWAYS,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { defineResource } from '@portfolio/luna-shopper-admin/models';
@@ -804,5 +805,93 @@ describe('sectionLink for a section that opens on one of its tabs', () => {
 
   it('answers the root for such a section with no segment', () => {
     expect(sectionLink({ ...harvestSection, segment: undefined })).toBe('/');
+  });
+});
+
+/**
+ * "Gone" is what a 404 says. A read that failed for any other reason has not
+ * said the record is gone, and a page that drew it so would send an operator
+ * looking for a person who is there.
+ */
+describe('ResourceReferences, reading one reference', () => {
+  const failing = (status: number) => () =>
+    Promise.reject(
+      new GatewayError({ code: 'refused', status, correlationId: '' })
+    );
+
+  const people = (read: () => Promise<Scope>) =>
+    defineResource<Scope>({
+      name: 'people',
+      segment: 'people',
+      labels: { one: 'people.one', many: 'people.many' },
+      title: (row) => row.label,
+      fields: [{ kind: 'text', name: 'label', label: 'people.label' }],
+      list: { columns: ['label'], compact: ['label'] },
+      gateway: () => ({
+        list: async () => ({ items: [], nextCursor: null }),
+        read,
+        create: () => Promise.reject(new Error('not used')),
+        update: () => Promise.reject(new Error('not used')),
+        remove: () => Promise.reject(new Error('not used')),
+      }),
+    });
+
+  const references = (read: () => Promise<Scope>) => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [ContentLocaleStore, provideResources(people(read))],
+    });
+    return TestBed.inject(ResourceReferences);
+  };
+
+  it('answers the row with its name', async () => {
+    const rosa = { id: 'u1', label: 'rosa' };
+
+    await expect(
+      references(async () => rosa).read('people', 'u1')
+    ).resolves.toEqual({
+      state: 'found',
+      option: { id: 'u1', title: 'rosa', row: rosa },
+    });
+  });
+
+  it('says gone for a 404', async () => {
+    await expect(
+      references(failing(404)).read('people', 'u1')
+    ).resolves.toEqual({ state: 'gone' });
+  });
+
+  it.each([400, 403, 429, 500, 503, 0])(
+    'says the read failed, and never gone, for a %i',
+    async (status) => {
+      await expect(
+        references(failing(status)).read('people', 'u1')
+      ).resolves.toEqual({ state: 'failed' });
+    }
+  );
+
+  it('says the read failed for a failure that is no answer at all', async () => {
+    await expect(
+      references(() => Promise.reject(new Error('offline'))).read(
+        'people',
+        'u1'
+      )
+    ).resolves.toEqual({ state: 'failed' });
+  });
+
+  it('says the read failed for a resource this app does not know', async () => {
+    await expect(
+      references(failing(404)).read('nothing', 'u1')
+    ).resolves.toEqual({ state: 'failed' });
+  });
+
+  /** What every other caller asks: a row or nothing, and never a throw. */
+  it('still answers nothing from resolve, whatever the failure', async () => {
+    await expect(
+      references(failing(404)).resolve('people', 'u1')
+    ).resolves.toBeNull();
+    await expect(
+      references(failing(500)).resolve('people', 'u1')
+    ).resolves.toBeNull();
   });
 });

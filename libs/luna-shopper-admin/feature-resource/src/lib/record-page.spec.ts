@@ -50,19 +50,25 @@ interface Line extends ResourceRow {
 
 const LINE: Line = { id: 'l1', plantId: 'p1', name: 'Bottling', kind: 'wet' };
 
+/** What a change wrote, so that a read after it answers the changed row. */
+let written: ResourceInput = {};
+
 const server = {
   /** What a read answers. A function, so a case can count or refuse. */
-  read: async (id: string): Promise<ResourceRow> => ({ ...LINE, id }),
+  read: async (id: string): Promise<ResourceRow> => ({
+    ...LINE,
+    ...written,
+    id,
+  }),
   create: async (input: ResourceInput): Promise<ResourceRow> => ({
     ...LINE,
     ...input,
     id: 'l_new',
   }),
-  update: async (id: string, input: ResourceInput): Promise<ResourceRow> => ({
-    ...LINE,
-    ...input,
-    id,
-  }),
+  update: async (id: string, input: ResourceInput): Promise<ResourceRow> => {
+    written = { ...written, ...input };
+    return { ...LINE, ...written, id };
+  },
   remove: async (id: string): Promise<void> => void id,
 };
 const pristine = { ...server };
@@ -388,6 +394,7 @@ async function press(mounted: Mounted, selector: string): Promise<void> {
 
 beforeEach(() => {
   Object.assign(server, pristine);
+  written = {};
   creates.length = 0;
   updates.length = 0;
   removes.length = 0;
@@ -666,8 +673,9 @@ describe('RecordPage, after a save', () => {
     expect(mounted.page.store().mode()).toBe('read');
     expect(one(mounted, 'h1')?.textContent).toBe('Capping');
     expect(one(mounted, '[data-saved]')).not.toBeNull();
-    // Its own write is not news to it: the saved row is the answer it holds.
-    expect(reads).toBe(0);
+    // One read, for what the answer of a change leaves out. Its own write
+    // is no further news to it.
+    expect(reads).toBe(1);
   });
 
   /**

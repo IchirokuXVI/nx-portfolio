@@ -59,19 +59,22 @@ function gatewayOf(
   const created: ResourceInput[] = [];
   const updated: { id: string; input: ResourceInput }[] = [];
   const removed: string[] = [];
+  // What the server holds. A read after a write answers the written row.
+  let held: ResourceRow = row;
   return {
     created,
     updated,
     removed,
     list: async () => ({ items: [], nextCursor: null }),
-    read: async () => row,
+    read: async () => held,
     create: async (input) => {
       created.push(input);
       return { id: 's_new', ...input };
     },
     update: async (id, input) => {
       updated.push({ id, input });
-      return { ...row, ...input };
+      held = { ...held, ...input };
+      return held;
     },
     remove: async (id) => {
       removed.push(id);
@@ -272,6 +275,135 @@ describe('RecordStore, changing a record', () => {
     await first;
     expect(updates).toBe(1);
     expect(store.busy()).toBe(false);
+  });
+});
+
+/**
+ * A write can answer less than a read: the answer of a changed list has no
+ * lines and no zone name. The page shows what a read shows.
+ */
+describe('RecordStore, a save whose answer is smaller than the read', () => {
+  const full = { ...row, shelves: ['a', 'b'], chainName: 'Mercado' };
+
+  /** Reads answer the whole row, and a change answers only the columns. */
+  const smaller = (over: Partial<ResourceGateway<ResourceRow>> = {}) => {
+    let held: ResourceRow = full;
+    return gatewayOf({
+      read: async () => held,
+      update: async (_id, input) => {
+        held = { ...held, ...input };
+        return { id: 's1', name: held['name'], city: null, slug: 'centro' };
+      },
+      ...over,
+    });
+  };
+
+  it('reads the record again, and shows what the read answers', async () => {
+    const store = await opened(smaller());
+    store.edit();
+    store.set('name', 'Triana');
+
+    const saved = await store.submit();
+
+    // The answer of the write is what the caller and the listener get.
+    expect(saved).toEqual({
+      id: 's1',
+      name: 'Triana',
+      city: null,
+      slug: 'centro',
+    });
+    expect(store.mode()).toBe('read');
+    expect(store.row()).toEqual({ ...full, name: 'Triana' });
+    expect(store.savedAt()).not.toBeNull();
+    expect(store.draft()).toEqual({});
+  });
+
+  it('stays busy, and in the form, until that read answers', async () => {
+    let answer: (value: ResourceRow) => void = () => undefined;
+    let reads = 0;
+    const store = await opened(
+      smaller({
+        read: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve(full)
+            : new Promise<ResourceRow>((resolve) => (answer = resolve));
+        },
+      })
+    );
+    store.edit();
+    store.set('name', 'Triana');
+
+    const saving = store.submit();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(store.busy()).toBe(true);
+    expect(store.mode()).toBe('edit');
+    expect(store.row()).toEqual(full);
+
+    answer({ ...full, name: 'Triana' });
+    await saving;
+
+    expect(store.busy()).toBe(false);
+    expect(store.mode()).toBe('read');
+    expect(store.row()).toEqual({ ...full, name: 'Triana' });
+  });
+
+  it('keeps the answer of the write when the read fails, and calls the save a save', async () => {
+    let reads = 0;
+    const store = await opened(
+      smaller({
+        read: async () => {
+          reads += 1;
+          if (reads > 1) {
+            throw refusal('internal', 500);
+          }
+          return full;
+        },
+      })
+    );
+    const heard: ResourceRow[] = [];
+    store.onSaved((saved) => heard.push(saved));
+    store.edit();
+    store.set('name', 'Triana');
+
+    const saved = await store.submit();
+
+    expect(saved?.['name']).toBe('Triana');
+    expect(store.row()).toEqual(saved);
+    expect(store.mode()).toBe('read');
+    expect(store.status()).toBe('ready');
+    expect(store.error()).toBeNull();
+    expect(store.bar()).toEqual({ kind: 'clean' });
+    expect(store.savedAt()).not.toBeNull();
+    expect(heard).toHaveLength(1);
+  });
+
+  it('does not let a read from before the write win over it', async () => {
+    const answers: ((value: ResourceRow) => void)[] = [];
+    let reads = 0;
+    const store = await opened(
+      smaller({
+        read: () => {
+          reads += 1;
+          return reads === 1
+            ? Promise.resolve(full)
+            : new Promise<ResourceRow>((resolve) => answers.push(resolve));
+        },
+      })
+    );
+    store.edit();
+    store.set('name', 'Triana');
+
+    const stale = store.load();
+    const saving = store.submit();
+    await new Promise((resolve) => setTimeout(resolve));
+    answers[1]({ ...full, name: 'Triana' });
+    await saving;
+    answers[0](full);
+    await stale;
+
+    expect(store.row()?.['name']).toBe('Triana');
   });
 });
 

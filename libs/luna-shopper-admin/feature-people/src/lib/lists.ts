@@ -114,6 +114,7 @@ export const LISTS = defineResource<List>({
       name: 'createdAt',
       label: 'people.lists.createdAt',
       help: 'people.field.createdAtHelp',
+      time: true,
       editable: false,
     },
     {
