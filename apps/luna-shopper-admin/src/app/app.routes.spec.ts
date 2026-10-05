@@ -11,10 +11,7 @@ import {
   SessionStore,
   type SessionServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
-import {
-  BrandDetailPage,
-  BrandSuggestionsPage,
-} from '@portfolio/luna-shopper-admin/feature-brands';
+import { BrandSuggestionsPage } from '@portfolio/luna-shopper-admin/feature-brands';
 import {
   EntriesQueuePage,
   HarvestReviewPage,
@@ -31,6 +28,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   provideSections,
+  RecordPage,
   ResourceListPage,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
@@ -271,7 +269,6 @@ describe('appRoutes', () => {
     ['/harvest/setup/brands', 'the registered brands'],
     ['/harvest/setup/brands/new', 'the form of a new brand'],
     ['/harvest/setup/brands/br_1', 'a registered brand'],
-    ['/harvest/setup/brands/br_1/edit', 'the form of a brand'],
     ['/harvest/setup/postal-codes', 'the postal codes'],
     ['/harvest/setup/postal-codes/new', 'the form that adds postal codes'],
     ['/harvest/setup/postal-codes/14001', 'a postal code'],
@@ -283,6 +280,18 @@ describe('appRoutes', () => {
     await router.navigateByUrl(url);
 
     expect(router.url).toBe(url);
+  });
+
+  /**
+   * The form of a brand was a page of its own. It is the record page now
+   * (admin plan 0054), and the old address still leads to the form.
+   */
+  it('sends the old address of the form of a brand to the record, with its form open', async () => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl('/harvest/setup/brands/br_1/edit');
+
+    expect(router.url).toBe('/harvest/setup/brands/br_1?edit=1');
   });
 
   /**
@@ -303,7 +312,7 @@ describe('appRoutes', () => {
     ['/harvest/setup/sources', [HarvestSetupPage, SourcesPage]],
     ['/harvest/setup/brands', [HarvestSetupPage, ResourceListPage]],
     ['/harvest/setup/postal-codes', [HarvestSetupPage, ResourceListPage]],
-    ['/harvest/setup/brands/br_1', [BrandDetailPage]],
+    ['/harvest/setup/brands/br_1', [RecordPage]],
     ['/harvest/setup/postal-codes/new', [PostalCodeAddPage]],
     ['/harvest/setup/postal-codes/14001', [PostalCodeDetailPage]],
   ])('draws %s with its own pages', async (url, pages) => {

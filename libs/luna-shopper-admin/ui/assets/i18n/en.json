@@ -807,6 +807,7 @@
         "canonicalBrandId": "Same brand as",
         "privateLabelSupermarketId": "Exclusive brand of chain",
         "itemCount": "Products",
+        "createdAt": "Added",
         "updatedAt": "Last changed"
       },
       "help": {
@@ -828,15 +829,12 @@
       "createdNone": "{{label}} registered. No product carries it yet.",
       "moved": "{{count}} products moved to {{label}}.",
       "links": {
-        "spellingOf": "This brand is a spelling of {{label}}. Its products are counted on {{label}}.",
-        "heading": "Spellings linked to this brand",
         "open": "Open that brand",
         "delete": "Delete this spelling",
-        "deleteBody": "Delete {{spelling}}? Its products go back to no brand, and the spelling returns to Suggested brands.",
+        "deleteBody": "Delete {{name}}? Its products go back to no brand, and the spelling returns to Suggested brands.",
         "deleteConfirm": "Delete"
       },
       "spellings": {
-        "heading": "How chains spell it",
         "chain": "Chain",
         "spelling": "Spelling",
         "products": "Products",
@@ -901,6 +899,20 @@
         "refused": "Refused.",
         "refusedKept": "The refused names are still selected. Correct them and review again."
       }
+    },
+    "section": {
+      "name": "Name and key",
+      "links": "Links"
+    },
+    "field": {
+      "keySetBy": "Set by the system"
+    },
+    "record": {
+      "spellings": "Other spellings",
+      "noSpellings": "No other spelling yet. Add one here, or open the other brand and set Same brand as.",
+      "addSpelling": "Add a spelling",
+      "sources": "What sources call it",
+      "products": "Products with this brand"
     }
   },
   "harvest": {
@@ -2325,7 +2337,8 @@
       "seeAllCount": "See all {{count}}",
       "none": "None yet",
       "failed": "This list could not be read.",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "trailing": "{{value}} {{label}}"
     },
     "save": {
       "clean": "No changes yet",
@@ -2339,6 +2352,13 @@
       "goToFirst": "Go to the first",
       "saveCount_one": "Save {{count}} change",
       "saveCount_other": "Save {{count}} changes"
+    },
+    "tab": {
+      "details": "Details"
+    },
+    "tabs": "Parts of {{name}}",
+    "children": {
+      "links": "Used by"
     }
   }
 }

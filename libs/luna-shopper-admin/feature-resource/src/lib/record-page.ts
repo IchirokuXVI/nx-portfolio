@@ -11,7 +11,12 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import {
+  ActivatedRoute,
+  Router,
+  RouterLink,
+  RouterOutlet,
+} from '@angular/router';
 import {
   RokuTranslatorPipe,
   RokuTranslatorService,
@@ -27,9 +32,13 @@ import {
   idOf,
   isEditable,
   nounKeyOf,
+  RECORD_DETAILS_TAB,
+  recordChildCount,
+  recordTabs,
   type AnyResourceDescriptor,
   type FieldDescriptor,
   type NamedAction,
+  type RecordChild,
   type ResourceDraft,
   type ResourceRow,
   type RowState,
@@ -38,14 +47,17 @@ import {
   CautionLine,
   ConfirmDialog,
   PageHeader,
+  type PageTab,
 } from '@portfolio/luna-shopper-admin/ui';
 import { TrashIcon } from '@portfolio/shared/ui';
 import { gatewayErrorKey } from './gateway-error-key';
+import { RECORD_CONTEXT, type RecordContext } from './record-context';
 import type { LeaveAware } from './record-leave-guard';
 import { RecordView, sentenceStart, type RecordRefusal } from './record-view';
 import { ResourceChanges } from './resource-changes';
 import { parentsFromRoute, ResourceRegistry } from './resource-registry';
 import {
+  RECORD_TAB,
   RESOURCE_DESCRIPTOR,
   RESOURCE_FORM_MODE,
   RESOURCE_ID_FROM,
@@ -95,17 +107,31 @@ const ADDED_STATE = 'added';
  * It reads its route as `ResourceFormPage` does, and it follows the route: one
  * component serves every ID of a route, because the router keeps the
  * component when only the ID changes.
+ *
+ * **A record that holds tabs** (admin plan 0054) gets them under the header,
+ * and each tab is a child route: Details is one of them, and the page draws
+ * an outlet where it drew the view. What is under the header is keyed on the
+ * ID, so every tab and every panel is built again for another record. The
+ * page provides `RECORD_CONTEXT`, which is how each of them learns the
+ * record.
  */
 @Component({
   selector: 'lib-record-page',
   imports: [
     RouterLink,
+    RouterOutlet,
     RokuTranslatorPipe,
     CautionLine,
     ConfirmDialog,
     PageHeader,
     RecordView,
     TrashIcon,
+  ],
+  providers: [
+    {
+      provide: RECORD_CONTEXT,
+      useFactory: (): RecordContext => inject(RecordPage).context,
+    },
   ],
   template: `
     @let record = store();
@@ -122,6 +148,8 @@ const ADDED_STATE = 'added';
       [info]="descriptor.info ?? null"
       [loading]="status === 'loading'"
       [moreLabel]="moreLabel()"
+      [tabs]="tabs()"
+      [tabsLabel]="tabsLabel()"
       overflow="menu"
     >
       @for (chip of chips(); track chip.label) {
@@ -197,16 +225,24 @@ const ADDED_STATE = 'added';
       @if (status === 'loading') {
         <p class="sr-only" role="status">{{ heading() }}</p>
       }
-      <lib-record-view
-        (addAnother)="addAnother()"
-        (cancel)="cancel()"
-        (saved)="saved($event)"
-        [added]="added()"
-        [descriptor]="descriptor"
-        [parents]="parents()"
-        [refusal]="refusal()"
-        [store]="record"
-      />
+      <!-- Built again for another record, so nothing under the header can
+           go on showing the one before. -->
+      @for (key of keys(); track key) {
+        @if (tabbed) {
+          <div class="under"><router-outlet /></div>
+        } @else {
+          <lib-record-view
+            (addAnother)="addAnother()"
+            (cancel)="cancel()"
+            (saved)="saved($event)"
+            [added]="added()"
+            [descriptor]="descriptor"
+            [parents]="parents()"
+            [refusal]="refusal()"
+            [store]="record"
+          />
+        }
+      }
     }
 
     @if (leaving()) {
@@ -286,6 +322,14 @@ const ADDED_STATE = 'added';
       flex: 1;
       flex-direction: column;
       gap: var(--admin-space-4);
+      min-inline-size: 0;
+    }
+
+    /* The tab that is open. The router puts it after its outlet. */
+    .under {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
       min-inline-size: 0;
     }
 
@@ -413,6 +457,40 @@ export class RecordPage implements LeaveAware {
 
   readonly store = signal(this._storeFor(null));
 
+  /** The ID the address names, or `null` on the page that adds a record. */
+  readonly recordId = signal<string | null>(null);
+
+  /** What is under the header is built once for each of these. */
+  readonly keys = computed(() => [this.recordId() ?? '']);
+
+  /**
+   * The address of each tab, by its key, from the child routes that carry
+   * one. Empty for a record with no tab, and for the page that adds one.
+   */
+  private readonly _tabPaths = new Map<string, string>(
+    (this._route.routeConfig?.children ?? []).flatMap((route) => {
+      const key: unknown = route.data?.[RECORD_TAB];
+      return typeof key === 'string' && route.path !== undefined
+        ? [[key, route.path] as const]
+        : [];
+    })
+  );
+
+  /** Whether Details is a tab among others, and not the page. */
+  readonly tabbed = this._tabPaths.size > 0;
+
+  /** The counts that no field of the record holds, built once here. */
+  private readonly _countsOf = this.descriptor.record?.counts?.() ?? null;
+
+  /** Those counts for the record that is open. */
+  private readonly _counts = computed(() => {
+    const id = this.recordId();
+    return id === null || this._countsOf === null ? null : this._countsOf(id);
+  });
+
+  /** What every tab, panel and link of this page reads the record from. */
+  readonly context: RecordContext = this._context();
+
   /** Whether the record was added a moment ago, by the page before this one. */
   readonly added = signal(false);
 
@@ -431,6 +509,8 @@ export class RecordPage implements LeaveAware {
 
   /** What the operator answers the leave question with. */
   private _answer: ((leave: boolean) => void) | null = null;
+  /** The leave question that is up, for whoever else asks meanwhile. */
+  private _question: Promise<boolean> | null = null;
 
   /** The writes to this resource that the page has already seen. */
   private _seen = this._changes.version(this.descriptor.name);
@@ -474,6 +554,53 @@ export class RecordPage implements LeaveAware {
 
   readonly moreLabel = computed(() =>
     this._t('record.more', { name: this.title() })
+  );
+
+  /**
+   * The tabs under the header, or `null` for a record that has none.
+   *
+   * Also `null` while there is no record to hold them: one that is gone, and
+   * one that could not be read. The header then draws what it draws for any
+   * page.
+   */
+  readonly tabs = computed<readonly PageTab[] | null>(() => {
+    const status = this.store().status();
+    // Read so that the addresses follow the record. The route already names
+    // the new one by the time this is written.
+    const id = this.recordId();
+    if (
+      !this.tabbed ||
+      id === null ||
+      status === 'missing' ||
+      status === 'error'
+    ) {
+      return null;
+    }
+
+    return recordTabs(this.descriptor).flatMap((tab) => {
+      const path = this._tabPaths.get(tab.key);
+      if (path === undefined) {
+        return [];
+      }
+      const child = tab.child;
+      return [
+        {
+          path: this._router.serializeUrl(
+            this._router.createUrlTree([path], { relativeTo: this._route })
+          ),
+          label:
+            child === null ? 'record.tab.details' : this._childLabel(child),
+          ...(child === null
+            ? {}
+            : { count: () => this.context.countOf(child) }),
+        },
+      ];
+    });
+  });
+
+  /** What the row of tabs is, for a screen reader. */
+  readonly tabsLabel = computed(() =>
+    this._t('record.tabs', { name: this.title() })
   );
 
   /** The record, while the page reads it and it is there. */
@@ -574,10 +701,28 @@ export class RecordPage implements LeaveAware {
     });
   }
 
-  /** From reading to the form. */
+  /**
+   * From reading to the form. The form is on Details, so a record with tabs
+   * goes there first.
+   */
   edit(): void {
     this.refusal.set(null);
-    this.store().edit();
+    const store = this.store();
+    const details = this._tabPaths.get(RECORD_DETAILS_TAB);
+    if (details === undefined) {
+      store.edit();
+      return;
+    }
+    void this._router
+      .navigate([details], {
+        relativeTo: this._route,
+        queryParamsHandling: 'preserve',
+      })
+      .then(() => {
+        if (this.store() === store) {
+          store.edit();
+        }
+      });
   }
 
   /**
@@ -607,12 +752,17 @@ export class RecordPage implements LeaveAware {
     if (!this.dirty()) {
       return true;
     }
-    // A second navigation while the question is up. The first one stays.
-    this._answer?.(false);
-    return new Promise<boolean>((resolve) => {
-      this._answer = resolve;
+    // One question at a time. A second navigation while it is up waits for
+    // the same answer, and so does a second guard of the same navigation: a
+    // record with tabs is asked by the route of Details and by its own.
+    this._question ??= new Promise<boolean>((resolve) => {
+      this._answer = (leave) => {
+        this._question = null;
+        resolve(leave);
+      };
       this.leaving.set(true);
     });
+    return this._question;
   }
 
   answerLeave(leave: boolean): void {
@@ -648,7 +798,11 @@ export class RecordPage implements LeaveAware {
       void this._router.navigateByUrl(this.listUrl);
       return;
     }
-    void this._router.navigate(['..', id], {
+    // On Details, which is where "added" is said. A record with tabs would
+    // otherwise open on its first tab, and that can be another one.
+    const details =
+      recordTabs(this.descriptor).length > 0 ? [RECORD_DETAILS_TAB] : [];
+    void this._router.navigate(['..', id, ...details], {
       relativeTo: this._route,
       state: { [ADDED_STATE]: true },
     });
@@ -751,6 +905,7 @@ export class RecordPage implements LeaveAware {
 
     const store = this._storeFor(id);
     this.store.set(store);
+    this.recordId.set(id);
     this.deleting.set(false);
     this.asking.set(null);
     this.refusal.set(null);
@@ -770,15 +925,18 @@ export class RecordPage implements LeaveAware {
       id !== null && snapshot.queryParamMap.get(RECORD_EDIT_PARAM) === '1';
     void store.load().then(() => {
       if (asForm && this.store() === store && this.canEdit()) {
-        store.edit();
+        this.edit();
       }
     });
     if (asForm) {
       // After the render and not now: the navigation that brought the
       // parameter is still on its way while the page is built.
+      // On a record with tabs the form is on Details, and an empty path
+      // would be the record itself, which opens on its first tab.
+      const details = this._tabPaths.get(RECORD_DETAILS_TAB);
       afterNextRender(
         () =>
-          void this._router.navigate([], {
+          void this._router.navigate(details === undefined ? [] : [details], {
             relativeTo: this._route,
             queryParams: { [RECORD_EDIT_PARAM]: null },
             queryParamsHandling: 'merge',
@@ -830,6 +988,32 @@ export class RecordPage implements LeaveAware {
     }
 
     return draft;
+  }
+
+  /** Built after the store, which every part of it reads. */
+  private _context(): RecordContext {
+    const id = (): string => this.recordId() ?? '';
+    return {
+      descriptor: this.descriptor,
+      get id(): string {
+        return id();
+      },
+      row: computed(() => this.store().row()),
+      mode: computed(() => this.store().mode()),
+      reload: () => this.store().load(),
+      countOf: (child) =>
+        recordChildCount(child, this.store().row(), this._counts()?.() ?? null),
+    };
+  }
+
+  /** What a tab is called: its own label, or what its resource calls many. */
+  private _childLabel(child: RecordChild): string {
+    return (
+      child.label ??
+      this._registry.byName('resource' in child ? child.resource : '')?.labels
+        .many ??
+      ''
+    );
   }
 
   private _offered(): readonly NamedAction<ResourceRow>[] {
@@ -900,4 +1084,56 @@ export class RecordPage implements LeaveAware {
 function askBeforeUnload(event: BeforeUnloadEvent): void {
   event.preventDefault();
   event.returnValue = true;
+}
+
+/**
+ * The Details tab of a record that has tabs (admin plan 0054, section 2.2):
+ * the view of the record, at a route of its own.
+ *
+ * It holds nothing. The page above holds the record, the draft and the
+ * questions, because the header is there, and this hands the view to it.
+ *
+ * Leaving the tab asks the page. A form that is left with nothing changed is
+ * closed, so that another tab is never drawn under the word "Editing".
+ */
+@Component({
+  selector: 'lib-record-details-tab',
+  imports: [RecordView],
+  template: `
+    <lib-record-view
+      (addAnother)="page.addAnother()"
+      (cancel)="page.cancel()"
+      (saved)="page.saved($event)"
+      [added]="page.added()"
+      [descriptor]="page.descriptor"
+      [parents]="page.parents()"
+      [refusal]="page.refusal()"
+      [store]="page.store()"
+    />
+  `,
+  styles: `
+    :host {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-inline-size: 0;
+    }
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class RecordDetailsTab implements LeaveAware {
+  readonly page = inject(RecordPage);
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      const store = this.page.store();
+      if (store.mode() === 'edit') {
+        store.cancel();
+      }
+    });
+  }
+
+  canLeave(): boolean | Promise<boolean> {
+    return this.page.canLeave();
+  }
 }

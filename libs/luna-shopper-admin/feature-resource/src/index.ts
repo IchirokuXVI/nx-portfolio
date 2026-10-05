@@ -11,6 +11,7 @@ export {
   type SectionCounts,
 } from './lib/admin-section';
 export { gatewayErrorKey } from './lib/gateway-error-key';
+export { RECORD_CONTEXT } from './lib/record-context';
 export { RecordPage } from './lib/record-page';
 export { RecordView } from './lib/record-view';
 export { ResourceChanges } from './lib/resource-changes';
@@ -27,6 +28,7 @@ export {
 } from './lib/resource-route-data';
 export {
   adminRoutes,
+  recordEditRedirect,
   recordRoute,
   resourceCreateRoute,
   resourceFormBranch,

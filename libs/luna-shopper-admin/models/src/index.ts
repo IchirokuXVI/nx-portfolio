@@ -110,7 +110,13 @@ export {
 } from './lib/resource/localized-text';
 export { formatCurrencyAmount, parseMoney } from './lib/resource/money';
 export {
+  RECORD_DETAILS_TAB,
+  isRecordChildList,
+  recordChildCount,
   recordLayout,
+  recordTabs,
+  type RecordChild,
+  type RecordChildList,
   type RecordMode,
   type SaveBarState,
 } from './lib/resource/record-block';

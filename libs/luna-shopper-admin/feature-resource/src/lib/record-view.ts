@@ -51,6 +51,7 @@ import {
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
+import { RecordChildren } from './record-children';
 import {
   ResourceReferences,
   ResourceRegistry,
@@ -86,6 +87,10 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
  * **Every reference is drawn by name.** The view resolves each one through
  * `ResourceReferences`, whatever `nameLookup` says: one record is a handful of
  * reads. A list is not, and the rule of plan 0023 still holds there.
+ *
+ * **The collections of the record come after its sections** (admin plan
+ * 0054): `lib-record-children` draws the panels and the links, and reads the
+ * record from `RECORD_CONTEXT`, which the page provides.
  */
 @Component({
   selector: 'lib-record-view',
@@ -97,6 +102,7 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
     FieldRow,
     FieldValue,
     LockedValue,
+    RecordChildren,
     RecordId,
     RecordSection,
     SaveBar,
@@ -207,6 +213,14 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
               }
             }
           </lib-record-section>
+        }
+
+        <!-- What the record holds: its panels, then its links (admin plan
+             0054). Never part of the form, so the same in both modes. A
+             record that does not exist yet holds nothing, and one that is
+             still being read has no ID to ask with. -->
+        @if (mode !== 'create' && !loading) {
+          <lib-record-children />
         }
       </div>
 
@@ -565,7 +579,9 @@ export class RecordView {
     > = {};
     for (const [name, value] of Object.entries(this._values())) {
       const held: Record<string, readonly string[]> = {};
-      for (const id of referenceIds(value)) {
+      // Every record the value points at, also one the row already named:
+      // a name that came with the row is as much a link as one looked up.
+      for (const id of targetIds(value)) {
         const target = this._registry.byName(resourceOf(value));
         const path =
           target !== undefined && hasDetailScreen(target)
@@ -860,6 +876,14 @@ export class RecordView {
 function referenceIds(value: RecordValue): readonly string[] {
   if (value.kind === 'reference') {
     return value.name === null ? [value.id] : [];
+  }
+  return value.kind === 'references' ? value.ids : [];
+}
+
+/** The IDs a value points at, named by the row or not. */
+function targetIds(value: RecordValue): readonly string[] {
+  if (value.kind === 'reference') {
+    return [value.id];
   }
   return value.kind === 'references' ? value.ids : [];
 }

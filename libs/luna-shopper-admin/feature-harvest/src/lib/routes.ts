@@ -1,6 +1,7 @@
 import type { Type } from '@angular/core';
 import type { Route } from '@angular/router';
 import {
+  recordEditRedirect,
   resourceFormBranch,
   resourceTabRoute,
 } from '@portfolio/luna-shopper-admin/feature-resource';
@@ -66,7 +67,8 @@ export interface HarvestRouteParts {
  * /harvest/setup                        goes to the chain sources
  * /harvest/setup/sources                part: chain sources
  * /harvest/setup/brands                 part: registered brands
- * /harvest/setup/brands/new, /{id}, /{id}/edit
+ * /harvest/setup/brands/new, /{id}        the record page of a brand
+ * /harvest/setup/brands/{id}/edit         goes to /{id}?edit=1
  * /harvest/setup/postal-codes           part: postal codes
  * /harvest/setup/postal-codes/new, /{id}
  * ```
@@ -131,9 +133,33 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
     // the page matched the rest of the address.
     {
       path: HARVEST_SETUP_TAB,
-      children: parts.setup.map(resourceFormBranch),
+      children: parts.setup.map(setupFormBranch),
     },
   ];
+}
+
+/**
+ * The pages of one Setup resource, under its segment.
+ *
+ * A resource whose page is the record page keeps the address its old form
+ * had, `{id}/edit`, as a way to the record with its form open (admin plan
+ * 0054, section 4.3). That is a resource that names no page of its own and
+ * can be changed, which is the brand. Before `{id}` for readability only: a
+ * parameter cannot match two segments.
+ */
+function setupFormBranch(descriptor: AnyResourceDescriptor): Route {
+  const branch = resourceFormBranch(descriptor);
+  const onRecordPage =
+    descriptor.detail === undefined &&
+    descriptor.editor === undefined &&
+    descriptor.actions?.edit === true;
+
+  return onRecordPage
+    ? {
+        ...branch,
+        children: [recordEditRedirect(), ...(branch.children ?? [])],
+      }
+    : branch;
 }
 
 /**

@@ -57,8 +57,6 @@ const STILL_USES_THE_OLD_FORM: readonly string[] = [
   'libs/luna-shopper-admin/feature-resource/src/lib/resource-form-page.ts',
   // The route factory, for a resource that names a `detail` or an `editor`.
   'libs/luna-shopper-admin/feature-resource/src/lib/routes.ts',
-  // The brand draws the old form inside its own page (plan 0054).
-  'libs/luna-shopper-admin/feature-brands/src/lib/brand-detail-page.ts',
   // The product and the product group (plan 0055).
   'libs/luna-shopper-admin/feature-catalog/src/lib/item-form-page.ts',
   'libs/luna-shopper-admin/feature-catalog/src/lib/product-group-detail-page.ts',

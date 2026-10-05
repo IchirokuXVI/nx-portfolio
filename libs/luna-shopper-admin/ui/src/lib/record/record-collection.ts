@@ -190,6 +190,19 @@ export interface CollectionLink {
       font-weight: 600;
     }
 
+    /* Several links share one panel (admin plan 0054, target 5). The panel
+       that holds them carries the edge, and each row after the first a
+       line. */
+    :host(.joined) .row.one {
+      border: none;
+      border-radius: 0;
+      background: none;
+    }
+
+    :host(.joined:not(:first-child)) .row.one {
+      border-block-start: 1px solid var(--admin-border);
+    }
+
     .title,
     .grow {
       flex: 1;
@@ -259,6 +272,7 @@ export interface CollectionLink {
       }
     }
   `,
+  host: { '[class.joined]': 'joined()' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RecordCollection {
@@ -279,6 +293,11 @@ export class RecordCollection {
   readonly status = input<'loading' | 'ready' | 'error'>('ready');
   /** The level of the heading of a panel. A pane uses 3. */
   readonly level = input<2 | 3>(2);
+  /**
+   * Whether the link shape is one row of a panel that something else draws.
+   * It then draws no edge of its own.
+   */
+  readonly joined = input(false);
 
   /** The read failed, and the operator asks again. */
   readonly retry = output<void>();

@@ -38,6 +38,11 @@ export { ScopeMark } from './lib/page/scope-mark';
 export { FieldRow, describedByOf } from './lib/record/field-row';
 export { FieldValue } from './lib/record/field-value';
 export { LockedValue } from './lib/record/locked-value';
+export {
+  RecordCollection,
+  type CollectionLink,
+  type RecordCollectionRow,
+} from './lib/record/record-collection';
 export { RecordSection } from './lib/record/record-section';
 export { SaveBar } from './lib/record/save-bar';
 export { FieldControl } from './lib/resource/field-control';

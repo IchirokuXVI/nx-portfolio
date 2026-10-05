@@ -44,6 +44,29 @@ export const RESOURCE_LIST_EMBED = 'embed';
 export type ResourceListEmbed = 'tab' | 'column';
 
 /**
+ * Route `data` key naming the filter that a list tab of a record is fixed by
+ * (admin plan 0054, section 2.2).
+ *
+ * The products of a group are the products list with `productGroupId` fixed
+ * to the group that is open. The list sends that filter on every read and
+ * offers no control for it, as it does for a `parent`.
+ *
+ * The route says which filter, and `RECORD_CONTEXT` says which record. The ID
+ * is not in the route data: a route is built once, before any record is open.
+ */
+export const RESOURCE_LIST_FIXED = 'fixedBy';
+
+/**
+ * Route `data` key that marks a child route of the record page as one of its
+ * tabs, and holds the key of the tab: `details`, the `name` of a part, or the
+ * `resource` of a list (admin plan 0054, section 2.2).
+ *
+ * The page reads the address of each tab from the route that carries its key,
+ * so a tab can never point at an address the route table does not have.
+ */
+export const RECORD_TAB = 'recordTab';
+
+/**
  * Route `data` key: whether a list drawn as a column sits under a page header
  * that the page holding it drew (admin plan 0042).
  *

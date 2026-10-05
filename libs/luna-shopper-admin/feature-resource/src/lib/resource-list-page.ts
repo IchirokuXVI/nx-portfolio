@@ -53,6 +53,7 @@ import {
   type RowAction,
 } from '@portfolio/luna-shopper-admin/ui';
 import { gatewayErrorKey } from './gateway-error-key';
+import { RECORD_CONTEXT } from './record-context';
 import { ResourceChanges } from './resource-changes';
 import {
   parentsFromRoute,
@@ -62,6 +63,7 @@ import {
 import {
   RESOURCE_DESCRIPTOR,
   RESOURCE_LIST_EMBED,
+  RESOURCE_LIST_FIXED,
   SPLIT_UNDER_HEADER,
   type ResourceListEmbed,
 } from './resource-route-data';
@@ -349,12 +351,28 @@ export class ResourceListPage {
   );
 
   /**
-   * The filters the list offers: the descriptor's, less the one the address
-   * already answered.
+   * What the record this list is a tab of fixes it to (admin plan 0054,
+   * section 2.2): the rows whose filter is that record's ID.
+   *
+   * The route names the filter and the page above names the record. A list
+   * that is no tab of a record has neither, and is fixed by nothing here.
+   */
+  private readonly _fixed: Readonly<Record<string, string>> = fixedBy(
+    this._route.snapshot.data[RESOURCE_LIST_FIXED],
+    inject(RECORD_CONTEXT, { optional: true })?.id
+  );
+
+  /**
+   * The filters the list offers: the descriptor's, less the ones the address
+   * or the record above already answered.
    */
   readonly filters: readonly FilterDescriptor[] = (
     (this.descriptor.filters ?? []) as readonly FilterDescriptor[]
-  ).filter((filter) => filter.param !== this.descriptor.parent?.filter);
+  ).filter(
+    (filter) =>
+      filter.param !== this.descriptor.parent?.filter &&
+      !(filter.param in this._fixed)
+  );
 
   /**
    * How a reference filter finds its rows, kept under the same parent.
@@ -664,15 +682,18 @@ export class ResourceListPage {
     return this._route.snapshot.firstChild?.url[0]?.path ?? null;
   }
 
-  /** What the address already decided, for every read. */
+  /** What the address and the record above already decided, for every read. */
   private _fixedFilters(): Record<string, string> {
     const parent = this.descriptor.parent;
     const value =
       parent === undefined ? undefined : this._parents[parent.filter];
 
-    return parent === undefined || value === undefined
-      ? {}
-      : { [parent.filter]: value };
+    return {
+      ...(parent === undefined || value === undefined
+        ? {}
+        : { [parent.filter]: value }),
+      ...this._fixed,
+    };
   }
 
   /**
@@ -1016,4 +1037,14 @@ export class ResourceListPage {
       return next;
     });
   }
+}
+
+/** The one filter a record fixes its list tab by, or nothing. */
+function fixedBy(
+  filter: unknown,
+  id: string | undefined
+): Readonly<Record<string, string>> {
+  return typeof filter === 'string' && id !== undefined && id !== ''
+    ? { [filter]: id }
+    : {};
 }

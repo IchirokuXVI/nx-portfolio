@@ -1,4 +1,12 @@
-import { recordLayout, type RecordBlock } from './record-block';
+import {
+  isRecordChildList,
+  RECORD_DETAILS_TAB,
+  recordChildCount,
+  recordLayout,
+  recordTabs,
+  type RecordBlock,
+  type RecordChild,
+} from './record-block';
 import type { ResourceDescriptor } from './resource-descriptor';
 
 /**
@@ -305,5 +313,73 @@ describe('recordLayout', () => {
       ['shops.section.place', ['name']],
       ['shops.section.notes', ['note']],
     ]);
+  });
+});
+
+describe('the children of a record', () => {
+  class Part {}
+
+  const withChildren = (
+    children: readonly RecordChild[],
+    details?: 'first' | 'last'
+  ): ResourceDescriptor =>
+    ({
+      name: 'things',
+      fields: [],
+      record: { sections: [], children, details },
+    }) as unknown as ResourceDescriptor;
+
+  const prices: RecordChild = {
+    as: 'tab',
+    name: 'prices',
+    label: 'things.prices',
+    component: Part,
+  };
+  const shopsTab: RecordChild = {
+    as: 'tab',
+    resource: 'shops',
+    by: 'thingId',
+    count: 'shopCount',
+  };
+  const panel: RecordChild = { as: 'panel', resource: 'notes', by: 'thingId' };
+
+  it('has no tabs when no child is a tab', () => {
+    expect(recordTabs(withChildren([panel]))).toEqual([]);
+    expect(recordTabs(withChildren([]))).toEqual([]);
+  });
+
+  it('puts Details first, then each tab in the order of the children', () => {
+    expect(
+      recordTabs(withChildren([prices, panel, shopsTab])).map((tab) => tab.key)
+    ).toEqual([RECORD_DETAILS_TAB, 'prices', 'shops']);
+  });
+
+  it('puts Details last when the block says so', () => {
+    expect(
+      recordTabs(withChildren([prices, shopsTab], 'last')).map((tab) => tab.key)
+    ).toEqual(['prices', 'shops', RECORD_DETAILS_TAB]);
+  });
+
+  it('tells a list from a part', () => {
+    expect(isRecordChildList(shopsTab)).toBe(true);
+    expect(isRecordChildList(prices)).toBe(false);
+  });
+
+  it('counts from the field the child names, before anything else', () => {
+    expect(recordChildCount(shopsTab, { shopCount: 7 }, { shops: 99 })).toBe(7);
+    // The record is not read yet, or the field holds no number.
+    expect(recordChildCount(shopsTab, null, { shops: 99 })).toBeNull();
+    expect(recordChildCount(shopsTab, { shopCount: '7' }, null)).toBeNull();
+  });
+
+  it('counts from what another read holds, by the key of the child', () => {
+    expect(recordChildCount(prices, {}, { prices: 4 })).toBe(4);
+    expect(recordChildCount(panel, {}, { notes: 2 })).toBe(2);
+  });
+
+  it('has no count when nothing holds one', () => {
+    expect(recordChildCount(prices, {}, null)).toBeNull();
+    expect(recordChildCount(prices, {}, {})).toBeNull();
+    expect(recordChildCount(prices, {}, { prices: null })).toBeNull();
   });
 });

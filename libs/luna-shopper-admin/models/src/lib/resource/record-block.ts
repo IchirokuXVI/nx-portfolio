@@ -234,3 +234,74 @@ export function recordLayout<T extends ResourceRow>(
     },
   };
 }
+
+/** The route segment of the Details tab of a record that has tabs. */
+export const RECORD_DETAILS_TAB = 'details';
+
+/** Whether a child is a collection of another resource, and not a part. */
+export function isRecordChildList<T extends ResourceRow>(
+  child: RecordChild<T>
+): child is RecordChildList<T> {
+  return 'resource' in child;
+}
+
+/**
+ * What a child is known by: the `name` of a part, or the `resource` of a
+ * list. It is the key of its count in `counts`, and of its route in the
+ * `tabs` a caller hands to the route factory.
+ */
+export function recordChildKey<T extends ResourceRow>(
+  child: RecordChild<T>
+): string {
+  return isRecordChildList(child) ? child.resource : child.name;
+}
+
+/** One tab of a record: Details, or a child the block draws as a tab. */
+export interface RecordTab {
+  /** {@link RECORD_DETAILS_TAB}, or the key of the child. */
+  readonly key: string;
+  /** `null` for Details. */
+  readonly child: RecordChild | null;
+}
+
+/**
+ * The tabs of a record, in the order they are drawn (admin plan 0054, target
+ * 1). Empty when no child is a tab: Details is then the page.
+ *
+ * Details is first, or last when the block says so. The record opens on the
+ * first of them.
+ */
+export function recordTabs<T extends ResourceRow>(
+  descriptor: ResourceDescriptor<T>
+): readonly RecordTab[] {
+  const block = descriptor.record as unknown as RecordBlock | undefined;
+  const tabs: RecordTab[] = (block?.children ?? [])
+    .filter((child) => child.as === 'tab')
+    .map((child) => ({ key: recordChildKey(child), child }));
+  if (tabs.length === 0) {
+    return [];
+  }
+
+  const details: RecordTab = { key: RECORD_DETAILS_TAB, child: null };
+  return block?.details === 'last' ? [...tabs, details] : [details, ...tabs];
+}
+
+/**
+ * The count beside a tab, a panel or a link (admin plan 0054, section 2.4).
+ *
+ * The first of these that exists: the field of the record that the child
+ * names, then what another read holds under the key of the child. `null`
+ * draws the label alone. Nothing here counts rows, so a count is only ever
+ * one that something already holds.
+ */
+export function recordChildCount(
+  child: RecordChild,
+  row: ResourceRow | null,
+  held: Readonly<Record<string, number | null>> | null
+): number | null {
+  if (child.count !== undefined) {
+    const value = row?.[child.count];
+    return typeof value === 'number' ? value : null;
+  }
+  return held?.[recordChildKey(child)] ?? null;
+}
