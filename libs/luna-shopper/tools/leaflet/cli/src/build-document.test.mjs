@@ -56,6 +56,13 @@ const CONDITIONAL = new Set([
   'buy_n_get_free',
 ]);
 
+/** A per kilo row whose only size is 1 kg, with no number in what it printed. */
+const isRestatedKilo = (row) =>
+  row.leaflet.basis === 'kg' &&
+  row.sizeFormat === 'kg' &&
+  row.unitSize === 1 &&
+  !/\d/.test(row.leaflet.format ?? '');
+
 /** Deza prints no loyalty badge, so its example has no card price to carry. */
 const NO_LOYALTY = new Set(['deza']);
 
@@ -146,8 +153,14 @@ for (const slug of listChains()) {
       // The size, as printed and as a number.
       if (row.unitSize !== null) {
         seen.size = true;
-        assert.equal(product.size.quantity, row.unitSize);
         assert.equal(product.size.label, leaflet.format);
+        if (isRestatedKilo(row)) {
+          // The per kilo basis said again as a size (plan 0005). El Jamon's
+          // prompt still shows one, and the builder writes no quantity for it.
+          assert.equal(product.size.quantity, undefined, row.name);
+        } else {
+          assert.equal(product.size.quantity, row.unitSize);
+        }
       }
 
       // The comparison line, with the printed wording as its label. A card
@@ -310,6 +323,114 @@ test('an end date with no start to open it states no window, and says why', asyn
       /not a YYYY-MM-DD/.test(warning.message)
     )
   );
+});
+
+/** A per kilo tile as the Deza October 2026 read answered it (plan 0005). */
+const perKilo = (over = {}, leaflet = {}) => ({
+  name: 'Trucha asturiana',
+  brand: null,
+  unitSize: 1,
+  sizeFormat: 'kg',
+  price: 7.5,
+  unitPrice: null,
+  unitPriceLabel: '€/KILO',
+  category: 'Pescado',
+  categoryPath: ['PESCADERÍA'],
+  ...over,
+  leaflet: {
+    format: 'kilo',
+    basis: 'kg',
+    wasPrice: null,
+    loyalty: false,
+    validUntil: null,
+    validityText: null,
+    promotion: null,
+    ...leaflet,
+  },
+});
+
+test('a per kilo offer read as 1 kg carries no quantity, and a warning names it', async () => {
+  const { document, assembled } = await build('deza', [
+    perKilo(),
+    perKilo({ name: 'Mejillón gallego' }, { format: null }),
+  ]);
+  const [trout, mussel] = document.products;
+
+  // The printed word stays as the label, and nothing claims a 1 kg pack.
+  assert.deepEqual(trout.size, { label: 'kilo' });
+  assert.equal(mussel.size, undefined);
+  assert.deepEqual(assembled.offers[0].product.format, { raw: 'kilo' });
+  assert.equal(assembled.offers[1].product.format, undefined);
+
+  // It is still a price per kilo, and still no till price.
+  assert.equal(trout.price, undefined);
+  assert.equal(trout.extra.basis, 'kg');
+  assert.equal(trout.unit_price.amount, 7.5);
+
+  const named = document.warnings.filter((warning) =>
+    /1 kg size the tile does not print/.test(warning.message)
+  );
+  assert.equal(named.length, 2);
+  assert.match(named[0].message, /^p05-o01 \(Trucha asturiana\)/);
+  assert.match(named[0].message, /"kilo"/);
+  assert.match(named[1].message, /^p05-o02 \(Mejillón gallego\)/);
+  assert.equal(named[0].extra.page, 5);
+});
+
+test('a printed 1 kg keeps its quantity, whatever the price is per', async () => {
+  const { document } = await build('deza', [
+    // Per kilo, and the tile prints the pack too.
+    perKilo({ name: 'Patata' }, { format: '1 kg' }),
+    // A bag of 1 kg at a price for the bag.
+    perKilo(
+      { name: 'Zanahorias', unitPriceLabel: null },
+      { format: 'Bolsa 1 kg', basis: 'unit' }
+    ),
+    // Per kilo, and a size that is not the basis said again.
+    perKilo({ name: 'Sandía', unitSize: 2 }, { format: 'kilo' }),
+  ]);
+  const [potato, carrots, melon] = document.products;
+  assert.deepEqual(potato.size, { label: '1 kg', quantity: 1, unit: 'kg' });
+  assert.deepEqual(carrots.size, {
+    label: 'Bolsa 1 kg',
+    quantity: 1,
+    unit: 'kg',
+  });
+  assert.equal(melon.size.quantity, 2);
+  assert.ok(
+    !(document.warnings ?? []).some((warning) =>
+      /does not print/.test(warning.message)
+    )
+  );
+});
+
+test("deza's prompt says a per kilo tile has no size and the brand is the line", () => {
+  const prompt = readPrompt(resolveChain('deza')).replace(/\r\n/g, '\n');
+  const flat = prompt.replace(/\s+/g, ' ');
+
+  // Rule one: only a per kilo price means no size.
+  assert.match(flat, /A TILE THAT PRINTS ONLY A PER KILO PRICE HAS NO SIZE/);
+  assert.match(flat, /answer "unitSize" null/);
+  // The line that taught the 1 kg is gone, and the example no longer shows it.
+  assert.doesNotMatch(prompt, /"kilo"\s+-> unitSize 1/);
+  const perKiloExample = promptExample('deza').filter(
+    (row) => row.leaflet.basis === 'kg'
+  );
+  assert.ok(perKiloExample.length > 0);
+  for (const row of perKiloExample) {
+    assert.equal(row.unitSize, null, row.name);
+    assert.equal(row.sizeFormat, null, row.name);
+  }
+
+  // Rule two: the brand is the line on the pack, not the company behind it.
+  assert.match(
+    flat,
+    /THE BRAND IS THE LINE PRINTED ON THE PACK, NOT ITS MAKER/
+  );
+  assert.match(flat, /"Elvive", "Fructis"/);
+  assert.match(flat, /never "L'Oréal" for Elvive/);
+  assert.match(flat, /never "Garnier" for Fructis/);
+  assert.doesNotMatch(prompt, /"brand": "manufacturer brand/);
 });
 
 test('readPer reads the words, the abbreviations and the flat enum', () => {

@@ -7,11 +7,16 @@
  * is 62 pages of flat images. A reader told that in advance reads differently
  * from one that finds out on page nine.
  *
- * **The page count comes from the PDF's own bytes**, by counting its
- * `/Type /Page` objects, so a census costs nothing and needs nothing installed.
- * A PDF that keeps its page objects in a compressed object stream answers zero
- * to that scan, and then the renderer is asked instead: PyMuPDF answers the
- * whole census in one call, and everything else answers the page count alone.
+ * **The page count comes from the PDF's own bytes**, so a census costs nothing
+ * and needs nothing installed. It is the `/Count` of the page tree the trailer's
+ * `/Root` names, and when no tree can be read it is the number of distinct page
+ * objects. It is never the number of times `/Type /Page` appears (plan 0005). A
+ * PDF saved with incremental updates holds several copies of one page object,
+ * the old one and each rewrite of it, and a count of appearances answered 85
+ * pages for a 44 page leaflet. A PDF that keeps its page objects in a
+ * compressed object stream answers zero to that scan, and then the renderer is
+ * asked instead: PyMuPDF answers the whole census in one call, and everything
+ * else answers the page count alone.
  *
  * **The text layer is reported when something can read it and "unknown"
  * otherwise.** PyMuPDF and `pdftotext` both answer it and neither is a
@@ -27,11 +32,81 @@ import { formatPageList } from './commands.mjs';
 import { PY_CENSUS, pagesInDirectory } from './render.mjs';
 
 /** A page object, and not the `/Pages` tree node that holds them. */
-const PAGE_OBJECT = /\/Type\s*\/Page(?![A-Za-z])/g;
+const PAGE_OBJECT = /\/Type\s*\/Page(?![A-Za-z])/;
 
 /** A page box, in points. */
 const MEDIA_BOX =
   /\/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]/g;
+
+/** Where an indirect object starts: `12 0 obj`. */
+const OBJECT_HEADER = /(\d+)\s+\d+\s+obj\b/g;
+
+/** Where the scan read the page count, as the census prints it. */
+const FROM_PAGE_TREE = "the PDF's own page tree (/Pages /Count)";
+const FROM_PAGE_OBJECTS = "the PDF's own distinct /Type /Page objects";
+
+/**
+ * Every object the file states in the clear, by object number, as the text of
+ * its dictionary.
+ *
+ * **A later definition replaces an earlier one.** An incremental update never
+ * edits an object in place: it appends a new copy under the same number, and
+ * the copy nearest the end of the file is the one the document means. The map
+ * is keyed on the number, so a page that was rewritten twice is one entry.
+ *
+ * A stream's bytes are left out, so nothing a content stream happens to spell
+ * is read as part of a dictionary.
+ */
+function readObjects(text) {
+  const objects = new Map();
+  for (const match of text.matchAll(OBJECT_HEADER)) {
+    const start = match.index + match[0].length;
+    let end = text.indexOf('endobj', start);
+    if (end < 0) {
+      end = text.length;
+    }
+    const stream = text.indexOf('stream', start);
+    if (stream >= 0 && stream < end) {
+      end = stream;
+    }
+    objects.set(Number(match[1]), text.slice(start, end));
+  }
+  return objects;
+}
+
+/** The object number a dictionary key refers to (`/Root 1 0 R`), the last time
+ * the text states it, or null. */
+function lastReference(text, key) {
+  const pattern = new RegExp(`/${key}\\s+(\\d+)\\s+\\d+\\s+R`, 'g');
+  let found = null;
+  for (const match of text.matchAll(pattern)) {
+    found = Number(match[1]);
+  }
+  return found;
+}
+
+/**
+ * The page count the document's own page tree states, or null when the tree
+ * cannot be read from the bytes.
+ *
+ * The last trailer's `/Root` names the catalog, the catalog's `/Pages` names
+ * the root of the tree, and that node's `/Count` is how many pages the
+ * document has. Each of the three is read from its latest definition.
+ */
+function countFromPageTree(text, objects) {
+  const root = lastReference(text, 'Root');
+  const catalog = root === null ? null : objects.get(root);
+  if (!catalog) {
+    return null;
+  }
+  const pages = lastReference(catalog, 'Pages');
+  const tree = pages === null ? null : objects.get(pages);
+  if (!tree) {
+    return null;
+  }
+  const count = /\/Count\s+(\d+)(?!\s+\d+\s+R)/.exec(tree);
+  return count ? Number(count[1]) : null;
+}
 
 /**
  * The page count and the page sizes the PDF states about itself.
@@ -43,15 +118,29 @@ export function scanPdf(bytes) {
   const text = Buffer.isBuffer(bytes)
     ? bytes.toString('latin1')
     : String(bytes);
-  const pageCount = (text.match(PAGE_OBJECT) ?? []).length;
+  const objects = readObjects(text);
+  const pageObjects = [...objects.values()].filter((body) =>
+    PAGE_OBJECT.test(body)
+  );
+
+  const fromTree = countFromPageTree(text, objects);
+  const pageCount = fromTree ?? pageObjects.length;
+  const pageCountFrom = fromTree === null ? FROM_PAGE_OBJECTS : FROM_PAGE_TREE;
+
+  // One size per page, read from the page's latest definition, so a rewritten
+  // page is not two sizes. A document that states its box once on the tree
+  // node, for every page to inherit, still answers that one box.
+  const boxed = pageObjects.filter((body) => body.includes('/MediaBox'));
   const sizes = [];
-  for (const match of text.matchAll(MEDIA_BOX)) {
-    sizes.push({
-      width: Math.round(Number(match[3]) - Number(match[1])),
-      height: Math.round(Number(match[4]) - Number(match[2])),
-    });
+  for (const source of boxed.length > 0 ? boxed : [text]) {
+    for (const match of source.matchAll(MEDIA_BOX)) {
+      sizes.push({
+        width: Math.round(Number(match[3]) - Number(match[1])),
+        height: Math.round(Number(match[4]) - Number(match[2])),
+      });
+    }
   }
-  return { pageCount, sizes };
+  return { pageCount, pageCountFrom, sizes };
 }
 
 /** The distinct page sizes, each with how many pages carry it. */
@@ -120,7 +209,7 @@ export async function censusPdf({
 }) {
   const scanned = scanPdf(readFile(pdf));
   let pageCount = scanned.pageCount;
-  let pageCountFrom = "the PDF's own /Type /Page objects";
+  let pageCountFrom = scanned.pageCountFrom;
   let sizes = groupSizes(scanned.sizes);
   let textLayer = null;
   let textLayerFrom = null;

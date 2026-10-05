@@ -21,9 +21,88 @@ const THREE_PAGES = Buffer.from(
   'latin1'
 );
 
-test('the page count comes from the page objects and not the Pages node', () => {
+/** One revision of a PDF: its objects, then the cross reference table and the
+ * trailer that locate them. `prev` is where the revision before it put its own
+ * table, which is what makes a revision an incremental update. */
+function appendRevision(pdf, objects, { prev = null } = {}) {
+  let out = pdf;
+  const offsets = new Map();
+  for (const [number, body] of objects) {
+    offsets.set(number, Buffer.byteLength(out, 'latin1'));
+    out += `${number} 0 obj\n${body}\nendobj\n`;
+  }
+  const xrefAt = Buffer.byteLength(out, 'latin1');
+  out += 'xref\n';
+  if (prev === null) {
+    out += `0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (const [number] of objects) {
+      out += `${String(offsets.get(number)).padStart(10, '0')} 00000 n \n`;
+    }
+  } else {
+    for (const [number] of objects) {
+      out += `${number} 1\n${String(offsets.get(number)).padStart(10, '0')} 00000 n \n`;
+    }
+  }
+  const trailer =
+    prev === null ? '/Size 6 /Root 1 0 R' : `/Size 6 /Root 1 0 R /Prev ${prev}`;
+  out += `trailer\n<< ${trailer} >>\nstartxref\n${xrefAt}\n%%EOF\n`;
+  return { pdf: out, xrefAt };
+}
+
+/**
+ * A small synthetic PDF of two pages, saved once and then saved again with an
+ * incremental update that rotates page one.
+ *
+ * The update appends a second copy of page object 3 and edits nothing, which is
+ * what an incremental save does. So the bytes hold three `/Type /Page` objects
+ * for two pages, the shape that made a 44 page leaflet count as 85 (plan 0005).
+ */
+function twoPagesSavedTwice() {
+  const page = (extra = '') =>
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 467 794] /Contents 5 0 R${extra} >>`;
+  const first = appendRevision('%PDF-1.4\n', [
+    [1, '<< /Type /Catalog /Pages 2 0 R >>'],
+    [2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>'],
+    [3, page()],
+    [4, page()],
+    [5, '<< /Length 0 >>\nstream\n\nendstream'],
+  ]);
+  const second = appendRevision(first.pdf, [[3, page(' /Rotate 90')]], {
+    prev: first.xrefAt,
+  });
+  return Buffer.from(second.pdf, 'latin1');
+}
+
+test('with no trailer to find the tree by, the page count is the distinct page objects', () => {
   const scanned = scanPdf(THREE_PAGES);
   assert.equal(scanned.pageCount, 3);
+  assert.match(scanned.pageCountFrom, /distinct \/Type \/Page objects/);
+});
+
+test('a 2 page PDF that holds an incremental update of one page counts 2 pages', () => {
+  const bytes = twoPagesSavedTwice();
+  // The defect this guards: page one is in the file twice, so counting every
+  // page object answers three.
+  assert.equal(bytes.toString('latin1').match(/\/Type \/Page /g).length, 3);
+
+  const scanned = scanPdf(bytes);
+  assert.equal(scanned.pageCount, 2);
+  assert.match(scanned.pageCountFrom, /page tree/);
+  assert.deepEqual(groupSizes(scanned.sizes), [
+    { width: 467, height: 794, pages: 2 },
+  ]);
+});
+
+test('with no readable page tree, a rewritten page is still one page', () => {
+  // The same file with its catalog out of reach, as it is when a PDF keeps it
+  // in a compressed object stream.
+  const bytes = twoPagesSavedTwice()
+    .toString('latin1')
+    .replace('/Type /Catalog /Pages 2 0 R', '/Type /Catalog');
+  const scanned = scanPdf(bytes);
+  assert.equal(scanned.pageCount, 2);
+  assert.match(scanned.pageCountFrom, /distinct \/Type \/Page objects/);
+  assert.equal(scanned.sizes.length, 2);
 });
 
 test('the page sizes are read in points, with no space needed after /Type', () => {
@@ -48,7 +127,7 @@ test('with no tool at all the census is the byte scan and the text layer is unkn
     run: async () => ({ started: false, code: -1, stdout: '', stderr: '' }),
   });
   assert.equal(census.pageCount, 3);
-  assert.match(census.pageCountFrom, /\/Type \/Page/);
+  assert.match(census.pageCountFrom, /distinct \/Type \/Page objects/);
   assert.equal(census.textLayer, null);
   assert.match(formatCensus(census), /text layer: unknown/);
 });

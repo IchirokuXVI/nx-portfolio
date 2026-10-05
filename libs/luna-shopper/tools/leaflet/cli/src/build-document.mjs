@@ -143,6 +143,21 @@ export function readPer(label, per = null) {
   return null;
 }
 
+/**
+ * Whether a size is the per kilo basis said a second time, and not a pack.
+ *
+ * A tile that prints only "€/KILO" prints no size: the shop weighs the product.
+ * A model asked for a size answers 1 kg anyway, and written down that is a
+ * fixed 1 kg pack a curator then sees (plan 0005). So a per kilo offer whose
+ * only size is exactly 1 kg carries no quantity, unless its printed format
+ * states a number, as "1 kg" and "Bolsa 1 kg" do and "kilo" does not.
+ */
+function isRestatedKilo({ basis, unit, quantity, raw }) {
+  return (
+    basis === 'kg' && unit === 'kg' && quantity === 1 && !/\d/.test(raw ?? '')
+  );
+}
+
 /** A unit price label's pattern, with every printed number folded to `#`, so
  * "LITRO 1'18" and "LITRO 3'61" count as one pattern and a genuinely new
  * footer wording still stands out. */
@@ -385,6 +400,17 @@ function buildPage({ page, rows, sections, fixedSections, leafletFrom }) {
     }
     if (isPackOfItems) {
       format.pack_count = Math.round(quantity);
+    } else if (isRestatedKilo({ basis, unit, quantity, raw: read.format })) {
+      warnings.push({
+        page,
+        message:
+          id +
+          ' (' +
+          name +
+          ') is priced per kilo and was read as a 1 kg size the tile does not print' +
+          (read.format ? ' (its format reads "' + read.format + '")' : '') +
+          ', so it carries no quantity.',
+      });
     } else if (quantity !== null) {
       format.quantity = quantity;
       if (unit) {
