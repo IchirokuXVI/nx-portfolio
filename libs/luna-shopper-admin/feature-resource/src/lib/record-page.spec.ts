@@ -544,6 +544,15 @@ describe('RecordPage, a record under the wrong parent', () => {
     expect(url()).not.toBe('/plants/p9/lines/l1');
   });
 
+  /** Another screen asked for the form, and the wrong address still gets it. */
+  it('keeps what the address asked for, so the form opens at the right address', async () => {
+    const mounted = await mount('/plants/p9/lines/l1?edit=1');
+    await drawn(mounted.harness);
+
+    expect(url()).toBe('/plants/p1/lines/l1');
+    expect(at(mounted.harness).page.store().mode()).toBe('edit');
+  });
+
   it('stays where the address and the row name the same parent', async () => {
     await mount('/plants/p1/lines/l1');
 
@@ -587,6 +596,21 @@ describe('RecordPage, a page that gives way to its child', () => {
 
     await TestBed.inject(Router).navigateByUrl('/yards/y1/inside');
     await drawn(mounted.harness);
+    expect(yields(mounted)).toBe(false);
+  });
+
+  /**
+   * A record that is gone draws no outlet, so its child is not drawn. Its
+   * header is then all there is on the page, and it stays.
+   */
+  it('keeps its header while the record is gone, whatever is open under it', async () => {
+    server.read = async () => {
+      throw refusal('not_found', 404);
+    };
+    const mounted = await mount('/yards/y1/inside/s1');
+
+    expect(mounted.page.yielded()).toBe(true);
+    expect(mounted.page.givesWay()).toBe(false);
     expect(yields(mounted)).toBe(false);
   });
 

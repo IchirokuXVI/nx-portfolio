@@ -10,6 +10,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type {
   DraftValue,
   FieldDescriptor,
+  FieldMessage,
   ReferenceScope,
   ResourceRow,
   ScopeMarkView,
@@ -151,6 +152,7 @@ import { ReferencesControl } from './references-control';
           [locks]="locks()"
           [lookup]="lookup()"
           [marks]="marks()"
+          [names]="names()"
           [ordered]="isOrdered()"
           [resource]="resourceOf()"
           [scope]="scopeOf()"
@@ -390,6 +392,18 @@ export class FieldControl {
       return null;
     }
     return (target) => field.mark?.(target);
+  });
+
+  /** What the descriptor calls one target, or `null` for its title. */
+  readonly names = computed<
+    ((target: ResourceRow) => FieldMessage | undefined) | null
+  >(() => {
+    const field = this.field();
+    if (field.kind !== 'references' || field.nameOf === undefined) {
+      return null;
+    }
+    const row = this.context();
+    return (target) => field.nameOf?.(row, target);
   });
 
   localesOf(): readonly string[] {

@@ -29,6 +29,7 @@ import type {
   ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
 import {
+  ConfirmDialog,
   PageHeader,
   ReferencesControl,
   ScopeMark,
@@ -36,6 +37,7 @@ import {
 } from '@portfolio/luna-shopper-admin/ui';
 import { ITEMS } from '../items';
 import { LocationSections } from '../location-sections';
+import { shopScopeName } from '../locations';
 import { CHAIN_RESOURCES, chainsRoutes } from './chains-routes';
 
 /**
@@ -391,6 +393,19 @@ describe('a shop, on the record page', () => {
     expect(page(fixture).heading()).toBe('Avenida del Gran Capitán 12');
   });
 
+  /** `?edit=1` is what another screen asked for, and it is still asked for. */
+  it('opens the form at its own address when the wrong one asked for it', async () => {
+    const fixture = await boot(
+      '/chains/sm_consum/shops/loc_cordoba_centro?edit=1'
+    );
+    await settle(fixture);
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(url()).toBe(`${CENTRO}/details`);
+    expect(page(fixture).store().mode()).toBe('edit');
+  });
+
   it('goes there from a tab of the wrong address as well', async () => {
     const fixture = await boot(
       '/chains/sm_consum/shops/loc_cordoba_centro/details'
@@ -519,6 +534,32 @@ describe('the Details tab of a shop', () => {
     expect(link?.textContent?.trim()).toBe('catalog.locations.openOnMap');
   });
 
+  /**
+   * The link is worked out from the two numbers. In the form it follows the
+   * numbers that are typed: the saved place beside the numbers of another
+   * one would be a link that lies.
+   */
+  it('follows the coordinates that are typed, and links to none while one is empty', async () => {
+    const fixture = await boot(`${CENTRO}/details`);
+    const store = page(fixture).store();
+    const href = () => {
+      const value = view(fixture).valueOf(field(fixture, 'mapUrl'));
+      return value.kind === 'link' ? value.href : null;
+    };
+    await edit(fixture);
+    expect(href()).toContain('37.8882');
+
+    store.set('latitude', '40.4168');
+    store.set('longitude', '-3.7038');
+    expect(href()).toContain('mlat=40.4168&mlon=-3.7038');
+    expect(href()).not.toContain('37.8882');
+
+    store.set('longitude', '');
+    expect(href()).toBeNull();
+    store.set('longitude', 'west');
+    expect(href()).toBeNull();
+  });
+
   it.each(['latitude', 'longitude'])(
     'links to no map when the %s is missing',
     async (coordinate) => {
@@ -604,13 +645,21 @@ describe('the price scopes of a shop', () => {
       `li[data-row="${id}"]`
     ) as HTMLElement | null;
 
-  it('reads them in the order the shop holds them, each by its name', async () => {
+  /**
+   * The shop holds its own scope first. The page reads the widest first, as
+   * the line above the tabs did before the record page.
+   */
+  it('reads them most general first, each by its name', async () => {
     const fixture = await boot(`${CENTRO}/details`);
 
+    expect(page(fixture).store().row()?.['priceScopeIds']).toEqual([
+      OWN,
+      WAREHOUSE,
+    ]);
     expect(view(fixture).valueOf(scopesField(fixture))).toMatchObject({
       kind: 'references',
       resource: 'price-scopes',
-      ids: [OWN, WAREHOUSE],
+      ids: [WAREHOUSE, OWN],
     });
     expect(view(fixture).namesOf(scopesField(fixture))[WAREHOUSE]).toBe(
       'Córdoba warehouse'
@@ -620,13 +669,70 @@ describe('the price scopes of a shop', () => {
     expect(control(fixture)).toBeNull();
   });
 
-  /** A harvested scope has no label, and is known by the key its source prints. */
-  it('calls a scope with no label by its kind and its source key', async () => {
+  /**
+   * A harvested scope has no label, and is known by the key its source
+   * prints. The kind beside it is in the words of this app, and never as the
+   * gateway spells it.
+   */
+  it('calls a scope with no label by the word for its kind and its source key', async () => {
     const fixture = await boot(`${SIERRA}/details`);
 
+    expect(
+      shopScopeName(
+        { id: 'loc_sierra' },
+        { kind: 'REGION', externalKey: '3421', label: null }
+      )
+    ).toEqual({
+      kind: 'key',
+      key: 'catalog.priceScopes.unlabelled.REGION',
+      args: { key: '3421' },
+    });
     expect(view(fixture).namesOf(scopesField(fixture))[OTHER_WAREHOUSE]).toBe(
-      'REGION 3421'
+      'catalog.priceScopes.unlabelled.REGION'
     );
+    expect(pageElement(fixture).textContent).not.toContain('REGION 3421');
+  });
+
+  it('calls a scope with no label and no key by the word for its kind alone', () => {
+    expect(
+      shopScopeName({ id: 'x' }, { kind: 'NATIONAL', externalKey: null })
+    ).toEqual({ kind: 'key', key: 'catalog.priceScopeKind.NATIONAL' });
+  });
+
+  it('leaves a scope with a label, and one of a kind it has no word for, to its title', () => {
+    expect(
+      shopScopeName(
+        { id: 'x' },
+        { kind: 'REGION', externalKey: '4661', label: { es: 'Almacén' } }
+      )
+    ).toBeUndefined();
+    expect(
+      shopScopeName({ id: 'x' }, { kind: 'PROVINCE', externalKey: '14' })
+    ).toBeUndefined();
+  });
+
+  /** The scope of the shop itself: its title is its kind and the id of the shop. */
+  it('calls the own scope of the shop "This shop only", reading and in the form', async () => {
+    const fixture = await boot(`${CENTRO}/details`);
+
+    expect(view(fixture).namesOf(scopesField(fixture))[OWN]).toBe(
+      'catalog.shops.pricedBy.own'
+    );
+    expect(pageElement(fixture).textContent).toContain(
+      'catalog.shops.pricedBy.own'
+    );
+
+    await edit(fixture);
+    expect(rowOf(fixture, OWN)?.querySelector('.name')?.textContent).toBe(
+      'catalog.shops.pricedBy.own'
+    );
+    // The scope of another shop is no scope of this one.
+    expect(
+      shopScopeName(
+        { id: 'loc_other' },
+        { kind: 'STORE', externalKey: 'loc_cordoba_centro', label: null }
+      )
+    ).not.toEqual({ kind: 'key', key: 'catalog.shops.pricedBy.own' });
   });
 
   it('gives each scope the mark of how far it reaches', async () => {
@@ -645,8 +751,8 @@ describe('the price scopes of a shop', () => {
         ?.queryAll(By.directive(ScopeMark))
         .map((mark) => (mark.componentInstance as ScopeMark).label())
     ).toEqual([
-      'catalog.priceScopeKind.STORE',
       'catalog.priceScopeKind.REGION',
+      'catalog.priceScopeKind.STORE',
     ]);
   });
 
@@ -742,7 +848,8 @@ describe('the price scopes of a shop', () => {
     expect(store.mode()).toBe('read');
     expect(store.row()?.['priceScopeIds']).toEqual([OWN, OTHER_WAREHOUSE]);
     expect(view(fixture).valueOf(scopesField(fixture))).toMatchObject({
-      ids: [OWN, OTHER_WAREHOUSE],
+      // Read again, so most general first.
+      ids: [OTHER_WAREHOUSE, OWN],
     });
     expect(control(fixture)).toBeNull();
     // The list of shops shows the scopes too, so it is told of the write.
@@ -1083,11 +1190,34 @@ describe('going from one shop to another', () => {
 
     expect(
       view(fixture).valueOf(field(fixture, 'priceScopeIds'))
-    ).toMatchObject({ ids: ['ps_store_loc_sierra', OTHER_WAREHOUSE] });
+    ).toMatchObject({ ids: [OTHER_WAREHOUSE, 'ps_store_loc_sierra'] });
   });
 });
 
 describe('deleting a shop', () => {
+  /**
+   * One name for the shop on the whole page: the heading. The title of a
+   * shop carries its town, for a picker.
+   */
+  it('calls the shop what the heading calls it, in the question and in the menu', async () => {
+    const fixture = await boot(`${CENTRO}/details`);
+    const name = 'Avenida del Gran Capitán 12';
+
+    expect(page(fixture).heading()).toBe(name);
+    expect(page(fixture).title()).toBe(name);
+    expect(
+      page(fixture).descriptor.title(page(fixture).store().row() ?? {}, [])
+    ).not.toBe(name);
+
+    page(fixture).deleting.set(true);
+    await settle(fixture);
+    const question = fixture.debugElement
+      .queryAll(By.directive(ConfirmDialog))
+      .at(-1)?.componentInstance as ConfirmDialog;
+    expect(question.headingArgs()).toMatchObject({ name });
+    expect(question.confirmArgs()).toEqual({ name });
+  });
+
   it('asks first, then goes back to the shops of the chain', async () => {
     const fixture = await boot(`${OESTE}/details`);
     const changes = TestBed.inject(ResourceChanges);

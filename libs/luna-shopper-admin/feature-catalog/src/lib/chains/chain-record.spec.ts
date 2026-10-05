@@ -648,6 +648,26 @@ describe('the Shops tab of a chain', () => {
     expect(head().classList.contains('yields')).toBe(false);
   });
 
+  /**
+   * A chain that is gone draws no outlet, so no shop is drawn under it. Its
+   * own header is then the one way back, also where the address names a shop.
+   */
+  it('keeps its header over a shop when the chain is not there', async () => {
+    const fixture = await boot(
+      '/chains/sm_nowhere/shops/loc_cordoba_centro/details'
+    );
+    const head = pageElement(fixture).querySelector(':scope > .head');
+
+    expect(page(fixture).descriptor.name).toBe('supermarkets');
+    expect(page(fixture).yielded()).toBe(true);
+    expect(page(fixture).givesWay()).toBe(false);
+    expect(head?.classList.contains('yields')).toBe(false);
+    expect(head?.querySelector('a.page-back')?.getAttribute('href')).toBe(
+      '/chains'
+    );
+    expect(pageElement(fixture).querySelector('[data-missing]')).not.toBeNull();
+  });
+
   it('gives its header up to a new shop as well', async () => {
     const fixture = await boot('/chains/sm_mercadona/shops/new');
 

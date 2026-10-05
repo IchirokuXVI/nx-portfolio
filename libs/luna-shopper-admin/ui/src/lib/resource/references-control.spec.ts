@@ -7,6 +7,10 @@ import type {
   ResourceRow,
   ScopeMarkView,
 } from '@portfolio/luna-shopper-admin/models';
+import {
+  fieldMessage,
+  type FieldMessage,
+} from '@portfolio/luna-shopper-admin/models';
 import { ScopeMark } from '../page/scope-mark';
 import type { ReferenceLookup, ReferenceOption } from './reference-lookup';
 import { ReferencePicker } from './reference-picker';
@@ -65,6 +69,7 @@ async function render(
     ordered?: boolean;
     addKey?: string;
     marks?: (target: ResourceRow) => ScopeMarkView | undefined;
+    names?: (target: ResourceRow) => FieldMessage | undefined;
   } = {}
 ) {
   TestBed.resetTestingModule();
@@ -92,6 +97,9 @@ async function render(
   }
   if (options.addKey !== undefined) {
     fixture.componentRef.setInput('addKey', options.addKey);
+  }
+  if (options.names !== undefined) {
+    fixture.componentRef.setInput('names', options.names);
   }
   fixture.detectChanges();
   await settle(fixture);
@@ -480,5 +488,27 @@ describe('ReferencesControl after a move', () => {
     expect(names(fixture)).toEqual(['Warehouse 4661', 'Córdoba', 'This shop']);
     expect(moveOf(rows(fixture)[0], 'up').disabled).toBe(true);
     expect(document.activeElement).toBe(moveOf(rows(fixture)[0], 'down'));
+  });
+});
+
+describe('ReferencesControl, what the field calls a target', () => {
+  /** A fact about the record and the target, which the title cannot say. */
+  it('says the name of the field in place of the title, and keeps the title of the rest', async () => {
+    const { fixture } = await render(['ps_store', 'ps_region', 'ps_local'], {
+      names: (target) =>
+        target['kind'] === 'STORE'
+          ? fieldMessage('shops.own')
+          : target['kind'] === 'LOCAL_AREA'
+            ? { kind: 'text', text: 'Near here' }
+            : undefined,
+    });
+
+    expect(names(fixture)).toEqual(['shops.own', 'Córdoba', 'Near here']);
+  });
+
+  it('says the title of every target for a field that names none', async () => {
+    const { fixture } = await render(['ps_store', 'ps_region']);
+
+    expect(names(fixture)).toEqual(['This shop', 'Córdoba']);
   });
 });

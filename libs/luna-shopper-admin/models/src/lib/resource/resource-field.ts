@@ -368,6 +368,25 @@ export interface ReferencesField<T extends ResourceRow> extends FieldBase<T> {
    * lookup has read the target, as it asks `locked`.
    */
   mark?(target: ResourceRow): ScopeMarkView | undefined;
+  /**
+   * What one target is called on this record, in place of the target's own
+   * title (admin plan 0056, target 7). A shop calls its own price scope
+   * "This shop only", which the scope cannot say about itself.
+   *
+   * A message and not a string, because a descriptor has no translator.
+   * `undefined` keeps the title. A method for the reason {@link locked} is
+   * one, and asked when `locked` is.
+   */
+  nameOf?(row: Partial<T>, target: ResourceRow): FieldMessage | undefined;
+  /**
+   * The order the targets are read in, as a comparison of two target rows.
+   *
+   * Only while the page reads, and only once every target is read. The form
+   * keeps the order the row holds, which is the order it sends. So this is
+   * for a field whose order says nothing, and never one that is
+   * {@link ordered}.
+   */
+  readOrder?(a: ResourceRow, b: ResourceRow): number;
 }
 
 /** A `jsonb` column with one string per locale. */
