@@ -69,8 +69,10 @@ export interface ScopePickerChoice {
   template: `
     <button
       (click)="toggle()"
+      [attr.aria-describedby]="describedBy()"
       [attr.aria-expanded]="open()"
       [attr.aria-label]="label()"
+      [attr.id]="controlId()"
       #trigger
       class="trigger"
       type="button"
@@ -367,6 +369,13 @@ export class ScopePicker {
   readonly truncated = input(false);
   /** Whether the chain's single shop scopes can still be asked for. */
   readonly shopsOffered = input(false);
+  /**
+   * The id of the button, for the `<label>` of a form row that names the
+   * picker. `null` leaves the attribute off.
+   */
+  readonly controlId = input<string | null>(null);
+  /** The ids of the lines that describe the button, or `null` for none. */
+  readonly describedBy = input<string | null>(null);
   /** Whether "no scope" is a choice. */
   readonly clearable = input(false);
   /** What the choice of no scope says, as a key. */

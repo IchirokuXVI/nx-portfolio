@@ -1,5 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component } from '@angular/core';
+import { Component, type Provider } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router, RouterOutlet } from '@angular/router';
@@ -8,16 +8,29 @@ import {
   ContentLocaleStore,
   DeploymentStore,
   RESOURCE_GATEWAYS,
+  ResourceMemoryGateways,
   ServerReachability,
   SessionStorage,
   SessionStore,
+  type ResourceGatewaysI,
+  type ResourceSource,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   adminRoutes,
   provideSections,
+  RecordView,
   type AdminSection,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { CautionLine, PageHeader } from '@portfolio/luna-shopper-admin/ui';
+import type {
+  ResourceGateway,
+  ResourceRow,
+} from '@portfolio/luna-shopper-admin/models';
+import {
+  CautionLine,
+  ConfirmDialog,
+  PageHeader,
+  SaveBar,
+} from '@portfolio/luna-shopper-admin/ui';
 import { pricePolicySource } from '../catalog-sources';
 import type { PricePolicy } from '../price-policies';
 import {
@@ -34,7 +47,9 @@ import {
 
 /**
  * The price rules (admin plan 0043, target 6): six rows in rank order, a
- * switch on each, and a form that opens under its row.
+ * switch on each, and a form that opens under its row. The form is the view
+ * of the record page, opened as a form at once (admin plan 0060, section
+ * 2.1).
  *
  * Against the in memory gateway, whose six rows are the ones the migration
  * seeds.
@@ -56,7 +71,33 @@ const SECTION: AdminSection = {
   screens: productsRoutes(),
 };
 
-async function boot(url = '/products/price-rules') {
+/**
+ * The memory gateways, recording every change of a rule as the ID and the
+ * body the gateway is handed.
+ */
+function recordingChanges(changed: unknown[]): ResourceGatewaysI {
+  const memory = new ResourceMemoryGateways();
+  return {
+    for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+      const inner = memory.for(source);
+      if (source.path !== pricePolicySource().path) {
+        return inner;
+      }
+      return {
+        list: (query) => inner.list(query),
+        read: (id) => inner.read(id),
+        create: (input) => inner.create(input),
+        update: (id, input) => {
+          changed.push([id, input]);
+          return inner.update(id, input);
+        },
+        remove: (id) => inner.remove(id),
+      } satisfies ResourceGateway<T>;
+    },
+  };
+}
+
+async function boot(url = '/products/price-rules', with_: Provider[] = []) {
   TestBed.resetTestingModule();
   await TestBed.configureTestingModule({
     imports: [TestHost, RokuTranslatorTestingModule.forTesting()],
@@ -69,6 +110,7 @@ async function boot(url = '/products/price-rules') {
       SessionStorage,
       SessionStore,
       DeploymentStore,
+      ...with_,
     ],
   }).compileComponents();
 
@@ -95,6 +137,29 @@ const q = <T extends Element>(
   fixture: ComponentFixture<TestHost>,
   selector: string
 ) => fixture.nativeElement.querySelector(selector) as T | null;
+
+/** The form under the open row. */
+const formOf = (fixture: ComponentFixture<TestHost>) =>
+  fixture.debugElement.query(By.directive(PriceRuleForm))
+    .componentInstance as PriceRuleForm;
+
+/** Type into one field of the form under the open row, as an operator does. */
+function type(
+  fixture: ComponentFixture<TestHost>,
+  field: string,
+  value: string
+) {
+  const input = q<HTMLInputElement>(fixture, `#record-field-${field}`);
+  if (input === null) {
+    throw new Error(`The form draws no control for "${field}".`);
+  }
+  input.value = value;
+  input.dispatchEvent(new Event('input'));
+  fixture.detectChanges();
+}
+
+const press = (fixture: ComponentFixture<TestHost>, selector: string) =>
+  q<HTMLButtonElement>(fixture, `lib-price-rule-form ${selector}`)?.click();
 
 /** One rule, as the memory table holds it now. */
 const stored = (kind: string) =>
@@ -217,45 +282,80 @@ describe('the form of a price rule', () => {
     const fixture = await boot('/products/price-rules/ADMIN');
 
     expect(page(fixture).openId()).toBe('ADMIN');
-    const form = fixture.debugElement.query(By.directive(PriceRuleForm))
-      .componentInstance as PriceRuleForm;
-    expect(form.store.row()).toMatchObject({ sourceKind: 'ADMIN' });
+    expect(formOf(fixture).store.row()).toMatchObject({ sourceKind: 'ADMIN' });
   });
 
-  /** The row above says which rule it is, so the form does not ask. */
   /**
-   * Whether the rule is on is the switch on the row above, so the form has no
-   * checkbox for it (admin plan 0049, target 4).
+   * A record opens to be read everywhere else. A row that was opened to
+   * change the rule is a form from the first moment.
+   */
+  it('is a form at once, and not a page that reads', async () => {
+    const fixture = await boot('/products/price-rules/OFFICIAL_API');
+    const form = formOf(fixture);
+
+    expect(form.store.mode()).toBe('edit');
+    expect(fixture.debugElement.query(By.directive(RecordView))).not.toBeNull();
+    expect(q(fixture, '#record-field-priority')).not.toBeNull();
+    expect(q(fixture, 'lib-price-rule-form lib-save-bar')).not.toBeNull();
+    // Nothing was typed yet, so there is nothing to save.
+    expect(
+      q<HTMLButtonElement>(fixture, 'lib-price-rule-form [data-save]')?.disabled
+    ).toBe(true);
+  });
+
+  /**
+   * The row above says which rule it is, so the form does not ask, and it
+   * draws no Record block. Whether the rule is on is the switch on the row
+   * above, so the form has no control for it (admin plan 0049, target 4).
    */
   it('draws the rank and the limit, the caution, and no second switch', async () => {
     const fixture = await boot('/products/price-rules/OFFICIAL_API');
-    const form = fixture.debugElement.query(By.directive(PriceRuleForm))
-      .componentInstance as PriceRuleForm;
+    const controls = [
+      ...fixture.nativeElement.querySelectorAll(
+        'lib-price-rule-form lib-field-control'
+      ),
+    ] as HTMLElement[];
 
-    expect(form.ruleFields.map((field) => field.name)).toEqual([
-      'priority',
-      'maxAgeDays',
-    ]);
     expect(
-      fixture.nativeElement.querySelector('lib-price-rule-form [type=checkbox]')
+      controls.map((control) => control.querySelector('[id]')?.id)
+    ).toEqual(['record-field-priority', 'record-field-maxAgeDays']);
+    expect(
+      q(fixture, 'lib-price-rule-form [type=checkbox]') ??
+        q(fixture, 'lib-price-rule-form [role=switch]')
     ).toBeNull();
-    const caution = fixture.debugElement.query(By.directive(CautionLine))
-      .componentInstance as CautionLine;
+    expect(q(fixture, 'lib-price-rule-form .facts')).toBeNull();
+    expect(q(fixture, 'lib-price-rule-form [data-fact]')).toBeNull();
+    const caution = fixture.debugElement
+      .query(By.directive(PriceRuleForm))
+      .query(By.directive(CautionLine)).componentInstance as CautionLine;
     expect(caution.text()).toBe('catalog.pricePolicies.caution');
+  });
+
+  /** The bar is the last line of the row, and not the edge of the window. */
+  it('holds its bar inside the row', async () => {
+    const fixture = await boot('/products/price-rules/OFFICIAL_API');
+    const bar = fixture.debugElement
+      .query(By.directive(PriceRuleForm))
+      .query(By.directive(SaveBar));
+
+    expect((bar.componentInstance as SaveBar).sticky()).toBe(false);
+    expect((bar.nativeElement as HTMLElement).classList).not.toContain(
+      'sticky'
+    );
   });
 
   it('saves, closes, and has the page read the rows again', async () => {
     const fixture = await boot('/products/price-rules/OFFICIAL_API');
-    const form = fixture.debugElement.query(By.directive(PriceRuleForm))
-      .componentInstance as PriceRuleForm;
 
-    form.store.set('maxAgeDays', '14');
-    await form.submit();
+    type(fixture, 'maxAgeDays', '14');
+    press(fixture, '[data-save]');
     await settle(fixture);
     await settle(fixture);
 
     expect(TestBed.inject(Router).url).toBe('/products/price-rules');
     expect(fixture.debugElement.query(By.directive(PriceRuleForm))).toBeNull();
+    // Saved, so nothing was asked on the way out.
+    expect(fixture.debugElement.query(By.directive(ConfirmDialog))).toBeNull();
     expect((await stored('OFFICIAL_API')).maxAgeDays).toBe(14);
     expect(
       page(fixture)
@@ -264,18 +364,140 @@ describe('the form of a price rule', () => {
     ).toBe(14);
   });
 
+  /**
+   * The exact body of "save a rule": the one of the two fields that changed,
+   * and never the other, the switch or the kind.
+   */
+  it('sends only the field that changed', async () => {
+    const changed: unknown[] = [];
+    const with_ = [
+      { provide: RESOURCE_GATEWAYS, useValue: recordingChanges(changed) },
+    ];
+
+    let fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'maxAgeDays', '14');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([['OFFICIAL_API', { maxAgeDays: 14 }]]);
+
+    changed.length = 0;
+    fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'priority', '5');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([['OFFICIAL_API', { priority: 5 }]]);
+
+    changed.length = 0;
+    fixture = await boot('/products/price-rules/OFFICIAL_API', with_);
+    type(fixture, 'priority', '6');
+    type(fixture, 'maxAgeDays', '21');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+    await settle(fixture);
+    expect(changed).toEqual([
+      ['OFFICIAL_API', { priority: 6, maxAgeDays: 21 }],
+    ]);
+  });
+
   it('follows a change of rank: the rows are read again in the new order', async () => {
     const fixture = await boot('/products/price-rules/ADMIN');
-    const form = fixture.debugElement.query(By.directive(PriceRuleForm))
-      .componentInstance as PriceRuleForm;
 
     // Ahead of the leaflet, which is at 10.
-    form.store.set('priority', '5');
-    await form.submit();
+    type(fixture, 'priority', '5');
+    press(fixture, '[data-save]');
     await settle(fixture);
     await settle(fixture);
 
     expect(page(fixture).rows()[0]).toMatchObject({ id: 'ADMIN', rank: 1 });
+  });
+
+  it('closes on Cancel with nothing typed, and asks nothing', async () => {
+    const fixture = await boot('/products/price-rules/ADMIN');
+
+    press(fixture, '[data-cancel]');
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe('/products/price-rules');
+    expect(fixture.debugElement.query(By.directive(PriceRuleForm))).toBeNull();
+  });
+
+  /** A save the rules of the app refuse keeps the row open, and says why. */
+  it('keeps a refusal in the row, under the field it is about', async () => {
+    const fixture = await boot('/products/price-rules/OFFICIAL_API');
+
+    type(fixture, 'priority', '');
+    press(fixture, '[data-save]');
+    await settle(fixture);
+
+    expect(TestBed.inject(Router).url).toBe(
+      '/products/price-rules/OFFICIAL_API'
+    );
+    expect(formOf(fixture).store.bar()).toEqual({ kind: 'invalid', fields: 1 });
+    expect(q(fixture, 'lib-price-rule-form [data-error]')).not.toBeNull();
+    expect((await stored('OFFICIAL_API')).priority).toBe(20);
+  });
+
+  describe('left with changes', () => {
+    async function changed() {
+      const fixture = await boot('/products/price-rules/ADMIN');
+      type(fixture, 'priority', '5');
+      return fixture;
+    }
+
+    const question = (fixture: ComponentFixture<TestHost>) =>
+      fixture.debugElement.query(By.directive(ConfirmDialog));
+
+    it('asks when another row is pressed, and stays on "Stay here"', async () => {
+      const fixture = await changed();
+      const router = TestBed.inject(Router);
+
+      q<HTMLButtonElement>(fixture, '[data-rule="OFFICIAL_WEB"]')?.click();
+      await settle(fixture);
+
+      const dialog = question(fixture).componentInstance as ConfirmDialog;
+      expect(dialog.bodyKey()).toBe('record.leave.body');
+      expect(dialog.bodyArgs()).toEqual({
+        count: 1,
+        name: 'catalog.priceSourceKind.ADMIN',
+      });
+      dialog.dismiss.emit();
+      await settle(fixture);
+
+      expect(router.url).toBe('/products/price-rules/ADMIN');
+      expect(question(fixture)).toBeNull();
+      // What was typed is still there.
+      expect(formOf(fixture).store.draft()['priority']).toBe('5');
+    });
+
+    it('leaves on a yes, and saves nothing', async () => {
+      const fixture = await changed();
+
+      q<HTMLButtonElement>(fixture, '[data-rule="OFFICIAL_WEB"]')?.click();
+      await settle(fixture);
+      (question(fixture).componentInstance as ConfirmDialog).confirm.emit();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(TestBed.inject(Router).url).toBe(
+        '/products/price-rules/OFFICIAL_WEB'
+      );
+      expect(formOf(fixture).store.row()).toMatchObject({
+        sourceKind: 'OFFICIAL_WEB',
+      });
+      expect((await stored('ADMIN')).priority).toBe(40);
+    });
+
+    it('asks on Cancel too, which throws the same work away', async () => {
+      const fixture = await changed();
+
+      press(fixture, '[data-cancel]');
+      await settle(fixture);
+
+      expect(question(fixture)).not.toBeNull();
+      expect(TestBed.inject(Router).url).toBe('/products/price-rules/ADMIN');
+    });
   });
 
   it('closes when its row is pressed again, and when another is opened', async () => {

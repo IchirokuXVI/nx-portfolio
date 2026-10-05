@@ -57,6 +57,15 @@ interface FieldBase<T extends ResourceRow> {
   readonly label: string;
   /** A translation key for the line under the control, when one helps. */
   readonly help?: string;
+  /**
+   * Whether {@link help} is also drawn under the value while the page reads.
+   *
+   * Help is written for the person who types, so a reading page draws none.
+   * "May be fetched" of a chain source is the exception: no mode can type
+   * into it, and its help says what the value means and what changes it. Only
+   * a field that says so here is drawn with its help while it is read.
+   */
+  readonly helpWhenRead?: true;
   /** Refused when empty. */
   readonly required?: boolean;
   /**
@@ -451,10 +460,13 @@ export type FieldDescriptor<T extends ResourceRow = ResourceRow> =
   | JsonField<T>;
 
 /**
- * Whether the form is creating a row or changing one.
+ * Whether a draft adds a record or changes one.
  *
- * Here rather than beside the draft, because {@link isEditable} needs it and a
- * field's own rules are the deeper of the two.
+ * The record page has a third mode, reading, which holds no draft:
+ * `RecordMode` names all three, and `RecordStore` hands the rules of a draft
+ * one of these two. Here rather than beside the draft, because
+ * {@link isEditable} needs it and a field's own rules are the deeper of the
+ * two.
  */
 export type FormMode = 'create' | 'edit';
 

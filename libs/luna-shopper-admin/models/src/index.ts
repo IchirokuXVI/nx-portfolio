@@ -155,7 +155,6 @@ export {
 export {
   changedFields,
   draftFor,
-  isDirty,
   isEmptyValue,
   orderedFieldNames,
   toInput,

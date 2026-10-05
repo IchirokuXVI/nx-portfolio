@@ -52,6 +52,8 @@ import {
       [choice]="shown()"
       [clearable]="clearable()"
       [clearKey]="clearKey()"
+      [controlId]="controlId()"
+      [describedBy]="describedBy()"
       [label]="label()"
       [placeholder]="placeholder()"
       [prefix]="prefix()"
@@ -82,6 +84,10 @@ export class PriceScopePicker {
   readonly placeholder = input('');
   /** The scope that is chosen, with its chain, or `null`. */
   readonly choice = input<PriceScopeChoice | null>(null);
+  /** The id of the button, for the label of a form row. */
+  readonly controlId = input<string | null>(null);
+  /** The ids of the lines that describe the button, or `null` for none. */
+  readonly describedBy = input<string | null>(null);
   /** Whether "no scope" is a choice. */
   readonly clearable = input(false);
   /** What the choice of no scope says, as a key. */

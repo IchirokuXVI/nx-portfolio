@@ -151,7 +151,7 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
 /**
  * The pages of one Setup resource, under its segment.
  *
- * A resource whose page is the record page keeps the address its old form
+ * A resource whose page is the record page keeps the address its form once
  * had, `{id}/edit`, as a way to the record with its form open (admin plan
  * 0054, section 4.3). That is a resource that names no page of its own and
  * can be changed, which is the brand. Before `{id}` for readability only: a

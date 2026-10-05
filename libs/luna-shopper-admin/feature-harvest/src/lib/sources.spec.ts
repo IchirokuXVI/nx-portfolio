@@ -204,6 +204,8 @@ describe('SOURCES, the descriptor', () => {
     expect(isEditable(enabled, 'edit')).toBe(false);
     expect(enabled.setBy).toBe('harvest.sources.enabledSetBy');
     expect(enabled.help).toBe('harvest.sources.help.enabled');
+    // The one field of the back office whose help is drawn while it is read.
+    expect(enabled.helpWhenRead).toBe(true);
   });
 
   /** Target 5: a switch of the form, saved with Save. */
@@ -332,6 +334,14 @@ describe('SOURCES, the descriptor', () => {
     expect(states(source({ enabled: false }))).toEqual([
       { label: 'harvest.sources.state.off', tone: 'neutral' },
     ]);
+  });
+
+  /**
+   * What a delete costs, said before it: no fetching run for the chain until
+   * a source is added again, and the runs it has done are kept.
+   */
+  it('says before a delete what the chain loses and what is kept', () => {
+    expect(SOURCES.record?.deleteBody).toBe('harvest.sources.deleteBody');
   });
 
   it('can be added, changed and deleted', () => {

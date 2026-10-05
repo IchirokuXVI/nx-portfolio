@@ -150,16 +150,13 @@
       "moveDown": "Move {{name}} down"
     },
     "form": {
-      "create": "New {{name}}",
-      "edit": "Edit {{name}}",
-      "loading": "Loading…"
+      "create": "New {{name}}"
     },
     "action": {
       "create": "Create",
       "save": "Save",
       "saving": "Saving…",
       "cancel": "Cancel",
-      "back": "Back",
       "delete": "Delete",
       "retry": "Try again",
       "more": "Load more",
@@ -177,7 +174,6 @@
       },
       "discard": {
         "heading": "Leave without saving?",
-        "body": "This form has changes that have not been saved. Leaving now loses them.",
         "confirm": "Leave and lose them"
       }
     },
@@ -1626,6 +1622,7 @@
       "exists": "This chain already has a source.",
       "adapterGone": "A source can no longer be fetched this way. Choose another.",
       "enabledSetBy": "Changed from the More menu",
+      "deleteBody": "No run that fetches this chain can start until a source is added again. A file import needs none and still can. The runs it has already done are kept. This cannot be taken back.",
       "section": {
         "source": "Source",
         "speed": "How fast",

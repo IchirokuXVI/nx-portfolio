@@ -208,7 +208,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
               } @else {
                 <lib-field-row
                   [help]="
-                    !form && field.editable === false
+                    !form && field.helpWhenRead === true
                       ? (field.help ?? null)
                       : null
                   "
@@ -247,7 +247,7 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
 
       <!-- The record itself: when it was made and changed, and its ID. A
            record that does not exist yet has none of them. -->
-      @if (mode !== 'create') {
+      @if (mode !== 'create' && facts()) {
         <aside class="facts">
           <lib-record-section [heading]="'record.facts.heading' | rokuT">
             @let facts = layout().facts;
@@ -337,8 +337,10 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
         (cancel)="cancel.emit()"
         (goToFirst)="goToFirst()"
         (save)="save()"
+        [class.edge]="stickyBar()"
         [saveLabel]="saveLabel()"
         [state]="record.bar()"
+        [sticky]="stickyBar()"
       />
     }
   `,
@@ -469,8 +471,9 @@ const NO_MARKS: Readonly<Record<string, ScopeMarkView>> = {};
       background: var(--admin-neutral-wash);
     }
 
-    /* The bar reaches the edges of the page, as the header does. */
-    lib-save-bar {
+    /* The bar reaches the edges of the page, as the header does. A bar that
+       does not stick is inside a row, and keeps to the width of the form. */
+    lib-save-bar.edge {
       margin-inline: calc(-1 * var(--admin-page-inline));
       margin-block-end: calc(-1 * var(--admin-page-block));
     }
@@ -501,6 +504,17 @@ export class RecordView {
    * failed. Drawn where a refused save about no field is drawn.
    */
   readonly refusal = input<RecordRefusal | null>(null);
+  /**
+   * Draw the Record block: when the record was made and changed, and its ID.
+   * `false` for a view inside a row that already names the record (admin plan
+   * 0060): the form of a price rule.
+   */
+  readonly facts = input(true);
+  /**
+   * Whether the save bar stays at the bottom edge of the window. `false` for
+   * a view that is not a page, where the bar is the last line of the form.
+   */
+  readonly stickyBar = input(true);
 
   /** The operator pressed Cancel. The page decides whether to ask first. */
   // The name the plan gives it. It is the Cancel of the bar and not the DOM

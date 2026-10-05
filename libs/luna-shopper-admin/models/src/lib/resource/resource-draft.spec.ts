@@ -2,7 +2,6 @@ import type { ResourceDescriptor } from './resource-descriptor';
 import {
   changedFields,
   draftFor,
-  isDirty,
   orderedFieldNames,
   toInput,
   validateDraft,
@@ -292,12 +291,11 @@ describe('validateDraft', () => {
   });
 });
 
-describe('changedFields and isDirty', () => {
+describe('changedFields', () => {
   it('sees nothing changed in an untouched draft', () => {
     const original = draftFor(descriptor, row);
 
     expect(changedFields(original, original)).toEqual([]);
-    expect(isDirty(original, original)).toBe(false);
   });
 
   it('sees a changed locale inside localized text', () => {
@@ -305,7 +303,6 @@ describe('changedFields and isDirty', () => {
     const draft = { ...original, name: { en: 'Milk', es: 'Lechita' } };
 
     expect(changedFields(draft, original)).toEqual(['name']);
-    expect(isDirty(draft, original)).toBe(true);
   });
 });
 
@@ -563,7 +560,6 @@ describe('a references field', () => {
     const draft = { priceScopeIds: ['region', 'store'] };
 
     expect(changedFields(draft, original)).toEqual([]);
-    expect(isDirty(draft, original)).toBe(false);
     expect(toInput(shops, draft, 'edit', original)).toEqual({});
   });
 
@@ -586,7 +582,6 @@ describe('a references field', () => {
     expect(changedFields(draft, original, orderedFieldNames(ranked))).toEqual([
       'priceScopeIds',
     ]);
-    expect(isDirty(draft, original, orderedFieldNames(ranked))).toBe(true);
     expect(toInput(ranked, draft, 'edit', original)).toEqual({
       priceScopeIds: ['region', 'store'],
     });

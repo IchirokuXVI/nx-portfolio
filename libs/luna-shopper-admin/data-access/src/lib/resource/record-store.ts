@@ -35,16 +35,15 @@ type Refusal = 'fields' | 'gateway' | null;
 /**
  * One record, being read, changed or added (admin plan 0053, section 2.1).
  *
- * A plain class and not an `@Injectable`, for the reason `ResourceFormStore`
- * is one: it belongs to a page and has to die with it.
+ * A plain class and not an `@Injectable`: it belongs to a page, or to a form
+ * inside one, and has to die with it.
  *
  * A record opens to be read. `edit()` starts a draft from the row, and
  * `cancel()` throws the draft away. A record that does not exist yet has no
  * reading mode: it is a draft from the first moment.
  *
  * It adds no rule of its own about what a value means. `draftFor`,
- * `validateDraft`, `changedFields` and `toInput` of `models` decide that, as
- * they do for the old form.
+ * `validateDraft`, `changedFields` and `toInput` of `models` decide that.
  */
 export class RecordStore<T extends ResourceRow> {
   private readonly _mode = signal<RecordMode>('read');

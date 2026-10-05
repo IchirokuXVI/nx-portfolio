@@ -19,7 +19,6 @@ import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { recordLeaveGuard } from './record-leave-guard';
 import { RECORD_EDIT_PARAM, RecordDetailsTab, RecordPage } from './record-page';
-import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RECORD_TAB,
@@ -50,11 +49,12 @@ export type ResourceByName = (
 /**
  * The three routes every resource has.
  *
- * A list, a form for a new row, and a form for an existing one. The second and
- * third are the same component: create and edit are one act from two starting
- * points (plan 0004, section 5), and the edit route doubles as the detail view
- * because the form draws the fields it cannot change as well as the ones it
- * can.
+ * A list, the page that adds a row, and the page that opens one. The second
+ * and third are the same component, the record page: one page reads a row,
+ * changes it and adds one (admin plan 0053). Only a resource that names an
+ * `editor` or a `detail` of its own gets another component there, and
+ * `no-page-outside-the-record-page.spec.ts` in the app holds the list of
+ * those (admin plan 0060).
  *
  * The descriptor is repeated on each child rather than stated once on the
  * parent. Route `data` is inherited only under conditions that depend on
@@ -97,9 +97,9 @@ function routesOf(
  * its parent's page, at the tab's own path.
  *
  * The same list component, told through route `data` that the page above it
- * already drew the header. Its forms are {@link resourceFormRoutes}, mounted by
- * the caller beside the page and not inside it, so that a form is a page of its
- * own with its own header and its way back.
+ * already drew the header. Its record pages are {@link resourceFormRoutes},
+ * mounted by the caller beside the page and not inside it, so that a record
+ * is a page of its own with its own header and its way back.
  */
 export function resourceTabRoute(descriptor: AnyResourceDescriptor): Route {
   return {
@@ -144,10 +144,10 @@ export function resourceSplitRoute(
 }
 
 /**
- * The form routes of a resource, without its list: `new`, and `:id`.
+ * The record routes of a resource, without its list: `new`, and `:id`.
  *
- * Under the resource's own segment, so that the form's way back, which is one
- * route up, is the address the list is at.
+ * Under the resource's own segment, so that the way back of a record, which
+ * is one route up, is the address the list is at.
  */
 export function resourceFormBranch(descriptor: AnyResourceDescriptor): Route {
   return {
@@ -156,14 +156,38 @@ export function resourceFormBranch(descriptor: AnyResourceDescriptor): Route {
   };
 }
 
-/** The create route of a resource alone, for a caller that mounts the rest. */
+/**
+ * The create route of a resource alone, for a caller that mounts the rest.
+ *
+ * The record page, or the resource's own editor where it names one. Either
+ * way the route carries the leave guard, so a form with something typed in
+ * it asks before it is left.
+ */
 export function resourceCreateRoute(descriptor: AnyResourceDescriptor): Route {
+  return descriptor.editor === undefined
+    ? recordRoute(descriptor, { path: 'new', mode: 'create' })
+    : editorRoute(descriptor, descriptor.editor, 'new', 'create');
+}
+
+/**
+ * One route of a resource's own editor.
+ *
+ * The leave guard is on it as it is on the record page. An editor that
+ * cannot answer the guard may be left, which is what the guard says.
+ */
+function editorRoute(
+  descriptor: AnyResourceDescriptor,
+  editor: Type<unknown>,
+  path: string,
+  mode?: 'create'
+): Route {
   return {
-    path: 'new',
-    component: descriptor.editor ?? ResourceFormPage,
+    path,
+    component: editor,
+    canDeactivate: [recordLeaveGuard],
     data: {
       [RESOURCE_DESCRIPTOR]: descriptor,
-      [RESOURCE_FORM_MODE]: 'create',
+      ...(mode === 'create' ? { [RESOURCE_FORM_MODE]: 'create' } : {}),
     },
   };
 }
@@ -390,15 +414,17 @@ function resourceFormRoutes(
   descriptor: AnyResourceDescriptor,
   lists?: ResourceByName
 ): Route[] {
-  const data = { [RESOURCE_DESCRIPTOR]: descriptor };
+  const { editor, detail } = descriptor;
 
   // A resource with no page of its own opens on the record page: one page
-  // that reads a row, changes it and adds one (admin plan 0053). A resource
-  // that names a `detail` or an `editor` keeps the routes it has, until the
-  // plan that moves it.
-  if (descriptor.detail === undefined && descriptor.editor === undefined) {
+  // that reads a row, changes it and adds one (admin plan 0053). It is the
+  // one default the factory has.
+  if (detail === undefined && editor === undefined) {
     return [
-      // Only where there is something to add, for the reason given below.
+      // A page that adds only where there is something to add. A resource
+      // with no `POST` behind it would otherwise answer a typed URL with a
+      // form that fills in, submits, and is refused by the gateway, which is
+      // a worse answer than the not found page (plan 0007, section 1).
       ...(descriptor.actions?.create === true
         ? [recordRoute(descriptor, { path: 'new', mode: 'create' })]
         : []),
@@ -408,66 +434,39 @@ function resourceFormRoutes(
     ];
   }
 
+  // A resource that names a page of its own (admin plan 0060). Its `editor`
+  // adds and changes a row, and its `detail` reads one. What it does not name
+  // is the record page, as for every other resource.
   return [
-    // A create screen only where there is something to create. A resource
-    // with no `POST` behind it would otherwise answer a typed URL with a
-    // form that fills in, submits, and is refused by the gateway, which is
-    // a worse answer than the not found page (plan 0007, section 1).
     ...(descriptor.actions?.create === true
-      ? [
-          {
-            // The resource's own editor where it named one, and the generic
-            // form otherwise. Create and edit stay one component either
-            // way, which is what keeps them one act.
-            path: 'new',
-            component: descriptor.editor ?? ResourceFormPage,
-            data: { ...data, [RESOURCE_FORM_MODE]: 'create' },
-          },
-        ]
+      ? [resourceCreateRoute(descriptor)]
       : []),
 
-    // The edit screen, for a resource whose `:id` is taken by a detail
-    // component of its own.
+    // The page that changes a row, for a resource that names both pages: its
+    // `:id` is taken by the `detail`, so its `editor` needs an address of its
+    // own. A resource with a `detail` and no `editor` gets none. The record
+    // page is never mounted here: a record has one page, and a second one
+    // beside a `detail` is how two pages come to disagree (admin plan 0060).
     //
-    // Without it, turning on `edit` for a zone or a list would change
-    // nothing at all: `detail` wins at `:id`, so the generic form would
-    // have no route to be reached at, and the operator would find a
-    // resource that claims to be editable and offers no way to edit it.
-    // The resources whose detail view *is* the generic form need no such
-    // route, because for them `:id` is already the editor.
-    //
-    // Before `:id` for readability only. A terminal route has to consume
-    // the whole remaining URL, so `:id` cannot match two segments whatever
-    // the order.
-    ...(descriptor.detail !== undefined && descriptor.actions?.edit === true
-      ? [
-          {
-            path: ':id/edit',
-            component: descriptor.editor ?? ResourceFormPage,
-            data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-          },
-        ]
+    // Before `:id` for readability only. A terminal route has to consume the
+    // whole remaining URL, so `:id` cannot match two segments whatever the
+    // order.
+    ...(detail !== undefined &&
+    editor !== undefined &&
+    descriptor.actions?.edit === true
+      ? [editorRoute(descriptor, editor, ':id/edit')]
       : []),
 
-    // The detail screen: the resource's own component where it named one,
-    // and the generic form otherwise, which draws the fields it cannot
-    // change beside the ones it can. A resource with neither has no such
-    // route, and `resource-list` draws its rows as text rather than as
-    // controls that lead nowhere.
-    //
-    // `detail` before `editor`, because a resource naming both means the two
-    // screens are genuinely different: one reads a row and one changes it.
-    // Nothing names both today, and the order says which would win.
-    ...(hasDetailScreen(descriptor)
-      ? [
-          {
-            path: ':id',
-            component:
-              descriptor.detail ?? descriptor.editor ?? ResourceFormPage,
-            data: { ...data, [RESOURCE_FORM_MODE]: 'edit' },
-          },
-        ]
-      : []),
+    // The page of one row. `detail` before `editor`, because a resource that
+    // names both means two different screens: one reads a row and one
+    // changes it.
+    detail === undefined
+      ? editorRoute(descriptor, editor as Type<unknown>, ':id')
+      : {
+          path: ':id',
+          component: detail,
+          data: { [RESOURCE_DESCRIPTOR]: descriptor },
+        },
   ];
 }
 

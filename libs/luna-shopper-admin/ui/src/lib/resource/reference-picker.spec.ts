@@ -484,7 +484,7 @@ describe('ReferencePicker typing', () => {
     expect(emitted).toEqual([]);
   });
 
-  /** `ResourceForm` is a native form with a submit button. */
+  /** A page may hold the picker inside a native form with a submit button. */
   it('keeps Enter from the form while the list is open and nothing is active', async () => {
     const fixture = await render('');
 

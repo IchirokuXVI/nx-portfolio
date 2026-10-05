@@ -19,24 +19,24 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  RecordStore,
   RESOURCE_GATEWAYS,
   toGatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   gatewayErrorKey,
+  LeaveQuestion,
+  RecordView,
   ResourceChanges,
-  ResourceFormPage,
+  type LeaveAware,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
-  isEditable,
-  type FieldDescriptor,
+  nounKeyOf,
+  type AnyResourceDescriptor,
   type InfoContent,
+  type ResourceRow,
 } from '@portfolio/luna-shopper-admin/models';
-import {
-  ConfirmDialog,
-  PageHeader,
-  ResourceForm,
-} from '@portfolio/luna-shopper-admin/ui';
+import { ConfirmDialog, PageHeader } from '@portfolio/luna-shopper-admin/ui';
 import { ChevronLeftIcon } from '@portfolio/shared/ui';
 import { PRICE_SOURCE_KIND_OPTIONS } from '../catalog-enums';
 import { pricePolicySource } from '../catalog-sources';
@@ -474,52 +474,54 @@ export class PriceRulesPage {
 
 /**
  * The form of one price rule, drawn under its row (admin plan 0043, target
- * 6).
+ * 6, and admin plan 0060, section 2.1).
  *
- * The form every resource has, with no header: the row above it says which
- * rule it is. It draws the two columns a rule can change here, the rank and
- * the limit, and carries the caution, because saving works out the shown
- * price of every product again. Whether the rule is on is the switch on the
- * row, and the form does not ask it a second time (admin plan 0049).
- * Saving and cancelling both close it.
+ * The view of the record page with no page around it. The row above says
+ * which rule it is, so there is no header and no Record block, and the bar
+ * is the last line of the row and not the edge of the window.
+ *
+ * **It opens as a form at once.** A record opens to be read everywhere else.
+ * A row that was opened to change the rule already answered that question,
+ * and a second press on "Edit" inside the row would only be in the way.
+ *
+ * It draws the two columns a rule can change here, the rank and the limit,
+ * and the caution, because saving works out the shown price of every product
+ * again. Whether the rule is on is the switch on the row, and the form does
+ * not ask it a second time (admin plan 0049). Saving and cancelling both
+ * close the row, and leaving it with changes asks first.
  */
 @Component({
   selector: 'lib-price-rule-form',
-  imports: [ResourceForm, ConfirmDialog, RokuTranslatorPipe],
+  imports: [RecordView, ConfirmDialog, RokuTranslatorPipe],
   template: `
-    @if (store.status() === 'loading') {
-      <p class="state" role="status">{{ 'resource.form.loading' | rokuT }}</p>
-    } @else if (store.status() === 'error') {
+    @if (store.status() === 'error') {
       <p class="state error" role="alert">{{ errorKey() | rokuT }}</p>
+    } @else if (store.status() === 'missing') {
+      <p class="state" role="status">
+        {{ 'record.state.missing.body' | rokuT: { name: noun() } }}
+      </p>
     } @else {
-      <lib-resource-form
-        (leave)="leave()"
-        (save)="submit()"
-        (valueChange)="change($event)"
-        [busy]="store.busy()"
-        [cautionKey]="descriptor.caution ?? null"
-        [context]="context()"
-        [draft]="store.draft()"
-        [errorKey]="bannerKey()"
-        [fields]="ruleFields"
-        [header]="false"
-        [lookup]="references"
-        [messages]="messages()"
-        [mode]="mode"
-        [readonlyCells]="readonlyCells()"
-        [strayErrors]="store.strayErrors()"
-        [titleArgs]="titleArgs()"
-        [titleKey]="titleKey()"
+      <lib-record-view
+        (cancel)="close()"
+        (saved)="close()"
+        [descriptor]="descriptor"
+        [facts]="false"
+        [stickyBar]="false"
+        [store]="store"
       />
     }
 
-    @if (confirmingLeave()) {
+    @if (leave.asking()) {
       <lib-confirm-dialog
-        (confirm)="goBack()"
-        (dismiss)="confirmingLeave.set(false)"
-        bodyKey="resource.confirm.discard.body"
+        (confirm)="leave.answer(true)"
+        (dismiss)="leave.answer(false)"
+        [bodyArgs]="leaveArgs()"
+        bodyKey="record.leave.body"
         confirmKey="resource.confirm.discard.confirm"
+        dismissKey="record.leave.stay"
         headingKey="resource.confirm.discard.heading"
+        prefer="dismiss"
+        data-leave
       />
     }
   `,
@@ -546,9 +548,76 @@ export class PriceRulesPage {
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PriceRuleForm extends ResourceFormPage {
-  /** The columns the form changes. The row above it names the source. */
-  readonly ruleFields: readonly FieldDescriptor[] = this.fields.filter(
-    (field) => isEditable(field, 'edit')
+export class PriceRuleForm implements LeaveAware {
+  private readonly _route = inject(ActivatedRoute);
+  private readonly _router = inject(Router);
+  private readonly _translator = inject(RokuTranslatorService);
+  private readonly _changes = inject(ResourceChanges);
+
+  readonly descriptor: AnyResourceDescriptor = PRICE_POLICIES;
+
+  /** The rule the row is of: its source kind, which the address holds. */
+  private readonly _id = this._route.snapshot.paramMap.get('id');
+
+  readonly store = new RecordStore<ResourceRow>(
+    this.descriptor,
+    this.descriptor.gateway(),
+    this._id
   );
+
+  /** The question asked before a row with changes is left. */
+  readonly leave = new LeaveQuestion(() => this.store.changed().length > 0);
+
+  /** Drawn only while the read failed, so the fallback is for the type. */
+  readonly errorKey = computed(
+    () => gatewayErrorKey(this.store.error()) ?? 'resource.error.unknown'
+  );
+
+  /** What one row is called inside a sentence: "price rule". */
+  readonly noun = computed(() => this._t(nounKeyOf(this.descriptor)));
+
+  /** How much would be lost, and of which rule: its source, in words. */
+  readonly leaveArgs = computed(() => {
+    const option = PRICE_SOURCE_KIND_OPTIONS.find(
+      (entry) => entry.value === this._id
+    );
+    return {
+      count: this.store.changed().length,
+      name: option === undefined ? (this._id ?? '') : this._t(option.label),
+    };
+  });
+
+  constructor() {
+    // Said by the store and not by the view: a save that answers after the
+    // row was closed still wrote the rule, and the rows have to be read
+    // again.
+    this.store.onSaved(() => this._changes.wrote(this.descriptor.name));
+
+    // Straight into the form. `edit` does nothing when the read failed.
+    void this.store.load().then(() => this.store.edit());
+  }
+
+  canLeave(): boolean | Promise<boolean> {
+    return this.leave.canLeave();
+  }
+
+  /**
+   * Close the row: one route up, which is the rules with no row open. After a
+   * save there is nothing to lose. After Cancel with something typed, the
+   * guard of the route asks.
+   */
+  close(): void {
+    void this._router.navigate(['..'], { relativeTo: this._route });
+  }
+
+  /**
+   * One key, translated now and again when the words arrive. `t` reads no
+   * signal, so without the two reads a `computed` that ran before the
+   * catalogue was loaded would hold the raw key for good.
+   */
+  private _t(key: string): string {
+    this._translator.loaded();
+    this._translator.locale();
+    return this._translator.t(key);
+  }
 }

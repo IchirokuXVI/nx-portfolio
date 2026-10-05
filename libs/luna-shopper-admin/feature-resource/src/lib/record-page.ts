@@ -50,7 +50,6 @@ import {
   type NamedAction,
   type RecordChild,
   type RenderOptions,
-  type ResourceDraft,
   type ResourceRow,
   type RowState,
 } from '@portfolio/luna-shopper-admin/models';
@@ -65,6 +64,7 @@ import { TrashIcon } from '@portfolio/shared/ui';
 import { gatewayErrorKey } from './gateway-error-key';
 import { RECORD_CONTEXT, type RecordContext } from './record-context';
 import type { LeaveAware } from './record-leave-guard';
+import { recordPrefill } from './record-prefill';
 import { RecordView, sentenceStart, type RecordRefusal } from './record-view';
 import { ResourceChanges } from './resource-changes';
 import {
@@ -82,22 +82,6 @@ import {
   routeParam,
 } from './resource-route-data';
 import { ResourceSplitPage } from './resource-split-page';
-
-/**
- * The field kinds a query parameter can fill in on a new record.
- *
- * Every one of them holds a plain string in the draft. A yes or no, a text in
- * several languages and a json field each hold a shape that a query parameter
- * cannot spell.
- */
-const STRING_FIELD_KINDS: readonly string[] = [
-  'text',
-  'number',
-  'money',
-  'enum',
-  'reference',
-  'date',
-];
 
 /** The query parameter that opens a record as a form: `?edit=1`. */
 export const RECORD_EDIT_PARAM = 'edit';
@@ -122,7 +106,7 @@ const ADDED_STATE = 'added';
  * route that mounts this page carries. The browser asks for a reload and for
  * a closed tab.
  *
- * It reads its route as `ResourceFormPage` does, and it follows the route: one
+ * It reads its route once for what never changes, and it follows the route: one
  * component serves every ID of a route, because the router keeps the
  * component when only the ID changes.
  *
@@ -1296,7 +1280,9 @@ export class RecordPage implements LeaveAware {
       this.descriptor,
       this._gateway,
       id,
-      id === null && this._creates ? this._prefill() : {}
+      id === null && this._creates
+        ? recordPrefill(this._registry, this.descriptor, this._route.snapshot)
+        : {}
     );
     // Said by the store and not by the view: a save that answers after the
     // operator left still wrote the resource, and the list they are now on
@@ -1329,40 +1315,6 @@ export class RecordPage implements LeaveAware {
     }
     heading.tabIndex = -1;
     heading.focus();
-  }
-
-  /**
-   * What a new record opens with: the parent the address names, and the
-   * fields a caller filled in through the query string.
-   *
-   * `price-scopes/new?supermarketId=<id>` from the leaflet upload of admin
-   * plan 0010 is the caller it exists for. Only over fields the descriptor
-   * names, which the store enforces again, and only the kinds whose control
-   * holds a plain string.
-   */
-  private _prefill(): ResourceDraft {
-    const snapshot = this._route.snapshot;
-    const parents = parentsFromRoute(this._registry, this.descriptor, snapshot);
-    const draft: Record<string, string> = {};
-
-    // A row made under a chain belongs to it.
-    const parent = this.descriptor.parent;
-    const parentId = parent === undefined ? undefined : parents[parent.filter];
-    if (parent !== undefined && parentId !== undefined) {
-      draft[parent.filter] = parentId;
-    }
-
-    for (const field of this.descriptor.fields) {
-      if (!STRING_FIELD_KINDS.includes(field.kind)) {
-        continue;
-      }
-      const value = snapshot.queryParamMap.get(field.name);
-      if (value !== null && value !== '' && draft[field.name] === undefined) {
-        draft[field.name] = value;
-      }
-    }
-
-    return draft;
   }
 
   /** Whether the page of another record is open in a route under this one. */

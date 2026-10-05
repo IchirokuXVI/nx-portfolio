@@ -16,7 +16,7 @@ import type { SignInFailure } from '@portfolio/luna-shopper-admin/models';
  *
  * `fieldErrors` arrived with `0004`, which is the plan that brought a form with
  * more than two fields. `ProblemDetails.errors` is present only on a
- * `validation_failed`, and the generic form puts each entry back on the field
+ * `validation_failed`, and the record page puts each entry back on the field
  * that caused it rather than dumping the lot in a banner (section 5). The
  * messages are the server's own, already translated into the request's locale,
  * so this app shows them rather than re-keying them.

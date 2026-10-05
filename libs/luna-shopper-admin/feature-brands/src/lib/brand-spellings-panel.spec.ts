@@ -176,7 +176,6 @@ describe('BrandSpellingsPanel', () => {
 
     // The page is the record page, reading: the name is a value and no input.
     expect(root(fixture).querySelector('lib-record-page')).not.toBeNull();
-    expect(root(fixture).querySelector('lib-resource-form-page')).toBeNull();
     expect(root(fixture).querySelector('h1')?.textContent).toBe('El Pozo');
     expect(root(fixture).querySelector('input')).toBeNull();
 

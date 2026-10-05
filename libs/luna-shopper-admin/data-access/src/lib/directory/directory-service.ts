@@ -15,7 +15,7 @@ import { DirectoryMemory } from './directory-memory';
  * services rather than in constraints, so each of these calls the same service
  * the user facing app calls and none of them writes a row.
  *
- * Plan 0009 made most of those rows editable through the generic form, and the
+ * Plan 0009 made most of those rows editable through the record page, and the
  * ones that stayed here are the ones that are still not fields. Each of them
  * does more than write a column: a zone's deletion mark is two columns written
  * together, a membership's status is four verbs along a state machine, and a

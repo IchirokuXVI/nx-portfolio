@@ -8,7 +8,6 @@ import type { AdminSection } from './admin-section';
 import { AdminShellPage } from './admin-shell-page';
 import { recordLeaveGuard } from './record-leave-guard';
 import { RecordDetailsTab, RecordPage } from './record-page';
-import { ResourceFormPage } from './resource-form-page';
 import { ResourceListPage } from './resource-list-page';
 import {
   RECORD_TAB,
@@ -126,15 +125,26 @@ describe('resourceRoutes', () => {
     expect(children[2].data?.[RESOURCE_FORM_MODE]).toBeUndefined();
   });
 
-  /** A resource that names a page of its own keeps the routes it had. */
-  it('keeps the old form for a resource with a detail or an editor', () => {
+  /**
+   * Admin plan 0060, target 5: the factory has one default, the record page.
+   * A resource that names a page of its own gets that page where it named
+   * one, and the record page everywhere else.
+   */
+  it('mounts the page a resource names, and the record page for the rest', () => {
     class ShopEditor {}
     const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
     const withDetail = defineResource<Shop>({ ...shops, detail: NotFoundPage });
 
     expect(
-      resourceRoutes(withEditor)[0].children?.map((route) => route.component)
-    ).toEqual([ResourceListPage, ShopEditor, ShopEditor]);
+      resourceRoutes(withEditor)[0].children?.map((route) => [
+        route.path,
+        route.component,
+      ])
+    ).toEqual([
+      ['', ResourceListPage],
+      ['new', ShopEditor],
+      [':id', ShopEditor],
+    ]);
     expect(
       resourceRoutes(withDetail)[0].children?.map((route) => [
         route.path,
@@ -142,16 +152,48 @@ describe('resourceRoutes', () => {
       ])
     ).toEqual([
       ['', ResourceListPage],
-      ['new', ResourceFormPage],
-      [':id/edit', ResourceFormPage],
+      ['new', RecordPage],
       [':id', NotFoundPage],
     ]);
-    for (const route of [
-      ...(resourceRoutes(withEditor)[0].children ?? []),
-      ...(resourceRoutes(withDetail)[0].children ?? []),
-    ]) {
-      expect(route.canDeactivate).toBeUndefined();
-    }
+  });
+
+  /**
+   * A form with something typed in it asks before it is left, whoever draws
+   * it. A page that only reads has nothing to lose and carries no guard.
+   */
+  it('puts the leave guard on every route that can hold a form', () => {
+    class ShopEditor {}
+    const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+    const withDetail = defineResource<Shop>({ ...shops, detail: NotFoundPage });
+    const guards = (descriptor: AnyResourceDescriptor) =>
+      resourceRoutes(descriptor)[0].children?.map((route) => [
+        route.path,
+        route.canDeactivate,
+      ]);
+
+    expect(guards(withEditor)).toEqual([
+      ['', undefined],
+      ['new', [recordLeaveGuard]],
+      [':id', [recordLeaveGuard]],
+    ]);
+    expect(guards(withDetail)).toEqual([
+      ['', undefined],
+      ['new', [recordLeaveGuard]],
+      [':id', undefined],
+    ]);
+  });
+
+  /** Only the page that adds says a mode. Every other page reads first. */
+  it('says the mode on the route that adds, and on no other', () => {
+    class ShopEditor {}
+    const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+    const [, create, open] = resourceRoutes(withEditor)[0].children ?? [];
+
+    expect(create.data).toEqual({
+      [RESOURCE_DESCRIPTOR]: withEditor,
+      [RESOURCE_FORM_MODE]: 'create',
+    });
+    expect(open.data).toEqual({ [RESOURCE_DESCRIPTOR]: withEditor });
   });
 
   /**
@@ -347,23 +389,23 @@ describe('adminRoutes with two sections at the root', () => {
  * section 1).
  *
  * `detail` wins at `:id`, because a row that is read is a different screen from
- * the one that changes it. Without a second route, turning on `edit` for a zone
- * or a list would change nothing at all: the generic form would have nowhere to
- * be reached, and the operator would find a resource that claims to be editable
- * and offers no way to edit it.
+ * the one that changes it. A resource that also names an `editor` gets it at
+ * `:id/edit`, or the editor would have nowhere to be reached.
  */
 describe('resourceRoutes for a resource with its own detail screen', () => {
   class ZoneDetail {}
+  class ZoneEditor {}
 
   const zones = defineResource<Shop>({
     ...shops,
     name: 'zones',
     segment: 'zones',
     detail: ZoneDetail,
+    editor: ZoneEditor,
     actions: { edit: true },
   });
 
-  it('puts the form at `:id/edit`, beside the detail screen at `:id`', () => {
+  it('puts the editor at `:id/edit`, beside the detail screen at `:id`', () => {
     const [branch] = resourceRoutes(zones);
     const children = branch.children ?? [];
 
@@ -374,10 +416,30 @@ describe('resourceRoutes for a resource with its own detail screen', () => {
     ]);
     expect(children.map((route) => route.component)).toEqual([
       ResourceListPage,
-      ResourceFormPage,
+      ZoneEditor,
       ZoneDetail,
     ]);
-    expect(children[1].data?.[RESOURCE_FORM_MODE]).toBe('edit');
+    expect(children[1].canDeactivate).toEqual([recordLeaveGuard]);
+  });
+
+  /**
+   * The record page is never a second page beside a `detail` (admin plan
+   * 0060): a record has one page.
+   */
+  it('mounts no record page beside a detail screen', () => {
+    const noEditor = defineResource<Shop>({
+      ...shops,
+      name: 'zones',
+      segment: 'zones',
+      detail: ZoneDetail,
+      actions: { edit: true },
+    });
+    const [branch] = resourceRoutes(noEditor);
+
+    expect(branch.children?.map((route) => route.path)).toEqual(['', ':id']);
+    expect(branch.children?.map((route) => route.component)).not.toContain(
+      RecordPage
+    );
   });
 
   /** A read only resource with a detail screen gets no form to reach at all. */
@@ -395,10 +457,10 @@ describe('resourceRoutes for a resource with its own detail screen', () => {
   });
 
   /**
-   * A resource whose detail view already **is** the form needs no second route:
-   * for it, `:id` is the editor.
+   * A resource whose page is the record page needs no second route: for it,
+   * `:id` reads the row and changes it.
    */
-  it('adds nothing where the generic form is already the detail screen', () => {
+  it('adds nothing where the record page is already the page of a row', () => {
     const [branch] = resourceRoutes(shops);
 
     expect(branch.children?.map((route) => route.path)).not.toContain(
@@ -583,22 +645,30 @@ describe('resourceFormBranch', () => {
 });
 
 describe('resourceCreateRoute', () => {
-  it('is the create form alone, for a caller that mounts the rest', () => {
+  it('is the page that adds alone, for a caller that mounts the rest', () => {
     const create = resourceCreateRoute(shops);
 
     expect(create.path).toBe('new');
-    expect(create.component).toBe(ResourceFormPage);
+    expect(create.component).toBe(RecordPage);
+    expect(create.canDeactivate).toEqual([recordLeaveGuard]);
     expect(create.data).toEqual({
       [RESOURCE_DESCRIPTOR]: shops,
       [RESOURCE_FORM_MODE]: 'create',
     });
   });
 
-  it('uses the resource own editor where it named one', () => {
+  /** The form that adds a price asks before a typed price is lost. */
+  it('uses the resource own editor where it named one, with the leave guard', () => {
     class ShopEditor {}
     const withEditor = defineResource<Shop>({ ...shops, editor: ShopEditor });
+    const create = resourceCreateRoute(withEditor);
 
-    expect(resourceCreateRoute(withEditor).component).toBe(ShopEditor);
+    expect(create.component).toBe(ShopEditor);
+    expect(create.canDeactivate).toEqual([recordLeaveGuard]);
+    expect(create.data).toEqual({
+      [RESOURCE_DESCRIPTOR]: withEditor,
+      [RESOURCE_FORM_MODE]: 'create',
+    });
   });
 });
 

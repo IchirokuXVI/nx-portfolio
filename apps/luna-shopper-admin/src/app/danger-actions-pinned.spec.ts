@@ -1,5 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  ContentLocaleStore,
+  DeploymentStore,
+  ServerReachability,
+  SessionStorage,
+  SessionStore,
+} from '@portfolio/luna-shopper-admin/data-access';
 import type { AnyResourceDescriptor } from '@portfolio/luna-shopper-admin/models';
 import { ADMIN_SECTIONS } from './sections';
 
@@ -37,6 +44,9 @@ const PINNED: Readonly<
   },
   'postal-codes': { danger: [], plain: ['discover-again'] },
   'price-scopes': { danger: [], plain: ['makeDefault'] },
+  // Stopping the fetch of a chain destroys nothing: each of the two is taken
+  // back by the other, with one press (admin plan 0059).
+  sources: { danger: [], plain: ['stop-fetching', 'allow-fetching'] },
   users: {
     danger: ['delete-account'],
     plain: [
@@ -100,6 +110,16 @@ describe('the named actions that are drawn in red', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [RokuTranslatorTestingModule.forTesting()],
+      // The actions of a chain source are built over the gateway of the
+      // sources, which names the chain and asks which deployment it is on.
+      // These are what the app provides at its root for both.
+      providers: [
+        ContentLocaleStore,
+        ServerReachability,
+        SessionStorage,
+        SessionStore,
+        DeploymentStore,
+      ],
     });
   });
 
