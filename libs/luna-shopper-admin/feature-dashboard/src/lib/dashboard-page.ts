@@ -27,12 +27,18 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   BarChart,
+  LineChart,
   PageHeader,
   StatTile,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { catalogTiles, pricesWrittenChart } from './catalog-view';
 import { runsByStatusChart } from './harvest-view';
+import {
+  peopleTiles,
+  signUpsChart,
+  zonesAndListsChart,
+} from './shoppers-view';
 import {
   activityRows,
   loginFailureRows,
@@ -52,6 +58,11 @@ import {
  * 8). They were the dashboard of a Catalog section, and that section is the
  * Chains and the Products sections now, each of which opens on its list. So
  * how much catalog there is, and how much of it is being priced, is read here.
+ *
+ * **The shoppers' numbers are a block of this page too** (admin plan 0045,
+ * section 1). They were the dashboard of the Shoppers section, which opens on
+ * its People tab now. Admin plan 0046 gives every block its final layout, and
+ * until then this one is drawn as that dashboard drew it.
  *
  * **Three other things, and each is a question about the whole tool rather
  * than about one part of it.** Work waiting is every queue in the app in one place, which
@@ -76,7 +87,14 @@ import {
  */
 @Component({
   selector: 'lib-dashboard-page',
-  imports: [PageHeader, RouterLink, RokuTranslatorPipe, StatTile, BarChart],
+  imports: [
+    PageHeader,
+    RouterLink,
+    RokuTranslatorPipe,
+    StatTile,
+    BarChart,
+    LineChart,
+  ],
   template: `
     <lib-page-header [heading]="'dashboard.heading' | rokuT">
       @if (measured(); as taken) {
@@ -191,6 +209,43 @@ import {
             [series]="runsByStatus().series"
             [title]="text('dashboard.harvest.byStatusTitle')"
           />
+        </section>
+      }
+
+      <!-- Who uses velista and what they have made together. It was the
+           dashboard of the Shoppers section, which opens on its People tab now
+           (admin plan 0045). People come from auth and the rest from core, so
+           each half is skipped by itself when its service did not answer. -->
+      @if (shoppers().length > 0) {
+        <section class="block" data-shoppers-block>
+          <h2>{{ 'dashboard.shoppers.heading' | rokuT }}</h2>
+
+          <div class="tiles">
+            @for (tile of shoppers(); track tile.key) {
+              <lib-stat-tile
+                [caption]="tile.caption ?? undefined"
+                [delta]="tile.delta ?? undefined"
+                [label]="tile.label"
+                [link]="tile.link ?? undefined"
+                [tone]="tile.tone"
+                [trend]="tile.trend ?? undefined"
+                [value]="tile.value"
+              />
+            }
+          </div>
+
+          @if (signUps(); as series) {
+            <lib-line-chart
+              [series]="series"
+              [title]="text('dashboard.shoppers.signUpsTitle')"
+            />
+          }
+          @if (zonesAndLists(); as series) {
+            <lib-line-chart
+              [series]="series"
+              [title]="text('dashboard.shoppers.zonesAndLists')"
+            />
+          }
         </section>
       }
 
@@ -570,6 +625,26 @@ export class DashboardPage {
     return catalog === null
       ? { bars: [], series: [] }
       : pricesWrittenChart(catalog, this._text, (day) => this._day(day));
+  });
+
+  /** Who is here and what they have made, each a way into its list. */
+  readonly shoppers = computed(() => {
+    const document = this.document();
+    return document === null
+      ? []
+      : peopleTiles(document.identity, document.core, this._text, this._pathOf);
+  });
+
+  /** Registered sign ups per day, or `null` when auth did not answer. */
+  readonly signUps = computed(() => {
+    const identity = this.document()?.identity ?? null;
+    return identity === null ? null : signUpsChart(identity, this._text);
+  });
+
+  /** Zones and lists made per day, or `null` when core did not answer. */
+  readonly zonesAndLists = computed(() => {
+    const core = this.document()?.core ?? null;
+    return core === null ? null : zonesAndListsChart(core, this._text);
   });
 
   /** The harvester's runs by status, over all time. */

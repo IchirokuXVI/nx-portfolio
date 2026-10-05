@@ -132,7 +132,7 @@ describe('DashboardPage against the seed', () => {
    * whole tool (admin plan 0022, section 6). The catalog's numbers are here
    * as a block since its own section went (admin plan 0043, target 8).
    */
-  it('draws work waiting, the catalog, the sign ins and the feed, and nothing else', async () => {
+  it('draws work waiting, the three areas, the sign ins and the feed, and nothing else', async () => {
     const fixture = await render();
     const headings = fixture.debugElement
       .queryAll(By.css('h2'))
@@ -144,19 +144,61 @@ describe('DashboardPage against the seed', () => {
       // The chart of the harvester's own dashboard, which is gone (admin plan
       // 0044, target 7).
       'dashboard.harvest.heading',
+      // The dashboard of the Shoppers section, which opens on its People tab
+      // now (admin plan 0045, section 1).
+      'dashboard.shoppers.heading',
       'dashboard.signIns.heading',
       'dashboard.activity.heading',
     ]);
   });
 
   /**
-   * The people's counts and charts are on their own section's dashboard. The
-   * catalog's are here: its five tiles, and the prices written per day.
+   * Admin plan 0045, section 1: the Shoppers section has no dashboard of its
+   * own any more, and admin plan 0046 has not drawn its numbers yet, so the
+   * block is here as that dashboard drew it: four tiles and two charts.
    */
+  it('draws the shoppers block, with its tiles and its two charts', async () => {
+    const fixture = await render();
+    const block = fixture.debugElement.query(By.css('[data-shoppers-block]'));
+
+    expect(block).not.toBeNull();
+    expect(
+      fixture.componentInstance.shoppers().map((tile) => tile.key)
+    ).toEqual(['users', 'zones', 'lists', 'baskets']);
+    expect(
+      block
+        .queryAll(By.directive(LineChart))
+        .map((chart) => (chart.componentInstance as LineChart).title())
+    ).toEqual([
+      'dashboard.shoppers.signUpsTitle',
+      'dashboard.shoppers.zonesAndLists',
+    ]);
+  });
+
+  /** People come from auth and the rest from core, and either can be down. */
+  it('keeps the half of the shoppers block whose service answered', async () => {
+    const withoutCore = await render(dashboardSeedWithout('core'));
+    expect(
+      withoutCore.componentInstance.shoppers().map((tile) => tile.key)
+    ).toEqual(['users']);
+    expect(withoutCore.componentInstance.zonesAndLists()).toBeNull();
+
+    const withoutAuth = await render(dashboardSeedWithout('identity'));
+    expect(
+      withoutAuth.componentInstance.shoppers().map((tile) => tile.key)
+    ).toEqual(['zones', 'lists', 'baskets']);
+    expect(withoutAuth.componentInstance.signUps()).toBeNull();
+  });
+
+  /** The catalog's five tiles, and the prices written per day. */
   it('draws the catalog block, with its one chart and no other', async () => {
     const fixture = await render();
 
-    expect(fixture.debugElement.queryAll(By.directive(LineChart))).toEqual([]);
+    expect(
+      fixture.debugElement
+        .query(By.css('[data-catalog-block]'))
+        .queryAll(By.directive(LineChart))
+    ).toEqual([]);
     expect(
       fixture.debugElement
         .query(By.css('[data-catalog-block]'))
@@ -367,10 +409,14 @@ describe('DashboardPage against the seed', () => {
     const captioned = tiles(fixture).filter(
       (tile) => tile.caption() !== undefined
     );
-    // The postal code queue, and the priced products of the catalog block.
+    // The postal code queue, the priced products of the catalog block, and
+    // the three tiles of the shoppers block that break their total down.
     expect(captioned.map((tile) => tile.label())).toEqual([
       'dashboard.waiting.postalCodes',
       'dashboard.catalog.supermarketItems',
+      'dashboard.shoppers.users',
+      'dashboard.shoppers.zones',
+      'dashboard.shoppers.baskets',
     ]);
 
     const entries = fixture.debugElement.query(

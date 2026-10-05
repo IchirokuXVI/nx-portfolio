@@ -27,6 +27,7 @@ function zone(over: Partial<AdminZoneView>): AdminZoneView {
     ownerUserId: 'u-owner',
     memberCount: 2,
     listCount: 1,
+    pendingCount: 0,
     markedForDeletionAt: null,
     createdAt: '2026-09-01T10:00:00.000Z',
     updatedAt: '2026-09-01T10:00:00.000Z',

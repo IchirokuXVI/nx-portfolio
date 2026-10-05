@@ -20,13 +20,11 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-harvest';
 import {
   ADMINS,
-  BASKETS,
-  LIST_LINES,
-  LISTS,
-  MEMBERSHIPS,
-  PeopleDashboard,
+  oldShopperAddresses,
+  SHOPPER_RESOURCES,
+  shoppersRoutes,
+  ShoppersStatus,
   USERS,
-  ZONES,
 } from '@portfolio/luna-shopper-admin/feature-people';
 import type { AdminSection } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
@@ -75,15 +73,12 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * names on a tab, because a tab names what the operator is about to look at and
  * nobody is about to look at a deployment.
  *
- * **Shoppers** for the section holding users, zones, memberships, lists, list
- * lines and baskets: the people who use velista and the things they own
- * together. Not *People*, which is `0007`'s own title and reads well until the
- * section next to it is full of admins, who are also people. Not *Users*, which
- * is one of the six screens inside it, and a section cannot carry the same word
- * as one of its members without an operator having to learn which is which. Not
- * *Accounts*, because an account is the auth idea and Auth is the next section
- * along. **Admins** for that one by the same rule, and because the section is
- * the admin account table and nothing else.
+ * **Shoppers** for the section holding the people who use velista and the
+ * zones they share. Not *People*, which is one of its two tabs, and a section
+ * cannot carry the same word as one of its members without an operator having
+ * to learn which is which. Not *Accounts*, because an account is the auth idea
+ * and Auth is the next section along. **Admins** for that one by the same
+ * rule, and because the section is the admin account table and nothing else.
  *
  * ## Order
  *
@@ -100,10 +95,11 @@ export const SHOPPERS_SEGMENT = 'shoppers';
  * the chains and five are the products, and its dashboard is a block of the
  * overview. What is left of `/catalog` is redirects.
  *
- * Among the shoppers, each nested collection follows the resource it hangs off:
- * a membership after zones, a line after lists. Neither can be listed from
- * nothing, so both are usually reached by opening a row on their parent's detail
- * screen rather than from the navigation.
+ * **The shoppers have two tabs, People and Zones** (admin plan 0045). The
+ * section held six flat screens. The data had a shape they did not show: a
+ * zone holds its members and its lists, a list holds its lines, and a person
+ * is in zones and owns shopping lists. So the four other screens are tabs of a
+ * zone or of a person, and what is left of their addresses is redirects.
  */
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   {
@@ -183,12 +179,27 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     counts: HarvestStatus,
   },
   {
+    // A zone holds its members and its lists (admin plan 0045).
+    //
+    // **No home.** The section's own address goes to People, and the two
+    // held resources that have no parent, the people and the zones, are its
+    // tabs. The other five are held and are no tab: each lives under a zone
+    // or a person, and the section's own route table mounts all seven.
+    //
+    // The count on Zones, and so on this section's entry in the rail, is the
+    // join requests that wait: `ShoppersStatus` reads it with the dashboard.
+    //
+    // Beside the route table, the addresses the six flat screens had, as
+    // redirects to where the same rows are now.
     key: 'shoppers',
     label: 'shell.sections.shoppers',
     icon: PeopleIcon,
     segment: SHOPPERS_SEGMENT,
-    home: PeopleDashboard,
-    resources: [USERS, ZONES, MEMBERSHIPS, LISTS, LIST_LINES, BASKETS],
+    landing: USERS.segment,
+    held: SHOPPER_RESOURCES,
+    heldTabs: true,
+    screens: [...shoppersRoutes(), ...oldShopperAddresses()],
+    counts: ShoppersStatus,
   },
   {
     // **A section with one screen has no segment**, so the admins list stays at

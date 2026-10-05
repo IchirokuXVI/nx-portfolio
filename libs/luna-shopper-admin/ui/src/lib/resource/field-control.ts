@@ -87,8 +87,18 @@ import { ReferencesControl } from './references-control';
           [value]="asText()"
         >
           <option value="">{{ 'resource.field.choose' | rokuT }}</option>
+          <!-- Each option says whether it is the one held. The select's own
+               value is written before its options are drawn, so by itself it
+               finds no option to choose and shows "Choose" over a row that
+               holds a value (admin plan 0045, where a member's role is the
+               one thing the form is opened to change). -->
           @for (option of optionsOf(); track option.value) {
-            <option [value]="option.value">{{ option.label | rokuT }}</option>
+            <option
+              [selected]="option.value === asText()"
+              [value]="option.value"
+            >
+              {{ option.label | rokuT }}
+            </option>
           }
         </select>
       }

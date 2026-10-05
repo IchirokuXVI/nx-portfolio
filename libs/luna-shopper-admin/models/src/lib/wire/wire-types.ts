@@ -1464,6 +1464,7 @@ export type AdminCoreAdminZoneDetailView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1518,6 +1519,7 @@ export type AdminCoreAdminZoneRowView = {
   ownerUserId: string | null;
   memberCount: number;
   listCount: number;
+  pendingCount: number;
   markedForDeletionAt: string | null;
   createdAt: string;
   updatedAt: string;

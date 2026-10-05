@@ -23,7 +23,6 @@ const nothing: PathOf = () => null;
 describe('activityTarget', () => {
   it.each([
     ['zones', ['/', 'shoppers', 'zones']],
-    ['shopping_lists', ['/', 'shoppers', 'lists']],
     ['users', ['/', 'shoppers', 'users']],
     ['items', ['/', 'catalog', 'items']],
   ])(
@@ -49,6 +48,9 @@ describe('activityTarget', () => {
     // A price is read on its product's page (admin plan 0043), and the audit
     // row names the price and not the product.
     'item_prices',
+    // A list is a page under its zone (admin plan 0045), and the audit row
+    // names the list and not the zone.
+    'shopping_lists',
   ])('has no target for a %s row', (entity) => {
     expect(activityTarget({ entity, entityId: 'row-1' }, mounted)).toBeNull();
   });

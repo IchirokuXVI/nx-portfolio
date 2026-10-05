@@ -123,7 +123,10 @@ export function waitingTiles(
         'memberships',
         translate('dashboard.waiting.joinRequests'),
         core.memberships.pending,
-        pathOf('zones')
+        pathOf('zones'),
+        // The Zones tab, narrowed to the zones where a request waits (admin
+        // plan 0045, section 2).
+        { hasPending: 'true' }
       )
     );
   }

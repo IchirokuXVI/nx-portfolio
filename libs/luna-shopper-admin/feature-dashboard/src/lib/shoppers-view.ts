@@ -7,18 +7,17 @@ import {
 import type { ChartSeries, TileView } from '@portfolio/luna-shopper-admin/ui';
 
 /**
- * The people the product has, as the shoppers screen draws them.
+ * The people the product has, as the overview draws them.
  *
- * The three functions came from `feature-dashboard` with admin plan 0022 and
- * none of them changed except to take {@link PathOf} where it held a literal
- * path. They are here because this is the library that owns the screens they
- * link to.
+ * Admin plan 0022 moved the three functions to `feature-people`, for a
+ * dashboard of the Shoppers section. That section opens on its People tab now
+ * (admin plan 0045), so the tiles and the two charts are a block of the
+ * overview again, and the functions are back beside the page that draws them.
  *
- * The section is called Shoppers and this library is called `feature-people`,
- * and the mismatch is on purpose: `Core` and `Auth` are the names of two backend
- * deployments and `People` is this library's own title, and neither is what a
- * tab says. A tab names what the operator is about to look at, and nobody is
- * about to look at a deployment.
+ * A list and a shopping list have no screen of their own any more: a list is
+ * under its zone and a shopping list under its owner. So their two tiles lead
+ * to the Zones tab and to the People tab, which is where `pathOf` says the
+ * closest list is.
  */
 
 /** Registered sign ups per day, as one line. */
@@ -137,10 +136,8 @@ export function peopleTiles(
         }),
         delta: null,
         trend: null,
-        // By name, which is `baskets`. Its segment is `shopping-lists`, the
-        // gateway's own word for a basket, and this link used to be
-        // that segment written out: a second copy of a fact the descriptor
-        // already holds, and wrong the moment the screen moved into a section.
+        // By name, and never by its segment. A shopping list is under its
+        // owner, so this answers with the people.
         link: pathOf('baskets'),
         query: null,
         tone: 'quiet',

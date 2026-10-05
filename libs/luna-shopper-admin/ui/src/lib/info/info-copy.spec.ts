@@ -97,7 +97,8 @@ describe('what an info button says', () => {
       'harvest.switch.info',
       'people.admins.info',
       'people.baskets.info',
-      'people.lines.info',
+      'people.lists.info',
+      'people.shoppers.info',
     ]);
   });
 

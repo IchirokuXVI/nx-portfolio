@@ -116,12 +116,17 @@ function response(
 }
 
 describe('waitingTiles', () => {
-  it('counts the join requests and opens the zones', () => {
+  /**
+   * Admin plan 0045, section 2: the tile opens the Zones tab already narrowed
+   * to the zones where a request waits.
+   */
+  it('counts the join requests and opens the zones that have one', () => {
     const [tile] = waitingTiles(response(), translate, nameChain, pathOf);
 
     expect(tile.key).toBe('memberships');
     expect(tile.value).toBe(2);
     expect(tile.link).toEqual(['/', 'shoppers', 'zones']);
+    expect(tile.query).toEqual({ hasPending: 'true' });
   });
 
   /** A queue with rows in it is the reason this screen exists. */

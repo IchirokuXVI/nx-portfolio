@@ -138,6 +138,10 @@ async function boot(signedIn: boolean) {
   return { router: TestBed.inject(Router), sessions };
 }
 
+/** A person and a zone of the in-memory rows, by the ids the fixture gives. */
+const ROSA = '11111111-1111-4111-8111-111111111111';
+const KITCHEN = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
 describe('appRoutes', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => localStorage.clear());
@@ -225,13 +229,35 @@ describe('appRoutes', () => {
     ['/products/it_milk_1l/prices/new', 'the form of a new price'],
     ['/products/it_milk_1l/where', 'where a product is'],
     ['/products/it_milk_1l/sources', 'the source rows of a product'],
-    ['/shoppers', 'the shoppers dashboard'],
-    ['/shoppers/users', 'the users'],
+    // A zone holds its members and its lists (admin plan 0045).
+    ['/shoppers/people', 'the people'],
+    [`/shoppers/people/${ROSA}/details`, 'the account of a person'],
+    [`/shoppers/people/${ROSA}/zones`, 'the zones of a person'],
+    [`/shoppers/people/${ROSA}/shopping-lists`, 'what a person owns'],
+    [`/shoppers/people/${ROSA}/shopping-lists/b-saturday`, 'a shopping list'],
+    [`/shoppers/people/${ROSA}/edit`, 'the form of a person'],
     ['/shoppers/zones', 'the zones'],
-    ['/shoppers/memberships', 'the memberships'],
-    ['/shoppers/lists', 'the lists'],
-    ['/shoppers/list-lines', 'the list lines'],
-    ['/shoppers/shopping-lists', 'the baskets'],
+    [`/shoppers/zones/${KITCHEN}/members`, 'the members of a zone'],
+    [
+      `/shoppers/zones/${KITCHEN}/members/${KITCHEN}~m-kitchen-marc`,
+      'the form of a member',
+    ],
+    [`/shoppers/zones/${KITCHEN}/lists`, 'the lists of a zone'],
+    [`/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`, 'a list'],
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/edit`,
+      'the form of a list',
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines/l-kitchen-weekly~line-milk`,
+      'the form of a line',
+    ],
+    [
+      `/shoppers/zones/${KITCHEN}/shopping-lists`,
+      'the shopping lists drawn from a zone',
+    ],
+    [`/shoppers/zones/${KITCHEN}/details`, 'the facts of a zone'],
+    [`/shoppers/zones/${KITCHEN}/edit`, 'the form of a zone'],
     // The harvester in three tabs (admin plan 0044).
     ['/harvest/review/products', 'the queue of source products'],
     ['/harvest/review/shops', 'the queue of source shops'],
@@ -354,7 +380,11 @@ describe('appRoutes', () => {
     expect(router.url).toBe(now);
   });
 
-  /** A chain, a shop and a product each open on their first tab. */
+  /**
+   * A chain, a shop and a product each open on their first tab. So do the
+   * Shoppers section, a person and a zone (admin plan 0045, targets 1, 3 and
+   * 5).
+   */
   it.each([
     ['/chains/sm_mercadona', '/chains/sm_mercadona/shops'],
     [
@@ -362,6 +392,9 @@ describe('appRoutes', () => {
       '/chains/sm_mercadona/shops/loc_cordoba_centro/details',
     ],
     ['/products/it_milk_1l', '/products/it_milk_1l/details'],
+    ['/shoppers', '/shoppers/people'],
+    [`/shoppers/people/${ROSA}`, `/shoppers/people/${ROSA}/details`],
+    [`/shoppers/zones/${KITCHEN}`, `/shoppers/zones/${KITCHEN}/members`],
   ])('opens %s on its first tab', async (url, tab) => {
     const { router } = await boot(true);
 
@@ -427,6 +460,54 @@ describe('appRoutes', () => {
       '/products/it_milk_1l/prices?scope=ps_mercadona_4661',
     ],
     ['/catalog/price-policies', '/products/price-rules'],
+  ])('sends the old address %s to %s', async (old, now) => {
+    const { router } = await boot(true);
+
+    await router.navigateByUrl(old);
+
+    expect(router.url).toBe(now);
+  });
+
+  /**
+   * The addresses the six shoppers screens had (admin plan 0045, target 8),
+   * against the app's own sections. `old-addresses.spec.ts` in the people
+   * library holds every case, and this is the proof that the app mounts them
+   * where the old screens were.
+   */
+  it.each([
+    ['/shoppers/users', '/shoppers/people'],
+    [`/shoppers/users/${ROSA}`, `/shoppers/people/${ROSA}/details`],
+    ['/shoppers/memberships', '/shoppers/zones'],
+    [
+      `/shoppers/memberships?zoneId=${KITCHEN}`,
+      `/shoppers/zones/${KITCHEN}/members`,
+    ],
+    ['/shoppers/lists', '/shoppers/zones'],
+    [`/shoppers/lists?zoneId=${KITCHEN}`, `/shoppers/zones/${KITCHEN}/lists`],
+    [
+      '/shoppers/lists/l-kitchen-weekly',
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
+    ],
+    ['/shoppers/list-lines', '/shoppers/zones'],
+    [
+      '/shoppers/list-lines/l-kitchen-weekly~line-milk',
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
+    ],
+    ['/shoppers/shopping-lists', '/shoppers/people'],
+    [
+      '/shoppers/shopping-lists/b-saturday',
+      `/shoppers/people/${ROSA}/shopping-lists/b-saturday`,
+    ],
+    // A row of a zone's Shopping lists tab opens under its owner.
+    [
+      `/shoppers/zones/${KITCHEN}/shopping-lists/b-saturday`,
+      `/shoppers/people/${ROSA}/shopping-lists/b-saturday`,
+    ],
+    // A line's form goes back one segment, which is the list it is on.
+    [
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly/lines`,
+      `/shoppers/zones/${KITCHEN}/lists/l-kitchen-weekly`,
+    ],
   ])('sends the old address %s to %s', async (old, now) => {
     const { router } = await boot(true);
 

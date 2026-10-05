@@ -16,24 +16,27 @@ export interface ActivitySubject {
  * The tables whose rows have a screen, and which resource that screen is.
  *
  * The audit trail names a table and this app names a resource, and the two agree
- * only by accident: `shopping_lists` is the table behind the `lists` screen.
- * So the mapping is written out rather than derived, and a table missing from
- * it has no screen rather than a guessed one.
+ * only by accident: `users` is the table behind the people. So the mapping is
+ * written out rather than derived, and a table missing from it has no screen
+ * rather than a guessed one.
  *
  * `item_prices` is not in it (admin plan 0043). A price is read on its
  * product's page, the audit row carries the price's own uuid, and nothing in
  * it names the product.
  *
+ * `shopping_lists` is not in it either (admin plan 0045). A list is a page
+ * under its zone, the audit row carries the list's own uuid, and nothing in
+ * it names the zone. The row is still named in the feed, without a link.
+ *
  * **A resource name, never a URL segment** (admin plan 0022, section 3). This
  * used to be a second hand written copy of the segment list, which drifted
  * silently the day a segment was renamed and broke outright the day the sections
- * moved fourteen screens. Knowing that `shopping_lists` is the `lists` screen is
- * real knowledge that lives nowhere else; knowing where the `lists` screen is
- * mounted belongs to the registry, and comes in through {@link PathOf}.
+ * moved fourteen screens. Knowing which resource a table is behind is real
+ * knowledge that lives nowhere else; knowing where that resource is mounted
+ * belongs to the registry, and comes in through {@link PathOf}.
  */
 const RESOURCE_NAMES: Readonly<Record<string, string | undefined>> = {
   zones: 'zones',
-  shopping_lists: 'lists',
   users: 'users',
   items: 'items',
 };
