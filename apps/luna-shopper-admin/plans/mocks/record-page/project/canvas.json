@@ -1,0 +1,448 @@
+{
+  "v": 3,
+  "attachments": {},
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-05T12:00:00Z"
+  },
+  "title": "Luna Shopper admin record page",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1360,
+      "h": 860,
+      "title": "Read: a brand, the smallest record"
+    },
+    "Brand-Edit.dc.html": {
+      "x": 1440,
+      "y": 0,
+      "w": 1360,
+      "h": 860,
+      "title": "Change: the same page, with a picker open"
+    },
+    "Create.dc.html": {
+      "x": 2880,
+      "y": 0,
+      "w": 1360,
+      "h": 860,
+      "title": "Add: a new product"
+    },
+    "Actions.dc.html": {
+      "x": 4320,
+      "y": 0,
+      "w": 1360,
+      "h": 860,
+      "title": "Actions: an account, with the More menu open"
+    },
+    "Product.dc.html": {
+      "x": 0,
+      "y": 2200,
+      "w": 1360,
+      "h": 860,
+      "title": "Read: a product, many fields"
+    },
+    "Product-Edit.dc.html": {
+      "x": 1440,
+      "y": 2200,
+      "w": 1360,
+      "h": 860,
+      "title": "Change: a product, refused by two fields"
+    },
+    "Shop.dc.html": {
+      "x": 2880,
+      "y": 2200,
+      "w": 1360,
+      "h": 860,
+      "title": "Read: a shop, as a pane inside its chain"
+    },
+    "Save-States.dc.html": {
+      "x": 0,
+      "y": 4400,
+      "w": 1360,
+      "h": 860,
+      "title": "States of a save, and the questions it asks"
+    },
+    "Page-States.dc.html": {
+      "x": 1440,
+      "y": 4400,
+      "w": 1360,
+      "h": 860,
+      "title": "Loading, not found, no answer, nothing yet"
+    },
+    "Parts.dc.html": {
+      "x": 2880,
+      "y": 4400,
+      "w": 1360,
+      "h": 860,
+      "title": "The parts, all of them"
+    },
+    "Contract.dc.html": {
+      "x": 4320,
+      "y": 4400,
+      "w": 1360,
+      "h": 860,
+      "title": "What a descriptor can state"
+    },
+    "Phone-Brand.dc.html": {
+      "x": 0,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: a brand"
+    },
+    "Phone-Product.dc.html": {
+      "x": 470,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: a product"
+    },
+    "Phone-Product-Edit.dc.html": {
+      "x": 940,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: changing a product"
+    },
+    "Phone-Picker.dc.html": {
+      "x": 1410,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: a picker, open"
+    },
+    "Phone-Shop.dc.html": {
+      "x": 1880,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: a shop"
+    },
+    "Phone-Create.dc.html": {
+      "x": 2350,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: a new product"
+    },
+    "Phone-Actions.dc.html": {
+      "x": 2820,
+      "y": 6600,
+      "w": 390,
+      "h": 844,
+      "title": "Phone: the More sheet"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Brand-Edit.dc.html",
+    "Create.dc.html",
+    "Actions.dc.html",
+    "Product.dc.html",
+    "Product-Edit.dc.html",
+    "Shop.dc.html",
+    "Save-States.dc.html",
+    "Page-States.dc.html",
+    "Parts.dc.html",
+    "Contract.dc.html",
+    "Phone-Brand.dc.html",
+    "Phone-Product.dc.html",
+    "Phone-Product-Edit.dc.html",
+    "Phone-Picker.dc.html",
+    "Phone-Shop.dc.html",
+    "Phone-Create.dc.html",
+    "Phone-Actions.dc.html"
+  ],
+  "notes": {
+    "t-modes": {
+      "x": 0,
+      "y": -260,
+      "text": "One page, three modes: read, change, add",
+      "kind": "title1",
+      "w": 240,
+      "maxW": 5680
+    },
+    "t-weight": {
+      "x": 0,
+      "y": 1940,
+      "text": "Heavier records, same page",
+      "kind": "title1",
+      "w": 240,
+      "maxW": 4240
+    },
+    "t-states": {
+      "x": 0,
+      "y": 4140,
+      "text": "States, parts and the contract",
+      "kind": "title1",
+      "w": 240,
+      "maxW": 5680
+    },
+    "t-phone": {
+      "x": 0,
+      "y": 6340,
+      "text": "On a phone",
+      "kind": "title1",
+      "w": 240,
+      "maxW": 3210
+    },
+    "n-legend": {
+      "x": 5760,
+      "y": 0,
+      "w": 340,
+      "fill": "gray",
+      "text": "How to read the notes. Green is a decision this mock made. Orange is a question for the owner, and each one ends with a recommendation. Every name, count and date on a board is sample data. A value in square brackets is one the mock did not invent."
+    },
+    "d-read-first": {
+      "x": 0,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: reading comes first. A record opens as a page to read. Edit turns the same page into a form, and each value becomes its control in the same place, so nothing moves. Why: a record is read many more times than it is changed, and a page that is always a form can be changed by accident."
+    },
+    "d-rows": {
+      "x": 440,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: label on the left, value on the right, one field per row. On a phone the label goes above the value. A record with 3 fields is one short panel. A record with 30 fields is the same rows in more sections."
+    },
+    "d-facts": {
+      "x": 880,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: the record's own facts sit beside the sections on a wide screen and after them on a narrow one. They are who made it, when it changed, and its ID in small mono type with a Copy button. The ID is never the name of anything."
+    },
+    "q-two-per-row": {
+      "x": 0,
+      "y": 1400,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: may a section put two short fields in one row, such as city and postal code? Recommendation: no. One rule for every record is worth more than a shorter page. The mock uses one field per row everywhere."
+    },
+    "d-save-bar": {
+      "x": 1440,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: Save and Cancel live in one bar at the foot of the page and nowhere else. The bar says what state the form is in: nothing changed, 1 unsaved change, saving, not saved. Save is off until something changed."
+    },
+    "d-picker": {
+      "x": 1880,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a reference is a picker that looks like a select. It has the same arrow, it opens without typing, and None is the first choice when the field may be empty. It shows names. It never shows an ID and never asks for one."
+    },
+    "d-changed": {
+      "x": 2320,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a changed field says Changed beside its label until the save. The back link, a tab and an entry of the rail all ask before they throw changes away. The More menu is not offered while the page is a form."
+    },
+    "q-whole-page": {
+      "x": 1440,
+      "y": 1400,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: edit the whole page at once, or one section at a time? Recommendation: the whole page. One Save, one answer from the gateway, one bar. A section at a time means several bars and a record that can be half saved."
+    },
+    "d-create": {
+      "x": 2880,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: adding uses the same page. Fields that the system fills in (ID, dates, counts) are not drawn. A field fixed by the address, such as the chain of a new shop, is drawn as a locked value. A required field has a star, and the bar says how many are still empty. Defaults are filled in and can be changed."
+    },
+    "q-after-create": {
+      "x": 3320,
+      "y": 900,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: where does the app go after a new record is saved? Recommendation: to the new record, in reading mode, with one line that says it was added and a link to add another. The next step is usually on that record, because a product needs prices. Today the app goes back to the list."
+    },
+    "d-more-menu": {
+      "x": 4320,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: every action that is not Edit lives in the More menu of the header. Actions that destroy come last, under a line, in red words. On a phone the same list is a sheet. The header keeps to two controls and the info button."
+    },
+    "d-confirm": {
+      "x": 4760,
+      "y": 900,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a delete always asks first. The question names the record and says what goes with it. A refusal says why and links to the rows that hold the record. Both are on the board of save states."
+    },
+    "q-danger-section": {
+      "x": 5200,
+      "y": 900,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: should Delete also have a section at the foot of the page? Recommendation: no. One place for every action is easier to learn, and a red button that is always on the page gets pressed by mistake."
+    },
+    "q-instant-switch": {
+      "x": 4320,
+      "y": 1400,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: may a switch write at once while reading, for example to stop a chain from being fetched? Recommendation: no. A switch changes with Save like every other field. A change that must be fast is a named action in the More menu, with its own question."
+    },
+    "d-children": {
+      "x": 0,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a collection that belongs to the record is shown in one of three ways, and the descriptor picks. Tab: a long list with its own filters, such as prices. Panel: a short list inside the page with a link to the rest. Link: a count that opens the filtered list."
+    },
+    "d-empty-value": {
+      "x": 440,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: the descriptor names the sections. A section that has no field in this mode is not drawn. An empty value reads None. It is never a blank and never a dash, so an empty field and a field that failed to load do not look the same."
+    },
+    "q-section-index": {
+      "x": 880,
+      "y": 3100,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: should a long record get a list of its sections to jump to? Recommendation: not yet. The heaviest record today is a shop with 14 fields in 4 sections, which is two screens on a phone. Add the list when a record passes 6 sections."
+    },
+    "d-errors": {
+      "x": 1440,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: an error is said under its field, in words, beside a mark. The bar counts the fields that need a look, and its link jumps to the first. A refusal that belongs to no field is one line above the sections, with a link when the gateway names a row."
+    },
+    "d-groups": {
+      "x": 1880,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a text in several languages is one field with one line per language. A list of references has one row per reference. When the order means something the rows have arrows, and the first row is marked Main."
+    },
+    "q-image": {
+      "x": 2320,
+      "y": 3100,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: is an image a link to paste or a file to upload? Recommendation: a link with a preview, for now. The catalog stores an address today and has no place to keep a file. The mock draws a grey box where the picture goes."
+    },
+    "d-pane": {
+      "x": 2880,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: the page also works as a pane. Inside a chain, a shop's record is the Details tab of the split screen of plan 0042. The pane is narrow, so the record's facts go after the sections. No part changes."
+    },
+    "d-who-set-it": {
+      "x": 3320,
+      "y": 3100,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: a value that a person may not change says who set it, such as Set by the harvester. A value that a person must check is amber, such as Postal code guessed. Amber means only that."
+    },
+    "q-map": {
+      "x": 3760,
+      "y": 3100,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: should coordinates show a small map? Recommendation: not in this page. A map is a field kind of its own and it brings a dependency. Two numbers and a link that opens the place on a map site are enough for now."
+    },
+    "d-bar-states": {
+      "x": 0,
+      "y": 5300,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: the bar has six states and the board shows all of them. After a save the page goes back to reading and says Saved in one line that a screen reader hears. Nothing moves and nothing fades, as plan 0041 allows no motion here."
+    },
+    "d-page-states": {
+      "x": 1440,
+      "y": 5300,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: while a record loads, the header, the back link and the section frames are drawn at once and only the values wait. A record that is not there says so and offers the list. A gateway that did not answer offers to try again."
+    },
+    "d-parts": {
+      "x": 2880,
+      "y": 5300,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: twelve parts and no others. Every board is built from them, and all of them exist in the app today or are one of its parts with a new input. The plan should refuse a thirteenth part unless a record cannot be drawn without it."
+    },
+    "d-contract": {
+      "x": 4320,
+      "y": 5300,
+      "w": 420,
+      "fill": "green",
+      "text": "Decision: the descriptor gains one block, record, and a few words on a field. Everything marked New on the board is new. The rest is ResourceDescriptor as it is in dev. This board is the contract for the plan that follows."
+    },
+    "q-migrate": {
+      "x": 4760,
+      "y": 5300,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: should the records that have a page of their own today (brand, product, shop, chain, zone) move to this page? Recommendation: yes, one at a time, brand first. Each keeps only what is special to it, as a tab or a panel. The plan should name the order."
+    },
+    "q-who-changed": {
+      "x": 5200,
+      "y": 5300,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: the boards show who made and who changed a record. Most tables do not store that today. Recommendation: draw the line only when the row carries the value, and let a backend plan decide which tables get it. The page needs no change either way."
+    },
+    "d-phone-header": {
+      "x": 0,
+      "y": 7484,
+      "w": 390,
+      "fill": "green",
+      "text": "Decision: on a phone the header is 48 px and scrolls away with the page. Edit stays in the header and every other action is in the More sheet."
+    },
+    "d-phone-save": {
+      "x": 940,
+      "y": 7484,
+      "w": 390,
+      "fill": "green",
+      "text": "Decision: on a phone the save bar sits just above the bar of the app, and both stay. Together they take 118 px of 844, which is 14 percent. The bar has no room for words there, so Save carries the count, and a refusal moves the page to the first field that was refused."
+    },
+    "q-phone-hide-bar": {
+      "x": 940,
+      "y": 7900,
+      "w": 390,
+      "fill": "orange",
+      "text": "Question: should the bar of the app hide while a form is open on a phone? Recommendation: no. It would give 58 px and take away the way out. Leaving already asks before it throws changes away."
+    },
+    "d-phone-picker": {
+      "x": 1410,
+      "y": 7484,
+      "w": 390,
+      "fill": "green",
+      "text": "Decision: on a phone a picker opens as a sheet from the bottom. The search field is at the top, None is first, and a row is 48 px high. It is the PopoverSheet part of plan 0041."
+    },
+    "d-phone-facts": {
+      "x": 1880,
+      "y": 7484,
+      "w": 390,
+      "fill": "green",
+      "text": "Decision: on a phone the record's facts are the last section. A collection shown as a panel on a wide screen is a row that opens the list."
+    },
+    "q-outline": {
+      "x": 3320,
+      "y": 5300,
+      "w": 420,
+      "fill": "orange",
+      "text": "Question: the outline of a control is #C3C8C0, the token of plan 0041. On the surface that is 1.7 to 1, and the edge of a control should reach 3 to 1. Recommendation: darken the token to #8D948C in the plan that builds this page. It changes every control of the app by one value."
+    }
+  },
+  "designSystems": []
+}

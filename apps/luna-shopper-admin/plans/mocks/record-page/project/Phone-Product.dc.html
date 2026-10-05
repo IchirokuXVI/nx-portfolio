@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: a product</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab ph" style="width: 390px; height: 844px">
+
+<header class="phead">
+<a class="pb" href="#" aria-label="Back to Products"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+<div class="grow col"><h1>Leche entera</h1><span>Hacendado, 1 l</span></div>
+<button class="pb" aria-label="How a product page works"><i>i</i></button>
+<a class="pb pact" href="Phone-Product-Edit.dc.html">Edit</a>
+<a class="pb" href="Phone-Actions.dc.html" aria-label="More actions for Leche entera"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></a>
+</header>
+<nav class="tabs" aria-label="Leche entera">
+<a class="tab on" href="#" aria-current="page">Details</a>
+<a class="tab" href="#">Prices <span class="cnt">14</span></a>
+<a class="tab" href="#">Shops <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="pp-name">
+<div class="sec-h"><h2 id="pp-name">Name and codes</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Name</dt><dd class="fv"><div class="loc" style="gap: 2px"><div><span class="lang">ES</span><span>Leche entera</span></div><div><span class="lang">EN</span><span>Whole milk</span></div></div></dd></div>
+<div class="fr"><dt class="fl">Brand</dt><dd class="fv"><a href="Phone-Brand.dc.html">Hacendado</a></dd></div>
+<div class="fr"><dt class="fl">Barcode</dt><dd class="fv"><code>8480000100115</code></dd></div>
+<div class="fr"><dt class="fl">Chain's code</dt><dd class="fv"><code>10379</code></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="pp-where">
+<div class="sec-h"><h2 id="pp-where">Where it belongs</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Categories</dt><dd class="fv col" style="gap: 2px"><span class="rowx" style="gap: 8px"><a href="#">Lácteos y huevos, Leche</a><span class="chip">Main</span></span><a href="#">Desayuno, Leche y bebidas vegetales</a></dd></div>
+<div class="fr"><dt class="fl">Product group</dt><dd class="fv"><a href="#">Leche entera</a></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="pp-sold">
+<div class="sec-h"><h2 id="pp-sold">How it is sold</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Sold by</dt><dd class="fv">Litre</dd></div>
+<div class="fr"><dt class="fl">Size</dt><dd class="fv num">1</dd></div>
+<div class="fr"><dt class="fl">Picture</dt><dd class="fv rowx" style="gap: 12px"><span class="thumb">[PICTURE]</span><a href="#">[ADDRESS OF THE PICTURE]</a></dd></div>
+</dl>
+</section>
+
+</div>
+</div>
+
+<nav class="bnav" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Phone-Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Phone-Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>More</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

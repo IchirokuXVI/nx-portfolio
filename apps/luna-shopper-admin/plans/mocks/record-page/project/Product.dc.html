@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Read: a product, many fields</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab" style="width: 1360px; height: 860px">
+
+<nav class="rail" aria-label="Sections">
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z"/></svg>Overview</a>
+<a href="Shop.dc.html"><svg viewBox="0 0 24 24"><path d="M4 10v10h16V10M3 10l2-6h14l2 6M3 10h18M10 20v-6h4v6"/></svg>Chains</a>
+<a class="on" href="Product.dc.html"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8L3 12zM7.5 8.5h.01"/></svg>Products</a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M4 13l3-8h10l3 8v6H4v-6zM4 13h5l1 3h4l1-3h5"/></svg>Harvest<span class="badge">148</span></a>
+<a href="#"><svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6M16 4.5a3.5 3.5 0 010 6.5M18 14c2 .8 3.2 2.6 3.5 6"/></svg>Shoppers</a>
+<a href="Actions.dc.html"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>Admins</a>
+<div class="grow"></div>
+<span class="env">STAGING</span>
+<button class="rb" aria-label="Read the catalog in English">EN</button>
+<button class="rb" aria-label="Account: Dev Admin">DA</button>
+</nav>
+
+<div class="main">
+<header class="head">
+<a class="back" href="#" aria-label="Back to Products"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Products</a>
+<h1>Leche entera</h1>
+<span class="mut" style="white-space: nowrap">Hacendado, 1 l</span>
+<div class="grow"></div>
+<button class="ibtn" aria-label="How a product page works">i</button>
+<a class="btn" href="Product-Edit.dc.html" style="color: #14171a">Edit</a>
+<button class="btn sq" aria-label="More actions for Leche entera"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></button>
+</header>
+<nav class="tabs" aria-label="Leche entera">
+<a class="tab on" href="Product.dc.html" aria-current="page">Details</a>
+<a class="tab" href="#">Prices <span class="cnt">14</span></a>
+<a class="tab" href="#">Shops <span class="cnt">3,870</span></a>
+</nav>
+
+<div class="body">
+<div class="secs">
+
+<section class="sec" aria-labelledby="p-name">
+<div class="sec-h"><h2 id="p-name">Name and codes</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Name</dt><dd class="fv"><div class="loc"><div><span class="lang">ES</span><span>Leche entera</span></div><div><span class="lang">EN</span><span>Whole milk</span></div></div></dd></div>
+<div class="fr"><dt class="fl">Brand</dt><dd class="fv"><a href="Main.dc.html">Hacendado</a></dd></div>
+<div class="fr"><dt class="fl">Barcode</dt><dd class="fv"><code>8480000100115</code></dd></div>
+<div class="fr"><dt class="fl">Chain's code</dt><dd class="fv"><code>10379</code></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="p-where">
+<div class="sec-h"><h2 id="p-where">Where it belongs</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Categories</dt><dd class="fv col" style="gap: 4px"><span class="rowx" style="gap: 8px"><a href="#">Lácteos y huevos, Leche</a><span class="chip">Main</span></span><a href="#">Desayuno, Leche y bebidas vegetales</a></dd></div>
+<div class="fr"><dt class="fl">Product group</dt><dd class="fv"><a href="#">Leche entera</a></dd></div>
+</dl>
+</section>
+
+<section class="sec" aria-labelledby="p-sold">
+<div class="sec-h"><h2 id="p-sold">How it is sold</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Sold by</dt><dd class="fv">Litre</dd></div>
+<div class="fr"><dt class="fl">Size</dt><dd class="fv num">1</dd></div>
+<div class="fr" style="align-items: center"><dt class="fl">Picture</dt><dd class="fv rowx" style="gap: 12px"><span class="thumb">[PICTURE]</span><a href="#">[ADDRESS OF THE PICTURE]</a></dd></div>
+</dl>
+</section>
+
+</div>
+
+<aside class="aside" aria-labelledby="p-rec">
+<section class="sec">
+<div class="sec-h"><h2 id="p-rec">Record</h2></div>
+<div class="kv"><h3>Added</h3><span>4 Jun 2026, 03:15</span><span class="mut">by <a href="#">a run of Mercadona</a></span></div>
+<div class="kv"><h3>Last changed</h3><span>30 Sep 2026, 08:12</span><span class="mut">by Dev Admin</span></div>
+<div class="kv"><h3>ID</h3><div class="rowx" style="gap: 8px"><code class="grow mut">1be40a77…5d02</code><button class="btn sm" aria-label="Copy the ID of Leche entera">Copy</button></div></div>
+</section>
+</aside>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

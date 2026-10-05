@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Loading, not found, no answer, nothing yet</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./record.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="ab sheet" style="width: 1360px; height: 860px">
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 40px">
+
+<div class="col" style="gap: 6px"><span class="cap">Loading. The frame and the labels come from the descriptor, so only the values wait.</span>
+<div class="frame col" style="height: 360px" aria-busy="true">
+<header class="head"><a class="back" href="#" aria-label="Back to Brands"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Brands</a><span class="sk" style="width: 160px; height: 18px"></span><span role="status" style="position: absolute; left: -9999px">Loading the brand</span></header>
+<div class="body" style="padding: 16px 20px"><div class="secs">
+<section class="sec"><div class="sec-h"><h2>Name and key</h2></div>
+<div class="fr"><span class="fl">Name</span><span class="fv"><span class="sk" style="width: 180px"></span></span></div>
+<div class="fr"><span class="fl">Key</span><span class="fv"><span class="sk" style="width: 110px"></span></span></div>
+</section>
+<section class="sec"><div class="sec-h"><h2>Links</h2></div>
+<div class="fr"><span class="fl">Same brand as</span><span class="fv"><span class="sk" style="width: 90px"></span></span></div>
+<div class="fr"><span class="fl">Own brand of</span><span class="fv"><span class="sk" style="width: 130px"></span></span></div>
+</section>
+</div></div>
+</div></div>
+
+<div class="col" style="gap: 6px"><span class="cap">Not found. It says what happened and offers the list.</span>
+<div class="frame col" style="height: 360px">
+<header class="head"><a class="back" href="#" aria-label="Back to Brands"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Brands</a><h1>Brand not found</h1></header>
+<div class="body" style="padding: 16px 20px"><div class="secs">
+<section class="sec col" style="padding: 18px 16px; gap: 12px; align-items: flex-start">
+<p>This brand is not here. It was deleted, or the link is old.</p>
+<a class="btn pri" href="#" style="color: #fff">Go to Brands</a>
+</section>
+</div></div>
+</div></div>
+
+<div class="col" style="gap: 6px"><span class="cap">No answer. Nothing is drawn that could be mistaken for the record.</span>
+<div class="frame col" style="height: 330px">
+<header class="head"><a class="back" href="#" aria-label="Back to Brands"><svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Brands</a><h1>Brand</h1></header>
+<div class="body" style="padding: 16px 20px"><div class="secs">
+<div class="ban" role="alert" style="align-items: center"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 0"><path d="M12 4l9 16H3L12 4zM12 10v4M12 17h.01"/></svg><span class="grow">The gateway did not answer, so this brand could not be read.</span><button class="btn sm" style="color: #14171a">Try again</button></div>
+</div></div>
+</div></div>
+
+<div class="col" style="gap: 6px"><span class="cap">Nothing yet. An empty value reads None, and an empty collection says how to fill it.</span>
+<div class="frame col" style="height: 330px">
+<div class="body" style="padding: 16px 20px"><div class="secs">
+<section class="sec"><div class="sec-h"><h2>Links</h2></div>
+<dl>
+<div class="fr"><dt class="fl">Same brand as</dt><dd class="fv none">None</dd></div>
+<div class="fr"><dt class="fl">Own brand of</dt><dd class="fv none">None</dd></div>
+</dl>
+</section>
+<section class="sec"><div class="sec-h"><h2 class="grow">Other spellings <span class="cnt">0</span></h2><button class="btn sm">Link a spelling</button></div>
+<p class="li mut">No other spellings. Link one when a source writes this brand in another way.</p>
+</section>
+<section class="sec">
+<div class="li" style="border-top: 0"><span class="grow" style="font-weight: 600">Products with this brand</span><span class="mut">None yet</span></div>
+</section>
+</div></div>
+</div></div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":860}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
