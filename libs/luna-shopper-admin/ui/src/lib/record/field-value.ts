@@ -10,6 +10,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type { RecordValue } from '@portfolio/luna-shopper-admin/models';
 import { ScopeMark } from '../page/scope-mark';
 
+/**
+ * The languages that `record.language` names in words. A screen reader hears
+ * the code of any other one, which is better than a key that has no text.
+ * `field-value.spec.ts` holds this list to the catalogue.
+ */
+export const NAMED_LANGUAGES: readonly string[] = ['en', 'es'];
+
 /** One of several references, as its row is drawn. */
 interface ReferenceLine {
   readonly id: string;
@@ -105,7 +112,9 @@ interface ReferenceLine {
                    in words. -->
               <span aria-hidden="true" class="lang">{{ line.locale }}</span>
               <span class="sr-only">{{
-                'record.language.' + line.locale | rokuT
+                named(line.locale)
+                  ? ('record.language.' + line.locale | rokuT)
+                  : line.locale
               }}</span>
               @if (line.text !== null) {
                 <span [attr.lang]="line.locale" class="text">{{
@@ -313,6 +322,11 @@ export class FieldValue {
   readonly link = input<readonly string[] | null>(null);
   /** The same for several references, by ID. */
   readonly links = input<Readonly<Record<string, readonly string[]>>>({});
+
+  /** Whether the catalogue has a word for this language. */
+  named(locale: string): boolean {
+    return NAMED_LANGUAGES.includes(locale);
+  }
 
   /** The address of a picture that did not load. */
   readonly failed = signal<string | null>(null);

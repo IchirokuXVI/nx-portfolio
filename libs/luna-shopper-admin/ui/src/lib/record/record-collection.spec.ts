@@ -38,6 +38,7 @@ const all: CollectionLink = {
       [count]="count()"
       [emptyKey]="emptyKey()"
       [heading]="'Other spellings'"
+      [level]="level()"
       [more]="more()"
       [rows]="rows()"
       [shape]="shape()"
@@ -56,6 +57,7 @@ class Host {
   readonly emptyKey = signal<string | null>(null);
   readonly status = signal<'loading' | 'ready' | 'error'>('ready');
   readonly retries = signal(0);
+  readonly level = signal<2 | 3>(2);
 }
 
 function render(set: (host: Host) => void = () => undefined, compact = false) {
@@ -85,6 +87,15 @@ describe('RecordCollection as a panel', () => {
     expect(host.querySelector('[data-count]')?.textContent?.trim()).toBe('2');
     expect(host.querySelector('.head button')?.textContent?.trim()).toBe(
       'Link a spelling'
+    );
+  });
+
+  it('takes the level of its heading from the page', () => {
+    const { host } = render((panel) => panel.level.set(3));
+
+    expect(host.querySelector('h2')).toBeNull();
+    expect(host.querySelector('h3')?.textContent?.trim()).toBe(
+      'Other spellings'
     );
   });
 
@@ -225,6 +236,42 @@ describe('RecordCollection on a phone', () => {
     expect(host.querySelector('[data-collection-link]')).not.toBeNull();
     expect(host.querySelector('li')).toBeNull();
     expect(host.querySelector('lib-record-section')).toBeNull();
+  });
+
+  /** One row that opens nothing would leave the rows out of reach. */
+  it('keeps the rows of a panel that has nowhere to lead', () => {
+    const { host } = render((panel) => panel.all.set(null), true);
+    const [first] = [...host.querySelectorAll('li')];
+
+    expect(host.querySelector('lib-record-section')).not.toBeNull();
+    expect(host.querySelectorAll('li')).toHaveLength(2);
+    expect(first.querySelector('a')?.getAttribute('href')).toBe('/brands/b_2');
+    expect(host.querySelector('[data-collection-link]')).toBeNull();
+  });
+
+  it('keeps the retry of a panel that has nowhere to lead', () => {
+    const { fixture, host } = render((panel) => {
+      panel.all.set(null);
+      panel.status.set('error');
+    }, true);
+
+    host
+      .querySelector<HTMLButtonElement>('[data-collection-error] button')
+      ?.click();
+
+    expect(fixture.componentInstance.retries()).toBe(1);
+  });
+
+  it('says None yet in one line for an empty panel that has nowhere to lead', () => {
+    const { host } = render((panel) => {
+      panel.all.set(null);
+      panel.rows.set([]);
+    }, true);
+
+    expect(host.querySelector('lib-record-section')).toBeNull();
+    expect(
+      host.querySelector('[data-collection-empty]')?.textContent
+    ).toContain('record.collection.none');
   });
 
   it('says None yet for a panel that was read and holds nothing', () => {

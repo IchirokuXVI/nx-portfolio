@@ -269,20 +269,18 @@ describe('an ink is readable on what it is drawn on', () => {
       token('--admin-surface-raised')
     );
 
-    expect(outline).toBe(3.03);
     expect(outline).toBeGreaterThanOrEqual(OUTLINE);
   });
 
   /**
    * The same outline against the ground of the page, which is the outer side
-   * of a control in a filter bar. Measured so that a change to either token
-   * shows here. It is under 3 to 1 by itself, and the fill inside the edge is
-   * what carries the control there.
+   * of a control in a filter bar. The plan asks for 3 to 1 there too, so the
+   * edge reads from both of its sides.
    */
-  it('measures the outline of a control against the ground', () => {
+  it('draws the outline of a control at 3 to 1 on the ground', () => {
     expect(
       contrast(token('--admin-border-strong'), token('--admin-surface'))
-    ).toBe(2.82);
+    ).toBeGreaterThanOrEqual(OUTLINE);
   });
 
   /** A line between rows and the edge of a panel stay light: they are not controls. */

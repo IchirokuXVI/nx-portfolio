@@ -94,7 +94,7 @@ outline of every control. No page is changed to use the parts. Use the
    `PopoverSheet` from the bottom edge. The search field is at the top of the sheet, the
    empty choice is first, and a row is 48 px high. At 48 rem and above it is the combobox of
    plan `0050`, unchanged.
-8. **The outline of a control is `#8d948c`.** `--admin-border-strong` takes that value. On
+8. **The outline of a control is `#878e86`.** `--admin-border-strong` takes that value. On
    `--admin-surface-raised` it is 3 to 1 or more, and a spec proves it. A rule that used the
    token for the edge of a panel or for a line between rows takes `--admin-border`.
 9. **Nothing uses the parts yet.** No file of a `feature-*` library and no file of the app
@@ -502,10 +502,12 @@ It keeps its inputs and gains two:
 | `controlId` | `string` | The id of the button. |
 | `label` | `string` | The accessible name: the label of the field. |
 | `disabled` | `boolean`, default `false` | |
+| `invalid` | `boolean`, default `false` | Whether the value was refused. Sets `aria-invalid`. |
+| `describedBy` | `string \| null`, default `null` | The ids of the lines under the switch. |
 
 Output: `checkedChange` with the new boolean.
 
-- 36 by 20 px beside a pointer and 44 by 26 px under a thumb. The track is `#8d948c` off
+- 36 by 20 px beside a pointer and 44 by 26 px under a thumb. The track is `#878e86` off
   and `--admin-accent` on.
 - "Yes" or "No" is written beside it, so the state is never color alone.
 - It says what was pressed and writes nothing. The form holds the value until Save.
@@ -585,6 +587,7 @@ The page of `0053` picks the reason in this order:
 | `all` | `CollectionLink \| null`, default `null` | Where "See all" and the link shape lead. |
 | `emptyKey` | `string \| null`, default `null` | What an empty panel says. |
 | `status` | `'loading' \| 'ready' \| 'error'`, default `'ready'` | |
+| `level` | `2 \| 3`, default `2` | The level of the heading of a panel. A pane uses 3. |
 
 ```ts
 export interface RecordCollectionRow {
@@ -609,7 +612,9 @@ handed on to the heading row.
   when `count` is larger than the rows. With a `count` of `null` it says "See all".
 - An empty panel says the sentence of `emptyKey`. An empty link says "None yet" and is not
   a link.
-- Below 48 rem a panel is drawn as the link shape: one row that opens the list.
+- Below 48 rem a panel is drawn as the link shape: one row that opens the list. A panel
+  whose `all` is `null` stays a panel there. The one row opens nothing, and it puts the
+  rows out of reach.
 
 ### 3.10 `SaveBar`
 
@@ -668,7 +673,7 @@ product". `refused` has `role="alert"` and `saved` has `role="status"`.
 
 | Token | Was | Is | Why |
 | --- | --- | --- | --- |
-| `--admin-border-strong` | `#c3c8c0` | `#8d948c` | The edge of a control was 1.7 to 1 on the raised surface. It reaches 3 to 1. |
+| `--admin-border-strong` | `#c3c8c0` | `#878e86` | The edge of a control was 1.7 to 1 on the raised surface. It reaches 3 to 1. |
 
 - `wash-contrast.spec.ts` gains the pair: `--admin-border-strong` on
   `--admin-surface-raised` and on `--admin-surface`, 3 to 1 or more.
@@ -736,7 +741,7 @@ ones this plan builds on.
   keep a file.
 - **No map for coordinates.** Two numbers and a link to a map site, which is a `url` field.
 - **No list of sections to jump to yet.** Add it when a record passes six sections.
-- **The outline of a control darkens to `#8d948c`.**
+- **The outline of a control darkens to `#878e86`.**
 
 Decisions this plan made, for the owner to confirm:
 

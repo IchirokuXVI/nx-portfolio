@@ -26,6 +26,8 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
     <button
       (click)="checkedChange.emit(!checked())"
       [attr.aria-checked]="checked()"
+      [attr.aria-describedby]="describedBy()"
+      [attr.aria-invalid]="invalid() ? 'true' : null"
       [attr.aria-label]="label()"
       [class.on]="checked()"
       [disabled]="disabled()"
@@ -118,6 +120,10 @@ export class Switch {
   /** The accessible name: the label of the field, already translated. */
   readonly label = input.required<string>();
   readonly disabled = input(false);
+  /** Whether the value was refused. Sets `aria-invalid`. */
+  readonly invalid = input(false);
+  /** The ids of the lines under the switch that say something about it. */
+  readonly describedBy = input<string | null>(null);
 
   /** The value the operator asked for. The form decides what to do with it. */
   readonly checkedChange = output<boolean>();

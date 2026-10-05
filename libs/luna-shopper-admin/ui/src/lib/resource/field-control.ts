@@ -89,7 +89,9 @@ import { ReferencesControl } from './references-control';
             (checkedChange)="valueChange.emit($event)"
             [checked]="value() === true"
             [controlId]="controlId()"
+            [describedBy]="describedBy()"
             [disabled]="disabled()"
+            [invalid]="invalid()"
             [label]="field().label | rokuT"
           />
         }
