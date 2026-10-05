@@ -95,6 +95,35 @@ function build(
 }
 
 describe('productListGateway', () => {
+  /**
+   * A product the list found by its ID (admin plan 0051) is drawn in the row
+   * of any other product, so it carries the price at the chosen scope.
+   */
+  it('reads one product with its price at the scope the list shows', async () => {
+    const { gateway, priceQueries } = build([], [price('a', { price: 2.5 })]);
+
+    const row = await gateway.read('a', {
+      query: 'a',
+      [PRICES_AT_FILTER]: 'scope',
+    });
+
+    expect(row.scopePrice?.price).toBe(2.5);
+    expect(priceQueries).toHaveLength(1);
+    expect(priceQueries[0].filters).toEqual({
+      [PRICES_AT_FILTER]: 'scope',
+      itemIds: ['a'],
+    });
+  });
+
+  it('reads one product alone when the list shows no scope', async () => {
+    const { gateway, priceQueries } = build([], [price('a')]);
+
+    const row = await gateway.read('a');
+
+    expect(row.scopePrice).toBeUndefined();
+    expect(priceQueries).toEqual([]);
+  });
+
   it('is the product gateway when no scope is asked for', async () => {
     const { gateway, productQueries, priceQueries } = build(
       [product('a'), product('b')],

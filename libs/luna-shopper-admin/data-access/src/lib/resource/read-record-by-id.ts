@@ -1,6 +1,7 @@
 import {
   idOf,
   rowWithin,
+  type AnyResourceDescriptor,
   type FilterValue,
   type ResourceDescriptor,
   type ResourceGateway,
@@ -29,7 +30,8 @@ import { toGatewayError } from '../gateway-error';
  * there.
  */
 export async function readRecordById<T extends ResourceRow>(
-  descriptor: ResourceDescriptor<T>,
+  // Either form: a page holds the erased descriptor and a typed gateway.
+  descriptor: ResourceDescriptor<T> | AnyResourceDescriptor,
   gateway: ResourceGateway<T>,
   id: string,
   within: Readonly<Record<string, FilterValue>> = {},
@@ -47,5 +49,8 @@ export async function readRecordById<T extends ResourceRow>(
     throw error;
   }
 
-  return idOf(descriptor, row) === id && rowWithin(row, within) ? row : null;
+  return idOf(descriptor as AnyResourceDescriptor, row) === id &&
+    rowWithin(row, within)
+    ? row
+    : null;
 }

@@ -84,9 +84,12 @@ function basketResource(
     labels: { one: 'people.baskets.one', many: 'people.baskets.many' },
 
     // A basket needs no name, and an unnamed one is the ordinary case: velista
-    // generates it and the shopper never titles it. So the fallback is its id,
-    // which is the only other thing that tells two of them apart.
-    title: (row) => row.name ?? row.id,
+    // generates it and the shopper never titles it. So the fallback is the
+    // day it was made, as the calendar writes it. It was the ID, and an ID is
+    // never what a row is called (admin plan 0051): the list drew a column of
+    // uuids as its names. A pure function cannot translate, so the day is in
+    // the one form every reader of this app knows.
+    title: (row) => row.name ?? row.generatedAt.slice(0, 10),
 
     // Named so that a row opens. `shoppersRoutes` mounts it under the owner.
     detail: BasketPage,

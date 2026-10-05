@@ -26,7 +26,7 @@ import {
   type BasketSettlementView,
 } from './basket-settlements';
 import { FactList, type Fact } from './fact-list';
-import { instant } from './people-format';
+import { day, instant } from './people-format';
 import type { BasketRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
 import { BASKET_PARAM, PERSON_PARAM } from './shopper-params';
@@ -276,7 +276,17 @@ export class BasketPage {
 
   readonly heading = computed(() => {
     const basket = this.basket();
-    return basket === null ? '' : (basket.name ?? basket.id);
+    if (basket === null) {
+      return '';
+    }
+    // Most shopping lists have no name, and an ID is not one (admin plan
+    // 0051). The day it was made tells two of them apart, in words.
+    return (
+      basket.name ??
+      this._translator.t('people.baskets.unnamed', undefined, undefined, {
+        date: day(basket.generatedAt, this._translator.locale()),
+      })
+    );
   });
 
   /** The owner's Shopping lists tab, for the way back. */
@@ -331,7 +341,7 @@ export class BasketPage {
         label: 'people.baskets.updatedAt',
         text: instant(basket.updatedAt, locale),
       },
-      { label: 'people.baskets.id', text: basket.id, mono: true },
+      { label: 'people.baskets.id', text: basket.id, id: true },
     ];
   });
 

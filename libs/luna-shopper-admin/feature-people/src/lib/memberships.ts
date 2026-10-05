@@ -101,6 +101,9 @@ export const MEMBERSHIPS = defineResource<Membership>({
       name: 'userId',
       label: 'people.memberships.userId',
       resource: 'users',
+      // The row carries the name, so the form shows it and not the uuid
+      // (admin plan 0051).
+      nameFrom: 'username',
       editable: false,
       help: 'people.memberships.userIdHelp',
     },

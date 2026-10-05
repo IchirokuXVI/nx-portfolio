@@ -114,7 +114,8 @@
     },
     "id": {
       "notFound": "No {{thing}} has this ID.",
-      "notFoundHere": "Nothing here has this ID."
+      "notFoundHere": "Nothing here has this ID.",
+      "copy": "Copy the ID"
     },
     "filter": {
       "any": "Any",
@@ -508,6 +509,7 @@
       }
     },
     "products": {
+      "unnamed": "Product with no name",
       "back": "Back to products",
       "edit": "Edit product",
       "delete": "Delete product",
@@ -2039,6 +2041,7 @@
     "baskets": {
       "one": "shopping list",
       "many": "Shopping lists",
+      "unnamed": "List of {{date}}",
       "id": "Identifier",
       "name": "Name",
       "ownerUserId": "Owner",

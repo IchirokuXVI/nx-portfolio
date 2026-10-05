@@ -416,9 +416,13 @@ export class ProductPage {
 
   readonly name = computed(() => {
     const row = this.product.product();
+    // A product with no name in any language says so. It used to show its ID
+    // as the heading, and an ID is not a name (admin plan 0051). The ID is on
+    // the Details tab, and the brand and the size are under the heading.
     return row === null
       ? ''
-      : localizedTextValue(row.name, this._content.order()) || row.id;
+      : localizedTextValue(row.name, this._content.order()) ||
+          this._translate.t('catalog.products.unnamed');
   });
 
   /** The brand and the size, which is what tells two products apart. */

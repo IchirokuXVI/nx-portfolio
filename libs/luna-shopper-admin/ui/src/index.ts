@@ -40,6 +40,7 @@ export { PAGE_FRAME_TABS, PageTabs, type PageTab } from './lib/page/page-tabs';
 export { PopoverSheet } from './lib/page/popover-sheet';
 export { ScopeMark } from './lib/page/scope-mark';
 export { FieldControl } from './lib/resource/field-control';
+export { RecordId } from './lib/resource/record-id';
 export {
   type ReferenceLookup,
   type ReferenceOption,

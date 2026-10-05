@@ -13,6 +13,7 @@ import { ActivatedRoute } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
+  readRecordById,
   RESOURCE_GATEWAYS,
   type GatewayError,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -24,6 +25,7 @@ import {
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   localizedTextValue,
+  recordIdFor,
   REFERENCE_NONE,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
@@ -34,6 +36,7 @@ import {
   type GroupTarget,
 } from './group-assign-review';
 import { GroupNames } from './group-names';
+import { ITEMS } from './items';
 
 /** How long typing settles before a search goes out. */
 const SEARCH_DELAY_MS = 250;
@@ -103,6 +106,10 @@ const SEARCH_PAGE_SIZE = 25;
           <p class="state">{{ 'resource.list.loading' | rokuT }}</p>
         } @else if (searchErrorKey(); as key) {
           <p class="failure" role="alert">{{ key | rokuT }}</p>
+        } @else if (idNotFound()) {
+          <p class="state" data-id-not-found>
+            {{ 'resource.id.notFound' | rokuT: { thing: oneKey | rokuT } }}
+          </p>
         } @else if (found().length === 0) {
           <p class="state">{{ 'resource.list.noMatch' | rokuT }}</p>
         } @else {
@@ -317,6 +324,9 @@ export class ProductGroupDetailPage implements OnDestroy {
   readonly adding = signal(false);
   readonly query = signal('');
   readonly searching = signal(false);
+  /** The search holds a record ID that no product has. */
+  readonly idNotFound = signal(false);
+  readonly oneKey = ITEMS.labels.one;
   private readonly _searchError = signal<GatewayError | null>(null);
   readonly searchErrorKey = computed(() =>
     gatewayErrorKey(this._searchError())
@@ -435,21 +445,39 @@ export class ProductGroupDetailPage implements OnDestroy {
     const term = this.query().trim();
     this.searching.set(true);
     this._searchError.set(null);
+    this.idNotFound.set(false);
     try {
-      const page = await this._items.list({
-        limit: SEARCH_PAGE_SIZE,
-        filters:
-          term === '' ? { productGroupId: REFERENCE_NONE } : { query: term },
-      });
-      this._found.set(page.items);
+      // A typed ID is the product that has it (admin plan 0051), read by the
+      // products' own read route and not searched for by name.
+      const id = recordIdFor(ITEMS, term);
+      const items =
+        id === null
+          ? (
+              await this._items.list({
+                limit: SEARCH_PAGE_SIZE,
+                filters:
+                  term === ''
+                    ? { productGroupId: REFERENCE_NONE }
+                    : { query: term },
+              })
+            ).items
+          : await this._byId(id);
+      this._found.set(items);
+      this.idNotFound.set(id !== null && items.length === 0);
       void this._names.resolve(
-        page.items.map((item) => item.productGroupId ?? null)
+        items.map((item) => item.productGroupId ?? null)
       );
     } catch (error) {
       this._searchError.set(error as GatewayError);
     } finally {
       this.searching.set(false);
     }
+  }
+
+  /** The product with an ID, as a list of one or of none. */
+  private async _byId(id: string): Promise<readonly Wire.CatalogItemView[]> {
+    const item = await readRecordById(ITEMS, this._items, id);
+    return item === null ? [] : [item];
   }
 
   private _candidate(

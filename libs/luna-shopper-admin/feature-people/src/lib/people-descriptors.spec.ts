@@ -486,11 +486,14 @@ describe('the list and shopping list descriptors', () => {
   });
 
   /** A basket needs no name, and an unnamed one is the ordinary case. */
-  it('calls an unnamed shopping list by its id', () => {
+  it('calls an unnamed shopping list by its day, never by its ID', () => {
     const [named, unnamed] = BASKET_SEED;
 
     expect(BASKETS.title(named, CONTENT_LOCALES)).toBe('Saturday');
-    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(unnamed.id);
+    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).toBe(
+      unnamed.generatedAt.slice(0, 10)
+    );
+    expect(BASKETS.title(unnamed, CONTENT_LOCALES)).not.toContain(unnamed.id);
   });
 });
 
