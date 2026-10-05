@@ -855,6 +855,26 @@ describe('the Price scopes tab of a chain', () => {
       fixture.nativeElement.querySelector('#record-field-kind')
     ).not.toBeNull();
   });
+
+  /**
+   * The page of a scope is in the pane of the split of chains, and the
+   * column beside it lists chains. So the column is no way back for it: its
+   * own link is, on a wide screen as on a narrow one.
+   */
+  it('leads back from a scope to the tab, beside the column of chains too', async () => {
+    for (const providers of [[WIDE], []]) {
+      const fixture = await boot(
+        '/chains/sm_mercadona/scopes/ps_mercadona_4661',
+        providers
+      );
+
+      expect(page(fixture).descriptor.name).toBe('price-scopes');
+      expect(page(fixture).backLabel()).not.toBeNull();
+      expect(
+        pageElement(fixture).querySelector('a.page-back')?.getAttribute('href')
+      ).toBe('/chains/sm_mercadona/scopes');
+    }
+  });
 });
 
 describe('the Details tab of a chain', () => {

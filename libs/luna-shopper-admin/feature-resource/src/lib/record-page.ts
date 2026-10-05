@@ -486,11 +486,14 @@ export class RecordPage implements LeaveAware {
   private readonly _viewport = inject(Viewport);
 
   /**
-   * Whether the page is drawn in the pane of a split, beside the column that
-   * lists its rows. The split is the component that holds the outlet.
+   * Whether the page is the pane of a split: the nearest split above it
+   * lists the rows of this page's own resource. A page of another resource
+   * in the same outlet is no pane, and neither is a shop's page for the
+   * split of chains, which is two splits up.
    */
   private readonly _inSplit =
-    inject(ResourceSplitPage, { optional: true }) !== null;
+    inject(ResourceSplitPage, { optional: true })?.descriptor ===
+    this._route.snapshot.data[RESOURCE_DESCRIPTOR];
 
   readonly descriptor: AnyResourceDescriptor =
     this._route.snapshot.data[RESOURCE_DESCRIPTOR];
