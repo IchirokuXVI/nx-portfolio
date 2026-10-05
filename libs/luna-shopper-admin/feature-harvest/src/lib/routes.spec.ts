@@ -63,12 +63,6 @@ const routes = harvestRoutes({
 });
 
 const pathsOf = () => routes.map((route) => route.path);
-/** An old address: a redirect, or a branch that holds nothing but one. */
-const isOldAddress = (route: Route): boolean =>
-  route.redirectTo !== undefined ||
-  (route.component === undefined &&
-    (route.children ?? []).some((child) => child.path === '**'));
-const screens = () => routes.filter((route) => !isOldAddress(route));
 const childPaths = (route: Route | undefined) =>
   (route?.children ?? []).map((child) => child.path);
 
@@ -84,7 +78,7 @@ function declared(): Set<string> {
     }
   };
 
-  walk(screens(), '');
+  walk(routes, '');
   return found;
 }
 
@@ -100,7 +94,7 @@ describe('harvestRoutes', () => {
   });
 
   it('has a page for each tab, and the screens under Runs', () => {
-    expect(screens().map((route) => [route.path, route.component])).toEqual([
+    expect(routes.map((route) => [route.path, route.component])).toEqual([
       ['review', HarvestReviewPage],
       ['runs', RunsPage],
       ['runs/new', NewRunPage],
@@ -195,13 +189,6 @@ describe('harvestRoutes, Runs', () => {
       RunPage
     );
   });
-
-  /** Target 5: presets are a panel of the tab, and have no route. */
-  it('has no route for the presets', () => {
-    expect(
-      screens().some((route) => (route.path ?? '').includes('presets'))
-    ).toBe(false);
-  });
 });
 
 describe('harvestRoutes, Setup', () => {
@@ -278,24 +265,6 @@ describe('harvestRoutes, Setup', () => {
 
     expect(childPaths(bareByItself)).toEqual(['', 'sources']);
     expect(bareForms.children).toEqual([]);
-  });
-});
-
-/**
- * The old addresses follow the screens, and each is a redirect. Where each one
- * lands is `old-addresses.spec.ts`.
- */
-describe('harvestRoutes, the addresses the screens had', () => {
-  it('declares every screen before the first redirect', () => {
-    const firstRedirect = routes.findIndex(isOldAddress);
-
-    expect(firstRedirect).toBeGreaterThan(-1);
-    for (const route of routes.slice(0, firstRedirect)) {
-      expect(route.redirectTo).toBeUndefined();
-    }
-    for (const route of routes.slice(firstRedirect)) {
-      expect(route.component).toBeUndefined();
-    }
   });
 });
 

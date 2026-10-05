@@ -1,47 +1,17 @@
-export * from './lib/catalog-enums';
-export * from './lib/catalog-seed';
-export * from './lib/catalog-sources';
-export * from './lib/categories';
-export * from './lib/chain-sections';
-export * from './lib/chains/chain-context';
-export * from './lib/chains/chain-page';
-export * from './lib/chains/chains-routes';
-export * from './lib/chains/old-addresses';
-export * from './lib/chains/section-tabs';
-export * from './lib/chains/shop-context';
-export * from './lib/chains/shop-page';
-export * from './lib/item-form-page';
-export * from './lib/item-sections-panel';
-export * from './lib/item-source-entries';
-export * from './lib/items';
-export * from './lib/location-form-page';
-export * from './lib/location-items';
-export * from './lib/location-sections';
-export * from './lib/locations';
-export * from './lib/price-form-page';
-export * from './lib/price-policies';
-export * from './lib/price-scope-notice';
-export * from './lib/price-scopes';
-export * from './lib/prices';
-export * from './lib/product-categories-batch';
-export * from './lib/product-groups';
-export * from './lib/products/categories-page';
-export * from './lib/products/category-nodes';
-export * from './lib/products/old-addresses';
-export * from './lib/products/price-rules-page';
-export * from './lib/products/price-scope-picker';
-export * from './lib/products/product-context';
-export * from './lib/products/product-format';
-export * from './lib/products/product-list-gateway';
-export * from './lib/products/product-page';
-export * from './lib/products/product-prices-tab';
-export * from './lib/products/product-tabs';
-export * from './lib/products/products-page';
-export * from './lib/products/products-routes';
-export * from './lib/products/scope-choices';
-export * from './lib/section-seed';
-export * from './lib/sections';
-export * from './lib/shop-sections';
-export * from './lib/supermarket-form-page';
-export * from './lib/supermarkets';
-export * from './lib/supermarkets-seed';
+// Named, and not `export *`: this barrel offers what another project imports,
+// and nothing else (admin plan 0047). A name used only inside this library is
+// imported there by its relative path. `no-unused-public-export.spec.ts`
+// in the app fails when a name here has no importer outside the library.
+export { priceScopeMark } from './lib/catalog-enums';
+export { priceScopeSource } from './lib/catalog-sources';
+export { CHAIN_RESOURCES, chainsRoutes } from './lib/chains/chains-routes';
+export { LOCATIONS } from './lib/locations';
+export { PRICE_SCOPES, type PriceScope } from './lib/price-scopes';
+export { formatSize } from './lib/products/product-format';
+export { PRODUCT_SCOPE_QUERY } from './lib/products/product-page';
+export {
+  PRODUCTS_SEGMENT,
+  PRODUCT_RESOURCES,
+  productsRoutes,
+} from './lib/products/products-routes';
+export { SUPERMARKETS } from './lib/supermarkets';

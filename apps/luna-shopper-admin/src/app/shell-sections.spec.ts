@@ -250,16 +250,6 @@ describe('ADMIN_SECTIONS', () => {
     expect(shoppers.counts).toBeDefined();
   });
 
-  /** The Catalog section is gone, and nothing is mounted under its segment. */
-  it('has no catalog section', () => {
-    expect(ADMIN_SECTIONS.map((section) => section.segment)).not.toContain(
-      'catalog'
-    );
-    expect(ADMIN_SECTIONS.map((section) => section.label)).not.toContain(
-      'shell.sections.catalog'
-    );
-  });
-
   /**
    * **A section with one screen has no segment.** Its tab points straight at
    * that screen, because a dashboard summarising one list is a click between the

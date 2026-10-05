@@ -22,7 +22,6 @@ import {
   LineChart,
   RunProgressView,
   RunRowView,
-  StatTile,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { DashboardPage, FEED_ROWS_ON_A_PHONE } from './dashboard-page';
@@ -364,7 +363,6 @@ describe('DashboardPage against the seed', () => {
     expect(fixture.debugElement.queryAll(By.directive(LineChart))).toHaveLength(
       1
     );
-    expect(fixture.debugElement.queryAll(By.directive(StatTile))).toEqual([]);
     expect(
       fixture.debugElement.query(By.directive(RunProgressView))
     ).toBeNull();

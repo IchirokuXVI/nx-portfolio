@@ -504,7 +504,6 @@ describe('the list and shopping list descriptors', () => {
 describe('the membership descriptor', () => {
   /** Admin plan 0045: the members are a tab of their zone. */
   it('reads the zone from the address, and offers no filter', () => {
-    expect(MEMBERSHIPS.requires).toBeUndefined();
     expect(MEMBERSHIPS.segment).toBe('members');
     expect(MEMBERSHIPS.parent).toEqual({
       resource: 'zones',
@@ -631,7 +630,6 @@ describe('the membership descriptor', () => {
 describe('the list line descriptor', () => {
   /** Admin plan 0045: a line sits under its list, which sits under its zone. */
   it('reads the list from the address, and offers no filter', () => {
-    expect(LIST_LINES.requires).toBeUndefined();
     expect(LIST_LINES.segment).toBe('lines');
     expect(LIST_LINES.parent).toEqual({
       resource: 'lists',
@@ -793,8 +791,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(MEMBERSHIPS);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(MEMBERSHIP_SEED.length);
     // The fixture spans more than one household, which is what makes the
     // assertion above mean anything.
@@ -814,8 +810,6 @@ describe('a list with no parent chosen', () => {
     const store = storeFor(LIST_LINES);
     await store.load();
 
-    expect(store.blocked()).toBe(false);
-    expect(store.missingFilters()).toEqual([]);
     expect(store.rows().length).toBe(LIST_LINE_SEED.length);
     expect(
       new Set(LIST_LINE_SEED.map((row) => row.listId)).size

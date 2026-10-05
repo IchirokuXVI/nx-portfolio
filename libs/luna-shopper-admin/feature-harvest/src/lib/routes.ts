@@ -20,7 +20,6 @@ import { EntriesQueuePage } from './entries-queue-page';
 import { HARVEST_SEGMENT } from './harvest-paths';
 import { ImportUploadPage } from './import-upload-page';
 import { NewRunPage } from './new-run-page';
-import { oldHarvestAddresses } from './old-addresses';
 import { PlacesQueuePage } from './places-queue-page';
 import { HarvestReviewPage } from './review-page';
 import { RunPage } from './run-page';
@@ -85,8 +84,6 @@ export interface HarvestRouteParts {
  * **The fixed words come before the parameter**, because a parameter matches
  * anything: declared after it, `new` would be read as a run called "new".
  *
- * The old addresses follow, as redirects (see {@link oldHarvestAddresses}).
- *
  * Every path is a plain segment, because this app carries no `:locale`
  * (plan 0001, section 3): one operator, one browser, no links sent to anyone.
  */
@@ -136,8 +133,6 @@ export function harvestRoutes(parts: HarvestRouteParts): Route[] {
       path: HARVEST_SETUP_TAB,
       children: parts.setup.map(resourceFormBranch),
     },
-
-    ...oldHarvestAddresses(),
   ];
 }
 

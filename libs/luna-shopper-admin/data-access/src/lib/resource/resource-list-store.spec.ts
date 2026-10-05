@@ -352,32 +352,6 @@ describe('ResourceListStore fixed filters', () => {
     expect(store.narrowed()).toBe(true);
     expect(store.noMatch()).toBe(true);
   });
-
-  /**
-   * A descriptor that still names the parent in `requires` is answered by the
-   * address, so the list reads and does not wait for a choice nobody can make.
-   */
-  it('answers a required filter, so the list is not blocked', async () => {
-    const requiring = { ...descriptor, requires: ['supermarketId'] };
-    const gateway = new FakeGateway();
-
-    const without = new ResourceListStore<ResourceRow>(requiring, gateway);
-    await without.load();
-    expect(without.missingFilters()).toEqual(['supermarketId']);
-    expect(without.blocked()).toBe(true);
-    expect(gateway.queries).toHaveLength(0);
-
-    const withParent = new ResourceListStore<ResourceRow>(
-      requiring,
-      gateway,
-      {},
-      fixed
-    );
-    await withParent.load();
-    expect(withParent.missingFilters()).toEqual([]);
-    expect(withParent.blocked()).toBe(false);
-    expect(gateway.queries).toHaveLength(1);
-  });
 });
 
 describe('ResourceListStore delete', () => {

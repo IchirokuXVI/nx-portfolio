@@ -488,19 +488,6 @@ export interface ResourceDescriptor<T extends ResourceRow = ResourceRow> {
    * rows are drawn, so a signal read inside it keeps the states current.
    */
   rowStates?(): (row: T) => readonly RowState[];
-  /**
-   * Filter parameters this list cannot be read without.
-   *
-   * Not every collection can be listed from nothing. A chain's shops are read
-   * at `/supermarkets/{id}/locations`, and what is in one shop is read with a
-   * shop named, because aisle positions across every shop at once would be rows
-   * nothing could make sense of.
-   *
-   * A list missing one of these is a **third** state, and stating it here is
-   * what lets the screen say so. Asking the gateway anyway would answer 400,
-   * and drawing "there is nothing here" would be a claim nobody checked.
-   */
-  readonly requires?: readonly string[];
   /** The orders the backend accepts, sent as `order`. Absent means none. */
   readonly sorts?: readonly EnumOption[];
   readonly actions?: ResourceActions<T>;

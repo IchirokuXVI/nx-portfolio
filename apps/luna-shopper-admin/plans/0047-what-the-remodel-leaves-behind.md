@@ -1,3 +1,5 @@
+> **PR:** [#629](https://github.com/IchirokuXVI/nx-portfolio/pull/629)
+
 # 0047 What the remodel leaves behind
 
 > Last of the seven remodel plans. Needs `0041` to `0046`, all merged. Each of those plans has

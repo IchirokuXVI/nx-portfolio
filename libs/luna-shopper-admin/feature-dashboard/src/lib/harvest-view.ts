@@ -5,16 +5,14 @@ import {
   type Translate,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import type { BarChartView } from '@portfolio/luna-shopper-admin/ui';
 import type { StatView } from './dashboard-view';
 
 /**
  * The harvest block of the dashboard document, as the overview draws it.
  *
- * Both functions were the harvester dashboard's. That dashboard is gone (admin
+ * The caption was the harvester dashboard's. That dashboard is gone (admin
  * plan 0044, target 7): its running run and its recent runs are the Runs tab,
- * and its chart is a block of the overview, which is why the chart's builder
- * is in this library again.
+ * and its numbers are a block of the overview.
  */
 
 /**
@@ -51,48 +49,6 @@ export function postalCodeCaption(
   }
 
   return parts.length === 0 ? null : parts.join(' · ');
-}
-
-/** Every status a run can end in, in the order the gateway's enum states them. */
-const RUN_STATUSES: readonly Wire.EnumsHarvestRunStatus[] = [
-  'PENDING',
-  'RUNNING',
-  'COMPLETED',
-  'FAILED',
-  'ABORTED',
-  'STALE',
-];
-
-/**
- * Runs by status, over all time.
- *
- * Every status is a bar, in enum order, even at zero: the chart assigns colours
- * by position, so a bar that appeared only once something had failed would
- * recolour the whole chart the day it does. One series, so every bar is the
- * first colour and none of them is an identity.
- */
-export function runsByStatusChart(
-  harvest: Wire.AdminDashboardAdminHarvestDashboard,
-  translate: Translate
-): BarChartView {
-  const counts = new Map(
-    harvest.runs.byStatus.map((entry) => [entry.status, entry.count])
-  );
-
-  return {
-    bars: RUN_STATUSES.map((status) => ({
-      key: status,
-      label: translate(`harvest.status.${status}`),
-      values: [counts.get(status) ?? 0],
-    })),
-    series: [
-      {
-        key: 'runs',
-        label: translate('dashboard.harvest.byStatus'),
-        colour: 1,
-      },
-    ],
-  };
 }
 
 /**
