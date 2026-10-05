@@ -339,11 +339,14 @@ describe('RecordView', () => {
     });
 
     /**
-     * The help of a field says what its value means, and a value is read more
-     * often than it is changed. A field that is never a control ("May be
-     * fetched" of a chain source) had its help drawn nowhere at all.
+     * A field that no mode can type into ("May be fetched" of a chain source)
+     * has no control to put its help under, so the help was drawn nowhere at
+     * all. It is drawn under the value that is read.
+     *
+     * The help of a field that has a control is written for the person who
+     * types ("One per line"), and is under that control alone.
      */
-    it('draws the help of a field under its value', async () => {
+    it('draws the help of a field that is never a control, and of no other', async () => {
       drawn = await draw();
 
       const helpOf = (label: string) =>
@@ -351,19 +354,23 @@ describe('RecordView', () => {
           .querySelector('[data-help]')
           ?.textContent?.trim();
 
-      expect(helpOf('shops.slug')).toBe('shops.slugHelp');
+      // Never a control: the help is under the value.
       expect(helpOf('shops.key')).toBe('shops.keyHelp');
-      // A field with no help has no line.
-      expect(helpOf('shops.note')).toBeUndefined();
+      // A control once the page is a form: no help while it is read.
+      expect(helpOf('shops.slug')).toBeUndefined();
 
-      // And under a value the form cannot change, beside the lock.
+      // Locked in the form: the lock and its reason, as it was, and no help.
       drawn.store.edit();
       await settle(drawn.fixture);
 
-      expect(helpOf('shops.key')).toBe('shops.keyHelp');
+      expect(helpOf('shops.key')).toBeUndefined();
       expect(
-        rowOf(drawn.element, 'shops.key').querySelector('lib-locked-value')
-      ).not.toBeNull();
+        rowOf(drawn.element, 'shops.key')
+          .querySelector('lib-locked-value [data-reason]')
+          ?.textContent?.trim()
+      ).toBe('shops.keySetBy');
+      // And the help of a control is under the control.
+      expect(helpOf('shops.slug')).toBe('shops.slugHelp');
     });
 
     it('holds the date and the ID in the Record block, and in no section', async () => {

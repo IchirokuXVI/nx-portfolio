@@ -201,7 +201,11 @@ const NO_LINKS: Readonly<Record<string, readonly string[]>> = {};
                 </lib-field-row>
               } @else {
                 <lib-field-row
-                  [help]="field.help ?? null"
+                  [help]="
+                    !form && field.editable === false
+                      ? (field.help ?? null)
+                      : null
+                  "
                   [label]="field.label | rokuT"
                 >
                   @if (form) {
