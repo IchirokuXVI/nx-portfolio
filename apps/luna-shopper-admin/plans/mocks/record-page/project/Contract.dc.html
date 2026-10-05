@@ -61,23 +61,23 @@ body{margin:0}
 
 <section class="col" style="gap: 6px" aria-labelledby="k-rec">
 <h2 id="k-rec">The record block of a brand <span class="new">New</span></h2>
-<pre class="src">record: {
+<pre class="src">record: &#123;
   sections: [
-    { title: 'brands.section.name',
-      fields: ['label', 'key'] },
-    { title: 'brands.section.links',
+    &#123; title: 'brands.section.name',
+      fields: ['label', 'key'] &#125;,
+    &#123; title: 'brands.section.links',
       fields: ['canonicalBrandId',
-               'privateLabelSupermarketId'] },
+               'privateLabelSupermarketId'] &#125;,
   ],
   children: [
-    { resource: 'brands', by: 'canonicalBrandId',
-      as: 'panel', rows: 5 },
-    { resource: 'items', by: 'brandId', as: 'link' },
+    &#123; resource: 'brands', by: 'canonicalBrandId',
+      as: 'panel', rows: 5 &#125;,
+    &#123; resource: 'items', by: 'brandId', as: 'link' &#125;,
   ],
-  facts: { added: 'createdAt', changed: 'updatedAt',
-           also: [] },
+  facts: &#123; added: 'createdAt', changed: 'updatedAt',
+           also: [] &#125;,
   afterAdd: 'open',
-}</pre>
+&#125;</pre>
 </section>
 
 <section class="panel" aria-labelledby="k-means" style="padding: 10px 6px 4px">
