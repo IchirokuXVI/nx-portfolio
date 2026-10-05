@@ -2057,6 +2057,10 @@
         "at": "at {{shop}}",
         "by": "by {{name}}",
         "byParticipant": "by participant {{id}}",
+        "shopGone": "at a shop that is gone",
+        "shopUnread": "the shop could not be read",
+        "byGone": "by a person who is gone",
+        "byUnread": "the person could not be read",
         "reverted": "Taken back"
       }
     },

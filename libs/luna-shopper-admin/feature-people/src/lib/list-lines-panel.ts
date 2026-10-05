@@ -24,7 +24,7 @@ import { RecordSection } from '@portfolio/luna-shopper-admin/ui';
 import { instant } from './people-format';
 import type { ListLineRow, ListRow } from './people-seed';
 import { PEOPLE_STYLES } from './people-styles';
-import { ActionConfirm, ActionRunner } from './row-actions';
+import { ActionConfirm, ActionRunner, isDangerAction } from './row-actions';
 
 /** What the list descriptor calls this panel among its children. */
 export const LIST_LINES_PANEL = 'lines';
@@ -113,6 +113,7 @@ export interface LineRow {
                   <button
                     (click)="run(action, entry.line)"
                     [attr.data-action]="action.name"
+                    [class.danger]="isDanger(action)"
                     [class.primary]="action.name === 'approve-line'"
                     [disabled]="actions.busy()"
                     class="button small"
@@ -181,7 +182,7 @@ export interface LineRow {
         order: 1;
       }
 
-      .row-actions > .danger {
+      .row-actions > [data-delete-line] {
         order: 2;
       }
 
@@ -268,6 +269,11 @@ export class ListLinesPanel {
     return instant(value, this._translator.locale());
   }
 
+  /** Whether the button of an action is red, as its confirmation is. */
+  isDanger(action: NamedAction<ResourceRow>): boolean {
+    return isDangerAction(action);
+  }
+
   /** Run one of a line's actions, asking first where it says to ask. */
   run(action: NamedAction<ResourceRow>, line: ListLineRow): void {
     this.actions.start(action, line, {
@@ -304,16 +310,19 @@ export class ListLinesPanel {
    * A line moved, and the lines and their count come with the read of the
    * list.
    *
-   * Saying that `lists` was written is what reads the list again: the page
-   * watches the resource it shows, while it reads. A page that is a form
-   * reads nothing again by itself, so the panel asks for that read. The
-   * draft of the form is kept.
+   * The panel asks for that read and waits for it, whatever the page is
+   * doing. The buttons of a row stay off until the action is over, so they
+   * must not come back while the old row is still drawn: "Approve" could be
+   * pressed a second time on a line that is approved already. The draft of a
+   * page that is a form is kept.
+   *
+   * The others are told after the read. Told before it, the page would start
+   * a read of its own, which is newer and so takes the answer of this one
+   * away, and the wait would end with the old row on the screen.
    */
   private async _changed(): Promise<void> {
+    await this._record.reload();
     this._changes.wrote('list-lines');
     this._changes.wrote('lists');
-    if (this._record.mode() !== 'read') {
-      await this._record.reload();
-    }
   }
 }

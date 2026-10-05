@@ -187,6 +187,18 @@ describe('the Record block of a list', () => {
   });
 
   /** The line is drawn from the row, and never guessed. */
+  /** When a list was made is a moment, with its time of day. */
+  it('says when it was made with the time of day, as it does for the change', () => {
+    const dated = LISTS.fields.filter(
+      (field) => field.name === 'createdAt' || field.name === 'updatedAt'
+    );
+
+    expect(dated).toHaveLength(2);
+    for (const field of dated) {
+      expect(field).toMatchObject({ kind: 'date', time: true });
+    }
+  });
+
   it('draws no "by" for a row that carries nobody', async () => {
     const fixture = await bootWith({ createdByUserId: null });
 
@@ -586,6 +598,85 @@ describe('the Lines panel of a list', () => {
     expect(row.textContent).toContain('people.lists.approval.APPROVED');
     expect(row.querySelector('[data-action]')).toBeNull();
     expect(find(fixture, 'lib-confirm-dialog')).toBeNull();
+  });
+
+  /**
+   * The buttons of a row come back only once the list is read again. Before
+   * that the old row is still drawn, and "Approve" could be pressed a second
+   * time on a line that is approved already.
+   */
+  it('keeps the buttons off until the list is read again', async () => {
+    const { calls, directory } = recordingDirectory();
+    let hold = false;
+    let release: () => void = () => undefined;
+    const fixture = await bootShoppers(address, [
+      ...withDirectory(directory),
+      {
+        provide: RESOURCE_GATEWAYS,
+        useFactory: (): ResourceGatewaysI => {
+          const memory = TestBed.inject(ResourceMemoryGateways);
+          return {
+            for: (source) => {
+              const gateway = memory.for(source);
+              return source.path !== ADMIN_LISTS_PATH
+                ? gateway
+                : {
+                    ...gateway,
+                    read: async (id, shown) => {
+                      if (hold) {
+                        await new Promise<void>(
+                          (resolve) => (release = resolve)
+                        );
+                      }
+                      return gateway.read(id, shown);
+                    },
+                  };
+            },
+          };
+        },
+      },
+    ]);
+    const approve = () =>
+      lineRow(fixture, pending?.id ?? '').querySelector<HTMLButtonElement>(
+        '[data-action="approve-line"]'
+      );
+
+    hold = true;
+    approve()?.click();
+    await settle(fixture);
+    controlSaying(fixture, 'people.lines.confirm.approve.confirm')?.click();
+    await settle(fixture);
+    await settle(fixture);
+
+    // The action answered, and the read of the list has not.
+    expect(calls).toHaveLength(1);
+    expect(recordPage(fixture).store().mode()).toBe('read');
+    expect(approve()?.disabled).toBe(true);
+    approve()?.click();
+    await settle(fixture);
+    expect(calls).toHaveLength(1);
+    expect(find(fixture, 'lib-confirm-dialog')).not.toBeNull();
+
+    hold = false;
+    release();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(approve()?.disabled).toBe(false);
+    expect(find(fixture, 'lib-confirm-dialog')).toBeNull();
+  });
+
+  /** The button of a row is red where its confirmation is. */
+  it('draws the answer that turns a line away in the danger style', async () => {
+    const fixture = await bootShoppers(address);
+    const row = lineRow(fixture, pending?.id ?? '');
+
+    expect(
+      row.querySelector('[data-action="reject-line"]')?.classList
+    ).toContain('danger');
+    expect(
+      row.querySelector('[data-action="approve-line"]')?.classList
+    ).not.toContain('danger');
   });
 
   it('rejects a line through the service, once confirmed', async () => {
