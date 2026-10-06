@@ -1,3 +1,5 @@
+> **PR:** [#648](https://github.com/IchirokuXVI/nx-portfolio/pull/648)
+
 # 0186: the first catalog, repaired
 
 > Found by the audit of the first catalog on local slot 1, 2026-10-03, the day it was
