@@ -27,9 +27,11 @@ dumps and what stays wrong. Every other section describes the catalog as it was 
 > "Repairs after the audit" describes the catalog at the end of plan 0186.
 
 > **Note of 2026-10-07.** The owner asked for two more changes: the tenth Deza shop, and
-> the category of three shoe creams. New dumps were taken after them, and those are the
-> dumps that ship. The last section holds them under "The two changes of 2026-10-07, and
-> the dumps that ship".
+> the category of three shoe creams. New dumps were taken after them. The last section
+> holds them under "The two changes of 2026-10-07". Later that day the owner gave the
+> coordinates of that shop. They are stored, and the dumps were taken once more. Those
+> are the dumps that ship. The last section holds them under "The coordinates of the shop
+> of `T7`, and the dumps that ship".
 
 ## The state in numbers
 
@@ -107,8 +109,8 @@ The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
 > them. They are not uploaded to a bucket yet.
 
 > **Note of 2026-10-07.** Those dumps do not ship either. The dumps that ship were taken at
-> 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time), after two more changes. The manifest
-> states what they hold. They are not uploaded to a bucket yet.
+> 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time), after three more changes. The
+> manifest states what they hold. They are not uploaded to a bucket yet.
 
 1. **Run the same code.** In the dumps of 2026-10-03 the catalog database holds 26
    migrations, the last one `DiaCategoryTree1758500000000` (plan 0173, PR #597). The
@@ -751,7 +753,7 @@ Slot 1 is down and locked, with its databases kept.
 > **Note of 2026-10-06, after plan 0192.** `after-stage-b-final/` no longer holds the state
 > of slot 1. Plan 0192 wrote to slot 1 after it. The dumps that ship are in
 > `stage-c3/final/` of the same folder, and the last section names them.
-> **Note of 2026-10-07:** the dumps that ship are in `stage-c4/final/` now.
+> **Note of 2026-10-07:** the dumps that ship are in `stage-c5/final/` now.
 
 ### What stays wrong
 
@@ -963,9 +965,10 @@ ignored folder `.curation-runs/2026-10-audit-repair/` of the checkout that did i
 
 > **Note of 2026-10-07.** The owner asked for two more changes after this section was
 > written, and new dumps were taken. The dumps that ship are no longer those of
-> 2026-10-06T21:12:47Z. "The two changes of 2026-10-07, and the dumps that ship", below,
-> holds the changes, the corrected counts and the new dumps. The text and the tables before
-> it describe the state of 2026-10-06 and stay as they were written.
+> 2026-10-06T21:12:47Z. "The two changes of 2026-10-07", below, holds the changes and the
+> corrected counts. "The coordinates of the shop of `T7`, and the dumps that ship", after
+> it, holds a third change of that day and the dumps that ship. The text and the tables
+> before them describe the state of 2026-10-06 and stay as they were written.
 
 Every change went through the gateway of slot 1 as `admin@curation.local`. No SQL write was
 made. The register, `first-catalog-decisions-2026-10/README.md`, holds each decision with
@@ -1114,7 +1117,8 @@ B3 rose by one in stage 1, where the candle was created as 1 `UNIT`.
 
 > **Note of 2026-10-07.** These dumps no longer ship, and the manifest no longer holds
 > their values. The column "Ships" and the last three points of the list were true on
-> 2026-10-06. The next section holds the dumps that ship.
+> 2026-10-06. "The coordinates of the shop of `T7`, and the dumps that ship" holds the
+> dumps that ship.
 
 The dumps were taken at 2026-10-06T21:12:47Z (23:12 Madrid time) with `pg_dump -Fc`
 (PostgreSQL 16.15), on the code of `dev` at `152d9d5e`. Only the gateway ran, and it holds
@@ -1153,7 +1157,7 @@ The dumps of the sessions before the last one stay in the run folder. They do no
 | `stage-c2/after-stage-2/` | `catalog.dump` | 32,019,020 | `2c2331ef7d430b4c1ee23f2e80fd1a918fa03aad5b84462870b7be42691e335a` |
 | `stage-c2/after-stage-2/` | `harvester.dump` | 11,549,001 | `080a3a41c3104acdd7860d73c5f200f1617e1c11527ae885cf9b4c901d558746` |
 
-### The two changes of 2026-10-07, and the dumps that ship
+### The two changes of 2026-10-07
 
 Written on 2026-10-07. The owner asked for two more changes on slot 1 after the dumps of
 2026-10-06, and gave two answers about the fruit. Every figure below was read from the
@@ -1166,8 +1170,9 @@ the gateway of slot 1, in three writes. No SQL write was made.
   "Tienda 7 - Supermercado Deza Calidad SA en Calle Acera Fuente de la Salud, 14006 -
   Córdoba". Shop `dcb350bf-f135-4f2e-8ef2-bec9fd6044fd` was created by hand with that
   address, postal code 14006 (source `MANUAL`) and its own `STORE` price scope. It has no
-  external provider and **no coordinates**: Nominatim answered an empty list for the
-  street in two queries.
+  external provider. It was created with no coordinates: Nominatim answered an empty list
+  for the street in two queries. The owner gave them later that day, and the next section
+  holds that write.
 - **`T7` is mapped to it.** The mapping answered 200 in 23 seconds and wrote 11,089 shop
   rows. 7,435 of them say that the shop stocks the product. The Deza shop codes are now 10
   `ACTIVE`, 1 `IGNORED` and 0 `UNMAPPED`.
@@ -1179,9 +1184,9 @@ the gateway of slot 1, in three writes. No SQL write was made.
   another time, and asked for a report of them:
   [`first-catalog-decisions-2026-10/loose-fruit-rows.md`](first-catalog-decisions-2026-10/loose-fruit-rows.md).
 
-What the two changes moved, read from slot 1 right after the new dumps:
+What the two changes moved, read from slot 1 right after the dumps of this session:
 
-| | The dumps of 2026-10-06 | The dumps of 2026-10-07 |
+| | The dumps of 2026-10-06 | The dumps of 00:33 of 2026-10-07 |
 | --- | ---: | ---: |
 | `supermarket_locations` | 41 | 42 |
 | `price_scopes` | 104 | 105 |
@@ -1207,15 +1212,17 @@ queue rows, field by field. Every check of plan 0186 answers what it answered on
   22,094 rows: 1 shop, 1 price scope, 11,001 offers created, 2 offers updated and 11,089
   shop rows. No row names `items`.
 
-The dumps that ship were taken at 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time)
-with `pg_dump -Fc` (PostgreSQL 16.15), on the code of `dev` at `2ccbeae3`. Only the
+The dumps of this session were taken at 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid
+time) with `pg_dump -Fc` (PostgreSQL 16.15), on the code of `dev` at `2ccbeae3`. Only the
 gateway ran, and it holds no database, so nothing wrote. They stand in `stage-c4/final/`
-of the run folder, beside a `VERIFY.txt` and `manifest-values.json`.
+of the run folder, beside a `VERIFY.txt` and `manifest-values.json`. **They no longer
+ship.** The owner gave the coordinates of the shop after them, and the next section holds
+the dumps that ship.
 
 | Dump | Bytes | sha256 | Ships |
 | --- | ---: | --- | --- |
-| `catalog.dump` | 45,538,533 | `b13edba1658be321d9dbdfb46d4805d086a6769c7d870fd8bd13c09478f96235` | Yes |
-| `harvester.dump` | 11,549,548 | `b7fd7abf72644023aa0a01d2363b613262f7a541209b4a48bbf24518826d454a` | Yes |
+| `catalog.dump` | 45,538,533 | `b13edba1658be321d9dbdfb46d4805d086a6769c7d870fd8bd13c09478f96235` | No |
+| `harvester.dump` | 11,549,548 | `b7fd7abf72644023aa0a01d2363b613262f7a541209b4a48bbf24518826d454a` | No |
 | `auth.dump` | 26,032 | `3df8ed083e1a3483123b3d18d442759c01918f90f5097d94e657e68e0fcd20f8` | No |
 | `core.dump` | 99,428 | `6f141c30bca046c187f3569c652e5b1985bf947e0df9b81adbf0ae0a08828d20` | No |
 
@@ -1224,29 +1231,89 @@ of the run folder, beside a `VERIFY.txt` and `manifest-values.json`.
   `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
   slot 1. Both exited 0, and all 37 values read from the copies equal those read from
   slot 1.
-- `k8s/catalog-import/first-catalog.manifest` holds the values of these dumps. Three of
-  its lines changed: the two checksums, and `EXPECT_PRICE_SCOPES` from 104 to 105.
-- **The owner has not said that slot 1 is final.** The owner is checking the data first:
-  on 2026-10-07 these dumps were restored onto the owner's own slot 0 for that.
+- `k8s/catalog-import/first-catalog.manifest` held the values of these dumps for one
+  session. Three of its lines changed against the dumps of 2026-10-06: the two checksums,
+  and `EXPECT_PRICE_SCOPES` from 104 to 105.
+- **The owner is checking the data on a restore of these dumps.** On 2026-10-07 they were
+  restored onto the owner's own slot 0 for that.
+- **The two files were not uploaded to a bucket.**
+
+### The coordinates of the shop of `T7`, and the dumps that ship
+
+Written on 2026-10-07. After the dumps of 00:33 the owner gave the coordinates of the
+Deza shop at Calle Acera Fuente de la Salud: latitude 37.89862387806124 and longitude
+-4.772603355414682, read from Google Maps. Every figure below was read from the folder
+`stage-c5/` of the run folder. Its files read 2026-10-06T23:30Z to 23:35Z, which is 01:30
+to 01:35 in Madrid. The change went through the gateway of slot 1, in one write. No SQL
+write was made.
+
+- **The point was checked before the write.** It lies in Córdoba, 672 m from the Deza
+  shop at Avenida Ronda del Marrubial, 1,297 m from the one at Avenida Jesús Rescatado 15
+  and 1,617 m from the one at Avenida de Libia. The farthest of the nine other Deza shops
+  is 4,516 m away.
+- **One write.** `PATCH /v1/admin/catalog/locations/dcb350bf-f135-4f2e-8ef2-bec9fd6044fd`
+  with the latitude and the longitude and no other field. The route takes a partial body
+  and sets only the fields that the body names. It answered 200. The two columns are
+  `double precision`, as for every shop, and they hold both values digit for digit.
+- **Nothing else changed on the shop.** The address, the city, the country, the postal
+  code 14006 and its source `MANUAL` are as they were. The shop still has no external
+  provider and no external reference. Its stack is still the one `STORE` scope
+  `d0311048`, and the code `T7` is still mapped to it. Only `latitude`, `longitude` and
+  `updatedAt` differ on the row.
+- **Nothing else changed in the catalog.** `catalog_audit` grew by one row, from 292,079
+  to 292,080: an `UPDATE` of `supermarket_locations` by the admin, from no coordinates to
+  these. The other 41 shop rows are the same, field by field. These counts are the same
+  before and after: 42 shops, 105 price scopes, 305,218 offers (121,327 with no price),
+  110,890 shop rows (11,089 of this shop), 24,964 price rows, 19,773 products, 25,861
+  queue rows, 11 shop codes, 85 discovered places and 15 harvest runs. Every check of plan
+  0186 answers what it answered before the write.
+- **All 42 shops hold coordinates now.** 41 did before.
+
+The dumps that ship were taken at 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time)
+with `pg_dump -Fc` (PostgreSQL 16.15), on the code of `dev` at `2ccbeae3`. Only the
+gateway ran, and it holds no database, so nothing wrote. They stand in `stage-c5/final/`
+of the run folder, beside a `VERIFY.txt` and `manifest-values.json`.
+
+| Dump | Bytes | sha256 | Ships |
+| --- | ---: | --- | --- |
+| `catalog.dump` | 45,538,671 | `634196da6d64feadf883142dd434cccd8a4756f70073c8ec5a0deb0831af4319` | Yes |
+| `harvester.dump` | 11,549,548 | `c74fb2430e5f8fae3ebc1b25bc19c66344a30bb72fd49a563a28190d4a9c4c87` | Yes |
+| `auth.dump` | 26,069 | `d8b275ffa62c95e86609bece407031799c5ae432810463b53eaa6d023f101a07` | No |
+| `core.dump` | 99,428 | `d4e22b4fd3d26253027f54db12b0029ec37c39ace62fc9d052661f18e1f9a965` | No |
+
+- The migrations are the same 29 and 21, with the same last names.
+- **What differs from the dumps of 00:33.** Both pairs were turned into SQL and compared.
+  The catalog differs in two lines: the row of the shop, and the new audit row. The
+  harvester is the same, line for line. Its file has the same size and a new checksum,
+  because `pg_dump` writes the time into each file.
+- Copies of `catalog.dump` and `harvester.dump` were restored with
+  `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
+  slot 1. Both exited 0, and all 37 values read from the copies equal those read from
+  slot 1. The shop, read from the copy, holds its coordinates.
+- `k8s/catalog-import/first-catalog.manifest` holds the values of these dumps. Two of its
+  lines changed against the dumps of 00:33: the two checksums. The other fourteen
+  variables are the same.
+- **The owner has not said that slot 1 is final.** The copy that the owner is checking on
+  slot 0 is the restore of the dumps of 00:33. It differs from these dumps in one shop: it
+  holds no coordinates for the shop of `T7`, and it lacks the audit row of that write.
 - **The two files are not uploaded to a bucket.**
 
 ### What stays wrong or open
 
 This list replaces "What stays wrong" of the section before it. Each item has its own
 title, so that it can be found and fixed later. It was written on 2026-10-06. A note of
-2026-10-07 stands on each item that the two changes made false, and the items under "What
-a shopper would notice" are new.
+2026-10-07 stands on each item that the changes of that day made false, and the items
+under "What a shopper would notice" are new.
 
 #### In the data
 
 - **`T7` "Fuente de la salud" has no shop.** It is the one Deza shop code that is still
   unmapped. OpenStreetMap holds no Deza at that street, so the store discovery found
   nothing to import. Its stored claims wait for a shop that a person creates.
-  **Note of 2026-10-07: done.** The shop exists and the code is mapped. What stays open is
-  the next item.
-- **The Deza shop at Calle Acera Fuente de la Salud has no coordinates** (2026-10-07). It
-  is the one shop of the 42 without them. Nominatim does not know the street, so a person
-  has to set them.
+  **Note of 2026-10-07: done.** The shop exists and the code is mapped. It was created
+  with no coordinates, because Nominatim does not know the street. The owner decided them
+  the same day: 37.89862387806124, -4.772603355414682, read from Google Maps. They are
+  stored, and nothing of this item stays open.
 - **The three Búfalo shoe creams are `uncategorised`.** White, brown and black, 50 ml
   each. No sibling product holds a category that fits. A leaf `shoe-care` exists, and it
   holds no product. **Note of 2026-10-07: done.** The three are in `shoe-care`.
@@ -1316,6 +1383,8 @@ a shopper would notice" are new.
 #### What a shopper would notice (read on 2026-10-07)
 
 `stage-c4/stats.json` is a read of slot 1 after the two changes, by SQL that only reads.
+It was made before the coordinates of the shop of `T7` were stored. That write touched
+the coordinates of one shop, and no finding below depends on them.
 These are its findings that a person who uses the catalog would see. Each one is open. An
 id is the first eight characters of the uuid on slot 1.
 
@@ -1381,7 +1450,9 @@ id is the first eight characters of the uuid on slot 1.
 #### Before a cluster restore
 
 - **The dumps are not uploaded,** and the owner has not said that slot 1 is final. On
-  2026-10-07 the owner is checking the data on a restore of the new dumps on slot 0.
+  2026-10-07 the owner is checking the data on slot 0, on a restore of the dumps of 00:33
+  of that day. The dumps that ship were taken after it, at 01:32. They differ from that
+  copy in the coordinates of one shop and in one audit row.
 - **Prices age.** The newest Mercadona prices were read on 2026-10-06, for three Córdoba
   warehouses. The Deza leaflet prices end on 2026-10-08. The El Jamón prices are stale
   from 2026-10-10 (2026-10-07).

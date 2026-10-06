@@ -164,10 +164,10 @@ A count that differs is a refusal, not a warning.
 
 > **Note of 2026-10-06, corrected on 2026-10-07.**
 > `k8s/catalog-import/first-catalog.manifest` now holds the values of the dumps of
-> 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time). They replaced the dumps of
+> 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time). They replaced the dumps of
 > 2026-10-06T21:12:47Z, which were taken at the end of backend plan `0192`, after the owner
-> asked for two more changes. The values in this section are those of 2026-10-03, which this
-> plan was written with.
+> asked for three more changes. The values in this section are those of 2026-10-03, which
+> this plan was written with.
 
 **Every value above is provisional.** The checksums and counts are those of the dumps of
 2026-10-03 20:44. The owner went on editing slot 1 after that (2026-10-04), so those dumps

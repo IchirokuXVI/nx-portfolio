@@ -23,6 +23,10 @@ El Jamón row "kiwis" is fine on "Kiwi verde", and that the other loose fruit ro
 a later fix. Section 4 holds the four answers, section 5 holds the two changes, and
 `loose-fruit-rows.md` is the report of the rows that wait.
 
+**Later on 2026-10-07 the owner gave the coordinates of the shop of `T7`,** read from
+Google Maps. They are stored on slot 1, and the dumps were taken once more. Those are the
+dumps that ship. Section 4 holds that fifth answer, and section 5 holds the write.
+
 The folder holds four things:
 
 - This file: the rules, the decisions of each step, the sixteen decisions that the
@@ -316,7 +320,7 @@ names (the category, the image) is not in the keys at all.
 | `c02` | 22 | 22 | 22 | None. |
 | `c03` | 1 | 1 | 0 | None. The queue row is text in `why`. |
 | `c04` | 19 | 18 | 0 | None. A brand is keyed by its label and its key. |
-| `c05` | 13 | 0 | 0 | None. 11 shop codes, 10 shops and 1 discovered place, each with its address or its printed name. The last entry is the shop that was created by hand on 2026-10-07. |
+| `c05` | 13 | 0 | 0 | None. 11 shop codes, 10 shops and 1 discovered place, each with its address or its printed name. The last entry is the shop that was created by hand on 2026-10-07, with the coordinates that the owner gave later that day. |
 | `c06` | 14 | 21 | 14 | None. |
 | `c07` | 15 | 25 | 11 | None. |
 | `c08` | 47 | 94 | 124 | None. |
@@ -394,8 +398,9 @@ the build writes it into the `c` files as `ownerAnswerAfterTheRegister`.
 
 Each line below was decided by the owner on 2026-10-07, after the final dumps of plan
 `0192` were taken. `build/decisions.mjs` holds each one. The build writes the first two
-into `c05` and `c13` as `ownerAnswerOf20261007`. The last two changed no data, so no data
-file holds them.
+into `c05` and `c13` as `ownerAnswerOf20261007`. The next two changed no data, so no data
+file holds them. The last line came after the dumps of 00:33 of that day. The build writes
+it into the entry of the shop in `c05`, under `coordinates`.
 
 | Decision | Answer of the owner, 2026-10-07 | Where it stands |
 | ---: | --- | --- |
@@ -403,6 +408,7 @@ file holds them.
 | None | The three Búfalo shoe creams go into the leaf "Cuidado del calzado" (`shoe-care`). No category is created. | `c13`, 3 entries. Applied on 2026-10-07 |
 | 11 | The El Jamón row "kiwis" on "Kiwi verde" is fine. | `c10`, the second entry. No write |
 | 11 | The loose fruit rows that sit on other products are left for now. They are fixed another time, and a small report of them is saved. | `loose-fruit-rows.md`. No write |
+| 4 | The coordinates of the shop of `T7` are 37.89862387806124, -4.772603355414682. The owner read them from Google Maps. | `c05`, the last entry. Applied on 2026-10-07, in one write |
 
 What was found when the recommendations were written, before plan `0192`:
 
@@ -455,7 +461,9 @@ Plan `0192` changed data on slot 1 only, through the gateway of slot 1 as
 `admin@curation.local`. No SQL write was made. The work ran in four sessions on 2026-10-06,
 each with a backup before its first write and dumps at its end. The files of each session
 stand in the run folder, and each folder has a `summary.md`. A fifth session made the two
-changes of 2026-10-07 the same way. Its folder has no `summary.md`.
+changes of 2026-10-07 the same way. Its folder has no `summary.md`. A sixth session, later
+that day, stored the coordinates of the shop of `T7` and took the dumps that ship. Its
+folder has no `summary.md` either.
 
 | Session | Folder of the run folder | Writes through the gateway |
 | --- | --- | ---: |
@@ -463,7 +471,8 @@ changes of 2026-10-07 the same way. Its folder has no `summary.md`.
 | Stage 1 | `stage-c1/` | 43 |
 | Stage 2 | `stage-c2/` | 6, and 4 dry runs of the settle route |
 | The last decisions and the dumps of 2026-10-06 (stage 3) | `stage-c3/` | 32 |
-| The two changes of 2026-10-07 and the dumps that ship | `stage-c4/` | 3 |
+| The two changes of 2026-10-07 | `stage-c4/` | 3 |
+| The coordinates of the shop of `T7` and the dumps that ship | `stage-c5/` | 1 |
 
 Three code plans landed before or between the sessions, and each changed the data:
 
@@ -554,7 +563,7 @@ No decision of the owner, so no data file. The run is in `after-0189/summary.md`
   of 2026-10-07: they are in the leaf `shoe-care` now.)
 - **The dumps of stage 3** were taken at 2026-10-06T21:12:47Z, with every service that
   holds a database stopped. (Note of 2026-10-07: they no longer ship.
-  `k8s/catalog-import/first-catalog.manifest` holds the values of the dumps of the next
+  `k8s/catalog-import/first-catalog.manifest` holds the values of the dumps of the last
   session.)
 
 ### The two changes of 2026-10-07
@@ -565,9 +574,10 @@ UTC, so they read 2026-10-06T22:24Z to 22:34Z, which is after midnight in Madrid
 - **The shop of `T7`.** The owner gave the page of the chain for the code "Fuente de la
   salud". Shop `dcb350bf-f135-4f2e-8ef2-bec9fd6044fd` was created through the gateway:
   address "Calle Acera Fuente de la Salud", postal code 14006, Córdoba. The postal code
-  source is `MANUAL`. The shop has no external provider and **no coordinates**: Nominatim
-  answered an empty list for the street in two queries. The create made the `STORE` price
-  scope of the shop, `d0311048`.
+  source is `MANUAL`. The shop has no external provider. It was created with no
+  coordinates: Nominatim answered an empty list for the street in two queries. The owner
+  gave them later that day, and the next part holds that write. The create made the
+  `STORE` price scope of the shop, `d0311048`.
 - **The mapping.** `T7` was then mapped to the shop. The call answered 200 in 23 seconds
   and wrote 11,089 shop rows, one for each product that a bound row with a claim names.
   7,435 of them say that the shop stocks the product.
@@ -585,12 +595,40 @@ UTC, so they read 2026-10-06T22:24Z to 22:34Z, which is after midnight in Madrid
 - **No product and no queue row changed.** The snapshots of the start and of the end of
   the session hold the same 19,773 products and the same 25,861 queue rows, field by
   field. A snapshot of a product holds no category, so the batch does not show there.
-- **The dumps that ship** were taken at 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid
+- **The dumps of this session** were taken at 2026-10-06T22:33:14Z (2026-10-07 00:33
+  Madrid time), with every service that holds a database stopped. They no longer ship. The
+  next part names the dumps that do.
+- **The owner's check.** On 2026-10-07 the dumps of this session were restored onto the
+  owner's own slot 0, so that the owner can check the data.
+
+### The coordinates of the shop of `T7`, and the dumps that ship
+
+The owner gave the coordinates on 2026-10-07, after the dumps of 00:33: latitude
+37.89862387806124 and longitude -4.772603355414682, read from Google Maps. The files of
+the session read 2026-10-06T23:30Z to 23:35Z, which is 01:30 to 01:35 in Madrid.
+
+- **The point was checked before the write.** It lies 672 m from the Deza shop at Avenida
+  Ronda del Marrubial, 1,297 m from the one at Avenida Jesús Rescatado 15 and 1,617 m from
+  the one at Avenida de Libia. The farthest of the nine other Deza shops is 4,516 m away.
+- **One write.** `PATCH /v1/admin/catalog/locations/dcb350bf-f135-4f2e-8ef2-bec9fd6044fd`
+  with the latitude and the longitude, and no other field. It answered 200. Both columns
+  are `double precision`, and they hold the two values digit for digit.
+- **Nothing else changed on the shop.** The address, the city, the postal code 14006 and
+  its source `MANUAL` are as they were. The shop still has no external provider. Its
+  stack is still the one `STORE` scope `d0311048`, and `T7` is still mapped to it.
+- **Nothing else changed in the catalog.** `catalog_audit` grew by one row, from 292,079
+  to 292,080: an `UPDATE` of `supermarket_locations` by the admin, from no coordinates to
+  these. The other 41 shop rows are the same, field by field. The counts of shops, price
+  scopes, offers, shop rows, price rows, products and queue rows are the same. All 42 shops
+  hold coordinates now.
+- **The dumps that ship** were taken at 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid
   time), with every service that holds a database stopped.
-  `k8s/catalog-import/first-catalog.manifest` holds their values.
-- **The owner has not said that slot 1 is final.** On 2026-10-07 the new dumps were
-  restored onto the owner's own slot 0, so that the owner can check the data. Nothing is
-  uploaded.
+  `k8s/catalog-import/first-catalog.manifest` holds their values. Read as SQL, the catalog
+  dump differs from the one of 00:33 in the row of the shop and in the one audit row. The
+  harvester dump holds the same rows as the one of 00:33.
+- **The owner has not said that slot 1 is final.** The copy on the owner's slot 0 is the
+  restore of the dumps of 00:33. It holds no coordinates for this shop, and it lacks the
+  audit row of the write. Nothing is uploaded.
 
 ### The counts, session by session
 
@@ -611,7 +649,11 @@ UTC, so they read 2026-10-06T22:24Z to 22:34Z, which is after midnight in Madrid
 | Harvest runs | 13 | 14 | 14 | 14 | 15 | 15 |
 
 The products add up: 16 creates in stage 1, 1 create and 2 merges in stage 2, 3 creates
-and 6 merges in stage 3. The session of 2026-10-07 created and merged none.
+and 6 merges in stage 3. The two sessions of 2026-10-07 created and merged none.
+
+The last column holds for both pairs of dumps of 2026-10-07. The coordinates of the shop
+of `T7` changed no count of this table, so the dumps of 00:33 and the dumps of 01:32,
+which ship, hold the same figures.
 
 The shop of `T7` took the shops (`supermarket_locations`) from 41 to 42 and the price
 scopes from 104 to 105. Ten of the 42 shops are Deza shops.
@@ -619,11 +661,11 @@ scopes from 104 to 105. Ten of the 42 shops are Deza shops.
 ### What stays left, and why
 
 Two rows left this table on 2026-10-07: `T7` has its shop, and the three shoe creams have
-their category.
+their category. The shop of `T7` was created with no coordinates. The owner decided them
+the same day, from Google Maps, and they are stored. No row stands here for them.
 
 | What | Why | Data |
 | --- | --- | --- |
-| The shop of `T7` has no coordinates | Nominatim does not know the street. A person sets them | `c05` |
 | The paella mix is `KILOGRAM` with no size | Two round weights fit. The owner: it stays without a size | `c02` |
 | The Nescafé vanilla pair | "latte" against "cappuccino". The owner: two products | `c08`, pair 37 |
 | The Bref "Blue Activ" pair | The owner: it waits for a barcode | `c08`, pair 3 |
@@ -651,7 +693,8 @@ The run folder is git ignored and stands in the checkout that did the repair. It
 `README.md`, `stage-a-summary.md` and `stage-b-summary.md` describe each source file of
 plan `0186`. The files of plan `0192` stand in four folders of the same run folder:
 `after-0189/`, `stage-c1/`, `stage-c2/` and `stage-c3/`. Each has a `summary.md`. The
-files of the two changes of 2026-10-07 stand in `stage-c4/`, which has none.
+files of the two changes of 2026-10-07 stand in `stage-c4/`, which has none. The files of
+the coordinates of the shop of `T7` stand in `stage-c5/`, which has none either.
 
 A build writes all twenty-nine files again. The sixteen files of plan `0186` come out byte
 for byte as they are committed, which was checked on 2026-10-06 after `stage-c.mjs` was
@@ -662,14 +705,19 @@ files: `c05` (the entry of `T7`, and one new entry for the shop), `c13` (the thr
 creams) and `gaps.json` (the count of `c05`, 12 to 13). The other twenty-seven data files
 came out byte for byte as they are committed.
 
+Later that day `stage-c.mjs` learned to read `stage-c5/`, for the coordinates of the
+shop of `T7`. A build then changed one file, `c05`: its header, and the entry of the shop,
+which gained its coordinates. The other twenty-eight data files came out byte for byte as
+they are committed.
+
 | Script | What it does |
 | --- | --- |
 | `build/lib.mjs` | Reads the source files, shapes a product and a queue row by their natural keys, counts the keys that are absent, writes one entry on one line. |
 | `build/state.mjs` | Holds each product at the start of stage B, replays each product before stage A, and checks the replay. |
 | `build/stage-a.mjs` | Steps A1 to A11. |
 | `build/stage-b.mjs` | Steps B1 to B5. |
-| `build/stage-c.mjs` | The thirteen files of plan `0192`, from `stage-c1/`, `stage-c2/` and `stage-c3/`. For `c05` and `c13` it also reads `stage-c4/`. |
-| `build/decisions.mjs` | The answer of the owner to each of the sixteen decisions. `lib.mjs` writes it as `ownerDecision` beside every `openDecision`. It also holds the answers that came after the register was written, and the four answers of 2026-10-07. |
+| `build/stage-c.mjs` | The thirteen files of plan `0192`, from `stage-c1/`, `stage-c2/` and `stage-c3/`. For `c05` and `c13` it also reads `stage-c4/`, and for `c05` it reads `stage-c5/` too. |
+| `build/decisions.mjs` | The answer of the owner to each of the sixteen decisions. `lib.mjs` writes it as `ownerDecision` beside every `openDecision`. It also holds the answers that came after the register was written, and the five answers of 2026-10-07. |
 | `build/build.mjs` | Runs all of it and writes `gaps.json`. |
 
 Some text in the data files is written in the scripts and not read from a source file: the

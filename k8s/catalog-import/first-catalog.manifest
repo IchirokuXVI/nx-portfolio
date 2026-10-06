@@ -4,23 +4,27 @@
 # is a refusal, not a warning.
 #
 # The values below are the checksums and counts of the dumps of
-# 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time). They were taken after
-# the two changes that the owner asked for on 2026-10-07 (the tenth Deza shop
-# and the three shoe creams), with every service that holds a database
-# stopped. They replace the values of the dumps of 2026-10-06T21:12:47Z.
+# 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time). They were taken after
+# the three changes that the owner asked for on 2026-10-07 (the tenth Deza
+# shop, the three shoe creams, and the coordinates of that shop), with every
+# service that holds a database stopped. They replace the values of the dumps
+# of 2026-10-06T22:33:14Z, which held the first two changes only.
 #
 # These dumps are the ones that ship, unless slot 1 is written again. A later
 # write means new dumps and new values here (README.md, "When slot 1 is
 # final"). The owner has NOT yet said that slot 1 is final. The owner is
-# checking the data on a restore of these dumps on the owner's own machine.
+# checking the data on a restore of the dumps of 2026-10-06T22:33:14Z on the
+# owner's own machine. That copy differs from these dumps in one shop row (it
+# holds no coordinates for the tenth Deza shop) and in the one audit row of
+# that write.
 # The two files are NOT uploaded to a bucket yet. A file with other bytes is
 # refused at the checksum, which is the intended failure.
 #
 # The object keys, under a prefix that the nightly dumps never use.
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
-CATALOG_SHA256="b13edba1658be321d9dbdfb46d4805d086a6769c7d870fd8bd13c09478f96235"
+CATALOG_SHA256="634196da6d64feadf883142dd434cccd8a4756f70073c8ec5a0deb0831af4319"
 HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
-HARVESTER_SHA256="b7fd7abf72644023aa0a01d2363b613262f7a541209b4a48bbf24518826d454a"
+HARVESTER_SHA256="c74fb2430e5f8fae3ebc1b25bc19c66344a30bb72fd49a563a28190d4a9c4c87"
 #
 # The `migrations` table of each dump: how many rows, and the name with the
 # highest timestamp. The live database must hold the same names.

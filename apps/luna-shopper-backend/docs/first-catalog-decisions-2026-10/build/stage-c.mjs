@@ -1,7 +1,8 @@
 // Backend plan 0192: the owner's decisions of 2026-10-06, applied on slot 1 in three
 // stages. The files of each stage stand in `stage-c1/`, `stage-c2/` and `stage-c3/` of the
 // run folder. Two more changes of 2026-10-07 stand in `stage-c4/`: the shop of the Deza
-// code T7, and the category of the three shoe creams.
+// code T7, and the category of the three shoe creams. A third change of that day stands
+// in `stage-c5/`: the coordinates of that shop, which the owner read from Google Maps.
 //
 // A product is keyed as it stood at the start of the stage that changed it. A product that
 // a stage created is keyed as the create answered it.
@@ -246,6 +247,9 @@ export function stageC() {
     const state = J('stage-c3/d3-state.after-import.json');
     // The shop of T7 was created by hand on 2026-10-07, so the state of stage 3 lacks it.
     const made = J('stage-c4/c1.shop.answer.json').answer;
+    // It was created with no coordinates. The owner gave them later that day, and one
+    // PATCH of the shop set them. The answer of that call holds the stored values.
+    const located = J('stage-c5/t7.coordinates.answer.json');
     const shop = (id) => {
       const s = state.shops.find((x) => x.id === id) ?? made;
       return {
@@ -370,11 +374,19 @@ export function stageC() {
         longitude: made.longitude,
         priceScope: { kind: 'STORE', localId: made.priceScopeId },
       },
+      coordinates: {
+        action: 'set-coordinates',
+        latitude: located.answer.latitude,
+        longitude: located.answer.longitude,
+        source: 'Google Maps, read by the owner',
+        status: DAY_AFTER,
+        ownerAnswerOf20261007: NEXT_DAY.t7Coordinates,
+      },
       page: 'https://www.dezacalidad.es/centros/avda-virgen-de-las-angustias/',
       status: DAY_AFTER,
       openDecision: 4,
       ownerAnswerOf20261007: NEXT_DAY.t7,
-      why: 'No Deza shop stood at this street in the catalog or in OpenStreetMap. The shop was created through the gateway from the address on the page of the chain. It has no coordinates: Nominatim answered nothing for the street in two queries.',
+      why: 'No Deza shop stood at this street in the catalog or in OpenStreetMap. The shop was created through the gateway from the address on the page of the chain. The create held no coordinates, because Nominatim answered nothing for the street in two queries. The owner gave the coordinates later the same day, and one more call through the gateway stored them. That call changed no other field of the shop.',
     });
     out.push(
       writeData(
@@ -391,11 +403,12 @@ export function stageC() {
             'stage-c3/d3-state.after-import.json',
             'stage-c4/c1.shop.answer.json',
             'stage-c4/d2-shops.result.jsonl',
+            'stage-c5/t7.coordinates.answer.json',
           ],
           keys: 'A shop code is keyed by its chain, its code and its printed name. A shop is keyed by its chain, its address, its postal code and its OpenStreetMap reference. The shop that was created by hand has no reference.',
           decidedBy:
-            'The owner, 2026-10-06 (decision 4), and two later answers of the same day: the shops of C1, Z1 and C2, and the store discovery for T2 and T7. On 2026-10-07 the owner gave the page of the chain for T7.',
-          note: 'A mapping publishes the stored claims of the shop in the same request. shopRowsWritten is the count of supermarket_location_items of the shop after it.',
+            'The owner, 2026-10-06 (decision 4), and two later answers of the same day: the shops of C1, Z1 and C2, and the store discovery for T2 and T7. On 2026-10-07 the owner gave the page of the chain for T7, and later that day the coordinates of its shop.',
+          note: 'A mapping publishes the stored claims of the shop in the same request. shopRowsWritten is the count of supermarket_location_items of the shop after it. In the entry of the shop that was created by hand, decision holds the create as it was sent, with no coordinates, and coordinates holds the values that were set afterwards. The shop holds those values now.',
         },
         entries
       )

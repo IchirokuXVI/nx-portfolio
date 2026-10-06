@@ -85,7 +85,9 @@ export const ANSWERS_AFTER_THE_REGISTER = {
 
 // What the owner answered on 2026-10-07, after the final dumps of plan 0192 were taken.
 // `stage-c.mjs` writes each one as `ownerAnswerOf20261007`. The first two changed data, so
-// new dumps were taken. The files of that session stand in `stage-c4/`.
+// new dumps were taken. The files of that session stand in `stage-c4/`. The last one came
+// after those dumps and changed data too, so the dumps were taken once more. Its files
+// stand in `stage-c5/`.
 const NEXT_DAY = 'Decided by the owner, 2026-10-07: ';
 
 export const ANSWERS_OF_2026_10_07 = {
@@ -99,6 +101,9 @@ export const ANSWERS_OF_2026_10_07 = {
   looseFruit:
     NEXT_DAY +
     'the loose fruit rows that sit on other products are left for now. They are fixed another time, and a small report of them is saved.',
+  t7Coordinates:
+    NEXT_DAY +
+    'the coordinates of the shop of T7 are 37.89862387806124, -4.772603355414682. The owner read them from Google Maps.',
 };
 
 /** The entry with the answer of the owner beside its decision number. */
