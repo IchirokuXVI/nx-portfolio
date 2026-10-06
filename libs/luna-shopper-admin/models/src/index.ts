@@ -108,7 +108,11 @@ export {
   toLocalizedText,
   type LocalizedText,
 } from './lib/resource/localized-text';
-export { formatCurrencyAmount, parseMoney } from './lib/resource/money';
+export {
+  formatCurrencyAmount,
+  parseMoney,
+  unitPriceUnit,
+} from './lib/resource/money';
 export {
   RECORD_DETAILS_TAB,
   isRecordChildList,

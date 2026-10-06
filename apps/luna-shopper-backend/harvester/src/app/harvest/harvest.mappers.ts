@@ -12,6 +12,7 @@ import type {
   SourceLocationView,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
+import { unitBasisOf } from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
   HarvestRun,
@@ -202,6 +203,7 @@ export function toSourceEntryPriceView(
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
+    unitBasis: unitBasisOf(row.unitPriceLabel),
     validFrom: iso(row.validFrom),
     validUntil: iso(row.validUntil),
     details: row.details ?? null,

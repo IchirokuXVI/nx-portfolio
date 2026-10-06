@@ -114,6 +114,44 @@ export function formatCurrencyAmount(
   }
 }
 
+/**
+ * What a unit price is per, as this app prints each basis the gateway states
+ * (backend plan 0157). English, as every other word of this app is.
+ */
+const UNIT_BASIS_WORDS: Readonly<Record<string, string>> = {
+  KILOGRAM: 'kg',
+  LITER: 'L',
+  UNIT: 'unit',
+  DOZEN: 'dozen',
+  WASH: 'wash',
+};
+
+/**
+ * The unit to print beside a unit price (backend plan 0189).
+ *
+ * **The basis when the answer carries one, and the label of the source only
+ * when it does not.** A label is the text a chain printed, and it is not always
+ * true of the figure beside it: Mercadona sent the price of a litre under
+ * `100 ml`, and a curator read "17 / 100 ml". The catalog already knows how
+ * to read such a pair, and states what it read as `unitBasis`. So a row with
+ * the basis `LITER` and the label `100 ml` prints `L`.
+ *
+ * A basis this build does not know, and a null one, fall back to the label as
+ * the source wrote it. `''` when there is neither.
+ */
+export function unitPriceUnit(
+  basis: unknown,
+  label: string | null | undefined
+): string {
+  if (
+    typeof basis === 'string' &&
+    Object.prototype.hasOwnProperty.call(UNIT_BASIS_WORDS, basis)
+  ) {
+    return UNIT_BASIS_WORDS[basis];
+  }
+  return (label ?? '').trim();
+}
+
 /** What this locale puts between the units and the fraction. */
 function decimalSeparator(locale: string): string {
   const part = new Intl.NumberFormat(locale)

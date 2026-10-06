@@ -45,10 +45,12 @@ export function formatPrice(
 }
 
 /**
- * A unit price with what it is per: `0,98 € / 1 L`.
+ * A unit price with what it is per: `0,98 € / L`.
  *
- * The label is the source's own words and is written as it came. Up to four
- * decimals, since a price per capsule is `0,13` and one per sheet is less.
+ * `label` is written as it is given. A caller passes `unitPriceUnit` of the
+ * row, which is the basis the catalog read and the source's own words only
+ * when it read none (backend plan 0189). Up to four decimals, since a price
+ * per capsule is `0,13` and one per sheet is less.
  */
 export function formatUnitPrice(
   value: number | null | undefined,

@@ -626,7 +626,7 @@
       "unitPrice": "Unit price",
       "unitPriceHelp": "The source’s own price per reference unit. Type it in. It is never worked out from the price and the size, because the two disagree on about one product in forty.",
       "unitPriceLabel": "Unit price label",
-      "unitPriceLabelHelp": "The source’s own words for the unit price, such as 100 ml, or lv for washing machine loads. Free text and not a unit.",
+      "unitPriceLabelHelp": "What the unit price is per, such as kg, L or ud. Write what the figure is: a price per litre is L, also when the shelf tag shows it per 100 ml. Free text and not a unit.",
       "validFrom": "Valid from",
       "validFromHelp": "Leave it empty for a price that applies from the moment it is added.",
       "validUntil": "Valid until",

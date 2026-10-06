@@ -29,6 +29,7 @@ import type {
   ContentLocale,
   ItemView,
   LocalizedText,
+  UnitBasis,
 } from './catalog.messages';
 
 /**
@@ -863,8 +864,19 @@ export interface SourceEntryPriceView {
   currency: string;
   /** The source's own normalized price, stored verbatim and never recomputed. */
   unitPrice: number | null;
-  /** The source's own label for that number. Display text, never a unit. */
+  /**
+   * What the adapter says that number is per. It is the text the source
+   * printed when that text is true of the number, and the adapter's own `L`,
+   * `kg` or `ud` when the source labelled another figure (plan 0189). Display
+   * text, never a unit: {@link unitBasis} is the unit.
+   */
   unitPriceLabel: string | null;
+  /**
+   * What {@link unitPrice} is per, read from the label by the table catalog
+   * reads its own prices with (plans 0157 and 0189). Null for a label the
+   * table does not name.
+   */
+  unitBasis: UnitBasis | null;
   /** A file's window. Null for a storefront price, which has none. */
   validFrom: string | null;
   validUntil: string | null;

@@ -9,7 +9,7 @@
  * It makes real requests to a third party, one at a time and paced, so it obeys
  * the same politeness rules the runtime does (section 8.1): one honest
  * User-Agent naming a contact address, a low fixed rate, and a small fixed list
- * of products rather than a crawl. The whole run is fewer than a dozen requests.
+ * of products rather than a crawl. The whole run is about twenty requests.
  *
  * Every product below is here because a test needs that exact shape. Changing the
  * list means changing what the tests can prove, so add rather than replace.
@@ -94,6 +94,30 @@ const PRODUCTS: Array<{
     id: '84692',
     lang: 'es',
     why: 'a fixed pack that also carries an in-store barcode (plan 0181)',
+  },
+  {
+    file: 'product-reference-format-100ml.json',
+    id: '46815',
+    lang: 'es',
+    why: 'a body oil whose reference_format reads `100 ml` (plan 0189)',
+  },
+  {
+    file: 'product-reference-format-100g.json',
+    id: '34149',
+    lang: 'es',
+    why: 'a ground spice whose reference_format reads `100 g` (plan 0189)',
+  },
+  {
+    file: 'product-eggs-per-dozen.json',
+    id: '15768',
+    lang: 'es',
+    why: 'a dozen eggs whose reference_format reads `dc` (plan 0189)',
+  },
+  {
+    file: 'product-detergent-per-wash.json',
+    id: '86400',
+    lang: 'es',
+    why: 'a detergent whose reference_format reads `lv`, a wash (plan 0189)',
   },
 ];
 
