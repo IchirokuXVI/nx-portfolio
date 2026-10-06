@@ -199,6 +199,7 @@ export function toSourceEntryPriceView(
   return {
     id: row.id,
     priceScopeId: row.priceScopeId,
+    sourceKind: row.sourceKind ?? null,
     price: toNumber(row.price),
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),

@@ -863,11 +863,25 @@ export interface SourceCatalogEntryView {
  * So they are a row of their own, and accepting the entry writes every one of
  * them that is still valid, each into its own scope and stamped with the run
  * that observed it.
+ *
+ * **And one per kind of source** (plan 0190). A website and a leaflet of one
+ * chain can share a row, and each states its own price, so a row can hold two
+ * prices for one scope, one of each kind.
  */
 export interface SourceEntryPriceView {
   id: string;
   /** Opaque here, as every catalog id is. */
   priceScopeId: string;
+  /**
+   * The kind of the run that stated this price (plan 0190), which is the kind
+   * an accept writes it to catalog under. It can differ from the `sourceKind`
+   * of the row, which says who owns the text of the row: a row that a website
+   * walk owns can hold a leaflet price.
+   *
+   * Null only for a price from before plan 0190 whose kind could not be
+   * read. Such a price is shown and is not written by an accept.
+   */
+  sourceKind: PriceSourceKind | null;
   /**
    * The till price for one unit. Null when the source stated only a comparison
    * figure, a per kilogram price with no pack price.
@@ -1483,6 +1497,14 @@ export interface SourceEntryPriceWithheld {
   priceScopeId: string;
   /** The other bound rows that state another amount at that scope. */
   otherEntryIds: string[];
+  /**
+   * Present and true when the price was not sent for another reason (plan
+   * 0190): it is a price from before that plan whose kind could not be read,
+   * and a price is never sent under a guessed kind. `otherEntryIds` is then
+   * empty. The row is still bound, and a row with no other open price is
+   * offered with no price.
+   */
+  kindUnknown?: true;
 }
 
 /** Settle a product at a chain (plan 0191). */

@@ -28,6 +28,7 @@ import {
   applySourceGroup,
   loadCatalogItems,
   sourceGroupChanged,
+  writesSourceGroup,
   type SourceEntryFields,
 } from './source-snapshot';
 
@@ -240,6 +241,14 @@ export interface SourceIngestCounters {
    * Rows that state one amount are not counted either: that amount is sent.
    */
   pricesConflicted: number;
+  /**
+   * Observations whose prices were not written because they are sold another
+   * way than the row a walk owns says (plan 0190): a leaflet offer by the
+   * kilo on a row of a fixed pack, or the reverse. One per observation,
+   * whatever the number of scopes it priced. Each is a warning of the run,
+   * `PRICE_SOLD_ANOTHER_WAY`, that names the row.
+   */
+  pricesSoldAnotherWay: number;
 }
 
 /**
@@ -395,9 +404,18 @@ export class SourceIngest {
     // A full observation writes its EAN onto its row verbatim, a null included,
     // so the count is what the rows hold once the chunk is written, and the
     // first of five cuts sharing an EAN does not bind before the other four.
+    //
+    // An observation that leaves the source group of its row alone writes no
+    // EAN either (plan 0190), so it is not counted: a leaflet tile with no
+    // barcode would otherwise take the barcode of a walked row out of the
+    // count, and the next row to print it would bind as if nobody shared it.
     const chunkEans = new Set<string>();
     for (const observation of reported) {
-      if (observation.detailFetched !== false) {
+      const known = byExternalId.get(observation.externalId);
+      if (
+        observation.detailFetched !== false &&
+        (!known || writesSourceGroup(known, input.sourceKind))
+      ) {
         eans.note(observation.externalId, observation.ean);
         if (observation.ean) {
           chunkEans.add(observation.ean);
@@ -431,7 +449,12 @@ export class SourceIngest {
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
         // Asked before the touch writes, because the touch is what makes it false.
-        changed = held ? sourceGroupChanged(held, fields) : false;
+        // A row whose group this observation does not write did not change,
+        // whatever the observation says (plan 0190): it is `unchanged`.
+        changed = held
+          ? writesSourceGroup(held, fields.sourceKind) &&
+            sourceGroupChanged(held, fields)
+          : false;
         outcome = held
           ? await this.touch(held, fields, context.runId, seenAt, items, eans)
           : await this.create(
@@ -466,7 +489,20 @@ export class SourceIngest {
       // writing it to the default would put a Sevilla price on Madrid. A run
       // that writes no prices places none, and has nothing to warn about.
       const placed: PlacedPrice[] = [];
-      for (const price of writesPrices ? observation.prices : []) {
+      // A leaflet offer by the kilo on a row that a walk describes as a fixed
+      // pack, or the reverse (plan 0190). The row keeps what the walk said,
+      // so the figure would be stored and sent as a price of the wrong thing.
+      const soldAnotherWay =
+        writesPrices &&
+        observation.prices.length > 0 &&
+        sellsAnotherWay(held, observation, input.sourceKind);
+      if (soldAnotherWay) {
+        counters.pricesSoldAnotherWay += 1;
+        this.warnSoldAnotherWay(context, outcome.entry, observation);
+      }
+      for (const price of writesPrices && !soldAnotherWay
+        ? observation.prices
+        : []) {
         const priceScopeId = this.resolveScope(
           context,
           input,
@@ -501,7 +537,7 @@ export class SourceIngest {
     }
 
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
-    await this.replaceScopePrices(context.runId, observed);
+    await this.replaceScopePrices(context.runId, input.sourceKind, observed);
     // One row per price read at its scope. Counted here rather than inside the
     // write, because a price that resolved to no scope was already dropped with
     // a warning above and was never a row. A copy is not counted: the number
@@ -593,7 +629,9 @@ export class SourceIngest {
         `${counters.pricesRecorded} price(s) recorded on the source rows, ` +
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
         `${counters.pricesWritten} written to catalog, ` +
-        `${counters.pricesConflicted} withheld as conflicts.`
+        `${counters.pricesConflicted} withheld as conflicts, ` +
+        `${counters.pricesSoldAnotherWay} observation(s) priced another way ` +
+        'than their row is sold and not written.'
     );
     return { outcomes, counters, copies, priceConflicts };
   }
@@ -769,6 +807,31 @@ export class SourceIngest {
     return null;
   }
 
+  /**
+   * The warning for prices that were not written because the observation is
+   * sold another way than its row (plan 0190). It names the row, so a person
+   * can open it.
+   */
+  private warnSoldAnotherWay(
+    context: RunContext,
+    row: SourceCatalogEntry,
+    observation: SourceObservation
+  ): void {
+    const byWeight = observation.soldByWeight === true;
+    context.warn({
+      code: HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+      message:
+        `"${observation.name}" is priced ${byWeight ? 'by weight' : 'as a fixed pack'} ` +
+        `here, and the row it lands on (${row.id}, "${row.name}") is sold ` +
+        `${byWeight ? 'as a fixed pack' : 'by weight'} on the walk that ` +
+        'describes it. The row keeps what the walk says, so no price of this ' +
+        'offer was written. Check that the two are one product.',
+      offerId: observation.externalId,
+      page: null,
+      name: observation.name,
+    });
+  }
+
   /** The scope id a price resolves to, with no warning and no side effect. */
   private scopeOf(
     input: SourceIngestSessionInput,
@@ -880,6 +943,13 @@ export class SourceIngest {
    * **The other is a barcode a product learned** (plan 0185). A row that is
    * waiting and learned nothing new is asked the EAN rung again with the EAN
    * it holds, and only that rung: {@link bindWaitingByEan}.
+   *
+   * **A walk owns the text of a row** (plan 0190). `writesSourceGroup` in
+   * `source-snapshot.ts` is the rule. When it answers no, a leaflet has
+   * observed a row that a walk owns: the seen fields move, the source group
+   * and the kind of the row stay, and the row is asked the EAN rung with the
+   * EAN it holds, as {@link see} asks it. The prices are written by the
+   * caller either way, under the kind of the run.
    */
   private async touch(
     row: SourceCatalogEntry,
@@ -889,8 +959,11 @@ export class SourceIngest {
     items: ItemMatchIndex,
     eans: ChainEanIndex
   ): Promise<SourceEntryOutcome> {
-    const learnedEan = fields.ean !== null && row.ean !== fields.ean;
-    applySourceGroup(row, fields);
+    const writes = writesSourceGroup(row, fields.sourceKind);
+    const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
+    if (writes) {
+      applySourceGroup(row, fields);
+    }
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
@@ -1014,9 +1087,15 @@ export class SourceIngest {
    * **replaces** this scope's row and leaves every other scope's alone, and an
    * observation carrying none writes nothing here rather than clearing what an
    * earlier run said.
+   *
+   * **And one per kind of source** (plan 0190). The row it replaces is the one
+   * of this run's own kind. A website price and a leaflet price for one scope
+   * of one row are two rows, and neither run touches the other's. A row from
+   * before the plan that has no kind is left as it is too.
    */
   private async replaceScopePrices(
     runId: string,
+    sourceKind: PriceSourceKind,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
     if (observed.length === 0) {
@@ -1029,6 +1108,7 @@ export class SourceIngest {
       ({ price, priceScopeId, copiedFromScopeId, observation, entry }) => ({
         entryId: entry.id,
         priceScopeId,
+        sourceKind,
         // Written on every row, null included, so a scope walked directly
         // after an earlier copy loses the copy's provenance with its values.
         copiedFromScopeId,
@@ -1054,7 +1134,7 @@ export class SourceIngest {
           i,
           i + PRICE_ROW_CHUNK
         ) as QueryDeepPartialEntity<SourceEntryPrice>[],
-        { conflictPaths: ['entryId', 'priceScopeId'] }
+        { conflictPaths: ['entryId', 'priceScopeId', 'sourceKind'] }
       );
     }
   }
@@ -1158,7 +1238,30 @@ function emptyCounters(): SourceIngestCounters {
     pricesWritten: 0,
     pricesConfirmed: 0,
     pricesConflicted: 0,
+    pricesSoldAnotherWay: 0,
   };
+}
+
+/**
+ * Whether a full observation states its prices for something sold another way
+ * than the row it lands on, on a row whose source group it does not write
+ * (plan 0190).
+ *
+ * Only then. An observation that writes the group writes `soldByWeight` with
+ * it, so the row and its price agree by construction. A partial observation
+ * has its own rule in `see`, which moves the flag with the price.
+ */
+function sellsAnotherWay(
+  held: SourceCatalogEntry | undefined,
+  observation: ReportedObservation,
+  sourceKind: PriceSourceKind
+): observation is SourceObservation {
+  return (
+    held !== undefined &&
+    observation.detailFetched !== false &&
+    !writesSourceGroup(held, sourceKind) &&
+    (observation.soldByWeight === true) !== (held.soldByWeight === true)
+  );
 }
 
 function emptyCopies(): SourceIngestCopies {
@@ -1452,6 +1555,7 @@ export class SourceIngestSession {
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
+    this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
     this.priceConflicts.push(...result.priceConflicts);
     for (const scopeId of result.copies.pricedScopes) {
       this.copies.pricedScopes.add(scopeId);

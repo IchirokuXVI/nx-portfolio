@@ -67,6 +67,25 @@ describeIntegration('harvester schema (real Postgres)', () => {
     }
   });
 
+  it('keys a price of a source row on its scope and on the kind that stated it', async () => {
+    // Plan 0190: a website price and a leaflet price for one scope of one
+    // row are two rows. The ingest upserts on these three columns, so the
+    // key and the `ON CONFLICT` target must stay the same list.
+    const keys: { name: string; definition: string }[] = await dataSource.query(
+      `SELECT conname AS "name", pg_get_constraintdef(oid) AS "definition"
+         FROM pg_constraint
+        WHERE conrelid = 'source_entry_prices'::regclass AND contype = 'u'`
+    );
+
+    expect(keys).toEqual([
+      {
+        name: 'uq_source_entry_prices_scope_kind',
+        definition:
+          'UNIQUE NULLS NOT DISTINCT ("entryId", "priceScopeId", "sourceKind")',
+      },
+    ]);
+  });
+
   it('allows exactly one active run per supermarket', async () => {
     const supermarketId = '5efa0000-0000-4000-a000-0000000000aa';
     await dataSource.query(

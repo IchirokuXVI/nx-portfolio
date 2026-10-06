@@ -124,6 +124,7 @@ function queued(
         id: 'sep-1',
         entryId: 'e-1',
         priceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_API,
         price: 0.95,
         currency: 'EUR',
         unitPrice: 0.95,

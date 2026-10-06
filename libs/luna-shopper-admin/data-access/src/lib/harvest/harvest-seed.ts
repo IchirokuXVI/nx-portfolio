@@ -726,6 +726,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         {
           id: 'price-milk-national',
           priceScopeId: MERCADONA_NATIONAL,
+          sourceKind: 'OFFICIAL_API',
           price: 0.89,
           currency: 'EUR',
           unitPrice: 0.89,
@@ -772,6 +773,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         {
           id: 'price-bread-national',
           priceScopeId: MERCADONA_NATIONAL,
+          sourceKind: 'OFFICIAL_API',
           price: 1.25,
           currency: 'EUR',
           unitPrice: 2.72,
@@ -822,6 +824,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         {
           id: 'price-aceite-national',
           priceScopeId: DEZA_NATIONAL,
+          sourceKind: 'OFFICIAL_LEAFLET',
           price: 19.95,
           currency: 'EUR',
           unitPrice: 3.99,
@@ -835,6 +838,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         {
           id: 'price-aceite-cordoba',
           priceScopeId: DEZA_CORDOBA,
+          sourceKind: 'OFFICIAL_LEAFLET',
           price: 18.95,
           currency: 'EUR',
           unitPrice: 3.79,
@@ -914,6 +918,7 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
         {
           id: 'price-leche-leaflet',
           priceScopeId: MERCADONA_NATIONAL,
+          sourceKind: 'OFFICIAL_LEAFLET',
           price: 0.79,
           currency: 'EUR',
           unitPrice: 0.79,

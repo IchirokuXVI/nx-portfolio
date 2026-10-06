@@ -22,6 +22,9 @@ const SOURCE_KIND_BY_ADAPTER: Partial<Record<AdapterKey, PriceSourceKind>> = {
   'dia-api': PriceSourceKind.OFFICIAL_API,
   'deza-web': PriceSourceKind.OFFICIAL_WEB,
   'carrefour-web': PriceSourceKind.OFFICIAL_WEB,
+  // Named so the lookup of an old price below reads it (plan 0190). A walk
+  // of it stamped this before it was named, through the default.
+  'eljamon-web': PriceSourceKind.OFFICIAL_WEB,
 };
 
 /** The kind a walk of this adapter stamps on what it writes. */
@@ -44,15 +47,24 @@ const RUN_KINDS: readonly PriceSourceKind[] = [
 /**
  * The kind each of these runs wrote its prices with (plan 0191).
  *
- * A source row carries one `sourceKind`, and every full observation rewrites
- * it: a row the website and a leaflet both print says whichever came last
- * (plan 0190). A price row keeps the run that observed it, and a run has one
- * kind for its whole life. So the kind of a price is asked of its run:
+ * **A fallback since plan 0190.** A price row now says its own kind
+ * (`source_entry_prices.sourceKind`), and every run writes it. This is asked
+ * only for a price row that has none, which is a row from before that plan
+ * whose kind the migration could not read. The migration of plan 0190 read
+ * the kind the same way, in SQL.
+ *
+ * The kind of a source row never was the answer: before plan 0190 every full
+ * observation rewrote it, and since then it says who owns the text of the
+ * row. A price row keeps the run that observed it, and a run has one kind for
+ * its whole life. So the kind of such a price is asked of its run:
  *
  * - **A file import** was stamped by the operator, and the stamp is in the
  *   run's input.
  * - **Any other run** wrote with the kind of its chain's adapter, which is
- *   what `RunExecutor` hands the sink.
+ *   what `RunExecutor` hands the sink. Only an adapter the map above names
+ *   answers: `osm-places` and `manual` walk no storefront, and the default
+ *   of {@link sourceKindOf} is for a run that is starting, not for a price
+ *   whose kind is in doubt. The migration of plan 0190 draws the same line.
  *
  * **A run that cannot be read answers nothing**, and the caller treats that
  * as "unknown" and not as a guess: the run is gone, its input names no kind,
@@ -99,8 +111,9 @@ export async function sourceKindsOfRuns(
     const adapterKey = run.supermarketId
       ? adapterOf.get(run.supermarketId)
       : undefined;
-    if (adapterKey) {
-      kinds.set(run.id, sourceKindOf(adapterKey));
+    const named = adapterKey ? SOURCE_KIND_BY_ADAPTER[adapterKey] : undefined;
+    if (named) {
+      kinds.set(run.id, named);
     }
   }
   return kinds;

@@ -50,6 +50,13 @@ const WEB = PriceSourceKind.OFFICIAL_WEB;
 const LEAFLET = PriceSourceKind.OFFICIAL_LEAFLET;
 const KINDS = [PriceSourceKind.OFFICIAL_API, WEB, LEAFLET];
 
+/** What each run of this spec stamps on the prices it writes. */
+const KIND_OF_RUN: Record<string, PriceSourceKind> = {
+  [RUN]: WEB,
+  [OLD_RUN]: WEB,
+  [LEAFLET_RUN]: LEAFLET,
+};
+
 function price(
   entryId: string,
   amount: number,
@@ -70,6 +77,14 @@ function price(
     runId: RUN,
     copiedFromScopeId: null,
     ...over,
+    // The kind of its run, as every run writes it since plan 0190: the
+    // primary path. A case that passes `sourceKind: null` is a price from
+    // before that plan, and exercises the lookup by run.
+    sourceKind:
+      over.sourceKind !== undefined
+        ? over.sourceKind
+        : (KIND_OF_RUN[over.runId === undefined ? RUN : (over.runId ?? '')] ??
+          null),
   } as SourceEntryPrice;
 }
 
@@ -171,6 +186,7 @@ function build(bound: SourceCatalogEntry[]) {
   return {
     settler,
     find,
+    runs,
     withdrawPrices,
     withdrawOffers,
     addPrices,
@@ -285,12 +301,86 @@ describe('SourceEntrySettler (plan 0191)', () => {
       });
     });
 
-    it('takes the kind of a price from its run, not from what the row says today', async () => {
-      // A leaflet wrote the price. A website walk touched the shared row
-      // since, so the row says OFFICIAL_WEB (plan 0190).
+    it('reads the kind from the price row, and asks no run (plan 0190)', async () => {
+      // A row that a website walk owns holds a website price and a leaflet
+      // price for one scope. Each says its own kind.
       const shared = row(
         'shared',
-        [price('shared', 1.99, { runId: LEAFLET_RUN })],
+        [
+          price('shared', 2.45, { id: 'web', sourceKind: WEB }),
+          price('shared', 1.99, {
+            id: 'leaflet',
+            sourceKind: LEAFLET,
+            runId: LEAFLET_RUN,
+          }),
+        ],
+        { sourceKind: WEB }
+      );
+      const { settler, runs, heldOf, statedOf } = build([shared]);
+
+      await settler.settle(ITEM, CHAIN);
+
+      expect(runs.find).not.toHaveBeenCalled();
+      expect(heldOf()).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB, sourceRunId: RUN },
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: LEAFLET,
+          sourceRunId: LEAFLET_RUN,
+        },
+      ]);
+      expect(
+        statedOf().map((each) => [each.sourceKind, each.price.price])
+      ).toEqual([
+        [WEB, 2.45],
+        [LEAFLET, 1.99],
+      ]);
+    });
+
+    it('takes the kind on the price row over the kind of its run', async () => {
+      // The row says what the run wrote. Should the two ever differ, the
+      // stored kind is the statement and the run is only a fallback.
+      const stamped = row('stamped', [
+        price('stamped', 1.99, { sourceKind: LEAFLET, runId: RUN }),
+      ]);
+      const { settler, heldOf } = build([stamped]);
+
+      await settler.settle(ITEM, CHAIN);
+
+      expect(heldOf()).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: LEAFLET, sourceRunId: RUN },
+      ]);
+    });
+
+    it('asks the run only for the prices that have no kind', async () => {
+      const mixed = row('mixed', [
+        price('mixed', 1.99, { sourceKind: WEB }),
+        price('mixed', 2.05, {
+          priceScopeId: NORTH,
+          sourceKind: null,
+          runId: LEAFLET_RUN,
+        }),
+      ]);
+      const { settler, runs, heldOf } = build([mixed]);
+
+      await settler.settle(ITEM, CHAIN);
+
+      expect(runs.find).toHaveBeenCalledTimes(1);
+      expect(runs.find).toHaveBeenCalledWith({
+        where: { id: expect.objectContaining({ _value: [LEAFLET_RUN] }) },
+      });
+      expect(heldOf()).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB, sourceRunId: RUN },
+        { priceScopeId: NORTH, sourceKind: LEAFLET, sourceRunId: LEAFLET_RUN },
+      ]);
+    });
+
+    it('takes the kind of a price that has none from its run, not from what the row says', async () => {
+      // A price from before plan 0190, which the migration left with no
+      // kind. A leaflet wrote it, and the row says OFFICIAL_WEB.
+      const shared = row(
+        'shared',
+        [price('shared', 1.99, { runId: LEAFLET_RUN, sourceKind: null })],
         { sourceKind: WEB }
       );
       const { settler, heldOf, statedOf } = build([shared]);

@@ -529,6 +529,11 @@ const sourceEntryPriceView = object(
   {
     id: nonEmptyString(),
     priceScopeId: nonEmptyString(),
+    sourceKind: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+      description:
+        'The kind of the run that stated this price (plan 0190), which is the kind an accept writes it to catalog under. It can differ from the kind of the row: a row that a website walk owns can hold a leaflet price. Null only for a price from before plan 0190 whose kind could not be read. Such a price is not written by an accept.',
+    },
     // Null when the source stated only a comparison figure.
     price: numberOrNull(),
     currency: nonEmptyString(),
@@ -548,6 +553,7 @@ const sourceEntryPriceView = object(
   [
     'id',
     'priceScopeId',
+    'sourceKind',
     'price',
     'currency',
     'unitPrice',
@@ -600,6 +606,12 @@ const sourceEntryPriceWithheld = object(
     entryId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
     otherEntryIds: array(nonEmptyString()),
+    kindUnknown: {
+      type: 'boolean',
+      enum: [true],
+      description:
+        'Present and true when the price was not sent because it is a price from before plan 0190 whose kind could not be read. A price is never sent under a guessed kind. otherEntryIds is then empty.',
+    },
   },
   ['entryId', 'priceScopeId', 'otherEntryIds']
 );

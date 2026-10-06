@@ -43,6 +43,7 @@ interface CatalogItem {
 interface PriceRow {
   entryId: string;
   priceScopeId: string;
+  sourceKind: PriceSourceKind;
   price: number | null;
   currency: string;
   unitPrice: number | null;
@@ -109,7 +110,9 @@ function build(options: {
         const held = priceRows.findIndex(
           (each) =>
             each.entryId === row.entryId &&
-            each.priceScopeId === row.priceScopeId
+            each.priceScopeId === row.priceScopeId &&
+            // The key holds the kind since plan 0190.
+            each.sourceKind === row.sourceKind
         );
         if (held === -1) {
           priceRows.push(row);
@@ -264,6 +267,7 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       rows: [
         {
           externalId: 'k1',
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
           name: 'Cerveza',
           status: SourceEntryStatus.REJECTED,
           itemId: null,
@@ -765,6 +769,8 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
         {
           id: 'row-1',
           externalId: 'k1',
+          // A row of the kind that observes it, so the run writes its group.
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
           name: 'Leche',
           status: SourceEntryStatus.ACTIVE,
           itemId: 'item-1',
@@ -2368,5 +2374,450 @@ describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
       status: SourceEntryStatus.CANDIDATE,
       itemId: 'item-bottle',
     });
+  });
+});
+
+describe('SourceIngest, a row that a website and a leaflet both print (plan 0190)', () => {
+  const LEAFLET_RUN = '77777777-7777-4777-8777-777777777777';
+  const WEB_RUN = '88888888-8888-4888-8888-888888888888';
+
+  /** What the website walk stored, as the Deza rows of the first catalog. */
+  const WALKED = {
+    id: 'covap',
+    externalId: 'k-covap',
+    sourceKind: PriceSourceKind.OFFICIAL_WEB,
+    name: 'Leche COVAP entera',
+    brand: 'COVAP',
+    brandKey: 'covap',
+    ean: '8411327052016',
+    unitSize: 1,
+    sizeUnit: UnitOfMeasure.LITER,
+    soldByWeight: false,
+    sizeFormat: '1 L',
+    packCount: 6,
+    categoryPath: ['Lácteos', 'Leche'],
+    url: 'https://example.test/leche-covap-entera',
+    extra: { listing: 'web' },
+    firstRunId: OTHER_RUN,
+    lastRunId: OTHER_RUN,
+    timesSeen: 1,
+  } as Partial<SourceCatalogEntry>;
+
+  /** The same product as the leaflet printed it: other case, no link, by the kilo. */
+  const TILE = {
+    externalId: 'k-covap',
+    name: 'Leche COVAP Entera',
+    brand: 'Covap',
+    ean: null,
+    unitSize: 30,
+    sizeUnit: null,
+    sizeFormat: '1 L',
+    categoryPath: [],
+    url: null,
+    extra: { page: 4 },
+    price: { ...PRICE, price: 1.15, unitPrice: null, unitPriceLabel: null },
+  };
+
+  const SOURCE_GROUP = [
+    'externalId',
+    'sourceKind',
+    'name',
+    'brand',
+    'brandKey',
+    'ean',
+    'unitSize',
+    'sizeUnit',
+    'soldByWeight',
+    'sizeFormat',
+    'packCount',
+    'categoryPath',
+    'url',
+    'extra',
+  ] as const;
+
+  const groupOf = (row: Partial<SourceCatalogEntry>) =>
+    Object.fromEntries(SOURCE_GROUP.map((key) => [key, row[key]]));
+
+  it('a leaflet leaves the text and the kind of a row that a walk owns', async () => {
+    const { ingest, context, saved, stored, priceRows } = build({
+      rows: [{ ...WALKED }],
+      runId: LEAFLET_RUN,
+    });
+    const before = groupOf(stored[0]);
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+
+    // The key, the review text, the size, the link and the bag are the walk's.
+    expect(groupOf(saved[0])).toEqual(before);
+    // The seen fields moved.
+    expect(saved[0]).toMatchObject({
+      timesSeen: 2,
+      lastRunId: LEAFLET_RUN,
+      firstRunId: OTHER_RUN,
+    });
+    // It counts as a row the run left alone.
+    expect(counters).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+    // And the leaflet's price is on it, as a leaflet price with the leaflet's
+    // own bag.
+    expect(priceRows).toEqual([
+      expect.objectContaining({
+        entryId: 'covap',
+        priceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        price: 1.15,
+        runId: LEAFLET_RUN,
+        details: { page: 4 },
+      }),
+    ]);
+  });
+
+  it('does not touch the decision of a bound row, and writes its leaflet price to catalog as one', async () => {
+    const decidedAt = new Date('2026-10-03T02:00:00.000Z');
+    const { ingest, context, saved, catalog } = build({
+      rows: [
+        {
+          ...WALKED,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: 'item-1',
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt,
+        },
+      ],
+      runId: LEAFLET_RUN,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+
+    expect(saved[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      decidedAt,
+    });
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 1.15 })],
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
+  });
+
+  it('a walk takes over a row that only a leaflet has described, once', async () => {
+    const { ingest, context, saved, stored } = build({
+      rows: [
+        {
+          id: 'covap',
+          externalId: 'k-covap',
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          name: 'Leche COVAP Entera',
+          brand: 'Covap',
+          sizeFormat: '1 L',
+          firstRunId: LEAFLET_RUN,
+          lastRunId: LEAFLET_RUN,
+        },
+      ],
+      runId: WEB_RUN,
+    });
+    const walk = observation({
+      externalId: 'k-covap',
+      name: 'Leche COVAP entera',
+      brand: 'COVAP',
+      sizeFormat: '1 L',
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.LITER,
+      url: 'https://example.test/leche-covap-entera',
+    });
+
+    const first = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [walk],
+    });
+
+    expect(first.counters).toMatchObject({ updated: 1, unchanged: 0 });
+    expect(saved[0]).toMatchObject({
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      name: 'Leche COVAP entera',
+      brand: 'COVAP',
+      unitSize: 1,
+      url: 'https://example.test/leche-covap-entera',
+    });
+
+    // A second leaflet import changes nothing in the source group.
+    const taken = groupOf(stored[0]);
+    const second = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      observations: [observation(TILE)],
+    });
+    expect(second.counters).toMatchObject({ updated: 0, unchanged: 1 });
+    expect(groupOf(stored[0])).toEqual(taken);
+
+    // And the next walk finds its own text, so the row is not taken twice.
+    const third = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [walk],
+    });
+    expect(third.counters).toMatchObject({ updated: 0, unchanged: 1 });
+  });
+
+  it('keeps a website price and a leaflet price for one scope, and replaces each by its own kind', async () => {
+    const { ingest, context, priceRows } = build({ rows: [{ ...WALKED }] });
+    const walk = (price: number) =>
+      observation({
+        externalId: 'k-covap',
+        name: WALKED.name as string,
+        brand: WALKED.brand,
+        ean: WALKED.ean,
+        unitSize: 1,
+        sizeUnit: UnitOfMeasure.LITER,
+        sizeFormat: '1 L',
+        packCount: 6,
+        categoryPath: ['Lácteos', 'Leche'],
+        url: WALKED.url,
+        price: { ...PRICE, price },
+      });
+    const run = (
+      sourceKind: PriceSourceKind,
+      each: SourceObservation
+    ): Promise<unknown> =>
+      ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind,
+        observations: [each],
+      });
+
+    await run(PriceSourceKind.OFFICIAL_WEB, walk(1.25));
+    await run(PriceSourceKind.OFFICIAL_LEAFLET, observation(TILE));
+
+    const held = () =>
+      priceRows
+        .map((row) => [row.sourceKind, row.price])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+    expect(held()).toEqual([
+      [PriceSourceKind.OFFICIAL_LEAFLET, 1.15],
+      [PriceSourceKind.OFFICIAL_WEB, 1.25],
+    ]);
+
+    // The next walk replaces the website price and leaves the leaflet's.
+    await run(PriceSourceKind.OFFICIAL_WEB, walk(1.29));
+    expect(held()).toEqual([
+      [PriceSourceKind.OFFICIAL_LEAFLET, 1.15],
+      [PriceSourceKind.OFFICIAL_WEB, 1.29],
+    ]);
+  });
+
+  it('does not let a leaflet tile with no barcode take the barcode of a walked row out of the count', async () => {
+    // Two walked rows of the chain share one barcode, so neither binds by it
+    // (plan 0155). A leaflet prints the first with no barcode. Before the
+    // plan that observation wrote a null EAN onto the row. Under the plan the
+    // row keeps its EAN, so the count must keep it too: the second row,
+    // which waits, is asked the EAN rung by a later chunk and must still
+    // find the barcode shared.
+    const { ingest, context, saved } = build({
+      items: [
+        {
+          id: 'item-ean',
+          name: { es: 'Otra cosa', en: null },
+          brand: null,
+          ean: '8411327052016',
+          unitSize: null,
+        },
+      ],
+      rows: [
+        { ...WALKED },
+        {
+          id: 'twin',
+          externalId: 'k-twin',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          name: 'Leche COVAP entera pack',
+          ean: '8411327052016',
+        },
+      ],
+      runId: LEAFLET_RUN,
+    });
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+    });
+
+    await session.push([observation(TILE)]);
+    await session.push([
+      observation({
+        externalId: 'k-twin',
+        name: 'Leche COVAP entera pack',
+        price: PRICE,
+      }),
+    ]);
+    await session.close();
+
+    expect(saved.find((row) => row.id === 'covap')?.ean).toBe('8411327052016');
+    expect(saved.find((row) => row.id === 'twin')).toMatchObject({
+      ean: '8411327052016',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+  });
+
+  describe('a leaflet offer sold another way than the row a walk owns', () => {
+    /** The tile again, by the kilo: every figure on it is the price of a kilo. */
+    const BY_THE_KILO = {
+      ...TILE,
+      soldByWeight: true,
+      price: { ...PRICE, price: 9.41, unitPrice: 9.41, unitPriceLabel: 'kg' },
+    };
+
+    it('writes no price, counts the observation and names the row in a warning', async () => {
+      const { ingest, context, saved, priceRows, catalog, warnings } = build({
+        rows: [
+          {
+            ...WALKED,
+            status: SourceEntryStatus.ACTIVE,
+            itemId: 'item-1',
+            matchedBy: ItemSourceMatch.MANUAL,
+          },
+        ],
+        runId: LEAFLET_RUN,
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(BY_THE_KILO)],
+      });
+
+      // The per kilo figure is neither stored on the row nor sent to catalog
+      // as the price of the row's fixed pack.
+      expect(priceRows).toEqual([]);
+      expect(catalog.addPrices).not.toHaveBeenCalled();
+      expect(counters).toMatchObject({
+        unchanged: 1,
+        pricesRecorded: 0,
+        pricesSoldAnotherWay: 1,
+      });
+      // The row was seen, and still says what the walk said.
+      expect(saved[0]).toMatchObject({
+        timesSeen: 2,
+        lastRunId: LEAFLET_RUN,
+        soldByWeight: false,
+        unitSize: 1,
+      });
+      expect(warnings).toEqual([
+        expect.objectContaining({
+          code: HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+          offerId: 'k-covap',
+          name: 'Leche COVAP Entera',
+          message: expect.stringContaining('covap'),
+        }),
+      ]);
+    });
+
+    it('does the same for a fixed pack offer on a row a walk sells by weight', async () => {
+      const { ingest, context, priceRows, warnings } = build({
+        rows: [{ ...WALKED, soldByWeight: true, unitSize: null }],
+        runId: LEAFLET_RUN,
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(TILE)],
+      });
+
+      expect(priceRows).toEqual([]);
+      expect(counters.pricesSoldAnotherWay).toBe(1);
+      expect(warnings.map((warning) => warning.code)).toEqual([
+        HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+      ]);
+    });
+
+    it('leaves alone an earlier leaflet price of the row', async () => {
+      const { ingest, context, priceRows } = build({
+        rows: [{ ...WALKED }],
+        runId: LEAFLET_RUN,
+      });
+      const run = (each: SourceObservation) =>
+        ingest.ingest(context, {
+          supermarketId: CHAIN,
+          defaultPriceScopeId: SCOPE,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          observations: [each],
+        });
+
+      await run(observation(TILE));
+      await run(observation(BY_THE_KILO));
+
+      expect(priceRows.map((row) => row.price)).toEqual([1.15]);
+    });
+
+    it('says nothing when the offer states no price, or when the run writes the row', async () => {
+      // No price: nothing to withhold.
+      const quiet = build({ rows: [{ ...WALKED }] });
+      const first = await quiet.ingest.ingest(quiet.context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation({ ...BY_THE_KILO, price: null })],
+      });
+      expect(first.counters.pricesSoldAnotherWay).toBe(0);
+      expect(quiet.warnings).toEqual([]);
+
+      // A leaflet row: the leaflet owns its text, writes the flag with the
+      // price, and the two agree.
+      const own = build({
+        rows: [{ ...WALKED, sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }],
+      });
+      const second = await own.ingest.ingest(own.context, {
+        supermarketId: CHAIN,
+        defaultPriceScopeId: SCOPE,
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        observations: [observation(BY_THE_KILO)],
+      });
+      expect(second.counters.pricesSoldAnotherWay).toBe(0);
+      expect(own.priceRows).toHaveLength(1);
+      expect(own.saved[0].soldByWeight).toBe(true);
+    });
+  });
+
+  it('lets a walk of one kind write a row that a walk of another kind owns', async () => {
+    // Both are a walk. Which of two walks owns a row is not this plan's
+    // question, so the last one writes, as before the plan.
+    const { ingest, context, saved } = build({
+      rows: [{ ...WALKED, sourceKind: PriceSourceKind.OFFICIAL_API }],
+    });
+
+    const { counters } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: [
+        observation({ externalId: 'k-covap', name: 'Leche COVAP entera' }),
+      ],
+    });
+
+    expect(saved[0].sourceKind).toBe(PriceSourceKind.OFFICIAL_WEB);
+    expect(counters.updated).toBe(1);
   });
 });

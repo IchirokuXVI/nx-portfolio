@@ -288,6 +288,18 @@ export enum HarvestWarningCode {
    * that waits a week for the next run to fetch the detail.
    */
   DETAIL_SKIPPED_UNKNOWN = 'DETAIL_SKIPPED_UNKNOWN',
+  /**
+   * A source that does not own the text of a row stated a price for it that
+   * is sold another way than the row says (plan 0190): a leaflet offer by the
+   * kilo on a row that a website walk describes as a fixed pack, or the
+   * reverse.
+   *
+   * The row keeps what the walk said, so the figure would be stored, and
+   * sent to catalog, as the price of something it is not the price of. No
+   * price of that observation is written. The row is still seen. A person
+   * decides: the leaflet may name another product than the row.
+   */
+  PRICE_SOLD_ANOTHER_WAY = 'PRICE_SOLD_ANOTHER_WAY',
 }
 
 /**

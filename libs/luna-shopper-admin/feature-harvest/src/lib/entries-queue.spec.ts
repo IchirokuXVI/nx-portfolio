@@ -889,6 +889,37 @@ describe('the one queue, drawing a row', () => {
   });
 
   /**
+   * Backend plan 0190: the kind is on the price. A row that a website and a
+   * leaflet both print holds a price of each for one scope, so the kind is
+   * drawn on every line and a line is tracked by the scope and the kind.
+   */
+  it('says on each price line what stated it', async () => {
+    const { fixture, page } = await opened(DEZA);
+    for (let round = 0; round < 3; round++) {
+      await drain();
+      fixture.detectChanges();
+    }
+
+    expect(page.priceLines().map((line) => line.sourceKind)).toEqual([
+      'OFFICIAL_LEAFLET',
+      'OFFICIAL_LEAFLET',
+    ]);
+    const kinds = [
+      ...fixture.nativeElement.querySelectorAll('.prices li .kind'),
+    ].map((each: Element) => each.textContent?.trim());
+    expect(kinds).toEqual([
+      'catalog.priceSourceKind.OFFICIAL_LEAFLET',
+      'catalog.priceSourceKind.OFFICIAL_LEAFLET',
+    ]);
+    // One key per line, also when two lines share a scope.
+    const keys = page.priceLines().map((line) => line.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys[0]).toBe(
+      '55555555-5555-4555-8555-555555555552|OFFICIAL_LEAFLET'
+    );
+  });
+
+  /**
    * For a DEZA row that is the truth rather than a gap: the site prints no price
    * anywhere. Saying so is what stops an operator reading a working accept as a
    * failure.

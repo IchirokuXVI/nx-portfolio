@@ -61,6 +61,13 @@ export class SourceCatalogEntry extends BaseEntity {
    * path reads. One of the three official kinds today; backlog 0008's till
    * receipts are `USER_RECEIPT` when that plan is picked up, on this same
    * table, which is the `kind` column it asked for.
+   *
+   * **It names the source that owns the text of the row, and not the source
+   * of its prices** (plan 0190). A website and a leaflet of one chain can
+   * share a row, and a walk owns its text: `writesSourceGroup` in
+   * `source-snapshot.ts` is the rule. A leaflet that observes a row a walk
+   * owns leaves this column and the rest of the source group alone. Each
+   * price says its own kind, on `source_entry_prices.sourceKind`.
    */
   @Column({
     type: 'enum',

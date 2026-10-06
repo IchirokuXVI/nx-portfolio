@@ -86,14 +86,19 @@ const RUN_WRITTEN_KINDS: PriceSourceKind[] = [
  * shows. So "no bound row states this" does not make a row of catalog a
  * leftover. Only the run of the row that left does.
  *
- * ## The kind of a price is its run's
+ * ## The kind of a price is on the price
  *
- * `entry.sourceKind` is rewritten by every full observation. A leaflet price
- * on a row that says `OFFICIAL_WEB` today is still a leaflet price, and
- * catalog holds it as one. So each price is read under the kind of the run in
- * its `runId` ({@link sourceKindsOfRuns}), never under the row's.
+ * A leaflet price on a row that says `OFFICIAL_WEB` is still a leaflet price,
+ * and catalog holds it as one. So each price is read under the kind on its
+ * own row (`source_entry_prices.sourceKind`, plan 0190), never under the kind
+ * of the source row, which says who owns the text.
  *
- * **A price whose run cannot be told has no kind**, and then nothing is
+ * A price from before plan 0190 can have no kind, when the migration could
+ * not read one. For such a price the run in its `runId` is asked once more
+ * ({@link sourceKindsOfRuns}): the run can be readable now, for example when
+ * the chain has a source row again.
+ *
+ * **A price that neither names a kind has no kind**, and then nothing is
  * stated at its scope.
  *
  * ## When nothing is stated at a scope and kind that has open prices
@@ -173,13 +178,20 @@ export class SourceEntrySettler {
     const prices = bound.flatMap((entry) =>
       (entry.prices ?? []).filter((price) => known.has(price.priceScopeId))
     );
+    // The kind on the price row. The run is asked only for a price that has
+    // none, which is a row from before plan 0190.
     const runKinds = await sourceKindsOfRuns(
       this.runs,
       this.sources,
-      prices.map((price) => price.runId).filter((id): id is string => !!id)
+      prices
+        .filter((price) => !price.sourceKind)
+        .map((price) => price.runId)
+        .filter((id): id is string => !!id)
     );
     const kindOf = (price: SourceEntryPrice): PriceSourceKind | null =>
-      (price.runId ? runKinds.get(price.runId) : undefined) ?? null;
+      price.sourceKind ??
+      (price.runId ? runKinds.get(price.runId) : undefined) ??
+      null;
 
     const held = new Map<string, HeldItemPrice>();
     /** Scopes at which a bound row holds a price of no known kind. */

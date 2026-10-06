@@ -381,9 +381,14 @@ export class SourceEntryService {
   }
 
   /**
-   * For each bound row of a page, the other bound rows of its chain and
-   * source kind that hold an open price at a scope it holds one at (plan
+   * For each bound row of a page, the other bound rows of its chain that
+   * hold an open price at a scope it holds one at, of the same kind (plan
    * 0191).
+   *
+   * The kind is the kind of each price and not of the row (plan 0190): two
+   * rows compete for one price in catalog only where both state a price of
+   * one kind for one scope. A price with no kind is sent nowhere, so it
+   * shares nothing.
    *
    * Read over every bound row of the product and not over the page, because
    * the row a page row shares a scope with can be on another page. A product
@@ -406,7 +411,11 @@ export class SourceEntryService {
     const scopesOf = new Map(
       bound.map((row) => [
         row.id,
-        new Set(openPrices(row, now).map((price) => price.priceScopeId)),
+        new Set(
+          openPrices(row, now)
+            .filter((price) => price.sourceKind !== null)
+            .map((price) => `${price.priceScopeId}|${price.sourceKind}`)
+        ),
       ])
     );
     for (const row of page) {
@@ -418,7 +427,6 @@ export class SourceEntryService {
         (other) =>
           other.id !== row.id &&
           other.supermarketId === row.supermarketId &&
-          other.sourceKind === row.sourceKind &&
           [...(scopesOf.get(other.id) ?? [])].some((scope) => mine.has(scope))
       );
       if (others.length > 0) {

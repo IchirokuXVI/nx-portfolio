@@ -308,10 +308,10 @@ export interface StatementOptions {
    */
   runOf?: (priceScopeId: string, sourceKind: PriceSourceKind) => string | null;
   /**
-   * The kind a price is stated under. Absent, it is the kind the row says
-   * now, which is what an accept writes with until plan 0190 puts the kind on
-   * the price row. The settle passes the kind of the run that observed the
-   * price. A null leaves the price out: nothing is stated under a kind that
+   * The kind a price is stated under. Absent, it is the kind on the price
+   * row itself (plan 0190), which is what an accept writes with. The settle
+   * passes its own reading, which falls back to the run of a price that has
+   * no kind. A null leaves the price out: nothing is stated under a kind that
    * is not known.
    */
   kindOf?: (
@@ -359,8 +359,8 @@ export function statementsOf(
   >();
   for (const entry of bound) {
     for (const stated of openPrices(entry, now)) {
-      const sourceKind = kindOf ? kindOf(entry, stated) : entry.sourceKind;
-      if (sourceKind === null) {
+      const sourceKind = kindOf ? kindOf(entry, stated) : stated.sourceKind;
+      if (!sourceKind) {
         continue;
       }
       const key = `${stated.priceScopeId}|${sourceKind}`;
@@ -516,10 +516,16 @@ export function lowestPerKilo<T>(
 /**
  * Write the prices a decided row holds (plan 0086, section 7).
  *
- * One `catalog.addPrices` call per scope, each with **that scope's own run id**
- * and the row's own `sourceKind`, so plan 0082 can take them back with the rest
- * of that run's rows. An admin who accepts a Mercadona product on Tuesday gets
- * the price Monday's walk saw, stamped with Monday's run.
+ * One `catalog.addPrices` call per scope and kind, each with **that price's
+ * own run id**, so plan 0082 can take them back with the rest of that run's
+ * rows. An admin who accepts a Mercadona product on Tuesday gets the price
+ * Monday's walk saw, stamped with Monday's run.
+ *
+ * **Each price goes under its own kind, never under the kind of the row**
+ * (plan 0190). A row that a website walk owns can hold a leaflet price, and
+ * plan 0080 decides the shown price by kind, so that price must reach catalog
+ * as a leaflet price. A price from before the plan whose kind the migration
+ * could not read has none: it is not sent, because the kind would be a guess.
  *
  * A row whose window has closed writes nothing: an expired price is not one
  * anybody is charged, and inserting one only to have the resolver filter it out
@@ -530,9 +536,9 @@ export function lowestPerKilo<T>(
  * same step (plan 0182).
  *
  * **The product may already be bound to another row of the same chain**, and
- * catalog holds one price for the two. So for each scope the row's own price
- * is put beside what the other bound rows of its chain and kind hold there,
- * and {@link decideArticles} says what is sent:
+ * catalog holds one price for the two. So for each scope and kind the row's
+ * own price is put beside the prices of that kind that the other bound rows
+ * of its chain hold there, and {@link decideArticles} says what is sent:
  *
  * - Pieces sold by weight send the lowest price per kilo among those the same
  *   run stated (plan 0181). Accepting a dearer piece therefore confirms the
@@ -562,24 +568,45 @@ export class SourceEntryPriceWriter {
       return outcome;
     }
     const now = new Date();
-    const own = openPrices(entry, now);
+    const open = openPrices(entry, now);
+    // A price of no kind is named and not sent (plan 0190). The answer says
+    // so, because the row is bound and a person would otherwise read a zero.
+    for (const stated of open) {
+      if (stated.sourceKind === null || stated.sourceKind === undefined) {
+        outcome.withheld.push({
+          entryId: entry.id,
+          priceScopeId: stated.priceScopeId,
+          otherEntryIds: [],
+          kindUnknown: true,
+        });
+      }
+    }
+    const own = sendablePrices(entry, now);
     if (own.length === 0) {
       return outcome;
     }
-    const ownRun = new Map(
-      own.map((stated) => [stated.priceScopeId, stated.runId])
+    // Keyed by scope and kind: a row can hold a website price and a leaflet
+    // price for one scope (plan 0190), and each is its own statement.
+    const mine = new Map(
+      own.map((stated) => [
+        slotKey(stated.priceScopeId, stated.sourceKind),
+        stated,
+      ])
     );
-    const priced = new Set(own.map((stated) => stated.priceScopeId));
     const statements = statementsOf(
       [entry, ...(await this.othersBound(entry))],
       now,
-      { runOf: (priceScopeId) => ownRun.get(priceScopeId) ?? null }
+      {
+        runOf: (priceScopeId, sourceKind) =>
+          mine.get(slotKey(priceScopeId, sourceKind))?.runId ?? null,
+      }
     );
 
     for (const { priceScopeId, sourceKind, verdict } of statements) {
-      // Only the scopes this row prices. What the other rows state elsewhere
-      // was written when they were bound.
-      if (!priced.has(priceScopeId) || sourceKind !== entry.sourceKind) {
+      // Only the scopes and kinds this row prices. What the other rows state
+      // elsewhere was written when they were bound.
+      const stated = mine.get(slotKey(priceScopeId, sourceKind));
+      if (!stated) {
         continue;
       }
       if (verdict.send === null) {
@@ -595,10 +622,8 @@ export class SourceEntryPriceWriter {
       // Pieces sold by weight send the lowest of them, which can be another
       // piece's. Every other verdict that sends is one amount, and the row
       // being written states it: its own statement is the one that goes.
-      const mine = own.find((stated) => stated.priceScopeId === priceScopeId);
-      const chosen =
-        verdict.send.soldByWeight || !mine ? verdict.send.stated : mine;
-      const result = await this.send(entry.itemId, entry.sourceKind, chosen);
+      const chosen = verdict.send.soldByWeight ? verdict.send.stated : stated;
+      const result = await this.send(entry.itemId, sourceKind, chosen);
       outcome.written += result.inserted;
     }
     return outcome;
@@ -607,9 +632,9 @@ export class SourceEntryPriceWriter {
   /**
    * The one `catalog.addPrices` call of a stored price, for a product.
    *
-   * With **that price's own run id**, its own `observedAt` and the source
-   * kind of the row that states it, so plan 0082 can take it back with the
-   * rest of that run's rows.
+   * With **that price's own run id**, its own `observedAt` and the kind it
+   * was stated under, so plan 0082 can take it back with the rest of that
+   * run's rows.
    */
   send(
     itemId: string,
@@ -628,8 +653,13 @@ export class SourceEntryPriceWriter {
   }
 
   /**
-   * The other rows of this chain and source kind that are bound to the same
-   * product, with their prices.
+   * The other rows of this chain that are bound to the same product, with
+   * their prices.
+   *
+   * Of any kind of row: the comparison is between prices of one kind (plan
+   * 0190), and {@link statementsOf} groups them by the kind on each price.
+   * A leaflet price on a row that a website walk owns is thus compared with
+   * the leaflet price of a row that only a leaflet has described.
    */
   private async othersBound(
     entry: SourceCatalogEntry
@@ -641,13 +671,34 @@ export class SourceEntryPriceWriter {
       where: {
         id: Not(entry.id),
         supermarketId: entry.supermarketId,
-        sourceKind: entry.sourceKind,
         itemId: entry.itemId,
         status: SourceEntryStatus.ACTIVE,
       },
       relations: { prices: true },
     });
   }
+}
+
+/**
+ * The open prices of a row that an accept can send: those that say their
+ * kind (plan 0190).
+ *
+ * The one test of "this row has a price" for the availability half of a bind
+ * too. A row whose only open price has no kind sends none, so it is the row
+ * that is owed an offer with no price.
+ */
+export function sendablePrices(
+  entry: SourceCatalogEntry,
+  now: Date
+): SourceEntryPrice[] {
+  return openPrices(entry, now).filter(
+    (price) => price.sourceKind !== null && price.sourceKind !== undefined
+  );
+}
+
+/** One price slot of a row: a scope and the kind that stated the price. */
+function slotKey(priceScopeId: string, sourceKind: PriceSourceKind | null) {
+  return `${priceScopeId}|${sourceKind}`;
 }
 
 /**

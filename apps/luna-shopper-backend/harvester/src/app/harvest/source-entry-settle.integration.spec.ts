@@ -78,6 +78,17 @@ const KINDS = [
   PriceSourceKind.OFFICIAL_LEAFLET,
 ];
 
+/**
+ * The kind each run of this spec writes its prices with (plan 0190). A price
+ * row carries the kind of the run that observed it, so the fixture stamps it
+ * as a run does. A price of a run that is gone, or of no run, has no kind:
+ * that is what the migration of plan 0190 leaves on such a row.
+ */
+const KIND_OF_RUN: Record<string, PriceSourceKind> = {
+  [RUN]: PriceSourceKind.OFFICIAL_WEB,
+  [LEAFLET_RUN]: PriceSourceKind.OFFICIAL_LEAFLET,
+};
+
 describeIntegration('a row that leaves a product (real Postgres)', () => {
   let dataSource: DataSource;
   let entries: Repository<SourceCatalogEntry>;
@@ -334,6 +345,8 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       validUntil?: string;
       runId?: string | null;
       observedAt?: string;
+      /** Absent: the kind of the run. Null: a price from before plan 0190. */
+      sourceKind?: PriceSourceKind | null;
     } = {}
   ): Promise<string> {
     seq += 1;
@@ -360,19 +373,25 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           : null,
       ]
     );
+    const runId = priceOver.runId === undefined ? RUN : priceOver.runId;
+    const sourceKind =
+      priceOver.sourceKind === undefined
+        ? ((runId ? KIND_OF_RUN[runId] : undefined) ?? null)
+        : priceOver.sourceKind;
     for (const [priceScopeId, price] of Object.entries(prices)) {
       await dataSource.query(
         `INSERT INTO "source_entry_prices"
                 ("entryId", "priceScopeId", "price", "observedAt", "runId",
-                 "validUntil")
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+                 "validUntil", "sourceKind")
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           inserted.id,
           priceScopeId,
           price,
           priceOver.observedAt ?? OBSERVED,
-          priceOver.runId === undefined ? RUN : priceOver.runId,
+          runId,
           priceOver.validUntil ?? null,
+          sourceKind,
         ]
       );
     }
@@ -648,15 +667,14 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       ).toEqual({ [small]: [king], [king]: [small] });
     }, 60_000);
 
-    it('does not meet a row of another kind, another chain, another product, or one that is not bound', async () => {
+    it('does not meet a price of another kind, or a row of another chain, another product, or one that is not bound', async () => {
       const king = await row(
         { itemId: null, status: SourceEntryStatus.UNRESOLVED },
         { [DEFAULT]: 2.95 }
       );
-      await row(
-        { itemId: RIGHT, sourceKind: PriceSourceKind.OFFICIAL_LEAFLET },
-        { [DEFAULT]: 1.99 }
-      );
+      // A leaflet price. The kind that is compared is the kind of the price
+      // (plan 0190), whatever the row says.
+      await row({ itemId: RIGHT }, { [DEFAULT]: 1.99 }, { runId: LEAFLET_RUN });
       await row(
         { itemId: RIGHT, supermarketId: OTHER_CHAIN },
         { [DEFAULT]: 1.99 }
@@ -742,13 +760,44 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
   });
 
   describe('the kind of a price is the kind of the run that observed it', () => {
-    it('states a leaflet price as a leaflet price after a website walk rewrote the kind of its row', async () => {
-      // One shared row (plan 0190). A leaflet wrote its price. A website
-      // walk observed the row since, so the row says OFFICIAL_WEB.
+    it('reads the kind a price row holds, also when its run is gone (plan 0190)', async () => {
+      // The price row says its own kind since plan 0190, so a run that the
+      // table no longer holds does not make the price unknown.
       await row(
         { sourceKind: PriceSourceKind.OFFICIAL_WEB },
         { [DEFAULT]: 1.99 },
-        { runId: LEAFLET_RUN }
+        { runId: LOST_RUN, sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }
+      );
+
+      await settler.settle(WRONG, ELJAMON);
+
+      const [withdraw] = asked.priceWithdraws;
+      expect(withdraw.held).toEqual([
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: LOST_RUN,
+        },
+      ]);
+      expect(withdraw.stated.map(said)).toEqual([
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: LOST_RUN,
+          price: 1.99,
+          observedAt: OBSERVED,
+        },
+      ]);
+    }, 60_000);
+
+    it('states a leaflet price as a leaflet price on a row that says website, for a price that has no kind', async () => {
+      // One shared row (plan 0190). A leaflet wrote its price before that
+      // plan, so the price row has no kind, and the row says OFFICIAL_WEB.
+      // The run is the fallback.
+      await row(
+        { sourceKind: PriceSourceKind.OFFICIAL_WEB },
+        { [DEFAULT]: 1.99 },
+        { runId: LEAFLET_RUN, sourceKind: null }
       );
 
       await settler.settle(WRONG, ELJAMON);

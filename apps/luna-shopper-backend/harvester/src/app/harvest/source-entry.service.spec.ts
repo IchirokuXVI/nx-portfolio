@@ -70,6 +70,8 @@ function price(overrides: Partial<SourceEntryPrice> = {}): SourceEntryPrice {
     id: 'sep-1',
     entryId: 'e-1',
     priceScopeId: NATIONAL,
+    // The kind of the run that observed it (plan 0190).
+    sourceKind: PriceSourceKind.OFFICIAL_API,
     price: 0.89,
     currency: 'EUR',
     unitPrice: 0.89,
@@ -483,7 +485,7 @@ describe('SourceEntryService', () => {
       });
     });
 
-    it('writes every open scope price, each with its own run and the row kind', async () => {
+    it('writes every open scope price, each with its own run and its own kind', async () => {
       const { service, addPrices } = build({
         row: entry({
           prices: [

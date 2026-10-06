@@ -578,8 +578,9 @@ describeIntegration(
         const bread = await bindSilently('pan', ITEM_BREAD);
         await dataSource.query(
           `INSERT INTO "source_entry_prices"
-                  ("entryId", "priceScopeId", "price", "currency", "observedAt")
-           VALUES ($1, $2, 1.25, 'EUR', now())`,
+                  ("entryId", "priceScopeId", "price", "currency", "observedAt",
+                   "sourceKind")
+           VALUES ($1, $2, 1.25, 'EUR', now(), 'OFFICIAL_WEB')`,
           [bread.id, DEFAULT_SCOPE]
         );
         // A proposal nobody accepted is not bound.
@@ -598,6 +599,46 @@ describeIntegration(
 
         expect(scopeWrites).toEqual([]);
         expect(written.pricelessOffersWritten).toBe(0);
+      }, 120_000);
+
+      it('offers a row whose only open price has no kind, at the end of a run and on an accept (plan 0190)', async () => {
+        // A price from before plan 0190 whose kind the migration could not
+        // read. An accept sends no such price, so it is not a price here
+        // either. Counting it left the product with neither a price nor an
+        // offer: not offered at the chain at all.
+        await run(RUN_1, FIRST_LISTING);
+        const bread = await bindSilently('pan', ITEM_BREAD);
+        await dataSource.query(
+          `INSERT INTO "source_entry_prices"
+                  ("entryId", "priceScopeId", "price", "currency", "observedAt",
+                   "sourceKind")
+           VALUES ($1, $2, 1.25, 'EUR', now(), NULL)`,
+          [bread.id, DEFAULT_SCOPE]
+        );
+
+        // The end of a run: the SQL of `writePricelessOffersForRun`.
+        const written = await run(RUN_2, FIRST_LISTING);
+        expect(scopeWrites.map((write) => write.entries)).toEqual([
+          [{ itemId: ITEM_BREAD, available: true }],
+        ]);
+        expect(written.pricelessOffersWritten).toBe(1);
+
+        // An accept: the rows of `writePricelessOffers`. The answer names the
+        // price that was not sent, and says why.
+        scopeWrites = [];
+        const result = await accept(await rowOf('pan'), ITEM_BREAD);
+        expect(result.pricesWritten).toBe(0);
+        expect(result.pricesWithheld).toEqual([
+          {
+            entryId: bread.id,
+            priceScopeId: DEFAULT_SCOPE,
+            otherEntryIds: [],
+            kindUnknown: true,
+          },
+        ]);
+        expect(scopeWrites.map((write) => write.entries)).toEqual([
+          [{ itemId: ITEM_BREAD, available: true }],
+        ]);
       }, 120_000);
 
       it('offers once the only price of a row has expired', async () => {
