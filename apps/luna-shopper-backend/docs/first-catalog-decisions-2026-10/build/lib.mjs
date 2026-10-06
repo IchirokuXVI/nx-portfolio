@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withOwnerDecision } from './decisions.mjs';
 
 export const SRC = process.argv[2] || process.env.CURATION_RUN_DIR;
 if (!SRC || !fs.existsSync(path.join(SRC, 'stage-a-summary.md'))) {
@@ -200,7 +201,9 @@ export function writeData(file, header, entries) {
   const g = takeGaps();
   const head = { ...header, count: entries.length, naturalKeys: g };
   const lines = JSON.stringify(head, null, 2).replace(/\n}$/, ',');
-  const body = entries.map((e) => '    ' + JSON.stringify(e)).join(',\n');
+  const body = entries
+    .map((e) => '    ' + JSON.stringify(withOwnerDecision(e)))
+    .join(',\n');
   fs.writeFileSync(
     path.join(OUT, file),
     `${lines}\n  "entries": [\n${body}\n  ]\n}\n`

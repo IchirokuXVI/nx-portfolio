@@ -1,4 +1,5 @@
 // Stage A of backend plan 0186: steps A1 to A11.
+import { OWNER_DECISIONS } from './decisions.mjs';
 import {
   J,
   firstUuid,
@@ -659,7 +660,7 @@ export function stageA({ beforeA, rows }) {
             'stage-a-summary.md',
           ],
           keys: KEYS_A + ' A brand is keyed by its label and its key.',
-          decidedBy: `The proposal column of section 1 of plan 0186, applied by ${DELEGATED}. The owner answered no row of section 1 one by one. Five links are the judgement of an agent and are marked.`,
+          decidedBy: `The proposal column of section 1 of plan 0186, applied by ${DELEGATED}. The owner answered no row of section 1 one by one. Five links are the judgement of an agent and are marked. The owner kept all five on 2026-10-06.`,
           order:
             'The product renames were sent before the links, so that the word was in the name when the brand became a spelling.',
           linesLeftSeparate: [
@@ -696,6 +697,7 @@ export function stageA({ beforeA, rows }) {
             },
           ],
           linesLeftSeparateOpenDecision: 12,
+          linesLeftSeparateOwnerDecision: OWNER_DECISIONS[12],
           stayByTheProposalOfThePlan: [
             'Kinder Bueno',
             'Kinder Joy',

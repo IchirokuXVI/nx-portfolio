@@ -9,9 +9,16 @@ and does not pay to take them again.
 The report of the repair is `../initial-catalog-2026-10.md`, section "Repairs after the audit".
 It says what happened. This folder says what was decided, row by row.
 
+**The owner answered the sixteen decisions that the repair left, on 2026-10-06.** Section 4
+holds each answer. Backend plan `0192`
+(`../../plans/0192-the-owners-decisions-on-the-first-catalog-applied.md`) applies them on
+slot 1. Until that plan is built, the data files say what the owner decided and the catalog
+does not hold it yet.
+
 The folder holds three things:
 
-- This file: the rules, the decisions of each step, and the decisions that are still open.
+- This file: the rules, the decisions of each step, and the sixteen decisions that the
+  repair left, each with the answer of the owner.
 - Sixteen data files, one for each step (`a01-…json` to `b05-…json`), and `gaps.json`.
 - `build/`: the scripts that wrote the data files from the files of the repair.
 
@@ -39,7 +46,10 @@ and pack count, and by barcode when it has one. Find each queue row by chain, so
 external id. The external id of a Deza row is a hash of its printed name and format. Then
 apply `decision`. An entry whose `status` starts with "left" or "not applied" changed nothing:
 it records that somebody looked and why nothing was done. `openDecision` names a row of the
-table in section 4.
+table in section 4, and `ownerDecision` beside it is the answer of the owner to that row.
+The key kept its name from the time the rows were open. No row is open now: fifteen are
+decided and one is held by the owner. `status` still says what the repair did, so a row
+that the owner decided on 2026-10-06 reads "left" until plan `0192` applies the answer.
 
 A new harvest and a new curation will not give every product the same name. An entry that
 finds no product is not an error. Read its `why` and decide again.
@@ -50,6 +60,8 @@ Each rule applies to any product, not only to the rows of this repair. "The sess
 directing session of the repair. On 2026-10-06 the owner answered its report of the first pass
 with two decisions and the words "Decide for yourself on the rest, they seem fine." What the
 session then decided is marked as such, and the owner can change each of those rules.
+Later on 2026-10-06 the owner read the sixteen decisions of section 4, said that the
+recommendations "are on point", and answered each one. Rule R32 comes from those answers.
 
 ### Rules the owner decided
 
@@ -61,6 +73,7 @@ session then decided is marked as such, and the owner can change each of those r
 | R4 | Nike Man is Nike, and Nivea Men is Nivea. The range joins its house and is not a brand. | The owner, 2026-10-03 (the report, "Brands") |
 | R5 | A product name is not a brand. Pantera Rosa is a product of Bimbo. | The owner, 2026-10-03 (the report, "Brands") |
 | R6 | A line with its own shelf identity stays a brand: Hero Baby, YoPro, Ristorante. | The owner, 2026-10-03 (the report, "Brands") |
+| R32 | A printed size wins over a size worked out from a unit price. The El Pozo burger "king" prints 240 g, so it is 240 g, and the unit price that implies 260 g changes nothing. | The owner, 2026-10-06 (decision 10): "If it's printed at 240g, the size is 240g." |
 | R7 | A revert of a harvest run and a delete of prices that are not duplicates are decisions of the owner. No agent takes them. | Plan `0186` (action boundaries), which the owner started on 2026-10-06. Both agents of stage B held to it. |
 
 ### Rules of plan 0186
@@ -91,14 +104,14 @@ The plan states these rules in its target table.
 | R21 | A brand that another spelling points at cannot become a spelling itself (`brand_link_too_deep`). Do not change a link to force it. Move the products through their own brand field. | An agent (the Invictus case) |
 | R22 | The brand of a product is the line that the chain prints, not the maker: Nestlé "Chocolate KitKat" belongs to `KitKat`. The maker leaves the name. | Plan `0186`, step A9, and rule 5 of the curation prompt |
 | R23 | The children's line of a house, with its own name on the bottle, is not a spelling of the house (Gotitas de Oro and Gotas de Oro). | An agent read both brands. The session kept it. |
-| R24 | Singular and plural of one loose vegetable or fruit, with no brand and sold by the kilo, are one product. The exception is a chain that lists both under two codes: then a person decides. | An agent proposed it. The session applied it. |
+| R24 | Singular and plural of one loose vegetable or fruit, with no brand and sold by the kilo, are one product. The exception is a chain that lists both under two codes: then a person decides. | An agent proposed it. The session applied it. For the exception the owner gave a test on 2026-10-06 (decision 11). |
 | R25 | In a merge, the kept product is the one that holds the barcode or the price. | An agent. It is the choice in every merge of this repair. |
 | R26 | What the container is (botellín, lata) stays in a name, because it tells a bottle from a can. | An agent (step A10) |
 | R27 | An English name carries no brand and no size. A line word, a shade code and a proper name stay as printed. | The rules of the curation prompt, used by an agent (step A1) |
-| R28 | The same size at another price in the same shops is another article of the chain. Such a row is never accepted onto the product as a second barcode. | An agent (step B4) |
-| R29 | A candidate that matches by name and size across two brands is not accepted. | An agent (step B4) |
-| R30 | For one product stored by weight and by count, keep the product in grams or millilitres and put the count in the pack count. Merge only when the two names are the same word for word. | An agent (step B5, the Bref pair) |
-| R31 | A size that only price over unit price gives is not proof. Do not write it without a row that prints it. | An agent (steps A5 and B1) |
+| R28 | The same size at another price in the same shops is another article of the chain. Such a row is never accepted onto the product as a second barcode. It gets a product of its own. | An agent (step B4). The owner confirmed it on 2026-10-06 (decision 2). |
+| R29 | A candidate that matches by name and size across two brands is not accepted. | An agent (step B4). The owner confirmed it on 2026-10-06 (decision 7). |
+| R30 | For one product stored by weight and by count, keep the product in grams or millilitres and put the count in the pack count. Merge only when the two names are the same word for word. | An agent (step B5, the Bref pair). On 2026-10-06 the owner widened the last sentence (decision 6): merge when the rows of both agree on count and weight. |
+| R31 | A size that only price over unit price gives is not proof. Do not write it without a row that prints it. | An agent (steps A5 and B1). On 2026-10-06 the owner made one exception, for the 22 frozen fish products (decision 3). R32 holds for every other case. |
 
 ## 2. Decisions taken
 
@@ -126,7 +139,7 @@ The counts are those of the data files. "Applied" means that the write was sent 
 - 3 applied in stage B: the three Mercadona pieces became `KILOGRAM` with no size (R3), after
   the new run said that they are sold by weight.
 - Data: `a03-units.json`. The reading of each product is in `why`.
-- Three conversions are open again (decisions 13 and 14).
+- Three conversions were looked at again (decisions 13 and 14).
 
 ### A4, a code that is not a barcode
 
@@ -285,53 +298,80 @@ What one read of the kept dumps would add:
 - The 729 other candidates of step A6, if somebody wants the pairs that were read as two
   products.
 
-## 4. Open decisions
+## 4. The sixteen decisions, and the answer of the owner
 
-**None of these is decided.** Each recommendation is the one of the directing session of
-2026-10-06. The status of every row is "open, not decided by the owner".
+**The owner answered all sixteen on 2026-10-06.** The owner said that the recommendations
+"are on point" and accepted each one as written, with two exceptions: decision 9 is held,
+and decision 10 takes the printed size. Each recommendation is the one of the directing
+session of 2026-10-06. Where the status says "decided", the recommendation is the answer.
 
-| # | Question | Recommendation | Status |
+Plan `0192` applies the answers. Its sections are named in the last table.
+
+| # | Question | Recommendation of the session, which is the answer unless the status says otherwise | Status |
 | --- | --- | --- | --- |
-| 1 | Revert Deza leaflet run `794056b6` and import the document again, to price the 21 offers by the kilo? | No. The leaflet is valid only until 2026-10-08, and a second import collides with the 8 rows the website run took over. The next leaflet goes through the fixed code. | Open, not decided by the owner |
-| 2 | The 11 Mercadona rows plan 0186 called second barcodes | Each gets a product of its own, created from its row. Two containers of one milk or butter at two prices in the same shops are two products, told apart by the container in the name. The Coca-Cola "2 L" at 5.60 is a multipack and takes a pack count once its detail is read. | Open, not decided by the owner |
-| 3 | 22 frozen fish and seafood products that are `KILOGRAM` with no size while the chain sells a fixed pack | Set `GRAM` with the weight that price over unit price gives, when it lands within 1 percent of a round pack weight. Leave the rest for a person. | Open, not decided by the owner |
-| 4 | Ten Deza shop codes with no shop | Map the ten by their street names to the Deza shops of the catalog. Never map `CONSULTAR`. First confirm in code that a mapping publishes the waiting claims. | Open, not decided by the owner |
-| 5 | 58 Deza products the second run did not see | Leave them. No write. | Open, not decided by the owner |
-| 6 | 47 pairs of one product stored by weight and by count | One reading pass that merges a pair only when the rows of both agree on count and weight. Keep the product in grams or millilitres and put the count in the pack count, as done for the Bref pair. | Open, not decided by the owner |
-| 7 | 14 El Jamón candidates that match another brand by name and size | Reject each candidate. Bind the row to the product of its own brand when one exists, else create one from the row. | Open, not decided by the owner |
-| 8 | 4 products with no English name (Alteza "Besitos", Hidalgo "Negrito", "Negrito gigante", El Cateto "Panales de cabello sin azúcar") | Keep the three proper names as they are in English. "Sugar free angel hair pastries" for the fourth. | Open, not decided by the owner |
-| 9 | Probable duplicates: Johnnie Walker Black Label 700 ml, Dewar's White Label 700 ml and 1 L, ProActiv margarine 225 g | Merge all four pairs. Move `d38b02dd` from Flora to ProActiv first. | Open, not decided by the owner |
-| 10 | El Pozo burger "king" bound to the regular burger product | Create a product from row `67a821e4`, remove the 2.95 price row from the old product, size 260 g (price over unit price), low sureness on the size. | Open, not decided by the owner |
-| 11 | Singular and plural fruit pairs (Aguacate, Kiwi verde, Manzana Golden, Manzana roja dulce) | The product whose Mercadona row is sold by weight is the loose fruit and takes every loose row of the other chains. The other is the bag and stays its own product with a size. Move El Jamón row `a90598fb` and the 1.5 kg Golden bag accordingly. | Open, not decided by the owner |
-| 12 | Brand lines left separate (Nike Ultra Blue, Vileda Turbo, Vileda Duactiva, Nescafé Farmers Origins, Neutrex Transpirex, Lenor Unstoppables, Puleva Max) and the brand Invictus | Link the first six to their house with the word in the product name, after pointing the blocking spellings at the house. Puleva Max stays, like Hero Baby. Point `INVICTUS P.RABANNE` at Paco Rabanne, then link Invictus. Keep the six Oral-B, Vanish and Norit links an agent made. | Open, not decided by the owner |
-| 13 | Charcoal "10l" and cat litter "8 L" stored as `MILLILITER` | Keep. The pack states its content by volume, and base units are the rule. | Open, not decided by the owner |
-| 14 | Incarlopsa "Jamón serrano pieza" at 7500 `GRAM` against about 6.8 kg implied | `KILOGRAM` with no size if its row is sold by weight, as for the three Covap pieces. Else leave. | Open, not decided by the owner |
-| 15 | Fanta naranja 1500 ml against a unit price that says 1.25 L | Leave until the next Mercadona run prints the size again. | Open, not decided by the owner |
-| 16 | The F1 figurine shown available with no price in 20 El Jamón scopes | Wait for the code fix (a row that moves takes its offers with it), no manual write. | Open, not decided by the owner |
+| 1 | Revert Deza leaflet run `794056b6` and import the document again, to price the 21 offers by the kilo? | No. The leaflet is valid only until 2026-10-08, and a second import collides with the 8 rows the website run took over. The next leaflet goes through the fixed code. | Decided by the owner, 2026-10-06: no revert and no second import. |
+| 2 | The 11 Mercadona rows plan 0186 called second barcodes | Each gets a product of its own, created from its row. Two containers of one milk or butter at two prices in the same shops are two products, told apart by the container in the name. The Coca-Cola "2 L" at 5.60 is a multipack and takes a pack count once its detail is read. | Decided by the owner, 2026-10-06: as recommended. |
+| 3 | 22 frozen fish and seafood products that are `KILOGRAM` with no size while the chain sells a fixed pack | Set `GRAM` with the weight that price over unit price gives, when it lands within 1 percent of a round pack weight. Leave the rest for a person. | Decided by the owner, 2026-10-06: as recommended. |
+| 4 | Ten Deza shop codes with no shop | Map the ten by their street names to the Deza shops of the catalog. Never map `CONSULTAR`. First confirm in code that a mapping publishes the waiting claims. | Decided by the owner, 2026-10-06: as recommended. The condition is met, see below. |
+| 5 | 58 Deza products the second run did not see | Leave them. No write. | Decided by the owner, 2026-10-06: left. |
+| 6 | 47 pairs of one product stored by weight and by count | One reading pass that merges a pair only when the rows of both agree on count and weight. Keep the product in grams or millilitres and put the count in the pack count, as done for the Bref pair. | Decided by the owner, 2026-10-06: as recommended. |
+| 7 | 14 El Jamón candidates that match another brand by name and size | Reject each candidate. Bind the row to the product of its own brand when one exists, else create one from the row. | Decided by the owner, 2026-10-06: as recommended. |
+| 8 | 4 products with no English name (Alteza "Besitos", Hidalgo "Negrito", "Negrito gigante", El Cateto "Panales de cabello sin azúcar") | Keep the three proper names as they are in English. "Sugar free angel hair pastries" for the fourth. | Decided by the owner, 2026-10-06: as recommended, and not the names that step A1 proposed. |
+| 9 | Probable duplicates: Johnnie Walker Black Label 700 ml, Dewar's White Label 700 ml and 1 L, ProActiv margarine 225 g | Merge all four pairs. Move `d38b02dd` from Flora to ProActiv first. | **Held by the owner, 2026-10-06.** The recommendation is not taken: "Leave this one for now, I wanna check if they are actually duplicates". No merge, and `d38b02dd` stays under Flora. |
+| 10 | El Pozo burger "king" bound to the regular burger product | Create a product from row `67a821e4`, remove the 2.95 price row from the old product, size 260 g (price over unit price), low sureness on the size. | Decided by the owner, 2026-10-06, with another size: the row gets a product of its own, and that product is **240 g, as printed**. "If it's printed at 240g, the size is 240g." The unit price that implies 260 g is the figure of the chain and changes nothing (rule R32). |
+| 11 | Singular and plural fruit pairs (Aguacate, Kiwi verde, Manzana Golden, Manzana roja dulce) | The product whose Mercadona row is sold by weight is the loose fruit and takes every loose row of the other chains. The other is the bag and stays its own product with a size. Move El Jamón row `a90598fb` and the 1.5 kg Golden bag accordingly. | Decided by the owner, 2026-10-06: as recommended. |
+| 12 | Brand lines left separate (Nike Ultra Blue, Vileda Turbo, Vileda Duactiva, Nescafé Farmers Origins, Neutrex Transpirex, Lenor Unstoppables, Puleva Max) and the brand Invictus | Link the first six to their house with the word in the product name, after pointing the blocking spellings at the house. Puleva Max stays, like Hero Baby. Point `INVICTUS P.RABANNE` at Paco Rabanne, then link Invictus. Keep the five Oral-B, Vanish and Norit links an agent made. | Decided by the owner, 2026-10-06: as recommended. |
+| 13 | Charcoal "10l" and cat litter "8 L" stored as `MILLILITER` | Keep. The pack states its content by volume, and base units are the rule. | Decided by the owner, 2026-10-06: kept. |
+| 14 | Incarlopsa "Jamón serrano pieza" at 7500 `GRAM` against about 6.8 kg implied | `KILOGRAM` with no size if its row is sold by weight, as for the three Covap pieces. Else leave. | Decided by the owner, 2026-10-06: as recommended. |
+| 15 | Fanta naranja 1500 ml against a unit price that says 1.25 L | Leave until the next Mercadona run prints the size again. | Decided by the owner, 2026-10-06: left. |
+| 16 | The F1 figurine shown available with no price in 20 El Jamón scopes | Wait for the code fix (a row that moves takes its offers with it), no manual write. | Decided by the owner, 2026-10-06: wait for plan `0191`. |
 
-Where each one stands in the data:
+What was found after the recommendations were written:
 
-| # | Data |
-| --- | --- |
-| 1 | `b01`, the 21 entries with `openDecision` 1 |
-| 2 | `b04`, the 11 Mercadona entries |
-| 3 | `b01`, the 22 entries with `gramsThatPriceOverUnitPriceGives` |
-| 4 | `b02`, the 11 `shopCode` entries |
-| 5 | `b02`, the 58 product entries |
-| 6 | `b05`, the 47 entries with `decision` "no merge" |
-| 7 | `b04`, the 14 El Jamón entries |
-| 8 | `a01`, the 4 entries marked low |
-| 9 | `a11`, the 4 entries with `decision` "no merge" |
-| 10 | `a05`, El Pozo "Burger de pavo con espinacas bienStar" |
-| 11 | `a06`, the 4 pairs left for a person, and `b01`, "Manzanas Golden" |
-| 12 | `a11`: `linesLeftSeparate` in the header, the refused Invictus link, and the five links marked as agent judgement |
-| 13 | `a03`, "Carbón vegetal" and "Lecho higiénico Vegetal Clean" |
-| 14 | `a03`, "Jamón serrano pieza" |
-| 15 | `a05`, Fanta "Refresco de naranja" |
-| 16 | `a07`, the first entry |
+- **Decision 4.** The condition is met. `SourceLocationService.map` publishes the stored
+  claims of a shop in the same request (`PUT /v1/admin/harvest/shops/:id/location`), and
+  `POST /v1/admin/harvest/shops/:id/ignore` dismisses `CONSULTAR`. Not confirmed: that
+  one mapping, about 11,000 claims in batches of 200, finishes inside the request timeout.
+  If it fails, the shop stays mapped, and mapping it again sends the same claims.
+- **Decision 12.** The recommendation first said "the six Oral-B, Vanish and Norit links".
+  The files of the repair hold five: three Oral-B, one Vanish and one Norit. The table
+  above says five.
+- **Decision 3.** The words do not say what a round pack weight is. Plan `0192` reads it
+  as a multiple of 10 g or of 25 g, with exactly one such weight within 1 percent. 21 of
+  the 22 products pass.
+- **Decision 6.** No row of a product stored by count prints a weight, so no pair agrees
+  on a weight as the words say. Plan `0192` reads "agree" as "do not contradict" and asks
+  for the same variant in both names. Most of the 47 pairs are two products.
+- **Decision 7.** The reject route of the queue rejects the row and not the proposal. The
+  row is bound to another product, which drops the proposal.
+- **Decision 11.** Both Mercadona rows of each of the four pairs are sold by weight in the
+  snapshot of the end of the repair. The test of the answer then tells no pair apart.
+  Plan `0192` moves no fruit row unless a new read differs, and reports the pairs.
 
-Recommendation 12 says "the six Oral-B, Vanish and Norit links". The files of the repair hold
-five: three Oral-B, one Vanish and one Norit.
+Where each one stands in the data, and in plan `0192`:
+
+| # | Data | Plan `0192` |
+| --- | --- | --- |
+| 1 | `b01`, the 21 entries with `openDecision` 1 | Not done, section 6 |
+| 2 | `b04`, the 11 Mercadona entries | Stage 1, section 2.7 |
+| 3 | `b01`, the 22 entries with `gramsThatPriceOverUnitPriceGives` | Stage 1, section 2.2 |
+| 4 | `b02`, the 11 `shopCode` entries | Stage 1, section 2.5 |
+| 5 | `b02`, the 58 product entries | Not done, section 6 |
+| 6 | `b05`, the 47 entries with `decision` "no merge" | Stage 1, section 2.8 |
+| 7 | `b04`, the 14 El Jamón entries | Stage 1, section 2.6 |
+| 8 | `a01`, the 4 entries marked low | Stage 1, section 2.1 |
+| 9 | `a11`, the 4 entries with `decision` "no merge" | Not done, held, section 6 |
+| 10 | `a05`, El Pozo "Burger de pavo con espinacas bienStar" | Stage 2, section 3.1 |
+| 11 | `a06`, the 4 pairs left for a person, and `b01`, "Manzanas Golden" | Stage 2, section 3.2 |
+| 12 | `a11`: `linesLeftSeparate` in the header, the refused Invictus link, and the five links marked as agent judgement | Stage 1, section 2.4 |
+| 13 | `a03`, "Carbón vegetal" and "Lecho higiénico Vegetal Clean" | Not done, section 6 |
+| 14 | `a03`, "Jamón serrano pieza" | Stage 1, section 2.3 |
+| 15 | `a05`, Fanta "Refresco de naranja" | Not done, section 6 |
+| 16 | `a07`, the first entry | Not done, section 6 |
+
+Stage 1 of the plan needs no code. Stage 2 runs after plan `0191` is merged, because a
+bound row that moves to another product leaves its offers and its barcode behind until
+then. Stage 3 takes the dumps that ship.
 
 ## 5. How to build the data files again
 
@@ -352,9 +392,12 @@ The run folder is git ignored and stands in the checkout that did the repair. It
 | `build/state.mjs` | Holds each product at the start of stage B, replays each product before stage A, and checks the replay. |
 | `build/stage-a.mjs` | Steps A1 to A11. |
 | `build/stage-b.mjs` | Steps B1 to B5. |
+| `build/decisions.mjs` | The answer of the owner to each of the sixteen decisions. `lib.mjs` writes it as `ownerDecision` beside every `openDecision`. |
 | `build/build.mjs` | Runs all of it and writes `gaps.json`. |
 
 Some text in the data files is written in the scripts and not read from a source file: the
 reasons of the two A5 cases that were not applied, the reasons of the lines left separate, the
-four probable duplicates and the numbers of the open decisions. Each of them is taken from
-`stage-a-summary.md` or `stage-b-summary.md`.
+four probable duplicates and the numbers of the sixteen decisions. Each of them is taken from
+`stage-a-summary.md` or `stage-b-summary.md`. The answers of the owner are the one text that
+no file of the repair holds. They are the owner's word of 2026-10-06 and stand in
+`build/decisions.mjs`.
