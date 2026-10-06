@@ -26,6 +26,11 @@ dumps and what stays wrong. Every other section describes the catalog as it was 
 > now. Its title is "The owner's decisions applied (plan 0192, 2026-10-06)".
 > "Repairs after the audit" describes the catalog at the end of plan 0186.
 
+> **Note of 2026-10-07.** The owner asked for two more changes: the tenth Deza shop, and
+> the category of three shoe creams. New dumps were taken after them, and those are the
+> dumps that ship. The last section holds them under "The two changes of 2026-10-07, and
+> the dumps that ship".
+
 ## The state in numbers
 
 | | Count |
@@ -74,6 +79,9 @@ After plan 0192, on 2026-10-06 at 21:13 UTC, slot 1 and the dumps that ship hold
 These are the eight counts of `k8s/catalog-import/first-catalog.manifest`. "Counts before
 and after" in the last section splits them by chain.
 
+**Note of 2026-10-07:** the dumps that ship now hold 105 price scopes. The tenth Deza shop
+made one. The other seven counts are the same.
+
 ## What production must do before it serves this state
 
 Release task `0003-restore-the-first-catalog` copies this state into a cluster
@@ -97,6 +105,10 @@ The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
 > are not the ones that ship. Plan 0192 wrote to slot 1 after them and took new dumps at
 > 2026-10-06T21:12:47Z. The manifest states what those hold, and the last section names
 > them. They are not uploaded to a bucket yet.
+
+> **Note of 2026-10-07.** Those dumps do not ship either. The dumps that ship were taken at
+> 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time), after two more changes. The manifest
+> states what they hold. They are not uploaded to a bucket yet.
 
 1. **Run the same code.** In the dumps of 2026-10-03 the catalog database holds 26
    migrations, the last one `DiaCategoryTree1758500000000` (plan 0173, PR #597). The
@@ -739,6 +751,7 @@ Slot 1 is down and locked, with its databases kept.
 > **Note of 2026-10-06, after plan 0192.** `after-stage-b-final/` no longer holds the state
 > of slot 1. Plan 0192 wrote to slot 1 after it. The dumps that ship are in
 > `stage-c3/final/` of the same folder, and the last section names them.
+> **Note of 2026-10-07:** the dumps that ship are in `stage-c4/final/` now.
 
 ### What stays wrong
 
@@ -948,6 +961,12 @@ the dumps that ship hold. Every figure in it was read from the files of the work
 ignored folder `.curation-runs/2026-10-audit-repair/` of the checkout that did it:
 `after-0189/`, `stage-c1/`, `stage-c2/` and `stage-c3/`.
 
+> **Note of 2026-10-07.** The owner asked for two more changes after this section was
+> written, and new dumps were taken. The dumps that ship are no longer those of
+> 2026-10-06T21:12:47Z. "The two changes of 2026-10-07, and the dumps that ship", below,
+> holds the changes, the corrected counts and the new dumps. The text and the tables before
+> it describe the state of 2026-10-06 and stay as they were written.
+
 Every change went through the gateway of slot 1 as `admin@curation.local`. No SQL write was
 made. The register, `first-catalog-decisions-2026-10/README.md`, holds each decision with
 its answer (section 4) and each stage (section 5). Its files `c01` to `c13` hold the rows.
@@ -1093,6 +1112,10 @@ B3 rose by one in stage 1, where the candle was created as 1 `UNIT`.
 
 ### The final dumps
 
+> **Note of 2026-10-07.** These dumps no longer ship, and the manifest no longer holds
+> their values. The column "Ships" and the last three points of the list were true on
+> 2026-10-06. The next section holds the dumps that ship.
+
 The dumps were taken at 2026-10-06T21:12:47Z (23:12 Madrid time) with `pg_dump -Fc`
 (PostgreSQL 16.15), on the code of `dev` at `152d9d5e`. Only the gateway ran, and it holds
 no database, so nothing wrote. Each file was listed with `pg_restore -l`. They stand in
@@ -1130,25 +1153,114 @@ The dumps of the sessions before the last one stay in the run folder. They do no
 | `stage-c2/after-stage-2/` | `catalog.dump` | 32,019,020 | `2c2331ef7d430b4c1ee23f2e80fd1a918fa03aad5b84462870b7be42691e335a` |
 | `stage-c2/after-stage-2/` | `harvester.dump` | 11,549,001 | `080a3a41c3104acdd7860d73c5f200f1617e1c11527ae885cf9b4c901d558746` |
 
+### The two changes of 2026-10-07, and the dumps that ship
+
+Written on 2026-10-07. The owner asked for two more changes on slot 1 after the dumps of
+2026-10-06, and gave two answers about the fruit. Every figure below was read from the
+folder `stage-c4/` of the run folder. Its files stamp their times in UTC, so they read
+2026-10-06T22:24Z to 22:34Z, which is after midnight in Madrid. Both changes went through
+the gateway of slot 1, in three writes. No SQL write was made.
+
+- **The Deza code `T7` "Fuente de la salud" has its shop.** The owner gave the page of the
+  chain, `https://www.dezacalidad.es/centros/avda-virgen-de-las-angustias/`. It says
+  "Tienda 7 - Supermercado Deza Calidad SA en Calle Acera Fuente de la Salud, 14006 -
+  Córdoba". Shop `dcb350bf-f135-4f2e-8ef2-bec9fd6044fd` was created by hand with that
+  address, postal code 14006 (source `MANUAL`) and its own `STORE` price scope. It has no
+  external provider and **no coordinates**: Nominatim answered an empty list for the
+  street in two queries.
+- **`T7` is mapped to it.** The mapping answered 200 in 23 seconds and wrote 11,089 shop
+  rows. 7,435 of them say that the shop stocks the product. The Deza shop codes are now 10
+  `ACTIVE`, 1 `IGNORED` and 0 `UNMAPPED`.
+- **The three Búfalo shoe creams are in "Cuidado del calzado"** (`shoe-care`), by the
+  owner's word: `74bdc211`, `e8f102a7` and `c8ad0b91`. The leaf existed and was empty. No
+  category was created.
+- **The El Jamón row "kiwis" is fine on "Kiwi verde".** The owner said so. No write.
+- **The other loose fruit rows are left for now.** The owner said that they are fixed
+  another time, and asked for a report of them:
+  [`first-catalog-decisions-2026-10/loose-fruit-rows.md`](first-catalog-decisions-2026-10/loose-fruit-rows.md).
+
+What the two changes moved, read from slot 1 right after the new dumps:
+
+| | The dumps of 2026-10-06 | The dumps of 2026-10-07 |
+| --- | ---: | ---: |
+| `supermarket_locations` | 41 | 42 |
+| `price_scopes` | 104 | 105 |
+| `supermarket_items` | 294,109 | 305,218 |
+| `supermarket_location_items` | 99,801 | 110,890 |
+| `catalog_audit` | 269,985 | 292,079 |
+| Offers with no price | 110,305 | 121,327 |
+| Deza shop codes mapped, ignored, unmapped | 9, 1, 1 | 10, 1, 0 |
+
+Every other count of "Counts before and after" is the same: 19,773 products (3,990 with
+an EAN), 2,782 brands, 24,964 price rows, 3,990 barcodes, 5 chains, 309 categories, 0
+product groups, and 25,861 queue rows (21,779 `ACTIVE`, 4,082 `UNRESOLVED`, 0
+`CANDIDATE`). The harvester holds the same 25,470 rows of `source_entry_prices`, 155,067
+rows of `source_entry_availability`, 85 discovered places and 15 harvest runs. The
+snapshots of the start and of the end of the session hold the same products and the same
+queue rows, field by field. Every check of plan 0186 answers what it answered on
+2026-10-06.
+
+- **The offers add up.** The new `STORE` scope held 108 offers after the shop was
+  created, as each Deza `STORE` scope did before its mapping. The mapping wrote 11,001
+  more. 108 and 11,001 are the 11,109 offers between 294,109 and 305,218.
+- **The audit adds up, and the category batch is not in it.** `catalog_audit` grew by
+  22,094 rows: 1 shop, 1 price scope, 11,001 offers created, 2 offers updated and 11,089
+  shop rows. No row names `items`.
+
+The dumps that ship were taken at 2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time)
+with `pg_dump -Fc` (PostgreSQL 16.15), on the code of `dev` at `2ccbeae3`. Only the
+gateway ran, and it holds no database, so nothing wrote. They stand in `stage-c4/final/`
+of the run folder, beside a `VERIFY.txt` and `manifest-values.json`.
+
+| Dump | Bytes | sha256 | Ships |
+| --- | ---: | --- | --- |
+| `catalog.dump` | 45,538,533 | `b13edba1658be321d9dbdfb46d4805d086a6769c7d870fd8bd13c09478f96235` | Yes |
+| `harvester.dump` | 11,549,548 | `b7fd7abf72644023aa0a01d2363b613262f7a541209b4a48bbf24518826d454a` | Yes |
+| `auth.dump` | 26,032 | `3df8ed083e1a3483123b3d18d442759c01918f90f5097d94e657e68e0fcd20f8` | No |
+| `core.dump` | 99,428 | `6f141c30bca046c187f3569c652e5b1985bf947e0df9b81adbf0ae0a08828d20` | No |
+
+- The migrations are the same 29 and 21, with the same last names.
+- Copies of `catalog.dump` and `harvester.dump` were restored with
+  `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
+  slot 1. Both exited 0, and all 37 values read from the copies equal those read from
+  slot 1.
+- `k8s/catalog-import/first-catalog.manifest` holds the values of these dumps. Three of
+  its lines changed: the two checksums, and `EXPECT_PRICE_SCOPES` from 104 to 105.
+- **The owner has not said that slot 1 is final.** The owner is checking the data first:
+  on 2026-10-07 these dumps were restored onto the owner's own slot 0 for that.
+- **The two files are not uploaded to a bucket.**
+
 ### What stays wrong or open
 
 This list replaces "What stays wrong" of the section before it. Each item has its own
-title, so that it can be found and fixed later.
+title, so that it can be found and fixed later. It was written on 2026-10-06. A note of
+2026-10-07 stands on each item that the two changes made false, and the items under "What
+a shopper would notice" are new.
 
 #### In the data
 
 - **`T7` "Fuente de la salud" has no shop.** It is the one Deza shop code that is still
   unmapped. OpenStreetMap holds no Deza at that street, so the store discovery found
   nothing to import. Its stored claims wait for a shop that a person creates.
+  **Note of 2026-10-07: done.** The shop exists and the code is mapped. What stays open is
+  the next item.
+- **The Deza shop at Calle Acera Fuente de la Salud has no coordinates** (2026-10-07). It
+  is the one shop of the 42 without them. Nominatim does not know the street, so a person
+  has to set them.
 - **The three Búfalo shoe creams are `uncategorised`.** White, brown and black, 50 ml
   each. No sibling product holds a category that fits. A leaf `shoe-care` exists, and it
-  holds no product.
+  holds no product. **Note of 2026-10-07: done.** The three are in `shoe-care`.
 - **Loose fruit rows of other chains sit on products that are not the singular fruit.**
   Five rows: Deza "MANZANA GOLDEN M GRANEL" (on "Manzana Golden mediana a granel"), Deza
   "AGUACATE HASS GRANEL" (on "Aguacate Hass a granel"), Deza "KIWI HAYWARD", El Jamón
   "manzanas golden nacional" (on "Manzana Golden nacional") and El Jamón "manzanas golden
   extra". Each names a variety, an origin or a size. A person decides whether any of them
-  is the singular fruit.
+  is the singular fruit. **Note of 2026-10-07:** the owner said that they are left for now
+  and fixed another time.
+  [`first-catalog-decisions-2026-10/loose-fruit-rows.md`](first-catalog-decisions-2026-10/loose-fruit-rows.md)
+  holds each row, the product it is bound to and what a fix needs. It also holds four
+  produce products that are stored once by the piece and once by the kilo: "Col", "Col
+  lombarda", "Coliflor" and "Manzana Granny Smith".
 - **87 Mercadona price rows keep an old label,** on 33 products: 54 `100 ml`, 17 `100 g`
   and 16 `lv`. For 79 rows on 27 products the figure is not a price per litre or kilo (a
   nail polish at the bottle price, tablets per piece, washes). The run did not see the
@@ -1178,7 +1290,9 @@ title, so that it can be found and fixed later.
 - **41 other pairs by weight and by count** were read as two products each.
 - **110,305 offers have no price.** 55,005 of them are the offers that the five shop
   mappings of stage 1 wrote, and the four mappings of stage 3 wrote more. The owner said
-  that they stay.
+  that they stay. **Note of 2026-10-07:** the count is 121,327 now. The shop of `T7` and
+  its mapping added 11,022. 121,242 of the offers are Deza offers, on 11,022 products, and
+  85 are Mercadona offers, on 59 products.
 - **The two Coca Cola packs hold no container in the name.** They are 2000 ml with pack
   count 4, beside the 2 L bottle of the same name. The stored link states the count and
   not the container. The owner said that they stay.
@@ -1199,6 +1313,47 @@ title, so that it can be found and fixed later.
 - **The queue holds 4,082 `UNRESOLVED` rows:** 3,191 from the Deza website, 86 from the
   Deza leaflet, 155 from Mercadona, 607 from El Jamón and 43 from LIDL.
 
+#### What a shopper would notice (read on 2026-10-07)
+
+`stage-c4/stats.json` is a read of slot 1 after the two changes, by SQL that only reads.
+These are its findings that a person who uses the catalog would see. Each one is open. An
+id is the first eight characters of the uuid on slot 1.
+
+- **Makeup sits in "Cuidado facial", and the six "Maquillaje" leaves are empty.** The leaf
+  `facial-care` holds 2,346 products. It is the largest leaf, and the next one holds 694.
+  About 1,592 of the 2,346 have a name that says makeup. The root "Maquillaje" holds no
+  product in any of its six leaves ("Ojos", "Bases y correctores", "Labios", "Brochas y
+  accesorios", "Manicura y pedicura", "Polvos y colorete"). Two examples: Beter "Lápiz de
+  cejas n01 medium" (`90034ecd`) and Clarins "Aceite Confort labios n00" (`63dc45ea`).
+- **132 products show the price of a kilo as the price of the pack.** Each holds a size
+  in grams or millilitres, and its shelf price equals its price per kilo or litre: 128 at
+  Mercadona and 4 at El Jamón. They read like products that the chain sells by weight.
+  Two examples, both from Mercadona: "Jamón de bellota ibérico 100% cortado a tapas", 90
+  g, at 168.00 (`264826a2`), which is the highest price of the catalog, and "Tocino de
+  cerdo ibérico", 290 g, at 7.30 (`0056aafb`).
+- **50 of the 67 priced Lidl products show an offer that has ended.** The offer of 45
+  products ended on 2026-10-04 and that of 5 on 2026-10-05. The other 17 run until
+  2026-10-11 (7 products) or 2026-10-18 (10). The file names no product.
+- **Deza loses its 87 shown prices after 2026-10-08.** Deza offers 11,109 products, and
+  87 of them show a price. Every Deza price row comes from the leaflet, and all 108 end on
+  2026-10-08. The other 11,022 products never had a price: the website prints none. Two
+  examples of an offer with no price: Bonnatur "Jamón asado al horno 98% carne"
+  (`20e8698f`) and Carchelejo "Salchichón Gran Reserva" (`6ca9937d`). The file names no
+  product among the 87.
+- **The El Jamón prices go stale on 2026-10-10 without a run.** All 6,276 El Jamón
+  products have a price, and every one was observed on 2026-10-03 at 03:56 UTC, by the
+  one El Jamón run. A website price is stale after seven days (`price_policies`). It is
+  every product of the chain, so no example is given.
+- **31 products are only in `uncategorised`.** 19 of them are kiosk titles: 10 books, 3
+  magazines and 6 collectibles. The leaves "Libros" and "Revistas y coleccionables" exist
+  and hold no product. Two examples: "Libro Altitud" (`a021de31`) and Burda "Revista Easy"
+  (`cd8e66c3`). Four roots hold no product at all: "Ropa y complementos", "Hogar y
+  jardín", "Ocio y papelería" and "Maquillaje".
+- **27 pack counts are over 30 and read like a measurement.** Two examples: Great Plastic
+  "Comedero dispensador para mascotas" with pack count 260 (`1c844cc3`), and Nobleza "Manta
+  de felpa panda" with pack count 75 (`1416515f`).
+- **No product has an image.** 19,773 of 19,773.
+
 #### In the code and the documents
 
 - **A decision of an admin on a queue row is audited under the service actor of the
@@ -1207,7 +1362,11 @@ title, so that it can be found and fixed later.
   the actor kind `SERVICE`.
 - **A category batch leaves no audit row.** `catalog_audit` holds 5 item updates of the
   admin for stage 3: one brand and four names. The batch that gave four products their
-  categories is not among them.
+  categories is not among them. **Confirmed on 2026-10-07,** on the batch of the three
+  shoe creams. The route (`PATCH /admin/catalog/items/batch`) wrote no audit row. The
+  session started at 269,985 rows of `catalog_audit` and ended at 292,079, and the 22,094
+  rows between are those of the shop and its mapping. No row names `items`. The route
+  also left the `updatedAt` of each of the three products as it was.
 - **The search compares unit prices across chains whatever their label.** Plan 0189 names
   this in its context. A row whose label is not per litre or per kilo can thus rank
   against rows that are.
@@ -1221,7 +1380,9 @@ title, so that it can be found and fixed later.
 
 #### Before a cluster restore
 
-- **The dumps are not uploaded,** and the owner has not said that slot 1 is final.
+- **The dumps are not uploaded,** and the owner has not said that slot 1 is final. On
+  2026-10-07 the owner is checking the data on a restore of the new dumps on slot 0.
 - **Prices age.** The newest Mercadona prices were read on 2026-10-06, for three Córdoba
-  warehouses. The Deza leaflet prices end on 2026-10-08.
+  warehouses. The Deza leaflet prices end on 2026-10-08. The El Jamón prices are stale
+  from 2026-10-10 (2026-10-07).
 - **The release must hold the 29 and 21 migrations of the dumps.**

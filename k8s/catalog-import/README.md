@@ -116,7 +116,7 @@ hold the same schema, and they compare equal.
 ## Before the release
 
 1. Upload both dumps to the backup bucket of the cluster, under the keys of the
-   manifest. This is the owner's step. **On 2026-10-06 it is not done: neither
+   manifest. This is the owner's step. **On 2026-10-07 it is not done: neither
    bucket holds the two files.**
 
    ```
@@ -295,28 +295,36 @@ kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
 
 ## When slot 1 is final
 
-**The manifest describes the dumps of 2026-10-06.** They were taken at
-2026-10-06T21:12:47Z (23:12 Madrid time), at the end of backend plan 0192, with
-every service that holds a database stopped. The values of the dumps of
-2026-10-03 20:44 are gone from the manifest.
+**The manifest describes the dumps of 2026-10-07.** They were taken at
+2026-10-06T22:33:14Z (2026-10-07 00:33 Madrid time), with every service that
+holds a database stopped. They hold the two changes that the owner asked for on
+2026-10-07: the shop of the Deza code `T7`, and the category of the three shoe
+creams. The values of the dumps of 2026-10-06T21:12:47Z are gone from the
+manifest, and so are those of 2026-10-03 20:44.
 
 | File             |      Bytes | SHA-256                                                            |
 | ---------------- | ---------: | ------------------------------------------------------------------ |
-| `catalog.dump`   | 42,839,380 | `506247e3a8350a91fd0aaaeca406ada88fb9c89351ba6b258ff7abf757a7f9b0` |
-| `harvester.dump` | 11,549,529 | `9c102642bf0cb87cc6a1b6f0ab6b94fec8dbf249394ff13c3e3c0252c0773512` |
+| `catalog.dump`   | 45,538,533 | `b13edba1658be321d9dbdfb46d4805d086a6769c7d870fd8bd13c09478f96235` |
+| `harvester.dump` | 11,549,548 | `b7fd7abf72644023aa0a01d2363b613262f7a541209b4a48bbf24518826d454a` |
 
 - The catalog dump holds 29 migrations, the last one `ItemEans1758800000000`.
   The harvester dump holds 21, the last one `SourceEntryPriceKind1759200000000`.
-  That is the code of `dev` at `152d9d5e`. A cluster that runs other migrations
+  That is the code of `dev` at `2ccbeae3`. A cluster that runs other migrations
   is refused at step 3.
+- The catalog dump holds 42 shops and 105 price scopes. The dumps of 2026-10-06
+  held 41 and 104. The tenth Deza shop made the difference. Of the counts of
+  the manifest, only the price scopes changed.
 - The two files stand in the folder
-  `.curation-runs/2026-10-audit-repair/stage-c3/final/` of the checkout that did
+  `.curation-runs/2026-10-audit-repair/stage-c4/final/` of the checkout that did
   the work. Git ignores that folder. A `VERIFY.txt` stands beside them, and so
-  does the file that states how each value was read.
+  does the file that states how each value was read. The folder
+  `stage-c3/final/` holds the dumps of 2026-10-06. They do not ship.
 - Slot 1 is down and locked, with its databases kept.
 
 **These dumps ship unless slot 1 is written again.** The owner has not said in
-words that slot 1 is final. What the owner still has to do:
+words that slot 1 is final. The owner is checking the data first: on 2026-10-07
+these dumps were restored onto the owner's own slot 0 for that. What the owner
+still has to do:
 
 1. Say that slot 1 is final, or ask for more work on it. More work means new
    dumps, and the steps below again.
@@ -377,9 +385,9 @@ the shell rewrites `/bin/sh` on its way to `docker exec`.
 
 On 2026-10-04, against Postgres 16 containers and a local S3 server. The two
 dumps were only read: copies of them were uploaded. No cluster and no Luna slot
-that holds data was touched. Those were the dumps of 2026-10-03. The last row
-of the table is the one test of the dumps of 2026-10-06, and it did not run the
-script.
+that holds data was touched. Those were the dumps of 2026-10-03. The last two
+rows of the table are the tests of the later dumps, and neither ran the script.
+The last row is the one test of the dumps that the manifest describes.
 
 | Case                                                                                                | Result                                                                                                                                                                                                                                                                                        |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -401,3 +409,4 @@ script.
 | `kubectl` that cannot reach the cluster, a database pod that does not exist, a writer at 0 replicas | `post.sh` exited 1 each time, and nothing was scaled.                                                                                                                                                                                                                                         |
 | The deploy path                                                                                     | The runner of plan 0011 ran the task from a copy of `k8s/` with an armed `task.env`. A stand in for `kubectl` mapped the pods onto the containers. Check, pre and post passed, both services were scaled to zero and back, and a second run with the ledger removed left the databases alone. |
 | The dumps of 2026-10-06, restored on 2026-10-06                                                     | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. Every count and both `migrations` tables of the manifest, read from the copies, equal the values read from slot 1.       |
+| The dumps of 2026-10-07, restored on 2026-10-07 (2026-10-06T22:34Z)                                 | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. All 37 values read from the copies equal the values read from slot 1, the 105 price scopes among them.                   |

@@ -1,10 +1,14 @@
 // Backend plan 0192: the owner's decisions of 2026-10-06, applied on slot 1 in three
 // stages. The files of each stage stand in `stage-c1/`, `stage-c2/` and `stage-c3/` of the
-// run folder.
+// run folder. Two more changes of 2026-10-07 stand in `stage-c4/`: the shop of the Deza
+// code T7, and the category of the three shoe creams.
 //
 // A product is keyed as it stood at the start of the stage that changed it. A product that
 // a stage created is keyed as the create answered it.
-import { ANSWERS_AFTER_THE_REGISTER as LATER } from './decisions.mjs';
+import {
+  ANSWERS_AFTER_THE_REGISTER as LATER,
+  ANSWERS_OF_2026_10_07 as NEXT_DAY,
+} from './decisions.mjs';
 import {
   CHAINS,
   J,
@@ -22,6 +26,7 @@ const KEYS_C =
 const STAGE_1 = 'applied in stage 1';
 const STAGE_2 = 'applied in stage 2';
 const STAGE_3 = 'applied in stage 3';
+const DAY_AFTER = 'applied on 2026-10-07';
 
 const items = (f) => new Map(J(f).items.map((i) => [i.id, itemState(i)]));
 const rowsOf = (f) => new Map(J(f).rows.map((r) => [r.id, r]));
@@ -239,8 +244,10 @@ export function stageC() {
   {
     startGaps();
     const state = J('stage-c3/d3-state.after-import.json');
+    // The shop of T7 was created by hand on 2026-10-07, so the state of stage 3 lacks it.
+    const made = J('stage-c4/c1.shop.answer.json').answer;
     const shop = (id) => {
-      const s = state.shops.find((x) => x.id === id);
+      const s = state.shops.find((x) => x.id === id) ?? made;
       return {
         chain: 'Deza',
         address: s.address,
@@ -256,6 +263,9 @@ export function stageC() {
     );
     const last = new Map(
       JL('stage-c3/d2-shops.result.jsonl').map((l) => [l.code, l])
+    );
+    const nextDay = new Map(
+      JL('stage-c4/d2-shops.result.jsonl').map((l) => [l.code, l])
     );
     const later = { C1: LATER.shops, Z1: LATER.shops, C2: LATER.shops };
     later.T2 = later.T7 = LATER.discovery;
@@ -277,6 +287,18 @@ export function stageC() {
             status: STAGE_1,
             openDecision: 4,
             why: 'Not a shop. Never mapped.',
+          };
+        const c = nextDay.get(s.externalId);
+        if (c)
+          return {
+            ...base,
+            decision: { action: 'map', shop: shop(c.shopId) },
+            status: 'left in stage 3, ' + DAY_AFTER,
+            shopRowsWritten: c.written,
+            openDecision: 4,
+            ownerAnswerAfterTheRegister: later[s.externalId],
+            ownerAnswerOf20261007: NEXT_DAY.t7,
+            why: 'The store discovery of stage 3 met no Deza shop at this street. The owner then gave the page of the chain, and the shop was created by hand.',
           };
         if (a || b)
           return {
@@ -339,6 +361,21 @@ export function stageC() {
       ownerAnswerAfterTheRegister: LATER.discovery,
       why: 'The one Deza place of the discovery that the catalog did not hold as a shop.',
     });
+    entries.push({
+      shop: shop(made.id),
+      decision: {
+        action: 'create-shop',
+        postalCodeSource: made.postalCodeSource,
+        latitude: made.latitude,
+        longitude: made.longitude,
+        priceScope: { kind: 'STORE', localId: made.priceScopeId },
+      },
+      page: 'https://www.dezacalidad.es/centros/avda-virgen-de-las-angustias/',
+      status: DAY_AFTER,
+      openDecision: 4,
+      ownerAnswerOf20261007: NEXT_DAY.t7,
+      why: 'No Deza shop stood at this street in the catalog or in OpenStreetMap. The shop was created through the gateway from the address on the page of the chain. It has no coordinates: Nominatim answered nothing for the street in two queries.',
+    });
     out.push(
       writeData(
         'c05-deza-shop-codes.json',
@@ -352,10 +389,12 @@ export function stageC() {
             'stage-c3/d3.run.poll.json',
             'stage-c3/d3.import.answer.json',
             'stage-c3/d3-state.after-import.json',
+            'stage-c4/c1.shop.answer.json',
+            'stage-c4/d2-shops.result.jsonl',
           ],
-          keys: 'A shop code is keyed by its chain, its code and its printed name. A shop is keyed by its chain, its address, its postal code and its OpenStreetMap reference.',
+          keys: 'A shop code is keyed by its chain, its code and its printed name. A shop is keyed by its chain, its address, its postal code and its OpenStreetMap reference. The shop that was created by hand has no reference.',
           decidedBy:
-            'The owner, 2026-10-06 (decision 4), and two later answers of the same day: the shops of C1, Z1 and C2, and the store discovery for T2 and T7.',
+            'The owner, 2026-10-06 (decision 4), and two later answers of the same day: the shops of C1, Z1 and C2, and the store discovery for T2 and T7. On 2026-10-07 the owner gave the page of the chain for T7.',
           note: 'A mapping publishes the stored claims of the shop in the same request. shopRowsWritten is the count of supermarket_location_items of the shop after it.',
         },
         entries
@@ -793,12 +832,27 @@ export function stageC() {
     const after = new Map(
       J('stage-c3/d7.after.json').map((x) => [x.id, slugs(x)])
     );
+    // The batch of 2026-10-07: the products that stage 3 left without a category.
+    const nextDay = new Map(
+      JL('stage-c4/c2.after.json').map((x) => [x.id, x.cats.map((c) => c.slug)])
+    );
     const entries = [];
     for (const b of J('stage-c3/d7.before.json')) {
       const was = slugs(b);
       if (!was.includes('uncategorised')) continue;
       const now = after.get(b.id);
       const changed = now.join() !== was.join();
+      if (!changed && nextDay.has(b.id)) {
+        entries.push({
+          product: product(b.id, itemState(b)),
+          decision: { action: 'set-categories', slugs: nextDay.get(b.id) },
+          was,
+          status: 'left in stage 3, ' + DAY_AFTER,
+          ownerAnswerOf20261007: NEXT_DAY.shoeCreams,
+          why: 'The owner named the leaf. It existed and held no product. No category was created.',
+        });
+        continue;
+      }
       entries.push({
         product: product(b.id, itemState(b)),
         decision: changed
@@ -818,10 +872,15 @@ export function stageC() {
           step: 'C13',
           title:
             'The categories of the products that plan 0192 created with none',
-          sources: ['stage-c3/d7.before.json', 'stage-c3/d7.after.json'],
-          keys: 'Each product is keyed as the read before the batch printed it.',
+          sources: [
+            'stage-c3/d7.before.json',
+            'stage-c3/d7.after.json',
+            'stage-c4/c2.before.json',
+            'stage-c4/c2.after.json',
+          ],
+          keys: 'Each product is keyed as the read before the batch of stage 3 printed it.',
           decidedBy:
-            'The stage 3 session of plan 0192. No decision of the owner names a category.',
+            'The stage 3 session of plan 0192, for the four products that took the categories of a sibling. The owner, 2026-10-07, for the three shoe creams.',
         },
         entries
       )

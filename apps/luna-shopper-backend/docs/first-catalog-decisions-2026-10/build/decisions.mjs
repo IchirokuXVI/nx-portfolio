@@ -83,6 +83,24 @@ export const ANSWERS_AFTER_THE_REGISTER = {
   fanta: LATER + 'Fanta naranja stays 1,500 ml. A printed size wins.',
 };
 
+// What the owner answered on 2026-10-07, after the final dumps of plan 0192 were taken.
+// `stage-c.mjs` writes each one as `ownerAnswerOf20261007`. The first two changed data, so
+// new dumps were taken. The files of that session stand in `stage-c4/`.
+const NEXT_DAY = 'Decided by the owner, 2026-10-07: ';
+
+export const ANSWERS_OF_2026_10_07 = {
+  t7:
+    NEXT_DAY +
+    'the shop of T7 is the one on the page of the chain, https://www.dezacalidad.es/centros/avda-virgen-de-las-angustias/ ("Tienda 7 - Supermercado Deza Calidad SA en Calle Acera Fuente de la Salud, 14006 - Córdoba"). The shop is created and the code is mapped to it.',
+  shoeCreams:
+    NEXT_DAY +
+    'the three shoe creams go into the leaf "Cuidado del calzado". No category is created.',
+  kiwis: NEXT_DAY + 'the El Jamón row "kiwis" on "Kiwi verde" is fine.',
+  looseFruit:
+    NEXT_DAY +
+    'the loose fruit rows that sit on other products are left for now. They are fixed another time, and a small report of them is saved.',
+};
+
 /** The entry with the answer of the owner beside its decision number. */
 export function withOwnerDecision(entry) {
   if (!('openDecision' in entry)) return entry;
