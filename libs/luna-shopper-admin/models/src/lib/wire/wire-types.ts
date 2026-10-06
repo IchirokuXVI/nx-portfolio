@@ -4298,11 +4298,17 @@ export type HarvestSettleItemAtChainResult = {
     deleted: number;
   }[];
   pricesRestated: number;
+  pricesWritten: number;
+  pricesKeptAsWritten: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    heldAs: EnumsPriceSourceKind;
+  }[];
   pricesWithheld: HarvestSourceEntryPriceWithheld[];
   offersRemoved: string[];
   offersKept: {
     priceScopeId: string;
-    reason: 'PRICED' | 'SHOP_ROW' | 'PERSON';
+    reason: 'PRICED' | 'SHOP_ROW' | 'PERSON' | 'NO_TRAIL';
   }[];
   shopRowsRemoved: number;
   shopRowsCleared: number;

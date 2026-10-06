@@ -2178,20 +2178,40 @@ const deleteItemPricesByRunResult = object(
   },
   ['deleted', 'reset', 'recomputed']
 );
-/** A price a row still bound to the product states (plan 0191). */
+/** A price row a row still bound to the product holds (plan 0191). */
+const heldItemPrice: JsonSchema = {
+  type: 'object',
+  properties: {
+    priceScopeId: nonEmptyString(),
+    sourceKind: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+    },
+    sourceRunId: nullableString(),
+  },
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId'],
+  additionalProperties: false,
+};
+/** The one price the bound rows state at a scope and kind (plan 0191). */
 const statedItemPrice: JsonSchema = {
   type: 'object',
   properties: {
     priceScopeId: nonEmptyString(),
     sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
-    observedAt: { type: ['string', 'null'], format: 'date-time' },
+    sourceRunId: nonEmptyString(),
+    copiedFromScopeId: nullableString(),
+    price: {
+      type: 'object',
+      properties: { ...itemPriceValues, observedAt: nonEmptyString() },
+      required: ['observedAt'],
+      additionalProperties: false,
+    },
   },
-  required: ['priceScopeId', 'sourceKind', 'observedAt'],
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId', 'price'],
   additionalProperties: false,
 };
 /**
- * Remove the price rows a harvest run wrote for one product, at named scopes
- * and kinds (plan 0191). A row a person typed is never touched.
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it (plan 0191). A row a person typed is never touched.
  */
 const withdrawItemPricesRequest = object(
   CATALOG_SCHEMA_IDS.withdrawItemPricesRequest,
@@ -2203,6 +2223,7 @@ const withdrawItemPricesRequest = object(
       maxItems: WITHDRAW_MAX_SCOPES,
     },
     sourceKinds: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
+    held: array(heldItemPrice),
     stated: array(statedItemPrice),
     dryRun: boolean(),
   },
@@ -2222,9 +2243,21 @@ const withdrawItemPricesResult = object(
       required: ['priceScopeId', 'sourceKind', 'deleted'],
       additionalProperties: false,
     }),
+    inserted: integer({ minimum: 0 }),
+    confirmed: integer({ minimum: 0 }),
+    keptAsWritten: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        heldAs: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind', 'heldAs'],
+      additionalProperties: false,
+    }),
     recomputed: integer({ minimum: 0 }),
   },
-  ['deleted', 'removed', 'recomputed']
+  ['deleted', 'removed', 'inserted', 'confirmed', 'keptAsWritten', 'recomputed']
 );
 /**
  * Take a product's offers out of the scopes of one chain, with the shop rows
@@ -2257,13 +2290,16 @@ const withdrawSupermarketItemsResult = object(
         type: 'object',
         properties: {
           priceScopeId: nonEmptyString(),
-          reason: { type: 'string', enum: ['PRICED', 'SHOP_ROW', 'PERSON'] },
+          reason: {
+            type: 'string',
+            enum: ['PRICED', 'SHOP_ROW', 'PERSON', 'NO_TRAIL'],
+          },
         },
         required: ['priceScopeId', 'reason'],
         additionalProperties: false,
       }),
       description:
-        'The offers that stayed, and why: PRICED when a price row of the product exists at the scope or at a scope it falls through to, SHOP_ROW when a shop row a person wrote backs it, PERSON when an operator wrote the offer itself.',
+        'The offers that stayed, and why: PRICED when a price row of the product exists at the scope or at a scope it falls through to, SHOP_ROW when a shop row a person wrote backs it, PERSON when an operator wrote the offer itself, NO_TRAIL when the offer is older than the trail that would say so.',
     },
     shopRowsRemoved: integer({ minimum: 0 }),
     shopRowsCleared: {

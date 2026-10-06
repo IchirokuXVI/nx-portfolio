@@ -649,7 +649,26 @@ const settleItemAtChainResult = object(
     pricesRestated: {
       ...integer({ minimum: 0 }),
       description:
-        'Prices of the bound rows that were sent to catalog again, one per row and scope. It counts what was sent, not what changed.',
+        'Prices of the bound rows that were stated to catalog, one per scope and kind. It counts what was stated, not what changed.',
+    },
+    pricesWritten: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Price rows catalog inserted for those statements. Zero on a product that was already settled.',
+    },
+    pricesKeptAsWritten: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+          heldAs: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        },
+        required: ['priceScopeId', 'sourceKind', 'heldAs'],
+        additionalProperties: false,
+      }),
+      description:
+        'Statements catalog did not apply, because it holds the price of that run at that scope under another kind (heldAs) than the kind of the run (sourceKind). The price stays as it was written.',
     },
     pricesWithheld: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld)),
     offersRemoved: {
@@ -661,7 +680,10 @@ const settleItemAtChainResult = object(
       type: 'object',
       properties: {
         priceScopeId: nonEmptyString(),
-        reason: { type: 'string', enum: ['PRICED', 'SHOP_ROW', 'PERSON'] },
+        reason: {
+          type: 'string',
+          enum: ['PRICED', 'SHOP_ROW', 'PERSON', 'NO_TRAIL'],
+        },
       },
       required: ['priceScopeId', 'reason'],
       additionalProperties: false,
@@ -690,6 +712,8 @@ const settleItemAtChainResult = object(
     'pricesWithdrawn',
     'pricesWithdrawnAt',
     'pricesRestated',
+    'pricesWritten',
+    'pricesKeptAsWritten',
     'pricesWithheld',
     'offersRemoved',
     'offersKept',

@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   PriceSourceKind,
   SourceEntryStatus,
+  type HeldItemPrice,
   type ItemView,
   type StatedItemPrice,
 } from '@portfolio/luna-shopper/contracts';
@@ -17,6 +18,7 @@ import {
   SourceCatalogEntry,
   SourceEntryAvailability,
   SourceEntryPrice,
+  SupermarketSource,
 } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
@@ -37,8 +39,8 @@ import type { SupermarketSourceService } from './supermarket-source.service';
  *
  * Catalog is a recorder here. What it does with the two withdraw messages is
  * proved against its own database, in catalog's
- * `item-withdraw.integration.spec.ts`. The two halves over one stack are a
- * scripted run on an ephemeral slot, named in the plan's pull request.
+ * `item-withdraw.integration.spec.ts`. The two halves over both databases
+ * are `settle-across-services.integration.spec.ts`, beside this file.
  *
  *   LUNA_INTEGRATION=1 HARVESTER_DB_URL=postgres://... \
  *     npx nx run luna-shopper-backend-harvester:test-integration \
@@ -61,7 +63,11 @@ const CENTRE = 'd1910000-0000-4000-a000-000000000003';
 const SOUTH = 'd1910000-0000-4000-a000-000000000004';
 const SCOPES = [DEFAULT, NORTH, CENTRE, SOUTH];
 
+/** A walk of the chain's website, and a leaflet an operator uploaded. */
 const RUN = 'e1910000-0000-4000-a000-000000000001';
+const LEAFLET_RUN = 'e1910000-0000-4000-a000-000000000002';
+/** A run id no row of `harvest_runs` carries. */
+const LOST_RUN = 'e1910000-0000-4000-a000-000000000003';
 const OBSERVED = '2026-10-05T06:00:00.000Z';
 const BARCODE = '8402001047251';
 
@@ -84,6 +90,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       itemId: string;
       priceScopeIds: string[];
       sourceKinds: PriceSourceKind[];
+      held: HeldItemPrice[];
       stated: StatedItemPrice[];
       dryRun: boolean;
     }[];
@@ -99,6 +106,18 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
   };
   /** The product catalog says holds each barcode. */
   let eanHolders: Map<string, string>;
+  /** Set by a test to make the next price write to a product fail. */
+  let failPriceWrite: Error | null;
+
+  /** What a statement says, in the three fields the tests read. */
+  const said = (each: StatedItemPrice) => ({
+    priceScopeId: each.priceScopeId,
+    sourceKind: each.sourceKind,
+    sourceRunId: each.sourceRunId,
+    price: each.price.price,
+    observedAt: each.price.observedAt,
+  });
+  const WEB = PriceSourceKind.OFFICIAL_WEB;
 
   beforeAll(async () => {
     dataSource = new DataSource({
@@ -121,6 +140,9 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
         sent: { itemId: string; price: number }[]
       ) => {
         asked.order.push('addPrices');
+        if (failPriceWrite) {
+          throw failPriceWrite;
+        }
         asked.priceWrites.push({
           priceScopeId,
           itemId: sent[0].itemId,
@@ -132,6 +154,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
         itemId: string,
         priceScopeIds: string[],
         sourceKinds: PriceSourceKind[],
+        held: HeldItemPrice[],
         stated: StatedItemPrice[],
         dryRun = false
       ) => {
@@ -140,10 +163,18 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           itemId,
           priceScopeIds,
           sourceKinds,
+          held,
           stated,
           dryRun,
         });
-        return { deleted: 0, removed: [], recomputed: 0 };
+        return {
+          deleted: 0,
+          removed: [],
+          inserted: 0,
+          confirmed: 0,
+          keptAsWritten: [],
+          recomputed: 0,
+        };
       },
       withdrawOffers: async (
         itemId: string,
@@ -190,8 +221,31 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       },
     } as unknown as CatalogClient;
 
+    // The runs the prices name. The kind of a price is its run's, so the
+    // settle reads these two tables, and a fake would prove no `where`.
+    await cleanRuns();
+    await dataSource.query(
+      // Finished, because a chain holds one run at a time that is not.
+      `INSERT INTO "harvest_runs"
+              ("id", "supermarketId", "mode", "status", "input")
+       VALUES ($1, $3, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
+              ($2, $3, 'FILE_IMPORT', 'COMPLETED',
+               '{"sourceKind":"OFFICIAL_LEAFLET"}'::jsonb)`,
+      [RUN, LEAFLET_RUN, ELJAMON]
+    );
+    await dataSource.query(
+      `INSERT INTO "supermarket_sources" ("supermarketId", "adapterKey")
+       VALUES ($1, 'eljamon-web')`,
+      [ELJAMON]
+    );
+
     const writer = new SourceEntryPriceWriter(catalog, entries);
-    settler = new SourceEntrySettler(entries, catalog, writer);
+    settler = new SourceEntrySettler(
+      entries,
+      dataSource.getRepository(HarvestRun),
+      dataSource.getRepository(SupermarketSource),
+      catalog
+    );
     service = new SourceEntryService(
       entries,
       dataSource.getRepository(SourceEntryPrice),
@@ -215,9 +269,21 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
   afterAll(async () => {
     if (dataSource?.isInitialized) {
       await clean();
+      await cleanRuns();
       await dataSource.destroy();
     }
   });
+
+  async function cleanRuns() {
+    await dataSource.query(
+      `DELETE FROM "harvest_runs" WHERE "id" = ANY($1::uuid[])`,
+      [[RUN, LEAFLET_RUN]]
+    );
+    await dataSource.query(
+      `DELETE FROM "supermarket_sources" WHERE "supermarketId" = ANY($1::uuid[])`,
+      [[ELJAMON, OTHER_CHAIN]]
+    );
+  }
 
   beforeEach(async () => {
     asked = {
@@ -229,6 +295,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       order: [],
     };
     eanHolders = new Map();
+    failPriceWrite = null;
     await clean();
   });
 
@@ -254,7 +321,11 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       decidedAt?: string;
     } = {},
     prices: Record<string, number> = { [DEFAULT]: 4.99 },
-    priceOver: { validUntil?: string } = {}
+    priceOver: {
+      validUntil?: string;
+      runId?: string | null;
+      observedAt?: string;
+    } = {}
   ): Promise<string> {
     seq += 1;
     const status = over.status ?? SourceEntryStatus.ACTIVE;
@@ -290,8 +361,8 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           inserted.id,
           priceScopeId,
           price,
-          OBSERVED,
-          RUN,
+          priceOver.observedAt ?? OBSERVED,
+          priceOver.runId === undefined ? RUN : priceOver.runId,
           priceOver.validUntil ?? null,
         ]
       );
@@ -320,14 +391,15 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       expect(asked.priceWrites).toEqual([
         { priceScopeId: DEFAULT, itemId: RIGHT, price: 4.99 },
       ]);
-      // No row of the chain names the wrong product now, so nothing is
-      // stated for it: every run written price row goes, at every scope and
-      // kind, and then its offers are asked about.
+      // No row of the chain names the wrong product now, so nothing is held
+      // or stated for it: every run written price row goes, at every scope
+      // and kind, and then its offers are asked about.
       expect(asked.priceWithdraws).toEqual([
         {
           itemId: WRONG,
           priceScopeIds: SCOPES,
           sourceKinds: KINDS,
+          held: [],
           stated: [],
           dryRun: false,
         },
@@ -340,11 +412,12 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           dryRun: null,
         },
       ]);
-      // The new product is written before the old one is settled.
+      // The old product is settled right after the bind, before the price
+      // write, which can fail and cannot be made up for by a retry.
       expect(asked.order).toEqual([
-        'addPrices',
         'withdrawPrices',
         'withdrawOffers',
+        'addPrices',
       ]);
       expect(result.settled).toMatchObject({
         itemId: WRONG,
@@ -363,35 +436,36 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
         itemId: RIGHT,
       });
 
-      // What the staying row states is spared from its own instant back, and
-      // nothing else is.
+      // What the staying row holds is accounted for, and what it states
+      // travels inside the one withdraw, with its run and its instant.
       expect(asked.priceWithdraws).toHaveLength(1);
       expect(asked.priceWithdraws[0].itemId).toBe(WRONG);
-      expect(asked.priceWithdraws[0].stated).toEqual([
+      expect(asked.priceWithdraws[0].held).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB, sourceRunId: RUN },
+        { priceScopeId: NORTH, sourceKind: WEB, sourceRunId: RUN },
+      ]);
+      expect(asked.priceWithdraws[0].stated.map(said)).toEqual([
         {
           priceScopeId: DEFAULT,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          sourceKind: WEB,
+          sourceRunId: RUN,
+          price: 2.45,
           observedAt: OBSERVED,
         },
         {
           priceScopeId: NORTH,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          sourceKind: WEB,
+          sourceRunId: RUN,
+          price: 2.6,
           observedAt: OBSERVED,
         },
       ]);
-      // Its prices are written again on the old product, after the delete,
-      // so the current row is the one a bound row states.
+      // The harvester sends no price of its own to the old product: catalog
+      // writes what is stated in the transaction that removes the rest.
       expect(asked.priceWrites).toEqual([
         { priceScopeId: DEFAULT, itemId: RIGHT, price: 2.95 },
-        { priceScopeId: DEFAULT, itemId: WRONG, price: 2.45 },
-        { priceScopeId: NORTH, itemId: WRONG, price: 2.6 },
       ]);
-      expect(asked.order).toEqual([
-        'addPrices',
-        'withdrawPrices',
-        'addPrices',
-        'addPrices',
-      ]);
+      expect(asked.order).toEqual(['withdrawPrices', 'addPrices']);
       // A chain that lists a product sells it: the offers are not asked about.
       expect(asked.offerWithdraws).toEqual([]);
       expect(result.settled).toMatchObject({
@@ -415,9 +489,38 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
         itemId: RIGHT,
       });
 
+      expect(asked.priceWithdraws[0].held).toEqual([]);
       expect(asked.priceWithdraws[0].stated).toEqual([]);
       expect(asked.offerWithdraws).toHaveLength(1);
       expect(result.settled?.boundEntryIds).toEqual([]);
+    }, 60_000);
+
+    it('has settled the old product when the price write to the new one fails, and says so', async () => {
+      const figurine = await row();
+      failPriceWrite = new Error('catalog is away');
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: figurine, itemId: RIGHT })
+        .catch((error: Error) => error);
+
+      // The bind stands, and the old product was settled before the failure.
+      expect(await stored(figurine)).toMatchObject({ itemId: RIGHT });
+      expect(asked.priceWithdraws.map((each) => each.itemId)).toEqual([WRONG]);
+      expect(asked.offerWithdraws.map((each) => each.itemId)).toEqual([WRONG]);
+      expect((failure as Error).message).toContain('catalog is away');
+      expect((failure as Error).message).toContain(WRONG);
+      expect((failure as Error).message).toContain(ELJAMON);
+
+      // The retry binds to the same product, so it settles nothing. That is
+      // why the first call had to.
+      failPriceWrite = null;
+      const retried = await service.accept({
+        userId: ADMIN,
+        entryId: figurine,
+        itemId: RIGHT,
+      });
+      expect(retried.settled).toBeNull();
+      expect(asked.priceWithdraws).toHaveLength(1);
     }, 60_000);
 
     it('settles nothing for a row accepted onto the product it is already on', async () => {
@@ -452,6 +555,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           itemId: WRONG,
           priceScopeIds: SCOPES,
           sourceKinds: KINDS,
+          held: [],
           stated: [],
           dryRun: false,
         },
@@ -465,16 +569,16 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
 
       await service.reject({ userId: ADMIN, entryId: rejected });
 
-      expect(asked.priceWithdraws[0].stated).toEqual([
+      expect(asked.priceWithdraws[0].stated.map(said)).toEqual([
         {
           priceScopeId: DEFAULT,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          sourceKind: WEB,
+          sourceRunId: RUN,
+          price: 2.45,
           observedAt: OBSERVED,
         },
       ]);
-      expect(asked.priceWrites).toEqual([
-        { priceScopeId: DEFAULT, itemId: WRONG, price: 2.45 },
-      ]);
+      expect(asked.priceWrites).toEqual([]);
       expect(asked.offerWithdraws).toEqual([]);
     }, 60_000);
 
@@ -599,25 +703,94 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
 
       const result = await settler.settle(RIGHT, ELJAMON);
 
-      expect(asked.priceWithdraws[0].stated).toEqual([
-        {
-          priceScopeId: DEFAULT,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
-          observedAt: null,
-        },
+      // The scope they disagree on is held and not stated.
+      expect(asked.priceWithdraws[0].held).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB, sourceRunId: RUN },
+        { priceScopeId: NORTH, sourceKind: WEB, sourceRunId: RUN },
+      ]);
+      expect(asked.priceWithdraws[0].stated.map(said)).toEqual([
         {
           priceScopeId: NORTH,
-          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+          sourceKind: WEB,
+          sourceRunId: RUN,
+          price: 3.05,
           observedAt: OBSERVED,
         },
       ]);
-      expect(asked.priceWrites).toEqual([
-        { priceScopeId: NORTH, itemId: RIGHT, price: 3.05 },
-      ]);
+      expect(asked.priceWrites).toEqual([]);
       expect(result.pricesWithheld).toEqual([
         { entryId: small, priceScopeId: DEFAULT, otherEntryIds: [king] },
         { entryId: king, priceScopeId: DEFAULT, otherEntryIds: [small] },
       ]);
+    }, 60_000);
+  });
+
+  describe('the kind of a price is the kind of the run that observed it', () => {
+    it('states a leaflet price as a leaflet price after a website walk rewrote the kind of its row', async () => {
+      // One shared row (plan 0190). A leaflet wrote its price. A website
+      // walk observed the row since, so the row says OFFICIAL_WEB.
+      await row(
+        { sourceKind: PriceSourceKind.OFFICIAL_WEB },
+        { [DEFAULT]: 1.99 },
+        { runId: LEAFLET_RUN }
+      );
+
+      await settler.settle(WRONG, ELJAMON);
+
+      const [withdraw] = asked.priceWithdraws;
+      // Held and stated as what catalog holds it as. Read from the row, the
+      // leaflet kind would be unaccounted for and its price row would go.
+      expect(withdraw.held).toEqual([
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: LEAFLET_RUN,
+        },
+      ]);
+      expect(withdraw.stated.map(said)).toEqual([
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: LEAFLET_RUN,
+          price: 1.99,
+          observedAt: OBSERVED,
+        },
+      ]);
+    }, 60_000);
+
+    it('spares every kind at the scope, and states nothing, for a price whose run is gone or absent', async () => {
+      await row({}, { [DEFAULT]: 1.99 }, { runId: LOST_RUN });
+      await row({}, { [NORTH]: 2.05 }, { runId: null });
+
+      const result = await settler.settle(WRONG, ELJAMON);
+
+      const [withdraw] = asked.priceWithdraws;
+      expect(withdraw.held).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: null, sourceRunId: LOST_RUN },
+        { priceScopeId: NORTH, sourceKind: null, sourceRunId: null },
+      ]);
+      expect(withdraw.stated).toEqual([]);
+      expect(result.pricesRestated).toBe(0);
+    }, 60_000);
+
+    it('holds a price whose window closed, so the history of a leaflet that ended stays', async () => {
+      await row(
+        {},
+        { [DEFAULT]: 1.99 },
+        { runId: LEAFLET_RUN, validUntil: '2026-09-28T00:00:00.000Z' }
+      );
+
+      await settler.settle(WRONG, ELJAMON);
+
+      const [withdraw] = asked.priceWithdraws;
+      expect(withdraw.held).toEqual([
+        {
+          priceScopeId: DEFAULT,
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+          sourceRunId: LEAFLET_RUN,
+        },
+      ]);
+      expect(withdraw.stated).toEqual([]);
     }, 60_000);
   });
 
@@ -663,7 +836,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
   });
 
   describe('a dry run', () => {
-    it('asks catalog what it would remove, and sends no price', async () => {
+    it('asks catalog what it would remove and write, and sends no price', async () => {
       await row({}, { [DEFAULT]: 2.45 });
 
       const result = await service.settleItem({

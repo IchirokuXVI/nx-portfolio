@@ -29,7 +29,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository, type EntityManager } from 'typeorm';
+import { In, IsNull, Not, Repository, type EntityManager } from 'typeorm';
 import { Item, ItemPrice, PricePolicy, PriceScope } from '../entities';
 import {
   CatalogAuditService,
@@ -45,8 +45,11 @@ import {
   recomputeEffectivePrices,
   type PriceKey,
 } from './effective-price.service';
-import { writeItemPrices } from './item-price-writer';
-import { PlatformAdminService } from './platform-admin.service';
+import { statesTheSame, writeItemPrices } from './item-price-writer';
+import {
+  PlatformAdminService,
+  requireServiceActor,
+} from './platform-admin.service';
 
 interface ItemPriceCursor {
   value: string;
@@ -502,17 +505,19 @@ export class ItemPriceService {
   }
 
   /**
-   * Remove the price rows a harvest run wrote for one product, at named
-   * scopes and kinds, and recompute (plan 0191).
+   * Make the run written price rows of one product agree with the rows still
+   * bound to it, at named scopes and kinds, and recompute (plan 0191).
    *
-   * The harvester sends it when a row that stated those prices left the
-   * product: a person moved the row to another product, or rejected it.
-   * `item_prices` names no queue row, so the harvester says where the product
-   * should hold nothing from a run, and {@link withdrawRunWrittenPrices} is
-   * the rule for which rows that is.
+   * The harvester sends it when a row left the product: a person moved the
+   * row to another product, or rejected it. `item_prices` names no queue row,
+   * so the harvester says what the rows still bound account for and what they
+   * state, and {@link withdrawRunWrittenPrices} is the rule for the rest.
    *
-   * Audited like {@link deleteByRun}: one trail row per price row, by the
-   * actor the gate let through.
+   * **Only a service may send it.** What it removes follows from which rows
+   * are bound, and only the harvester knows that.
+   *
+   * Audited like {@link deleteByRun}: one trail row per price row removed or
+   * inserted, by the actor the gate let through.
    *
    * `dryRun` runs the same statements in a transaction that is rolled back,
    * so its answer is the answer of a real call and not a second rule.
@@ -521,6 +526,7 @@ export class ItemPriceService {
     req: WithdrawItemPricesRequest
   ): Promise<WithdrawItemPricesResult> {
     const actor = await this.admin.requireAdmin(req);
+    requireServiceActor(actor, 'itemPrice.withdraw');
     requireWithdrawablePrices(req);
     return dryRunnable(req.dryRun === true, (rollback) =>
       this.audit.write(actor, async (tx) =>
@@ -634,7 +640,7 @@ async function affectedByRows(
 /** What a withdraw names, which is all {@link withdrawRunWrittenPrices} reads. */
 export type RunWrittenPrices = Pick<
   WithdrawItemPricesRequest,
-  'itemId' | 'priceScopeIds' | 'sourceKinds' | 'stated'
+  'itemId' | 'priceScopeIds' | 'sourceKinds' | 'held' | 'stated'
 >;
 
 /**
@@ -642,17 +648,25 @@ export type RunWrittenPrices = Pick<
  *
  * `ADMIN` is refused and not skipped: a caller that names it has asked for a
  * person's price to be removed, and saying no is better than doing less than
- * was asked without saying so.
+ * was asked without saying so. A statement of such a kind is refused for the
+ * same reason, and so is one that names no run.
  */
 export function requireWithdrawablePrices(req: RunWrittenPrices): void {
-  const refused = req.sourceKinds.filter(
-    (kind) => !AUTOMATED_KINDS.includes(kind)
-  );
+  const refused = [
+    ...req.sourceKinds,
+    ...(req.stated ?? []).map((each) => each.sourceKind),
+  ].filter((kind) => !AUTOMATED_KINDS.includes(kind));
   if (refused.length > 0) {
     throw new ValidationException(
       `Only the prices a harvest run wrote can be withdrawn, and a run writes ` +
-        `official kinds only, not ${refused.join(', ')}.`,
+        `official kinds only, not ${[...new Set(refused)].join(', ')}.`,
       { details: { sourceKinds: 'must be automated kinds' } }
+    );
+  }
+  if ((req.stated ?? []).some((each) => !isUuid(each.sourceRunId))) {
+    throw new ValidationException(
+      'A stated price names the run that observed it.',
+      { details: { stated: 'sourceRunId must be a uuid' } }
     );
   }
   if (req.priceScopeIds.length > WITHDRAW_MAX_SCOPES) {
@@ -664,142 +678,288 @@ export function requireWithdrawablePrices(req: RunWrittenPrices): void {
   }
 }
 
+const pairKey = (priceScopeId: string, sourceKind: string): string =>
+  `${priceScopeId}|${sourceKind}`;
+
 /**
- * Remove the run written price rows of one product at named scopes and kinds,
- * record each in the trail, and recompute (plan 0191).
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it, record each change in the trail, and recompute (plan 0191).
  *
  * A plain function over the caller's audited transaction, for the reason the
  * recompute is one: the offers withdraw runs it inside its own transaction to
  * answer a dry run of the two calls in a row.
  *
- * ## Which rows
+ * **The rule for every doubt is that the row stays.** These rows were curated
+ * by hand, and a leftover price is a smaller error than a price nobody can
+ * bring back.
  *
- * A row is removed when all of this holds:
+ * ## Which rows are removed
  *
- * - It is the product's, at a named scope, of a named kind.
- * - **It names a run** (`sourceRunId` is not null). That, with the kind, is
- *   what tells a run's row from a person's. An `ADMIN` row is never named
- *   here, and a row of an automated kind that a person typed through the back
- *   office carries no run. A run's row from before plan 0086, which has no
- *   run either, is kept too: nothing tells it from a typed one.
- * - **It is not the history of what a bound row still states.** At a scope
- *   and kind `stated` names, only the rows observed at that statement's
- *   instant or later are removed, and the caller writes the statement again
- *   behind this call. The rows before it are the history of that scope and
- *   kind and stay. A null instant spares every row there: the bound rows
- *   disagree, nothing is written again, and the price that was current stays.
+ * A row is a candidate when it is the product's, at a named scope, of a named
+ * kind, and **names a run** (`sourceRunId` is not null). That, with the kind,
+ * is what tells a run's row from a person's. An `ADMIN` row is never named
+ * here, and a row of an automated kind that a person typed through the back
+ * office carries no run. A run's row from before plan 0086, which has no run
+ * either, is kept too: nothing tells it from a typed one.
  *
- * **At or later, not later.** A run stamps every product it reads with one
- * instant, so the row that left and the row that stayed carry the same
- * `observedAt`, and `currentPriceRows` breaks that tie by id. Removing both
- * and writing one again does not depend on which id was the larger.
+ * A candidate is then **kept** when a bound row accounts for it:
+ *
+ * - `held` names its scope and kind, or its scope with no kind. A bound row
+ *   holds a price row there, open or closed, and what catalog holds there is
+ *   its history.
+ * - `held` or `stated` names, at its scope, the run that wrote or last
+ *   confirmed a row of its kind there. That covers a price written under
+ *   another kind than its run's, which an accept did while a shared row said
+ *   the other kind (plan 0190).
+ *
+ * ## The one thing a statement removes
+ *
+ * At the scope and kind of a statement, a candidate is removed when all of
+ * this holds: it was observed at the statement's instant or later, its values
+ * differ from the statement's, and it is not the row of another run that a
+ * bound row names there. That is the price of the row that left: one run
+ * stamps every product it reads with one instant, so that row carries the
+ * `observedAt` of the row that stayed, and `currentPriceRows` breaks the tie
+ * by id. The rows before the instant are history and stay.
+ *
+ * ## The statement is written in this transaction
+ *
+ * After the removal, the statement goes through `writeItemPrices`, the insert
+ * on change of every other write. A row that already says it, at its instant
+ * or later, means nothing is written at all. So a second call removes
+ * nothing, inserts nothing and records nothing, and there is no moment at
+ * which the product shows an older price because a second message failed.
+ *
+ * A statement is dropped, and its scope and kind spared, when catalog holds a
+ * row of its run at its scope under another kind, or when two statements name
+ * one scope and kind. `keptAsWritten` names the first case.
  *
  * ## What happens to the materialized row
  *
- * The recompute runs for every key the removed rows reached. It leaves a held
- * `supermarket_items` row in place with no price. This function removes none:
- * whether such a row is an offer or a leftover is `supermarketItem.withdraw`'s
- * to say.
+ * The recompute runs for every key a removed or written row reached. It
+ * leaves a held `supermarket_items` row in place with no price. This function
+ * removes none: whether such a row is an offer or a leftover is
+ * `supermarketItem.withdraw`'s to say.
  */
 export async function withdrawRunWrittenPrices(
   tx: AuditedWrite,
   req: RunWrittenPrices,
   now: Date = new Date()
 ): Promise<WithdrawItemPricesResult> {
-  const nothing: WithdrawItemPricesResult = {
+  const result: WithdrawItemPricesResult = {
     deleted: 0,
     removed: [],
+    inserted: 0,
+    confirmed: 0,
+    keptAsWritten: [],
     recomputed: 0,
   };
   const scopeIds = [...new Set(req.priceScopeIds.filter(isUuid))];
   const kinds = [...new Set(req.sourceKinds)];
   if (!isUuid(req.itemId) || scopeIds.length === 0 || kinds.length === 0) {
-    return nothing;
+    return result;
   }
-  // One statement per scope and kind. Named twice, the one that spares more
-  // wins: a null, which spares every row, and else the later instant.
-  const stated = new Map<string, StatedItemPrice>();
-  for (const each of req.stated ?? []) {
-    const key = `${each.priceScopeId}|${each.sourceKind}`;
-    const held = stated.get(key);
-    if (!held || sparesMore(each, held)) {
-      stated.set(key, each);
-    }
-  }
-  const spared = [...stated.values()].filter((each) =>
-    isUuid(each.priceScopeId)
-  );
+  const named = new Set(scopeIds);
+  const held = (req.held ?? []).filter((each) => named.has(each.priceScopeId));
 
-  const found: { id: string }[] = await tx.manager.query(
-    `
-    SELECT p."id"
-      FROM "item_prices" p
-      LEFT JOIN unnest($4::uuid[], $5::text[], $6::timestamptz[])
-             AS s("priceScopeId", "sourceKind", "observedAt")
-        ON s."priceScopeId" = p."priceScopeId"
-       AND s."sourceKind" = p."sourceKind"::text
-     WHERE p."itemId" = $1::uuid
-       AND p."priceScopeId" = ANY($2::uuid[])
-       AND p."sourceKind"::text = ANY($3::text[])
-       AND p."sourceRunId" IS NOT NULL
-       AND (s."priceScopeId" IS NULL OR p."observedAt" >= s."observedAt")
-    `,
-    [
-      req.itemId,
-      scopeIds,
-      kinds,
-      spared.map((each) => each.priceScopeId),
-      spared.map((each) => each.sourceKind),
-      // A null stays a null: no instant is at or after it, so the comparison
-      // is never true and every row of that scope and kind is spared.
-      spared.map((each) =>
-        each.observedAt === null ? null : new Date(each.observedAt)
-      ),
-    ]
-  );
-  if (found.length === 0) {
-    return nothing;
+  /** Scopes at which nothing of any kind is removed. */
+  const sparedScopes = new Set<string>();
+  /** Scope and kind pairs at which nothing is removed, a statement aside. */
+  const sparedPairs = new Set<string>();
+  /** The runs a bound row names, per scope. */
+  const runsAt = new Map<string, Set<string>>();
+  const nameRun = (priceScopeId: string, runId: string | null): void => {
+    if (!runId) {
+      return;
+    }
+    const runs = runsAt.get(priceScopeId) ?? new Set<string>();
+    runs.add(runId);
+    runsAt.set(priceScopeId, runs);
+  };
+  for (const each of held) {
+    if (each.sourceKind === null) {
+      sparedScopes.add(each.priceScopeId);
+    } else {
+      sparedPairs.add(pairKey(each.priceScopeId, each.sourceKind));
+    }
+    nameRun(each.priceScopeId, each.sourceRunId);
+  }
+
+  // One statement per scope and kind. Two is a caller that does not know
+  // which price is stated, so neither is applied and the pair is spared.
+  const statements = new Map<string, StatedItemPrice>();
+  const statedTwice = new Set<string>();
+  for (const each of req.stated ?? []) {
+    if (!named.has(each.priceScopeId) || !kinds.includes(each.sourceKind)) {
+      continue;
+    }
+    const key = pairKey(each.priceScopeId, each.sourceKind);
+    nameRun(each.priceScopeId, each.sourceRunId);
+    if (statements.has(key) || statedTwice.has(key)) {
+      statements.delete(key);
+      statedTwice.add(key);
+      sparedPairs.add(key);
+      continue;
+    }
+    statements.set(key, each);
   }
 
   const rows = await tx.manager.find(ItemPrice, {
-    where: { id: In(found.map((row) => row.id)) },
+    where: {
+      itemId: req.itemId,
+      priceScopeId: In(scopeIds),
+      sourceKind: In(kinds),
+      sourceRunId: Not(IsNull()),
+    },
+    order: { observedAt: 'ASC', id: 'ASC' },
   });
-  // One statement for the rows, then one trail row each, as `deleteByRun`.
-  await tx.manager.delete(ItemPrice, { id: In(rows.map((row) => row.id)) });
-  const removed = new Map<
-    string,
-    WithdrawItemPricesResult['removed'][number]
-  >();
-  for (const row of rows) {
-    await tx.recordDelete(ItemPrice, row);
-    const key = `${row.priceScopeId}|${row.sourceKind}`;
-    const held = removed.get(key) ?? {
-      priceScopeId: row.priceScopeId,
-      sourceKind: row.sourceKind,
-      deleted: 0,
-    };
-    held.deleted += 1;
-    removed.set(key, held);
-  }
-
-  const keys = await affectedByRows(tx.manager, rows);
-  await recomputeEffectivePrices(tx.manager, keys, now);
-  return {
-    deleted: rows.length,
-    removed: [...removed.values()],
-    recomputed: keys.length,
+  const ofNamedRun = (row: ItemPrice): boolean => {
+    const runs = runsAt.get(row.priceScopeId);
+    return (
+      !!runs &&
+      ((row.sourceRunId !== null && runs.has(row.sourceRunId)) ||
+        (row.lastObservedRunId !== null && runs.has(row.lastObservedRunId)))
+    );
   };
-}
-
-/** Whether `a` spares more rows of its scope and kind than `b` does. */
-function sparesMore(a: StatedItemPrice, b: StatedItemPrice): boolean {
-  if (b.observedAt === null) {
-    return false;
+  for (const row of rows) {
+    if (ofNamedRun(row)) {
+      sparedPairs.add(pairKey(row.priceScopeId, row.sourceKind));
+    }
   }
-  return (
-    a.observedAt === null ||
-    new Date(a.observedAt).getTime() > new Date(b.observedAt).getTime()
-  );
+  // A statement whose run already wrote at its scope under another kind.
+  for (const [key, statement] of [...statements]) {
+    const other = rows.find(
+      (row) =>
+        row.priceScopeId === statement.priceScopeId &&
+        row.sourceKind !== statement.sourceKind &&
+        (row.sourceRunId === statement.sourceRunId ||
+          row.lastObservedRunId === statement.sourceRunId)
+    );
+    if (other || sparedScopes.has(statement.priceScopeId)) {
+      statements.delete(key);
+      sparedPairs.add(key);
+    }
+    if (other) {
+      result.keptAsWritten.push({
+        priceScopeId: statement.priceScopeId,
+        sourceKind: statement.sourceKind,
+        heldAs: other.sourceKind,
+      });
+    }
+  }
+
+  const doomed: ItemPrice[] = [];
+  const kept: ItemPrice[] = [];
+  for (const row of rows) {
+    const key = pairKey(row.priceScopeId, row.sourceKind);
+    const statement = statements.get(key);
+    const goes = statement
+      ? row.observedAt.getTime() >=
+          new Date(statement.price.observedAt).getTime() &&
+        !statesTheSame(
+          row,
+          statement.price,
+          statement.copiedFromScopeId ?? null,
+          now
+        ) &&
+        !(ofNamedRun(row) && row.sourceRunId !== statement.sourceRunId)
+      : !sparedScopes.has(row.priceScopeId) && !sparedPairs.has(key);
+    (goes ? doomed : kept).push(row);
+  }
+
+  const touched: ItemPrice[] = [...doomed];
+  if (doomed.length > 0) {
+    // One statement for the rows, then one trail row each, as `deleteByRun`.
+    await tx.manager.delete(ItemPrice, { id: In(doomed.map((row) => row.id)) });
+    const removed = new Map<
+      string,
+      WithdrawItemPricesResult['removed'][number]
+    >();
+    for (const row of doomed) {
+      await tx.recordDelete(ItemPrice, row);
+      const key = pairKey(row.priceScopeId, row.sourceKind);
+      const counted = removed.get(key) ?? {
+        priceScopeId: row.priceScopeId,
+        sourceKind: row.sourceKind,
+        deleted: 0,
+      };
+      counted.deleted += 1;
+      removed.set(key, counted);
+    }
+    result.deleted = doomed.length;
+    result.removed = [...removed.values()];
+  }
+
+  if (statements.size > 0) {
+    const scopes = await tx.manager.find(PriceScope, {
+      where: {
+        id: In([
+          ...new Set(
+            [...statements.values()].flatMap((each) => [
+              each.priceScopeId,
+              ...(each.copiedFromScopeId ? [each.copiedFromScopeId] : []),
+            ])
+          ),
+        ]),
+      },
+    });
+    const scopeById = new Map(scopes.map((scope) => [scope.id, scope]));
+    for (const statement of statements.values()) {
+      const scope = scopeById.get(statement.priceScopeId);
+      if (!scope) {
+        // Deleted since the caller listed it. Nothing to write to.
+        continue;
+      }
+      const copiedFromScopeId = statement.copiedFromScopeId ?? null;
+      const source = copiedFromScopeId
+        ? scopeById.get(copiedFromScopeId)
+        : undefined;
+      if (
+        copiedFromScopeId &&
+        (!source ||
+          source.id === scope.id ||
+          source.supermarketId !== scope.supermarketId)
+      ) {
+        throw new ValidationException(
+          `The price scope ${copiedFromScopeId} is not another scope of the ` +
+            `chain the price scope ${scope.id} belongs to, so a price cannot ` +
+            'be stated as a copy of it.'
+        );
+      }
+      const instant = new Date(statement.price.observedAt).getTime();
+      const alreadyStated = kept.some(
+        (row) =>
+          row.priceScopeId === scope.id &&
+          row.sourceKind === statement.sourceKind &&
+          row.observedAt.getTime() >= instant &&
+          statesTheSame(row, statement.price, copiedFromScopeId, now)
+      );
+      if (alreadyStated) {
+        continue;
+      }
+      const outcome = await writeItemPrices(tx.manager, {
+        scope,
+        sourceKind: statement.sourceKind,
+        sourceRunId: statement.sourceRunId,
+        copiedFromScopeId,
+        entries: [{ ...statement.price, itemId: req.itemId }],
+        now,
+      });
+      for (const inserted of outcome.inserted) {
+        await tx.recordCreate(ItemPrice, inserted);
+      }
+      result.inserted += outcome.inserted.length;
+      result.confirmed += outcome.confirmed.length;
+      touched.push(...outcome.inserted, ...outcome.confirmed);
+    }
+  }
+
+  if (touched.length > 0) {
+    const keys = await affectedByRows(tx.manager, touched);
+    await recomputeEffectivePrices(tx.manager, keys, now);
+    result.recomputed = keys.length;
+  }
+  return result;
 }
 
 /** Thrown inside a transaction to undo it and carry its answer out. */

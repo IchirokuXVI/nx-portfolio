@@ -5,6 +5,7 @@ import {
   productGtin,
   SourceEntryStatus,
   type AddItemPriceBatchResult,
+  type ItemPriceValues,
   type ItemView,
   type PriceSourceKind,
   type SourceEntryPriceWithheld,
@@ -298,6 +299,27 @@ function statedPrice(
   };
 }
 
+/** How {@link statementsOf} reads the rows it is handed. */
+export interface StatementOptions {
+  /**
+   * The run pieces sold by weight are compared within, for a scope and kind.
+   * For a decision it is the run of the row being decided. Absent, it is the
+   * run of the newest statement.
+   */
+  runOf?: (priceScopeId: string, sourceKind: PriceSourceKind) => string | null;
+  /**
+   * The kind a price is stated under. Absent, it is the kind the row says
+   * now, which is what an accept writes with until plan 0190 puts the kind on
+   * the price row. The settle passes the kind of the run that observed the
+   * price. A null leaves the price out: nothing is stated under a kind that
+   * is not known.
+   */
+  kindOf?: (
+    entry: SourceCatalogEntry,
+    price: SourceEntryPrice
+  ) => PriceSourceKind | null;
+}
+
 /**
  * What the bound rows of one chain state for one product, per scope and
  * source kind, and what {@link decideArticles} makes of each (plan 0191).
@@ -308,19 +330,23 @@ function statedPrice(
  *
  * **Pieces sold by weight are compared within one run** (plan 0181): a row
  * the chain stopped listing keeps its last price, and that number is not
- * allowed to win against what the chain says today. `runOf` names the run
- * for a scope and kind: for a decision it is the run of the row being
- * decided, and absent it is the run of the newest statement.
+ * allowed to win against what the chain says today.
+ *
+ * **Rows that agree send the newest observation.** "The first" of rule 3 is
+ * the row whose price was observed last, so a row the chain stopped listing,
+ * which holds an old price of the same amount, does not put its old instant
+ * and its old run on the price a newer row states.
  */
 export function statementsOf(
   bound: readonly SourceCatalogEntry[],
   now: Date,
-  runOf?: (priceScopeId: string, sourceKind: PriceSourceKind) => string | null
+  options: StatementOptions = {}
 ): {
   priceScopeId: string;
   sourceKind: PriceSourceKind;
   verdict: ArticleVerdict<StatedPrice>;
 }[] {
+  const { runOf, kindOf } = options;
   const groups = new Map<
     string,
     {
@@ -329,19 +355,16 @@ export function statementsOf(
       articles: StatedPrice[];
     }
   >();
-  // Oldest decision first, so "the first" of rule 3 is the same row whoever
-  // asks and in whatever order the rows were loaded.
-  const ordered = [...bound].sort(
-    (a, b) =>
-      (a.decidedAt?.getTime() ?? 0) - (b.decidedAt?.getTime() ?? 0) ||
-      a.id.localeCompare(b.id)
-  );
-  for (const entry of ordered) {
+  for (const entry of bound) {
     for (const stated of openPrices(entry, now)) {
-      const key = `${stated.priceScopeId}|${entry.sourceKind}`;
+      const sourceKind = kindOf ? kindOf(entry, stated) : entry.sourceKind;
+      if (sourceKind === null) {
+        continue;
+      }
+      const key = `${stated.priceScopeId}|${sourceKind}`;
       const group = groups.get(key) ?? {
         priceScopeId: stated.priceScopeId,
-        sourceKind: entry.sourceKind,
+        sourceKind,
         articles: [],
       };
       group.articles.push(statedPrice(entry, stated));
@@ -351,7 +374,15 @@ export function statementsOf(
 
   const statements = [];
   for (const group of groups.values()) {
-    let articles = group.articles;
+    // Newest observation first, then oldest decision, then id: the same
+    // order whoever asks and in whatever order the rows were loaded.
+    let articles = [...group.articles].sort(
+      (a, b) =>
+        b.stated.observedAt.getTime() - a.stated.observedAt.getTime() ||
+        (a.entry.decidedAt?.getTime() ?? 0) -
+          (b.entry.decidedAt?.getTime() ?? 0) ||
+        a.entryId.localeCompare(b.entryId)
+    );
     if (articles.length > 1 && articles.every((each) => each.soldByWeight)) {
       const runId = runOf
         ? runOf(group.priceScopeId, group.sourceKind)
@@ -369,6 +400,22 @@ export function statementsOf(
     }
   }
   return statements;
+}
+
+/** The values of a stored price, as catalog takes them (plans 0086 and 0191). */
+export function priceValuesOf(
+  price: SourceEntryPrice
+): ItemPriceValues & { observedAt: string } {
+  return {
+    price: price.price === null ? null : Number(price.price),
+    currency: price.currency,
+    unitPrice: price.unitPrice === null ? null : Number(price.unitPrice),
+    unitPriceLabel: price.unitPriceLabel,
+    validFrom: price.validFrom?.toISOString() ?? null,
+    validUntil: price.validUntil?.toISOString() ?? null,
+    observedAt: price.observedAt.toISOString(),
+    details: toItemPriceDetails(price.details ?? null),
+  };
 }
 
 function newestOf(articles: readonly StatedPrice[]): StatedPrice {
@@ -498,7 +545,7 @@ export class SourceEntryPriceWriter {
     const statements = statementsOf(
       [entry, ...(await this.othersBound(entry))],
       now,
-      (priceScopeId) => ownRun.get(priceScopeId) ?? null
+      { runOf: (priceScopeId) => ownRun.get(priceScopeId) ?? null }
     );
 
     for (const { priceScopeId, sourceKind, verdict } of statements) {
@@ -543,19 +590,7 @@ export class SourceEntryPriceWriter {
   ): Promise<AddItemPriceBatchResult> {
     return this.catalog.addPrices(
       price.priceScopeId,
-      [
-        {
-          itemId,
-          price: price.price === null ? null : Number(price.price),
-          currency: price.currency,
-          unitPrice: price.unitPrice === null ? null : Number(price.unitPrice),
-          unitPriceLabel: price.unitPriceLabel,
-          validFrom: price.validFrom?.toISOString() ?? null,
-          validUntil: price.validUntil?.toISOString() ?? null,
-          observedAt: price.observedAt.toISOString(),
-          details: toItemPriceDetails(price.details ?? null),
-        },
-      ],
+      [{ itemId, ...priceValuesOf(price) }],
       price.runId,
       sourceKind,
       // A copied row keeps its provenance when a person accepts it later

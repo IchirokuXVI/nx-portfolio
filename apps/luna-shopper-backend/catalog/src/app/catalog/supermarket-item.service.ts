@@ -23,7 +23,7 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { In, Repository } from 'typeorm';
+import { In, Repository, type EntityManager } from 'typeorm';
 import {
   AuditActorKind,
   CatalogAudit,
@@ -48,6 +48,7 @@ import {
 import { LocationScopeService } from './location-scopes';
 import {
   PlatformAdminService,
+  requireServiceActor,
   type CatalogActor,
 } from './platform-admin.service';
 import { withdrawHarvestedShopRows } from './supermarket-location-item.service';
@@ -241,7 +242,15 @@ export class SupermarketItemService {
    *    row. `supermarket_items` carries no provenance of its own, and the back
    *    office can set this flag, so the trail is what tells a typed "not sold
    *    here" from a leftover.
-   * 5. Otherwise it is removed, whatever `available` says.
+   * 5. It is kept as `NO_TRAIL` when the trail cannot tell: the offer is older
+   *    than the oldest row the trail holds, or the trail holds none. That is
+   *    a catalog restored without its audit rows. An offer the recompute made
+   *    has no trail row of its own, so "no row for this offer" is the normal
+   *    case and says nothing. What says something is whether the trail was
+   *    being written while the offer existed.
+   * 6. Otherwise it is removed, whatever `available` says.
+   *
+   * **Only a service may send it**, because step 0 is the caller's word.
    *
    * `dryRun` runs the same statements in a transaction that is rolled back.
    * With `assumePricesWithdrawn` it removes the run written prices of those
@@ -252,6 +261,7 @@ export class SupermarketItemService {
     req: WithdrawSupermarketItemsRequest
   ): Promise<WithdrawSupermarketItemsResult> {
     const actor = await this.admin.requireAdmin(req);
+    requireServiceActor(actor, 'supermarketItem.withdraw');
     const scopeIds = [...new Set(req.priceScopeIds)];
     if (scopeIds.length > WITHDRAW_MAX_SCOPES) {
       throw new ValidationException(
@@ -292,6 +302,8 @@ export class SupermarketItemService {
 
     return dryRunnable(dryRun, (rollback) =>
       this.audit.write(actor, async (tx) => {
+        // Read before anything in this transaction adds to the trail.
+        const trailStart = await oldestTrailRow(tx.manager);
         if (assumed.length > 0) {
           await withdrawRunWrittenPrices(tx, {
             itemId: req.itemId,
@@ -299,16 +311,17 @@ export class SupermarketItemService {
             sourceKinds: assumed,
           });
         }
-        return rollback(await this.withdrawOffers(tx, req, scopes));
+        return rollback(await this.withdrawOffers(tx, req, scopes, trailStart));
       })
     );
   }
 
-  /** Steps 1 to 5 of {@link withdraw}, inside its transaction. */
+  /** Steps 1 to 6 of {@link withdraw}, inside its transaction. */
   private async withdrawOffers(
     tx: AuditedWrite,
     req: WithdrawSupermarketItemsRequest,
-    scopes: readonly PriceScope[]
+    scopes: readonly PriceScope[],
+    trailStart: Date | null
   ): Promise<WithdrawSupermarketItemsResult> {
     const manager = tx.manager;
     const shops = await manager.find(SupermarketLocation, {
@@ -371,6 +384,13 @@ export class SupermarketItemService {
       });
       if (typed) {
         result.offersKept.push({ priceScopeId: scope.id, reason: 'PERSON' });
+        continue;
+      }
+      if (
+        trailStart === null ||
+        offer.createdAt.getTime() < trailStart.getTime()
+      ) {
+        result.offersKept.push({ priceScopeId: scope.id, reason: 'NO_TRAIL' });
         continue;
       }
       await tx.delete(SupermarketItem, offer);
@@ -566,4 +586,16 @@ export class SupermarketItemService {
       throw new NotFoundException('Item not found');
     }
   }
+}
+
+/**
+ * When the trail's oldest row was written, or null for an empty trail (plan
+ * 0191). An offer older than this existed while nothing was being recorded,
+ * so the trail cannot say that no person wrote it.
+ */
+async function oldestTrailRow(manager: EntityManager): Promise<Date | null> {
+  const [row]: { at: Date | string | null }[] = await manager.query(
+    `SELECT min("at") AS "at" FROM "catalog_audit"`
+  );
+  return row?.at ? new Date(row.at) : null;
 }

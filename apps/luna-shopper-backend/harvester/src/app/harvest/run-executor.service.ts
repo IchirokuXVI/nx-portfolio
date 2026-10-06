@@ -8,7 +8,6 @@ import {
   HarvestRunWrites,
   HarvestWarningCode,
   PriceSourceKind,
-  type AdapterKey,
 } from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
 import { IsNull, Not, Repository } from 'typeorm';
@@ -28,6 +27,7 @@ import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunContext } from './run-context';
 import { RunReportSink, type RunReportResult } from './run-report.sink';
+import { sourceKindOf } from './run-source-kind';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceIngest, type SourceIngestCounters } from './source-ingest';
 import { SourceLocationService } from './source-location.service';
@@ -597,31 +597,6 @@ export class RunExecutor implements OnApplicationShutdown {
       controller.abort();
     }
   }
-}
-
-/**
- * What observed a price, per adapter (plan 0103, section 2.3).
- *
- * It is stamped on every row and every price a run writes, and it used to be
- * stated inline by each runner at its own ingest call. The runners write
- * nothing now, so it is stated here, once, and a run of an adapter this map does
- * not know is `OFFICIAL_WEB`: a page a chain publishes is the least specific
- * honest answer, and a file import never reaches here because the operator says
- * what observed it.
- */
-const SOURCE_KIND_BY_ADAPTER: Partial<Record<AdapterKey, PriceSourceKind>> = {
-  'mercadona-api': PriceSourceKind.OFFICIAL_API,
-  'lidl-api': PriceSourceKind.OFFICIAL_API,
-  'dia-api': PriceSourceKind.OFFICIAL_API,
-  'deza-web': PriceSourceKind.OFFICIAL_WEB,
-  'carrefour-web': PriceSourceKind.OFFICIAL_WEB,
-};
-
-function sourceKindOf(adapterKey: AdapterKey | undefined): PriceSourceKind {
-  return (
-    (adapterKey && SOURCE_KIND_BY_ADAPTER[adapterKey]) ??
-    PriceSourceKind.OFFICIAL_WEB
-  );
 }
 
 /**

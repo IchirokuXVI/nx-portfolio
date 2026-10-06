@@ -23,6 +23,7 @@ import {
   type FillPackCountsResult,
   type FindItemByEanResult,
   type FindItemsByEansResult,
+  type HeldItemPrice,
   type ItemEanPair,
   type ItemPage,
   type ItemPriceBatchEntry,
@@ -489,15 +490,20 @@ export class CatalogClient {
   }
 
   /**
-   * Remove the price rows harvest runs wrote for one product at these scopes
-   * and of these kinds (plan 0191), sparing the history of what `stated` says
-   * a bound row still states. Catalog owns the delete and the recompute, and
-   * never removes a row a person typed.
+   * Make the price rows harvest runs wrote for one product agree with the
+   * rows still bound to it, at these scopes and of these kinds (plan 0191).
+   *
+   * `held` is every price row a bound row holds, and catalog removes nothing
+   * such a row accounts for. `stated` is the one price the bound rows state
+   * at a scope and kind, and catalog makes it the current row there. The
+   * removal and the write are one catalog transaction. Catalog never removes
+   * a row a person typed.
    */
   withdrawPrices(
     itemId: string,
     priceScopeIds: string[],
     sourceKinds: PriceSourceKind[],
+    held: HeldItemPrice[],
     stated: StatedItemPrice[],
     dryRun = false
   ): Promise<WithdrawItemPricesResult> {
@@ -506,6 +512,7 @@ export class CatalogClient {
       itemId,
       priceScopeIds,
       sourceKinds,
+      held,
       stated,
       ...(dryRun ? { dryRun: true } : {}),
     });

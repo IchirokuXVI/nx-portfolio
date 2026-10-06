@@ -157,6 +157,8 @@ function build(
     others?: SourceCatalogEntry[];
     /** Fail the settle of the product a row left (plan 0191). */
     failSettle?: Error;
+    /** Fail the price write to the product the row is bound to now. */
+    failAddPrices?: Error;
   } = {}
 ) {
   const row = options.row ?? entry();
@@ -218,6 +220,9 @@ function build(
 
   const addPrices = jest.fn(async () => {
     calls.push('addPrices');
+    if (options.failAddPrices) {
+      throw options.failAddPrices;
+    }
     return { inserted: 1, confirmed: 0 };
   });
   const createItem = jest.fn(
@@ -395,6 +400,8 @@ function settled(
     pricesWithdrawn: 1,
     pricesWithdrawnAt: [],
     pricesRestated: 0,
+    pricesWritten: 0,
+    pricesKeptAsWritten: [],
     pricesWithheld: [],
     offersRemoved: [],
     offersKept: [],
@@ -1545,7 +1552,7 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
     });
 
   describe('accept onto another product', () => {
-    it('settles the product the row left, at the row’s chain, after the prices', async () => {
+    it('settles the product the row left, at the row’s chain, right after the bind is saved', async () => {
       const { service, settle, calls } = build({ row: bound() });
 
       const result = await service.accept({
@@ -1556,13 +1563,52 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
 
       expect(settle).toHaveBeenCalledTimes(1);
       expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
-      // The row is bound to the new product and its prices are written
-      // before the old product is settled: the settle reads the rows bound
-      // to the old product now, and this row must no longer be one of them.
+      // After the save: the settle reads the rows bound to the old product
+      // now, and this row must no longer be one of them. Before the price
+      // write: that step can fail, and a retry of the accept cannot settle,
+      // because the saved row no longer names the product it left.
       expect(calls.indexOf('save')).toBeLessThan(calls.indexOf('settle'));
-      expect(calls.indexOf('addPrices')).toBeLessThan(calls.indexOf('settle'));
+      expect(calls.indexOf('settle')).toBeLessThan(calls.indexOf('addPrices'));
       expect(result.entry.itemId).toBe('item-new');
       expect(result.settled).toEqual(settled('item-old', CHAIN));
+    });
+
+    it('has settled the old product when the price write then fails, and the error says so', async () => {
+      const { service, settle, saved, calls } = build({
+        row: bound(),
+        failAddPrices: new Error('catalog is away'),
+      });
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
+
+      // The old product is settled although the request failed.
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
+      expect(calls).toEqual(['save', 'settle', 'addPrices']);
+      expect(saved[0]).toMatchObject({ itemId: 'item-new' });
+      expect(failure).toBeInstanceOf(Error);
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('item-old');
+      expect(message).toContain(CHAIN);
+      expect(message).toContain('was settled');
+      expect(message).not.toContain('NOT settled');
+    });
+
+    it('settles nothing on the retry, which is why the first call had to', async () => {
+      // The row as the failed call left it: bound to the new product.
+      const { service, settle } = build({
+        row: bound({ itemId: 'item-new' }),
+      });
+
+      await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(settle).not.toHaveBeenCalled();
     });
 
     it('settles nothing when the row is accepted onto the product it is bound to', async () => {
@@ -1597,21 +1643,29 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
       expect(result.settled).toBeNull();
     });
 
-    it('leaves the decision standing when the settle fails, and answers with its error', async () => {
-      const { service, saved } = build({
+    it('leaves the decision standing when the settle fails, still writes the prices, and names the product to settle', async () => {
+      const { service, saved, addPrices } = build({
         row: bound(),
         failSettle: new Error('catalog is away'),
       });
 
-      await expect(
-        service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
-      ).rejects.toThrow('catalog is away');
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
 
       expect(saved).toHaveLength(1);
       expect(saved[0]).toMatchObject({
         status: SourceEntryStatus.ACTIVE,
         itemId: 'item-new',
       });
+      // The new product is owed its price whatever happened to the old one.
+      expect(addPrices).toHaveBeenCalled();
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('NOT settled');
+      // Enough to call the route by hand: the product and the chain.
+      expect(message).toContain('/v1/admin/harvest/items/item-old/settle');
+      expect(message).toContain(CHAIN);
     });
   });
 
@@ -1660,11 +1714,16 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
         failSettle: new Error('catalog is away'),
       });
 
-      await expect(
-        service.reject({ userId: ADMIN, entryId: 'e-1' })
-      ).rejects.toThrow('catalog is away');
+      const failure = await service
+        .reject({ userId: ADMIN, entryId: 'e-1' })
+        .catch((error: Error) => error);
 
       expect(saved[0].status).toBe(SourceEntryStatus.REJECTED);
+      // A second reject cannot settle: the saved row names no product.
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('/v1/admin/harvest/items/item-old/settle');
+      expect(message).toContain(CHAIN);
     });
   });
 

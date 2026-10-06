@@ -579,10 +579,13 @@ export class AdminHarvestEntriesController {
    * product it leaves. Its barcode is taken off the old product and given to
    * the new one, unless another row still bound to the old product prints it
    * too: then the answer is 409 `item_ean_held`, naming the old product, and
-   * nothing is written. After the bind the old product is settled at the
-   * row's chain, as `POST items/:itemId/settle` does, and `settled` answers
-   * what that removed. If the settle fails the bind stands, the request
-   * answers with that error, and the settle route finishes the job.
+   * nothing is written. Right after the bind the old product is settled at
+   * the row's chain, as `POST items/:itemId/settle` does, and `settled`
+   * answers what that removed. It is settled before the prices of the new
+   * product are written, because a second accept cannot do it: the saved row
+   * no longer names the product it left. Any error after the bind names the
+   * old product and the chain, and says whether the product was settled. If
+   * it was not, the settle route finishes the job.
    */
   @Post(':id/accept')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
@@ -685,8 +688,9 @@ export class AdminHarvestEntriesController {
    * `POST items/:itemId/settle` does: the prices the row stated go, and when
    * no other row of the chain names the product, so do its offers and the
    * shop rows runs wrote. The barcode stays on the product. If the settle
-   * fails the row stays rejected, the request answers with that error, and
-   * the settle route finishes the job.
+   * fails the row stays rejected, and the request answers with that error.
+   * The error names the product and the chain, and the settle route finishes
+   * the job.
    */
   @Post(':id/reject')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.reject, {
@@ -760,15 +764,25 @@ export class AdminHarvestItemsController {
    * route is for a product a row left before that existed, and for a
    * decision whose own settle failed.
    *
-   * For each scope of the chain and each kind a harvest run writes:
+   * **It removes only what no bound row accounts for.** For each scope of
+   * the chain and each kind a harvest run writes:
    *
-   * - When no bound row holds an open price there, the price rows of the
+   * - When no bound row holds a price row there, the price rows of the
    *   product that a run wrote there are removed.
-   * - When the bound rows state one price there, the rows observed at that
-   *   statement or later are removed and the price is written again, so the
-   *   current row is the one a bound row states.
+   * - When a bound row holds a price row there, open or closed, nothing of
+   *   its history is removed. A leaflet that ended keeps its rows.
+   * - When the open prices of the bound rows come to one price there, that
+   *   price is stated (`pricesRestated`). Catalog removes the rows that were
+   *   observed at its instant or later and say something else, and makes it
+   *   the current row, in one transaction. `pricesWritten` counts the rows
+   *   that inserted.
    * - When the bound rows state two amounts there, nothing is removed and
    *   nothing is written. `pricesWithheld` names the rows.
+   *
+   * The kind of a price is the kind of the run that observed it, not the kind
+   * its row says today. When that run cannot be read, every kind at the scope
+   * of the price is left alone. `pricesKeptAsWritten` names a price catalog
+   * holds under another kind than its run's: it stays as it was written.
    *
    * A price a person typed is never removed: an `ADMIN` price, and a price of
    * any kind that names no run.
@@ -776,11 +790,12 @@ export class AdminHarvestItemsController {
    * Then, only when no bound row of the chain names the product, its offers
    * in the scopes of the chain are removed, with the shop rows a run wrote.
    * An offer stays when a price still exists for it (`PRICED`), when a shop
-   * row a person wrote backs it (`SHOP_ROW`) or when an operator wrote the
-   * offer itself (`PERSON`). `offersKept` says which.
+   * row a person wrote backs it (`SHOP_ROW`), when an operator wrote the
+   * offer itself (`PERSON`), or when the offer is older than the audit trail
+   * that would say so (`NO_TRAIL`). `offersKept` says which.
    *
    * `dryRun: true` answers the same and writes nothing. Calling it twice is
-   * safe: the second call finds nothing left to do.
+   * safe: the second call changes no row.
    *
    * An unknown chain answers 404. A product id nothing names answers zeros,
    * because the harvester does not own products.

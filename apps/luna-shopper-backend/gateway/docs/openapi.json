@@ -39629,7 +39629,37 @@
           "pricesRestated": {
             "type": "integer",
             "minimum": 0,
-            "description": "Prices of the bound rows that were sent to catalog again, one per row and scope. It counts what was sent, not what changed."
+            "description": "Prices of the bound rows that were stated to catalog, one per scope and kind. It counts what was stated, not what changed."
+          },
+          "pricesWritten": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows catalog inserted for those statements. Zero on a product that was already settled."
+          },
+          "pricesKeptAsWritten": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "heldAs": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "heldAs"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Statements catalog did not apply, because it holds the price of that run at that scope under another kind (heldAs) than the kind of the run (sourceKind). The price stays as it was written."
           },
           "pricesWithheld": {
             "type": "array",
@@ -39659,7 +39689,8 @@
                   "enum": [
                     "PRICED",
                     "SHOP_ROW",
-                    "PERSON"
+                    "PERSON",
+                    "NO_TRAIL"
                   ]
                 }
               },
@@ -39711,6 +39742,8 @@
           "pricesWithdrawn",
           "pricesWithdrawnAt",
           "pricesRestated",
+          "pricesWritten",
+          "pricesKeptAsWritten",
           "pricesWithheld",
           "offersRemoved",
           "offersKept",

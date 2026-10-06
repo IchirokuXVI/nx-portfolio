@@ -142,6 +142,48 @@ function leftItemOf(
   return entry.itemId === nextItemId ? null : entry.itemId;
 }
 
+/**
+ * Add to an error the product a decision took its row off, and the chain
+ * (plan 0191), and answer the error to throw.
+ *
+ * A decision on a bound row cannot be asked again for the old product: once
+ * the row is saved it names the new product, or none, and nothing remembers
+ * the one it left. So an error after that save says which product that was
+ * and whether it was settled, and a person can call the settle route.
+ *
+ * The error keeps its class and its code. Only its sentence grows.
+ */
+export function namingLeftProduct(
+  error: unknown,
+  left: { itemId: string; supermarketId: string; settled: boolean }
+): unknown {
+  const sentence = left.settled
+    ? `The row was taken off product ${left.itemId}, and that product was ` +
+      `settled at chain ${left.supermarketId} before this failed.`
+    : `The row was taken off product ${left.itemId}, and that product was ` +
+      `NOT settled at chain ${left.supermarketId}: it still holds what the ` +
+      `row wrote. Call POST /v1/admin/harvest/items/${left.itemId}/settle ` +
+      `with { "supermarketId": "${left.supermarketId}" } to finish it.`;
+  if (error instanceof Error) {
+    error.message = `${error.message} ${sentence}`;
+    return error;
+  }
+  if (error !== null && typeof error === 'object') {
+    // A problem object from catalog over NATS: `detail` is what the thrower
+    // wrote, and `message` the sentence for its code.
+    const problem = error as Record<string, unknown>;
+    const field = typeof problem['detail'] === 'string' ? 'detail' : 'message';
+    return {
+      ...problem,
+      [field]:
+        typeof problem[field] === 'string'
+          ? `${problem[field]} ${sentence}`
+          : sentence,
+    };
+  }
+  return new Error(`${describeError(error).message} ${sentence}`);
+}
+
 /** The two statuses that are waiting for a person: the queue (plan 0086, D7). */
 const QUEUED = [SourceEntryStatus.CANDIDATE, SourceEntryStatus.UNRESOLVED];
 
@@ -423,8 +465,11 @@ export class SourceEntryService {
    *   ({@link barcodeToTeach}). It is taken off the old product and taught to
    *   the new one.
    * - Its prices, offers and shop rows, which {@link SourceEntrySettler}
-   *   withdraws from the old product last. Last, because it is the one step
-   *   a person can run again by itself, through `settleItem`.
+   *   withdraws from the old product **right after the bind is saved**
+   *   ({@link afterLeaving}). It depends on the bind alone, and a retry of
+   *   the decision cannot do it: the saved row no longer names the product
+   *   it left. So it runs before any step that can fail, and every error
+   *   after the save names the old product and the chain.
    *
    * **A second article of the chain on the product writes no price where the
    * two disagree** (plan 0191, decision 2A). The row is bound, `pricesWritten`
@@ -443,16 +488,23 @@ export class SourceEntryService {
       left
     );
     const bound = await this.bind(entry, req.itemId);
-    const prices = await this.writeRowPrices(bound);
-    if (teach !== null) {
-      await this.teachBarcode(req.itemId, teach);
-    }
+    const { settled, value: prices } = await this.afterLeaving(
+      left,
+      bound,
+      async () => {
+        const written = await this.writeRowPrices(bound);
+        if (teach !== null) {
+          await this.teachBarcode(req.itemId, teach);
+        }
+        return written;
+      }
+    );
     return {
       entry: toSourceCatalogEntryView(bound),
       pricesWritten: prices.written,
       createdItem: null,
       pricesWithheld: prices.withheld,
-      settled: await this.settleLeft(left, bound),
+      settled,
     };
   }
 
@@ -584,16 +636,23 @@ export class SourceEntryService {
     });
 
     const bound = await this.bind(entry, item.id);
-    const prices = await this.writeRowPrices(bound);
-    if (teach !== null) {
-      await this.teachBarcode(item.id, teach);
-    }
+    const { settled, value: prices } = await this.afterLeaving(
+      left,
+      bound,
+      async () => {
+        const written = await this.writeRowPrices(bound);
+        if (teach !== null) {
+          await this.teachBarcode(item.id, teach);
+        }
+        return written;
+      }
+    );
     return {
       entry: toSourceCatalogEntryView(bound),
       pricesWritten: prices.written,
       createdItem: item,
       pricesWithheld: prices.withheld,
-      settled: await this.settleLeft(left, bound),
+      settled,
     };
   }
 
@@ -609,7 +668,9 @@ export class SourceEntryService {
    * product it was bound to is settled at the row's chain after the save: the
    * prices this row stated go, and when no other row of the chain names the
    * product, so do its offers and the shop rows runs wrote. A failure there
-   * leaves the row rejected and is the error the request answers with.
+   * leaves the row rejected and is the error the request answers with, and
+   * the error names the product and the chain: a second reject cannot settle
+   * it, because the saved row names no product.
    *
    * The barcode stays on the product. A rejected row names no product, so
    * there is nowhere for it to go, and whether the product keeps a barcode
@@ -628,7 +689,7 @@ export class SourceEntryService {
     entry.decidedAt = new Date();
     // name, brand and sizeFormat are deliberately untouched (D8).
     const saved = await this.entries.save(entry);
-    await this.settleLeft(left, saved);
+    await this.afterLeaving(left, saved, async () => undefined);
     return toSourceCatalogEntryView(saved);
   }
 
@@ -654,16 +715,58 @@ export class SourceEntryService {
   }
 
   /**
-   * Settle the product a decision took a row off, at the row's chain. Null
-   * when the decision took it off none.
+   * The steps of a decision that follow the save of the row (plan 0191), with
+   * the product the row left settled first.
+   *
+   * **The settle comes first because nothing can ask for it again.** The
+   * decision reads the old product off the row before it saves. After the
+   * save the row names the new product, or none, so a retry of the same
+   * decision finds no product to settle. If the settle waited behind the
+   * price write and the barcode, one failure there would leave the old
+   * product with its price and its offers and nothing naming it.
+   *
+   * **Every failure after the save names the old product and the chain**
+   * ({@link namingLeftProduct}), and says whether it was settled:
+   *
+   * - The settle fails. `rest` still runs: the new product is owed its
+   *   prices whatever happened to the old one. The request then answers with
+   *   the settle's error.
+   * - A step of `rest` fails. The request answers with that error, and it
+   *   says whether the old product was settled before it.
+   *
+   * A decision that takes the row off no product runs `rest` and nothing
+   * else.
    */
-  private settleLeft(
+  private async afterLeaving<T>(
     left: string | null,
-    entry: SourceCatalogEntry
-  ): Promise<SettleItemAtChainResult | null> {
-    return left === null
-      ? Promise.resolve(null)
-      : this.settler.settle(left, entry.supermarketId);
+    entry: SourceCatalogEntry,
+    rest: () => Promise<T>
+  ): Promise<{ settled: SettleItemAtChainResult | null; value: T }> {
+    if (left === null) {
+      return { settled: null, value: await rest() };
+    }
+    const named = { itemId: left, supermarketId: entry.supermarketId };
+    let settled: SettleItemAtChainResult | null = null;
+    let settleError: unknown = null;
+    try {
+      settled = await this.settler.settle(left, entry.supermarketId);
+    } catch (error) {
+      settleError = error;
+      this.logger.error(
+        `Row ${entry.id} left product ${left}, and settling that product at ` +
+          `chain ${entry.supermarketId} failed: ${describeError(error).message}`
+      );
+    }
+    let value: T;
+    try {
+      value = await rest();
+    } catch (error) {
+      throw namingLeftProduct(error, { ...named, settled: settled !== null });
+    }
+    if (settled === null) {
+      throw namingLeftProduct(settleError, { ...named, settled: false });
+    }
+    return { settled, value };
   }
 
   // --- Brands (plan 0115, sections 7 and 8) ---------------------------------
