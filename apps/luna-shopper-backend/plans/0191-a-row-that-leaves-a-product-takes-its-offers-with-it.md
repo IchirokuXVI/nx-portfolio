@@ -1,3 +1,5 @@
+> **PR:** [#652](https://github.com/IchirokuXVI/nx-portfolio/pull/652)
+
 # 0191: a row that leaves a product takes its offers with it
 
 > Found by the repair of the first catalog on local slot 1 (plan `0186`, stage A, steps A5
