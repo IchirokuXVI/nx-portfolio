@@ -1,0 +1,30 @@
+{
+  "step": "A2",
+  "title": "A pack count read from a dimension",
+  "sources": [
+    "a2.answers.json"
+  ],
+  "keys": "Each product is keyed as it stood in the catalog of 2026-10-03, before stage A. That state is replayed from the end of stage A (see build/state.mjs).",
+  "decidedBy": "Plan 0186, target A2.",
+  "count": 9,
+  "naturalKeys": {
+    "products": 9,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"product":{"brand":"Maxi Products","nameEs":"Bandeja de cartón con blonda blanca 25x34 cm","size":null,"unit":"UNIT","packCount":25,"barcode":null,"localId":"465e7b19-9b7c-4c5d-ae97-f06c54582e33"},"decision":{"action":"clear-pack-count","packCountWas":25},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Bandeja cartón con blonda MAXI PRODUCTS blanca | 25x34 cm | size null | pack 25"]},
+    {"product":{"brand":"Mascow","nameEs":"Manta para mascota huellas 125x157 cm","size":null,"unit":"UNIT","packCount":125,"barcode":null,"localId":"1443dc50-7c02-40dd-9870-a6cf79e7af8e"},"decision":{"action":"clear-pack-count","packCountWas":125},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Manta para mascota MASCOW huellas 125x157 cm | 125x157 cm | size null | pack null","Manta mascota MASCOW huellas | 125x157 cm | size null | pack 125"]},
+    {"product":{"brand":"Mascow","nameEs":"Manta para mascotas huellas 125x150 cm","size":null,"unit":"UNIT","packCount":125,"barcode":null,"localId":"067123a9-9e6b-4eec-aad6-66778dd7f27f"},"decision":{"action":"clear-pack-count","packCountWas":125},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Manta mascotas huellas MASCOW | 125x150 cm | size null | pack 125"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel aguamarina 5x1.2 m","size":null,"unit":"UNIT","packCount":5,"barcode":null,"localId":"c0901484-cdcc-4f2a-90f7-10927dda992b"},"decision":{"action":"clear-pack-count","packCountWas":5},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel aguamarina MAXI PRODUCTS | 5x1.2 m | size null | pack 5"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel azul 5x1.2 m","size":null,"unit":"UNIT","packCount":5,"barcode":null,"localId":"5ee70871-0970-465c-9af7-c7a401a1a202"},"decision":{"action":"clear-pack-count","packCountWas":5},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel azul MAXI PRODUCTS | 5x1.2 m | size null | pack 5"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel biodegradable amarillo 5x1.2 m","size":null,"unit":"UNIT","packCount":5,"barcode":null,"localId":"32e55f70-98f7-4192-ab15-056a9ae6b3e9"},"decision":{"action":"clear-pack-count","packCountWas":5},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel biodegradable MAXI PRODUCTS amarillo | 5x1.2 m | size null | pack 5"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel blanco 10x1 m","size":null,"unit":"UNIT","packCount":10,"barcode":null,"localId":"f2a31e9b-60c1-440b-b406-500e56d4db86"},"decision":{"action":"clear-pack-count","packCountWas":10},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel blanco MAXI PRODUCTS | 10x1 m | size null | pack 10"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel fucsia 5x1.2 m","size":null,"unit":"UNIT","packCount":5,"barcode":null,"localId":"c984147d-0a92-4b37-ad76-f2cdcf74c708"},"decision":{"action":"clear-pack-count","packCountWas":5},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel fucsia MAXI PRODUCTS | 5x1.2 m | size null | pack 5"]},
+    {"product":{"brand":"Maxi Products","nameEs":"Rollo mantel rojo 5x1.2 m","size":null,"unit":"UNIT","packCount":5,"barcode":null,"localId":"69927d10-6eef-4713-8d1e-835565e8bad0"},"decision":{"action":"clear-pack-count","packCountWas":5},"status":"applied","why":"The pack count is the first number of a dimension in the name.","printedRows":["Rollo mantel rojo MAXI PRODUCTS | 5x1.2 m | size null | pack 5"]}
+  ]
+}

@@ -1,0 +1,202 @@
+{
+  "replay": {
+    "productsBeforeStageA": 19791,
+    "productsAtTheStartOfStageB": 19764,
+    "writesThatNamedAProductTheReplayDoesNotHold": 0,
+    "productsThatDifferFromTheTwoReadsOfPass1": 0
+  },
+  "files": [
+    {
+      "file": "a01-english-names.json",
+      "step": "A1",
+      "count": 100,
+      "products": 100,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a02-pack-counts-from-a-dimension.json",
+      "step": "A2",
+      "count": 9,
+      "products": 9,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a03-units.json",
+      "step": "A3",
+      "count": 199,
+      "products": 199,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a04-codes-that-are-not-a-barcode.json",
+      "step": "A4",
+      "count": 216,
+      "products": 216,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a05-sizes-against-unit-prices.json",
+      "step": "A5",
+      "count": 146,
+      "products": 146,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a06-the-same-product-twice.json",
+      "step": "A6",
+      "count": 40,
+      "products": 79,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 30,
+      "rowsWithNoChain": 4,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 4,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a07-rows-bound-to-the-wrong-product.json",
+      "step": "A7",
+      "count": 3,
+      "products": 4,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 7,
+      "rowsWithNoChain": 2,
+      "rowsWithNoSourceKind": 2,
+      "rowsWithNoExternalId": 2,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a08-one-brand-registered-twice.json",
+      "step": "A8",
+      "count": 6,
+      "products": 5,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a09-a-wrong-brand-on-a-product.json",
+      "step": "A9",
+      "count": 10,
+      "products": 11,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 1,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a10-names-that-say-pack.json",
+      "step": "A10",
+      "count": 103,
+      "products": 103,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "a11-brand-decisions.json",
+      "step": "A11",
+      "count": 32,
+      "products": 84,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "b01-prices-by-the-kilo.json",
+      "step": "B1",
+      "count": 47,
+      "products": 47,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 67,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "b02-deza-run.json",
+      "step": "B2",
+      "count": 69,
+      "products": 58,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 58,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "b03-sizes-of-one-unit.json",
+      "step": "B3",
+      "count": 435,
+      "products": 453,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 430,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "b04-candidate-rows.json",
+      "step": "B4",
+      "count": 28,
+      "products": 22,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 53,
+      "rowsWithNoChain": 14,
+      "rowsWithNoSourceKind": 14,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "b05-grams-and-units.json",
+      "step": "B5",
+      "count": 48,
+      "products": 96,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 117,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    }
+  ]
+}
