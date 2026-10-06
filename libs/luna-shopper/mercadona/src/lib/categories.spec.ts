@@ -235,7 +235,7 @@ describe('the checked in fixtures (plan 0166, section 7)', () => {
       'compatible-nespresso-capsules',
       'serrano-ham',
       'batteries-kitchenware-and-bags',
-      'cream',
+      'body-and-hand-hydration',
       'film-aluminum-and-preservation',
     ]);
     expect(

@@ -6,11 +6,14 @@ import approximateWeight from './__fixtures__/product-approximate-weight.json';
 import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
 import oliveOil from './__fixtures__/product-detail-es.json';
+import detergent from './__fixtures__/product-detergent-per-wash.json';
+import eggs from './__fixtures__/product-eggs-per-dozen.json';
 import fixedPackInStoreBarcode from './__fixtures__/product-fixed-pack-in-store-barcode.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
 import packOfPads from './__fixtures__/product-pack-of-pads.json';
 import packOfWipes from './__fixtures__/product-pack-of-wipes.json';
+import per100g from './__fixtures__/product-reference-format-100g.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
 import rollOfServices from './__fixtures__/product-roll-of-services.json';
 import singleRazor from './__fixtures__/product-single-razor.json';
@@ -73,10 +76,10 @@ describe('normalizeProduct', () => {
   describe('bulk_price is stored verbatim and never recomputed (section 2.4)', () => {
     it('keeps the value even when it equals unit_price / unit_size', () => {
       const product = normalizeProduct(referenceFormat);
-      expect(product.price).toBe(1.8);
-      expect(product.unitSize).toBe(0.4);
-      // 1.80 / 0.4 is 4.50, so deriving would agree here. It is still not derived.
-      expect(product.unitPrice).toBe(4.5);
+      expect(product.price).toBe(3.4);
+      expect(product.unitSize).toBe(0.2);
+      // 3.40 / 0.2 is 17.00, so deriving would agree here. It is still not derived.
+      expect(product.unitPrice).toBe(17);
     });
 
     it('keeps a value normalized per pack unit rather than per kilo', () => {
@@ -98,12 +101,177 @@ describe('normalizeProduct', () => {
     });
   });
 
-  it('keeps reference_format as the source wrote it, label and number disagreeing', () => {
-    // `100 ml` sits on a number that is per LITRE. It is a price tag for a human
-    // and cannot be parsed into a unit, which is why it is stored as text.
-    const product = normalizeProduct(referenceFormat);
-    expect(product.unitPriceLabel).toBe('100 ml');
-    expect(product.unit).toBe(UnitOfMeasure.LITER);
+  describe('the label names what the figure is (plan 0189)', () => {
+    /** A captured product with some fields of its price block replaced. */
+    const withPrice = (
+      raw: { price_instructions: object },
+      fields: Record<string, unknown>
+    ) => ({
+      ...raw,
+      price_instructions: { ...raw.price_instructions, ...fields },
+    });
+
+    it('is what the four captures say it is', () => {
+      // As served on 2026-10-06. `reference_format` names `reference_price`,
+      // and `bulk_price` is another figure on each of the four.
+      expect(referenceFormat.price_instructions).toMatchObject({
+        unit_price: '3.40',
+        unit_size: 0.2,
+        size_format: 'l',
+        bulk_price: '17.00',
+        reference_price: '1.700',
+        reference_format: '100 ml',
+      });
+      expect(per100g.price_instructions).toMatchObject({
+        unit_price: '1.60',
+        unit_size: 0.049,
+        size_format: 'kg',
+        bulk_price: '32.65',
+        reference_price: '3.266',
+        reference_format: '100 g',
+      });
+      expect(eggs.price_instructions).toMatchObject({
+        unit_price: '3.35',
+        unit_size: 12,
+        size_format: 'ud',
+        bulk_price: '0.28',
+        reference_price: '3.350',
+        reference_format: 'dc',
+      });
+      expect(detergent.price_instructions).toMatchObject({
+        unit_price: '5.85',
+        unit_size: 3,
+        size_format: 'l',
+        total_units: 50,
+        unit_name: 'lavados',
+        bulk_price: '1.95',
+        reference_price: '0.117',
+        reference_format: 'lv',
+      });
+    });
+
+    it('keeps the label as sent when the two prices are one figure', () => {
+      // The olive oil: `bulk_price` and `reference_price` are both 8.75.
+      expect(normalizeProduct(oliveOil).unitPriceLabel).toBe('L');
+    });
+
+    it('writes L beside the price of a litre that the chain labels per 100 ml', () => {
+      const product = normalizeProduct(referenceFormat);
+      // The figure is `bulk_price`, untouched: 17 a litre and not 1.70.
+      expect(product.unitPrice).toBe(17);
+      expect(product.unitPriceLabel).toBe('L');
+      expect(product.unit).toBe(UnitOfMeasure.LITER);
+    });
+
+    it('writes kg beside the price of a kilo that the chain labels per 100 g', () => {
+      // 32.65 over ten is 3.265 and the chain prints 3.266: each field is
+      // rounded on its own, so the two agree within a step.
+      const product = normalizeProduct(per100g);
+      expect(product.unitPrice).toBe(32.65);
+      expect(product.unitPriceLabel).toBe('kg');
+    });
+
+    it('writes ud beside the price of one egg that the chain labels per dozen', () => {
+      const product = normalizeProduct(eggs);
+      expect(product.unitPrice).toBe(0.28);
+      expect(product.unitPriceLabel).toBe('ud');
+      // `dz` is the same label in another spelling.
+      expect(
+        normalizeProduct(withPrice(eggs, { reference_format: 'dz' }))
+          .unitPriceLabel
+      ).toBe('ud');
+    });
+
+    it('writes L beside the price of a litre that the chain labels per wash', () => {
+      const product = normalizeProduct(detergent);
+      expect(product.unitPrice).toBe(1.95);
+      expect(product.unitPriceLabel).toBe('L');
+    });
+
+    it('writes kg for a detergent sized in kilos', () => {
+      // No captured product shows it, so this is the detergent with its size
+      // format changed: the same evidence, on a powder.
+      expect(
+        normalizeProduct(withPrice(detergent, { size_format: 'kg' }))
+          .unitPriceLabel
+      ).toBe('kg');
+    });
+
+    it('keeps lv when both prices are the price of a wash', () => {
+      // A pack of tablets: the chain compares it per wash in both fields.
+      expect(
+        normalizeProduct(
+          withPrice(detergent, { bulk_price: '0.12', reference_price: '0.117' })
+        ).unitPriceLabel
+      ).toBe('lv');
+    });
+
+    it('keeps lv when the payload does not say what the figure is', () => {
+      for (const fields of [
+        { total_units: null },
+        { total_units: 40 },
+        { bulk_price: '2.40' },
+        { size_format: 'ud' },
+      ]) {
+        expect(
+          normalizeProduct(withPrice(detergent, fields)).unitPriceLabel
+        ).toBe('lv');
+      }
+    });
+
+    it('keeps the label as sent when the numbers agree with no rule', () => {
+      // The 110 products of plan 0038: 2.45 for 0.15 kg beside 16.75.
+      const product = normalizeProduct(inconsistent);
+      expect(product.unitPrice).toBe(16.75);
+      expect(product.unitPriceLabel).toBe('kg');
+      // A nail polish of 11 ml at 2.50 carries 2.50 under `100 ml`. Whatever
+      // `reference_price` holds, nothing says the figure is per litre.
+      for (const reference_price of ['2.500', '22.727']) {
+        expect(
+          normalizeProduct(
+            withPrice(referenceFormat, {
+              unit_price: '2.50',
+              unit_size: 0.011,
+              bulk_price: '2.50',
+              reference_price,
+            })
+          ).unitPriceLabel
+        ).toBe('100 ml');
+      }
+    });
+
+    it('keeps the label as sent when the payload has no reference_price', () => {
+      expect(
+        normalizeProduct(withPrice(referenceFormat, { reference_price: null }))
+          .unitPriceLabel
+      ).toBe('100 ml');
+    });
+
+    it('reads the same label from a category listing', () => {
+      const [listed] = normalizeCategoryProducts({
+        id: 1,
+        name: 'Cuidado corporal',
+        products: [referenceFormat],
+      });
+      expect(listed).toMatchObject({
+        externalId: '46815',
+        unitPrice: 17,
+        unitPriceLabel: 'L',
+      });
+    });
+
+    it('sorts the captured cheese listing by rule', () => {
+      // 38 products, each compared per kilo: the label as sent on every one.
+      // The listing holds no product of the other rules.
+      const labels = normalizeCategoryProducts(cheeseListing).map(
+        (product) => product.unitPriceLabel
+      );
+      const sent = cheeseListing.categories
+        .flatMap((category) => category.products)
+        .map((product) => product.price_instructions.reference_format);
+      expect(labels).toHaveLength(38);
+      expect(labels).toEqual(sent);
+    });
   });
 
   it('reads a missing EAN and an empty brand as null, not as empty strings', () => {

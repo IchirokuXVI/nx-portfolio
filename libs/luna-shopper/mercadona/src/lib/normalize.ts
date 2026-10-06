@@ -87,7 +87,7 @@ function toListProduct(
     packCount: readPackCount(price),
     price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
-    unitPriceLabel: readString(price, 'reference_format'),
+    unitPriceLabel: readUnitPriceLabel(price),
     categoryPath: path,
   };
 }
@@ -139,7 +139,7 @@ export function normalizeProduct(
     categoryPath: path.map((node) => node.name),
     price: readPrice(price, soldByWeight),
     unitPrice: readNumber(price, 'bulk_price'),
-    unitPriceLabel: readString(price, 'reference_format'),
+    unitPriceLabel: readUnitPriceLabel(price),
     currency: 'EUR',
     // A detail payload exists, so the warehouse carries it. A 404 never reaches
     // here: the client turns it into null and the caller records unavailable.
@@ -276,6 +276,137 @@ function comparedOver(price: Json, pieces: number): boolean {
   }
   const step = reference === null ? 0.01 : 0.001;
   return Math.abs(compared - unitPrice / pieces) <= step + 1e-9;
+}
+
+/** `bulk_price` carries two decimals and `reference_price` three. */
+const BULK_PRICE_STEP = 0.01;
+const REFERENCE_PRICE_STEP = 0.001;
+
+/**
+ * The labels that name `reference_price` and not `bulk_price` (plan 0189):
+ * what `bulk_price` is multiplied by to give `reference_price`, and the
+ * label that is true of `bulk_price`, in the spelling the chain uses for it.
+ */
+const SCALED_LABELS: Readonly<
+  Record<string, { factor: number; base: string }>
+> = {
+  '100 ml': { factor: 0.1, base: 'L' },
+  '100 g': { factor: 0.1, base: 'kg' },
+  dz: { factor: 12, base: 'ud' },
+  dc: { factor: 12, base: 'ud' },
+};
+
+/** The label of a wash, and the label of each size format a wash is sold in. */
+const WASH_LABEL = 'lv';
+const SIZE_FORMAT_LABELS: Readonly<Record<string, string>> = {
+  l: 'L',
+  kg: 'kg',
+};
+
+/**
+ * The label that is true of the unit price this adapter stores (plan 0189).
+ *
+ * The unit price stored is `bulk_price`, verbatim (plan 0038, section 2.4).
+ * **`reference_format` is the label of `reference_price`, which is another
+ * field.** The two fields hold the same figure for most products, and then
+ * the label fits both. They differ for the products below, and there the
+ * label as sent is false of the figure stored: a body oil of 200 ml at 3.40
+ * was stored as 17 with the label "100 ml".
+ *
+ * This reads the three fields and changes the label only. No figure is
+ * multiplied, divided or rounded on the way in, and `reference_price` is
+ * evidence here, as it is in {@link comparedOver}. It is not stored.
+ *
+ * 1. `reference_price` equals `bulk_price` within one step of the last
+ *    decimal: the label as sent. That is every `kg`, `L` and `ud` product.
+ *    Proved by `product-detail-es.json`.
+ * 2. The label is `100 ml`, `100 g`, `dz` or `dc`, and `reference_price`
+ *    is `bulk_price` over ten, or times twelve: the figure stored is per
+ *    litre, kilo or piece, so the label is `L`, `kg` or `ud`. Proved by
+ *    three products captured on 2026-10-06:
+ *    - `product-reference-format-100ml.json`, product 46815, a body oil of
+ *      0.2 l at 3.40: `bulk_price: "17.00"`, `reference_price: "1.700"`.
+ *    - `product-reference-format-100g.json`, product 34149, a spice of
+ *      0.049 kg at 1.60: `bulk_price: "32.65"`, `reference_price: "3.266"`.
+ *      The chain rounds each field on its own, so the two agree within a
+ *      step and not to the digit.
+ *    - `product-eggs-per-dozen.json`, product 15768, twelve eggs at 3.35
+ *      under `dc`: `bulk_price: "0.28"` is one egg and `reference_price:
+ *      "3.350"` is the dozen.
+ * 3. The label is `lv`, a wash. `reference_price` is the pack price over
+ *    the washes in `total_units`, and `bulk_price` is the pack price over
+ *    `unit_size`: the figure stored is per litre or per kilo, so the label
+ *    is `L` or `kg`, after `size_format`. Proved by
+ *    `product-detergent-per-wash.json`, product 86400, captured on
+ *    2026-10-06: 3 l at 5.85 with `total_units: 50` and `unit_name:
+ *    "lavados"` answers `bulk_price: "1.95"` and `reference_price:
+ *    "0.117"`. A pack of tablets whose two fields both hold the price of a
+ *    wash falls under the first rule and keeps `lv`, which is true of it.
+ * 4. Anything else: the label as sent. A product whose numbers agree with no
+ *    rule keeps what the chain wrote, as its `bulk_price` does. A nail
+ *    polish of 11 ml carries its own pack price as the figure, and nothing in
+ *    the payload says what that figure is per.
+ *
+ * A payload with no `reference_price` has no evidence, and keeps its label.
+ */
+function readUnitPriceLabel(price: Json): string | null {
+  const label = readString(price, 'reference_format');
+  const bulk = readNumber(price, 'bulk_price');
+  const reference = readNumber(price, 'reference_price');
+  if (label === null || bulk === null || reference === null) {
+    return label;
+  }
+  if (agree(reference, bulk, BULK_PRICE_STEP)) {
+    return label;
+  }
+  const key = label.trim().toLowerCase();
+  const scaled = Object.prototype.hasOwnProperty.call(SCALED_LABELS, key)
+    ? SCALED_LABELS[key]
+    : null;
+  if (scaled !== null) {
+    // Each field is rounded on its own, so the room is one step of the
+    // coarser of the two after the scaling.
+    const step = Math.max(
+      REFERENCE_PRICE_STEP,
+      BULK_PRICE_STEP * scaled.factor
+    );
+    return agree(reference, bulk * scaled.factor, step) ? scaled.base : label;
+  }
+  if (key === WASH_LABEL) {
+    return washedLabel(price, bulk) ?? label;
+  }
+  return label;
+}
+
+/**
+ * The label of a figure sent under `lv` that is not the price of a wash, or
+ * null when the payload does not say what it is. See rule 3 above.
+ */
+function washedLabel(price: Json, bulk: number): string | null {
+  const unitPrice = readNumber(price, 'unit_price');
+  const unitSize = readNumber(price, 'unit_size');
+  const washes = readNumber(price, 'total_units');
+  const sizeFormat = readString(price, 'size_format')?.trim().toLowerCase();
+  if (
+    unitPrice === null ||
+    unitSize === null ||
+    unitSize <= 0 ||
+    washes === null ||
+    washes <= 0 ||
+    sizeFormat === undefined ||
+    !Object.prototype.hasOwnProperty.call(SIZE_FORMAT_LABELS, sizeFormat)
+  ) {
+    return null;
+  }
+  return comparedOver(price, washes) &&
+    agree(bulk, unitPrice / unitSize, BULK_PRICE_STEP)
+    ? SIZE_FORMAT_LABELS[sizeFormat]
+    : null;
+}
+
+/** Whether two printed figures are the same within `step`. */
+function agree(a: number, b: number, step: number): boolean {
+  return Math.abs(a - b) <= step + 1e-9;
 }
 
 /**

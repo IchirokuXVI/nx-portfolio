@@ -14,6 +14,9 @@ export * from './lib/brands/never-a-brand';
 // The unit a source's size is in, and the one conversion every adapter reads a
 // printed size through (plan 0177). Browser reachable, as the brand key is.
 export * from './lib/units/source-size';
+// What a verbatim unit price label means (plan 0157), read by catalog and by
+// the harvester (plan 0189). Browser reachable too.
+export * from './lib/units/unit-basis';
 
 // The one barcode reader, shared by catalog, the harvester and the gateway
 // (plan 0184). Browser reachable, as the brand key is.

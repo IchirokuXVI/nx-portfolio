@@ -20,7 +20,10 @@ import {
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { formatCurrencyAmount } from '@portfolio/luna-shopper-admin/models';
+import {
+  formatCurrencyAmount,
+  unitPriceUnit,
+} from '@portfolio/luna-shopper-admin/models';
 import { ReferencePicker } from '@portfolio/luna-shopper-admin/ui';
 
 /** How many price rows one page asks for. */
@@ -49,6 +52,11 @@ export interface RunPriceRow {
   readonly price: number | null;
   readonly unitPrice: number | null;
   readonly unitPriceLabel: string | null;
+  /**
+   * What the unit price is per, as the catalog read it from the label, or
+   * `''` when it read nothing (backend plan 0189).
+   */
+  readonly unitBasis: string;
   readonly currency: string | null;
   readonly writtenBy: RunPriceWrittenBy;
 }
@@ -82,12 +90,26 @@ export function toRunPriceRow(value: unknown): RunPriceRow | null {
     price: numberOrNull(row['price']),
     unitPrice: numberOrNull(row['unitPrice']),
     unitPriceLabel: stringOf(row['unitPriceLabel']) || null,
+    unitBasis: stringOf(row['unitBasis']),
     currency: stringOf(row['currency']) || null,
     writtenBy:
       writtenBy === 'INSERTED' || writtenBy === 'CONFIRMED'
         ? writtenBy
         : 'UNKNOWN',
   };
+}
+
+/**
+ * The unit price of a row with what it is per: the basis the catalog read,
+ * and the label of the source only when it read none (backend plan 0189).
+ */
+export function runUnitPrice(row: RunPriceRow): string {
+  if (row.unitPrice === null) {
+    return '';
+  }
+  const unit = unitPriceUnit(row.unitBasis, row.unitPriceLabel);
+
+  return unit === '' ? String(row.unitPrice) : `${row.unitPrice} / ${unit}`;
 }
 
 function stringOf(value: unknown): string {
@@ -333,12 +355,7 @@ export class RunPricesTab {
       scope: names.get(`price-scopes:${row.priceScopeId}`) ?? row.priceScopeId,
       sourceKind: row.sourceKind,
       price: formatCurrencyAmount(row.price, row.currency),
-      unitPrice:
-        row.unitPrice === null
-          ? ''
-          : row.unitPriceLabel === null
-            ? String(row.unitPrice)
-            : `${row.unitPrice} / ${row.unitPriceLabel}`,
+      unitPrice: runUnitPrice(row),
       writtenBy: row.writtenBy,
       // The Prices tab of the product, with the scope the run wrote at open
       // (admin plan 0043, target 7). Where the registry says a product's

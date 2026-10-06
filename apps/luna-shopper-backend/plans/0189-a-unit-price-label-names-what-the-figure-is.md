@@ -1,3 +1,5 @@
+> **PR:** [#651](https://github.com/IchirokuXVI/nx-portfolio/pull/651)
+
 # 0189: a unit price label names what the figure is
 
 > Found by the repair of the first catalog on local slot 1 (plan `0186`, stage A, step A5,

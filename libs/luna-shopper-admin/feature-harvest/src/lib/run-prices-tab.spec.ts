@@ -13,7 +13,7 @@ import {
   ResourceReferences,
   ResourceRegistry,
 } from '@portfolio/luna-shopper-admin/feature-resource';
-import { RunPricesTab, toRunPriceRow } from './run-prices-tab';
+import { RunPricesTab, runUnitPrice, toRunPriceRow } from './run-prices-tab';
 
 /**
  * The "Prices written" tab (admin plan 0033), against the in memory harvester,
@@ -159,6 +159,33 @@ describe('the prices a run wrote', () => {
       fixture.nativeElement.querySelector('[role="alert"]')
     ).not.toBeNull();
     expect(text(fixture)).toContain('resource.action.retry');
+  });
+
+  it('prints the basis the catalog read, and not the label of the source (backend plan 0189)', () => {
+    const unitPriceOf = (row: Record<string, unknown>) => {
+      const read = toRunPriceRow({ id: 'p', itemId: 'i', ...row });
+      return read === null ? null : runUnitPrice(read);
+    };
+
+    // The price of a litre, which the chain sent under `100 ml`.
+    expect(
+      unitPriceOf({
+        unitPrice: 17,
+        unitPriceLabel: '100 ml',
+        unitBasis: 'LITER',
+      })
+    ).toBe('17 / L');
+    // No basis was read, so the label is what there is.
+    expect(
+      unitPriceOf({ unitPrice: 4.13, unitPriceLabel: '100gr', unitBasis: null })
+    ).toBe('4.13 / 100gr');
+    expect(unitPriceOf({ unitPrice: 0.92, unitPriceLabel: '1 L' })).toBe(
+      '0.92 / 1 L'
+    );
+    expect(unitPriceOf({ unitPrice: 2 })).toBe('2');
+    expect(unitPriceOf({ unitPriceLabel: 'kg', unitBasis: 'KILOGRAM' })).toBe(
+      ''
+    );
   });
 
   it('reads a written by it does not know as unknown', () => {

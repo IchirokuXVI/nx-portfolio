@@ -15,6 +15,7 @@ import {
   CONTENT_LOCALES,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
+  UNIT_BASES,
 } from '../../lib/messages/catalog.messages';
 import {
   ADAPTER_CAPABILITIES,
@@ -533,6 +534,11 @@ const sourceEntryPriceView = object(
     currency: nonEmptyString(),
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
+    // Plan 0189: read from the label on every request, so it is stated and
+    // never required, as it is on a catalog price (plan 0157).
+    unitBasis: {
+      anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
+    },
     validFrom: nullableString(),
     validUntil: nullableString(),
     details: nullableObject(),

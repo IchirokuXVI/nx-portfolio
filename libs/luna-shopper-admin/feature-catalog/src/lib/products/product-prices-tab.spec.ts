@@ -531,6 +531,29 @@ describe('the prices of a product', () => {
     expect(text(fixture)).toContain('catalog.productPrices.none');
   });
 
+  it('prints the basis the catalog read, and not the label of the source (backend plan 0189)', async () => {
+    // The price of a litre, which the chain sent under `100 ml`.
+    const oil: Wire.CatalogItemPriceView = {
+      ...priceRow('ip_oil', 'ps_mercadona_national'),
+      price: 3.4,
+      unitPrice: 17,
+      unitPriceLabel: '100 ml',
+      unitBasis: 'LITER',
+    };
+    const fixture = await boot('/products/it_dish_soap/prices', [
+      {
+        provide: RESOURCE_GATEWAYS,
+        useValue: scopesAnswering([
+          [scopeOf('ps_mercadona_national', 'NATIONAL', 1000, [oil])],
+        ]),
+      },
+    ]);
+    const [scope] = pricesTab(fixture).chains()[0].scopes;
+
+    expect(scope.unitPrice).toBe('€17.00 / L');
+    expect(scope.unitPrice).not.toContain('100 ml');
+  });
+
   /**
    * More pages than are read on opening: the tab offers the next one, and
    * says no number that it did not read.
