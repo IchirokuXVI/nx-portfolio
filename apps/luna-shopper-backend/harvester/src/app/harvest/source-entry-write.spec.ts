@@ -35,6 +35,8 @@ function price(
     id: `price-${entryId}-${over.priceScopeId ?? SCOPE}`,
     entryId,
     priceScopeId: SCOPE,
+    // The kind of the run that observed it (plan 0190). Every run writes one.
+    sourceKind: PriceSourceKind.OFFICIAL_API,
     price: perKilo,
     currency: 'EUR',
     unitPrice: perKilo,
@@ -74,24 +76,33 @@ function piece(
 
 /**
  * The writer over a table of rows, with a `find` that filters as the real
- * query does: the same chain, source kind and product, `ACTIVE`, and not the
- * row being written. Since plan 0191 it reads every such row, sold by weight
- * or not, because a second article is compared too.
+ * query does: the same chain and product, `ACTIVE`, and not the row being
+ * written. Since plan 0191 it reads every such row, sold by weight or not,
+ * because a second article is compared too. Since plan 0190 it reads rows of
+ * every kind, because the kind that is compared is the kind of each price.
+ *
+ * It throws on a `where` that names the kind of the row, so a writer that
+ * goes back to filtering rows by it fails here and not on real data.
  */
 function build(table: SourceCatalogEntry[]) {
   const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
   const find = jest.fn(
     async (query: {
       where: Partial<SourceCatalogEntry> & { id: FindOperator<string> };
-    }) =>
-      table.filter(
+    }) => {
+      if ('sourceKind' in query.where) {
+        throw new Error(
+          'The other bound rows are read whatever the kind of the row is.'
+        );
+      }
+      return table.filter(
         (row) =>
           row.id !== query.where.id.value &&
           row.supermarketId === query.where.supermarketId &&
-          row.sourceKind === query.where.sourceKind &&
           row.itemId === query.where.itemId &&
           row.status === query.where.status
-      )
+      );
+    }
   );
   const writer = new SourceEntryPriceWriter(
     { addPrices } as unknown as CatalogClient,
@@ -228,15 +239,16 @@ describe('SourceEntryPriceWriter, rows sold by weight (plan 0181)', () => {
     );
   });
 
-  it('ignores a row of another product, another chain or another source kind', async () => {
+  it('ignores a row of another product or another chain, and a price of another kind', async () => {
     const dear = piece('50943', [price('50943', 9.7)]);
     const { writer, addPrices } = build([
       dear,
       piece('a', [price('a', 1)], { itemId: 'item-2' }),
       piece('b', [price('b', 1)], { supermarketId: 'another-chain' }),
-      piece('c', [price('c', 1)], {
-        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
-      }),
+      // The kind that is compared is the kind of the price (plan 0190).
+      piece('c', [
+        price('c', 1, { sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }),
+      ]),
       piece('d', [price('d', 1)], { status: SourceEntryStatus.CANDIDATE }),
     ]);
 
@@ -428,9 +440,13 @@ describe('SourceEntryPriceWriter, a second article of the chain (plan 0191)', ()
           validUntil: new Date('2020-01-01T00:00:00Z'),
         }),
       ]),
-      pack('leaflet', [price('leaflet', 1.99)], {
-        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
-      }),
+      // A price of another kind, which is the kind of the price since plan
+      // 0190 and not the kind of its row.
+      pack('leaflet', [
+        price('leaflet', 1.99, {
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        }),
+      ]),
     ]);
 
     await expect(writer.writeNamed(king)).resolves.toEqual({
@@ -500,11 +516,11 @@ describe('statementsOf (plan 0191)', () => {
     expect(statement.verdict.send?.entryId).toBe('a');
   });
 
-  it('keeps two source kinds of one scope apart', () => {
+  it('keeps two source kinds of one scope apart, by the kind of each price', () => {
     const web = pack('a', [price('a', 2.45)]);
-    const leaflet = pack('b', [price('b', 1.99)], {
-      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
-    });
+    const leaflet = pack('b', [
+      price('b', 1.99, { sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }),
+    ]);
 
     const statements = statementsOf([web, leaflet], NOW);
 
@@ -513,5 +529,209 @@ describe('statementsOf (plan 0191)', () => {
       PriceSourceKind.OFFICIAL_LEAFLET,
     ]);
     expect(statements.every((each) => each.verdict.send !== null)).toBe(true);
+  });
+
+  it('reads the kind from the price and not from the row (plan 0190)', () => {
+    // One row that a website walk owns, with a price of each kind for one
+    // scope. The kind of the row says who owns its text.
+    const shared = pack(
+      'a',
+      [
+        price('a', 2.45, {
+          id: 'web',
+          sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        }),
+        price('a', 1.99, {
+          id: 'leaflet',
+          sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+        }),
+      ],
+      { sourceKind: PriceSourceKind.OFFICIAL_WEB }
+    );
+
+    const statements = statementsOf([shared], NOW);
+
+    expect(
+      statements
+        .map((each) => [each.sourceKind, each.verdict.send?.stated.id])
+        .sort()
+    ).toEqual([
+      [PriceSourceKind.OFFICIAL_LEAFLET, 'leaflet'],
+      [PriceSourceKind.OFFICIAL_WEB, 'web'],
+    ]);
+  });
+
+  it('states nothing for a price that has no kind', () => {
+    const old = pack('a', [price('a', 2.45, { sourceKind: null })]);
+
+    expect(statementsOf([old], NOW)).toEqual([]);
+  });
+});
+
+describe('SourceEntryPriceWriter, the kind of each price (plan 0190)', () => {
+  const LEAFLET_RUN = '66666666-6666-4666-8666-666666666666';
+
+  /** A row that a website walk owns, as the eight Deza rows of slot 1 are. */
+  function websiteRow(
+    id: string,
+    prices: SourceEntryPrice[],
+    over: Partial<SourceCatalogEntry> = {}
+  ): SourceCatalogEntry {
+    return piece(id, prices, {
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      soldByWeight: false,
+      ...over,
+    });
+  }
+
+  function leafletPrice(
+    entryId: string,
+    amount: number,
+    over: Partial<SourceEntryPrice> = {}
+  ): SourceEntryPrice {
+    return price(entryId, amount, {
+      id: `leaflet-${entryId}`,
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      runId: LEAFLET_RUN,
+      unitPrice: null,
+      unitPriceLabel: null,
+      ...over,
+    });
+  }
+
+  it('sends a leaflet price on a website row as a leaflet price', async () => {
+    const row = websiteRow('covap', [leafletPrice('covap', 1.15)]);
+    const { writer, addPrices } = build([row]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
+
+    expect(addPrices).toHaveBeenCalledTimes(1);
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: 1.15 })],
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
+  });
+
+  it('sends both prices of one scope, each under its own kind and run', async () => {
+    const row = websiteRow('covap', [
+      price('covap', 1.25, {
+        id: 'web-covap',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      }),
+      leafletPrice('covap', 1.15),
+    ]);
+    const { writer, addPrices } = build([row]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 2,
+      withheld: [],
+    });
+
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ price: 1.25 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_WEB,
+      null
+    );
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ price: 1.15 })],
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
+  });
+
+  it('compares with prices of the same kind only, whatever the kind of the other row', async () => {
+    // Another row of the chain, which only a leaflet has described, prices
+    // the product at another amount in the leaflet. That is a conflict for
+    // the leaflet price. The website price meets nothing and is written.
+    const row = websiteRow('covap', [
+      price('covap', 1.25, {
+        id: 'web-covap',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      }),
+      leafletPrice('covap', 1.15),
+    ]);
+    const other = websiteRow('tile', [leafletPrice('tile', 0.99)], {
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+    });
+    const { writer, addPrices } = build([row, other]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 1,
+      withheld: [
+        { entryId: 'covap', priceScopeId: SCOPE, otherEntryIds: ['tile'] },
+      ],
+    });
+
+    expect(addPrices).toHaveBeenCalledTimes(1);
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ price: 1.25 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_WEB,
+      null
+    );
+  });
+
+  it('does not meet a price of another kind on a row of the same kind', async () => {
+    // Two website rows of one product. One holds a website price and the
+    // other a leaflet price of another amount, for one scope. Before the
+    // plan both were compared under the kind of their rows, and neither was
+    // sent.
+    const row = websiteRow('a', [leafletPrice('a', 1.15)]);
+    const other = websiteRow('b', [
+      price('b', 1.25, { sourceKind: PriceSourceKind.OFFICIAL_WEB }),
+    ]);
+    const { writer, addPrices } = build([row, other]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ price: 1.15 })],
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
+  });
+
+  it('sends no price that has no kind, and still sends the others', async () => {
+    // A row from before the plan whose kind the migration could not read.
+    // The kind of the row is not used for it: that would be a guess.
+    const row = websiteRow('old', [
+      price('old', 3.1, {
+        id: 'unknown',
+        sourceKind: null,
+        runId: null,
+        priceScopeId: OTHER_SCOPE,
+      }),
+      leafletPrice('old', 1.15),
+    ]);
+    const { writer, addPrices } = build([row]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
+
+    expect(addPrices).toHaveBeenCalledTimes(1);
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      expect.anything(),
+      LEAFLET_RUN,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+      null
+    );
   });
 });

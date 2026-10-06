@@ -4401,6 +4401,7 @@ export type HarvestSourceEntryPriceSkip = {
 export type HarvestSourceEntryPriceView = {
   id: string;
   priceScopeId: string;
+  sourceKind: EnumsPriceSourceKind | null;
   price: number | null;
   currency: string;
   unitPrice: number | null;

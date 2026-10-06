@@ -408,7 +408,7 @@ const BRAND_SEARCH_DELAY_MS = 250;
               <p class="hint">{{ 'harvest.entries.prices.none' | rokuT }}</p>
             } @else {
               <ul>
-                @for (line of priceLines(); track line.scopeId) {
+                @for (line of priceLines(); track line.key) {
                   <li>
                     @if (line.mark; as mark) {
                       <lib-scope-mark
@@ -417,6 +417,12 @@ const BRAND_SEARCH_DELAY_MS = 250;
                       />
                     }
                     <span class="scope">{{ line.scope }}</span>
+                    <span class="kind">{{
+                      (line.sourceKind === null
+                        ? 'harvest.entries.prices.noKind'
+                        : 'catalog.priceSourceKind.' + line.sourceKind
+                      ) | rokuT
+                    }}</span>
                     <span class="window">{{ line.window }}</span>
                     <span class="unit">{{ line.unitPrice }}</span>
                     <span class="amount">{{ line.price }}</span>
@@ -814,6 +820,10 @@ const BRAND_SEARCH_DELAY_MS = 250;
       min-inline-size: 8rem;
     }
 
+    .kind {
+      color: var(--admin-ink-muted);
+    }
+
     .amount,
     .unit {
       font-variant-numeric: tabular-nums;
@@ -1205,13 +1215,19 @@ export class EntriesQueuePage implements OnDestroy {
       : 'harvest.entries.accept'
   );
 
-  /** The price lines with their scopes named, and how far each one reaches. */
+  /**
+   * The price lines with their scopes named, and how far each one reaches.
+   *
+   * A row can hold two prices for one scope, one a website stated and one a
+   * leaflet stated (backend plan 0190), so a line is tracked by both.
+   */
   readonly priceLines = computed(() => {
     const scopes = this._scopeNames();
     return (this.row()?.prices ?? []).map((line) => {
       const scope = scopes.get(line.scopeId);
       return {
         ...line,
+        key: `${line.scopeId}|${line.sourceKind ?? ''}`,
         scope: scope?.name ?? line.scopeId,
         mark: scope?.mark ?? null,
       };

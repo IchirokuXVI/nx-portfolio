@@ -44,10 +44,16 @@ const RUN_KINDS: readonly PriceSourceKind[] = [
 /**
  * The kind each of these runs wrote its prices with (plan 0191).
  *
- * A source row carries one `sourceKind`, and every full observation rewrites
- * it: a row the website and a leaflet both print says whichever came last
- * (plan 0190). A price row keeps the run that observed it, and a run has one
- * kind for its whole life. So the kind of a price is asked of its run:
+ * **A fallback since plan 0190.** A price row now says its own kind
+ * (`source_entry_prices.sourceKind`), and every run writes it. This is asked
+ * only for a price row that has none, which is a row from before that plan
+ * whose kind the migration could not read. The migration of plan 0190 read
+ * the kind the same way, in SQL.
+ *
+ * The kind of a source row never was the answer: before plan 0190 every full
+ * observation rewrote it, and since then it says who owns the text of the
+ * row. A price row keeps the run that observed it, and a run has one kind for
+ * its whole life. So the kind of such a price is asked of its run:
  *
  * - **A file import** was stamped by the operator, and the stamp is in the
  *   run's input.

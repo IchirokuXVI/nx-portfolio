@@ -82,7 +82,12 @@ export interface SourceEntryRow {
    */
   readonly candidateEntryId: string;
 
-  /** One line per scope, newest window first. Empty is a statement, not a gap. */
+  /**
+   * One line per scope and kind of source. Empty is a statement, not a gap.
+   *
+   * A row that a website and a leaflet both print holds a price of each for
+   * one scope (backend plan 0190), so the scope alone does not name a line.
+   */
   readonly prices: readonly SourceEntryPriceLine[];
   /** Whatever the producer put in the bag, as key and value. Folded by default. */
   readonly extra: readonly SourceEntryExtraLine[];
@@ -102,6 +107,15 @@ export interface SourceEntryRow {
  */
 export interface SourceEntryPriceLine {
   readonly scopeId: string;
+  /**
+   * What stated this price: API, web or leaflet (backend plan 0190).
+   *
+   * It is the kind the price is written to the catalog under, and it can
+   * differ from the kind of the row. `null` for a price from before that
+   * plan whose kind nobody could read, and for a kind this app does not
+   * know. An accept does not write a price whose kind is unknown.
+   */
+  readonly sourceKind: OfficialSourceKind | null;
   /** Already formatted, with the price's own currency. */
   readonly price: string;
   /** The comparison figure with the label the source printed. `''` when none. */
@@ -218,6 +232,7 @@ function readPrice(
 
   return {
     scopeId: asText(price['priceScopeId']),
+    sourceKind: toOfficialSourceKind(price['sourceKind']),
     price: formatCurrencyAmount(asNumber(price['price']), currency, locale),
     unitPrice: unit === '' || label === '' ? unit : `${unit} / ${label}`,
     window: formatWindow(from, until, locale),

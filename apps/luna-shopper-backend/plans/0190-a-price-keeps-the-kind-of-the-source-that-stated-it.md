@@ -211,3 +211,146 @@ Only local slot 1 holds the eight rows. Nothing is repaired by hand.
   stage B left for the owner. Without it, the second import turns the eight rows into
   leaflet rows again and rewrites their text. With it, the import writes prices and
   moves the seen fields only.
+
+## 4. What was built, and the choices the builder made
+
+Every target state is built. This section records the places where the plan was silent or
+where the build differs from its text, and what only the owner can settle.
+
+### The column can be null, and the migration guesses nothing
+
+Target 1 says `not null`, and target 6 gives a price with no readable run the kind of its
+entry. The build differs on both, on the instruction the builder was given with the plan:
+the migration runs on the one curated catalog, and a price whose kind cannot be known
+stays without a kind.
+
+- `source_entry_prices.sourceKind` is nullable. Every run writes it. Null exists only on
+  a row from before this plan.
+- The kind of the entry is never copied to a price. That kind is the one a later run may
+  have rewritten, which is the defect this plan exists for.
+- The unique key is `UNIQUE NULLS NOT DISTINCT ("entryId", "priceScopeId", "sourceKind")`,
+  named `uq_source_entry_prices_scope_kind`. Two nulls count as equal, so a row and a
+  scope hold one price of no kind at most, as before. Every database of the service is
+  Postgres 16.
+
+A price with no kind is shown in the queue as "Source unknown, not written". An accept
+does not send it to catalog. The settle of plan `0191` asks its run once more, and keeps
+every price at its scope when the run does not say.
+
+### The migration, exactly
+
+`SourceEntryPriceKind1759200000000` in the harvester. Catalog has no migration.
+
+1. It adds the nullable column.
+2. A price of a `FILE_IMPORT` run takes the `sourceKind` of the input of that run, when it
+   is `OFFICIAL_API`, `OFFICIAL_WEB` or `OFFICIAL_LEAFLET`.
+3. A price of any other run takes the kind of the adapter of the chain of that run:
+   `OFFICIAL_API` for `mercadona-api`, `lidl-api` and `dia-api`, and `OFFICIAL_WEB` for any
+   other adapter. The list is frozen in the migration file.
+4. A price stays without a kind when it names no run, when its run is not in
+   `harvest_runs`, when the run is a file import whose input names no official kind, or
+   when the run is a walk of a chain with no row in `supermarket_sources`.
+5. It prints the count of rows stamped with each kind, and the count left without a kind
+   for each of the three reasons.
+6. It drops `uq_source_entry_prices_scope` and adds the new key.
+
+It updates one column of `source_entry_prices` and no other table. It changes no price,
+no run id, no instant and no row of `source_catalog_entries`, and it deletes nothing. The
+down restores the old key and drops the column. The down refuses, and deletes nothing,
+while a row holds two prices for one scope.
+
+**On a copy of the dump of slot 1** (`after-0189/after-run/harvester.dump`, restored into
+a scratch database of an ephemeral slot):
+
+- 25,470 price rows before and after, with the same fingerprint over every old column.
+- 25,861 source rows, with the same fingerprint.
+- Stamped: 18,383 `OFFICIAL_API`, 6,891 `OFFICIAL_WEB`, 196 `OFFICIAL_LEAFLET`.
+- Left without a kind: 0. The dump holds no price without a run and no price of a run
+  that is gone, and its one file import names its kind.
+- The 196 prices of run `794056b6` are all `OFFICIAL_LEAFLET`: 188 on rows that say
+  `OFFICIAL_LEAFLET`, and 8 on the eight rows that say `OFFICIAL_WEB`.
+- The eight rows keep their kind, their name, their status and their product.
+
+### The read that section 3 left open
+
+Confirmed on a copy of `catalog.dump` of the same snapshot. Each of the six bound
+products holds one `item_prices` row of run `794056b6`, and all six are
+`OFFICIAL_LEAFLET`. Run `794056b6` wrote 108 price rows to catalog, all of them
+`OFFICIAL_LEAFLET`. No leaflet price of that run is in catalog under another kind.
+
+### A walk owns the text: what counts as a walk
+
+`writesSourceGroup` in `source-snapshot.ts` is the rule, and `touch` calls it.
+
+- A walk is a run of kind `OFFICIAL_API` or `OFFICIAL_WEB`.
+- A walk of one kind that observes a row of the other walk kind writes it, as before.
+  Which of two walks owns a row is not a question this plan asks.
+- An observation that is not a walk leaves a row that a walk owns alone. That is a
+  leaflet today, and it will be a receipt when backlog `0008` is built.
+- A row that a walk has taken over keeps its `firstRunId`. A revert of the leaflet run
+  that created it thus still does not delete it, because its `lastRunId` moved.
+
+One point the plan did not name. A full observation is counted in the EAN index of the
+chain before the ladder runs, because it writes its EAN to its row, null included. A
+leaflet tile prints no barcode. For a row that a walk owns, that null is not written to
+the row any more, so it is not counted either. Without that, a tile took the barcode of
+a walked row out of the count, and a second row that shares the barcode could bind by
+it.
+
+### An accept, and the comparison with other rows
+
+- The writer reads the kind from each price row. A row that holds a website price and a
+  leaflet price for one scope sends both, each with its own run.
+- The other bound rows of the chain are read whatever the kind of the row is, and
+  compared by the kind of each price. A leaflet price on a website row is thus compared
+  with the leaflet price of a row that only a leaflet described. Before, two rows of two
+  kinds were never compared.
+- `scopeSharedWith` on the entries of a product follows the same rule: two rows share a
+  scope when both hold an open price of one kind there.
+
+### How the settle of plan 0191 reads the kind
+
+`SourceEntrySettler` takes the kind from the price row. It asks `sourceKindsOfRuns` only
+for the prices that have none, and it asks nothing when every price has a kind. A price
+that neither answers has no kind, and plan `0191` then keeps everything at its scope, as
+before. No spec of plan `0191` was weakened. The fixtures of its integration specs now
+stamp each price with the kind of its run, as a run does, and each keeps one case with a
+price of no kind.
+
+One guard of plan `0191` stays in use. Catalog keeps a price that was accepted under the
+wrong kind before this plan (`pricesKeptAsWritten`). The six bound rows of slot 1 need
+none of it: their catalog rows have the right kind.
+
+### The back office
+
+The queue card lists the prices of a row. Each line now names what stated it, with the
+existing `catalog.priceSourceKind` texts, and a line is tracked by scope and kind. One
+new text, `harvest.entries.prices.noKind`.
+
+### What proves it
+
+- `harvester/src/app/harvest/shared-source-row.integration.spec.ts`, on real Postgres:
+  both orders of a website run and a leaflet import, the two price rows of one scope, the
+  counters, and an accept that sends `OFFICIAL_LEAFLET`.
+- `harvester/src/app/db/source-entry-price-kind.migration.integration.spec.ts`, on a
+  probe database: twelve cases of run and row, the log line, the key, and the down.
+- `settle-across-services.integration.spec.ts`: a row with two kinds at one scope, a
+  move that carries a leaflet price as a leaflet price, and the fallback to the run.
+- `source-ingest.spec.ts`, `source-entry-write.spec.ts` and `source-entry-settle.spec.ts`
+  for the same rules without a database.
+
+### For the owner to decide
+
+- **The leaflet queue.** `SourceEntryService.list` still filters on the kind of the row.
+  A row that a walk owns is in the website queue also when a leaflet prices it. The plan
+  says so for the two unresolved rows, and the build changes nothing here. A filter "has
+  a leaflet price" would be a new plan.
+- **The export of a leaflet run.** It still reads the rows whose `lastRunId` is the run.
+  It holds the eight offers again after the second import, until the next website run
+  observes them. The text it exports for a shared row is the website's.
+- **A price with no kind.** None exists on slot 1. If one ever does, it stays beside the
+  new prices of its scope for good, is never sent, and makes the settle state nothing at
+  that scope. The other choice is to let the first run that prices the scope replace it.
+- **The size of the two toys.** As section 1 says, the leaflet size of a row that a walk
+  owns is not stored. The two toys have none today, and the second import does not
+  bring it back.

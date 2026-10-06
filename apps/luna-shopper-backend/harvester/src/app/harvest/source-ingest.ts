@@ -28,6 +28,7 @@ import {
   applySourceGroup,
   loadCatalogItems,
   sourceGroupChanged,
+  writesSourceGroup,
   type SourceEntryFields,
 } from './source-snapshot';
 
@@ -395,9 +396,18 @@ export class SourceIngest {
     // A full observation writes its EAN onto its row verbatim, a null included,
     // so the count is what the rows hold once the chunk is written, and the
     // first of five cuts sharing an EAN does not bind before the other four.
+    //
+    // An observation that leaves the source group of its row alone writes no
+    // EAN either (plan 0190), so it is not counted: a leaflet tile with no
+    // barcode would otherwise take the barcode of a walked row out of the
+    // count, and the next row to print it would bind as if nobody shared it.
     const chunkEans = new Set<string>();
     for (const observation of reported) {
-      if (observation.detailFetched !== false) {
+      const known = byExternalId.get(observation.externalId);
+      if (
+        observation.detailFetched !== false &&
+        (!known || writesSourceGroup(known, input.sourceKind))
+      ) {
         eans.note(observation.externalId, observation.ean);
         if (observation.ean) {
           chunkEans.add(observation.ean);
@@ -431,7 +441,12 @@ export class SourceIngest {
       } else {
         const fields = fieldsOf(observation, input.sourceKind);
         // Asked before the touch writes, because the touch is what makes it false.
-        changed = held ? sourceGroupChanged(held, fields) : false;
+        // A row whose group this observation does not write did not change,
+        // whatever the observation says (plan 0190): it is `unchanged`.
+        changed = held
+          ? writesSourceGroup(held, fields.sourceKind) &&
+            sourceGroupChanged(held, fields)
+          : false;
         outcome = held
           ? await this.touch(held, fields, context.runId, seenAt, items, eans)
           : await this.create(
@@ -501,7 +516,7 @@ export class SourceIngest {
     }
 
     // Step 3, grouped by resolved scope, in one statement per chunk of rows.
-    await this.replaceScopePrices(context.runId, observed);
+    await this.replaceScopePrices(context.runId, input.sourceKind, observed);
     // One row per price read at its scope. Counted here rather than inside the
     // write, because a price that resolved to no scope was already dropped with
     // a warning above and was never a row. A copy is not counted: the number
@@ -880,6 +895,13 @@ export class SourceIngest {
    * **The other is a barcode a product learned** (plan 0185). A row that is
    * waiting and learned nothing new is asked the EAN rung again with the EAN
    * it holds, and only that rung: {@link bindWaitingByEan}.
+   *
+   * **A walk owns the text of a row** (plan 0190). `writesSourceGroup` in
+   * `source-snapshot.ts` is the rule. When it answers no, a leaflet has
+   * observed a row that a walk owns: the seen fields move, the source group
+   * and the kind of the row stay, and the row is asked the EAN rung with the
+   * EAN it holds, as {@link see} asks it. The prices are written by the
+   * caller either way, under the kind of the run.
    */
   private async touch(
     row: SourceCatalogEntry,
@@ -889,8 +911,11 @@ export class SourceIngest {
     items: ItemMatchIndex,
     eans: ChainEanIndex
   ): Promise<SourceEntryOutcome> {
-    const learnedEan = fields.ean !== null && row.ean !== fields.ean;
-    applySourceGroup(row, fields);
+    const writes = writesSourceGroup(row, fields.sourceKind);
+    const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
+    if (writes) {
+      applySourceGroup(row, fields);
+    }
     row.timesSeen += 1;
     row.lastSeenAt = seenAt;
     row.lastRunId = runId;
@@ -1014,9 +1039,15 @@ export class SourceIngest {
    * **replaces** this scope's row and leaves every other scope's alone, and an
    * observation carrying none writes nothing here rather than clearing what an
    * earlier run said.
+   *
+   * **And one per kind of source** (plan 0190). The row it replaces is the one
+   * of this run's own kind. A website price and a leaflet price for one scope
+   * of one row are two rows, and neither run touches the other's. A row from
+   * before the plan that has no kind is left as it is too.
    */
   private async replaceScopePrices(
     runId: string,
+    sourceKind: PriceSourceKind,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
     if (observed.length === 0) {
@@ -1029,6 +1060,7 @@ export class SourceIngest {
       ({ price, priceScopeId, copiedFromScopeId, observation, entry }) => ({
         entryId: entry.id,
         priceScopeId,
+        sourceKind,
         // Written on every row, null included, so a scope walked directly
         // after an earlier copy loses the copy's provenance with its values.
         copiedFromScopeId,
@@ -1054,7 +1086,7 @@ export class SourceIngest {
           i,
           i + PRICE_ROW_CHUNK
         ) as QueryDeepPartialEntity<SourceEntryPrice>[],
-        { conflictPaths: ['entryId', 'priceScopeId'] }
+        { conflictPaths: ['entryId', 'priceScopeId', 'sourceKind'] }
       );
     }
   }

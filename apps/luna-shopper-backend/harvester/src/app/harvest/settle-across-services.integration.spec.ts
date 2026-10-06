@@ -126,6 +126,19 @@ const LAST_MONTH = new Date(Date.now() - 30 * DAY);
 const WEB = PriceSourceKind.OFFICIAL_WEB;
 const LEAFLET_KIND = PriceSourceKind.OFFICIAL_LEAFLET;
 
+/**
+ * The kind each run writes its prices with. A price row of the harvester
+ * carries the kind of the run that observed it (plan 0190), so a bound row
+ * of this spec holds its prices as a run wrote them.
+ */
+const KIND_OF_RUN: Record<string, PriceSourceKind> = {
+  [WALK]: WEB,
+  [OLD_WALK]: WEB,
+  [MID_WALK]: WEB,
+  [LEAFLET]: LEAFLET_KIND,
+  [WEB_IMPORT]: WEB,
+};
+
 /** Catalog's database, from the environment or from catalog's own `.env`. */
 function catalogDbUrl(): string {
   const exported = process.env['CATALOG_DB_URL'];
@@ -395,12 +408,15 @@ describeIntegration(
       priceScopeId?: string;
       details?: Record<string, unknown>;
       copiedFromScopeId?: string;
+      /** Absent: the kind of the run. Null: a price from before plan 0190. */
+      sourceKind?: PriceSourceKind | null;
     }
 
     /**
      * A row of the chain that is bound to a product, with the prices it
-     * holds. `sourceKind` is what the row says today, which is not always the
-     * kind its prices were observed as.
+     * holds. `sourceKind` is what the row says, which is who owns its text
+     * and not always the kind of its prices: each price holds the kind of
+     * its own run (plan 0190).
      */
     async function boundRow(
       itemId: string,
@@ -428,8 +444,8 @@ describeIntegration(
           `INSERT INTO "source_entry_prices"
                   ("entryId", "priceScopeId", "price", "currency",
                    "observedAt", "runId", "validUntil", "details",
-                   "copiedFromScopeId")
-           VALUES ($1, $2, $3, 'EUR', $4, $5, $6, $7, $8)`,
+                   "copiedFromScopeId", "sourceKind")
+           VALUES ($1, $2, $3, 'EUR', $4, $5, $6, $7, $8, $9)`,
           [
             inserted.id,
             each.priceScopeId ?? national,
@@ -439,6 +455,9 @@ describeIntegration(
             each.validUntil ?? null,
             each.details ? JSON.stringify(each.details) : null,
             each.copiedFromScopeId ?? null,
+            each.sourceKind === undefined
+              ? (KIND_OF_RUN[each.runId ?? WALK] ?? null)
+              : each.sourceKind,
           ]
         );
       }
@@ -612,6 +631,110 @@ describeIntegration(
         boundEntryIds: [],
         pricesRestated: 0,
       });
+    }, 120_000);
+
+    it('settles nothing on a row that holds a website price and a leaflet price for one scope (plan 0190)', async () => {
+      // One row that a website walk owns. The walk states a price, and a
+      // leaflet states another for the same scope. Both are two price rows
+      // of the row, each of its own kind, and catalog holds each under its
+      // kind.
+      const milk = await product();
+      await wrote(milk, { price: 1.25, runId: WALK, kind: WEB });
+      await wrote(milk, {
+        price: 1.15,
+        runId: LEAFLET,
+        kind: LEAFLET_KIND,
+        observedAt: LAST_WEEK,
+      });
+      await boundRow(
+        milk,
+        [
+          { price: 1.25, runId: WALK },
+          { price: 1.15, runId: LEAFLET, observedAt: LAST_WEEK },
+        ],
+        { sourceKind: WEB }
+      );
+      const before = await everything(milk);
+      expect(before.prices).toHaveLength(2);
+
+      const result = await settle(milk);
+
+      // Each kind is stated by its own price, so neither is a leftover.
+      expect(result).toMatchObject({ ...NOTHING, pricesRestated: 2 });
+      expect(await everything(milk)).toEqual(before);
+    }, 120_000);
+
+    it('a move of a website row carries its leaflet price as a leaflet price (plan 0190)', async () => {
+      // The row says OFFICIAL_WEB and holds a leaflet price. Before plan
+      // 0190 an accept wrote that price under the kind of the row: the new
+      // product got a website price stamped with the run of the leaflet.
+      const wrong = await product();
+      const right = await product();
+      await wrote(wrong, {
+        price: 1.15,
+        runId: LEAFLET,
+        kind: LEAFLET_KIND,
+        observedAt: LAST_WEEK,
+      });
+      const row = await boundRow(
+        wrong,
+        [{ price: 1.15, runId: LEAFLET, observedAt: LAST_WEEK }],
+        { sourceKind: WEB }
+      );
+
+      const moved = await service.accept({
+        userId: OPERATOR,
+        entryId: row,
+        itemId: right,
+      });
+
+      expect(moved.pricesWritten).toBe(1);
+      expect(await priceRows(wrong)).toEqual([]);
+      expect(
+        (await priceRows(right)).map((each) => ({
+          price: Number(each.price),
+          sourceKind: each.sourceKind,
+          sourceRunId: each.sourceRunId,
+        }))
+      ).toEqual([
+        { price: 1.15, sourceKind: LEAFLET_KIND, sourceRunId: LEAFLET },
+      ]);
+      // And a settle of the new product finds it stated as it is held.
+      expect(await settle(right)).toMatchObject({
+        ...NOTHING,
+        pricesRestated: 1,
+      });
+    }, 120_000);
+
+    it('reads the kind of a price that has none from its run, as before plan 0190', async () => {
+      // A price row from before plan 0190 that its migration left with no
+      // kind. The settle asks the run, and the leaflet price stays a leaflet
+      // price.
+      const milk = await product();
+      await wrote(milk, {
+        price: 1.99,
+        runId: LEAFLET,
+        kind: LEAFLET_KIND,
+        observedAt: LAST_WEEK,
+      });
+      await boundRow(
+        milk,
+        [
+          {
+            price: 1.99,
+            runId: LEAFLET,
+            observedAt: LAST_WEEK,
+            sourceKind: null,
+          },
+        ],
+        { sourceKind: WEB }
+      );
+      const before = await everything(milk);
+
+      const result = await settle(milk);
+
+      expect(result).toMatchObject({ ...NOTHING, pricesRestated: 1 });
+      expect(await everything(milk)).toEqual(before);
     }, 120_000);
 
     it('keeps a leaflet price whose row changed kind after the price was written', async () => {

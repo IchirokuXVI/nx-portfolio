@@ -1369,7 +1369,8 @@
       "prices": {
         "heading": "Prices it brings",
         "none": "No price on this row. That is not a gap: a site that prints no price gives us none, and a leaflet tile with no single unit price gives us none either.",
-        "writes": "Accepting writes these prices."
+        "writes": "Accepting writes these prices.",
+        "noKind": "Source unknown, not written"
       },
       "proposal": {
         "heading": "Proposed product",

@@ -44,3 +44,47 @@ describe('the unit price of a queued row', () => {
     ).toBe('€2.00');
   });
 });
+
+/**
+ * What stated each price of a queued row (backend plan 0190).
+ *
+ * A website and a leaflet of one chain can share a row, so a row holds a
+ * price of each kind for one scope. The kind is on the price, and it is not
+ * always the kind of the row.
+ */
+describe('the kind of each price of a queued row', () => {
+  const pricesOf = (prices: Record<string, unknown>[]) =>
+    toSourceEntryRow(
+      { id: 'entry-1', sourceKind: 'OFFICIAL_WEB', prices },
+      'en'
+    )?.prices ?? [];
+
+  it('reads the kind of the price, and not the kind of the row', () => {
+    const lines = pricesOf([
+      { priceScopeId: 'ps-1', currency: 'EUR', sourceKind: 'OFFICIAL_WEB' },
+      {
+        priceScopeId: 'ps-1',
+        currency: 'EUR',
+        sourceKind: 'OFFICIAL_LEAFLET',
+      },
+    ]);
+
+    expect(lines.map((line) => [line.scopeId, line.sourceKind])).toEqual([
+      ['ps-1', 'OFFICIAL_WEB'],
+      ['ps-1', 'OFFICIAL_LEAFLET'],
+    ]);
+  });
+
+  it('answers null for a price with no kind, and never the kind of the row', () => {
+    // A price from before the plan whose kind nobody could read, an answer
+    // from a server built before the field, and a kind this app does not
+    // know.
+    const lines = pricesOf([
+      { priceScopeId: 'ps-1', currency: 'EUR', sourceKind: null },
+      { priceScopeId: 'ps-2', currency: 'EUR' },
+      { priceScopeId: 'ps-3', currency: 'EUR', sourceKind: 'USER_RECEIPT' },
+    ]);
+
+    expect(lines.map((line) => line.sourceKind)).toEqual([null, null, null]);
+  });
+});

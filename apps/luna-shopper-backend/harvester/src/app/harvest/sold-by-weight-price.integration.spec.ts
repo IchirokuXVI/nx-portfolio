@@ -120,9 +120,17 @@ describeIntegration(
       await dataSource.query(
         `INSERT INTO "source_entry_prices"
               ("entryId", "priceScopeId", "price", "unitPrice",
-               "unitPriceLabel", "runId")
-       VALUES ($1, $2, $3, $3, 'kg', $4)`,
-        [row.id, SCOPE, perKilo, RUN]
+               "unitPriceLabel", "runId", "sourceKind")
+       VALUES ($1, $2, $3, $3, 'kg', $4, $5)`,
+        // The kind of the run that observed it (plan 0190), which is the
+        // kind an accept writes the price under.
+        [
+          row.id,
+          SCOPE,
+          perKilo,
+          RUN,
+          over.sourceKind ?? PriceSourceKind.OFFICIAL_API,
+        ]
       );
       return dataSource.getRepository(SourceCatalogEntry).findOneOrFail({
         where: { id: row.id as string },
