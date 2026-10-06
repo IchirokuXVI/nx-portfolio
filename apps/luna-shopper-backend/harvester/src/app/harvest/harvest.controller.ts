@@ -54,6 +54,8 @@ import {
   type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
   type SetSupermarketSourceEnabledRequest,
+  type SettleItemAtChainRequest,
+  type SettleItemAtChainResult,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -408,6 +410,17 @@ export class HarvestController {
     @Payload() req: SourceEntryIdRequest
   ): Promise<SourceCatalogEntryView> {
     return this.entries.reject(req);
+  }
+
+  /**
+   * Settle a product at a chain (plan 0191): withdraw from catalog what the
+   * chain stated for the product and no bound row states any more.
+   */
+  @MessagePattern(SOURCE_ENTRY_PATTERNS.settleItem)
+  settleItem(
+    @Payload() req: SettleItemAtChainRequest
+  ): Promise<SettleItemAtChainResult> {
+    return this.entries.settleItem(req);
   }
 
   // --- Source locations: which shop of theirs is which of ours (plan 0084) --

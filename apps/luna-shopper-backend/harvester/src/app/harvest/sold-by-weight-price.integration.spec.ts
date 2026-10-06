@@ -148,16 +148,41 @@ describeIntegration(
       await piece(1, { supermarketId: OTHER_CHAIN });
       await piece(1, { sourceKind: PriceSourceKind.OFFICIAL_LEAFLET });
       await piece(1, { status: SourceEntryStatus.CANDIDATE });
-      await piece(1, { soldByWeight: false });
 
       await writer.write(alone);
 
       expect(sent).toEqual([{ priceScopeId: SCOPE, price: 10.2, runId: RUN }]);
     }, 60_000);
 
-    it('leaves a row that is not sold by weight to its own price', async () => {
+    /**
+     * Plan 0191, decision 2A. Before it a pack was written whatever else was
+     * bound to its product, and a piece ignored every pack. Now the query
+     * reads every bound row of the chain and kind, and a pack beside a piece
+     * is two articles that cannot be compared: neither price is sent.
+     */
+    it('sends no price for a pack bound beside a piece sold by weight, and names the piece', async () => {
       const pack = await piece(2.95, { soldByWeight: false });
-      await piece(1);
+      const other = await piece(1);
+
+      const outcome = await writer.writeNamed(pack);
+
+      expect(sent).toEqual([]);
+      expect(outcome).toEqual({
+        written: 0,
+        withheld: [
+          {
+            entryId: pack.id,
+            priceScopeId: SCOPE,
+            otherEntryIds: [other.id],
+          },
+        ],
+      });
+    }, 60_000);
+
+    it('writes the price of a pack that is the only bound row of its product', async () => {
+      const pack = await piece(2.95, { soldByWeight: false });
+      // Bound to another product, so it is not a second article of this one.
+      await piece(1, { itemId: OTHER_ITEM, soldByWeight: false });
 
       await writer.write(pack);
 

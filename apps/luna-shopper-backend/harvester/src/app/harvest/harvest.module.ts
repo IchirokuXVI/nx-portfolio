@@ -35,6 +35,7 @@ import { PriceScopeResolver } from './price-scope-resolver';
 import { RunExecutor } from './run-executor.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
+import { SourceEntrySettler } from './source-entry-settle';
 import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
 import { SourceIngest } from './source-ingest';
@@ -118,6 +119,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     SourceEntryService,
     SourceEntryBatchService,
     SourceEntryPriceWriter,
+    // What a row that leaves a product takes with it (plan 0191): the one
+    // place that makes catalog agree with the rows bound to a product now.
+    SourceEntrySettler,
     // Where a run's per shop claims wait for a binding and a shop, and the one
     // thing that sends them to catalog (plan 0182).
     SourceEntryAvailabilityWriter,

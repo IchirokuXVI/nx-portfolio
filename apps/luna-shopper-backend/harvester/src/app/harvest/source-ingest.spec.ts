@@ -1778,6 +1778,205 @@ describe('SourceIngest, two entries of one item in one batch', () => {
     );
     expect(counters.pricesConflicted).toBe(0);
   });
+
+  it('names the two entries of a conflict, and says that neither was sent', async () => {
+    const { ingest, context } = build({
+      rows: [
+        { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+        { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+      ],
+    });
+
+    const { priceConflicts } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({
+          externalId: 'b',
+          name: 'Dos',
+          price: { ...PRICE, price: 2.5 },
+        }),
+      ],
+    });
+
+    expect(priceConflicts).toEqual([
+      {
+        itemId: 'item-1',
+        priceScopeId: SCOPE,
+        entryIds: ['entry-a', 'entry-b'],
+        firstWasSent: false,
+      },
+    ]);
+  });
+
+  it('sends the one amount two entries agree on, and counts no conflict', async () => {
+    // Two barcodes of one product at one price (plan 0185). Withholding it
+    // left a product unpriced that every row priced the same.
+    const { ingest, context, catalog } = build({
+      rows: [
+        { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+        { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const { counters, priceConflicts } = await ingest.ingest(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+      observations: [
+        observation({ externalId: 'a', name: 'Uno', price: PRICE }),
+        observation({ externalId: 'b', name: 'Dos', price: PRICE }),
+      ],
+    });
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: PRICE.price })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(0);
+    expect(priceConflicts).toEqual([]);
+  });
+});
+
+/**
+ * The same rule across the chunks of one run (plan 0191).
+ *
+ * The sink pushes four hundred products at a time. Before the plan the map
+ * the comparison read was built per chunk, so two rows of one product in two
+ * chunks were both sent, and which one a shopper saw was decided by which
+ * chunk came last.
+ */
+describe('SourceIngest, two entries of one item in two chunks of one run (plan 0191)', () => {
+  const accepted = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    itemId: 'item-1',
+    decidedAt: new Date('2026-09-01T00:00:00Z'),
+  };
+  const rows = [
+    { id: 'entry-a', externalId: 'a', name: 'Uno', ...accepted },
+    { id: 'entry-b', externalId: 'b', name: 'Dos', ...accepted },
+  ];
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+  const small = observation({ externalId: 'a', name: 'Uno', price: PRICE });
+  const king = observation({
+    externalId: 'b',
+    name: 'Dos',
+    price: { ...PRICE, price: 2.95 },
+  });
+
+  it('counts one conflict, names both entries, and does not take back the first', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([king]);
+    const { counters, priceConflicts } = await open.close();
+
+    // The first chunk sent its price before the run knew there was a second
+    // article. The second chunk sends nothing.
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-1', price: PRICE.price })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(1);
+    expect(priceConflicts).toEqual([
+      {
+        itemId: 'item-1',
+        priceScopeId: SCOPE,
+        entryIds: ['entry-a', 'entry-b'],
+        firstWasSent: true,
+      },
+    ]);
+  });
+
+  it('counts the pair once, however many chunks see it again', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([king]);
+    await open.push([small]);
+    await open.push([king]);
+    const { counters, priceConflicts } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesConflicted).toBe(1);
+    expect(priceConflicts).toHaveLength(1);
+  });
+
+  it('counts no conflict for a second entry of the same amount, and sends it once', async () => {
+    const { ingest, context, catalog } = build({
+      rows,
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([
+      observation({ externalId: 'b', name: 'Dos', price: PRICE }),
+    ]);
+    const { counters, priceConflicts } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(1);
+    expect(counters.pricesConflicted).toBe(0);
+    expect(priceConflicts).toEqual([]);
+  });
+
+  it('keeps an item one entry prices out of it', async () => {
+    const { ingest, context, catalog } = build({
+      rows: [
+        ...rows,
+        {
+          id: 'entry-c',
+          externalId: 'c',
+          name: 'Tres',
+          ...accepted,
+          itemId: 'item-2',
+        },
+      ],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+
+    const open = await ingest.open(context, session);
+    await open.push([small]);
+    await open.push([
+      king,
+      observation({ externalId: 'c', name: 'Tres', price: PRICE }),
+    ]);
+    const { counters } = await open.close();
+
+    expect(catalog.addPrices).toHaveBeenCalledTimes(2);
+    expect(catalog.addPrices).toHaveBeenLastCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-2' })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+    expect(counters.pricesConflicted).toBe(1);
+  });
 });
 
 describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', () => {

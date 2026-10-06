@@ -274,7 +274,9 @@ describeIntegration(
         admin,
         new SourceEntryPriceWriter(catalog, entries),
         {} as unknown as ConfigService,
-        availability
+        availability,
+        // No row here is bound before it is decided, so nothing is settled.
+        undefined as never
       );
     }, 120_000);
 

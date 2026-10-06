@@ -24269,6 +24269,111 @@
         ]
       }
     },
+    "/v1/admin/harvest/items/{itemId}/settle": {
+      "post": {
+        "operationId": "AdminHarvestItemsController_settle_v1",
+        "parameters": [
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettleItemAtChainDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `sourceEntry.settleItem` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.SettleItemAtChainResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
     "/v1/admin/harvest/places": {
       "get": {
         "operationId": "AdminHarvestPlacesController_list_v1",
@@ -25615,7 +25720,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_ean_held` — Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29948,6 +30053,23 @@
           "supermarketId",
           "sourceKind",
           "document"
+        ]
+      },
+      "SettleItemAtChainDto": {
+        "type": "object",
+        "properties": {
+          "supermarketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The chain whose rows are read. Catalog is made to agree with the rows of this chain that are bound to the product now."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "True answers what a call would remove and write, and writes nothing. The answer has the shape of a real call and counts the same things. Absent is false."
+          }
+        },
+        "required": [
+          "supermarketId"
         ]
       },
       "NewChainDto": {
@@ -39029,6 +39151,14 @@
               "null"
             ],
             "minimum": 1
+          },
+          "scopeSharedWith": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The other rows of this chain and source kind that are bound to the same product and hold an open price at a scope this row also holds one at (plan 0191). Catalog keeps one current price per product, scope and kind, so when the amounts differ and the rows are not both sold by weight, neither price is written. Empty for a row that is not ACTIVE."
           }
         },
         "required": [
@@ -39059,7 +39189,8 @@
           "confidence",
           "decidedAt",
           "prices",
-          "eanSharedBy"
+          "eanSharedBy",
+          "scopeSharedWith"
         ],
         "additionalProperties": false
       },
@@ -39443,6 +39574,152 @@
         ],
         "additionalProperties": false
       },
+      "harvest.SettleItemAtChainResult": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "boundEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The rows of the chain that are bound to the product now. Catalog is made to agree with these."
+          },
+          "pricesWithdrawn": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows a harvest run wrote that were removed from the product. A row a person typed is never one of them."
+          },
+          "pricesWithdrawnAt": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "deleted": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "deleted"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "pricesRestated": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Prices of the bound rows that were sent to catalog again, one per row and scope. It counts what was sent, not what changed."
+          },
+          "pricesWithheld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceWithheld"
+            }
+          },
+          "offersRemoved": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The price scopes whose offer was removed. Always empty while a bound row of the chain names the product."
+          },
+          "offersKept": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "PRICED",
+                    "SHOP_ROW",
+                    "PERSON"
+                  ]
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "shopRowsRemoved": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shopRowsCleared": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "shopRowConflicts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "supermarketLocationId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "held": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "supermarketLocationId",
+                "held"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Shop rows whose availability a person wrote. They are left alone."
+          }
+        },
+        "required": [
+          "itemId",
+          "supermarketId",
+          "dryRun",
+          "boundEntryIds",
+          "pricesWithdrawn",
+          "pricesWithdrawnAt",
+          "pricesRestated",
+          "pricesWithheld",
+          "offersRemoved",
+          "offersKept",
+          "shopRowsRemoved",
+          "shopRowsCleared",
+          "shopRowConflicts"
+        ],
+        "additionalProperties": false
+      },
       "harvest.SourceCatalogEntryView": {
         "type": "object",
         "properties": {
@@ -39653,12 +39930,32 @@
                 "type": "null"
               }
             ]
+          },
+          "pricesWithheld": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/harvest.SourceEntryPriceWithheld"
+            },
+            "description": "The scopes whose price was not written, because another bound row of the chain states another amount there (plan 0191). The row is bound all the same."
+          },
+          "settled": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.SettleItemAtChainResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What settling the product the row left did (plan 0191). Null when the row was not bound before, or was bound to this same product."
           }
         },
         "required": [
           "entry",
           "pricesWritten",
-          "createdItem"
+          "createdItem",
+          "pricesWithheld",
+          "settled"
         ],
         "additionalProperties": false
       },
@@ -39813,6 +40110,32 @@
           "details",
           "observedAt",
           "runId"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.SourceEntryPriceWithheld": {
+        "type": "object",
+        "properties": {
+          "entryId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "otherEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "entryId",
+          "priceScopeId",
+          "otherEntryIds"
         ],
         "additionalProperties": false
       },

@@ -314,7 +314,10 @@ function oneRowRoute(
     admin,
     new SourceEntryPriceWriter(catalog.client, entries),
     {} as ConfigService,
-    availability
+    availability,
+    // No row here is bound before it is decided, so nothing is settled. A
+    // barcode that moves with its row is in `source-entry.service.spec.ts`.
+    undefined as never
   );
   return { service, saved };
 }
@@ -363,7 +366,13 @@ function bulkRoute(
   const service = new SourceEntryBatchService(
     entries,
     catalog.client,
-    { write } as unknown as SourceEntryPriceWriter,
+    {
+      // The bulk route reads the named answer since plan 0191.
+      writeNamed: async (row: SourceCatalogEntry) => ({
+        written: await write(row),
+        withheld: [],
+      }),
+    } as unknown as SourceEntryPriceWriter,
     admin,
     sources,
     { writeForEntries } as unknown as SourceEntryAvailabilityWriter

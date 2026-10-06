@@ -303,7 +303,22 @@ export class SourceEntryBatchService {
         continue;
       }
       try {
-        outcomes[index].pricesWritten = await this.prices.write(row);
+        const prices = await this.prices.writeNamed(row);
+        outcomes[index].pricesWritten = prices.written;
+        // Plan 0191, decision 2A: another bound row of the chain states
+        // another amount at that scope, so the writer sent neither. The bind
+        // stands, and the row is named here like any price that did not land.
+        for (const withheld of prices.withheld) {
+          priceSkips.push({
+            entryId: row.id,
+            itemId: outcomes[index].itemId ?? '',
+            reason:
+              `No price was written at scope ${withheld.priceScopeId}: ` +
+              `another row bound to this product ` +
+              `(${withheld.otherEntryIds.join(', ')}) states another amount ` +
+              'there.',
+          });
+        }
       } catch (error) {
         // The bind stands. Naming the row is what lets the operator write the
         // prices again without replaying a decision that already landed.

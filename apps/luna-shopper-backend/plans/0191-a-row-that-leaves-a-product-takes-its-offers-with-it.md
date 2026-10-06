@@ -235,3 +235,142 @@ the old product, and insert on change never removes a row.
   proposal needed three calls.
 - The dumps of `after-stage-b-final/` are taken before this repair. Take new ones after
   it, before any restore into a cluster.
+
+## 4. What was built, and what the owner must decide
+
+Every target state is built. The points below are the choices the builder made where the
+plan left room, and the consequences that only the owner can settle.
+
+### The settle, as a call
+
+`POST /v1/admin/harvest/items/:itemId/settle` with `{ "supermarketId": "<uuid>" }`, and
+`"dryRun": true` for an answer that writes nothing. The message is `sourceEntry.settleItem`.
+The answer is `SettleItemAtChainResult`: the rows bound now, the price rows withdrawn by scope
+and kind, the prices sent again, the prices withheld, the offers removed, the offers kept and
+why, and the shop rows removed, cleared or left to a person. A second call finds nothing to
+do. An unknown chain answers 404. A product that no row names answers zeros.
+
+The two catalog messages are `itemPrice.withdraw` and `supermarketItem.withdraw`. Both take
+`dryRun`, and a dry run executes the statements of a real call in a transaction that is
+rolled back, so the two answers cannot differ.
+
+### A bound row that still states a price: what is removed before it is written again
+
+Target 1 says that such a price "is written again, so the current row is the one a bound row
+states". Writing again does not do that by itself. One run stamps every product that it reads
+with one instant, so the row that left and the row that stayed carry the same `observedAt`,
+and catalog breaks that tie by the id of the two rows. A second write of 2.45 next to a
+2.95 with the same instant is current or not by chance.
+
+So the price rows of that scope and kind that were observed at the statement's instant, or
+later, are removed first, and the stated price is then written. The rows before that instant
+are the history of the scope and stay.
+
+**For the owner:** the alternative is to remove every run written row of that scope and kind
+and keep no history. It is simpler to explain and it loses the history of the row that
+stayed.
+
+### What tells a run's price from a person's
+
+A row is removed only when its kind is an automated one and it names a run. This is the
+kind and the run id alone, as the action boundaries ask, so the builder did not stop.
+
+One case follows from it. A row of an automated kind with no run id is always kept. A person
+can type such a price in the back office, and a price that plan `0086` folded in from before
+runs were recorded has no run id either. Nothing tells those two apart, so both stay.
+
+**For the owner:** if slot 1 holds run written rows with no run id, a settle leaves them. A
+query for `"sourceRunId" IS NULL` with an automated kind shows whether any exist.
+
+### One rule, and what it changes for a run
+
+`decideArticles` in `source-entry-write.ts` is the rule, and the run and the accept both
+read it:
+
+1. One row sends its price.
+2. Rows that are all sold by weight send the lowest price per kilo (plan `0181`).
+3. Rows that state the same amount send that amount.
+4. Any other set of rows sends nothing.
+
+Point 3 is new for a run. Plan `0155` withheld the price of any two rows of one product in
+one batch, also when both stated the same amount. Target 6 says "of another amount" for an
+accept, and one rule cannot say two things, so a run now sends an amount that its rows agree
+on. The amount is the price and the unit price together: one pack price beside two prices
+per kilo is two pack sizes, and a conflict.
+
+Point 4 is stricter than before for an accept. A fixed pack that is accepted next to a
+piece sold by weight used to be written. The run already withheld that pair, and now the
+accept does too.
+
+**For the owner:** say so if two rows of one amount must stay a conflict.
+
+### The run's report names the pairs
+
+The report holds `priceConflicts` next to `pricesConflicted`: the product, the scope, the
+rows, and `firstWasSent` when an earlier chunk had sent the first row's price. A pair is
+counted one time for the run, in whatever chunks it falls. The report names the first 200.
+A file import counts its conflicts and does not name them, because its report is built from
+the counters alone.
+
+### An offer that a person wrote
+
+`supermarket_items` holds no provenance, and the back office can set its availability flag.
+So "nothing a person typed is removed" needed a way to see a typed offer. The audit trail is
+that way: an offer whose row an operator created or changed is kept, with the reason
+`PERSON`. An offer that only the harvester or the recompute wrote is removed under the three
+conditions, whatever its flag says.
+
+### Shop rows
+
+- A shop row whose availability a person wrote is left alone and reported, in the words of
+  `setLocationAvailability`.
+- A shop row that a run wrote, on which a person also typed a position, keeps the position.
+  Its availability is cleared.
+- A shop row that holds only what a run wrote is removed.
+
+The shop rows of a run are removed whenever no bound row of the chain names the product.
+That includes a product whose offer stays because a person typed a price for it: the price
+is the person's, and the shop claim was the row's.
+
+**For the owner:** "under the same condition" in target 1 can also be read as "only when the
+offer of that shop's scope goes". Under that reading a typed price keeps the shop rows of a
+row that left. The builder took the first reading.
+
+### The barcode
+
+- A move takes the barcode off the old product and teaches it to the new one in the one
+  call. Section 3's Fanta bottle is one accept.
+- A create from a bound row makes the product with no barcode, and moves the barcode to it
+  after the bind. Catalog holds a barcode on one product, also for the length of a call.
+- When another row that is bound to the old product prints the barcode, the answer is
+  `item_ean_held`. Its sentence names the old product and that row.
+- A reject leaves the barcode on the product. A rejected row names no product, so the
+  barcode has nowhere to go.
+
+**For the owner:** a product can therefore keep a barcode that no bound row prints. Whether
+a reject must clear it is not in this plan.
+
+### The order of a decision
+
+Bind, prices and availability, barcode, then the settle of the old product. The settle is
+last because it is the one step that a person can run again by itself. A failure in a step
+leaves the steps before it standing, is the error of the request, and skips the steps after
+it. So a price write that fails also leaves the old product unsettled, and the route settles
+it.
+
+### The bulk route
+
+It still refuses a bound row. It shares the price writer, so decision 2A reaches it: a price
+that the writer withheld is named in `priceSkips`, where every price that did not land is
+named.
+
+### What proves it
+
+- `catalog/src/app/catalog/item-withdraw.integration.spec.ts`, on real Postgres: the
+  figurine with its three scopes, the `ADMIN` price, a typed price with no run, the typed
+  offer, the shop rows, the spared history, the dry run.
+- `harvester/src/app/harvest/source-entry-settle.integration.spec.ts`, on real Postgres:
+  which rows count as bound, the move, the reject, the second article, the barcode.
+- A scripted run over the gateway on an ephemeral slot, with both services and both
+  databases, for the move, the second bound row, the `ADMIN` price, the reject, the two
+  articles and the leftover of section 3. The pull request lists its eighteen checks.

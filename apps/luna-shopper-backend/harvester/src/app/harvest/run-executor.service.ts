@@ -678,6 +678,9 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
       pricesConfirmed: written.pricesConfirmed,
       pricesConflicted: written.pricesConflicted,
     }),
+    // Plan 0191: the pairs behind `pricesConflicted`, named. Two rows of the
+    // chain are bound to one product and state two amounts at one scope.
+    priceConflicts: written.priceConflicts,
     placesCreated: written.placesCreated,
     placesRefreshed: written.placesRefreshed,
     placesImported: written.placesImported,

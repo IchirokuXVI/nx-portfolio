@@ -4,6 +4,7 @@ import {
   ITEM_PRICE_OBSERVED_AT_MAX_AGE_DAYS,
   ItemPriceWrittenBy,
   PriceSourceKind,
+  WITHDRAW_MAX_SCOPES,
   type AddItemPriceBatchRequest,
   type AddItemPriceBatchResult,
   type AddItemPriceRequest,
@@ -16,23 +17,32 @@ import {
   type ItemScopePricesPage,
   type ItemScopePricesView,
   type ListItemPricesRequest,
+  type StatedItemPrice,
+  type WithdrawItemPricesRequest,
+  type WithdrawItemPricesResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  isUuid,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { Repository, type EntityManager } from 'typeorm';
+import { In, Repository, type EntityManager } from 'typeorm';
 import { Item, ItemPrice, PricePolicy, PriceScope } from '../entities';
-import { CatalogAuditService } from './catalog-audit.service';
+import {
+  CatalogAuditService,
+  type AuditedWrite,
+} from './catalog-audit.service';
 import { toItemPriceView } from './catalog.mappers';
 import { AUTOMATED_KINDS, resolveEffectivePrice } from './effective-price';
 import {
+  affectedPriceKeys,
   currentPriceRows,
   EffectivePriceService,
   lessSpecificScopesOf,
+  recomputeEffectivePrices,
   type PriceKey,
 } from './effective-price.service';
 import { writeItemPrices } from './item-price-writer';
@@ -492,40 +502,42 @@ export class ItemPriceService {
   }
 
   /**
+   * Remove the price rows a harvest run wrote for one product, at named
+   * scopes and kinds, and recompute (plan 0191).
+   *
+   * The harvester sends it when a row that stated those prices left the
+   * product: a person moved the row to another product, or rejected it.
+   * `item_prices` names no queue row, so the harvester says where the product
+   * should hold nothing from a run, and {@link withdrawRunWrittenPrices} is
+   * the rule for which rows that is.
+   *
+   * Audited like {@link deleteByRun}: one trail row per price row, by the
+   * actor the gate let through.
+   *
+   * `dryRun` runs the same statements in a transaction that is rolled back,
+   * so its answer is the answer of a real call and not a second rule.
+   */
+  async withdraw(
+    req: WithdrawItemPricesRequest
+  ): Promise<WithdrawItemPricesResult> {
+    const actor = await this.admin.requireAdmin(req);
+    requireWithdrawablePrices(req);
+    return dryRunnable(req.dryRun === true, (rollback) =>
+      this.audit.write(actor, async (tx) =>
+        rollback(await withdrawRunWrittenPrices(tx, req))
+      )
+    );
+  }
+
+  /**
    * Every (item, scope) key these rows belonged to, deduplicated, including the
    * fan out a NATIONAL row causes (plan 0080, section 6).
-   *
-   * Grouped by scope before asking, because `affectedKeys` reads the scope once
-   * per call and a run's rows are nearly always all at one scope.
    */
-  private async affectedBy(
+  private affectedBy(
     manager: EntityManager,
     rows: readonly ItemPrice[]
   ): Promise<PriceKey[]> {
-    const byScope = new Map<string, Set<string>>();
-    for (const row of rows) {
-      const items = byScope.get(row.priceScopeId) ?? new Set<string>();
-      items.add(row.itemId);
-      byScope.set(row.priceScopeId, items);
-    }
-
-    const keys: PriceKey[] = [];
-    const seen = new Set<string>();
-    for (const [priceScopeId, items] of byScope) {
-      const fanned = await this.effective.affectedKeys(
-        manager,
-        [...items],
-        priceScopeId
-      );
-      for (const key of fanned) {
-        const token = `${key.itemId}|${key.priceScopeId}`;
-        if (!seen.has(token)) {
-          seen.add(token);
-          keys.push(key);
-        }
-      }
-    }
-    return keys;
+    return affectedByRows(manager, rows);
   }
 
   private async requireItemAndScope(
@@ -583,6 +595,245 @@ export class ItemPriceService {
       );
     }
     return copiedFromScopeId;
+  }
+}
+
+/**
+ * Every (item, scope) key these rows belonged to, deduplicated, including the
+ * fan out a NATIONAL row causes (plan 0080, section 6).
+ *
+ * Grouped by scope before asking, because `affectedPriceKeys` reads the scope
+ * once per call and a run's rows are nearly always all at one scope.
+ */
+async function affectedByRows(
+  manager: EntityManager,
+  rows: readonly ItemPrice[]
+): Promise<PriceKey[]> {
+  const byScope = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const items = byScope.get(row.priceScopeId) ?? new Set<string>();
+    items.add(row.itemId);
+    byScope.set(row.priceScopeId, items);
+  }
+
+  const keys: PriceKey[] = [];
+  const seen = new Set<string>();
+  for (const [priceScopeId, items] of byScope) {
+    const fanned = await affectedPriceKeys(manager, [...items], priceScopeId);
+    for (const key of fanned) {
+      const token = `${key.itemId}|${key.priceScopeId}`;
+      if (!seen.has(token)) {
+        seen.add(token);
+        keys.push(key);
+      }
+    }
+  }
+  return keys;
+}
+
+/** What a withdraw names, which is all {@link withdrawRunWrittenPrices} reads. */
+export type RunWrittenPrices = Pick<
+  WithdrawItemPricesRequest,
+  'itemId' | 'priceScopeIds' | 'sourceKinds' | 'stated'
+>;
+
+/**
+ * Refuse a withdraw that names a kind a run cannot write, or too many scopes.
+ *
+ * `ADMIN` is refused and not skipped: a caller that names it has asked for a
+ * person's price to be removed, and saying no is better than doing less than
+ * was asked without saying so.
+ */
+export function requireWithdrawablePrices(req: RunWrittenPrices): void {
+  const refused = req.sourceKinds.filter(
+    (kind) => !AUTOMATED_KINDS.includes(kind)
+  );
+  if (refused.length > 0) {
+    throw new ValidationException(
+      `Only the prices a harvest run wrote can be withdrawn, and a run writes ` +
+        `official kinds only, not ${refused.join(', ')}.`,
+      { details: { sourceKinds: 'must be automated kinds' } }
+    );
+  }
+  if (req.priceScopeIds.length > WITHDRAW_MAX_SCOPES) {
+    throw new ValidationException(
+      `A withdraw names at most ${WITHDRAW_MAX_SCOPES} price scopes, and ` +
+        `this one names ${req.priceScopeIds.length}.`,
+      { details: { priceScopeIds: `at most ${WITHDRAW_MAX_SCOPES}` } }
+    );
+  }
+}
+
+/**
+ * Remove the run written price rows of one product at named scopes and kinds,
+ * record each in the trail, and recompute (plan 0191).
+ *
+ * A plain function over the caller's audited transaction, for the reason the
+ * recompute is one: the offers withdraw runs it inside its own transaction to
+ * answer a dry run of the two calls in a row.
+ *
+ * ## Which rows
+ *
+ * A row is removed when all of this holds:
+ *
+ * - It is the product's, at a named scope, of a named kind.
+ * - **It names a run** (`sourceRunId` is not null). That, with the kind, is
+ *   what tells a run's row from a person's. An `ADMIN` row is never named
+ *   here, and a row of an automated kind that a person typed through the back
+ *   office carries no run. A run's row from before plan 0086, which has no
+ *   run either, is kept too: nothing tells it from a typed one.
+ * - **It is not the history of what a bound row still states.** At a scope
+ *   and kind `stated` names, only the rows observed at that statement's
+ *   instant or later are removed, and the caller writes the statement again
+ *   behind this call. The rows before it are the history of that scope and
+ *   kind and stay. A null instant spares every row there: the bound rows
+ *   disagree, nothing is written again, and the price that was current stays.
+ *
+ * **At or later, not later.** A run stamps every product it reads with one
+ * instant, so the row that left and the row that stayed carry the same
+ * `observedAt`, and `currentPriceRows` breaks that tie by id. Removing both
+ * and writing one again does not depend on which id was the larger.
+ *
+ * ## What happens to the materialized row
+ *
+ * The recompute runs for every key the removed rows reached. It leaves a held
+ * `supermarket_items` row in place with no price. This function removes none:
+ * whether such a row is an offer or a leftover is `supermarketItem.withdraw`'s
+ * to say.
+ */
+export async function withdrawRunWrittenPrices(
+  tx: AuditedWrite,
+  req: RunWrittenPrices,
+  now: Date = new Date()
+): Promise<WithdrawItemPricesResult> {
+  const nothing: WithdrawItemPricesResult = {
+    deleted: 0,
+    removed: [],
+    recomputed: 0,
+  };
+  const scopeIds = [...new Set(req.priceScopeIds.filter(isUuid))];
+  const kinds = [...new Set(req.sourceKinds)];
+  if (!isUuid(req.itemId) || scopeIds.length === 0 || kinds.length === 0) {
+    return nothing;
+  }
+  // One statement per scope and kind. Named twice, the one that spares more
+  // wins: a null, which spares every row, and else the later instant.
+  const stated = new Map<string, StatedItemPrice>();
+  for (const each of req.stated ?? []) {
+    const key = `${each.priceScopeId}|${each.sourceKind}`;
+    const held = stated.get(key);
+    if (!held || sparesMore(each, held)) {
+      stated.set(key, each);
+    }
+  }
+  const spared = [...stated.values()].filter((each) =>
+    isUuid(each.priceScopeId)
+  );
+
+  const found: { id: string }[] = await tx.manager.query(
+    `
+    SELECT p."id"
+      FROM "item_prices" p
+      LEFT JOIN unnest($4::uuid[], $5::text[], $6::timestamptz[])
+             AS s("priceScopeId", "sourceKind", "observedAt")
+        ON s."priceScopeId" = p."priceScopeId"
+       AND s."sourceKind" = p."sourceKind"::text
+     WHERE p."itemId" = $1::uuid
+       AND p."priceScopeId" = ANY($2::uuid[])
+       AND p."sourceKind"::text = ANY($3::text[])
+       AND p."sourceRunId" IS NOT NULL
+       AND (s."priceScopeId" IS NULL OR p."observedAt" >= s."observedAt")
+    `,
+    [
+      req.itemId,
+      scopeIds,
+      kinds,
+      spared.map((each) => each.priceScopeId),
+      spared.map((each) => each.sourceKind),
+      // A null stays a null: no instant is at or after it, so the comparison
+      // is never true and every row of that scope and kind is spared.
+      spared.map((each) =>
+        each.observedAt === null ? null : new Date(each.observedAt)
+      ),
+    ]
+  );
+  if (found.length === 0) {
+    return nothing;
+  }
+
+  const rows = await tx.manager.find(ItemPrice, {
+    where: { id: In(found.map((row) => row.id)) },
+  });
+  // One statement for the rows, then one trail row each, as `deleteByRun`.
+  await tx.manager.delete(ItemPrice, { id: In(rows.map((row) => row.id)) });
+  const removed = new Map<
+    string,
+    WithdrawItemPricesResult['removed'][number]
+  >();
+  for (const row of rows) {
+    await tx.recordDelete(ItemPrice, row);
+    const key = `${row.priceScopeId}|${row.sourceKind}`;
+    const held = removed.get(key) ?? {
+      priceScopeId: row.priceScopeId,
+      sourceKind: row.sourceKind,
+      deleted: 0,
+    };
+    held.deleted += 1;
+    removed.set(key, held);
+  }
+
+  const keys = await affectedByRows(tx.manager, rows);
+  await recomputeEffectivePrices(tx.manager, keys, now);
+  return {
+    deleted: rows.length,
+    removed: [...removed.values()],
+    recomputed: keys.length,
+  };
+}
+
+/** Whether `a` spares more rows of its scope and kind than `b` does. */
+function sparesMore(a: StatedItemPrice, b: StatedItemPrice): boolean {
+  if (b.observedAt === null) {
+    return false;
+  }
+  return (
+    a.observedAt === null ||
+    new Date(a.observedAt).getTime() > new Date(b.observedAt).getTime()
+  );
+}
+
+/** Thrown inside a transaction to undo it and carry its answer out. */
+class DryRunRollback<T> extends Error {
+  constructor(readonly answer: T) {
+    super('dry run');
+  }
+}
+
+/**
+ * Run `work` for real, or run it and roll it back (plan 0191).
+ *
+ * `work` is handed `rollback`, and returns what `rollback` answers. For a real
+ * call that is the value itself. For a dry run it throws out of the
+ * transaction `work` opened, which undoes every write, and the value comes
+ * back here. So a dry run executes the statements of a real call, and what it
+ * answers cannot drift from what a real call does.
+ */
+export async function dryRunnable<T>(
+  dryRun: boolean,
+  work: (rollback: (answer: T) => T) => Promise<T>
+): Promise<T> {
+  if (!dryRun) {
+    return work((answer) => answer);
+  }
+  try {
+    return await work((answer) => {
+      throw new DryRunRollback(answer);
+    });
+  } catch (error) {
+    if (error instanceof DryRunRollback) {
+      return error.answer as T;
+    }
+    throw error;
   }
 }
 

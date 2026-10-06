@@ -26,6 +26,7 @@ import type {
   StoredClaim,
 } from './source-entry-availability';
 import type {
+  PriceConflict,
   ReportedObservation,
   SourceEntryOutcome,
   SourceIngest,
@@ -58,6 +59,12 @@ const PLACE_CHUNK = 100;
 
 /** How many availability rows go to catalog in one call. */
 const AVAILABILITY_BATCH = 200;
+
+/**
+ * How many price conflicts a run's report names (plan 0191). The count beside
+ * them is always the whole number, so a report that names fewer says so.
+ */
+const PRICE_CONFLICTS_NAMED = 200;
 
 export interface RunReportSinkInput {
   /** The chain this run writes for, and null for a run that names none. */
@@ -112,10 +119,16 @@ export interface RunReportResult {
   /** Prices catalog already held at that value and only moved the clock on. */
   pricesConfirmed: number;
   /**
-   * Items two entries of the chain priced at one scope in one batch, whose
-   * prices were withheld (plan 0155).
+   * Items two entries of the chain priced at one scope with two amounts,
+   * whose prices were withheld (plan 0155), counted once per run (plan 0191).
    */
   pricesConflicted: number;
+  /**
+   * Those items, named with the rows that disagree (plan 0191), so a person
+   * finds the pair without a query. The first {@link PRICE_CONFLICTS_NAMED}
+   * of them: {@link pricesConflicted} is the whole number.
+   */
+  priceConflicts: PriceConflict[];
   placesCreated: number;
   placesRefreshed: number;
   /** Catalog locations this run wrote itself, which only a trusted chain earns. */
@@ -232,6 +245,7 @@ export class RunReportSink implements RunReport {
     pricesPublished: 0,
     pricesConfirmed: 0,
     pricesConflicted: 0,
+    priceConflicts: [],
     placesCreated: 0,
     placesRefreshed: 0,
     placesImported: 0,
@@ -341,11 +355,16 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies } = await this.session.close();
+      const { outcomes, counters, copies, priceConflicts } =
+        await this.session.close();
       this.result.pricesRecorded += counters.pricesRecorded;
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
       this.result.pricesConflicted += counters.pricesConflicted;
+      this.result.priceConflicts = priceConflicts.slice(
+        0,
+        PRICE_CONFLICTS_NAMED
+      );
       this.result.pricedScopes = [...copies.pricedScopes];
       this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
       await this.fillPackCounts(outcomes);

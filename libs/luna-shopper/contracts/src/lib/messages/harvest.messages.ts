@@ -29,6 +29,7 @@ import type {
   ContentLocale,
   ItemView,
   LocalizedText,
+  OfferKeptReason,
 } from './catalog.messages';
 
 /**
@@ -193,6 +194,17 @@ export const SOURCE_ENTRY_PATTERNS = {
    * shared EAN is how two walk rows of one chain end up on one product.
    */
   listByItem: 'sourceEntry.listByItem',
+  /**
+   * Settle a product at a chain (plan 0191): make catalog agree with the rows
+   * of the chain that are bound to the product now.
+   *
+   * A bound row that is moved to another product, or rejected, leaves behind
+   * what it wrote on the old product: price rows, offers and shop rows. Nothing
+   * in catalog names the row that wrote them, so nothing else takes them back.
+   * `accept`, `createItem` and `reject` call this for the old product. A person
+   * calls it for a product a row left before the plan landed.
+   */
+  settleItem: 'sourceEntry.settleItem',
 } as const;
 
 /**
@@ -1347,6 +1359,17 @@ export interface ItemSourceEntryView extends SourceCatalogEntryView {
    * EAN.
    */
   eanSharedBy: number | null;
+  /**
+   * The other rows of this chain and source kind that are bound to the same
+   * product and hold an open price at a scope this row also holds an open
+   * price at (plan 0191). Their ids, oldest decision first.
+   *
+   * Catalog keeps one current price per product, scope and kind, so two such
+   * rows cannot both be shown. When their amounts differ and they are not
+   * both sold by weight, neither price is written until a person makes a
+   * second product or removes a row. Empty for a row that is not `ACTIVE`.
+   */
+  scopeSharedWith: string[];
 }
 
 /**
@@ -1420,6 +1443,83 @@ export interface SourceEntryAcceptResult {
   pricesWritten: number;
   /** The product this call created, or null when it bound an existing one. */
   createdItem: ItemView | null;
+  /**
+   * The scopes whose price was not written, because another bound row of the
+   * chain states another amount there (plan 0191). The row is bound all the
+   * same. Empty when every open price of the row was sent.
+   */
+  pricesWithheld: SourceEntryPriceWithheld[];
+  /**
+   * What settling the product the row left did (plan 0191). Null when the row
+   * was not bound before, or was bound to this same product.
+   */
+  settled: SettleItemAtChainResult | null;
+}
+
+/**
+ * A price that was not sent to catalog (plan 0191, after plan 0155).
+ *
+ * Two rows of one chain and one source kind are bound to one product, both
+ * hold an open price at one scope, and the amounts differ. Catalog keeps one
+ * current price there, and no rule picks between two packs. The price that
+ * was current before stays and ages until a person makes a second product or
+ * removes a row.
+ */
+export interface SourceEntryPriceWithheld {
+  /** The row whose price was not sent. */
+  entryId: string;
+  priceScopeId: string;
+  /** The other bound rows that state another amount at that scope. */
+  otherEntryIds: string[];
+}
+
+/** Settle a product at a chain (plan 0191). */
+export interface SettleItemAtChainRequest extends AdminCredential {
+  itemId: string;
+  supermarketId: string;
+  /** True answers what a call would do, and writes nothing. */
+  dryRun?: boolean;
+}
+
+/**
+ * What settling a product at a chain did, or with `dryRun` would do (plan
+ * 0191). The two answers have one shape and count the same things.
+ */
+export interface SettleItemAtChainResult {
+  itemId: string;
+  supermarketId: string;
+  dryRun: boolean;
+  /** The rows of the chain that are bound to the product now. */
+  boundEntryIds: string[];
+  /** Price rows a harvest run wrote that were removed from the product. */
+  pricesWithdrawn: number;
+  /** The same rows by scope and kind. A pair that lost no row is left out. */
+  pricesWithdrawnAt: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    deleted: number;
+  }[];
+  /**
+   * Prices of the bound rows that were sent to catalog again, one per row and
+   * scope. A price catalog already holds as current inserts nothing, so this
+   * counts what was sent and not what changed.
+   */
+  pricesRestated: number;
+  /** Prices of the bound rows that were not sent, and the rows they met. */
+  pricesWithheld: SourceEntryPriceWithheld[];
+  /**
+   * The scopes whose offer was removed. Always empty while a bound row of the
+   * chain names the product: a chain that lists a product sells it.
+   */
+  offersRemoved: string[];
+  /** The offers that stayed although no bound row names the product, and why. */
+  offersKept: { priceScopeId: string; reason: OfferKeptReason }[];
+  /** Shop rows of the chain's shops that were removed whole. */
+  shopRowsRemoved: number;
+  /** Shop rows that keep a position a person typed, with no availability now. */
+  shopRowsCleared: number;
+  /** Shop rows whose availability a person wrote. Left alone. */
+  shopRowConflicts: { supermarketLocationId: string; held: boolean | null }[];
 }
 
 // --- Bulk entry decisions (plan 0100) ---------------------------------------

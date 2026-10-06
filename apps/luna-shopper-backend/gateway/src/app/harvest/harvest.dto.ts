@@ -647,6 +647,25 @@ export class SetSourceEnabledDto {
   enabled!: boolean;
 }
 
+/** Settle a product at a chain (plan 0191). */
+export class SettleItemAtChainDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The chain whose rows are read. Catalog is made to agree with the rows of this chain that are bound to the product now.',
+  })
+  @IsUUID()
+  supermarketId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'True answers what a call would remove and write, and writes nothing. The answer has the shape of a real call and counts the same things. Absent is false.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+}
+
 // --- Queries ---------------------------------------------------------------
 
 export class HarvestRunListQueryDto extends PageQueryDto {

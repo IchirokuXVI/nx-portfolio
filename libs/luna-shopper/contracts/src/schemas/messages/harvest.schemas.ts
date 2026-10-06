@@ -143,6 +143,9 @@ export const HARVEST_SCHEMA_IDS = {
   queuedSourceEntryView: schemaId('harvest/QueuedSourceEntryView'),
   queuedSourceEntryPage: schemaId('harvest/QueuedSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
+  settleItemRequest: schemaId('msg/sourceEntry.settleItem/request'),
+  settleItemAtChainResult: schemaId('harvest/SettleItemAtChainResult'),
+  sourceEntryPriceWithheld: schemaId('harvest/SourceEntryPriceWithheld'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
   createItemFromEntryRequest: schemaId('msg/sourceEntry.createItem/request'),
   // Plan 0100: a whole decisions file, in one call.
@@ -489,8 +492,13 @@ const itemSourceEntryView = object(
   {
     ...sourceCatalogEntryProperties,
     eanSharedBy: { type: ['integer', 'null'], minimum: 1 },
+    scopeSharedWith: {
+      ...array(nonEmptyString()),
+      description:
+        'The other rows of this chain and source kind that are bound to the same product and hold an open price at a scope this row also holds one at (plan 0191). Catalog keeps one current price per product, scope and kind, so when the amounts differ and the rows are not both sold by weight, neither price is written. Empty for a row that is not ACTIVE.',
+    },
   },
-  [...sourceCatalogEntryRequired, 'eanSharedBy']
+  [...sourceCatalogEntryRequired, 'eanSharedBy', 'scopeSharedWith']
 );
 /**
  * A row as the queue answers it (plan 0178). Composed at the gateway: the
@@ -559,8 +567,130 @@ const sourceEntryAcceptResult = object(
     createdItem: {
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemView), { type: 'null' }],
     },
+    pricesWithheld: {
+      ...array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld)),
+      description:
+        'The scopes whose price was not written, because another bound row of the chain states another amount there (plan 0191). The row is bound all the same.',
+    },
+    settled: {
+      anyOf: [
+        ref(HARVEST_SCHEMA_IDS.settleItemAtChainResult),
+        { type: 'null' },
+      ],
+      description:
+        'What settling the product the row left did (plan 0191). Null when the row was not bound before, or was bound to this same product.',
+    },
   },
-  ['entry', 'pricesWritten', 'createdItem']
+  ['entry', 'pricesWritten', 'createdItem', 'pricesWithheld', 'settled']
+);
+
+/**
+ * A price that was not sent to catalog (plan 0191): two rows of one chain and
+ * one source kind are bound to one product and state two amounts at one scope.
+ */
+const sourceEntryPriceWithheld = object(
+  HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld,
+  {
+    entryId: nonEmptyString(),
+    priceScopeId: nonEmptyString(),
+    otherEntryIds: array(nonEmptyString()),
+  },
+  ['entryId', 'priceScopeId', 'otherEntryIds']
+);
+
+/** Settle a product at a chain (plan 0191). */
+const settleItemRequest = object(
+  HARVEST_SCHEMA_IDS.settleItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    dryRun: boolean(),
+  },
+  ['userId', 'itemId', 'supermarketId']
+);
+
+/**
+ * What settling a product at a chain did, or with `dryRun` would do (plan
+ * 0191). The two answers have one shape and count the same things.
+ */
+const settleItemAtChainResult = object(
+  HARVEST_SCHEMA_IDS.settleItemAtChainResult,
+  {
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    dryRun: boolean(),
+    boundEntryIds: {
+      ...array(nonEmptyString()),
+      description:
+        'The rows of the chain that are bound to the product now. Catalog is made to agree with these.',
+    },
+    pricesWithdrawn: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Price rows a harvest run wrote that were removed from the product. A row a person typed is never one of them.',
+    },
+    pricesWithdrawnAt: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        deleted: integer({ minimum: 1 }),
+      },
+      required: ['priceScopeId', 'sourceKind', 'deleted'],
+      additionalProperties: false,
+    }),
+    pricesRestated: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Prices of the bound rows that were sent to catalog again, one per row and scope. It counts what was sent, not what changed.',
+    },
+    pricesWithheld: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceWithheld)),
+    offersRemoved: {
+      ...array(nonEmptyString()),
+      description:
+        'The price scopes whose offer was removed. Always empty while a bound row of the chain names the product.',
+    },
+    offersKept: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        reason: { type: 'string', enum: ['PRICED', 'SHOP_ROW', 'PERSON'] },
+      },
+      required: ['priceScopeId', 'reason'],
+      additionalProperties: false,
+    }),
+    shopRowsRemoved: integer({ minimum: 0 }),
+    shopRowsCleared: integer({ minimum: 0 }),
+    shopRowConflicts: {
+      ...array({
+        type: 'object',
+        properties: {
+          supermarketLocationId: nonEmptyString(),
+          held: { type: ['boolean', 'null'] },
+        },
+        required: ['supermarketLocationId', 'held'],
+        additionalProperties: false,
+      }),
+      description:
+        'Shop rows whose availability a person wrote. They are left alone.',
+    },
+  },
+  [
+    'itemId',
+    'supermarketId',
+    'dryRun',
+    'boundEntryIds',
+    'pricesWithdrawn',
+    'pricesWithdrawnAt',
+    'pricesRestated',
+    'pricesWithheld',
+    'offersRemoved',
+    'offersKept',
+    'shopRowsRemoved',
+    'shopRowsCleared',
+    'shopRowConflicts',
+  ]
 );
 
 /**
@@ -1483,6 +1613,9 @@ export const harvestSchemas: JsonSchema[] = [
   listEntriesRequest,
   listEntriesByItemRequest,
   entryIdRequest,
+  settleItemRequest,
+  settleItemAtChainResult,
+  sourceEntryPriceWithheld,
   acceptEntryRequest,
   createItemFromEntryRequest,
   sourceEntryExpectation,
@@ -1615,6 +1748,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.entryIdRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  },
+  [SOURCE_ENTRY_PATTERNS.settleItem]: {
+    request: HARVEST_SCHEMA_IDS.settleItemRequest,
+    response: HARVEST_SCHEMA_IDS.settleItemAtChainResult,
   },
   [SOURCE_ENTRY_PATTERNS.applyDecisions]: {
     request: HARVEST_SCHEMA_IDS.applyEntryDecisionsRequest,

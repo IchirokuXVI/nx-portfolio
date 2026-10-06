@@ -281,6 +281,7 @@ describeIntegration('scope copies of a Mercadona walk (real Postgres)', () => {
       undefined as never,
       undefined as never,
       undefined as never,
+      undefined as never,
       undefined as never
     );
 

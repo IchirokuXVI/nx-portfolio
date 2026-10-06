@@ -23,7 +23,7 @@ import {
   type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
-import { lowestPerKilo } from './source-entry-write';
+import { decideArticles, type Article } from './source-entry-write';
 import {
   applySourceGroup,
   loadCatalogItems,
@@ -225,18 +225,38 @@ export interface SourceIngestCounters {
   /** Rows catalog already held at this value and only moved the clock on. */
   pricesConfirmed: number;
   /**
-   * Items two entries of this chain priced at one scope in one batch, for which
-   * nothing was sent (plan 0155).
+   * Items two entries of this chain priced at one scope with two amounts, for
+   * which the run withheld a price (plan 0155).
    *
-   * One per item and scope, whatever the number of entries. Catalog keeps one
-   * current price per item, scope and kind, so sending both made the one
-   * written last the one a shopper saw. No rule picks one of them: a person
-   * does, in the queue.
+   * One per item and scope, whatever the number of entries, and counted once
+   * for the whole run however many chunks the entries fell in (plan 0191).
+   * Catalog keeps one current price per item, scope and kind, so sending both
+   * made the one written last the one a shopper saw. No rule picks one of
+   * them: a person does, in the queue. {@link SourceIngestResult.priceConflicts}
+   * names them.
    *
    * Rows sold by weight are not counted here. Their prices are all the price
    * of a kilo, so they can be compared, and the lowest is sent (plan 0181).
+   * Rows that state one amount are not counted either: that amount is sent.
    */
   pricesConflicted: number;
+}
+
+/**
+ * One item two rows of the chain priced at one scope with two amounts (plan
+ * 0191), named so a person can find the pair.
+ */
+export interface PriceConflict {
+  itemId: string;
+  priceScopeId: string;
+  /** The rows that state the two amounts, in the order the run met them. */
+  entryIds: string[];
+  /**
+   * Whether the run had already sent the price of one of them when the other
+   * arrived, in an earlier chunk. That price is not taken back: it is the one
+   * that was current before the conflict, and it stays and ages.
+   */
+  firstWasSent: boolean;
 }
 
 /**
@@ -257,6 +277,8 @@ export interface SourceIngestResult {
   outcomes: SourceEntryOutcome[];
   counters: SourceIngestCounters;
   copies: SourceIngestCopies;
+  /** One per conflict {@link SourceIngestCounters.pricesConflicted} counts. */
+  priceConflicts: PriceConflict[];
 }
 
 /**
@@ -350,12 +372,13 @@ export class SourceIngest {
     siblings: SiblingEntryIndex,
     items: ItemMatchIndex,
     eans: ChainEanIndex,
-    weighed: Map<string, OwedCandidate> = new Map()
+    owedSoFar: OwedMemory = new Map()
   ): Promise<SourceIngestResult> {
     const seenAt = new Date();
     const outcomes: SourceEntryOutcome[] = [];
     const counters = emptyCounters();
     const copies = emptyCopies();
+    const priceConflicts: PriceConflict[] = [];
     /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
     /** Where each observation's prices landed, by its index, copies included. */
@@ -523,6 +546,8 @@ export class SourceIngest {
           entryId: outcome.entry.id,
           entry,
           soldByWeight: outcome.entry.soldByWeight === true,
+          price: entry.price ?? null,
+          unitPrice: entry.unitPrice ?? null,
         });
         batch.byItem.set(outcome.itemId, candidates);
         owed.set(key, batch);
@@ -531,13 +556,16 @@ export class SourceIngest {
 
     let owedCount = 0;
     for (const batch of owed.values()) {
-      const { entries, conflicted } = this.settle(
+      const { entries, conflicts } = this.settle(
         context.runId,
         batch,
-        weighed
+        owedSoFar
       );
+      // A copy is the same pair of rows at another scope. It is withheld like
+      // the price it copies, and the conflict is counted and named once.
       if (batch.copiedFromScopeId === null) {
-        counters.pricesConflicted += conflicted;
+        counters.pricesConflicted += conflicts.length;
+        priceConflicts.push(...conflicts);
       }
       const written = await this.writePrices(
         context,
@@ -567,69 +595,91 @@ export class SourceIngest {
         `${counters.pricesWritten} written to catalog, ` +
         `${counters.pricesConflicted} withheld as conflicts.`
     );
-    return { outcomes, counters, copies };
+    return { outcomes, counters, copies, priceConflicts };
   }
 
   /**
-   * The one price each item of a batch is sent, or none (plans 0155 and 0181).
+   * The one price each item of a batch is sent, or none.
    *
-   * **Refuse, do not choose, when the rows are packs.** Keeping either price
-   * would be a rule that picks one cut's price for a product several cuts
-   * share, and the answer to that is a person's: accept one entry, or create
-   * the cuts as products. That item is counted as a conflict and sent nothing.
+   * **The rule is not here.** It is `decideArticles` in
+   * `source-entry-write.ts` (plans 0155, 0181 and 0191), the one a decision
+   * reads too: one row sends its price, pieces sold by weight send the lowest
+   * price per kilo, rows that agree send the amount they agree on, and rows
+   * that state two amounts send nothing and are a conflict.
    *
-   * **Choose the lowest when every row is sold by weight.** Two pieces of one
-   * cheese are one product by the owner's rule, and each price is the price of
-   * a kilo, so the two can be compared and {@link lowestPerKilo} states which
-   * one a shopper is shown.
+   * **What is here is the run's memory, which makes the rule hold across
+   * chunks.** The sink pushes four hundred products at a time, and two rows of
+   * one product fall in two chunks as easily as in one. `owedSoFar` keeps, per
+   * item and scope, the latest statement of every row this run has reported.
+   * Each chunk adds its rows to that and asks the rule about all of them:
    *
-   * `weighed` is what the run already sent for such an item at this scope, so
-   * the rule holds across chunks: a later chunk carrying a second piece sends
-   * its price only when it is the lower one. A piece reported again replaces
-   * its own earlier figure, because its later observation is the one it holds.
+   * - A piece sold by weight in a later chunk sends its price only when it is
+   *   the lower one, as it did before the plan.
+   * - A second article in a later chunk, of another amount, is a conflict. It
+   *   is counted once and named with the first, and its price is not sent.
+   *   **The first is not taken back**: it was sent before the run knew, and
+   *   it is the price that was current before the conflict.
+   * - A row reported again replaces its own earlier statement, because its
+   *   later observation is the one it holds.
    */
   private settle(
     runId: string,
     batch: OwedBatch,
-    weighed: Map<string, OwedCandidate>
-  ): { entries: ItemPriceBatchEntry[]; conflicted: number } {
+    owedSoFar: OwedMemory
+  ): { entries: ItemPriceBatchEntry[]; conflicts: PriceConflict[] } {
     const entries: ItemPriceBatchEntry[] = [];
-    let conflicted = 0;
+    const conflicts: PriceConflict[] = [];
     for (const [itemId, byEntry] of batch.byItem) {
-      const candidates = [...byEntry.values()];
-      const allWeighed = candidates.every((each) => each.soldByWeight);
-      if (!allWeighed) {
-        if (candidates.length === 1) {
-          entries.push(candidates[0].entry);
+      const key = `${batch.priceScopeId}|${batch.copiedFromScopeId ?? ''}|${itemId}`;
+      const held = owedSoFar.get(key) ?? {
+        articles: new Map<string, OwedCandidate>(),
+        lastSent: null,
+        conflicted: false,
+      };
+      owedSoFar.set(key, held);
+      for (const [entryId, candidate] of byEntry) {
+        held.articles.set(entryId, candidate);
+      }
+
+      const verdict = decideArticles([...held.articles.values()]);
+      if (!verdict) {
+        continue;
+      }
+      if (verdict.send === null) {
+        if (held.conflicted) {
+          // Counted and named when the run first met the pair.
           continue;
         }
+        held.conflicted = true;
+        const entryIds = verdict.conflict.map((each) => each.entryId);
+        const firstWasSent = held.lastSent !== null;
         this.logger.warn(
-          `Run ${runId}: entries ${[...byEntry.keys()].join(', ')} all price ` +
-            `item ${itemId} at scope ${batch.priceScopeId}` +
+          `Run ${runId}: entries ${entryIds.join(', ')} price item ${itemId} ` +
+            `at scope ${batch.priceScopeId}` +
             (batch.copiedFromScopeId === null
               ? ''
               : ` (copied from ${batch.copiedFromScopeId})`) +
-            ', so none of their prices was sent.'
+            ' with different amounts, so ' +
+            (firstWasSent
+              ? 'the price an earlier chunk sent stands and no other was sent.'
+              : 'none of their prices was sent.')
         );
-        conflicted += 1;
+        conflicts.push({
+          itemId,
+          priceScopeId: batch.priceScopeId,
+          entryIds,
+          firstWasSent,
+        });
         continue;
       }
-
-      const key = `${batch.priceScopeId}|${batch.copiedFromScopeId ?? ''}|${itemId}`;
-      const sent = weighed.get(key);
-      const earlier = sent && !byEntry.has(sent.entryId) ? [sent] : [];
-      const lowest = lowestPerKilo(
-        [...earlier, ...candidates],
-        (each) => each.entry.unitPrice ?? each.entry.price ?? null
-      );
-      if (!lowest || lowest === sent) {
-        // An earlier chunk already sent the lower figure of another piece.
+      if (verdict.send === held.lastSent) {
+        // An earlier chunk already sent this very statement.
         continue;
       }
-      weighed.set(key, lowest);
-      entries.push(lowest.entry);
+      held.lastSent = verdict.send;
+      entries.push(verdict.send.entry);
     }
-    return { entries, conflicted };
+    return { entries, conflicts };
   }
 
   /**
@@ -1072,12 +1122,25 @@ interface ObservedPrice extends PlacedPrice {
 }
 
 /** The price one row states for the item it is bound to. */
-interface OwedCandidate {
-  entryId: string;
+interface OwedCandidate extends Article {
   entry: ItemPriceBatchEntry;
-  /** The row's own flag (plan 0181): its price is the price of a kilo. */
-  soldByWeight: boolean;
 }
+
+/**
+ * What a run has stated so far for one item at one scope (plan 0191), kept
+ * for the whole run so the rule compares rows across chunks.
+ */
+interface OwedSoFar {
+  /** The latest statement of every row the run reported, by row. */
+  articles: Map<string, OwedCandidate>;
+  /** The statement the run sent to catalog last, or null when it sent none. */
+  lastSent: OwedCandidate | null;
+  /** Whether the run already counted and named a conflict here. */
+  conflicted: boolean;
+}
+
+/** {@link OwedSoFar} by scope, copy source and item. */
+type OwedMemory = Map<string, OwedSoFar>;
 
 /** The prices owed to one scope, all read at the same place, by item and row. */
 interface OwedBatch {
@@ -1329,12 +1392,14 @@ export class SourceIngestSession {
   private readonly eans: ChainEanIndex;
   private readonly outcomes: SourceEntryOutcome[] = [];
   /**
-   * The price this run already sent for an item sold by weight, by scope and
-   * item (plan 0181), so a second piece in a later chunk is compared with it.
+   * What this run has stated for each item at each scope (plans 0181 and
+   * 0191), so a second row of one product in a later chunk is compared with
+   * the first.
    */
-  private readonly weighed = new Map<string, OwedCandidate>();
+  private readonly owedSoFar: OwedMemory = new Map();
   private readonly counters = emptyCounters();
   private readonly copies = emptyCopies();
+  private readonly priceConflicts: PriceConflict[] = [];
   private closed = false;
 
   constructor(
@@ -1377,7 +1442,7 @@ export class SourceIngestSession {
       this.siblings,
       this.items,
       this.eans,
-      this.weighed
+      this.owedSoFar
     );
     this.outcomes.push(...result.outcomes);
     this.counters.created += result.counters.created;
@@ -1387,6 +1452,7 @@ export class SourceIngestSession {
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
+    this.priceConflicts.push(...result.priceConflicts);
     for (const scopeId of result.copies.pricedScopes) {
       this.copies.pricedScopes.add(scopeId);
     }
@@ -1412,6 +1478,7 @@ export class SourceIngestSession {
       outcomes: this.outcomes,
       counters: this.counters,
       copies: this.copies,
+      priceConflicts: this.priceConflicts,
     };
   }
 }
