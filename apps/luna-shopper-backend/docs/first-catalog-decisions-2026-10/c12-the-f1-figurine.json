@@ -1,0 +1,22 @@
+{
+  "step": "C12",
+  "title": "Decision 16: the F1 figurine loses its 20 El Jamón offers",
+  "sources": [
+    "stage-c2/step3.settle-real.answer.json"
+  ],
+  "keys": "Each product is keyed as it stood at the start of the stage of plan 0192 that changed it (the items-snapshot of that stage). A product that a stage created is keyed as the create answered it. Each queue row is keyed as it stood at the start of stage 1 (stage-c1/rows-snapshot.c0-start.json).",
+  "decidedBy": "The owner, 2026-10-06 (decision 16): wait for the code of plan 0191. The settle route of that plan made the one call.",
+  "count": 1,
+  "naturalKeys": {
+    "products": 1,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"product":{"brand":"KitKat","nameEs":"Figurita de chocolate con leche coche F1","size":29,"unit":"GRAM","packCount":null,"barcode":null,"localId":"b3827082-e364-4242-acf0-e41565547754"},"decision":{"action":"settle","chain":"El Jamón"},"offersRemoved":20,"pricesWithdrawn":0,"status":"applied in stage 2","openDecision":16,"ownerDecision":"Decided by the owner, 2026-10-06: wait for the code fix of plan 0191. No manual write.","why":"The 20 El Jamón offers with no price came from the wrong bind of October. No bound row of the chain states them. The dry run answered these 20 offers and nothing else, so the call ran."}
+  ]
+}

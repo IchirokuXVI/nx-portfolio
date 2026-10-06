@@ -29,7 +29,7 @@ arms it in a pull request that writes the two dates and the production release.
 Every id in the dumps must survive. `source_catalog_entries.itemId`,
 `item_prices.sourceRunId` and core's `list_line_items.itemId` name rows across
 three databases with no foreign key between them. The bulk routes of the
-gateway create rows with random ids. Only 4,190 of the 19,791 products have an
+gateway create rows with random ids. Only 3,990 of the 19,773 products have an
 EAN, so nothing else can tell two copies of a product apart. A whole database
 restore also carries what the services derive on a write (`supermarket_items`,
 the search documents), so nothing is computed again.
@@ -41,7 +41,7 @@ the search documents), so nothing is computed again.
 - **The old databases stay**, as `luna_catalog_before_first_catalog` and
   `luna_harvester_before_first_catalog`. The script never deletes a database.
 - **Every `supermarket_sources` row is off after the restore.** The dumps hold
-  four rows that are on. A cluster starts with every chain off (backend plan
+  four rows, and all four are on. A cluster starts with every chain off (backend plan
   0083), and the owner turns one on from the back office.
 - **Lost in the harvester:** every row the cluster's own harvests wrote, and
   every decision a person took on a discovered place. The dry run prints the
@@ -116,7 +116,8 @@ hold the same schema, and they compare equal.
 ## Before the release
 
 1. Upload both dumps to the backup bucket of the cluster, under the keys of the
-   manifest. This is the owner's step.
+   manifest. This is the owner's step. **On 2026-10-06 it is not done: neither
+   bucket holds the two files.**
 
    ```
    imports/2026-10-first-catalog/catalog.dump
@@ -125,6 +126,11 @@ hold the same schema, and they compare equal.
 
    Staging's bucket is `velista-staging` and production's is `velista`. The
    nightly dumps never use the `imports/` prefix.
+
+   After each upload, download the object again and run `sha256sum` on it. The
+   answer must be the value of the manifest ("When slot 1 is final" has both).
+   The script makes the same check before it restores, so a wrong upload is a
+   refusal at step 2 and not a wrong catalog.
 
 2. Run a dry run on the VPS and read all of it.
 
@@ -289,16 +295,41 @@ kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
 
 ## When slot 1 is final
 
-Every value of `first-catalog.manifest` is provisional. It describes the dumps
-of 2026-10-03 20:44, and the owner went on editing slot 1 after that. When the
-owner says that slot 1 is final:
+**The manifest describes the dumps of 2026-10-06.** They were taken at
+2026-10-06T21:12:47Z (23:12 Madrid time), at the end of backend plan 0192, with
+every service that holds a database stopped. The values of the dumps of
+2026-10-03 20:44 are gone from the manifest.
 
-1. Bring slot 1 to the migrations of the release that will carry the task. The
-   dumps of 2026-10-03 hold 26 catalog migrations and 17 harvester migrations.
-   The code on `dev` on 2026-10-04 holds 29 and 20, so those dumps are refused
-   at step 3 by any cluster that runs it.
-2. Take both dumps again, with the slot's services stopped so that nothing
-   writes.
+| File             |      Bytes | SHA-256                                                            |
+| ---------------- | ---------: | ------------------------------------------------------------------ |
+| `catalog.dump`   | 42,839,380 | `506247e3a8350a91fd0aaaeca406ada88fb9c89351ba6b258ff7abf757a7f9b0` |
+| `harvester.dump` | 11,549,529 | `9c102642bf0cb87cc6a1b6f0ab6b94fec8dbf249394ff13c3e3c0252c0773512` |
+
+- The catalog dump holds 29 migrations, the last one `ItemEans1758800000000`.
+  The harvester dump holds 21, the last one `SourceEntryPriceKind1759200000000`.
+  That is the code of `dev` at `152d9d5e`. A cluster that runs other migrations
+  is refused at step 3.
+- The two files stand in the folder
+  `.curation-runs/2026-10-audit-repair/stage-c3/final/` of the checkout that did
+  the work. Git ignores that folder. A `VERIFY.txt` stands beside them, and so
+  does the file that states how each value was read.
+- Slot 1 is down and locked, with its databases kept.
+
+**These dumps ship unless slot 1 is written again.** The owner has not said in
+words that slot 1 is final. What the owner still has to do:
+
+1. Say that slot 1 is final, or ask for more work on it. More work means new
+   dumps, and the steps below again.
+2. Upload both files to both buckets, under the keys of the manifest.
+3. Check the SHA-256 of each object after the upload ("Before the release",
+   step 1).
+4. Run the dry run on each VPS, then arm the task ("Before the release", steps 2
+   and 3).
+
+After any later write to slot 1, take the dumps again:
+
+1. Bring slot 1 to the migrations of the release that will carry the task.
+2. Take both dumps, with the slot's services stopped so that nothing writes.
 
    ```sh
    docker exec luna-slot1-catalog-db-1 pg_dump -Fc -U luna_catalog -d luna_catalog -f /tmp/catalog.dump
@@ -314,8 +345,8 @@ owner says that slot 1 is final:
 5. Bring `initial-catalog-2026-10.md` to the same numbers, or say in it that
    the state moved on after it was written.
 
-A manifest that still holds the values of 2026-10-03 refuses the new files at
-the checksum, which is the intended failure.
+A manifest that holds the values of other dumps refuses the files at the
+checksum, which is the intended failure.
 
 ## Rehearsing it
 
@@ -346,7 +377,9 @@ the shell rewrites `/bin/sh` on its way to `docker exec`.
 
 On 2026-10-04, against Postgres 16 containers and a local S3 server. The two
 dumps were only read: copies of them were uploaded. No cluster and no Luna slot
-that holds data was touched.
+that holds data was touched. Those were the dumps of 2026-10-03. The last row
+of the table is the one test of the dumps of 2026-10-06, and it did not run the
+script.
 
 | Case                                                                                                | Result                                                                                                                                                                                                                                                                                        |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -367,3 +400,4 @@ that holds data was touched.
 | A harvester swap that fails, and a catalog that cannot be renamed back                              | `THE PAIR IS SPLIT`. Both services stayed at 0 replicas. `check.sh` and the next run both refused the pair.                                                                                                                                                                                   |
 | `kubectl` that cannot reach the cluster, a database pod that does not exist, a writer at 0 replicas | `post.sh` exited 1 each time, and nothing was scaled.                                                                                                                                                                                                                                         |
 | The deploy path                                                                                     | The runner of plan 0011 ran the task from a copy of `k8s/` with an armed `task.env`. A stand in for `kubectl` mapped the pods onto the containers. Check, pre and post passed, both services were scaled to zero and back, and a second run with the ledger removed left the databases alone. |
+| The dumps of 2026-10-06, restored on 2026-10-06                                                     | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. Every count and both `migrations` tables of the manifest, read from the copies, equal the values read from slot 1.       |

@@ -20,6 +20,12 @@ section "Repairs after the audit" at the end records what changed, the new count
 dumps and what stays wrong. Every other section describes the catalog as it was built on
 2026-10-03, and says so where a repair changed a number.
 
+> **Note of 2026-10-06, after plan 0192.** Slot 1 moved on once more the same day. Plan 0192
+> applied the owner's decisions on the repaired catalog and took the dumps that ship. The
+> last section holds the counts, the dumps and the list of what stays wrong as they stand
+> now. Its title is "The owner's decisions applied (plan 0192, 2026-10-06)".
+> "Repairs after the audit" describes the catalog at the end of plan 0186.
+
 ## The state in numbers
 
 | | Count |
@@ -49,7 +55,24 @@ These are the counts of 2026-10-03. After the repairs of 2026-10-06 slot 1 holds
 | Queue rows linked to a product (`ACTIVE`) | 21,754 |
 | Queue rows left for a person | 4,077 `UNRESOLVED` and 25 `CANDIDATE` |
 
-"Counts after the repairs" in the last section splits them by chain.
+"Counts after the repairs" in the section "Repairs after the audit" splits them by chain.
+
+After plan 0192, on 2026-10-06 at 21:13 UTC, slot 1 and the dumps that ship hold:
+
+| | Count in the dumps that ship |
+| --- | ---: |
+| Supermarkets | 5 |
+| Price scopes | 104 |
+| Categories | 309 |
+| Brands | 2,782 |
+| Products (`items`) | 19,773 |
+| Price rows (`item_prices`) | 24,964 |
+| Queue rows (`source_catalog_entries`) | 25,861 |
+| Queue rows linked to a product (`ACTIVE`) | 21,779 |
+| Queue rows left for a person | 4,082 `UNRESOLVED` and 0 `CANDIDATE` |
+
+These are the eight counts of `k8s/catalog-import/first-catalog.manifest`. "Counts before
+and after" in the last section splits them by chain.
 
 ## What production must do before it serves this state
 
@@ -70,6 +93,11 @@ went on editing slot 1 after that day, so the dumps that ship are taken again,
 and `k8s/catalog-import/first-catalog.manifest` then states what they hold.
 The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
 
+> **Note of 2026-10-06, after plan 0192.** The dumps that "Repairs after the audit" names
+> are not the ones that ship. Plan 0192 wrote to slot 1 after them and took new dumps at
+> 2026-10-06T21:12:47Z. The manifest states what those hold, and the last section names
+> them. They are not uploaded to a bucket yet.
+
 1. **Run the same code.** In the dumps of 2026-10-03 the catalog database holds 26
    migrations, the last one `DiaCategoryTree1758500000000` (plan 0173, PR #597). The
    harvester database holds 17, the last one `DiscoveredPlaceFootprint1757900000000`
@@ -77,6 +105,8 @@ The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
    20 migrations, the last ones `ItemEans1758800000000` and
    `SourceEntryAvailability1758200000000`. Production's release must contain exactly the
    migrations of the dumps it restores, or the services will try to run or miss one.
+   **Note of 2026-10-06, after plan 0192:** the dumps that ship hold 29 and 21 migrations.
+   The last harvester migration is `SourceEntryPriceKind1759200000000` (plan 0190).
 2. **Turn the four harvest sources off.** The harvester dump has a `supermarket_sources`
    row for Mercadona, LIDL, Deza and El Jamón, all with `enabled = true`. A cluster keeps
    every source off (plan 0083, `CLAUDE.md`). Set each one to false right after the
@@ -324,7 +354,10 @@ side. Note that two pieces of one cheese can cost a different amount per kilo (9
   boxes sized in grams at Mercadona and in units at Deza and El Jamón.
 - Make-up filed under `facial-care` until plan 0179 gives it its own branch.
 
-"What stays wrong" in the last section is the list as it stands after the repairs.
+"What stays wrong" in the section "Repairs after the audit" is the list as it stood after
+the repairs of plan 0186. **Note of 2026-10-06, after plan 0192:** "What stays wrong or
+open" in the last section is the list as it stands now. The queue holds 4,082 `UNRESOLVED`
+rows and no `CANDIDATE` row.
 
 ## Defects found, and their plans (PR #599)
 
@@ -404,6 +437,9 @@ The migrations changed two things that this document states:
 Condition 1 of "What production must do" thus reads differently for the new dumps. A
 release that restores them must contain exactly these 29 and 20 migrations. The dumps of
 2026-10-03 still need a release with 26 and 17.
+
+> **Note of 2026-10-06, after plan 0192.** Plan 0190 added a fourth harvester migration,
+> `SourceEntryPriceKind1759200000000`. The dumps that ship hold 29 and 21 migrations.
 
 ### Stage A: repairs that needed no other plan
 
@@ -700,7 +736,27 @@ that slot 1 holds now.
 
 Slot 1 is down and locked, with its databases kept.
 
+> **Note of 2026-10-06, after plan 0192.** `after-stage-b-final/` no longer holds the state
+> of slot 1. Plan 0192 wrote to slot 1 after it. The dumps that ship are in
+> `stage-c3/final/` of the same folder, and the last section names them.
+
 ### What stays wrong
+
+> **Note of 2026-10-06, after plan 0192.** Each item below is as it stood at the end of
+> plan 0186. Plan 0192 and the three code plans before it closed many of them:
+>
+> - The unit price labels: plan 0189 and a new run. 87 rows keep an old label.
+> - The three conversions of A3: the ham piece is `KILOGRAM` with no size, and the owner
+>   kept the other two.
+> - The 8 leaflet rows that became website rows: plan 0190 fixed the code.
+> - The frozen fish: 21 of 22 have a size.
+> - The Deza shop codes: 9 of 10 are mapped, and `CONSULTAR` is ignored.
+> - The 11 Mercadona candidates and the 14 El Jamón candidates: all decided.
+> - The 47 pairs, the 4 fruit pairs and the 4 probable duplicates: all read and decided.
+> - The 4 English names, the brand `Invictus` and six of the seven lines left separate.
+> - The El Pozo burger "king" and the F1 figurine.
+>
+> "What stays wrong or open" in the last section is the list as it stands now.
 
 Each item has its own title, so that it can be found and fixed later. The first two are
 recorded at the owner's request.
@@ -883,3 +939,289 @@ from Mercadona, 607 from El Jamón and 43 from LIDL. 25 are `CANDIDATE`. The 131
 the two runs found are among them, except the melon row. They include 16 Mercadona
 articles that are new to the three warehouses since 2026-10-03, and 114 Deza rows, 52 of
 them stationery.
+
+## The owner's decisions applied (plan 0192, 2026-10-06)
+
+Plan 0186 left sixteen decisions for the owner. The owner answered them on 2026-10-06, and
+plan 0192 applied the answers the same day, on slot 1 only. This section is the state that
+the dumps that ship hold. Every figure in it was read from the files of the work, in the git
+ignored folder `.curation-runs/2026-10-audit-repair/` of the checkout that did it:
+`after-0189/`, `stage-c1/`, `stage-c2/` and `stage-c3/`.
+
+Every change went through the gateway of slot 1 as `admin@curation.local`. No SQL write was
+made. The register, `first-catalog-decisions-2026-10/README.md`, holds each decision with
+its answer (section 4) and each stage (section 5). Its files `c01` to `c13` hold the rows.
+
+### The three code plans that landed first
+
+The repair of plan 0186 found code that was missing. Three plans fixed it, and each one
+changed the data of slot 1 before the dumps.
+
+| Plan | What the code does now | What it changed in the data |
+| --- | --- | --- |
+| 0189 (PR #651) | A unit price label names what the figure is | A new Mercadona run. Current price rows with an old label fell from 1,595 to 87 |
+| 0190 (PR #654) | A price keeps the kind of the source that stated it | One harvester migration, `SourceEntryPriceKind1759200000000`. Each of the 25,470 rows of `source_entry_prices` got its kind, and 0 were left without |
+| 0191 (PR #652) | A row that leaves a product takes its offers with it | The settle. A row that moved in stages 2 and 3 took its price and its offers along, and the F1 figurine lost its 20 offers |
+
+**Plan 0189, the Mercadona run.** Run `c6662e9c-b66d-4fad-aeff-5850989ed845`, a
+`CATALOG_DISCOVERY` of the three Córdoba scopes with `details: "ALL"`, ran for 10 minutes
+and 16 seconds on 2026-10-06 and ended `COMPLETED` with 0 failed.
+
+- Old labels on current rows: `100 ml` 1,206 to 54, `100 g` 292 to 17, `lv` 70 to 16, `dc`
+  24 to 0, `dz` 3 to 0. Together 1,595 to 87. History keeps the old rows.
+- The run wrote 1,544 price rows. 1,508 rows on 509 products differ only in the label. 36
+  rows on 12 products are real price changes.
+- It found 5 new queue rows, all `UNRESOLVED`. No product changed, and it bound no barcode
+  without review.
+- The Mercadona source was set to 8 workers and 8 requests per second for the run, and it
+  was left so. It had 4 and 4.
+
+**Plan 0190, the kind on each price.** The migration ran at the start of stage 1. It set
+18,383 rows to `OFFICIAL_API`, 196 to `OFFICIAL_LEAFLET` and 6,891 to `OFFICIAL_WEB`.
+
+**Plan 0191, the settle.** Stage 2 and stage 3 moved bound rows. Each accept and each
+create answered what the settle did to the product that the row left. No price and no
+offer was left behind, and no merge cascaded a price row.
+
+### What changed
+
+| Stage | What was done |
+| --- | --- |
+| Stage 1 | 4 English names. 21 frozen fish products to `GRAM`. The Incarlopsa ham piece to `KILOGRAM` with no size. 6 brand lines and `Invictus` linked to their house, with 9 names and 3 spellings before the links. 5 Deza shop codes mapped and `CONSULTAR` ignored. 11 El Jamón candidates decided (6 accepts, 5 creates). 11 Mercadona candidates each given a product, and 4 old products renamed with their container. The 47 pairs by weight and by count read. |
+| Stage 2 | The El Pozo burger "king" got a product of its own, 240 g as printed. 2 Nescafé cappuccino pairs merged. The F1 figurine lost its 20 El Jamón offers with no price. |
+| Stage 3 | The 4 probable duplicates merged. 3 Deza shop codes mapped to the shops that the owner named. A store discovery, 1 shop imported, and a fourth code mapped to it. The last 3 El Jamón candidates decided (2 creates, 1 accept with a rename). 2 Tassimo pairs merged with "Marcilla" in the name. 2 loose fruit rows moved to the singular fruit, and the 1.5 kg Golden bag given a product. 4 products given categories. The final dumps. |
+
+Notes that the table cannot hold:
+
+- **The Deza shops.** The catalog held eight Deza shops, where plan 0192 expected ten. Five
+  codes found their shop by the street name. The owner named the shops of `C1`, `Z1` and
+  `C2`: Imprenta de la Alborada 116, José María Martorell and Libertador Sucre 38. A
+  `STORE_DISCOVERY` run of 10 km around postal code 14005 met 85 places and no new one.
+  The Deza place at Carretera de Castro 42 was imported as a shop, and `T2` mapped to it.
+- **A mapping publishes the claims.** Each of the nine mappings answered 200 in 21 to 24
+  seconds and wrote 11,089 shop rows. Nobody had checked this before.
+- **A mapping also writes offers with no price.** The `STORE` scope of each mapped shop
+  went from 108 offers to 11,109. The five mappings of stage 1 wrote 55,005 such offers.
+  The owner said that they stay. The catalog held 11,295 offers with no price before stage
+  1, 66,300 after its mappings, and 110,305 at the end.
+- **The duplicates.** Kept: Johnnie Walker "Whisky escocés Black Label", Dewar's "Whisky
+  escocés White Label" at 700 ml and at 1 L, and the margarine that moved from `Flora` to
+  `ProActiv` and is named "Margarina original".
+- **The fruit.** The test of decision 11 told no pair apart, because all eight Mercadona
+  rows are sold by weight. The owner then said that the singular name is the loose fruit
+  and the plural is the bag. The first Mercadona run fits that reading in all four pairs:
+  the singular row stored the price of one piece, and the plural row the price of a bag.
+
+### Counts before and after
+
+| | End of plan 0186 | After the Mercadona run | End of stage 1 | End of stage 2 | The final dumps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Products (`items`) | 19,761 | 19,761 | 19,777 | 19,776 | 19,773 |
+| Brands | 2,782 | 2,782 | 2,782 | 2,782 | 2,782 |
+| Brands that are a spelling | 499 | 499 | 506 | 506 | 506 |
+| Price rows (`item_prices`) | 23,374 | 24,918 | 24,961 | 24,961 | 24,964 |
+| Offers (`supermarket_items`) | 194,571 | 194,571 | 249,937 | 249,937 | 294,109 |
+| Shop rows (`supermarket_location_items`) | 0 | 0 | 55,445 | 55,445 | 99,801 |
+| Barcodes (`item_eans`) | 3,979 | 3,979 | 3,990 | 3,990 | 3,990 |
+| Queue rows (`source_catalog_entries`) | 25,856 | 25,861 | 25,861 | 25,861 | 25,861 |
+| Queue rows `ACTIVE` | 21,754 | 21,754 | 21,776 | 21,776 | 21,779 |
+| Queue rows `CANDIDATE` | 25 | 25 | 3 | 3 | 0 |
+| Queue rows `UNRESOLVED` | 4,077 | 4,082 | 4,082 | 4,082 | 4,082 |
+| Deza shop codes mapped, ignored, unmapped | 0, 0, 11 | 0, 0, 11 | 5, 1, 5 | 5, 1, 5 | 9, 1, 1 |
+| Harvest runs | 13 | 14 | 14 | 14 | 15 |
+
+The products add up: 16 creates in stage 1, 1 create and 2 merges in stage 2, 3 creates
+and 6 merges in stage 3.
+
+The final state, read from slot 1 at 2026-10-06T21:13:33Z, right after the dumps. The same
+values were then read from restored copies of the two dumps, and none differs.
+
+Catalog:
+
+| Table | Rows |
+| --- | ---: |
+| `items` | 19,773 (3,990 with an EAN) |
+| `brands` | 2,782 (506 of them spellings of another brand) |
+| `item_prices` | 24,964 |
+| `item_eans` | 3,990 |
+| `supermarket_items` | 294,109 |
+| `supermarket_location_items` | 99,801 |
+| `supermarkets` | 5 |
+| `supermarket_locations` | 41 |
+| `categories` | 309 |
+| `price_scopes` | 104 |
+| `product_groups` | 0 |
+| `catalog_audit` | 269,985 |
+
+The price scopes grew from 103 to 104 and the shops from 40 to 41, because the import of
+the Deza shop at Carretera de Castro 42 made both.
+
+Harvester queue (`source_catalog_entries`, 25,861 rows):
+
+| Chain | Kind | `ACTIVE` | `UNRESOLVED` | `CANDIDATE` |
+| --- | --- | ---: | ---: | ---: |
+| Mercadona | `OFFICIAL_API` | 4,156 | 155 | 0 |
+| LIDL | `OFFICIAL_API` | 78 | 43 | 0 |
+| Deza | `OFFICIAL_WEB` | 11,159 | 3,191 | 0 |
+| Deza | `OFFICIAL_LEAFLET` | 102 | 86 | 0 |
+| El Jamón | `OFFICIAL_WEB` | 6,284 | 607 | 0 |
+| **Total** | | **21,779** | **4,082** | **0** |
+
+The harvester also holds 25,470 rows of `source_entry_prices`, 155,067 rows of
+`source_entry_availability`, 11 Deza shop codes, 85 discovered places (1 imported, 84 new)
+and 15 harvest runs, all `COMPLETED`. All four `supermarket_sources` rows are on. The
+restore turns them off.
+
+The checks of plan 0186, at the end of that plan and now:
+
+| Check | End of plan 0186 | The final dumps |
+| --- | ---: | ---: |
+| A1, no English name | 4 | 0 |
+| A3, `LITER` and sized `KILOGRAM` | 0 | 0 |
+| A4, a length that is not 8, 13 or 14 | 5 | 5 |
+| A6, equal in brand, name, size, unit and pack count | 1 | 1 |
+| A10, a name that says "pack" | 25 | 25 |
+| B1, current rows, Mercadona | 66 | 3 |
+| B1, current rows, Deza | 21 | 21 |
+| B1, current rows, El Jamón | 1 | 0 |
+| B2, Deza website products with no row in a Deza scope | 58 of 11,147 | 58 of 11,147 |
+| B3, a size of one `UNIT` | 286 | 287 |
+| B4, rows `CANDIDATE` | 25 | 0 |
+| Queue rows that name a product that does not exist | 0 | 0 |
+
+B3 rose by one in stage 1, where the candle was created as 1 `UNIT`.
+
+### The final dumps
+
+The dumps were taken at 2026-10-06T21:12:47Z (23:12 Madrid time) with `pg_dump -Fc`
+(PostgreSQL 16.15), on the code of `dev` at `152d9d5e`. Only the gateway ran, and it holds
+no database, so nothing wrote. Each file was listed with `pg_restore -l`. They stand in
+`stage-c3/final/` of the run folder, beside a `VERIFY.txt` and `manifest-values.json`,
+which states the SQL or the command behind every value.
+
+| Dump | Bytes | sha256 | Ships |
+| --- | ---: | --- | --- |
+| `catalog.dump` | 42,839,380 | `506247e3a8350a91fd0aaaeca406ada88fb9c89351ba6b258ff7abf757a7f9b0` | Yes |
+| `harvester.dump` | 11,549,529 | `9c102642bf0cb87cc6a1b6f0ab6b94fec8dbf249394ff13c3e3c0252c0773512` | Yes |
+| `auth.dump` | 25,995 | `5624fc2dc981dc3f23c4ed84e508ce82dd54c173fada1b1180ffb1339a0edfae` | No |
+| `core.dump` | 99,428 | `17ec9f455fc4bf9ddc65f4c7cb8f48b3bc00be338d4159c868eb40523936b2e4` | No |
+
+- The catalog dump holds 29 migrations, the last one `ItemEans1758800000000`. The harvester
+  dump holds 21, the last one `SourceEntryPriceKind1759200000000`. A release that restores
+  them must contain exactly these.
+- Copies of `catalog.dump` and `harvester.dump` were restored with
+  `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
+  slot 1. Both exited 0.
+- `k8s/catalog-import/first-catalog.manifest` holds the two checksums, the migrations and
+  the eight counts of these dumps.
+- **The two files are not uploaded to a bucket yet.** That is the owner's step
+  (`k8s/catalog-import/README.md`, "When slot 1 is final").
+- **They ship unless slot 1 is written again.** A later write means new dumps and a new
+  manifest. Slot 1 is down and locked, with its databases kept.
+
+The dumps of the sessions before the last one stay in the run folder. They do not ship.
+
+| Folder | Dump | Bytes | sha256 |
+| --- | --- | ---: | --- |
+| `after-0189/after-run/` | `catalog.dump` | 18,463,696 | `ef646b1a4da61b00986c01458d90fd99f7b88722fa8e90a36a1abe58d28dedd1` |
+| `after-0189/after-run/` | `harvester.dump` | 11,544,163 | `d3f8438fa59e2df6a880aced9a52a2b696a231c402d6528f7643f7890f86f391` |
+| `stage-c1/after-stage-1/` | `catalog.dump` | 32,013,304 | `c55b55a9cd6721ab432b0e09abef045b3144d572314e9cbc1f5ba3c2902c84e4` |
+| `stage-c1/after-stage-1/` | `harvester.dump` | 11,548,934 | `7a5fbed1fa3d80a729c92aabea33a0dd7610d9d1a1352cfc1b70f02f86e9764c` |
+| `stage-c2/after-stage-2/` | `catalog.dump` | 32,019,020 | `2c2331ef7d430b4c1ee23f2e80fd1a918fa03aad5b84462870b7be42691e335a` |
+| `stage-c2/after-stage-2/` | `harvester.dump` | 11,549,001 | `080a3a41c3104acdd7860d73c5f200f1617e1c11527ae885cf9b4c901d558746` |
+
+### What stays wrong or open
+
+This list replaces "What stays wrong" of the section before it. Each item has its own
+title, so that it can be found and fixed later.
+
+#### In the data
+
+- **`T7` "Fuente de la salud" has no shop.** It is the one Deza shop code that is still
+  unmapped. OpenStreetMap holds no Deza at that street, so the store discovery found
+  nothing to import. Its stored claims wait for a shop that a person creates.
+- **The three Búfalo shoe creams are `uncategorised`.** White, brown and black, 50 ml
+  each. No sibling product holds a category that fits. A leaf `shoe-care` exists, and it
+  holds no product.
+- **Loose fruit rows of other chains sit on products that are not the singular fruit.**
+  Five rows: Deza "MANZANA GOLDEN M GRANEL" (on "Manzana Golden mediana a granel"), Deza
+  "AGUACATE HASS GRANEL" (on "Aguacate Hass a granel"), Deza "KIWI HAYWARD", El Jamón
+  "manzanas golden nacional" (on "Manzana Golden nacional") and El Jamón "manzanas golden
+  extra". Each names a variety, an origin or a size. A person decides whether any of them
+  is the singular fruit.
+- **87 Mercadona price rows keep an old label,** on 33 products: 54 `100 ml`, 17 `100 g`
+  and 16 `lv`. For 79 rows on 27 products the figure is not a price per litre or kilo (a
+  nail polish at the bottle price, tablets per piece, washes). The run did not see the
+  other 8 rows, on 6 products, in that scope.
+- **One of those rows looks wrong.** Bosque Verde "Detergente ropa de color y oscura
+  líquido", 3,000 ml, costs 4.90 at 1.63. That is a price per litre, and its label stays
+  `lv`.
+- **3 Mercadona rows of the paella mix fail check B1.** Hacendado "Preparado de paella y
+  sopa ultracongelado" is `KILOGRAM` with no size, and its three price rows hold the price
+  of a pack. 680 g and 690 g both lie within 1 percent of 684.9 g. The owner said that it
+  stays without a size.
+- **21 Deza leaflet offers by the kilo have no price.** The owner said no to a revert and
+  to a second import (decision 1). The leaflet ends on 2026-10-08, so after that day the
+  read side treats every price of that leaflet as expired.
+- **58 Deza products that the second run did not see** have no row in a Deza scope. The
+  owner said to leave them (decision 5).
+- **Campofrío has two Frankfurt products.** "Salchichas Frankfurt", 4 `UNIT` with pack
+  count 4, was created from the El Jamón row. "Salchichas cocidas estilo Frankfurt sabor
+  ahumado", 560 `GRAM`, is the Mercadona product. They may be one product: 560 g could be
+  four packs of 140 g. The row states no weight, and the owner gave it a product of its
+  own.
+- **The Nescafé vanilla pair stays two products,** by the owner's answer: "Café soluble
+  latte vainilla", 136 g with pack count 8, and "Café soluble cappuccino vainilla en
+  sobres", 8 units.
+- **The Bref pair waits for a barcode:** "Colgador WC Blue Activ+ azul", 100 g with pack
+  count 2, and "Colgador WC Blue Activ", 2 units.
+- **41 other pairs by weight and by count** were read as two products each.
+- **110,305 offers have no price.** 55,005 of them are the offers that the five shop
+  mappings of stage 1 wrote, and the four mappings of stage 3 wrote more. The owner said
+  that they stay.
+- **The two Coca Cola packs hold no container in the name.** They are 2000 ml with pack
+  count 4, beside the 2 L bottle of the same name. The stored link states the count and
+  not the container. The owner said that they stay.
+- **The candle of 1 unit** stands beside the Bosque Verde "Vela perfumada Chai" of 18.
+  The owner said that it stays.
+- **Fanta naranja stays 1,500 ml.** The run of 2026-10-06 printed 1.5 L again, beside a
+  unit price that says 1.25 L. A printed size wins.
+- **The charcoal "10l" and the cat litter "8 L" stay `MILLILITER`** (decision 13).
+- **Some El Jamón rows hold the brand as the text "null".** The row "aguacates" is one,
+  and the row "manzanas golden bolsa" is another. The harvester stored the word, not an
+  absent value.
+- **Still open from plan 0186, and not touched:** the 2 near pairs of B3 (Tampax Pearl
+  regular, Oral-B Precision), the 729 other near candidates of A6, the 5 codes that are not
+  8, 13 or 14 digits long, the 25 names that say "pack", the 143 sizes that step A5 left,
+  the 287 products sized 1 `UNIT`, the brand `Gotitas de Oro`, the key `nordic`, the wine
+  labels `Cebolla`, `409` and `Frizz`, and the BBQ skewers that plan 0191 asks a dry run
+  for.
+- **The queue holds 4,082 `UNRESOLVED` rows:** 3,191 from the Deza website, 86 from the
+  Deza leaflet, 155 from Mercadona, 607 from El Jamón and 43 from LIDL.
+
+#### In the code and the documents
+
+- **A decision of an admin on a queue row is audited under the service actor of the
+  harvester.** `catalog_audit` thus does not say which person moved a row. In the audit of
+  stage 2 and stage 3, each price and each product that an accept or a create wrote has
+  the actor kind `SERVICE`.
+- **A category batch leaves no audit row.** `catalog_audit` holds 5 item updates of the
+  admin for stage 3: one brand and four names. The batch that gave four products their
+  categories is not among them.
+- **The search compares unit prices across chains whatever their label.** Plan 0189 names
+  this in its context. A row whose label is not per litre or per kilo can thus rank
+  against rows that are.
+- **`CLAUDE.md` still describes `source_aliases`.** The queue is `source_catalog_entries`
+  since the harvester migration `OneSourceProduct1756900000000`.
+- **The Mercadona source travels with 8 workers and 8 requests per second.** The restore
+  turns the source off, and it does not change these two settings.
+- **One read of plan 0192 is not in the files.** Section 4.1 of the plan asks for the kind
+  of the leaflet price row of the six bound rows that a leaflet and the website share. The
+  files of stage 3 hold no such read.
+
+#### Before a cluster restore
+
+- **The dumps are not uploaded,** and the owner has not said that slot 1 is final.
+- **Prices age.** The newest Mercadona prices were read on 2026-10-06, for three Córdoba
+  warehouses. The Deza leaflet prices end on 2026-10-08.
+- **The release must hold the 29 and 21 migrations of the dumps.**

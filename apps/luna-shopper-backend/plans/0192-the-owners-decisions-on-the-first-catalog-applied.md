@@ -1,3 +1,5 @@
+> **PR:** [#655](https://github.com/IchirokuXVI/nx-portfolio/pull/655)
+
 # 0192: the owner's decisions on the first catalog, applied
 
 > Plan `0186` repaired the first catalog on local slot 1 and left sixteen decisions for the
@@ -732,3 +734,64 @@ One more thing is the owner's alone. The manifest says "when the owner declares 
 final". Decision 9 is still held, and a Mercadona run for plan `0189` may follow. Stage 3
 writes the values of its dumps and says in the manifest what is still pending. Dumps
 taken after a later write replace them.
+
+## 8. What was done (2026-10-06)
+
+All three stages ran on 2026-10-06. The register
+(`apps/luna-shopper-backend/docs/first-catalog-decisions-2026-10/README.md`, section 5) and
+the report (`apps/luna-shopper-backend/docs/initial-catalog-2026-10.md`, the last section)
+hold the counts, the rows and the list of what stays open.
+
+- **Before stage 1.** The Mercadona run of plan `0189` ran first, and not between stage 2
+  and stage 3 as section 1 places it. Old labels on current price rows fell from 1,595 to 87.
+- **Stage 1.** 43 writes: decisions 8, 3, 14, 12, 4, 7 and 2, and the read of the 47 pairs
+  of decision 6. It left one fish product, five shop codes, three El Jamón rows and four
+  pairs for a person.
+- **Stage 2.** 6 writes: the burger "king" (decision 10), the two Nescafé cappuccino merges
+  of decision 6, and the settle of the F1 figurine (decision 16).
+- **Stage 3.** 32 writes: the owner's later answers to every row that stages 1 and 2 left,
+  the four merges of decision 9, a store discovery, and the final dumps of
+  2026-10-06T21:12:47Z. The manifest holds their values.
+
+Where the four cases of section 7 ended:
+
+1. **Decision 3, "a round pack weight".** The reading held. 21 products took a weight.
+   The owner then said that the paella mix stays without a size.
+2. **Decision 6, "agree on count and weight".** The reading held. The five conditions
+   merged 2 pairs and left 4 for a person. The owner then said: the two Tassimo pairs
+   merge with "Marcilla" in the name, the Nescafé vanilla pair stays two products, and the
+   Bref pair waits for a barcode. 41 pairs are two products.
+3. **Decision 7, "reject each candidate".** No reject route was called. 11 rows were bound
+   or given a product in stage 1. No row was left for a brand that is not registered. 3
+   rows were left because a product fit in part. The owner then said: Pata Negra verdejo
+   and Campofrío frankfurt get a product of their own, and the Coren row is accepted onto
+   the Coren product, which is renamed "Albóndigas de pollo".
+4. **Decision 11, the fruit test.** The test decided no pair, as section 3.2 expected. The
+   owner then said that the singular name is the loose fruit and the plural is the bag
+   (rule R33 of the register). 2 El Jamón rows moved, and the 1.5 kg Golden bag got a
+   product of its own.
+
+The manifest, which section 7 leaves to the owner: it states the final dumps and says that
+they ship unless slot 1 is written again. The owner has not said in words that slot 1 is
+final, and the two files are not uploaded.
+
+Where the work left the text of this plan:
+
+- **The run folder.** The scripts and the logs are in
+  `.curation-runs/2026-10-audit-repair/` (`after-0189/`, `stage-c1/`, `stage-c2/`,
+  `stage-c3/`), not in a new `2026-10-owner-decisions/` folder.
+- **Decision 9** was held when this plan was written. The owner lifted the hold the same
+  day, and stage 3 merged the four pairs.
+- **Decision 16** is in section 6 as not done. The settle route of plan `0191` existed in
+  stage 2, its dry run answered the 20 offers and nothing else, and the call ran.
+- **Decision 4.** The catalog held eight Deza shops, not ten. 9 codes are mapped, and
+  `T7` has no shop. The shop rows are 99,801, not about 111,000.
+- **Decision 2.** The container was read from the stored link of each row, not from a
+  product page. The candle was created past the likely stop of section 2.7, and the owner
+  then said that it stays.
+- **Section 4.1.** The read of the six leaflet rows that plan `0190` left open is not in
+  the files of stage 3.
+- **Section 4.5.** The register has thirteen new data files: one for each of the twelve
+  decisions with a write, and one for the categories. Decisions 1, 5, 13 and 15 have none.
+- **k8s plan `0012`.** The scope says not to touch it. It got one dated line that says
+  that the manifest now holds the values of 2026-10-06, and nothing else changed in it.
