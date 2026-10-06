@@ -345,6 +345,8 @@ export function statementsOf(
   priceScopeId: string;
   sourceKind: PriceSourceKind;
   verdict: ArticleVerdict<StatedPrice>;
+  /** The prices the verdict was reached over. */
+  articles: StatedPrice[];
 }[] {
   const { runOf, kindOf } = options;
   const groups = new Map<
@@ -396,10 +398,36 @@ export function statementsOf(
         priceScopeId: group.priceScopeId,
         sourceKind: group.sourceKind,
         verdict,
+        articles,
       });
     }
   }
   return statements;
+}
+
+/**
+ * Whether two stored prices say the same thing in every value catalog
+ * compares before it inserts (plan 0191): the amount, and also the currency,
+ * the label, the window and the scope the price was copied from.
+ *
+ * {@link sameAmount} is narrower on purpose: two rows of one amount are not a
+ * conflict. They can still be two variants of that amount, a label apart or a
+ * window apart, and catalog holds those as two rows.
+ */
+export function sameStatement(
+  a: SourceEntryPrice,
+  b: SourceEntryPrice
+): boolean {
+  const instant = (value: Date | null) => value?.getTime() ?? null;
+  return (
+    amountOf(a.price) === amountOf(b.price) &&
+    amountOf(a.unitPrice) === amountOf(b.unitPrice) &&
+    (a.currency ?? null) === (b.currency ?? null) &&
+    (a.unitPriceLabel ?? null) === (b.unitPriceLabel ?? null) &&
+    instant(a.validFrom) === instant(b.validFrom) &&
+    instant(a.validUntil) === instant(b.validUntil) &&
+    (a.copiedFromScopeId ?? null) === (b.copiedFromScopeId ?? null)
+  );
 }
 
 /** The values of a stored price, as catalog takes them (plans 0086 and 0191). */

@@ -2225,6 +2225,15 @@ const withdrawItemPricesRequest = object(
     sourceKinds: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
     held: array(heldItemPrice),
     stated: array(statedItemPrice),
+    left: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceRunId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceRunId'],
+      additionalProperties: false,
+    }),
     dryRun: boolean(),
   },
   ['userId', 'itemId', 'priceScopeIds', 'sourceKinds']
@@ -2255,9 +2264,37 @@ const withdrawItemPricesResult = object(
       required: ['priceScopeId', 'sourceKind', 'heldAs'],
       additionalProperties: false,
     }),
+    notWritable: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        copiedFromScopeId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceKind', 'copiedFromScopeId'],
+      additionalProperties: false,
+    }),
+    notCurrent: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind'],
+      additionalProperties: false,
+    }),
     recomputed: integer({ minimum: 0 }),
   },
-  ['deleted', 'removed', 'inserted', 'confirmed', 'keptAsWritten', 'recomputed']
+  [
+    'deleted',
+    'removed',
+    'inserted',
+    'confirmed',
+    'keptAsWritten',
+    'notWritable',
+    'notCurrent',
+    'recomputed',
+  ]
 );
 /**
  * Take a product's offers out of the scopes of one chain, with the shop rows

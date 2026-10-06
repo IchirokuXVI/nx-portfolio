@@ -453,9 +453,10 @@ export class SourceEntryService {
    * barcode names no single product (plan 0155), so the row is bound and its
    * prices are written as before the plan, with no teach and no refusal.
    *
-   * The barcode is written after the prices and the availability, and under
-   * the rule they follow on this route: the bind stands, and a write that
-   * fails is the error the request answers with.
+   * The barcode is written before the prices and the availability
+   * ({@link afterLeaving} says why), and under the rule they follow on this
+   * route: the bind stands, every later step still runs, and the first write
+   * that failed is the error the request answers with.
    *
    * **A bound row can be accepted again, onto another product** (plan 0191).
    * That is a move, and the row takes with it what it wrote on the product it
@@ -491,13 +492,8 @@ export class SourceEntryService {
     const { settled, value: prices } = await this.afterLeaving(
       left,
       bound,
-      async () => {
-        const written = await this.writeRowPrices(bound);
-        if (teach !== null) {
-          await this.teachBarcode(req.itemId, teach);
-        }
-        return written;
-      }
+      teach === null ? null : () => this.teachBarcode(req.itemId, teach),
+      () => this.writeRowPrices(bound)
     );
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -639,13 +635,8 @@ export class SourceEntryService {
     const { settled, value: prices } = await this.afterLeaving(
       left,
       bound,
-      async () => {
-        const written = await this.writeRowPrices(bound);
-        if (teach !== null) {
-          await this.teachBarcode(item.id, teach);
-        }
-        return written;
-      }
+      teach === null ? null : () => this.teachBarcode(item.id, teach),
+      () => this.writeRowPrices(bound)
     );
     return {
       entry: toSourceCatalogEntryView(bound),
@@ -689,7 +680,7 @@ export class SourceEntryService {
     entry.decidedAt = new Date();
     // name, brand and sizeFormat are deliberately untouched (D8).
     const saved = await this.entries.save(entry);
-    await this.afterLeaving(left, saved, async () => undefined);
+    await this.afterLeaving(left, saved, null, async () => undefined);
     return toSourceCatalogEntryView(saved);
   }
 
@@ -715,58 +706,80 @@ export class SourceEntryService {
   }
 
   /**
-   * The steps of a decision that follow the save of the row (plan 0191), with
-   * the product the row left settled first.
+   * The steps of a decision that follow the save of the row (plan 0191): the
+   * settle of the product the row left, the barcode, and `rest`, which is
+   * the prices and the availability.
+   *
+   * **Each step runs whatever happened to the one before it**, and the first
+   * error is the one the request answers with. The steps do not depend on
+   * each other, and each one is owed to a different product or table.
    *
    * **The settle comes first because nothing can ask for it again.** The
    * decision reads the old product off the row before it saves. After the
    * save the row names the new product, or none, so a retry of the same
-   * decision finds no product to settle. If the settle waited behind the
-   * price write and the barcode, one failure there would leave the old
-   * product with its price and its offers and nothing naming it.
+   * decision finds no product to settle. It is told the prices of the row
+   * that left (`leaving`), which is how catalog knows what that row wrote.
+   *
+   * **The barcode comes before the prices for the same reason.** A move takes
+   * the barcode off the old product and teaches it to the new one. If the
+   * price write failed first and the barcode never moved, the retry would
+   * find the barcode on a product that is neither the new one nor, any more,
+   * the one the row is leaving, and would be refused with `item_ean_held`
+   * before it wrote the price it owes.
    *
    * **Every failure after the save names the old product and the chain**
-   * ({@link namingLeftProduct}), and says whether it was settled:
+   * ({@link namingLeftProduct}), and says whether it was settled.
    *
-   * - The settle fails. `rest` still runs: the new product is owed its
-   *   prices whatever happened to the old one. The request then answers with
-   *   the settle's error.
-   * - A step of `rest` fails. The request answers with that error, and it
-   *   says whether the old product was settled before it.
-   *
-   * A decision that takes the row off no product runs `rest` and nothing
-   * else.
+   * A decision that takes the row off no product runs the barcode and `rest`
+   * and nothing else.
    */
   private async afterLeaving<T>(
     left: string | null,
     entry: SourceCatalogEntry,
+    barcode: (() => Promise<void>) | null,
     rest: () => Promise<T>
   ): Promise<{ settled: SettleItemAtChainResult | null; value: T }> {
-    if (left === null) {
-      return { settled: null, value: await rest() };
+    const failures: unknown[] = [];
+    const attempt = async <R>(
+      what: string,
+      step: () => Promise<R>
+    ): Promise<R | undefined> => {
+      try {
+        return await step();
+      } catch (error) {
+        failures.push(error);
+        this.logger.error(
+          `Row ${entry.id}, bound to ${entry.itemId ?? 'no product'}` +
+            `${left ? ` after leaving ${left}` : ''}: ${what} failed: ` +
+            describeError(error).message
+        );
+        return undefined;
+      }
+    };
+
+    const settled =
+      left === null
+        ? null
+        : ((await attempt('settling the product it left', () =>
+            this.settler.settle(left, entry.supermarketId, {
+              leaving: entry.prices ?? [],
+            })
+          )) ?? null);
+    if (barcode !== null) {
+      await attempt('moving its barcode', barcode);
     }
-    const named = { itemId: left, supermarketId: entry.supermarketId };
-    let settled: SettleItemAtChainResult | null = null;
-    let settleError: unknown = null;
-    try {
-      settled = await this.settler.settle(left, entry.supermarketId);
-    } catch (error) {
-      settleError = error;
-      this.logger.error(
-        `Row ${entry.id} left product ${left}, and settling that product at ` +
-          `chain ${entry.supermarketId} failed: ${describeError(error).message}`
-      );
+    const value = await attempt('writing its prices', rest);
+
+    if (failures.length > 0) {
+      throw left === null
+        ? failures[0]
+        : namingLeftProduct(failures[0], {
+            itemId: left,
+            supermarketId: entry.supermarketId,
+            settled: settled !== null,
+          });
     }
-    let value: T;
-    try {
-      value = await rest();
-    } catch (error) {
-      throw namingLeftProduct(error, { ...named, settled: settled !== null });
-    }
-    if (settled === null) {
-      throw namingLeftProduct(settleError, { ...named, settled: false });
-    }
-    return { settled, value };
+    return { settled, value: value as T };
   }
 
   // --- Brands (plan 0115, sections 7 and 8) ---------------------------------

@@ -1505,9 +1505,9 @@ export interface SettleItemAtChainResult {
   boundEntryIds: string[];
   /**
    * Price rows a harvest run wrote that were removed from the product. Only
-   * what no bound row accounts for: a scope and kind at which a bound row
-   * holds a price row, open or not, loses nothing but a row that contradicts
-   * the price the bound rows state there now.
+   * what no bound row accounts for. A scope at which a bound row holds a
+   * price row, open or not, loses only a row of the run of the row that left
+   * or of the run of the price the bound rows state there now.
    */
   pricesWithdrawn: number;
   /** The same rows by scope and kind. A pair that lost no row is left out. */
@@ -1517,11 +1517,30 @@ export interface SettleItemAtChainResult {
     deleted: number;
   }[];
   /**
-   * Prices of the bound rows that were stated to catalog, one per scope and
-   * kind. A price catalog already holds as current changes nothing, so this
-   * counts what was stated and not what changed. `pricesWritten` counts that.
+   * Prices of the bound rows that are the current price of their scope and
+   * kind in catalog after the call, one per scope and kind. A price catalog
+   * already held as current changes nothing, so this counts what is stated
+   * and current, not what changed. `pricesWritten` counts that.
    */
   pricesRestated: number;
+  /**
+   * Prices a bound row states that are **not** the current price of their
+   * scope and kind. Catalog holds a newer row there that says something
+   * else, written by a run that no bound row and no leaving row names, and
+   * that row stays. A row can hold an older observation than catalog does: a
+   * file import stamps the instant of its document.
+   */
+  pricesNotCurrent: { priceScopeId: string; sourceKind: PriceSourceKind }[];
+  /**
+   * Prices a bound row states that catalog cannot write, because the scope
+   * the price was copied from is gone. Nothing at that scope and kind
+   * changed.
+   */
+  pricesNotWritable: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
   /**
    * `item_prices` rows catalog inserted for those statements. Zero on a
    * product that was already settled: a second call changes nothing.

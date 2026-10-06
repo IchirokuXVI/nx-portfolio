@@ -640,7 +640,7 @@ async function affectedByRows(
 /** What a withdraw names, which is all {@link withdrawRunWrittenPrices} reads. */
 export type RunWrittenPrices = Pick<
   WithdrawItemPricesRequest,
-  'itemId' | 'priceScopeIds' | 'sourceKinds' | 'held' | 'stated'
+  'itemId' | 'priceScopeIds' | 'sourceKinds' | 'held' | 'stated' | 'left'
 >;
 
 /**
@@ -693,7 +693,7 @@ const pairKey = (priceScopeId: string, sourceKind: string): string =>
  * by hand, and a leftover price is a smaller error than a price nobody can
  * bring back.
  *
- * ## Which rows are removed
+ * ## Which rows can go at all
  *
  * A row is a candidate when it is the product's, at a named scope, of a named
  * kind, and **names a run** (`sourceRunId` is not null). That, with the kind,
@@ -702,25 +702,40 @@ const pairKey = (priceScopeId: string, sourceKind: string): string =>
  * office carries no run. A run's row from before plan 0086, which has no run
  * either, is kept too: nothing tells it from a typed one.
  *
- * A candidate is then **kept** when a bound row accounts for it:
+ * ## What a source row can and cannot account for
  *
- * - `held` names its scope and kind, or its scope with no kind. A bound row
- *   holds a price row there, open or closed, and what catalog holds there is
- *   its history.
- * - `held` or `stated` names, at its scope, the run that wrote or last
- *   confirmed a row of its kind there. That covers a price written under
- *   another kind than its run's, which an accept did while a shared row said
- *   the other kind (plan 0190).
+ * A source row holds **one** price per scope, and that price names **one**
+ * run. What the same row wrote before is not on it:
  *
- * ## The one thing a statement removes
+ * - A row a website and a leaflet both print is one row (plan 0190). It wrote
+ *   under both kinds, and holds the price of whichever run came last.
+ * - A file import stamps the instant of its document. An import of last
+ *   week's file leaves the row holding an older observation than the one
+ *   catalog shows, which a newer run of the same row wrote.
  *
- * At the scope and kind of a statement, a candidate is removed when all of
- * this holds: it was observed at the statement's instant or later, its values
- * differ from the statement's, and it is not the row of another run that a
- * bound row names there. That is the price of the row that left: one run
- * stamps every product it reads with one instant, so that row carries the
- * `observedAt` of the row that stayed, and `currentPriceRows` breaks the tie
- * by id. The rows before the instant are history and stay.
+ * So a bound row's price does not say "this is all I wrote here", and the
+ * absence of a statement for a row of catalog does not make it a leftover.
+ * What does is knowing **which run the row that left wrote with**.
+ *
+ * ## The three cases, per scope
+ *
+ * 1. **No bound row holds a price at the scope.** Every candidate goes. That
+ *    is the figurine: nothing of the chain stands behind anything there.
+ * 2. **A bound row holds a price at the scope** (`held`). A candidate goes
+ *    only when its run is one the leaving row names there (`left`) and no
+ *    bound row names it. On the route a person calls, no row is leaving, and
+ *    nothing goes here.
+ * 3. **A statement names the scope and the kind of the candidate.** It goes
+ *    when it was observed at the statement's instant or later, its values
+ *    differ from the statement's, and its run is the statement's own or one
+ *    the leaving row names and no bound row does. The statement's own run is
+ *    there for two rows that one walk priced: it stamps every product with
+ *    one instant, so the row that left and the row that stayed carry the same
+ *    `observedAt`, and `currentPriceRows` breaks the tie by id.
+ *
+ * A newer row of a run nobody names is therefore never removed. When such a
+ * row says something else than the statement, the statement is not the
+ * current price, and `notCurrent` says so.
  *
  * ## The statement is written in this transaction
  *
@@ -730,9 +745,16 @@ const pairKey = (priceScopeId: string, sourceKind: string): string =>
  * nothing, inserts nothing and records nothing, and there is no moment at
  * which the product shows an older price because a second message failed.
  *
- * A statement is dropped, and its scope and kind spared, when catalog holds a
- * row of its run at its scope under another kind, or when two statements name
- * one scope and kind. `keptAsWritten` names the first case.
+ * ## A statement that is not applied
+ *
+ * Its scope stays a held scope, and nothing is removed for it:
+ *
+ * - Catalog holds a row of its run at its scope under another kind
+ *   (`keptAsWritten`).
+ * - The scope it was copied from is gone, or is not another scope of the
+ *   chain (`notWritable`). It is reported and not thrown: a product must
+ *   stay possible to settle whatever one of its prices points at.
+ * - A held price at its scope has no kind, or two statements name the pair.
  *
  * ## What happens to the materialized row
  *
@@ -752,6 +774,8 @@ export async function withdrawRunWrittenPrices(
     inserted: 0,
     confirmed: 0,
     keptAsWritten: [],
+    notWritable: [],
+    notCurrent: [],
     recomputed: 0,
   };
   const scopeIds = [...new Set(req.priceScopeIds.filter(isUuid))];
@@ -762,46 +786,107 @@ export async function withdrawRunWrittenPrices(
   const named = new Set(scopeIds);
   const held = (req.held ?? []).filter((each) => named.has(each.priceScopeId));
 
-  /** Scopes at which nothing of any kind is removed. */
-  const sparedScopes = new Set<string>();
-  /** Scope and kind pairs at which nothing is removed, a statement aside. */
-  const sparedPairs = new Set<string>();
-  /** The runs a bound row names, per scope. */
-  const runsAt = new Map<string, Set<string>>();
-  const nameRun = (priceScopeId: string, runId: string | null): void => {
-    if (!runId) {
-      return;
-    }
-    const runs = runsAt.get(priceScopeId) ?? new Set<string>();
-    runs.add(runId);
-    runsAt.set(priceScopeId, runs);
+  const runsBy = (): {
+    add: (priceScopeId: string, runId: string | null) => void;
+    has: (priceScopeId: string, runId: string | null) => boolean;
+  } => {
+    const runs = new Map<string, Set<string>>();
+    return {
+      add: (priceScopeId, runId) => {
+        if (runId) {
+          runs.set(
+            priceScopeId,
+            (runs.get(priceScopeId) ?? new Set<string>()).add(runId)
+          );
+        }
+      },
+      has: (priceScopeId, runId) =>
+        runId !== null && (runs.get(priceScopeId)?.has(runId) ?? false),
+    };
   };
+  /** The runs a bound row names, per scope. */
+  const boundRuns = runsBy();
+  /** The runs the leaving row names, per scope. */
+  const leftRuns = runsBy();
+  /** Scopes at which a bound row holds a price row. */
+  const heldScopes = new Set<string>();
+  /** Scopes at which a held price has no kind: nothing is stated there. */
+  const kindlessScopes = new Set<string>();
   for (const each of held) {
+    heldScopes.add(each.priceScopeId);
     if (each.sourceKind === null) {
-      sparedScopes.add(each.priceScopeId);
-    } else {
-      sparedPairs.add(pairKey(each.priceScopeId, each.sourceKind));
+      kindlessScopes.add(each.priceScopeId);
     }
-    nameRun(each.priceScopeId, each.sourceRunId);
+    boundRuns.add(each.priceScopeId, each.sourceRunId);
+  }
+  for (const each of req.left ?? []) {
+    leftRuns.add(each.priceScopeId, each.sourceRunId);
   }
 
   // One statement per scope and kind. Two is a caller that does not know
-  // which price is stated, so neither is applied and the pair is spared.
+  // which price is stated, so neither is applied.
   const statements = new Map<string, StatedItemPrice>();
   const statedTwice = new Set<string>();
   for (const each of req.stated ?? []) {
     if (!named.has(each.priceScopeId) || !kinds.includes(each.sourceKind)) {
       continue;
     }
+    // A statement is a price a bound row holds, whether or not it is applied.
+    heldScopes.add(each.priceScopeId);
+    boundRuns.add(each.priceScopeId, each.sourceRunId);
     const key = pairKey(each.priceScopeId, each.sourceKind);
-    nameRun(each.priceScopeId, each.sourceRunId);
     if (statements.has(key) || statedTwice.has(key)) {
       statements.delete(key);
       statedTwice.add(key);
-      sparedPairs.add(key);
       continue;
     }
     statements.set(key, each);
+  }
+
+  // The scopes the statements write to and say they were copied from. Read
+  // before anything is removed, so a statement that cannot be written removes
+  // nothing either.
+  const scopeById = new Map<string, PriceScope>();
+  if (statements.size > 0) {
+    const scopes = await tx.manager.find(PriceScope, {
+      where: {
+        id: In([
+          ...new Set(
+            [...statements.values()].flatMap((each) => [
+              each.priceScopeId,
+              ...(each.copiedFromScopeId ? [each.copiedFromScopeId] : []),
+            ])
+          ),
+        ]),
+      },
+    });
+    for (const scope of scopes) {
+      scopeById.set(scope.id, scope);
+    }
+  }
+  for (const [key, statement] of [...statements]) {
+    const scope = scopeById.get(statement.priceScopeId);
+    const copiedFromScopeId = statement.copiedFromScopeId ?? null;
+    const source = copiedFromScopeId
+      ? scopeById.get(copiedFromScopeId)
+      : undefined;
+    if (!scope || kindlessScopes.has(statement.priceScopeId)) {
+      // Deleted since the caller listed it, or a scope where nothing is
+      // stated. Nothing to write.
+      statements.delete(key);
+    } else if (
+      copiedFromScopeId &&
+      (!source ||
+        source.id === scope.id ||
+        source.supermarketId !== scope.supermarketId)
+    ) {
+      statements.delete(key);
+      result.notWritable.push({
+        priceScopeId: statement.priceScopeId,
+        sourceKind: statement.sourceKind,
+        copiedFromScopeId,
+      });
+    }
   }
 
   const rows = await tx.manager.find(ItemPrice, {
@@ -813,19 +898,6 @@ export async function withdrawRunWrittenPrices(
     },
     order: { observedAt: 'ASC', id: 'ASC' },
   });
-  const ofNamedRun = (row: ItemPrice): boolean => {
-    const runs = runsAt.get(row.priceScopeId);
-    return (
-      !!runs &&
-      ((row.sourceRunId !== null && runs.has(row.sourceRunId)) ||
-        (row.lastObservedRunId !== null && runs.has(row.lastObservedRunId)))
-    );
-  };
-  for (const row of rows) {
-    if (ofNamedRun(row)) {
-      sparedPairs.add(pairKey(row.priceScopeId, row.sourceKind));
-    }
-  }
   // A statement whose run already wrote at its scope under another kind.
   for (const [key, statement] of [...statements]) {
     const other = rows.find(
@@ -835,11 +907,8 @@ export async function withdrawRunWrittenPrices(
         (row.sourceRunId === statement.sourceRunId ||
           row.lastObservedRunId === statement.sourceRunId)
     );
-    if (other || sparedScopes.has(statement.priceScopeId)) {
-      statements.delete(key);
-      sparedPairs.add(key);
-    }
     if (other) {
+      statements.delete(key);
       result.keptAsWritten.push({
         priceScopeId: statement.priceScopeId,
         sourceKind: statement.sourceKind,
@@ -848,13 +917,20 @@ export async function withdrawRunWrittenPrices(
     }
   }
 
+  /** A row of a run the leaving row names and no bound row does. */
+  const leftBehind = (row: ItemPrice): boolean =>
+    leftRuns.has(row.priceScopeId, row.sourceRunId) &&
+    !boundRuns.has(row.priceScopeId, row.sourceRunId) &&
+    !boundRuns.has(row.priceScopeId, row.lastObservedRunId);
+
   const doomed: ItemPrice[] = [];
   const kept: ItemPrice[] = [];
   for (const row of rows) {
-    const key = pairKey(row.priceScopeId, row.sourceKind);
-    const statement = statements.get(key);
-    const goes = statement
-      ? row.observedAt.getTime() >=
+    const statement = statements.get(pairKey(row.priceScopeId, row.sourceKind));
+    let goes: boolean;
+    if (statement) {
+      goes =
+        row.observedAt.getTime() >=
           new Date(statement.price.observedAt).getTime() &&
         !statesTheSame(
           row,
@@ -862,8 +938,12 @@ export async function withdrawRunWrittenPrices(
           statement.copiedFromScopeId ?? null,
           now
         ) &&
-        !(ofNamedRun(row) && row.sourceRunId !== statement.sourceRunId)
-      : !sparedScopes.has(row.priceScopeId) && !sparedPairs.has(key);
+        (row.sourceRunId === statement.sourceRunId || leftBehind(row));
+    } else if (heldScopes.has(row.priceScopeId)) {
+      goes = leftBehind(row);
+    } else {
+      goes = true;
+    }
     (goes ? doomed : kept).push(row);
   }
 
@@ -890,67 +970,64 @@ export async function withdrawRunWrittenPrices(
     result.removed = [...removed.values()];
   }
 
-  if (statements.size > 0) {
-    const scopes = await tx.manager.find(PriceScope, {
-      where: {
-        id: In([
-          ...new Set(
-            [...statements.values()].flatMap((each) => [
-              each.priceScopeId,
-              ...(each.copiedFromScopeId ? [each.copiedFromScopeId] : []),
-            ])
-          ),
-        ]),
-      },
+  for (const statement of statements.values()) {
+    const scope = scopeById.get(statement.priceScopeId) as PriceScope;
+    const copiedFromScopeId = statement.copiedFromScopeId ?? null;
+    const instant = new Date(statement.price.observedAt).getTime();
+    const alreadyStated = kept.some(
+      (row) =>
+        row.priceScopeId === scope.id &&
+        row.sourceKind === statement.sourceKind &&
+        row.observedAt.getTime() >= instant &&
+        statesTheSame(row, statement.price, copiedFromScopeId, now)
+    );
+    if (alreadyStated) {
+      continue;
+    }
+    const outcome = await writeItemPrices(tx.manager, {
+      scope,
+      sourceKind: statement.sourceKind,
+      sourceRunId: statement.sourceRunId,
+      copiedFromScopeId,
+      entries: [{ ...statement.price, itemId: req.itemId }],
+      now,
     });
-    const scopeById = new Map(scopes.map((scope) => [scope.id, scope]));
+    for (const inserted of outcome.inserted) {
+      await tx.recordCreate(ItemPrice, inserted);
+    }
+    result.inserted += outcome.inserted.length;
+    result.confirmed += outcome.confirmed.length;
+    touched.push(...outcome.inserted, ...outcome.confirmed);
+  }
+
+  if (statements.size > 0) {
+    // Whether each statement is what its scope and kind show now, by the
+    // rule every read uses for "the current row".
+    const current = await currentPriceRows(
+      tx.manager,
+      [req.itemId],
+      [...new Set([...statements.values()].map((each) => each.priceScopeId))]
+    );
     for (const statement of statements.values()) {
-      const scope = scopeById.get(statement.priceScopeId);
-      if (!scope) {
-        // Deleted since the caller listed it. Nothing to write to.
-        continue;
-      }
-      const copiedFromScopeId = statement.copiedFromScopeId ?? null;
-      const source = copiedFromScopeId
-        ? scopeById.get(copiedFromScopeId)
-        : undefined;
-      if (
-        copiedFromScopeId &&
-        (!source ||
-          source.id === scope.id ||
-          source.supermarketId !== scope.supermarketId)
-      ) {
-        throw new ValidationException(
-          `The price scope ${copiedFromScopeId} is not another scope of the ` +
-            `chain the price scope ${scope.id} belongs to, so a price cannot ` +
-            'be stated as a copy of it.'
-        );
-      }
-      const instant = new Date(statement.price.observedAt).getTime();
-      const alreadyStated = kept.some(
+      const shown = current.find(
         (row) =>
-          row.priceScopeId === scope.id &&
-          row.sourceKind === statement.sourceKind &&
-          row.observedAt.getTime() >= instant &&
-          statesTheSame(row, statement.price, copiedFromScopeId, now)
+          row.priceScopeId === statement.priceScopeId &&
+          row.sourceKind === statement.sourceKind
       );
-      if (alreadyStated) {
-        continue;
+      if (
+        !shown ||
+        !statesTheSame(
+          shown,
+          statement.price,
+          statement.copiedFromScopeId ?? null,
+          now
+        )
+      ) {
+        result.notCurrent.push({
+          priceScopeId: statement.priceScopeId,
+          sourceKind: statement.sourceKind,
+        });
       }
-      const outcome = await writeItemPrices(tx.manager, {
-        scope,
-        sourceKind: statement.sourceKind,
-        sourceRunId: statement.sourceRunId,
-        copiedFromScopeId,
-        entries: [{ ...statement.price, itemId: req.itemId }],
-        now,
-      });
-      for (const inserted of outcome.inserted) {
-        await tx.recordCreate(ItemPrice, inserted);
-      }
-      result.inserted += outcome.inserted.length;
-      result.confirmed += outcome.confirmed.length;
-      touched.push(...outcome.inserted, ...outcome.confirmed);
     }
   }
 

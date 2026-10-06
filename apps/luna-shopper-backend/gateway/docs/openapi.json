@@ -39629,7 +39629,54 @@
           "pricesRestated": {
             "type": "integer",
             "minimum": 0,
-            "description": "Prices of the bound rows that were stated to catalog, one per scope and kind. It counts what was stated, not what changed."
+            "description": "Prices of the bound rows that are the current price of their scope and kind after the call, one per scope and kind. It counts what is stated and current, not what changed."
+          },
+          "pricesNotCurrent": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Prices a bound row states that are not the current price of their scope and kind. Catalog holds a newer row there that says something else, written by a run that no bound row and no leaving row names. That row stays."
+          },
+          "pricesNotWritable": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "priceScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sourceKind": {
+                  "$ref": "#/components/schemas/enums.PriceSourceKind"
+                },
+                "copiedFromScopeId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "priceScopeId",
+                "sourceKind",
+                "copiedFromScopeId"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Prices a bound row states that catalog cannot write, because the scope the price was copied from is gone. Nothing at that scope and kind changed."
           },
           "pricesWritten": {
             "type": "integer",
@@ -39742,6 +39789,8 @@
           "pricesWithdrawn",
           "pricesWithdrawnAt",
           "pricesRestated",
+          "pricesNotCurrent",
+          "pricesNotWritable",
           "pricesWritten",
           "pricesKeptAsWritten",
           "pricesWithheld",

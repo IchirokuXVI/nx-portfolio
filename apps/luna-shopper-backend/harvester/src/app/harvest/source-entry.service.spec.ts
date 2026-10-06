@@ -333,7 +333,7 @@ function build(
     async (
       itemId: string,
       supermarketId: string,
-      settleOptions: { dryRun?: boolean } = {}
+      settleOptions: { dryRun?: boolean; leaving?: unknown[] } = {}
     ): Promise<SettleItemAtChainResult> => {
       calls.push('settle');
       if (options.failSettle) {
@@ -400,6 +400,8 @@ function settled(
     pricesWithdrawn: 1,
     pricesWithdrawnAt: [],
     pricesRestated: 0,
+    pricesNotCurrent: [],
+    pricesNotWritable: [],
     pricesWritten: 0,
     pricesKeptAsWritten: [],
     pricesWithheld: [],
@@ -1562,7 +1564,14 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
       });
 
       expect(settle).toHaveBeenCalledTimes(1);
-      expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
+      // It is told the prices of the row that left, which is how catalog
+      // knows which rows of the old product that row wrote.
+      const [, , told] = settle.mock.calls[0];
+      expect((told as { leaving: unknown[] }).leaving).toEqual(bound().prices);
+      expect(bound().prices?.length).toBeGreaterThan(0);
       // After the save: the settle reads the rows bound to the old product
       // now, and this row must no longer be one of them. Before the price
       // write: that step can fail, and a retry of the accept cannot settle,
@@ -1584,7 +1593,9 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
         .catch((error: Error) => error);
 
       // The old product is settled although the request failed.
-      expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
       expect(calls).toEqual(['save', 'settle', 'addPrices']);
       expect(saved[0]).toMatchObject({ itemId: 'item-new' });
       expect(failure).toBeInstanceOf(Error);
@@ -1678,7 +1689,9 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
         entryId: 'e-1',
       });
 
-      expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
       expect(result.createdItem).not.toBeNull();
       expect(result.settled).toEqual(settled('item-old', CHAIN));
     });
@@ -1696,7 +1709,9 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
         status: SourceEntryStatus.REJECTED,
         itemId: null,
       });
-      expect(settle).toHaveBeenCalledWith('item-old', CHAIN);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
       expect(calls).toEqual(['save', 'settle']);
     });
 
@@ -1724,6 +1739,74 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
       expect(message).toContain('catalog is away');
       expect(message).toContain('/v1/admin/harvest/items/item-old/settle');
       expect(message).toContain(CHAIN);
+    });
+  });
+
+  describe('a retry of a move whose price write failed, for a row that prints a barcode', () => {
+    it('moved the barcode before the price write failed, so the retry is not refused and writes the price', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const first = build({
+        row,
+        eanHolder: { id: 'item-old' } as ItemView,
+        others: [],
+        failAddPrices: new Error('catalog is away'),
+      });
+
+      await expect(
+        first.service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-new',
+        })
+      ).rejects.toThrow('catalog is away');
+
+      // The barcode left the old product and reached the new one although
+      // the price write failed after it.
+      expect(first.removeItemEan).toHaveBeenCalledWith('item-old', REAL_EAN);
+      expect(first.teachItemEans).toHaveBeenCalledWith([
+        { itemId: 'item-new', ean: REAL_EAN },
+      ]);
+      expect(first.calls).toEqual([
+        'save',
+        'settle',
+        'removeItemEan',
+        'teachItemEans',
+        'addPrices',
+      ]);
+
+      // The retry: the row names the new product, which holds the barcode
+      // now. Had the barcode stayed on the old product, this would be
+      // `item_ean_held`, and no price would be written.
+      const retry = build({
+        row: bound({ ean: REAL_EAN, itemId: 'item-new' }),
+        eanHolder: { id: 'item-new' } as ItemView,
+      });
+      const result = await retry.service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(result.pricesWritten).toBeGreaterThan(0);
+      expect(retry.removeItemEan).not.toHaveBeenCalled();
+      expect(retry.teachItemEans).not.toHaveBeenCalled();
+    });
+
+    it('still writes the prices when the barcode cannot be moved, and answers with that error', async () => {
+      const { service, addPrices } = build({
+        row: bound({ ean: REAL_EAN }),
+        eanHolder: { id: 'item-old' } as ItemView,
+        others: [],
+        teachRefusal: { reason: 'HELD', heldBy: 'item-other' },
+      });
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
+
+      expect(failure).toBeInstanceOf(ItemEanHeldException);
+      expect(addPrices).toHaveBeenCalled();
+      expect((failure as Error).message).toContain('item-old');
     });
   });
 

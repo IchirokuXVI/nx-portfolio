@@ -506,7 +506,7 @@ describe('accepting a row teaches its barcode (plan 0185)', () => {
       );
     });
 
-    it('writes the barcode after the prices, and teaches nothing for an in-store code or a barcode the product holds', async () => {
+    it('writes the barcode before the prices, and teaches nothing for an in-store code or a barcode the product holds', async () => {
       const order: string[] = [];
       const catalog = fakeCatalog([milk('item-milk', [PRODUCT_EAN])]);
       catalog.addPrices.mockImplementation(async () => {
@@ -523,7 +523,9 @@ describe('accepting a row teaches its barcode (plan 0185)', () => {
         entryId: 'e-1',
         itemId: 'item-milk',
       });
-      expect(order).toEqual(['prices', 'barcode']);
+      // The barcode first (plan 0191): a price write that fails must not
+      // leave the barcode where a retry is refused for it.
+      expect(order).toEqual(['barcode', 'prices']);
 
       // The product holds it now, so accepting a second row that prints it
       // teaches nothing.
@@ -966,7 +968,7 @@ describe('a create teaches and refuses like an accept (plan 0185)', () => {
   });
 
   describe('the one row route', () => {
-    it('teaches the row’s barcode to a product created with another EAN, after the prices, and stamps MANUAL', async () => {
+    it('teaches the row’s barcode to a product created with another EAN, before the prices, and stamps MANUAL', async () => {
       const catalog = fakeCatalog([]);
       const order: string[] = [];
       catalog.addPrices.mockImplementation(async () => {
@@ -998,7 +1000,9 @@ describe('a create teaches and refuses like an accept (plan 0185)', () => {
       // The product holds both: the one it was created with stays the first.
       expect(catalog.products[0].eans).toEqual([NAMED_EAN, ROW_EAN]);
       expect(catalog.products[0].ean).toBe(NAMED_EAN);
-      expect(order).toEqual(['prices', 'barcode']);
+      // The barcode first (plan 0191): a price write that fails must not
+      // leave the barcode where a retry is refused for it.
+      expect(order).toEqual(['barcode', 'prices']);
       // A decision is a person's, and the row keeps what the chain printed.
       expect(result.entry.status).toBe(SourceEntryStatus.ACTIVE);
       expect(result.entry.matchedBy).toBe(ItemSourceMatch.MANUAL);

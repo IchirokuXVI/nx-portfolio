@@ -583,9 +583,12 @@ export class AdminHarvestEntriesController {
    * the row's chain, as `POST items/:itemId/settle` does, and `settled`
    * answers what that removed. It is settled before the prices of the new
    * product are written, because a second accept cannot do it: the saved row
-   * no longer names the product it left. Any error after the bind names the
-   * old product and the chain, and says whether the product was settled. If
-   * it was not, the settle route finishes the job.
+   * no longer names the product it left. The barcode moves next, and the
+   * prices are written last, so a price write that fails leaves nothing a
+   * second accept is refused for. Each step runs whatever happened to the
+   * one before it. Any error after the bind names the old product and the
+   * chain, and says whether the product was settled. If it was not, the
+   * settle route finishes the job.
    */
   @Post(':id/accept')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
@@ -765,17 +768,24 @@ export class AdminHarvestItemsController {
    * decision whose own settle failed.
    *
    * **It removes only what no bound row accounts for.** For each scope of
-   * the chain and each kind a harvest run writes:
+   * the chain:
    *
    * - When no bound row holds a price row there, the price rows of the
    *   product that a run wrote there are removed.
-   * - When a bound row holds a price row there, open or closed, nothing of
-   *   its history is removed. A leaflet that ended keeps its rows.
-   * - When the open prices of the bound rows come to one price there, that
-   *   price is stated (`pricesRestated`). Catalog removes the rows that were
-   *   observed at its instant or later and say something else, and makes it
-   *   the current row, in one transaction. `pricesWritten` counts the rows
-   *   that inserted.
+   * - When a bound row holds a price row there, open or closed, the scope is
+   *   left alone. A source row holds one price per scope, and it can have
+   *   written more than that one: under another kind, or a newer price than
+   *   the one it holds now. So nothing there counts as a leftover on this
+   *   route. A move or a reject knows the row that left, and removes the
+   *   rows of the run that row names.
+   * - When the open prices of the bound rows come to one price at a scope
+   *   and kind, that price is stated. Catalog removes the rows of the same
+   *   run that were observed at its instant or later and say something else,
+   *   and writes it, in one transaction. `pricesWritten` counts the rows that
+   *   inserted. `pricesRestated` counts the stated prices that are the
+   *   current price afterwards. `pricesNotCurrent` names the ones that are
+   *   not: catalog holds a newer row of another run there, and it stays.
+   *   `pricesNotWritable` names a price copied from a scope that is gone.
    * - When the bound rows state two amounts there, nothing is removed and
    *   nothing is written. `pricesWithheld` names the rows.
    *

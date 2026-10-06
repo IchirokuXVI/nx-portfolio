@@ -4,9 +4,11 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   type HeldItemPrice,
+  type LeftItemPrice,
   type SettleItemAtChainResult,
   type SourceEntryPriceWithheld,
   type StatedItemPrice,
+  type WithdrawItemPricesResult,
 } from '@portfolio/luna-shopper/contracts';
 import { Repository } from 'typeorm';
 import {
@@ -17,7 +19,11 @@ import {
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
 import { sourceKindsOfRuns } from './run-source-kind';
-import { priceValuesOf, statementsOf } from './source-entry-write';
+import {
+  priceValuesOf,
+  sameStatement,
+  statementsOf,
+} from './source-entry-write';
 
 /**
  * The kinds a harvest run writes a price as. Catalog refuses any other kind
@@ -54,38 +60,56 @@ const RUN_WRITTEN_KINDS: PriceSourceKind[] = [
  * ## What it does, for one product and one chain
  *
  * It reads the rows of the chain that are `ACTIVE` and bound to the product,
- * with every price row they hold, and tells catalog two things:
+ * with every price row they hold, and tells catalog three things:
  *
  * - **What the bound rows hold** (`held`): each price row, open or closed, by
- *   scope, kind and run. Catalog removes nothing at such a scope and kind. A
- *   leaflet that ended last week keeps its rows.
+ *   scope, kind and run.
  * - **What they state now** (`stated`): for a scope and kind at which the
- *   open prices come to one price (`decideArticles`), that price. Catalog
- *   removes the rows there that contradict it from its instant on, and makes
- *   it the current row, in one transaction.
+ *   open prices come to one price (`decideArticles`), that price.
+ * - **Which runs the row that left names** (`left`): the run of each price
+ *   the leaving row holds. A decision knows the row it moved or rejected.
+ *   The route a person calls knows of none.
  *
- * At every other scope and kind of the chain, the price rows of the product
- * that a run wrote are removed. A row a person typed is not.
+ * Catalog then removes, in one transaction with the write of what is stated:
+ *
+ * - Every run written price row at a scope where no bound row holds a price.
+ * - At a scope where one does, only the rows of a run the leaving row names
+ *   and no bound row names, and the rows of a statement's own run that
+ *   contradict the statement from its instant on.
+ *
+ * ## Why a held scope is spared whole
+ *
+ * A source row holds one price per scope, and that price names one run. It
+ * does not say what the row wrote before. A row a website and a leaflet both
+ * print wrote under two kinds (plan 0190). A file import of last week's
+ * document leaves the row holding an older observation than the one catalog
+ * shows. So "no bound row states this" does not make a row of catalog a
+ * leftover. Only the run of the row that left does.
  *
  * ## The kind of a price is its run's
  *
- * `entry.sourceKind` is rewritten by every full observation, and a row that a
- * website and a leaflet both print is one shared row (plan 0190). A leaflet
- * price on a row that says `OFFICIAL_WEB` today is still a leaflet price, and
+ * `entry.sourceKind` is rewritten by every full observation. A leaflet price
+ * on a row that says `OFFICIAL_WEB` today is still a leaflet price, and
  * catalog holds it as one. So each price is read under the kind of the run in
  * its `runId` ({@link sourceKindsOfRuns}), never under the row's.
  *
- * **A price whose run cannot be told has no kind**, and then every kind at
- * its scope is spared and nothing is stated there.
+ * **A price whose run cannot be told has no kind**, and then nothing is
+ * stated at its scope.
  *
  * ## When nothing is stated at a scope and kind that has open prices
  *
  * - The bound rows state two amounts (decision 2A). The answer names them.
+ * - The bound rows agree on the amount and differ in a label, a currency or
+ *   a window. Catalog holds those as two rows, and stating one would remove
+ *   the other.
  * - A bound row holds a **closed** price there that was observed at the
- *   statement's instant or later. Stating the open price would remove that
- *   row, and it is a bound row's own history.
+ *   statement's instant or later. Stating the open price would remove it.
  *
- * In both cases the scope and kind are still held, so nothing is removed.
+ * ## A statement is not always the current price
+ *
+ * Catalog can hold a newer row at the scope and kind, written by a run that
+ * nobody names. It stays, and the answer names the statement in
+ * `pricesNotCurrent` and does not count it in `pricesRestated`.
  *
  * Then, **only when no bound row of the chain names the product at all**, the
  * offers of the product in the scopes of the chain and the shop rows runs
@@ -102,7 +126,7 @@ const RUN_WRITTEN_KINDS: PriceSourceKind[] = [
  *
  * ## A second call does nothing
  *
- * It sends the same two lists, catalog finds every row saying what is stated,
+ * It sends the same lists, catalog finds every row saying what is stated,
  * and no row, no id and no trail row changes. A dry run asks catalog the same
  * with `dryRun` and answers the same shape.
  */
@@ -123,7 +147,14 @@ export class SourceEntrySettler {
   async settle(
     itemId: string,
     supermarketId: string,
-    options: { dryRun?: boolean } = {}
+    options: {
+      dryRun?: boolean;
+      /**
+       * The prices of the row a decision just took off the product. Absent
+       * on the route a person calls, which knows of no such row.
+       */
+      leaving?: readonly SourceEntryPrice[];
+    } = {}
   ): Promise<SettleItemAtChainResult> {
     const dryRun = options.dryRun === true;
     const now = new Date();
@@ -171,7 +202,7 @@ export class SourceEntrySettler {
     const statements = statementsOf(bound, now, {
       kindOf: (_entry, price) => kindOf(price),
     });
-    for (const { priceScopeId, sourceKind, verdict } of statements) {
+    for (const { priceScopeId, sourceKind, verdict, articles } of statements) {
       if (!known.has(priceScopeId)) {
         continue;
       }
@@ -203,6 +234,14 @@ export class SourceEntrySettler {
       if (closedNewer) {
         continue;
       }
+      // Rows of one amount that are a label or a window apart are two rows
+      // in catalog. Stating one would remove the other, so neither is.
+      const variants =
+        !verdict.send.soldByWeight &&
+        articles.some((other) => !sameStatement(other.stated, price));
+      if (variants) {
+        continue;
+      }
       stated.push({
         priceScopeId,
         sourceKind,
@@ -212,7 +251,18 @@ export class SourceEntrySettler {
       });
     }
 
-    const withdrawn =
+    // The runs the row that left names, one per scope it priced.
+    const left = new Map<string, LeftItemPrice>();
+    for (const price of options.leaving ?? []) {
+      if (price.runId && known.has(price.priceScopeId)) {
+        left.set(`${price.priceScopeId}|${price.runId}`, {
+          priceScopeId: price.priceScopeId,
+          sourceRunId: price.runId,
+        });
+      }
+    }
+
+    const withdrawn: WithdrawItemPricesResult =
       scopeIds.length === 0
         ? {
             deleted: 0,
@@ -220,14 +270,15 @@ export class SourceEntrySettler {
             inserted: 0,
             confirmed: 0,
             keptAsWritten: [],
+            notWritable: [],
+            notCurrent: [],
             recomputed: 0,
           }
         : await this.catalog.withdrawPrices(
             itemId,
             scopeIds,
             RUN_WRITTEN_KINDS,
-            [...held.values()],
-            stated,
+            { held: [...held.values()], stated, left: [...left.values()] },
             dryRun
           );
 
@@ -249,7 +300,15 @@ export class SourceEntrySettler {
       boundEntryIds: bound.map((entry) => entry.id),
       pricesWithdrawn: withdrawn.deleted,
       pricesWithdrawnAt: withdrawn.removed,
-      pricesRestated: stated.length - withdrawn.keptAsWritten.length,
+      // What is stated and is what catalog shows: not a statement catalog
+      // did not apply, and not one a newer row of another run outranks.
+      pricesRestated:
+        stated.length -
+        withdrawn.keptAsWritten.length -
+        withdrawn.notWritable.length -
+        withdrawn.notCurrent.length,
+      pricesNotCurrent: withdrawn.notCurrent,
+      pricesNotWritable: withdrawn.notWritable,
       pricesWritten: withdrawn.inserted,
       pricesKeptAsWritten: withdrawn.keptAsWritten,
       pricesWithheld,

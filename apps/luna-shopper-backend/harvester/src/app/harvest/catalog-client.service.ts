@@ -28,6 +28,7 @@ import {
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
+  type LeftItemPrice,
   type LocalizedText,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
@@ -494,17 +495,21 @@ export class CatalogClient {
    * rows still bound to it, at these scopes and of these kinds (plan 0191).
    *
    * `held` is every price row a bound row holds, and catalog removes nothing
-   * such a row accounts for. `stated` is the one price the bound rows state
-   * at a scope and kind, and catalog makes it the current row there. The
-   * removal and the write are one catalog transaction. Catalog never removes
-   * a row a person typed.
+   * at such a scope but what the other two lists name. `stated` is the one
+   * price the bound rows state at a scope and kind, and catalog writes it
+   * there. `left` is the runs the row that is leaving names, and is empty
+   * when no row is. The removal and the write are one catalog transaction.
+   * Catalog never removes a row a person typed.
    */
   withdrawPrices(
     itemId: string,
     priceScopeIds: string[],
     sourceKinds: PriceSourceKind[],
-    held: HeldItemPrice[],
-    stated: StatedItemPrice[],
+    lists: {
+      held: HeldItemPrice[];
+      stated: StatedItemPrice[];
+      left: LeftItemPrice[];
+    },
     dryRun = false
   ): Promise<WithdrawItemPricesResult> {
     return this.send(ITEM_PRICE_PATTERNS.withdraw, {
@@ -512,8 +517,9 @@ export class CatalogClient {
       itemId,
       priceScopeIds,
       sourceKinds,
-      held,
-      stated,
+      held: lists.held,
+      stated: lists.stated,
+      left: lists.left,
       ...(dryRun ? { dryRun: true } : {}),
     });
   }

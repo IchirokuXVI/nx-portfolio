@@ -4,6 +4,7 @@ import {
   SourceEntryStatus,
   type HeldItemPrice,
   type ItemView,
+  type LeftItemPrice,
   type StatedItemPrice,
 } from '@portfolio/luna-shopper/contracts';
 import { ItemEanHeldException } from '@portfolio/luna-shopper/platform';
@@ -92,6 +93,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       sourceKinds: PriceSourceKind[];
       held: HeldItemPrice[];
       stated: StatedItemPrice[];
+      left: LeftItemPrice[];
       dryRun: boolean;
     }[];
     offerWithdraws: {
@@ -154,8 +156,11 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
         itemId: string,
         priceScopeIds: string[],
         sourceKinds: PriceSourceKind[],
-        held: HeldItemPrice[],
-        stated: StatedItemPrice[],
+        lists: {
+          held: HeldItemPrice[];
+          stated: StatedItemPrice[];
+          left: LeftItemPrice[];
+        },
         dryRun = false
       ) => {
         asked.order.push('withdrawPrices');
@@ -163,8 +168,7 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           itemId,
           priceScopeIds,
           sourceKinds,
-          held,
-          stated,
+          ...lists,
           dryRun,
         });
         return {
@@ -173,6 +177,8 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           inserted: 0,
           confirmed: 0,
           keptAsWritten: [],
+          notWritable: [],
+          notCurrent: [],
           recomputed: 0,
         };
       },
@@ -217,6 +223,9 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       teachItemEans: async (pairs: { itemId: string; ean: string }[]) => {
         asked.order.push('teachItemEans');
         asked.eanTeaches.push(...pairs);
+        for (const pair of pairs) {
+          eanHolders.set(pair.ean, pair.itemId);
+        }
         return { added: pairs.length, refused: [] };
       },
     } as unknown as CatalogClient;
@@ -401,6 +410,8 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           sourceKinds: KINDS,
           held: [],
           stated: [],
+          // The run of the price the row that left holds.
+          left: [{ priceScopeId: DEFAULT, sourceRunId: RUN }],
           dryRun: false,
         },
       ]);
@@ -443,6 +454,9 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       expect(asked.priceWithdraws[0].held).toEqual([
         { priceScopeId: DEFAULT, sourceKind: WEB, sourceRunId: RUN },
         { priceScopeId: NORTH, sourceKind: WEB, sourceRunId: RUN },
+      ]);
+      expect(asked.priceWithdraws[0].left).toEqual([
+        { priceScopeId: DEFAULT, sourceRunId: RUN },
       ]);
       expect(asked.priceWithdraws[0].stated.map(said)).toEqual([
         {
@@ -557,6 +571,8 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
           sourceKinds: KINDS,
           held: [],
           stated: [],
+          // The run of the price the row that left holds.
+          left: [{ priceScopeId: DEFAULT, sourceRunId: RUN }],
           dryRun: false,
         },
       ]);
@@ -794,6 +810,32 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
     }, 60_000);
   });
 
+  describe('the row that left', () => {
+    it('names its runs to catalog on a move and on a reject, and none on the route a person calls', async () => {
+      await row({}, { [DEFAULT]: 2.45 });
+      const leaving = await row(
+        {},
+        { [DEFAULT]: 1.99, [NORTH]: 2.05 },
+        { runId: LEAFLET_RUN }
+      );
+
+      await service.reject({ userId: ADMIN, entryId: leaving });
+
+      expect(asked.priceWithdraws[0].left).toEqual([
+        { priceScopeId: DEFAULT, sourceRunId: LEAFLET_RUN },
+        { priceScopeId: NORTH, sourceRunId: LEAFLET_RUN },
+      ]);
+
+      await service.settleItem({
+        userId: ADMIN,
+        itemId: WRONG,
+        supermarketId: ELJAMON,
+      });
+
+      expect(asked.priceWithdraws[1].left).toEqual([]);
+    }, 60_000);
+  });
+
   describe('the barcode moves with the row', () => {
     it('takes it off the old product and teaches it to the new one in the one accept', async () => {
       const bottle = await row({ ean: BARCODE });
@@ -813,8 +855,49 @@ describeIntegration('a row that leaves a product (real Postgres)', () => {
       expect(asked.order.indexOf('removeItemEan')).toBeLessThan(
         asked.order.indexOf('teachItemEans')
       );
-      // The old product no longer finds by that barcode.
-      expect(eanHolders.has(BARCODE)).toBe(false);
+      // The old product no longer finds by that barcode. The new one does.
+      expect(eanHolders.get(BARCODE)).toBe(RIGHT);
+    }, 60_000);
+
+    it('has moved the barcode when the price write fails, so the retry is not refused with item_ean_held', async () => {
+      const bottle = await row({ ean: BARCODE });
+      eanHolders.set(BARCODE, WRONG);
+      failPriceWrite = new Error('catalog is away');
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: bottle, itemId: RIGHT })
+        .catch((error: Error) => error);
+
+      expect((failure as Error).message).toContain('catalog is away');
+      expect(await stored(bottle)).toMatchObject({ itemId: RIGHT });
+      // Settled, then the barcode, then the price write that failed.
+      expect(asked.order).toEqual([
+        'withdrawPrices',
+        'withdrawOffers',
+        'removeItemEan',
+        'teachItemEans',
+        'addPrices',
+      ]);
+      expect(eanHolders.get(BARCODE)).toBe(RIGHT);
+
+      // The retry. The stored row names the new product, so no product is
+      // "the one it leaves". With the barcode still on the old product this
+      // was `item_ean_held`, thrown before any price was written, with the
+      // old product already stripped of its price and its offers.
+      failPriceWrite = null;
+      const retried = await service.accept({
+        userId: ADMIN,
+        entryId: bottle,
+        itemId: RIGHT,
+      });
+
+      expect(retried.pricesWritten).toBe(1);
+      expect(asked.priceWrites).toEqual([
+        { priceScopeId: DEFAULT, itemId: RIGHT, price: 4.99 },
+      ]);
+      // Nothing more to move.
+      expect(asked.eanRemovals).toHaveLength(1);
+      expect(asked.eanTeaches).toHaveLength(1);
     }, 60_000);
 
     it('refuses the move while a row of any chain that is bound to the old product prints it, and writes nothing', async () => {

@@ -4298,6 +4298,15 @@ export type HarvestSettleItemAtChainResult = {
     deleted: number;
   }[];
   pricesRestated: number;
+  pricesNotCurrent: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+  }[];
+  pricesNotWritable: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
   pricesWritten: number;
   pricesKeptAsWritten: {
     priceScopeId: string;

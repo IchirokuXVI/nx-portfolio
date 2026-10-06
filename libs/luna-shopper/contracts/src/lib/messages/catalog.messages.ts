@@ -3053,32 +3053,55 @@ export const WITHDRAW_MAX_SCOPES = 5000;
  * A price row that a row still bound to the product holds (plan 0191), open
  * or not. It is what a bound row accounts for, and a withdraw never removes
  * what it accounts for.
+ *
+ * **One held price spares its whole scope.** A source row holds one price per
+ * scope, and that price names one run. The same row can have written at the
+ * scope under another kind before (a shared row of a website and a leaflet),
+ * and it can have written a newer price than the one it holds now (a file
+ * import of an older document). Nothing in the row says so. So at a scope
+ * where a bound row holds a price, catalog removes only a row of a run that
+ * the row that left names (`left`), and what a statement removes.
  */
 export interface HeldItemPrice {
   priceScopeId: string;
   /**
    * The kind the price was written with: the kind of the run that observed
    * it. Null when that run cannot be told (the price names no run, or the run
-   * is gone). A null spares **every** kind at the scope.
+   * is gone). With a null, no statement is applied at the scope.
    */
   sourceKind: PriceSourceKind | null;
   /**
-   * The run that observed the price, or null. Catalog also spares, at this
-   * scope, every kind under which it holds a row this run wrote or confirmed,
-   * so a price that was written under another kind than its run's is kept.
+   * The run that observed the price, or null. A row of this run at this scope
+   * is never removed as the leaving row's, whatever kind it was written under.
    */
   sourceRunId: string | null;
+}
+
+/**
+ * A run the row that left the product names at a scope (plan 0191): the run
+ * of the price it holds there. The rows that run wrote for the product at
+ * that scope are the ones the row takes with it.
+ */
+export interface LeftItemPrice {
+  priceScopeId: string;
+  sourceRunId: string;
 }
 
 /**
  * The one price the rows still bound to the product state at a scope and
  * kind (plan 0191), with everything catalog needs to write it.
  *
- * Catalog removes, at that scope and kind, the run written rows observed at
- * `price.observedAt` or later **whose values differ from this price**, and
- * then makes this price the current row, in the same transaction. A row that
- * already says what this says is left alone, so a second call changes
- * nothing.
+ * At that scope and kind catalog removes a run written row only when it was
+ * observed at `price.observedAt` or later, its values differ from this price,
+ * **and it is a row of this statement's own run or of a run the leaving row
+ * names**. It then writes this price through the insert on change, in the
+ * same transaction. A row that already says what this says is left alone, so
+ * a second call changes nothing.
+ *
+ * **A statement does not have to be the newest thing catalog holds.** The row
+ * can hold an older observation than catalog does: a file import stamps the
+ * instant of its document. A newer row of a run nobody names stays, and stays
+ * current. The answer then names the statement in `notCurrent`.
  */
 export interface StatedItemPrice {
   priceScopeId: string;
@@ -3102,22 +3125,18 @@ export interface StatedItemPrice {
  * kind: a person can type a price of an automated kind, and such a row names
  * no run.
  *
- * **`held` spares what a bound row accounts for.** A scope and kind at which
- * a bound row holds a price row, open or not, loses nothing. That keeps the
- * history of a leaflet that ended, with its page and its text.
+ * - **A scope no bound row holds a price at** loses every such row.
+ * - **A scope a bound row holds a price at** (`held`) loses only the rows of
+ *   a run that the leaving row names (`left`) and no bound row names.
+ * - **A statement** (`stated`) removes, at its scope and kind, what
+ *   {@link StatedItemPrice} says, and is written.
  *
- * **`stated` is the one exception, and it removes little.** At a scope and
- * kind it names, the rows observed at its instant or later whose values
- * differ from it are removed, and it is written as the current row. A run
- * stamps every product it reads with one instant, so the row that left and
- * the row that stayed carry the same `observedAt`, and which of two such rows
- * is current is decided by their ids. Removing the one that differs is the
- * only outcome that does not depend on that.
- *
- * A statement is not applied, and its scope and kind are spared, when catalog
- * holds a row of the statement's run at that scope under **another** kind.
- * The price is in catalog already, under the kind it was written with, and it
- * is not written a second time under a new one. `keptAsWritten` names it.
+ * A statement is not applied, and removes nothing, in three cases. Catalog
+ * holds a row of its run at its scope under **another** kind
+ * (`keptAsWritten`): the price is in catalog already, under the kind it was
+ * written with. The scope it says it was copied from is gone or is not
+ * another scope of the chain (`notWritable`). Or a held price at its scope
+ * has no kind.
  *
  * Only a service actor may send it. An operator settles a product through the
  * harvester, which knows the bound rows.
@@ -3132,6 +3151,11 @@ export interface WithdrawItemPricesRequest extends AdminCredential {
   held?: HeldItemPrice[];
   /** One per scope and kind at most. Absent is the same as empty. */
   stated?: StatedItemPrice[];
+  /**
+   * The runs the row that left names, per scope. Absent when no row is
+   * leaving in this call: the settle a person asks for knows of none.
+   */
+  left?: LeftItemPrice[];
   /** True answers what a call would remove and write, and writes nothing. */
   dryRun?: boolean;
 }
@@ -3162,6 +3186,22 @@ export interface WithdrawItemPricesResult {
     /** The kind catalog holds the run's price under. */
     heldAs: PriceSourceKind;
   }[];
+  /**
+   * Statements that were not applied, because the scope they were copied
+   * from is gone or is not another scope of the chain. Nothing was removed
+   * or written at the scope and kind of such a statement.
+   */
+  notWritable: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  /**
+   * Statements catalog holds, but not as the current row of their scope and
+   * kind: a newer row that no bound row and no leaving row names says
+   * something else, and it stays.
+   */
+  notCurrent: { priceScopeId: string; sourceKind: PriceSourceKind }[];
   /** The (item, scope) keys worked out again, the fan out included. */
   recomputed: number;
 }

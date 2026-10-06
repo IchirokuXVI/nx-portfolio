@@ -3,6 +3,7 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   type HeldItemPrice,
+  type LeftItemPrice,
   type StatedItemPrice,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
@@ -113,8 +114,11 @@ function build(bound: SourceCatalogEntry[]) {
       _itemId: string,
       _scopes: string[],
       _kinds: PriceSourceKind[],
-      _held: HeldItemPrice[],
-      _stated: StatedItemPrice[],
+      _lists: {
+        held: HeldItemPrice[];
+        stated: StatedItemPrice[];
+        left: LeftItemPrice[];
+      },
       _dryRun?: boolean
     ) => {
       calls.push('withdrawPrices');
@@ -124,6 +128,8 @@ function build(bound: SourceCatalogEntry[]) {
         inserted: 1,
         confirmed: 0,
         keptAsWritten: [],
+        notWritable: [],
+        notCurrent: [],
         recomputed: 4,
       };
     }
@@ -159,8 +165,9 @@ function build(bound: SourceCatalogEntry[]) {
     ]),
   } as unknown as Repository<SupermarketSource>;
   const settler = new SourceEntrySettler(entries, runs, sources, catalog);
-  const heldOf = () => withdrawPrices.mock.calls[0][3];
-  const statedOf = () => withdrawPrices.mock.calls[0][4];
+  const heldOf = () => withdrawPrices.mock.calls[0][3].held;
+  const statedOf = () => withdrawPrices.mock.calls[0][3].stated;
+  const leftOf = () => withdrawPrices.mock.calls[0][3].left;
   return {
     settler,
     find,
@@ -170,6 +177,7 @@ function build(bound: SourceCatalogEntry[]) {
     calls,
     heldOf,
     statedOf,
+    leftOf,
   };
 }
 
@@ -202,8 +210,7 @@ describe('SourceEntrySettler (plan 0191)', () => {
         ITEM,
         [DEFAULT, NORTH, SOUTH],
         KINDS,
-        [],
-        [],
+        { held: [], stated: [], left: [] },
         false
       );
       expect(withdrawOffers).toHaveBeenCalledWith(
@@ -224,6 +231,8 @@ describe('SourceEntrySettler (plan 0191)', () => {
           { priceScopeId: DEFAULT, sourceKind: WEB, deleted: 3 },
         ],
         pricesRestated: 0,
+        pricesNotCurrent: [],
+        pricesNotWritable: [],
         pricesWritten: 1,
         pricesKeptAsWritten: [],
         pricesWithheld: [],
@@ -454,6 +463,8 @@ describe('SourceEntrySettler (plan 0191)', () => {
         keptAsWritten: [
           { priceScopeId: DEFAULT, sourceKind: LEAFLET, heldAs: WEB },
         ],
+        notWritable: [],
+        notCurrent: [],
         recomputed: 0,
       } as never);
 
@@ -468,6 +479,111 @@ describe('SourceEntrySettler (plan 0191)', () => {
     });
   });
 
+  describe('the row that left', () => {
+    it('names the run of each price the leaving row holds, and none on the route a person calls', async () => {
+      const kept = row('kept', [price('kept', 2.45)]);
+      const first = build([kept]);
+
+      await first.settler.settle(ITEM, CHAIN, {
+        leaving: [
+          price('gone', 2.95, { runId: OLD_RUN }),
+          price('gone', 3.05, { priceScopeId: NORTH, runId: LEAFLET_RUN }),
+          // Named by no run, or at a scope catalog no longer holds: nothing
+          // can be taken back by it.
+          price('gone', 3.1, { priceScopeId: SOUTH, runId: null }),
+          price('gone', 3.2, { priceScopeId: GONE }),
+        ],
+      });
+
+      expect(first.leftOf()).toEqual([
+        { priceScopeId: DEFAULT, sourceRunId: OLD_RUN },
+        { priceScopeId: NORTH, sourceRunId: LEAFLET_RUN },
+      ]);
+
+      const second = build([kept]);
+      await second.settler.settle(ITEM, CHAIN);
+      expect(second.leftOf()).toEqual([]);
+    });
+  });
+
+  describe('a statement that is not the current price', () => {
+    it('does not count as restated, and is named', async () => {
+      const kept = row('kept', [price('kept', 2.45)]);
+      const { settler, withdrawPrices } = build([kept]);
+      withdrawPrices.mockResolvedValueOnce({
+        deleted: 0,
+        removed: [],
+        inserted: 0,
+        confirmed: 0,
+        keptAsWritten: [],
+        notWritable: [],
+        notCurrent: [{ priceScopeId: DEFAULT, sourceKind: WEB }],
+        recomputed: 0,
+      } as never);
+
+      const result = await settler.settle(ITEM, CHAIN);
+
+      expect(result.pricesRestated).toBe(0);
+      expect(result.pricesNotCurrent).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB },
+      ]);
+    });
+
+    it('names a price catalog cannot write, and does not count it either', async () => {
+      const kept = row('kept', [
+        price('kept', 2.45, { copiedFromScopeId: GONE }),
+      ]);
+      const { settler, withdrawPrices, statedOf } = build([kept]);
+      withdrawPrices.mockResolvedValueOnce({
+        deleted: 0,
+        removed: [],
+        inserted: 0,
+        confirmed: 0,
+        keptAsWritten: [],
+        notWritable: [
+          { priceScopeId: DEFAULT, sourceKind: WEB, copiedFromScopeId: GONE },
+        ],
+        notCurrent: [],
+        recomputed: 0,
+      } as never);
+
+      const result = await settler.settle(ITEM, CHAIN);
+
+      expect(statedOf()[0].copiedFromScopeId).toBe(GONE);
+      expect(result.pricesRestated).toBe(0);
+      expect(result.pricesNotWritable).toEqual([
+        { priceScopeId: DEFAULT, sourceKind: WEB, copiedFromScopeId: GONE },
+      ]);
+    });
+  });
+
+  describe('rows that agree on the amount and differ in something else', () => {
+    it('states neither, because catalog holds the two as two rows and stating one would remove the other', async () => {
+      const plain = row('plain', [price('plain', 2.45)]);
+      const labelled = row('labelled', [
+        price('labelled', 2.45, { unitPriceLabel: '1 kg' }),
+      ]);
+      const { settler, heldOf, statedOf } = build([plain, labelled]);
+
+      const result = await settler.settle(ITEM, CHAIN);
+
+      expect(heldOf()).toHaveLength(1);
+      expect(statedOf()).toEqual([]);
+      // Not a conflict: the amount is one amount.
+      expect(result.pricesWithheld).toEqual([]);
+    });
+
+    it('still states one price for two rows that say the same in every value', async () => {
+      const one = row('one', [price('one', 2.45)]);
+      const two = row('two', [price('two', 2.45)]);
+      const { settler, statedOf } = build([one, two]);
+
+      await settler.settle(ITEM, CHAIN);
+
+      expect(statedOf()).toHaveLength(1);
+    });
+  });
+
   describe('a dry run', () => {
     it('asks catalog the same question with dryRun, and nothing else', async () => {
       const kept = row('kept', [price('kept', 2.45)]);
@@ -475,7 +591,7 @@ describe('SourceEntrySettler (plan 0191)', () => {
 
       const result = await settler.settle(ITEM, CHAIN, { dryRun: true });
 
-      expect(withdrawPrices.mock.calls[0][5]).toBe(true);
+      expect(withdrawPrices.mock.calls[0][4]).toBe(true);
       expect(statedOf()).toHaveLength(1);
       expect(calls).toEqual(['withdrawPrices']);
       expect(result).toMatchObject({ dryRun: true, pricesRestated: 1 });

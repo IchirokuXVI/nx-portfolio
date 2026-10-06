@@ -649,7 +649,34 @@ const settleItemAtChainResult = object(
     pricesRestated: {
       ...integer({ minimum: 0 }),
       description:
-        'Prices of the bound rows that were stated to catalog, one per scope and kind. It counts what was stated, not what changed.',
+        'Prices of the bound rows that are the current price of their scope and kind after the call, one per scope and kind. It counts what is stated and current, not what changed.',
+    },
+    pricesNotCurrent: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        },
+        required: ['priceScopeId', 'sourceKind'],
+        additionalProperties: false,
+      }),
+      description:
+        'Prices a bound row states that are not the current price of their scope and kind. Catalog holds a newer row there that says something else, written by a run that no bound row and no leaving row names. That row stays.',
+    },
+    pricesNotWritable: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+          copiedFromScopeId: nonEmptyString(),
+        },
+        required: ['priceScopeId', 'sourceKind', 'copiedFromScopeId'],
+        additionalProperties: false,
+      }),
+      description:
+        'Prices a bound row states that catalog cannot write, because the scope the price was copied from is gone. Nothing at that scope and kind changed.',
     },
     pricesWritten: {
       ...integer({ minimum: 0 }),
@@ -712,6 +739,8 @@ const settleItemAtChainResult = object(
     'pricesWithdrawn',
     'pricesWithdrawnAt',
     'pricesRestated',
+    'pricesNotCurrent',
+    'pricesNotWritable',
     'pricesWritten',
     'pricesKeptAsWritten',
     'pricesWithheld',

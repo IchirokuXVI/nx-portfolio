@@ -111,7 +111,11 @@ const OLD_WALK = '19100000-0000-4000-b000-0000000000a2';
 const MID_WALK = '19100000-0000-4000-b000-0000000000a3';
 /** A leaflet an operator uploaded. */
 const LEAFLET = '19100000-0000-4000-b000-0000000000a4';
-const RUNS = [WALK, OLD_WALK, MID_WALK, LEAFLET];
+/** An older export of the website, uploaded as a file. */
+const WEB_IMPORT = '19100000-0000-4000-b000-0000000000a5';
+const RUNS = [WALK, OLD_WALK, MID_WALK, LEAFLET, WEB_IMPORT];
+/** A scope id no scope carries. */
+const NO_SUCH_SCOPE = '19100000-0000-4000-b000-0000000000f1';
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Recent, so no price here is out of date, and never in the future. */
@@ -294,11 +298,13 @@ describeIntegration(
       await harvester.query(
         `INSERT INTO "harvest_runs"
                 ("id", "supermarketId", "mode", "status", "input")
-         VALUES ($1, $5, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
-                ($2, $5, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
-                ($3, $5, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
-                ($4, $5, 'FILE_IMPORT', 'COMPLETED',
-                 '{"sourceKind":"OFFICIAL_LEAFLET"}'::jsonb)`,
+         VALUES ($1, $6, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
+                ($2, $6, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
+                ($3, $6, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb),
+                ($4, $6, 'FILE_IMPORT', 'COMPLETED',
+                 '{"sourceKind":"OFFICIAL_LEAFLET"}'::jsonb),
+                ($5, $6, 'FILE_IMPORT', 'COMPLETED',
+                 '{"sourceKind":"OFFICIAL_WEB"}'::jsonb)`,
         [...RUNS, chain]
       );
       await harvester.query(
@@ -388,6 +394,7 @@ describeIntegration(
       validUntil?: Date;
       priceScopeId?: string;
       details?: Record<string, unknown>;
+      copiedFromScopeId?: string;
     }
 
     /**
@@ -420,8 +427,9 @@ describeIntegration(
         await harvester.query(
           `INSERT INTO "source_entry_prices"
                   ("entryId", "priceScopeId", "price", "currency",
-                   "observedAt", "runId", "validUntil", "details")
-           VALUES ($1, $2, $3, 'EUR', $4, $5, $6, $7)`,
+                   "observedAt", "runId", "validUntil", "details",
+                   "copiedFromScopeId")
+           VALUES ($1, $2, $3, 'EUR', $4, $5, $6, $7, $8)`,
           [
             inserted.id,
             each.priceScopeId ?? national,
@@ -430,6 +438,7 @@ describeIntegration(
             each.runId ?? WALK,
             each.validUntil ?? null,
             each.details ? JSON.stringify(each.details) : null,
+            each.copiedFromScopeId ?? null,
           ]
         );
       }
@@ -509,6 +518,8 @@ describeIntegration(
       pricesWithdrawnAt: [],
       pricesWritten: 0,
       pricesKeptAsWritten: [],
+      pricesNotCurrent: [],
+      pricesNotWritable: [],
       pricesWithheld: [],
       offersRemoved: [],
       shopRowsRemoved: 0,
@@ -735,11 +746,12 @@ describeIntegration(
       expect(await everything(ham)).toEqual(before);
     }, 120_000);
 
-    it('still removes the price of a kind and scope that no bound row holds', async () => {
-      // The other side of "keep the row": the row that left is still taken
-      // back. A leaflet row was bound here by mistake and moved away, and a
-      // website row stays.
+    it('still takes back what the row that left wrote, at a scope where another row stays', async () => {
+      // The other side of "keep the row". A leaflet row was bound here by
+      // mistake, a website row is rightly bound, and a person moves the
+      // leaflet row to its own product.
       const yoghurt = await product();
+      const other = await product();
       const [north] = regions;
       await wrote(yoghurt, { price: 0.99 });
       await wrote(yoghurt, {
@@ -749,17 +761,142 @@ describeIntegration(
         observedAt: LAST_WEEK,
       });
       await wrote(yoghurt, {
-        price: 1.05,
+        price: 0.85,
         priceScopeId: north,
-        runId: MID_WALK,
+        runId: LEAFLET,
+        kind: LEAFLET_KIND,
+        observedAt: LAST_WEEK,
       });
       await boundRow(yoghurt, [{ price: 0.99 }]);
+      const mistaken = await boundRow(
+        yoghurt,
+        [
+          { price: 0.79, runId: LEAFLET, observedAt: LAST_WEEK },
+          {
+            price: 0.85,
+            priceScopeId: north,
+            runId: LEAFLET,
+            observedAt: LAST_WEEK,
+          },
+        ],
+        { sourceKind: LEAFLET_KIND }
+      );
 
-      const result = await settle(yoghurt);
+      // The route a person calls knows of no row that left. At the scope
+      // the website row holds a price, the leaflet price stays.
+      expect((await settle(yoghurt, true)).pricesWithdrawn).toBe(0);
 
-      expect(result.pricesWithdrawn).toBe(2);
+      const moved = await service.accept({
+        userId: OPERATOR,
+        entryId: mistaken,
+        itemId: other,
+      });
+
+      // The move names the leaflet run, so both of its rows go: the one at
+      // the scope the website row prices, and the one at a scope nothing
+      // prices any more.
+      expect(moved.settled?.pricesWithdrawn).toBe(2);
       expect(await amounts(yoghurt)).toEqual([0.99]);
       expect(await shown(yoghurt)).toEqual([0.99, 0.99, 0.99, 0.99]);
+      expect((await amounts(other)).sort()).toEqual([0.79, 0.85]);
+    }, 120_000);
+
+    it('keeps the newer price of a bound row that holds an older observation than catalog does', async () => {
+      // One bound row, and nothing left the product. A walk wrote 2.45, the
+      // next walk wrote 2.60, which is what a shopper sees. An operator then
+      // imported the export of the first walk as a file. The import stamps
+      // the instant of its document, so the row now holds the older price.
+      const oil = await product();
+      await wrote(oil, { price: 2.45, runId: OLD_WALK, observedAt: LAST_WEEK });
+      await wrote(oil, { price: 2.6 });
+      await wrote(oil, {
+        price: 2.45,
+        runId: WEB_IMPORT,
+        observedAt: LAST_WEEK,
+      });
+      await boundRow(oil, [
+        { price: 2.45, runId: WEB_IMPORT, observedAt: LAST_WEEK },
+      ]);
+      const before = await everything(oil);
+      expect(await shown(oil)).toEqual([2.6, 2.6, 2.6, 2.6]);
+
+      const result = await settle(oil);
+
+      // The 2.60 is newer than what the row states and says something else.
+      // No bound row and no leaving row names its run, so it is not a
+      // leftover, and it stays current.
+      expect(result.pricesWithdrawn).toBe(0);
+      expect(result.pricesWritten).toBe(0);
+      expect(result.pricesRestated).toBe(0);
+      expect(result.pricesNotCurrent).toEqual([
+        { priceScopeId: national, sourceKind: WEB },
+      ]);
+      expect(await everything(oil)).toEqual(before);
+      expect(await shown(oil)).toEqual([2.6, 2.6, 2.6, 2.6]);
+    }, 120_000);
+
+    it('keeps what a bound row wrote under another kind than the one its price names now', async () => {
+      // One shared row of a website and a leaflet (plan 0190). The website
+      // walk wrote its price, then the leaflet wrote one, and the row holds
+      // the leaflet's: one price per scope, which names one run.
+      const rice = await product();
+      await wrote(rice, { price: 1.35 });
+      await wrote(rice, {
+        price: 0.99,
+        runId: LEAFLET,
+        kind: LEAFLET_KIND,
+        observedAt: LAST_WEEK,
+      });
+      await boundRow(rice, [
+        { price: 0.99, runId: LEAFLET, observedAt: LAST_WEEK },
+      ]);
+      const before = await everything(rice);
+      expect(before.prices).toHaveLength(2);
+
+      const result = await settle(rice);
+
+      // The website row is of a kind the row does not hold a price of now.
+      // It is still that row's, and it stays.
+      expect(result).toMatchObject({ ...NOTHING, pricesRestated: 1 });
+      expect(await everything(rice)).toEqual(before);
+    }, 120_000);
+
+    it('settles a product whose price was copied from a scope that is gone, and says which price it could not write', async () => {
+      const salt = await product();
+      const next = await product();
+      await wrote(salt, { price: 0.45 });
+      const staying = await boundRow(salt, [
+        { price: 0.45, copiedFromScopeId: NO_SUCH_SCOPE },
+      ]);
+      const leaving = await boundRow(salt, [
+        { price: 0.55, priceScopeId: regions[0] },
+      ]);
+      await wrote(salt, { price: 0.55, priceScopeId: regions[0] });
+      const before = await amounts(salt);
+
+      // On the route: reported, and no error.
+      const result = await settle(salt);
+      expect(result.pricesNotWritable).toEqual([
+        {
+          priceScopeId: national,
+          sourceKind: WEB,
+          copiedFromScopeId: NO_SUCH_SCOPE,
+        },
+      ]);
+      expect(result.pricesWithdrawn).toBe(0);
+      expect(await amounts(salt)).toEqual(before);
+
+      // And inside a decision, which settles the product as one of its
+      // steps: thrown, this would fail every move off the product.
+      const rejected = await service.reject({
+        userId: OPERATOR,
+        entryId: leaving,
+      });
+      expect(rejected.status).toBe(SourceEntryStatus.REJECTED);
+      expect(await amounts(salt)).toEqual([0.45]);
+      expect(await entries.findOneByOrFail({ id: staying })).toMatchObject({
+        itemId: salt,
+      });
     }, 120_000);
 
     it('has settled the old product when the price write to the new one fails, and the retry has nothing left to settle', async () => {

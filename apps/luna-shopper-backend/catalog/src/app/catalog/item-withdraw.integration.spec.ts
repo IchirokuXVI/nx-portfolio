@@ -33,6 +33,7 @@ import {
 } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
 import { EffectivePriceService } from './effective-price.service';
+import * as priceWriter from './item-price-writer';
 import { ItemPriceService } from './item-price.service';
 import { LocationScopeService, setStack } from './location-scopes';
 import type {
@@ -69,6 +70,10 @@ const RUN = '19100000-0000-4000-a000-0000000000a1';
 const OLDER_RUN = '19100000-0000-4000-a000-0000000000a2';
 /** A leaflet an operator uploaded. */
 const LEAFLET_RUN = '19100000-0000-4000-a000-0000000000a3';
+/** A file import of an older document, of the website kind. */
+const IMPORT_RUN = '19100000-0000-4000-a000-0000000000a4';
+/** A scope id no scope carries. */
+const NO_SUCH_SCOPE = '19100000-0000-4000-a000-0000000000f1';
 
 const WEB = PriceSourceKind.OFFICIAL_WEB;
 const LEAFLET = PriceSourceKind.OFFICIAL_LEAFLET;
@@ -354,6 +359,8 @@ describeIntegration(
           inserted: 0,
           confirmed: 0,
           keptAsWritten: [],
+          notWritable: [],
+          notCurrent: [],
           // The scope written to and the three that fall through to it.
           recomputed: 4,
         });
@@ -471,6 +478,8 @@ describeIntegration(
           inserted: 0,
           confirmed: 0,
           keptAsWritten: [],
+          notWritable: [],
+          notCurrent: [],
           recomputed: 0,
         });
         expect(await withdrawOffers(figurine, of)).toEqual({
@@ -655,6 +664,8 @@ describeIntegration(
           inserted: 0,
           confirmed: 0,
           keptAsWritten: [],
+          notWritable: [],
+          notCurrent: [],
           recomputed: 0,
         };
         // A dry run on a settled product reports nothing to do.
@@ -709,26 +720,78 @@ describeIntegration(
       }, 60_000);
 
       it('undoes the removal too when the write of the statement fails', async () => {
-        const { of, itemId } = await burger();
+        const of = await chain();
+        const itemId = await product();
+        await runPrice(itemId, of.national, 2.3, {
+          observedAt: SUNDAY,
+          runId: OLDER_RUN,
+        });
+        await runPrice(itemId, of.national, 2.95);
         const before = await everything(itemId);
 
-        // A copy of a scope of another chain is refused by the write, which
-        // comes after the removal in the one transaction.
-        const elsewhere = await chain();
-        await expect(
-          withdrawPrices(itemId, of, {
-            held: [holds(of.national)],
-            stated: [
-              {
-                ...states(of.national, 2.45),
-                copiedFromScopeId: elsewhere.national,
-              },
-            ],
-          })
-        ).rejects.toBeInstanceOf(ValidationException);
+        // The write comes after the removal, in the one transaction.
+        const write = jest
+          .spyOn(priceWriter, 'writeItemPrices')
+          .mockRejectedValueOnce(new Error('the disk is full'));
+        try {
+          await expect(
+            withdrawPrices(itemId, of, {
+              held: [holds(of.national)],
+              stated: [states(of.national, 2.45)],
+            })
+          ).rejects.toThrow('the disk is full');
+        } finally {
+          write.mockRestore();
+        }
 
         // Nothing went: the product never shows an older price because the
         // second half of a settle failed.
+        expect(await everything(itemId)).toEqual(before);
+      }, 60_000);
+
+      it('reports a statement copied from a scope that is gone, removes nothing for it, and does not fail', async () => {
+        const { of, itemId } = await burger();
+        const before = await everything(itemId);
+
+        // The slot of the bound row still names the scope its price was
+        // copied from, and that scope was deleted since. Thrown, this would
+        // make the product impossible to settle, inside every move and
+        // reject too.
+        const withdrawn = await withdrawPrices(itemId, of, {
+          held: [holds(of.national)],
+          stated: [
+            {
+              ...states(of.national, 2.45),
+              copiedFromScopeId: NO_SUCH_SCOPE,
+            },
+          ],
+        });
+
+        expect(withdrawn).toMatchObject({
+          deleted: 0,
+          inserted: 0,
+          notWritable: [
+            {
+              priceScopeId: of.national,
+              sourceKind: WEB,
+              copiedFromScopeId: NO_SUCH_SCOPE,
+            },
+          ],
+        });
+        expect(await everything(itemId)).toEqual(before);
+
+        // A scope of another chain is the same case.
+        const elsewhere = await chain();
+        const foreign = await withdrawPrices(itemId, of, {
+          held: [holds(of.national)],
+          stated: [
+            {
+              ...states(of.national, 2.45),
+              copiedFromScopeId: elsewhere.national,
+            },
+          ],
+        });
+        expect(foreign.notWritable).toHaveLength(1);
         expect(await everything(itemId)).toEqual(before);
       }, 60_000);
 
@@ -780,7 +843,7 @@ describeIntegration(
         expect(await details.countBy({ itemPriceId: row.id })).toBe(1);
       }, 60_000);
 
-      it('spares only the scope and kind that is held', async () => {
+      it('spares the whole scope a bound row holds a price at, and no other scope', async () => {
         const of = await chain();
         const itemId = await product();
         const [north] = of.regions;
@@ -795,14 +858,15 @@ describeIntegration(
           held: [holds(of.national)],
         });
 
+        // No bound row holds a price at the north scope, so its row goes.
+        // The leaflet row is at a scope one does, and no leaving row names
+        // its run, so it stays: the bound row may have written it itself.
+        expect(withdrawn.removed).toEqual([
+          { priceScopeId: north, sourceKind: WEB, deleted: 1 },
+        ]);
         expect(
-          withdrawn.removed
-            .map((each) => `${each.priceScopeId}|${each.sourceKind}`)
-            .sort()
-        ).toEqual([`${north}|${WEB}`, `${of.national}|${LEAFLET}`].sort());
-        expect(
-          (await priceRows(itemId)).map((row) => Number(row.price))
-        ).toEqual([2.45]);
+          (await priceRows(itemId)).map((row) => Number(row.price)).sort()
+        ).toEqual([1.99, 2.45]);
       }, 60_000);
 
       it('spares every kind at a scope where a held price has no kind', async () => {
@@ -830,6 +894,149 @@ describeIntegration(
         expect(
           (await priceRows(itemId)).map((row) => Number(row.price)).sort()
         ).toEqual([1.99, 2.45]);
+      }, 60_000);
+    });
+
+    describe('a bound row does not account only for the one price it holds', () => {
+      it('keeps a newer row of the bound row when the row holds an older observation than catalog does', async () => {
+        // One bound row, and nothing left the product. A walk wrote 2.45,
+        // the next walk wrote 2.60, which is current. An operator then
+        // imported the export of the first walk: the import stamps the
+        // instant of its document, so the row holds {2.45, Sunday, import}
+        // and catalog keeps 2.60 as current, which is right.
+        const of = await chain();
+        const itemId = await product();
+        await runPrice(itemId, of.national, 2.45, {
+          observedAt: SUNDAY,
+          runId: OLDER_RUN,
+        });
+        await runPrice(itemId, of.national, 2.6);
+        await runPrice(itemId, of.national, 2.45, {
+          observedAt: SUNDAY,
+          runId: IMPORT_RUN,
+        });
+        const before = await everything(itemId);
+        expect((await shown(itemId, of.national))?.price).toBe('2.60');
+
+        const withdrawn = await withdrawPrices(itemId, of, {
+          held: [holds(of.national, { runId: IMPORT_RUN })],
+          stated: [
+            states(of.national, 2.45, {
+              runId: IMPORT_RUN,
+              observedAt: SUNDAY,
+            }),
+          ],
+        });
+
+        // The 2.60 is newer than the statement and says something else. It
+        // is the row of a run nobody names, so it is not a leftover.
+        expect(withdrawn).toMatchObject({
+          deleted: 0,
+          inserted: 0,
+          confirmed: 0,
+          // And the answer does not pretend that the statement is current.
+          notCurrent: [{ priceScopeId: of.national, sourceKind: WEB }],
+        });
+        expect(await everything(itemId)).toEqual(before);
+        expect((await shown(itemId, of.national))?.price).toBe('2.60');
+      }, 60_000);
+
+      it('removes that newer row when the row that left names its run', async () => {
+        const of = await chain();
+        const itemId = await product();
+        await runPrice(itemId, of.national, 2.45, {
+          observedAt: SUNDAY,
+          runId: OLDER_RUN,
+        });
+        // The row that left wrote this one, in a later walk.
+        await runPrice(itemId, of.national, 2.6);
+
+        const withdrawn = await withdrawPrices(itemId, of, {
+          held: [holds(of.national, { runId: OLDER_RUN })],
+          stated: [
+            states(of.national, 2.45, {
+              runId: OLDER_RUN,
+              observedAt: SUNDAY,
+            }),
+          ],
+          left: [{ priceScopeId: of.national, sourceRunId: RUN }],
+        });
+
+        expect(withdrawn).toMatchObject({
+          deleted: 1,
+          inserted: 0,
+          notCurrent: [],
+        });
+        expect((await shown(itemId, of.national))?.price).toBe('2.45');
+      }, 60_000);
+
+      it('keeps the rows of another kind that the same bound row wrote at the scope', async () => {
+        // A shared row of a website and a leaflet (plan 0190). It wrote a
+        // website price and then a leaflet price, and holds the leaflet's:
+        // one slot per scope, which names one run.
+        const of = await chain();
+        const itemId = await product();
+        await runPrice(itemId, of.national, 2.45, {
+          observedAt: SUNDAY,
+          runId: OLDER_RUN,
+        });
+        await runPrice(itemId, of.national, 1.99, {
+          kind: LEAFLET,
+          runId: LEAFLET_RUN,
+        });
+        const before = await everything(itemId);
+        const request = {
+          held: [holds(of.national, { kind: LEAFLET, runId: LEAFLET_RUN })],
+          stated: [
+            states(of.national, 1.99, { kind: LEAFLET, runId: LEAFLET_RUN }),
+          ],
+        };
+
+        const withdrawn = await withdrawPrices(itemId, of, request);
+
+        // The website row is of a kind the bound row does not hold now. It
+        // is still the bound row's own, and nothing says otherwise.
+        expect(withdrawn.deleted).toBe(0);
+        expect(await everything(itemId)).toEqual(before);
+      }, 60_000);
+
+      it('removes a row of another kind at such a scope only when the row that left names its run', async () => {
+        const of = await chain();
+        const itemId = await product();
+        await runPrice(itemId, of.national, 2.45, {
+          observedAt: SUNDAY,
+          runId: OLDER_RUN,
+        });
+        await runPrice(itemId, of.national, 1.99, {
+          kind: LEAFLET,
+          runId: LEAFLET_RUN,
+        });
+
+        const withdrawn = await withdrawPrices(itemId, of, {
+          held: [holds(of.national, { kind: LEAFLET, runId: LEAFLET_RUN })],
+          left: [{ priceScopeId: of.national, sourceRunId: OLDER_RUN }],
+        });
+
+        expect(withdrawn.removed).toEqual([
+          { priceScopeId: of.national, sourceKind: WEB, deleted: 1 },
+        ]);
+        expect(
+          (await priceRows(itemId)).map((row) => Number(row.price))
+        ).toEqual([1.99]);
+      }, 60_000);
+
+      it('never removes a row of a run that a bound row names too, whatever the leaving row names', async () => {
+        const of = await chain();
+        const itemId = await product();
+        // One walk priced the row that stays and the row that left the same.
+        await runPrice(itemId, of.national, 2.45);
+
+        const withdrawn = await withdrawPrices(itemId, of, {
+          held: [holds(of.national)],
+          left: [{ priceScopeId: of.national, sourceRunId: RUN }],
+        });
+
+        expect(withdrawn.deleted).toBe(0);
       }, 60_000);
     });
 
