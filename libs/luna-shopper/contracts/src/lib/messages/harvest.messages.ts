@@ -1497,6 +1497,14 @@ export interface SourceEntryPriceWithheld {
   priceScopeId: string;
   /** The other bound rows that state another amount at that scope. */
   otherEntryIds: string[];
+  /**
+   * Present and true when the price was not sent for another reason (plan
+   * 0190): it is a price from before that plan whose kind could not be read,
+   * and a price is never sent under a guessed kind. `otherEntryIds` is then
+   * empty. The row is still bound, and a row with no other open price is
+   * offered with no price.
+   */
+  kindUnknown?: true;
 }
 
 /** Settle a product at a chain (plan 0191). */

@@ -606,6 +606,12 @@ const sourceEntryPriceWithheld = object(
     entryId: nonEmptyString(),
     priceScopeId: nonEmptyString(),
     otherEntryIds: array(nonEmptyString()),
+    kindUnknown: {
+      type: 'boolean',
+      enum: [true],
+      description:
+        'Present and true when the price was not sent because it is a price from before plan 0190 whose kind could not be read. A price is never sent under a guessed kind. otherEntryIds is then empty.',
+    },
   },
   ['entryId', 'priceScopeId', 'otherEntryIds']
 );

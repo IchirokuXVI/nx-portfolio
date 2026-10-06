@@ -3547,7 +3547,8 @@ export type EnumsHarvestWarningCode =
   | 'COPY_TARGET_GONE'
   | 'COPY_SOURCE_NOT_WRITTEN'
   | 'SCOPE_KIND_MISMATCH'
-  | 'DETAIL_SKIPPED_UNKNOWN';
+  | 'DETAIL_SKIPPED_UNKNOWN'
+  | 'PRICE_SOLD_ANOTHER_WAY';
 
 /**
  * `enums.ItemPriceWrittenBy` in the gateway's OpenAPI document.
@@ -4423,6 +4424,7 @@ export type HarvestSourceEntryPriceWithheld = {
   entryId: string;
   priceScopeId: string;
   otherEntryIds: string[];
+  kindUnknown?: true;
 };
 
 /**

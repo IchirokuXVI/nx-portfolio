@@ -241,6 +241,14 @@ export interface SourceIngestCounters {
    * Rows that state one amount are not counted either: that amount is sent.
    */
   pricesConflicted: number;
+  /**
+   * Observations whose prices were not written because they are sold another
+   * way than the row a walk owns says (plan 0190): a leaflet offer by the
+   * kilo on a row of a fixed pack, or the reverse. One per observation,
+   * whatever the number of scopes it priced. Each is a warning of the run,
+   * `PRICE_SOLD_ANOTHER_WAY`, that names the row.
+   */
+  pricesSoldAnotherWay: number;
 }
 
 /**
@@ -481,7 +489,20 @@ export class SourceIngest {
       // writing it to the default would put a Sevilla price on Madrid. A run
       // that writes no prices places none, and has nothing to warn about.
       const placed: PlacedPrice[] = [];
-      for (const price of writesPrices ? observation.prices : []) {
+      // A leaflet offer by the kilo on a row that a walk describes as a fixed
+      // pack, or the reverse (plan 0190). The row keeps what the walk said,
+      // so the figure would be stored and sent as a price of the wrong thing.
+      const soldAnotherWay =
+        writesPrices &&
+        observation.prices.length > 0 &&
+        sellsAnotherWay(held, observation, input.sourceKind);
+      if (soldAnotherWay) {
+        counters.pricesSoldAnotherWay += 1;
+        this.warnSoldAnotherWay(context, outcome.entry, observation);
+      }
+      for (const price of writesPrices && !soldAnotherWay
+        ? observation.prices
+        : []) {
         const priceScopeId = this.resolveScope(
           context,
           input,
@@ -608,7 +629,9 @@ export class SourceIngest {
         `${counters.pricesRecorded} price(s) recorded on the source rows, ` +
         `${owedCount} price(s) owed across ${owed.size} scope(s), ` +
         `${counters.pricesWritten} written to catalog, ` +
-        `${counters.pricesConflicted} withheld as conflicts.`
+        `${counters.pricesConflicted} withheld as conflicts, ` +
+        `${counters.pricesSoldAnotherWay} observation(s) priced another way ` +
+        'than their row is sold and not written.'
     );
     return { outcomes, counters, copies, priceConflicts };
   }
@@ -782,6 +805,31 @@ export class SourceIngest {
       name,
     });
     return null;
+  }
+
+  /**
+   * The warning for prices that were not written because the observation is
+   * sold another way than its row (plan 0190). It names the row, so a person
+   * can open it.
+   */
+  private warnSoldAnotherWay(
+    context: RunContext,
+    row: SourceCatalogEntry,
+    observation: SourceObservation
+  ): void {
+    const byWeight = observation.soldByWeight === true;
+    context.warn({
+      code: HarvestWarningCode.PRICE_SOLD_ANOTHER_WAY,
+      message:
+        `"${observation.name}" is priced ${byWeight ? 'by weight' : 'as a fixed pack'} ` +
+        `here, and the row it lands on (${row.id}, "${row.name}") is sold ` +
+        `${byWeight ? 'as a fixed pack' : 'by weight'} on the walk that ` +
+        'describes it. The row keeps what the walk says, so no price of this ' +
+        'offer was written. Check that the two are one product.',
+      offerId: observation.externalId,
+      page: null,
+      name: observation.name,
+    });
   }
 
   /** The scope id a price resolves to, with no warning and no side effect. */
@@ -1190,7 +1238,30 @@ function emptyCounters(): SourceIngestCounters {
     pricesWritten: 0,
     pricesConfirmed: 0,
     pricesConflicted: 0,
+    pricesSoldAnotherWay: 0,
   };
+}
+
+/**
+ * Whether a full observation states its prices for something sold another way
+ * than the row it lands on, on a row whose source group it does not write
+ * (plan 0190).
+ *
+ * Only then. An observation that writes the group writes `soldByWeight` with
+ * it, so the row and its price agree by construction. A partial observation
+ * has its own rule in `see`, which moves the flag with the price.
+ */
+function sellsAnotherWay(
+  held: SourceCatalogEntry | undefined,
+  observation: ReportedObservation,
+  sourceKind: PriceSourceKind
+): observation is SourceObservation {
+  return (
+    held !== undefined &&
+    observation.detailFetched !== false &&
+    !writesSourceGroup(held, sourceKind) &&
+    (observation.soldByWeight === true) !== (held.soldByWeight === true)
+  );
 }
 
 function emptyCopies(): SourceIngestCopies {
@@ -1484,6 +1555,7 @@ export class SourceIngestSession {
     this.counters.pricesWritten += result.counters.pricesWritten;
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
+    this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
     this.priceConflicts.push(...result.priceConflicts);
     for (const scopeId of result.copies.pricedScopes) {
       this.copies.pricedScopes.add(scopeId);

@@ -312,11 +312,15 @@ export class SourceEntryBatchService {
           priceSkips.push({
             entryId: row.id,
             itemId: outcomes[index].itemId ?? '',
-            reason:
-              `No price was written at scope ${withheld.priceScopeId}: ` +
-              `another row bound to this product ` +
-              `(${withheld.otherEntryIds.join(', ')}) states another amount ` +
-              'there.',
+            reason: withheld.kindUnknown
+              ? `No price was written at scope ${withheld.priceScopeId}: ` +
+                'the row holds a price there from before plan 0190 whose ' +
+                'source kind is not known, and a price is never written ' +
+                'under a guessed kind.'
+              : `No price was written at scope ${withheld.priceScopeId}: ` +
+                `another row bound to this product ` +
+                `(${withheld.otherEntryIds.join(', ')}) states another amount ` +
+                'there.',
           });
         }
       } catch (error) {

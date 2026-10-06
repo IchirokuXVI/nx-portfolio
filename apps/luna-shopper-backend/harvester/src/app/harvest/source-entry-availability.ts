@@ -9,7 +9,7 @@ import {
   type SourceLocation,
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
-import { openPrices } from './source-entry-write';
+import { sendablePrices } from './source-entry-write';
 
 /**
  * What a source said about which of its shops carries which of its products,
@@ -303,6 +303,8 @@ export class SourceEntryAvailabilityWriter {
    *
    * A row is read when it is bound ({@link BOUND}), this run is the last one
    * that saw it, and it holds no price whose window is open, in any scope.
+   * A price with no kind does not count (plan 0190): an accept sends none.
+   * Counting it left a product with neither a price nor an offer.
    * That is the rule {@link writeForEntries} applies to the rows it is given,
    * so a row bound long ago is owed what a row bound today is owed.
    *
@@ -330,6 +332,8 @@ export class SourceEntryAvailabilityWriter {
                SELECT 1
                  FROM "source_entry_prices" p
                 WHERE p."entryId" = e."id"
+                  -- A price of no kind is sent nowhere (plan 0190).
+                  AND p."sourceKind" IS NOT NULL
                   AND (p."validUntil" IS NULL OR p."validUntil" > $3::timestamptz)
              )
        ORDER BY 1
@@ -359,7 +363,9 @@ export class SourceEntryAvailabilityWriter {
     const now = new Date();
     const byChain = new Map<string, Set<string>>();
     for (const entry of bound) {
-      if (openPrices(entry, now).length > 0) {
+      // A price of no kind is sent nowhere (plan 0190), so it is no price
+      // here either: its row is offered with no price.
+      if (sendablePrices(entry, now).length > 0) {
         continue;
       }
       const items = byChain.get(entry.supermarketId) ?? new Set<string>();

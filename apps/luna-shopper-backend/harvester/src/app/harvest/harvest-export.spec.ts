@@ -217,6 +217,36 @@ describe('buildHarvestDocument', () => {
     );
   });
 
+  it('hints the kind of the prices the run observed, not the kind of the row (plan 0190)', async () => {
+    // The export of a leaflet run. Its offers landed on rows that a website
+    // walk owns, so every row says OFFICIAL_WEB and every price says leaflet.
+    const document = build([
+      entry({
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [price({ sourceKind: PriceSourceKind.OFFICIAL_LEAFLET })],
+      }),
+      entry({
+        id: 'e-2',
+        externalId: 'k-2',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [
+          price({ id: 'p-2', sourceKind: PriceSourceKind.OFFICIAL_LEAFLET }),
+        ],
+      }),
+      // A row with no price answers with its own kind, and is outnumbered.
+      entry({
+        id: 'e-3',
+        externalId: 'k-3',
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        prices: [],
+      }),
+    ]);
+
+    expect((document['hints'] as Record<string, unknown>)['source_kind']).toBe(
+      PriceSourceKind.OFFICIAL_LEAFLET
+    );
+  });
+
   it('states a window as the local days it was printed as, not the exclusive bound', async () => {
     // `validUntil` is the local midnight *after* the last valid day, so a file
     // that said "to 23 September" stored the 24th. Exporting the 24th would

@@ -247,13 +247,16 @@ every price at its scope when the run does not say.
 2. A price of a `FILE_IMPORT` run takes the `sourceKind` of the input of that run, when it
    is `OFFICIAL_API`, `OFFICIAL_WEB` or `OFFICIAL_LEAFLET`.
 3. A price of any other run takes the kind of the adapter of the chain of that run:
-   `OFFICIAL_API` for `mercadona-api`, `lidl-api` and `dia-api`, and `OFFICIAL_WEB` for any
-   other adapter. The list is frozen in the migration file.
-4. A price stays without a kind when it names no run, when its run is not in
-   `harvest_runs`, when the run is a file import whose input names no official kind, or
-   when the run is a walk of a chain with no row in `supermarket_sources`.
+   `OFFICIAL_API` for `mercadona-api`, `lidl-api` and `dia-api`, and `OFFICIAL_WEB` for
+   `deza-web`, `carrefour-web` and `eljamon-web`. Those are the six adapters that walk a
+   storefront. Both lists are frozen in the migration file, and no adapter falls to a
+   default.
+4. A price stays without a kind in five cases: it names no run, its run is not in
+   `harvest_runs`, the run is a file import whose input names no official kind, the run is
+   a walk of a chain with no row in `supermarket_sources`, or the run is a walk of a chain
+   whose adapter is `osm-places`, `manual` or a key the migration does not know.
 5. It prints the count of rows stamped with each kind, and the count left without a kind
-   for each of the three reasons.
+   for each of those five cases.
 6. It drops `uq_source_entry_prices_scope` and adds the new key.
 
 It updates one column of `source_entry_prices` and no other table. It changes no price,
@@ -272,6 +275,16 @@ a scratch database of an ephemeral slot):
 - The 196 prices of run `794056b6` are all `OFFICIAL_LEAFLET`: 188 on rows that say
   `OFFICIAL_LEAFLET`, and 8 on the eight rows that say `OFFICIAL_WEB`.
 - The eight rows keep their kind, their name, their status and their product.
+
+**The kind of each run, in both databases.** After the migration on the copy, every
+distinct pair of run and kind in `source_entry_prices` was put beside the pairs of
+`sourceRunId` and `sourceKind` in `item_prices` of the catalog dump of the same snapshot.
+Six runs hold prices, each under one kind, and the two databases agree on all six: four
+walks as `OFFICIAL_API`, one as `OFFICIAL_WEB`, and the leaflet import as
+`OFFICIAL_LEAFLET`. No run differs.
+
+The fallback `sourceKindsOfRuns` draws the same line as the migration since the review:
+it answers for the six adapters and for no other.
 
 ### The read that section 3 left open
 
@@ -298,6 +311,46 @@ leaflet tile prints no barcode. For a row that a walk owns, that null is not wri
 the row any more, so it is not counted either. Without that, a tile took the barcode of
 a walked row out of the count, and a second row that shares the barcode could bind by
 it.
+
+### A leaflet offer that is sold another way than its row
+
+Found by the review of the pull request. A leaflet does not write `soldByWeight` on a
+row that a walk owns. A leaflet offer by the kilo on a row that the walk describes as a
+fixed pack would thus be stored, and sent to catalog for a bound row, as the price of
+that pack. The reverse is the same error.
+
+So when an observation does not write the source group of its row, and it says
+`soldByWeight` differently from the row, **no price of that observation is written**.
+The row is still seen. The run counts the observation (`pricesSoldAnotherWay` in the
+counters of the ingest) and warns with the code `PRICE_SOLD_ANOTHER_WAY`, which names the
+row and the offer. An earlier leaflet price of the row stays as it is.
+
+**A choice the owner can reverse.** The other answers are to store the price and send
+none, or to let the leaflet set the flag of the row. To reverse it, remove
+`sellsAnotherWay` from `writeChunk` in `source-ingest.ts`. The builder chose no price,
+because such a tile often names another product than the row: a loose cheese beside a
+packed one.
+
+### A row whose only open price has no kind
+
+Also from the review. An accept sends no price of no kind, and the two checks that
+decide the offer with no price (`writePricelessOffers` for a bind,
+`writePricelessOffersForRun` for the end of a run) counted that price as a price. The
+product then had neither a price nor an offer at the chain. Both checks now count only a
+price that says its kind (`sendablePrices` in `source-entry-write.ts`). The accept answer
+names the price in `pricesWithheld`, with `kindUnknown: true` and no other row, and the
+bulk route names it in `priceSkips`.
+
+### A revert of the walk that took a row over
+
+A walk that takes over a row that a leaflet created writes its own text and kind on it.
+A revert of that walk does not put the leaflet's text back: the row was first seen by the
+leaflet run, so the revert keeps it, and it deletes only the prices of the walk. The row
+then says `OFFICIAL_WEB`, holds the walk's text, and holds leaflet prices alone. No later
+leaflet import rewrites it, because a leaflet leaves a row that a walk owns alone. The
+next walk of the chain writes the text again. Until then the row describes the product
+as a run that was reverted did. Nothing repairs this by itself, and the owner decides
+whether a revert must give such a row back to the leaflet.
 
 ### An accept, and the comparison with other rows
 
@@ -335,7 +388,8 @@ new text, `harvest.entries.prices.noKind`.
   both orders of a website run and a leaflet import, the two price rows of one scope, the
   counters, and an accept that sends `OFFICIAL_LEAFLET`.
 - `harvester/src/app/db/source-entry-price-kind.migration.integration.spec.ts`, on a
-  probe database: twelve cases of run and row, the log line, the key, and the down.
+  probe database: eighteen cases of run and row, one for each adapter key among them, the
+  log line, the key, and the down.
 - `settle-across-services.integration.spec.ts`: a row with two kinds at one scope, a
   move that carries a leaflet price as a leaflet price, and the fallback to the run.
 - `source-ingest.spec.ts`, `source-entry-write.spec.ts` and `source-entry-settle.spec.ts`
@@ -353,6 +407,9 @@ new text, `harvest.entries.prices.noKind`.
 - **A price with no kind.** None exists on slot 1. If one ever does, it stays beside the
   new prices of its scope for good, is never sent, and makes the settle state nothing at
   that scope. The other choice is to let the first run that prices the scope replace it.
+- **The hint of an export.** `dominantKind` in `harvest-export.ts` now reads the kind of
+  the prices of the run, and the kind of the row only for a row with no price. The export
+  of a leaflet run thus proposes `OFFICIAL_LEAFLET` also when its rows are walk owned.
 - **The size of the two toys.** As section 1 says, the leaflet size of a row that a walk
   owns is not stored. The two toys have none today, and the second import does not
   bring it back.

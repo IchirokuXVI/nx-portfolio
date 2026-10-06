@@ -360,7 +360,7 @@ export function statementsOf(
   for (const entry of bound) {
     for (const stated of openPrices(entry, now)) {
       const sourceKind = kindOf ? kindOf(entry, stated) : stated.sourceKind;
-      if (sourceKind === null) {
+      if (!sourceKind) {
         continue;
       }
       const key = `${stated.priceScopeId}|${sourceKind}`;
@@ -568,7 +568,20 @@ export class SourceEntryPriceWriter {
       return outcome;
     }
     const now = new Date();
-    const own = openPrices(entry, now);
+    const open = openPrices(entry, now);
+    // A price of no kind is named and not sent (plan 0190). The answer says
+    // so, because the row is bound and a person would otherwise read a zero.
+    for (const stated of open) {
+      if (stated.sourceKind === null || stated.sourceKind === undefined) {
+        outcome.withheld.push({
+          entryId: entry.id,
+          priceScopeId: stated.priceScopeId,
+          otherEntryIds: [],
+          kindUnknown: true,
+        });
+      }
+    }
+    const own = sendablePrices(entry, now);
     if (own.length === 0) {
       return outcome;
     }
@@ -664,6 +677,23 @@ export class SourceEntryPriceWriter {
       relations: { prices: true },
     });
   }
+}
+
+/**
+ * The open prices of a row that an accept can send: those that say their
+ * kind (plan 0190).
+ *
+ * The one test of "this row has a price" for the availability half of a bind
+ * too. A row whose only open price has no kind sends none, so it is the row
+ * that is owed an offer with no price.
+ */
+export function sendablePrices(
+  entry: SourceCatalogEntry,
+  now: Date
+): SourceEntryPrice[] {
+  return openPrices(entry, now).filter(
+    (price) => price.sourceKind !== null && price.sourceKind !== undefined
+  );
 }
 
 /** One price slot of a row: a scope and the kind that stated the price. */

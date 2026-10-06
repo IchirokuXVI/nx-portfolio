@@ -1,15 +1,20 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * The adapters whose walk stamps `OFFICIAL_API`, as `run-source-kind.ts` named
- * them on the day this migration was written. A walk of any other adapter
- * stamps `OFFICIAL_WEB`.
+ * Every adapter key of `ADAPTER_KEYS` on the day this migration was written,
+ * classified one by one. A walk of an API adapter stamped `OFFICIAL_API` and
+ * a walk of a web adapter stamped `OFFICIAL_WEB`.
+ *
+ * **No adapter falls to a default.** `osm-places` and `manual` walk no
+ * storefront, and a key this list does not know was added later. A price of
+ * a run of such a chain stays without a kind.
  *
  * Frozen here on purpose. A migration describes the rows that exist when it
- * runs, and those were written under this list. A chain that changes its
+ * runs, and those were written under these lists. A chain that changes its
  * adapter later must not change what this migration says about old prices.
  */
 const API_ADAPTERS = ['mercadona-api', 'lidl-api', 'dia-api'];
+const WEB_ADAPTERS = ['deza-web', 'carrefour-web', 'eljamon-web'];
 
 /** The kinds a run can stamp. A file import names one of them in its input. */
 const RUN_KINDS = ['OFFICIAL_API', 'OFFICIAL_WEB', 'OFFICIAL_LEAFLET'];
@@ -37,7 +42,8 @@ const RUN_KINDS = ['OFFICIAL_API', 'OFFICIAL_WEB', 'OFFICIAL_LEAFLET'];
  *   operator stated at the upload. Only one of the three official kinds is
  *   taken.
  * - **Any other run**: the kind of the adapter of its chain, read from
- *   `supermarket_sources`. That is what the executor handed the sink.
+ *   `supermarket_sources`, when that adapter is one of the six that walk a
+ *   storefront. That is what the executor handed the sink.
  *
  * **A price whose kind cannot be read stays null.** It is not given the kind
  * of its row, because that kind is the one a later run may have rewritten:
@@ -45,15 +51,17 @@ const RUN_KINDS = ['OFFICIAL_API', 'OFFICIAL_WEB', 'OFFICIAL_LEAFLET'];
  * - The price names no run. Plan 0086 folded such rows in from the old price
  *   columns, and nothing recorded which run wrote them.
  * - The run is not in `harvest_runs` any more.
- * - The run is a file import whose input names no official kind, or a walk
- *   of a chain that has no source row.
+ * - The run is a file import whose input names no official kind.
+ * - The run is a walk of a chain that has no source row.
+ * - The run is a walk of a chain whose adapter walks no storefront
+ *   (`osm-places`, `manual`), or whose adapter this migration does not know.
  *
  * A null kind is not sent to catalog by an accept, and the settle of plan
  * 0191 keeps every price at the scope of such a row. The next run that
  * observes the scope writes its own row beside it, under its own kind.
  *
  * The migration prints how many rows it stamped with each kind, and how many
- * it left null for each of the three reasons.
+ * it left null for each of those five reasons.
  *
  * ## The key
  *
@@ -97,22 +105,26 @@ export class SourceEntryPriceKind1759200000000 implements MigrationInterface {
       [RUN_KINDS]
     );
 
-    // Any other run: the kind of the adapter of its chain.
+    // Any other run: the kind of the adapter of its chain, for the adapters
+    // that walk a storefront and for no other. There is no ELSE: the WHERE
+    // admits only the keys the two lists name.
     await queryRunner.query(
       `
       UPDATE "source_entry_prices" p
          SET "sourceKind" = CASE
                WHEN s."adapterKey"::text = ANY($1::text[])
                  THEN 'OFFICIAL_API'::"price_source_kind"
-               ELSE 'OFFICIAL_WEB'::"price_source_kind"
+               WHEN s."adapterKey"::text = ANY($2::text[])
+                 THEN 'OFFICIAL_WEB'::"price_source_kind"
              END
         FROM "harvest_runs" r
         JOIN "supermarket_sources" s ON s."supermarketId" = r."supermarketId"
        WHERE r."id" = p."runId"
          AND p."sourceKind" IS NULL
          AND r."mode"::text <> 'FILE_IMPORT'
+         AND s."adapterKey"::text = ANY($1::text[] || $2::text[])
       `,
-      [API_ADAPTERS]
+      [API_ADAPTERS, WEB_ADAPTERS]
     );
 
     const stamped: { sourceKind: string; rows: number }[] =
@@ -123,15 +135,30 @@ export class SourceEntryPriceKind1759200000000 implements MigrationInterface {
          GROUP BY "sourceKind"
          ORDER BY "sourceKind"
       `);
-    const [left]: { noRun: number; runGone: number; runSilent: number }[] =
-      await queryRunner.query(`
+    const [left]: {
+      noRun: number;
+      runGone: number;
+      importSilent: number;
+      noSource: number;
+      otherAdapter: number;
+    }[] = await queryRunner.query(`
         SELECT count(*) FILTER (WHERE p."runId" IS NULL)::int AS "noRun",
                count(*) FILTER (
                  WHERE p."runId" IS NOT NULL AND r."id" IS NULL
                )::int AS "runGone",
-               count(*) FILTER (WHERE r."id" IS NOT NULL)::int AS "runSilent"
+               count(*) FILTER (
+                 WHERE r."mode"::text = 'FILE_IMPORT'
+               )::int AS "importSilent",
+               count(*) FILTER (
+                 WHERE r."mode"::text <> 'FILE_IMPORT' AND s."id" IS NULL
+               )::int AS "noSource",
+               count(*) FILTER (
+                 WHERE r."mode"::text <> 'FILE_IMPORT' AND s."id" IS NOT NULL
+               )::int AS "otherAdapter"
           FROM "source_entry_prices" p
           LEFT JOIN "harvest_runs" r ON r."id" = p."runId"
+          LEFT JOIN "supermarket_sources" s
+                 ON s."supermarketId" = r."supermarketId"
          WHERE p."sourceKind" IS NULL
       `);
     // The one place a harvester migration prints: plan 0190 asks for the
@@ -144,9 +171,11 @@ export class SourceEntryPriceKind1759200000000 implements MigrationInterface {
               .map((each) => `${each.rows} ${each.sourceKind}`)
               .join(', ')) +
         ` from the run of each price. Left with no kind: ${left.noRun} that ` +
-        `name no run, ${left.runGone} whose run is gone, ${left.runSilent} ` +
-        'whose run does not say (a file import with no official kind in its ' +
-        'input, or a walk of a chain with no source row).'
+        `name no run, ${left.runGone} whose run is gone, ` +
+        `${left.importSilent} of a file import with no official kind in its ` +
+        `input, ${left.noSource} of a walk of a chain with no source row, ` +
+        `${left.otherAdapter} of a walk of a chain whose adapter is neither ` +
+        'an API nor a web adapter.'
     );
 
     await queryRunner.query(

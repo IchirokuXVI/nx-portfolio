@@ -19,7 +19,9 @@ import { SourceEntryPriceKind1759200000000 } from './migrations/1759200000000-So
  *   leaflet price, which is the eight rows of the first catalog.
  * - **A price whose kind cannot be read stays null**, and is not given the
  *   kind of its row: no run, a run that is gone, a file import that names no
- *   official kind, a walk of a chain with no source row.
+ *   official kind, a walk of a chain with no source row, and a walk of a
+ *   chain whose adapter walks no storefront or is not one the migration
+ *   knows. No adapter falls to a default.
  * - **The key holds the kind**, so two kinds share a scope and one kind does
  *   not, a null kind included.
  * - **The down refuses to delete.**
@@ -53,8 +55,31 @@ const PROBE_DATABASE = 'luna_harvester_0190_probe';
 const DEZA = '01900190-0000-4000-a000-00000000000a';
 const MERCADONA = '01900190-0000-4000-a000-00000000000b';
 const NO_SOURCE = '01900190-0000-4000-a000-00000000000c';
-/** An adapter the frozen list does not name. A walk of it is a website walk. */
 const ELJAMON = '01900190-0000-4000-a000-00000000000d';
+
+/**
+ * One chain and one walk for every other adapter key, so each key of
+ * `ADAPTER_KEYS` is classified here by name: API, web, or neither. The last
+ * is a key the migration does not know, as one a later plan adds would be.
+ */
+const OTHER_ADAPTERS: {
+  adapterKey: string;
+  chain: string;
+  runId: string;
+  expected: string | null;
+}[] = [
+  ['lidl-api', 'OFFICIAL_API'],
+  ['dia-api', 'OFFICIAL_API'],
+  ['carrefour-web', 'OFFICIAL_WEB'],
+  ['manual', null],
+  ['osm-places', null],
+  ['some-later-web', null],
+].map(([adapterKey, expected], index) => ({
+  adapterKey: adapterKey as string,
+  chain: `01900190-0000-4000-a000-0000000001c${index}`,
+  runId: `01900190-0000-4000-a000-0000000001a${index}`,
+  expected,
+}));
 
 const SCOPE = '01900190-0000-4000-a000-0000000000f1';
 const OTHER_SCOPE = '01900190-0000-4000-a000-0000000000f2';
@@ -131,7 +156,7 @@ const SEED: Seed[] = [
     expected: 'OFFICIAL_API',
   },
   {
-    key: 'walk-of-an-adapter-the-list-does-not-name',
+    key: 'walk-of-eljamon-web',
     chain: ELJAMON,
     entryKind: 'OFFICIAL_WEB',
     runId: ELJAMON_WALK,
@@ -188,6 +213,18 @@ const SEED: Seed[] = [
     price: 7.2,
     expected: null,
   },
+  // Each row says OFFICIAL_WEB. For the three adapters that are neither an
+  // API nor a web adapter, none of it reaches the price.
+  ...OTHER_ADAPTERS.map(
+    (each, index): Seed => ({
+      key: `walk-of-${each.adapterKey}`,
+      chain: each.chain,
+      entryKind: 'OFFICIAL_WEB',
+      runId: each.runId,
+      price: 10 + index,
+      expected: each.expected,
+    })
+  ),
 ];
 
 interface PriceRow {
@@ -292,6 +329,19 @@ describeIntegration('SourceEntryPriceKind1759200000000 (real Postgres)', () => {
         ELJAMON,
       ]
     );
+    for (const each of OTHER_ADAPTERS) {
+      await probe.query(
+        `INSERT INTO "supermarket_sources" ("supermarketId", "adapterKey")
+         VALUES ($1, $2)`,
+        [each.chain, each.adapterKey]
+      );
+      await probe.query(
+        `INSERT INTO "harvest_runs"
+                ("id", "supermarketId", "mode", "status", "input")
+         VALUES ($1, $2, 'CATALOG_DISCOVERY', 'COMPLETED', '{}'::jsonb)`,
+        [each.runId, each.chain]
+      );
+    }
     for (const seed of SEED) {
       const [entry] = await probe.query(
         `INSERT INTO "source_catalog_entries"
@@ -391,6 +441,9 @@ describeIntegration('SourceEntryPriceKind1759200000000 (real Postgres)', () => {
       'OFFICIAL_LEAFLET',
       'OFFICIAL_WEB',
       'OFFICIAL_WEB',
+      'OFFICIAL_WEB',
+      'OFFICIAL_WEB',
+      'OFFICIAL_WEB',
     ]);
     const after = await read(probe);
     for (const seed of unread) {
@@ -404,12 +457,40 @@ describeIntegration('SourceEntryPriceKind1759200000000 (real Postgres)', () => {
     );
 
     expect(line).toContain(
-      'stamped 1 OFFICIAL_API, 2 OFFICIAL_LEAFLET, 4 OFFICIAL_WEB'
+      'stamped 3 OFFICIAL_API, 2 OFFICIAL_LEAFLET, 5 OFFICIAL_WEB'
     );
     expect(line).toContain('1 that name no run');
     expect(line).toContain('1 whose run is gone');
-    expect(line).toContain('3 whose run does not say');
+    expect(line).toContain('2 of a file import with no official kind');
+    expect(line).toContain('1 of a walk of a chain with no source row');
+    expect(line).toContain(
+      '3 of a walk of a chain whose adapter is neither an API nor a web adapter'
+    );
   });
+
+  it('stamps a walk only for the six adapters that walk a storefront', async () => {
+    const after = await read(probe);
+    const kindOf = (adapterKey: string) =>
+      after.find((row) => row.key === `walk-of-${adapterKey}`)?.sourceKind;
+
+    expect({
+      'lidl-api': kindOf('lidl-api'),
+      'dia-api': kindOf('dia-api'),
+      'carrefour-web': kindOf('carrefour-web'),
+      'eljamon-web': kindOf('eljamon-web'),
+      manual: kindOf('manual'),
+      'osm-places': kindOf('osm-places'),
+      'some-later-web': kindOf('some-later-web'),
+    }).toEqual({
+      'lidl-api': 'OFFICIAL_API',
+      'dia-api': 'OFFICIAL_API',
+      'carrefour-web': 'OFFICIAL_WEB',
+      'eljamon-web': 'OFFICIAL_WEB',
+      manual: null,
+      'osm-places': null,
+      'some-later-web': null,
+    });
+  }, 180_000);
 
   it('lets a second kind share a scope, and refuses a second price of one kind', async () => {
     const [{ id: entryId }] = await probe.query(

@@ -720,9 +720,17 @@ describe('SourceEntryPriceWriter, the kind of each price (plan 0190)', () => {
     ]);
     const { writer, addPrices } = build([row]);
 
+    // The price that was not sent is named, with the reason.
     await expect(writer.writeNamed(row)).resolves.toEqual({
       written: 1,
-      withheld: [],
+      withheld: [
+        {
+          entryId: 'old',
+          priceScopeId: OTHER_SCOPE,
+          otherEntryIds: [],
+          kindUnknown: true,
+        },
+      ],
     });
 
     expect(addPrices).toHaveBeenCalledTimes(1);
@@ -733,5 +741,42 @@ describe('SourceEntryPriceWriter, the kind of each price (plan 0190)', () => {
       PriceSourceKind.OFFICIAL_LEAFLET,
       null
     );
+  });
+
+  it('names a price of no kind also when it is the only price of the row', async () => {
+    const row = websiteRow('old', [
+      price('old', 3.1, { sourceKind: null, runId: null }),
+    ]);
+    const { writer, addPrices, find } = build([row]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 0,
+      withheld: [
+        {
+          entryId: 'old',
+          priceScopeId: SCOPE,
+          otherEntryIds: [],
+          kindUnknown: true,
+        },
+      ],
+    });
+    expect(addPrices).not.toHaveBeenCalled();
+    // Nothing to compare, so the other rows are not read.
+    expect(find).not.toHaveBeenCalled();
+  });
+
+  it('does not name a price of no kind whose window has closed', async () => {
+    const row = websiteRow('old', [
+      price('old', 3.1, {
+        sourceKind: null,
+        validUntil: new Date('2020-01-01T00:00:00Z'),
+      }),
+    ]);
+    const { writer } = build([row]);
+
+    await expect(writer.writeNamed(row)).resolves.toEqual({
+      written: 0,
+      withheld: [],
+    });
   });
 });

@@ -50,6 +50,13 @@ const WEB = PriceSourceKind.OFFICIAL_WEB;
 const LEAFLET = PriceSourceKind.OFFICIAL_LEAFLET;
 const KINDS = [PriceSourceKind.OFFICIAL_API, WEB, LEAFLET];
 
+/** What each run of this spec stamps on the prices it writes. */
+const KIND_OF_RUN: Record<string, PriceSourceKind> = {
+  [RUN]: WEB,
+  [OLD_RUN]: WEB,
+  [LEAFLET_RUN]: LEAFLET,
+};
+
 function price(
   entryId: string,
   amount: number,
@@ -70,6 +77,14 @@ function price(
     runId: RUN,
     copiedFromScopeId: null,
     ...over,
+    // The kind of its run, as every run writes it since plan 0190: the
+    // primary path. A case that passes `sourceKind: null` is a price from
+    // before that plan, and exercises the lookup by run.
+    sourceKind:
+      over.sourceKind !== undefined
+        ? over.sourceKind
+        : (KIND_OF_RUN[over.runId === undefined ? RUN : (over.runId ?? '')] ??
+          null),
   } as SourceEntryPrice;
 }
 
@@ -365,7 +380,7 @@ describe('SourceEntrySettler (plan 0191)', () => {
       // kind. A leaflet wrote it, and the row says OFFICIAL_WEB.
       const shared = row(
         'shared',
-        [price('shared', 1.99, { runId: LEAFLET_RUN })],
+        [price('shared', 1.99, { runId: LEAFLET_RUN, sourceKind: null })],
         { sourceKind: WEB }
       );
       const { settler, heldOf, statedOf } = build([shared]);
