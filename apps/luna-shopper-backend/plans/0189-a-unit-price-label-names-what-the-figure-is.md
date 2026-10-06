@@ -89,7 +89,8 @@ What the code does today. Every statement below was read in the file it names.
      with nothing keeps what the chain sent, as the 110 products of plan `0038` do.
 3. **If the captures refute the reading of target 2** (`reference_price` equals
    `bulk_price` on a `100 ml` product), stop and report. The second rule then has no
-   evidence in the payload, and the owner decides between section 2, option B, and a rule
+   evidence in the payload. The owner decided for the adapter (section 2, B) on the
+   reading of target 2, so the owner then decides again, between option 2D and a rule
    that reads `unit_price` over `unit_size`.
 4. **`lv` is decided from its capture and not before.** If the figure is per litre and
    `reference_price` is per wash, the label written is `L`. If nothing in the payload
@@ -100,10 +101,10 @@ What the code does today. Every statement below was read in the file it names.
    same way `catalog.mappers.ts` does, and regenerate `openapi.json` and `wire-types.ts`.
 6. **`unitBasisOf` does not change.** Old rows keep their old labels, and the table is
    what reads them. Section 3 says when its four Mercadona keys can go.
-7. **El Jamón, one rule, behind the owner's decision of section 2.** If the owner takes
-   option 2A, the El Jamón adapter writes no unit price and no label for a row whose
-   printed unit price is ten times, or one tenth of, the figure that its own price and
-   its own parsed size give. Nothing is computed and written in its place.
+7. **El Jamón, one rule, decided by the owner (section 2, option 2A).** The El Jamón
+   adapter writes no unit price and no label for a row whose printed unit price is ten
+   times, or one tenth of, the figure that its own price and its own parsed size give.
+   Nothing is computed and written in its place.
 
 ### Scope
 
@@ -155,23 +156,26 @@ What the code does today. Every statement below was read in the file it names.
   polish of 11 ml carries its own pack price as the figure. They fall under the third
   rule of target 2 and keep what the chain sent.
 
-## 2. Decisions for the owner
+## 2. Decisions, decided by the owner, 2026-10-06
+
+Both are closed. The builder builds them and asks about neither.
 
 **A. El Jamón rows that contradict themselves by a factor of ten.**
 
-- 2A, recommended: the adapter withholds the unit price of such a row (target 7). The
-  price of the pack is still written. A wrong figure per kilo makes a product look ten
-  times cheaper in a comparison, and no figure is better than that one.
-- 2B: store it verbatim, as today, and list the rows for a person.
+- 2A, decided by the owner, 2026-10-06: the adapter withholds the unit price of such a
+  row (target 7). The price of the pack is still written. A wrong figure per kilo makes a
+  product look ten times cheaper in a comparison, and no figure is better than that one.
+- 2B, rejected: store it verbatim, as today, and list the rows for a person. The wrong
+  figure stays in each comparison until a person reads the list.
 
 **B. Where the Mercadona label is corrected.**
 
-- 2C, recommended: in the adapter, as target 2 says. The adapter is the only code that
-  knows which field of this chain the label belongs to, and every reader after it gets a
-  true pair, SQL included.
-- 2D: nowhere in storage. The label stays as sent, `unitBasisOf` maps `dz` and `dc` to
-  `UNIT`, and target 5 hides the raw pair in the back office. Smaller, and the two columns
-  stay false for whoever reads them without the table.
+- 2C, decided by the owner, 2026-10-06: in the adapter, as target 2 says. The adapter is
+  the only code that knows which field of this chain the label belongs to, and every
+  reader after it gets a true pair, SQL included.
+- 2D, rejected: nowhere in storage, with `dz` and `dc` mapped to `UNIT` and the raw pair
+  hidden in the back office. Smaller, and the two columns stay false for whoever reads
+  them without the table.
 
 ## 3. The data already written
 
@@ -193,5 +197,5 @@ Only local slot 1 holds the wrong rows.
 - After that run, the four keys `100 ml`, `100 g`, `dz` and `dc` of `unitBasisOf` are
   needed for history only. Removing them is a later change, and it is safe once no current
   Mercadona row carries one.
-- **The 23 El Jamón rows** change only if the owner takes option 2A. The next El Jamón run
-  then writes each of them with no unit price, as a new row.
+- **The 23 El Jamón rows** change under option 2A, which the owner took. The next El
+  Jamón run writes each of them with no unit price, as a new row.

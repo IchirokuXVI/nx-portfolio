@@ -108,8 +108,8 @@ Every statement below was read in the file it names.
    and answers what it deleted and wrote. `dryRun: true` answers the same and writes
    nothing.
 6. **One rule for two articles of one chain on one product**, stated once in
-   `source-entry-write.ts` and used by the run and by the accept. This plan builds option
-   2A of section 2 unless the owner chooses another:
+   `source-entry-write.ts` and used by the run and by the accept. The rule is option 2A
+   of section 2, which the owner decided on 2026-10-06:
    - In a run, the comparison holds across chunks, as `weighed` already does for rows
      sold by weight. When the second row arrives after the first was sent, the run counts
      the conflict and names both rows in its report. It does not take back the first.
@@ -175,39 +175,41 @@ Every statement below was read in the file it names.
   the queue and says that its price "stays in catalog until it expires". A storefront
   price has no end date. The same leftovers follow, and the settle of target 1 would
   remove them. It is left out because that unbind is automatic and this plan acts on a
-  person's decision. The owner decides in section 2.
+  person's decision. The owner decided to leave it for a follow up (section 2, C).
 - **A pack count that the wrong row filled** (`fillPackCounts`). Catalog cannot tell it
   from a count a person typed. A person checks the old product.
 - **A deleted or merged product.** A delete cascades its rows in catalog.
 - **A move through the bulk route.** It refuses a bound row, and that stays.
 
-## 2. Decisions for the owner
+## 2. Decisions, decided by the owner, 2026-10-06
+
+All three are closed. The builder builds them and asks about none.
 
 **A. Two articles of one chain on one product, at one scope.** Stage B asks for this rule
 too: two containers of one Mercadona milk at 0.96 € and 1.15 €.
 
-- 2A, recommended: withhold, as plan `0155` says, on every path (target 6). The bind is
-  allowed, the price is not sent, and the back office shows the pair. A person then makes
-  a second product or removes a row. The price that was current before the conflict stays
-  and ages.
-- 2B: the lowest price wins, as plan `0181` does for pieces sold by weight. A shopper
-  sees a price, and it can be the price of the smaller pack.
-- 2C: refuse the accept that creates the pair, with a named code, unless the request says
-  `force`. Strict, and it stops the second barcode of plan `0185` from binding until a
-  person confirms it.
+- 2A, decided by the owner, 2026-10-06: withhold, as plan `0155` says, on every path
+  (target 6). The bind is allowed, the price is not sent, and the back office shows the
+  pair. A person then makes a second product or removes a row. The price that was current
+  before the conflict stays and ages.
+- 2B, rejected: the lowest price wins, as plan `0181` does for pieces sold by weight. A
+  shopper sees a price, and it can be the price of the smaller pack.
+- 2C, rejected: refuse the accept that creates the pair unless the request says `force`.
+  It stops the second barcode of plan `0185` from binding until a person confirms it.
 
 **B. An offer with no price that no row backs.**
 
-- 2D, recommended: remove the row (target 1). No row means that nothing is known, which
-  is what `recomputeEffectivePrices` already says when it creates none.
-- 2E: keep the row and set `available: false`. That reads as "this chain says it does
-  not sell it", which no source said.
+- 2D, decided by the owner, 2026-10-06: remove the row (target 1). No row means that
+  nothing is known, which is what `recomputeEffectivePrices` already says when it creates
+  none.
+- 2E, rejected: keep the row and set `available: false`. That reads as "this chain says
+  it does not sell it", which no source said.
 
 **C. The automatic unbind of plan `0155`.**
 
-- 2F, recommended: leave it as it is in this plan, and call the settle from it in a
-  follow up once target 1 has run on real data.
-- 2G: call it now.
+- 2F, decided by the owner, 2026-10-06: leave it as it is in this plan, and call the
+  settle from it in a follow up once target 1 has run on real data.
+- 2G, rejected: call it now, before target 1 has run on real data.
 
 ## 3. The data already written
 

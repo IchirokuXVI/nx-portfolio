@@ -171,23 +171,25 @@ What follows from one kind on a shared row:
 - A leaflet size that a walk does not print. The two toys lose their leaflet size under
   target 3. A person types it on the create.
 
-## 2. Decisions for the owner
+## 2. Decisions, decided by the owner, 2026-10-06
+
+Both are closed. The builder builds them and asks about neither.
 
 **A. One row or two.**
 
-- 2A, recommended: one row, as plans `0085` and `0086` decided, with the kind on the
-  price (this plan). A person decides once, and both sources resolve through the row.
-- 2B: add `sourceKind` to the unique index of the entries, so a leaflet and a website
-  each keep a row. Nothing is overwritten and nothing is shared. Every product that both
-  print is decided twice, through a rung 4 proposal, and the existing shared rows cannot
-  be split, because the leaflet text of each is gone.
+- 2A, decided by the owner, 2026-10-06: one shared row, as plans `0085` and `0086`
+  decided, with the kind on the price (this plan). A person decides once, and both
+  sources resolve through the row.
+- 2B, rejected: `sourceKind` in the unique index of the entries, so each source keeps a
+  row. Every product that both print is decided twice, and the existing shared rows
+  cannot be split, because the leaflet text of each is gone.
 
 **B. Who owns the text of a shared row.**
 
-- 2C, recommended: the walk (target 3). A walk reads fields, and a leaflet is read by a
-  model from a picture.
-- 2D: whoever created the row. Simpler to state, and a row that a leaflet named first
-  never takes the website's link, category path or pack count.
+- 2C, decided by the owner, 2026-10-06: the website walk (target 3). A leaflet only adds
+  prices. A walk reads fields, and a leaflet is read by a model from a picture.
+- 2D, rejected: whoever created the row. Simpler to state, and a row that a leaflet named
+  first never takes the website's link, category path or pack count.
 
 ## 3. The data already written
 
