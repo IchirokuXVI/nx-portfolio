@@ -409,15 +409,22 @@ release that restores them must contain exactly these 29 and 20 migrations. The 
 
 Stage A ran in two passes. The first pass made the repairs that need no judgement and
 wrote a proposal for each of the others. The second pass applied the proposals after the
-owner's decisions of 2026-10-06:
+owner answered on 2026-10-06. The owner decided two things:
 
 - A merge may delete a product that still holds price rows, when the kept product already
   holds each of those rows. The delete then cascades duplicates only.
 - For the two pairs of products that only a capacity tells apart, the capacity goes in the
   name.
-- The Nivea roll-on pair and the brand Gotitas de Oro stay as they are.
-- The session decided the rest on the owner's word. It answered the brand questions of
-  section 1 of the plan with the plan's own proposals.
+
+On the rest the owner said: "Decide for yourself on the rest, they seem fine". The session
+decided the rest under that word, and the owner can overrule each point:
+
+- The Nivea roll-on pair stays two products. That is the reading of the proposal, not a
+  word of the owner.
+- The brand Gotitas de Oro stays unlinked. That is a decision of the session, not of the
+  owner.
+- The session answered the brand questions of section 1 of the plan with the plan's own
+  proposals.
 
 The first pass sent 25 writes and all succeeded. The second pass sent 73 that succeeded
 and 1 that the gateway refused. The stage started no harvest run and no import.
@@ -431,10 +438,10 @@ and 1 that the gateway refused. The stage started no harvest run and no import.
 | A5, a size that the unit price contradicts | 1 correction: Hacendado "Postre lácteo Lemon Cake" from 1600 to 160 `GRAM`. | The 2 unlinks of the proposal were not applied, and 143 products were left as the proposal says. |
 | A6, the same product twice | All 21 exact pairs merged (7 in the first pass, 14 in the second) and 6 near pairs merged. The exact merges of the second pass cascaded 14 price rows and the near merges 4, each a duplicate of a row on the kept product. | 1 exact pair that is two products, 4 near pairs that a person decides, 7 near pairs marked as two products, and 729 other candidates. |
 | A7, a row bound to the wrong product | The El Jamón row "chocolatinas pk-3" moved from the F1 figurine to the KitKat bars, and its stale price row was deleted from the figurine. The BBQ skewers became two products (20 cm and 32.5 cm). Pepsi stayed one product. | The availability of the figurine. |
-| A8, one brand registered twice | 5 links: 3 Brujas to Las 3 Brujas, Sierra de Montoro to Sierra Montoro, Liviana to Fuente Liviana, One to Purina One, CH Carolina Herrera to Carolina Herrera. | Gotitas de Oro is not linked, by the owner's decision. |
-| A9, a wrong brand on a product | 8 renames in one batch, and 1 merge. | The Fiesta mini pizzas did not change, as decided. |
+| A8, one brand registered twice | 5 links: 3 Brujas to Las 3 Brujas, Sierra de Montoro to Sierra Montoro, Liviana to Fuente Liviana, One to Purina One, CH Carolina Herrera to Carolina Herrera. | Gotitas de Oro is not linked, by a decision of the session. |
+| A9, a wrong brand on a product | 8 renames in one batch, and 1 merge. | The Fiesta mini pizzas did not change, as the proposal says. |
 | A10, a name that says "pack" | 78 of 103 names lost the word, in one batch. | 25 products with no pack count, or where "pack" is part of what the product is. |
-| A11, the owner's brand decisions | 2 product batches and 18 brand calls. 16 brands became a spelling of their house. | 1 link was refused, and 7 lines were left. |
+| A11, the brand proposals of section 1 of the plan, applied by the session under the owner's "decide for yourself" | 2 product batches and 18 brand calls. 16 brands became a spelling of their house. | 1 link was refused, and 7 lines were left. |
 
 The notes below add what the table cannot hold.
 
@@ -495,8 +502,9 @@ and joins the house:
 | Vanish Oxi Action | Vanish | 4 |
 | Norit Complet | Norit | 1 |
 
-The product names did not change, because the range word is not in them. Kinder Bueno,
-Kinder Joy, Hero Baby and YoPro stay separate brands by decision.
+The product names did not change, because the range word is not in them. Hero Baby and
+YoPro stay separate brands by the owner's decision of 2026-10-03. Kinder Bueno and Kinder
+Joy stay separate brands as the plan proposes, which is not an answer of the owner.
 
 **A11, the other questions.**
 
@@ -509,7 +517,8 @@ Kinder Joy, Hero Baby and YoPro stay separate brands by decision.
 - The label of `Loreal` is now `L'Oréal`. The key stayed `loreal`. 375 products carry the
   new label.
 - The wine labels `Cebolla`, `409` and `Frizz` are held. `Excellence`, the licence names
-  and the 178 brands with no product are kept.
+  and the 178 brands with no product are kept. Both are the proposal of the plan, not an
+  answer of the owner.
 
 Stage A left the row counts close to those of October: 19,764 products, 2,782 brands,
 22,335 price rows and 25,725 queue rows. The first pass deleted 7 products and created 1.
@@ -845,7 +854,8 @@ two wines (Despecho and Pata Negra) and an Activia yogurt pack.
 - **The key `nordic` is no longer registered.** Deza prints `NORDIC` on the three tonics
   and on the two lighteners. Those five rows are bound, but a new row printed `NORDIC`
   will probably ask for a brand.
-- **Gotitas de Oro** is not linked to Gotas de Oro, by the owner's decision.
+- **Gotitas de Oro** is not linked to Gotas de Oro, by a decision of the session and not
+  of the owner.
 - **The wine labels `Cebolla`, `409` and `Frizz`** are held, as the 11 unsure wineries of
   October are.
 
