@@ -43,6 +43,7 @@ import {
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
   type QueuedSourceEntryPage,
+  type SettleItemAtChainResult,
   type SourceCatalogEntryPage,
   type SourceCatalogEntryView,
   type SourceEntryAcceptResult,
@@ -79,6 +80,7 @@ import {
   MapSourceLocationDto,
   PostalCodeDiscoveryListQueryDto,
   SetSourceEnabledDto,
+  SettleItemAtChainDto,
   SourceEntryListQueryDto,
   SourceLocationListQueryDto,
   SpawnHarvestRunDto,
@@ -564,6 +566,29 @@ export class AdminHarvestEntriesController {
    * takes the barcode between that check and the teach, the answer is the
    * same 409, and the bind and its prices stand. A row whose EAN another row
    * of its chain prints teaches nothing and is never refused for it.
+   *
+   * **A second article of the chain on the product writes no price where the
+   * two disagree** (plan 0191). When another bound row of the same chain and
+   * source kind holds an open price of another amount at a scope, the row is
+   * bound and no price is written for that scope. `pricesWithheld` names the
+   * other row, and `pricesWritten` counts what was written. The price that
+   * was current stays until a person makes a second product or removes a row.
+   *
+   * **A row that is already bound can be accepted onto another product**
+   * (plan 0191). That moves it, and it takes with it what it wrote on the
+   * product it leaves. Its barcode is taken off the old product and given to
+   * the new one, unless another row still bound to the old product prints it
+   * too: then the answer is 409 `item_ean_held`, naming the old product, and
+   * nothing is written. Right after the bind the old product is settled at
+   * the row's chain, as `POST items/:itemId/settle` does, and `settled`
+   * answers what that removed. It is settled before the prices of the new
+   * product are written, because a second accept cannot do it: the saved row
+   * no longer names the product it left. The barcode moves next, and the
+   * prices are written last, so a price write that fails leaves nothing a
+   * second accept is refused for. Each step runs whatever happened to the
+   * one before it. Any error after the bind names the old product and the
+   * chain, and says whether the product was settled. If it was not, the
+   * settle route finishes the job.
    */
   @Post(':id/accept')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.accept, {
@@ -590,12 +615,19 @@ export class AdminHarvestEntriesController {
    * The English name is fetched here, and only for a row whose id the source can
    * be asked about: paying for it during a walk would double a 4,232 request
    * run, and a leaflet row's key is not an id anything can fetch.
+   *
+   * **A row that is already bound can be made a product of its own** (plan
+   * 0191). That moves it off the product it was bound to, under the rules the
+   * accept route states for a move: the barcode goes with the row, the old
+   * product is settled at the row's chain, and `settled` answers what that
+   * removed. `pricesWithheld` is always empty here, because a new product has
+   * no other row.
    */
   @Post(':id/item')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.createItem, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, eanHeld: true })
   createItem(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -653,6 +685,15 @@ export class AdminHarvestEntriesController {
   /**
    * Not a product he tracks. The row stays as REJECTED rather than being
    * deleted, so the next run that observes the key touches it and asks nobody.
+   *
+   * **Rejecting a bound row takes back what it wrote** (plan 0191). The
+   * product it was bound to is settled at the row's chain, as
+   * `POST items/:itemId/settle` does: the prices the row stated go, and when
+   * no other row of the chain names the product, so do its offers and the
+   * shop rows runs wrote. The barcode stays on the product. If the settle
+   * fails the row stays rejected, and the request answers with that error.
+   * The error names the product and the chain, and the settle route finishes
+   * the job.
    */
   @Post(':id/reject')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.reject, {
@@ -691,6 +732,12 @@ export class AdminHarvestItemsController {
    * `ACTIVE` rows are bound and a `CANDIDATE` row proposes the product; the
    * status says which. A product id nothing names answers an empty page: the
    * harvester does not own products, so it cannot say one does not exist.
+   *
+   * `scopeSharedWith` names, for a bound row, the other bound rows of its
+   * chain and source kind that hold an open price at a scope it prices too
+   * (plan 0191). Catalog shows one price per product, scope and kind, so when
+   * two such rows state two amounts and are not both sold by weight, neither
+   * is written until a person makes a second product or removes a row.
    */
   @Get(':itemId/entries')
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.listByItem)
@@ -706,6 +753,80 @@ export class AdminHarvestItemsController {
         itemId,
         cursor: query.cursor,
         limit: query.limit,
+      }
+    );
+  }
+
+  /**
+   * Settle a product at a chain (plan 0191): make catalog agree with the rows
+   * of the chain that are bound to the product now.
+   *
+   * A bound row that is moved to another product, or rejected, leaves on the
+   * old product what it wrote there, and no later run takes it back. The
+   * accept, create and reject routes settle the old product themselves. This
+   * route is for a product a row left before that existed, and for a
+   * decision whose own settle failed.
+   *
+   * **It removes only what no bound row accounts for.** For each scope of
+   * the chain:
+   *
+   * - When no bound row holds a price row there, the price rows of the
+   *   product that a run wrote there are removed.
+   * - When a bound row holds a price row there, open or closed, the scope is
+   *   left alone. A source row holds one price per scope, and it can have
+   *   written more than that one: under another kind, or a newer price than
+   *   the one it holds now. So nothing there counts as a leftover on this
+   *   route. A move or a reject knows the row that left, and removes the
+   *   rows of the run that row names.
+   * - When the open prices of the bound rows come to one price at a scope
+   *   and kind, that price is stated. Catalog removes the rows of the same
+   *   run that were observed at its instant or later and say something else,
+   *   and writes it, in one transaction. `pricesWritten` counts the rows that
+   *   inserted. `pricesRestated` counts the stated prices that are the
+   *   current price afterwards. `pricesNotCurrent` names the ones that are
+   *   not: catalog holds a newer row of another run there, and it stays.
+   *   `pricesNotWritable` names a price copied from a scope that is gone.
+   * - When the bound rows state two amounts there, nothing is removed and
+   *   nothing is written. `pricesWithheld` names the rows.
+   *
+   * The kind of a price is the kind of the run that observed it, not the kind
+   * its row says today. When that run cannot be read, every kind at the scope
+   * of the price is left alone. `pricesKeptAsWritten` names a price catalog
+   * holds under another kind than its run's: it stays as it was written.
+   *
+   * A price a person typed is never removed: an `ADMIN` price, and a price of
+   * any kind that names no run.
+   *
+   * Then, only when no bound row of the chain names the product, its offers
+   * in the scopes of the chain are removed, with the shop rows a run wrote.
+   * An offer stays when a price still exists for it (`PRICED`), when a shop
+   * row a person wrote backs it (`SHOP_ROW`), when an operator wrote the
+   * offer itself (`PERSON`), or when the offer is older than the audit trail
+   * that would say so (`NO_TRAIL`). `offersKept` says which.
+   *
+   * `dryRun: true` answers the same and writes nothing. Calling it twice is
+   * safe: the second call changes no row.
+   *
+   * An unknown chain answers 404. A product id nothing names answers zeros,
+   * because the harvester does not own products.
+   */
+  @Post(':itemId/settle')
+  @ApiContractResponse(SOURCE_ENTRY_PATTERNS.settleItem, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true })
+  settle(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('itemId') itemId: string,
+    @Body() dto: SettleItemAtChainDto
+  ): Promise<SettleItemAtChainResult> {
+    return this.nats.send<SettleItemAtChainResult>(
+      SOURCE_ENTRY_PATTERNS.settleItem,
+      {
+        ...adminCredential(admin),
+        itemId,
+        supermarketId: dto.supermarketId,
+        dryRun: dto.dryRun,
       }
     );
   }

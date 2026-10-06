@@ -4,7 +4,11 @@ import {
   ItemSourceMatch,
   productGtin,
   SourceEntryStatus,
+  type AddItemPriceBatchResult,
+  type ItemPriceValues,
   type ItemView,
+  type PriceSourceKind,
+  type SourceEntryPriceWithheld,
 } from '@portfolio/luna-shopper/contracts';
 import { Not, Repository } from 'typeorm';
 import { SourceCatalogEntry, SourceEntryPrice } from '../entities';
@@ -169,6 +173,296 @@ export function eanHeldDetail(
 }
 
 /**
+ * The sentence a move is refused with when the barcode has to stay on the
+ * product the row leaves (plan 0191).
+ *
+ * A barcode moves with its row only when the row was the one thing that put
+ * it there. Here another bound row prints it on the old product too, so the
+ * barcode is that product's on the word of a row that is staying.
+ */
+export function eanStaysDetail(
+  ean: string,
+  oldItemId: string,
+  itemId: string | null,
+  otherEntryIds: readonly string[]
+): string {
+  return (
+    `The row prints the barcode ${ean}, and the catalog holds it on product ` +
+    `${oldItemId}, the product the row is bound to now` +
+    `${itemId ? `, not on ${itemId}` : ''}. The barcode does not move with ` +
+    `the row, because another row bound to ${oldItemId} prints it too ` +
+    `(${otherEntryIds.join(', ')}). A barcode names one product: move that ` +
+    'row as well, or take the barcode off the product first.'
+  );
+}
+
+/**
+ * **One rule for two articles of one chain on one product** (plans 0155, 0181
+ * and 0191), stated here and used by a run and by a decision alike.
+ *
+ * Catalog keeps one current price per product, scope and source kind. A chain
+ * can list one product more than once, and each of those rows states a price.
+ * So for the rows of one chain and one source kind that are bound to one
+ * product and hold a price at one scope, this says which price is sent:
+ *
+ * 1. **One row: its price.**
+ * 2. **Every row is sold by weight: the lowest price per kilo** (plan 0181).
+ *    Two pieces of one cheese are one product sold by the kilo, each figure
+ *    is the price of a kilo, and {@link lowestPerKilo} picks the least a
+ *    shopper pays for one.
+ * 3. **The rows agree on the amount: that amount.** Two barcodes of one
+ *    product at one price are not a question, and withholding it would leave
+ *    a product unpriced that every row prices the same.
+ * 4. **Otherwise none is sent** (plan 0155, and the owner's decision 2A of
+ *    plan 0191). The rows are packs of two sizes, or two products bound to
+ *    one. No rule picks one pack's price for another, so the price that was
+ *    current before stays and ages, and a person makes a second product or
+ *    removes a row.
+ *
+ * It decides and writes nothing. A run compares what it stated across every
+ * chunk it pushed, and a decision compares the row with the rows already
+ * bound, and both read the answer here.
+ */
+export interface Article {
+  /** The source row that states the price. */
+  entryId: string;
+  /** The row's own flag (plan 0181): its price is the price of a kilo. */
+  soldByWeight: boolean;
+  price: number | string | null;
+  unitPrice: number | string | null;
+}
+
+/** What {@link decideArticles} says about the rows that price one product at one scope. */
+export type ArticleVerdict<T> =
+  /** One price is sent, and it is this row's. */
+  | { send: T; conflict: null }
+  /** No price is sent. These rows state different amounts. */
+  | { send: null; conflict: T[] };
+
+/** Rule {@link Article}: the one price these rows send, or the rows that disagree. */
+export function decideArticles<T extends Article>(
+  articles: readonly T[]
+): ArticleVerdict<T> | null {
+  const [first] = articles;
+  if (!first) {
+    return null;
+  }
+  if (articles.length === 1) {
+    return { send: first, conflict: null };
+  }
+  if (articles.every((each) => each.soldByWeight)) {
+    return {
+      send: lowestPerKilo<T>(articles, perKiloOfArticle) ?? first,
+      conflict: null,
+    };
+  }
+  if (articles.every((each) => sameAmount(each, first))) {
+    return { send: first, conflict: null };
+  }
+  return { send: null, conflict: [...articles] };
+}
+
+/** Whether two rows state the same amount: the price and the unit price. */
+export function sameAmount(a: Article, b: Article): boolean {
+  return (
+    amountOf(a.price) === amountOf(b.price) &&
+    amountOf(a.unitPrice) === amountOf(b.unitPrice)
+  );
+}
+
+/** A `numeric` arrives from Postgres as text, and `"2.50"` is `2.5`. */
+function amountOf(value: number | string | null): number | null {
+  return value === null ? null : Number(value);
+}
+
+function perKiloOfArticle(article: Article): number | null {
+  return amountOf(article.unitPrice ?? article.price);
+}
+
+/** A stored price beside the row that states it, as {@link decideArticles} reads it. */
+export interface StatedPrice extends Article {
+  entry: SourceCatalogEntry;
+  stated: SourceEntryPrice;
+}
+
+function statedPrice(
+  entry: SourceCatalogEntry,
+  stated: SourceEntryPrice
+): StatedPrice {
+  return {
+    entryId: entry.id,
+    soldByWeight: entry.soldByWeight === true,
+    price: stated.price,
+    unitPrice: stated.unitPrice,
+    entry,
+    stated,
+  };
+}
+
+/** How {@link statementsOf} reads the rows it is handed. */
+export interface StatementOptions {
+  /**
+   * The run pieces sold by weight are compared within, for a scope and kind.
+   * For a decision it is the run of the row being decided. Absent, it is the
+   * run of the newest statement.
+   */
+  runOf?: (priceScopeId: string, sourceKind: PriceSourceKind) => string | null;
+  /**
+   * The kind a price is stated under. Absent, it is the kind the row says
+   * now, which is what an accept writes with until plan 0190 puts the kind on
+   * the price row. The settle passes the kind of the run that observed the
+   * price. A null leaves the price out: nothing is stated under a kind that
+   * is not known.
+   */
+  kindOf?: (
+    entry: SourceCatalogEntry,
+    price: SourceEntryPrice
+  ) => PriceSourceKind | null;
+}
+
+/**
+ * What the bound rows of one chain state for one product, per scope and
+ * source kind, and what {@link decideArticles} makes of each (plan 0191).
+ *
+ * The rows are the ones bound to the product now. For each scope and kind at
+ * which any of them holds an open price, the answer is the one price to send
+ * or the rows that disagree.
+ *
+ * **Pieces sold by weight are compared within one run** (plan 0181): a row
+ * the chain stopped listing keeps its last price, and that number is not
+ * allowed to win against what the chain says today.
+ *
+ * **Rows that agree send the newest observation.** "The first" of rule 3 is
+ * the row whose price was observed last, so a row the chain stopped listing,
+ * which holds an old price of the same amount, does not put its old instant
+ * and its old run on the price a newer row states.
+ */
+export function statementsOf(
+  bound: readonly SourceCatalogEntry[],
+  now: Date,
+  options: StatementOptions = {}
+): {
+  priceScopeId: string;
+  sourceKind: PriceSourceKind;
+  verdict: ArticleVerdict<StatedPrice>;
+  /** The prices the verdict was reached over. */
+  articles: StatedPrice[];
+}[] {
+  const { runOf, kindOf } = options;
+  const groups = new Map<
+    string,
+    {
+      priceScopeId: string;
+      sourceKind: PriceSourceKind;
+      articles: StatedPrice[];
+    }
+  >();
+  for (const entry of bound) {
+    for (const stated of openPrices(entry, now)) {
+      const sourceKind = kindOf ? kindOf(entry, stated) : entry.sourceKind;
+      if (sourceKind === null) {
+        continue;
+      }
+      const key = `${stated.priceScopeId}|${sourceKind}`;
+      const group = groups.get(key) ?? {
+        priceScopeId: stated.priceScopeId,
+        sourceKind,
+        articles: [],
+      };
+      group.articles.push(statedPrice(entry, stated));
+      groups.set(key, group);
+    }
+  }
+
+  const statements = [];
+  for (const group of groups.values()) {
+    // Newest observation first, then oldest decision, then id: the same
+    // order whoever asks and in whatever order the rows were loaded.
+    let articles = [...group.articles].sort(
+      (a, b) =>
+        b.stated.observedAt.getTime() - a.stated.observedAt.getTime() ||
+        (a.entry.decidedAt?.getTime() ?? 0) -
+          (b.entry.decidedAt?.getTime() ?? 0) ||
+        a.entryId.localeCompare(b.entryId)
+    );
+    if (articles.length > 1 && articles.every((each) => each.soldByWeight)) {
+      const runId = runOf
+        ? runOf(group.priceScopeId, group.sourceKind)
+        : newestOf(articles).stated.runId;
+      const sameRun = articles.filter((each) => each.stated.runId === runId);
+      articles = sameRun.length > 0 ? sameRun : articles;
+    }
+    const verdict = decideArticles(articles);
+    if (verdict) {
+      statements.push({
+        priceScopeId: group.priceScopeId,
+        sourceKind: group.sourceKind,
+        verdict,
+        articles,
+      });
+    }
+  }
+  return statements;
+}
+
+/**
+ * Whether two stored prices say the same thing in every value catalog
+ * compares before it inserts (plan 0191): the amount, and also the currency,
+ * the label, the window and the scope the price was copied from.
+ *
+ * {@link sameAmount} is narrower on purpose: two rows of one amount are not a
+ * conflict. They can still be two variants of that amount, a label apart or a
+ * window apart, and catalog holds those as two rows.
+ */
+export function sameStatement(
+  a: SourceEntryPrice,
+  b: SourceEntryPrice
+): boolean {
+  const instant = (value: Date | null) => value?.getTime() ?? null;
+  return (
+    amountOf(a.price) === amountOf(b.price) &&
+    amountOf(a.unitPrice) === amountOf(b.unitPrice) &&
+    (a.currency ?? null) === (b.currency ?? null) &&
+    (a.unitPriceLabel ?? null) === (b.unitPriceLabel ?? null) &&
+    instant(a.validFrom) === instant(b.validFrom) &&
+    instant(a.validUntil) === instant(b.validUntil) &&
+    (a.copiedFromScopeId ?? null) === (b.copiedFromScopeId ?? null)
+  );
+}
+
+/** The values of a stored price, as catalog takes them (plans 0086 and 0191). */
+export function priceValuesOf(
+  price: SourceEntryPrice
+): ItemPriceValues & { observedAt: string } {
+  return {
+    price: price.price === null ? null : Number(price.price),
+    currency: price.currency,
+    unitPrice: price.unitPrice === null ? null : Number(price.unitPrice),
+    unitPriceLabel: price.unitPriceLabel,
+    validFrom: price.validFrom?.toISOString() ?? null,
+    validUntil: price.validUntil?.toISOString() ?? null,
+    observedAt: price.observedAt.toISOString(),
+    details: toItemPriceDetails(price.details ?? null),
+  };
+}
+
+function newestOf(articles: readonly StatedPrice[]): StatedPrice {
+  return articles.reduce((newest, each) =>
+    each.stated.observedAt.getTime() > newest.stated.observedAt.getTime()
+      ? each
+      : newest
+  );
+}
+
+/** What writing the prices of one bound row came to (plan 0191). */
+export interface PriceWriteOutcome {
+  /** `item_prices` rows catalog inserted. A price it already held counts nothing. */
+  written: number;
+  /** The scopes whose price was not sent, and the rows it met there. */
+  withheld: SourceEntryPriceWithheld[];
+}
+
+/**
  * **One price per product, scope and source (plan 0181).**
  *
  * Catalog keeps one current price per product, scope and source kind. A chain
@@ -235,13 +529,18 @@ export function lowestPerKilo<T>(
  * stored availability, and `SourceEntryAvailabilityWriter` writes both in the
  * same step (plan 0182).
  *
- * **A row sold by weight writes the lowest price per kilo of its product**
- * (plan 0181, and {@link lowestPerKilo}). The product may already be bound to
- * another piece of the same chain, and catalog holds one price for the two. So
- * for each scope the row's own price is compared with what the other pieces
- * hold from the same run, and the lowest of them is the one written. Accepting
- * a dearer piece therefore confirms the price catalog already shows, and
- * accepting a cheaper one replaces it.
+ * **The product may already be bound to another row of the same chain**, and
+ * catalog holds one price for the two. So for each scope the row's own price
+ * is put beside what the other bound rows of its chain and kind hold there,
+ * and {@link decideArticles} says what is sent:
+ *
+ * - Pieces sold by weight send the lowest price per kilo among those the same
+ *   run stated (plan 0181). Accepting a dearer piece therefore confirms the
+ *   price catalog already shows, and accepting a cheaper one replaces it.
+ * - Another article of another amount sends nothing for that scope (plan
+ *   0191, decision 2A). The row is bound all the same, and the answer names
+ *   the row it met. Before the plan the second article was written over the
+ *   first, and which one a shopper saw depended on who was accepted last.
  */
 @Injectable()
 export class SourceEntryPriceWriter {
@@ -251,69 +550,91 @@ export class SourceEntryPriceWriter {
     private readonly entries: Repository<SourceCatalogEntry>
   ) {}
 
+  /** {@link writeNamed}, for a caller that reads the count alone. */
   async write(entry: SourceCatalogEntry): Promise<number> {
+    return (await this.writeNamed(entry)).written;
+  }
+
+  /** Write the open prices of one bound row, and name the ones withheld. */
+  async writeNamed(entry: SourceCatalogEntry): Promise<PriceWriteOutcome> {
+    const outcome: PriceWriteOutcome = { written: 0, withheld: [] };
     if (!entry.itemId) {
-      return 0;
+      return outcome;
     }
     const now = new Date();
     const own = openPrices(entry, now);
-    const others =
-      own.length > 0
-        ? (await this.otherPieces(entry)).flatMap((piece) =>
-            openPrices(piece, now)
-          )
-        : [];
-    let written = 0;
-
-    for (const stated of own) {
-      const price =
-        lowestPerKilo(
-          [
-            stated,
-            ...others.filter(
-              (other) =>
-                other.priceScopeId === stated.priceScopeId &&
-                other.runId === stated.runId
-            ),
-          ],
-          perKiloOf
-        ) ?? stated;
-      const result = await this.catalog.addPrices(
-        price.priceScopeId,
-        [
-          {
-            itemId: entry.itemId,
-            price: price.price === null ? null : Number(price.price),
-            currency: price.currency,
-            unitPrice:
-              price.unitPrice === null ? null : Number(price.unitPrice),
-            unitPriceLabel: price.unitPriceLabel,
-            validFrom: price.validFrom?.toISOString() ?? null,
-            validUntil: price.validUntil?.toISOString() ?? null,
-            observedAt: price.observedAt.toISOString(),
-            details: toItemPriceDetails(price.details ?? null),
-          },
-        ],
-        price.runId,
-        entry.sourceKind,
-        // A copied row keeps its provenance when a person accepts it later
-        // (plan 0118): the price was still read at the other scope.
-        price.copiedFromScopeId ?? null
-      );
-      written += result.inserted;
+    if (own.length === 0) {
+      return outcome;
     }
-    return written;
+    const ownRun = new Map(
+      own.map((stated) => [stated.priceScopeId, stated.runId])
+    );
+    const priced = new Set(own.map((stated) => stated.priceScopeId));
+    const statements = statementsOf(
+      [entry, ...(await this.othersBound(entry))],
+      now,
+      { runOf: (priceScopeId) => ownRun.get(priceScopeId) ?? null }
+    );
+
+    for (const { priceScopeId, sourceKind, verdict } of statements) {
+      // Only the scopes this row prices. What the other rows state elsewhere
+      // was written when they were bound.
+      if (!priced.has(priceScopeId) || sourceKind !== entry.sourceKind) {
+        continue;
+      }
+      if (verdict.send === null) {
+        outcome.withheld.push({
+          entryId: entry.id,
+          priceScopeId,
+          otherEntryIds: verdict.conflict
+            .map((each) => each.entryId)
+            .filter((id) => id !== entry.id),
+        });
+        continue;
+      }
+      // Pieces sold by weight send the lowest of them, which can be another
+      // piece's. Every other verdict that sends is one amount, and the row
+      // being written states it: its own statement is the one that goes.
+      const mine = own.find((stated) => stated.priceScopeId === priceScopeId);
+      const chosen =
+        verdict.send.soldByWeight || !mine ? verdict.send.stated : mine;
+      const result = await this.send(entry.itemId, entry.sourceKind, chosen);
+      outcome.written += result.inserted;
+    }
+    return outcome;
+  }
+
+  /**
+   * The one `catalog.addPrices` call of a stored price, for a product.
+   *
+   * With **that price's own run id**, its own `observedAt` and the source
+   * kind of the row that states it, so plan 0082 can take it back with the
+   * rest of that run's rows.
+   */
+  send(
+    itemId: string,
+    sourceKind: PriceSourceKind,
+    price: SourceEntryPrice
+  ): Promise<AddItemPriceBatchResult> {
+    return this.catalog.addPrices(
+      price.priceScopeId,
+      [{ itemId, ...priceValuesOf(price) }],
+      price.runId,
+      sourceKind,
+      // A copied row keeps its provenance when a person accepts it later
+      // (plan 0118): the price was still read at the other scope.
+      price.copiedFromScopeId ?? null
+    );
   }
 
   /**
    * The other rows of this chain and source kind that are bound to the same
-   * product and sold by weight, with their prices. None for a row that is not
-   * sold by weight itself.
+   * product, with their prices.
    */
-  private async otherPieces(
+  private async othersBound(
     entry: SourceCatalogEntry
   ): Promise<SourceCatalogEntry[]> {
-    if (entry.soldByWeight !== true || !entry.itemId) {
+    if (!entry.itemId) {
       return [];
     }
     return this.entries.find({
@@ -323,7 +644,6 @@ export class SourceEntryPriceWriter {
         sourceKind: entry.sourceKind,
         itemId: entry.itemId,
         status: SourceEntryStatus.ACTIVE,
-        soldByWeight: true,
       },
       relations: { prices: true },
     });
@@ -343,10 +663,4 @@ export function openPrices(
   return (entry.prices ?? []).filter(
     (price) => price.validUntil === null || price.validUntil > now
   );
-}
-
-/** The price of a kilo a stored price row states, as a number. */
-function perKiloOf(price: SourceEntryPrice): number | null {
-  const figure = price.unitPrice ?? price.price;
-  return figure === null ? null : Number(figure);
 }

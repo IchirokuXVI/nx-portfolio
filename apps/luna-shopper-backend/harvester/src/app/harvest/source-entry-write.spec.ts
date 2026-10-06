@@ -5,7 +5,13 @@ import {
 import type { FindOperator, Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
-import { lowestPerKilo, SourceEntryPriceWriter } from './source-entry-write';
+import {
+  decideArticles,
+  lowestPerKilo,
+  SourceEntryPriceWriter,
+  statementsOf,
+  type Article,
+} from './source-entry-write';
 
 /**
  * One price per product, scope and source (plan 0181), on the two paths a
@@ -68,8 +74,9 @@ function piece(
 
 /**
  * The writer over a table of rows, with a `find` that filters as the real
- * query does: the same chain, source kind and product, `ACTIVE`, sold by
- * weight, and not the row being written.
+ * query does: the same chain, source kind and product, `ACTIVE`, and not the
+ * row being written. Since plan 0191 it reads every such row, sold by weight
+ * or not, because a second article is compared too.
  */
 function build(table: SourceCatalogEntry[]) {
   const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
@@ -83,8 +90,7 @@ function build(table: SourceCatalogEntry[]) {
           row.supermarketId === query.where.supermarketId &&
           row.sourceKind === query.where.sourceKind &&
           row.itemId === query.where.itemId &&
-          row.status === query.where.status &&
-          row.soldByWeight === query.where.soldByWeight
+          row.status === query.where.status
       )
   );
   const writer = new SourceEntryPriceWriter(
@@ -232,8 +238,6 @@ describe('SourceEntryPriceWriter, rows sold by weight (plan 0181)', () => {
         sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
       }),
       piece('d', [price('d', 1)], { status: SourceEntryStatus.CANDIDATE }),
-      // A fixed pack bound to the same product: its price is a pack's.
-      piece('e', [price('e', 1)], { soldByWeight: false }),
     ]);
 
     await writer.write(dear);
@@ -247,18 +251,17 @@ describe('SourceEntryPriceWriter, rows sold by weight (plan 0181)', () => {
     );
   });
 
-  it('asks for no other row when the row is not sold by weight', async () => {
+  it('writes the price of a pack that is the only row of its product', async () => {
     const pack = piece('51630', [price('51630', 2.95, { unitPrice: 9.83 })], {
       soldByWeight: false,
     });
-    const { writer, addPrices, find } = build([
-      pack,
-      piece('50946', [price('50946', 1)]),
-    ]);
+    const { writer, addPrices } = build([pack]);
 
-    await writer.write(pack);
+    await expect(writer.writeNamed(pack)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
 
-    expect(find).not.toHaveBeenCalled();
     expect(addPrices).toHaveBeenCalledWith(
       SCOPE,
       [expect.objectContaining({ price: 2.95, unitPrice: 9.83 })],
@@ -266,5 +269,249 @@ describe('SourceEntryPriceWriter, rows sold by weight (plan 0181)', () => {
       PriceSourceKind.OFFICIAL_API,
       null
     );
+  });
+
+  it('asks for no other row when the row holds no open price', async () => {
+    const { writer, addPrices, find } = build([piece('50943', [])]);
+
+    await expect(writer.write(piece('50943', []))).resolves.toBe(0);
+
+    expect(find).not.toHaveBeenCalled();
+    expect(addPrices).not.toHaveBeenCalled();
+  });
+});
+
+/** A pack: a row that is not sold by weight, bound to `item-1`. */
+function pack(
+  id: string,
+  prices: SourceEntryPrice[],
+  over: Partial<SourceCatalogEntry> = {}
+): SourceCatalogEntry {
+  return piece(id, prices, { soldByWeight: false, ...over });
+}
+
+describe('decideArticles, one rule for two articles (plan 0191)', () => {
+  const article = (
+    entryId: string,
+    amount: number | string | null,
+    over: Partial<Article> = {}
+  ): Article => ({
+    entryId,
+    soldByWeight: false,
+    price: amount,
+    unitPrice: null,
+    ...over,
+  });
+
+  it('answers nothing for no row, and the row for one', () => {
+    const only = article('a', 2.45);
+    expect(decideArticles([])).toBeNull();
+    expect(decideArticles([only])).toEqual({ send: only, conflict: null });
+  });
+
+  it('sends the lowest price per kilo when every row is sold by weight', () => {
+    const dear = article('a', 9.7, { soldByWeight: true, unitPrice: 9.7 });
+    const cheap = article('b', 9.41, { soldByWeight: true, unitPrice: 9.41 });
+    expect(decideArticles([dear, cheap])).toEqual({
+      send: cheap,
+      conflict: null,
+    });
+  });
+
+  it('sends the amount two rows agree on, and it is the first row’s', () => {
+    // A `numeric` comes back from Postgres as text. `"2.50"` and 2.5 are one
+    // amount, and they are not the same string.
+    const first = article('a', '2.50', { unitPrice: '8.3300' });
+    const second = article('b', 2.5, { unitPrice: 8.33 });
+    expect(decideArticles([first, second])).toEqual({
+      send: first,
+      conflict: null,
+    });
+  });
+
+  it('sends nothing for two packs of two amounts, and names both', () => {
+    const small = article('a', 2.45);
+    const king = article('b', 2.95);
+    expect(decideArticles([small, king])).toEqual({
+      send: null,
+      conflict: [small, king],
+    });
+  });
+
+  it('calls two rows with one price and two unit prices a conflict', () => {
+    // One pack price and two prices per kilo are two pack sizes.
+    expect(
+      decideArticles([
+        article('a', 2.45, { unitPrice: 10.21 }),
+        article('b', 2.45, { unitPrice: 9.42 }),
+      ])?.send
+    ).toBeNull();
+  });
+
+  it('never compares a pack with a piece sold by weight', () => {
+    const piecePrice = article('a', 9.41, { soldByWeight: true });
+    const packPrice = article('b', 2.95);
+    expect(decideArticles([piecePrice, packPrice])).toEqual({
+      send: null,
+      conflict: [piecePrice, packPrice],
+    });
+  });
+});
+
+describe('SourceEntryPriceWriter, a second article of the chain (plan 0191)', () => {
+  it('writes no price for the shared scope, and names the other row', async () => {
+    // The El Pozo burger: two El Jamón articles on one product, in one scope.
+    const small = pack('93003284', [price('93003284', 2.45)]);
+    const king = pack('93003273', [price('93003273', 2.95)]);
+    const { writer, addPrices } = build([small, king]);
+
+    await expect(writer.writeNamed(king)).resolves.toEqual({
+      written: 0,
+      withheld: [
+        {
+          entryId: '93003273',
+          priceScopeId: SCOPE,
+          otherEntryIds: ['93003284'],
+        },
+      ],
+    });
+    expect(addPrices).not.toHaveBeenCalled();
+  });
+
+  it('still writes the scopes the other row does not price', async () => {
+    const small = pack('93003284', [price('93003284', 2.45)]);
+    const king = pack('93003273', [
+      price('93003273', 2.95),
+      price('93003273', 3.05, { priceScopeId: OTHER_SCOPE }),
+    ]);
+    const { writer, addPrices } = build([small, king]);
+
+    const outcome = await writer.writeNamed(king);
+
+    expect(outcome.written).toBe(1);
+    expect(outcome.withheld.map((each) => each.priceScopeId)).toEqual([SCOPE]);
+    expect(addPrices).toHaveBeenCalledTimes(1);
+    expect(addPrices).toHaveBeenCalledWith(
+      OTHER_SCOPE,
+      [expect.objectContaining({ price: 3.05 })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('writes its own statement when the other row states the same amount', async () => {
+    // Two barcodes of one product at one price (plan 0185): not a question.
+    const first = pack('a', [price('a', 0.96)]);
+    const second = pack('b', [price('b', 0.96, { runId: OLDER_RUN })]);
+    const { writer, addPrices } = build([first, second]);
+
+    await expect(writer.writeNamed(second)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
+    expect(addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ price: 0.96 })],
+      OLDER_RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('is not stopped by another row whose window has closed, or of another kind', async () => {
+    const king = pack('93003273', [price('93003273', 2.95)]);
+    const { writer, addPrices } = build([
+      king,
+      pack('expired', [
+        price('expired', 2.45, {
+          validUntil: new Date('2020-01-01T00:00:00Z'),
+        }),
+      ]),
+      pack('leaflet', [price('leaflet', 1.99)], {
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      }),
+    ]);
+
+    await expect(writer.writeNamed(king)).resolves.toEqual({
+      written: 1,
+      withheld: [],
+    });
+    expect(addPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('withholds a pack bound beside a piece sold by weight', async () => {
+    const piecePrice = piece('50946', [price('50946', 9.41)]);
+    const packPrice = pack('51630', [
+      price('51630', 2.95, { unitPrice: 9.83 }),
+    ]);
+    const { writer, addPrices } = build([piecePrice, packPrice]);
+
+    const outcome = await writer.writeNamed(packPrice);
+
+    expect(outcome.withheld).toEqual([
+      { entryId: '51630', priceScopeId: SCOPE, otherEntryIds: ['50946'] },
+    ]);
+    expect(addPrices).not.toHaveBeenCalled();
+  });
+});
+
+describe('statementsOf (plan 0191)', () => {
+  const NOW = new Date('2026-10-06T00:00:00.000Z');
+
+  it('answers one verdict per scope and kind, over the open prices only', () => {
+    const small = pack('a', [
+      price('a', 2.45),
+      price('a', 2.6, { priceScopeId: OTHER_SCOPE }),
+    ]);
+    const king = pack('b', [
+      price('b', 2.95),
+      price('b', 9.99, {
+        priceScopeId: OTHER_SCOPE,
+        validUntil: new Date('2020-01-01T00:00:00Z'),
+      }),
+    ]);
+
+    const statements = statementsOf([small, king], NOW);
+
+    expect(
+      statements.map(({ priceScopeId, verdict }) => [
+        priceScopeId,
+        verdict.send?.entryId ?? null,
+        verdict.conflict?.map((each) => each.entryId) ?? null,
+      ])
+    ).toEqual([
+      [SCOPE, null, ['a', 'b']],
+      [OTHER_SCOPE, 'a', null],
+    ]);
+  });
+
+  it('compares pieces sold by weight within the newest run', () => {
+    const dear = piece('a', [price('a', 9.7)]);
+    const gone = piece('b', [
+      price('b', 9.41, {
+        runId: OLDER_RUN,
+        observedAt: new Date('2026-09-01T06:00:00.000Z'),
+      }),
+    ]);
+
+    const [statement] = statementsOf([gone, dear], NOW);
+
+    expect(statement.verdict.send?.entryId).toBe('a');
+  });
+
+  it('keeps two source kinds of one scope apart', () => {
+    const web = pack('a', [price('a', 2.45)]);
+    const leaflet = pack('b', [price('b', 1.99)], {
+      sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+    });
+
+    const statements = statementsOf([web, leaflet], NOW);
+
+    expect(statements.map((each) => each.sourceKind).sort()).toEqual([
+      PriceSourceKind.OFFICIAL_API,
+      PriceSourceKind.OFFICIAL_LEAFLET,
+    ]);
+    expect(statements.every((each) => each.verdict.send !== null)).toBe(true);
   });
 });

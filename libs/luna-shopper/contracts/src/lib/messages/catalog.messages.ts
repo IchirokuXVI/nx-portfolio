@@ -556,6 +556,15 @@ export const SUPERMARKET_ITEM_PATTERNS = {
    * reachable only through `/v3/admin/catalog/supermarket-items`.
    */
   adminList: 'supermarketItem.adminList',
+  /**
+   * Take a product's offers out of the scopes of one chain, with the shop rows
+   * a harvest run wrote for it there (plan 0191).
+   *
+   * Sent by the harvester when no bound row of the chain names the product any
+   * more. An offer goes only when nothing prices it and no shop row a person
+   * wrote backs it. Nothing a person typed is removed.
+   */
+  withdraw: 'supermarketItem.withdraw',
 } as const;
 
 /**
@@ -609,6 +618,15 @@ export const ITEM_PRICE_PATTERNS = {
    * another run wrote.
    */
   deleteByRun: 'itemPrice.deleteByRun',
+  /**
+   * Remove the price rows a harvest run wrote for one product, at named
+   * scopes and kinds, and recompute (plan 0191).
+   *
+   * Sent by the harvester when a row that stated those prices left the
+   * product. A row a person typed is never touched: an `ADMIN` row, and a row
+   * of any kind that names no run.
+   */
+  withdraw: 'itemPrice.withdraw',
 } as const;
 
 /**
@@ -3023,6 +3041,227 @@ export interface DeleteItemPricesByRunResult {
   deleted: number;
   reset: number;
   recomputed: number;
+}
+
+/**
+ * How many scopes one withdraw message may name (plan 0191). A chain has a
+ * handful of scopes to a few hundred, so this bounds a message and not a chain.
+ */
+export const WITHDRAW_MAX_SCOPES = 5000;
+
+/**
+ * A price row that a row still bound to the product holds (plan 0191), open
+ * or not. It is what a bound row accounts for, and a withdraw never removes
+ * what it accounts for.
+ *
+ * **One held price spares its whole scope.** A source row holds one price per
+ * scope, and that price names one run. The same row can have written at the
+ * scope under another kind before (a shared row of a website and a leaflet),
+ * and it can have written a newer price than the one it holds now (a file
+ * import of an older document). Nothing in the row says so. So at a scope
+ * where a bound row holds a price, catalog removes only a row of a run that
+ * the row that left names (`left`), and what a statement removes.
+ */
+export interface HeldItemPrice {
+  priceScopeId: string;
+  /**
+   * The kind the price was written with: the kind of the run that observed
+   * it. Null when that run cannot be told (the price names no run, or the run
+   * is gone). With a null, no statement is applied at the scope.
+   */
+  sourceKind: PriceSourceKind | null;
+  /**
+   * The run that observed the price, or null. A row of this run at this scope
+   * is never removed as the leaving row's, whatever kind it was written under.
+   */
+  sourceRunId: string | null;
+}
+
+/**
+ * A run the row that left the product names at a scope (plan 0191): the run
+ * of the price it holds there. The rows that run wrote for the product at
+ * that scope are the ones the row takes with it.
+ */
+export interface LeftItemPrice {
+  priceScopeId: string;
+  sourceRunId: string;
+}
+
+/**
+ * The one price the rows still bound to the product state at a scope and
+ * kind (plan 0191), with everything catalog needs to write it.
+ *
+ * At that scope and kind catalog removes a run written row only when it was
+ * observed at `price.observedAt` or later, its values differ from this price,
+ * **and it is a row of this statement's own run or of a run the leaving row
+ * names**. It then writes this price through the insert on change, in the
+ * same transaction. A row that already says what this says is left alone, so
+ * a second call changes nothing.
+ *
+ * **A statement does not have to be the newest thing catalog holds.** The row
+ * can hold an older observation than catalog does: a file import stamps the
+ * instant of its document. A newer row of a run nobody names stays, and stays
+ * current. The answer then names the statement in `notCurrent`.
+ */
+export interface StatedItemPrice {
+  priceScopeId: string;
+  /** The kind of the run that observed the price. Never the row's own kind. */
+  sourceKind: PriceSourceKind;
+  /** The run that observed the price. */
+  sourceRunId: string;
+  /** The scope the price was read at, when it is a copy (plan 0118). */
+  copiedFromScopeId?: string | null;
+  /** The values, with `observedAt` always stated. */
+  price: ItemPriceValues & { observedAt: string };
+}
+
+/**
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it (plan 0191), in one transaction.
+ *
+ * The rows named are the product's rows at every scope of `priceScopeIds` and
+ * of every kind of `sourceKinds`, where the row names a run. `ADMIN` is
+ * refused as a kind, and a row with no run id is never removed, whatever its
+ * kind: a person can type a price of an automated kind, and such a row names
+ * no run.
+ *
+ * - **A scope no bound row holds a price at** loses every such row.
+ * - **A scope a bound row holds a price at** (`held`) loses only the rows of
+ *   a run that the leaving row names (`left`) and no bound row names.
+ * - **A statement** (`stated`) removes, at its scope and kind, what
+ *   {@link StatedItemPrice} says, and is written.
+ *
+ * A statement is not applied, and removes nothing, in three cases. Catalog
+ * holds a row of its run at its scope under **another** kind
+ * (`keptAsWritten`): the price is in catalog already, under the kind it was
+ * written with. The scope it says it was copied from is gone or is not
+ * another scope of the chain (`notWritable`). Or a held price at its scope
+ * has no kind.
+ *
+ * Only a service actor may send it. An operator settles a product through the
+ * harvester, which knows the bound rows.
+ */
+export interface WithdrawItemPricesRequest extends AdminCredential {
+  itemId: string;
+  /** At most {@link WITHDRAW_MAX_SCOPES}. */
+  priceScopeIds: string[];
+  /** Automated kinds only. `ADMIN` and the user kinds are refused. */
+  sourceKinds: PriceSourceKind[];
+  /** Every price row a bound row holds. Absent is the same as empty. */
+  held?: HeldItemPrice[];
+  /** One per scope and kind at most. Absent is the same as empty. */
+  stated?: StatedItemPrice[];
+  /**
+   * The runs the row that left names, per scope. Absent when no row is
+   * leaving in this call: the settle a person asks for knows of none.
+   */
+  left?: LeftItemPrice[];
+  /** True answers what a call would remove and write, and writes nothing. */
+  dryRun?: boolean;
+}
+
+/** What {@link WithdrawItemPricesRequest} did, or would do. */
+export interface WithdrawItemPricesResult {
+  /** Every `item_prices` row removed. */
+  deleted: number;
+  /** The same rows by scope and kind. A pair that lost no row is left out. */
+  removed: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    deleted: number;
+  }[];
+  /** `item_prices` rows inserted for a statement. */
+  inserted: number;
+  /** Current rows a statement confirmed: their `lastObservedAt` moved. */
+  confirmed: number;
+  /**
+   * Statements that were not applied, because catalog holds the price of that
+   * run at that scope under another kind. Nothing was removed or written at
+   * the scope and kind of such a statement.
+   */
+  keptAsWritten: {
+    priceScopeId: string;
+    /** The kind the statement named. */
+    sourceKind: PriceSourceKind;
+    /** The kind catalog holds the run's price under. */
+    heldAs: PriceSourceKind;
+  }[];
+  /**
+   * Statements that were not applied, because the scope they were copied
+   * from is gone or is not another scope of the chain. Nothing was removed
+   * or written at the scope and kind of such a statement.
+   */
+  notWritable: {
+    priceScopeId: string;
+    sourceKind: PriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  /**
+   * Statements catalog holds, but not as the current row of their scope and
+   * kind: a newer row that no bound row and no leaving row names says
+   * something else, and it stays.
+   */
+  notCurrent: { priceScopeId: string; sourceKind: PriceSourceKind }[];
+  /** The (item, scope) keys worked out again, the fan out included. */
+  recomputed: number;
+}
+
+/**
+ * Take a product's offers out of the scopes of one chain (plan 0191).
+ *
+ * The caller says that no bound row of the chain names the product. Catalog
+ * checks the rest, per offer:
+ *
+ * - **Nothing prices it.** No `item_prices` row of the product exists at the
+ *   scope or at a scope it falls through to. A price a person typed keeps the
+ *   offer.
+ * - **No shop row backs it.** The shop rows a harvest run wrote for the
+ *   product at the shops of the chain are removed first. A row a person wrote
+ *   stays, is reported in `conflicts`, and keeps the offer of every scope its
+ *   shop holds.
+ * - **No person wrote the offer itself.** The trail records who wrote a row,
+ *   and an offer an operator created or changed is kept (`PERSON`). An offer
+ *   that is older than the oldest row of the trail is kept too (`NO_TRAIL`):
+ *   the trail cannot say that nobody typed it.
+ *
+ * `available` is not read. An offer that says `false` goes under the same
+ * conditions as one that says `true`.
+ *
+ * Only a service actor may send it.
+ */
+export interface WithdrawSupermarketItemsRequest extends AdminCredential {
+  itemId: string;
+  supermarketId: string;
+  /** Scopes of `supermarketId`. At most {@link WITHDRAW_MAX_SCOPES}. */
+  priceScopeIds: string[];
+  /** True answers what a call would remove, and writes nothing. */
+  dryRun?: boolean;
+  /**
+   * With `dryRun` only: answer as if the run written price rows of these
+   * kinds at these scopes were already removed. It is how a dry run of the
+   * two messages in a row answers what the two calls would do.
+   */
+  assumePricesWithdrawn?: PriceSourceKind[];
+}
+
+/** Why an offer stayed (plan 0191). */
+export type OfferKeptReason = 'PRICED' | 'SHOP_ROW' | 'PERSON' | 'NO_TRAIL';
+
+/** What {@link WithdrawSupermarketItemsRequest} removed, or would remove. */
+export interface WithdrawSupermarketItemsResult {
+  /** The scopes whose offer was removed. */
+  offersRemoved: string[];
+  /** The offers that stayed, and the condition each one failed. */
+  offersKept: { priceScopeId: string; reason: OfferKeptReason }[];
+  /** Shop rows removed whole: a harvest run wrote all that they held. */
+  shopRowsRemoved: number;
+  /**
+   * Shop rows that keep a position a person typed. Their availability is
+   * cleared and the row stays.
+   */
+  shopRowsCleared: number;
+  /** Shop rows whose availability a person wrote. Left alone. */
+  conflicts: { supermarketLocationId: string; held: boolean | null }[];
 }
 
 /** Whether a scope carries each of these products. Carries no price. */

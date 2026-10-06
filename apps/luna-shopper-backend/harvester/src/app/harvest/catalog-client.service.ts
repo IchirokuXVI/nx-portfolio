@@ -23,10 +23,12 @@ import {
   type FillPackCountsResult,
   type FindItemByEanResult,
   type FindItemsByEansResult,
+  type HeldItemPrice,
   type ItemEanPair,
   type ItemPage,
   type ItemPriceBatchEntry,
   type ItemView,
+  type LeftItemPrice,
   type LocalizedText,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
@@ -37,12 +39,15 @@ import {
   type PriceScopeView,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
+  type StatedItemPrice,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
   type SupermarketView,
   type TeachItemEansResult,
   type UpdateSupermarketLocationRequest,
+  type WithdrawItemPricesResult,
+  type WithdrawSupermarketItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   buildNatsHeaders,
@@ -410,6 +415,23 @@ export class CatalogClient {
   }
 
   /**
+   * Take a barcode off a product (plan 0191).
+   *
+   * A row that leaves a product takes the barcode it taught with it. The
+   * decision asks first whether the barcode may move, so this is called only
+   * for a barcode the old product holds on that row's word alone. Catalog
+   * promotes the oldest of the product's other barcodes when this one was its
+   * first.
+   */
+  removeItemEan(itemId: string, ean: string): Promise<ItemView> {
+    return this.send(ITEM_PATTERNS.removeEan, {
+      userId: this.actor(),
+      itemId,
+      ean,
+    });
+  }
+
+  /**
    * Delete a product, for the one caller that has to undo its own creation.
    *
    * A bulk decisions file whose binds fail after its products were created
@@ -465,6 +487,69 @@ export class CatalogClient {
     return this.send(ITEM_PRICE_PATTERNS.deleteByRun, {
       userId: this.actor(),
       sourceRunId,
+    });
+  }
+
+  /**
+   * Make the price rows harvest runs wrote for one product agree with the
+   * rows still bound to it, at these scopes and of these kinds (plan 0191).
+   *
+   * `held` is every price row a bound row holds, and catalog removes nothing
+   * at such a scope but what the other two lists name. `stated` is the one
+   * price the bound rows state at a scope and kind, and catalog writes it
+   * there. `left` is the runs the row that is leaving names, and is empty
+   * when no row is. The removal and the write are one catalog transaction.
+   * Catalog never removes a row a person typed.
+   */
+  withdrawPrices(
+    itemId: string,
+    priceScopeIds: string[],
+    sourceKinds: PriceSourceKind[],
+    lists: {
+      held: HeldItemPrice[];
+      stated: StatedItemPrice[];
+      left: LeftItemPrice[];
+    },
+    dryRun = false
+  ): Promise<WithdrawItemPricesResult> {
+    return this.send(ITEM_PRICE_PATTERNS.withdraw, {
+      userId: this.actor(),
+      itemId,
+      priceScopeIds,
+      sourceKinds,
+      held: lists.held,
+      stated: lists.stated,
+      left: lists.left,
+      ...(dryRun ? { dryRun: true } : {}),
+    });
+  }
+
+  /**
+   * Take a product's offers out of the scopes of one chain, with the shop
+   * rows a run wrote for it there (plan 0191).
+   *
+   * **Sent only when no bound row of the chain names the product.** That is
+   * the one condition catalog cannot check, and it is this caller's word.
+   * Catalog keeps every offer something still prices, a person's shop row
+   * backs or an operator wrote.
+   *
+   * A dry run names the kinds whose run written prices to count as already
+   * gone, because the call that removes them was a dry run too.
+   */
+  withdrawOffers(
+    itemId: string,
+    supermarketId: string,
+    priceScopeIds: string[],
+    dryRun: { assumePricesWithdrawn: PriceSourceKind[] } | null = null
+  ): Promise<WithdrawSupermarketItemsResult> {
+    return this.send(SUPERMARKET_ITEM_PATTERNS.withdraw, {
+      userId: this.actor(),
+      itemId,
+      supermarketId,
+      priceScopeIds,
+      ...(dryRun
+        ? { dryRun: true, assumePricesWithdrawn: dryRun.assumePricesWithdrawn }
+        : {}),
     });
   }
 

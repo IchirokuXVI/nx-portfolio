@@ -496,6 +496,10 @@ export class HarvestMemory implements HarvestServiceI {
       entry: { ...entry },
       pricesWritten: writablePrices(entry),
       createdItem: null,
+      // Backend plan 0191. This double holds no second row of a product and
+      // no product a row left, so it withholds nothing and settles nothing.
+      pricesWithheld: [],
+      settled: null,
     };
   }
 
@@ -541,6 +545,8 @@ export class HarvestMemory implements HarvestServiceI {
       entry: { ...entry },
       pricesWritten: writablePrices(entry),
       createdItem: item,
+      pricesWithheld: [],
+      settled: null,
     };
   }
 
@@ -879,6 +885,8 @@ export class HarvestMemory implements HarvestServiceI {
                   other.supermarketId === entry.supermarketId &&
                   other.ean === entry.ean
               ).length,
+        // Backend plan 0191: the rows that price a scope this row prices too.
+        scopeSharedWith: [],
       }));
 
     return page(matching, query);

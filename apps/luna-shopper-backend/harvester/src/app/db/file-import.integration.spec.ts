@@ -80,6 +80,7 @@ describeIntegration('the one source product schema (real Postgres)', () => {
       } as unknown as PlatformAdminService,
       undefined as never,
       undefined as unknown as ConfigService,
+      undefined as never,
       undefined as never
     );
   });

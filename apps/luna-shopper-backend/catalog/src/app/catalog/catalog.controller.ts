@@ -135,6 +135,10 @@ import {
   type UpdateSupermarketLocationRequest,
   type UpdateSupermarketRequest,
   type UpsertSupermarketLocationItemRequest,
+  type WithdrawItemPricesRequest,
+  type WithdrawItemPricesResult,
+  type WithdrawSupermarketItemsRequest,
+  type WithdrawSupermarketItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import { BrandService } from './brand.service';
 import { CatalogDashboardService } from './dashboard.service';
@@ -745,6 +749,18 @@ export class CatalogController {
     return this.itemPrices.deleteByRun(req);
   }
 
+  /**
+   * Remove the price rows a run wrote for one product at named scopes and
+   * kinds (plan 0191). The harvester sends it when a row that stated them
+   * left the product.
+   */
+  @MessagePattern(ITEM_PRICE_PATTERNS.withdraw)
+  withdrawItemPrices(
+    @Payload() req: WithdrawItemPricesRequest
+  ): Promise<WithdrawItemPricesResult> {
+    return this.itemPrices.withdraw(req);
+  }
+
   // --- Price policies (plan 0080, section 3) --------------------------------
 
   @MessagePattern(PRICE_POLICY_PATTERNS.list)
@@ -768,6 +784,18 @@ export class CatalogController {
     @Payload() req: SetSupermarketItemAvailabilityRequest
   ): Promise<SetSupermarketItemAvailabilityResult> {
     return this.supermarketItems.setAvailability(req);
+  }
+
+  /**
+   * Take a product's offers out of the scopes of one chain, with the shop
+   * rows a run wrote for it there (plan 0191). The harvester sends it when no
+   * bound row of the chain names the product any more.
+   */
+  @MessagePattern(SUPERMARKET_ITEM_PATTERNS.withdraw)
+  withdrawSupermarketItems(
+    @Payload() req: WithdrawSupermarketItemsRequest
+  ): Promise<WithdrawSupermarketItemsResult> {
+    return this.supermarketItems.withdraw(req);
   }
 
   @MessagePattern(SUPERMARKET_ITEM_PATTERNS.get)

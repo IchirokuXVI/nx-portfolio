@@ -22,6 +22,7 @@ import type {
   StoredClaim,
 } from './source-entry-availability';
 import type {
+  PriceConflict,
   SourceIngest,
   SourceIngestCounters,
   SourceObservation,
@@ -96,6 +97,8 @@ function build(
     pricelessOffersFailed?: number;
     /** What the ingest counted, which the sink carries into the report. */
     counters?: Partial<SourceIngestCounters>;
+    /** The conflicts the ingest named (plan 0191). */
+    priceConflicts?: PriceConflict[];
     /** The scopes this run copies to, by the scope copied from (plan 0118). */
     copies?: Record<string, string[]>;
     /** What the ingest said its copies wrote. */
@@ -126,6 +129,7 @@ function build(
       pricedScopes: new Set(options.pricedScopes ?? []),
       pricesCopied: new Map(Object.entries(options.pricesCopied ?? {})),
     },
+    priceConflicts: options.priceConflicts ?? [],
   }));
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
@@ -325,6 +329,32 @@ describe('RunReportSink', () => {
     expect(written.pricesRecorded).toBe(8154);
     expect(written.pricesPublished).toBe(0);
     expect(written.pricesConfirmed).toBe(0);
+  });
+
+  /**
+   * Plan 0191: the count said that a price was withheld and not for which
+   * product, so finding the pair was a query. The report names it.
+   */
+  it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {
+    const conflict = (n: number): PriceConflict => ({
+      itemId: `item-${n}`,
+      priceScopeId: 'scope-1',
+      entryIds: [`a-${n}`, `b-${n}`],
+      firstWasSent: n % 2 === 0,
+    });
+    const many = Array.from({ length: 250 }, (_, n) => conflict(n));
+    const { sink } = build({
+      counters: { pricesConflicted: many.length },
+      priceConflicts: many,
+    });
+
+    sink.product(observation({ externalId: 'a' }));
+    const written = await sink.drain();
+
+    // The count is the whole number. The names are the first two hundred.
+    expect(written.pricesConflicted).toBe(250);
+    expect(written.priceConflicts).toHaveLength(200);
+    expect(written.priceConflicts[0]).toEqual(conflict(0));
   });
 
   describe('the pack count fill (plan 0162, section 3)', () => {

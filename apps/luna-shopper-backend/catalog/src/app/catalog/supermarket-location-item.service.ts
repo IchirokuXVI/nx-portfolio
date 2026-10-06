@@ -510,6 +510,73 @@ export class SupermarketLocationItemService {
   }
 }
 
+/** What {@link withdrawHarvestedShopRows} did with the shop rows of a product. */
+export interface ShopRowsWithdrawn {
+  removed: number;
+  cleared: number;
+  conflicts: { supermarketLocationId: string; held: boolean | null }[];
+}
+
+/**
+ * Take back what harvest runs said about one product at these shops (plan
+ * 0191), inside the caller's audited transaction.
+ *
+ * The caller says that no bound row of the chain names the product any more,
+ * so no source stands behind those claims. What happens to a row follows the
+ * ladder of {@link SupermarketLocationItemService.setAvailability}, read for a
+ * removal:
+ *
+ * - **A person wrote its availability**: left alone and reported as a
+ *   conflict, exactly as an automated write that meets such a row reports it.
+ * - **It has no opinion** (`available` is null): left alone. It holds a
+ *   position somebody typed and nothing a run said.
+ * - **A run wrote its availability and a person typed its position**: the
+ *   availability is cleared and the row stays. Nothing a person typed is
+ *   removed.
+ * - **A run wrote all it holds**: the row is removed.
+ *
+ * The scope flags are not derived again. Every row left with an opinion is a
+ * person's, and what follows for the offers is the caller's next step.
+ */
+export async function withdrawHarvestedShopRows(
+  tx: AuditedWrite,
+  itemId: string,
+  supermarketLocationIds: readonly string[]
+): Promise<ShopRowsWithdrawn> {
+  const outcome: ShopRowsWithdrawn = { removed: 0, cleared: 0, conflicts: [] };
+  for (const chunk of chunks([...supermarketLocationIds], CHUNK)) {
+    const rows = await tx.manager.find(SupermarketLocationItem, {
+      where: { itemId, supermarketLocationId: In(chunk) },
+      order: { supermarketLocationId: 'ASC' },
+    });
+    for (const row of rows) {
+      if (ownedByAPerson(row)) {
+        outcome.conflicts.push({
+          supermarketLocationId: row.supermarketLocationId,
+          held: row.available,
+        });
+        continue;
+      }
+      if (row.available === null && row.availabilitySourceKind === null) {
+        continue;
+      }
+      if (row.positionInStore === null) {
+        await tx.delete(SupermarketLocationItem, row);
+        outcome.removed += 1;
+        continue;
+      }
+      const before = { ...row };
+      row.available = null;
+      row.availabilitySourceKind = null;
+      row.availabilityObservedAt = null;
+      row.availabilitySourceRunId = null;
+      await tx.update(SupermarketLocationItem, before, row);
+      outcome.cleared += 1;
+    }
+  }
+  return outcome;
+}
+
 /**
  * Whether a person owns this row's availability (plan 0084, section 3).
  *

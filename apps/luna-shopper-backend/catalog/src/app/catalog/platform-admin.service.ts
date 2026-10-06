@@ -104,3 +104,21 @@ export class PlatformAdminService {
     }
   }
 }
+
+/**
+ * Refuse a caller that is not a configured service (plan 0191).
+ *
+ * For the few messages only the harvester has the knowledge to send: it says
+ * which rows are bound to a product, and catalog cannot check that. An
+ * operator's token is a valid credential and still the wrong caller, so it is
+ * turned away after the gate and not by it, and every other message keeps
+ * {@link PlatformAdminService.requireAdmin} as it is.
+ */
+export function requireServiceActor(actor: CatalogActor, what: string): void {
+  if (actor.kind !== 'service') {
+    throw new ForbiddenException(
+      `${what} is sent by a service, not by an operator. Settle the product ` +
+        'through the harvest route, which knows the rows bound to it.'
+    );
+  }
+}

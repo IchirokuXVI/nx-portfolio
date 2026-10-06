@@ -899,6 +899,14 @@ export type SettleBasketRowDto = {
 };
 
 /**
+ * `SettleItemAtChainDto` in the gateway's OpenAPI document.
+ */
+export type SettleItemAtChainDto = {
+  supermarketId: string;
+  dryRun?: boolean;
+};
+
+/**
  * `SettleLineDto` in the gateway's OpenAPI document.
  */
 export type SettleLineDto = {
@@ -4182,6 +4190,7 @@ export type HarvestItemSourceEntryView = {
   decidedAt: string | null;
   prices: HarvestSourceEntryPriceView[];
   eanSharedBy: number | null;
+  scopeSharedWith: string[];
 };
 
 /**
@@ -4275,6 +4284,50 @@ export type HarvestQueuedSourceEntryView = {
 };
 
 /**
+ * `harvest.SettleItemAtChainResult` in the gateway's OpenAPI document.
+ */
+export type HarvestSettleItemAtChainResult = {
+  itemId: string;
+  supermarketId: string;
+  dryRun: boolean;
+  boundEntryIds: string[];
+  pricesWithdrawn: number;
+  pricesWithdrawnAt: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    deleted: number;
+  }[];
+  pricesRestated: number;
+  pricesNotCurrent: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+  }[];
+  pricesNotWritable: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    copiedFromScopeId: string;
+  }[];
+  pricesWritten: number;
+  pricesKeptAsWritten: {
+    priceScopeId: string;
+    sourceKind: EnumsPriceSourceKind;
+    heldAs: EnumsPriceSourceKind;
+  }[];
+  pricesWithheld: HarvestSourceEntryPriceWithheld[];
+  offersRemoved: string[];
+  offersKept: {
+    priceScopeId: string;
+    reason: 'PRICED' | 'SHOP_ROW' | 'PERSON' | 'NO_TRAIL';
+  }[];
+  shopRowsRemoved: number;
+  shopRowsCleared: number;
+  shopRowConflicts: {
+    supermarketLocationId: string;
+    held: boolean | null;
+  }[];
+};
+
+/**
  * `harvest.SourceCatalogEntryView` in the gateway's OpenAPI document.
  */
 export type HarvestSourceCatalogEntryView = {
@@ -4316,6 +4369,8 @@ export type HarvestSourceEntryAcceptResult = {
   entry: HarvestSourceCatalogEntryView;
   pricesWritten: number;
   createdItem: CatalogItemView | null;
+  pricesWithheld: HarvestSourceEntryPriceWithheld[];
+  settled: HarvestSettleItemAtChainResult | null;
 };
 
 /**
@@ -4358,6 +4413,15 @@ export type HarvestSourceEntryPriceView = {
   } | null;
   observedAt: string;
   runId: string | null;
+};
+
+/**
+ * `harvest.SourceEntryPriceWithheld` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceEntryPriceWithheld = {
+  entryId: string;
+  priceScopeId: string;
+  otherEntryIds: string[];
 };
 
 /**

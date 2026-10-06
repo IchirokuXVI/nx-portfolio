@@ -7,6 +7,7 @@ import {
   type ApplySourceEntryDecisionsRequest,
   type ItemView,
   type SourceEntryDecisionOperation,
+  type SourceEntryPriceWithheld,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ForbiddenException,
@@ -142,6 +143,8 @@ function build(
     rows?: SourceCatalogEntry[];
     /** Fail the save of this entry, which is a step three failure. */
     failSaveOf?: string;
+    /** Prices the writer withheld for an entry (plan 0191), by entry id. */
+    withheldFor?: Record<string, SourceEntryPriceWithheld[]>;
     /** Fail the price write for these entries, which is a step four skip. */
     failPricesOf?: string[];
     /** Fail the availability write, which is a step four skip of every row. */
@@ -245,7 +248,14 @@ function build(
     }
     return (row.prices ?? []).length;
   });
-  const prices = { write } as unknown as SourceEntryPriceWriter;
+  // The bulk route reads the named answer since plan 0191. `write` stays the
+  // spy every test below asserts on.
+  const prices = {
+    writeNamed: async (row: SourceCatalogEntry) => ({
+      written: await write(row),
+      withheld: options.withheldFor?.[row.id] ?? [],
+    }),
+  } as unknown as SourceEntryPriceWriter;
 
   // The availability half of step four (plan 0182). What it sends is its own
   // spec; what matters here is when it is called, with which rows, and what a
@@ -1264,6 +1274,38 @@ describe('SourceEntryBatchService', () => {
     // and still want their prices" rather than scanning every outcome.
     expect(result.priceSkips).toEqual([
       { entryId: 'e-1', itemId: 'i-1', reason: 'scope is gone' },
+    ]);
+  });
+
+  /**
+   * Plan 0191, decision 2A, reaches this route through the writer it shares
+   * with the one row routes. The route itself is unchanged: the bind stands,
+   * and a price that was not written is named where every such price is.
+   */
+  it('names a price the writer withheld because another row states another amount', async () => {
+    const { service } = build({
+      rows: [entry()],
+      withheldFor: {
+        'e-1': [
+          { entryId: 'e-1', priceScopeId: 'scope-1', otherEntryIds: ['e-9'] },
+        ],
+      },
+    });
+
+    const result = await service.applyDecisions(
+      request([
+        { op: 'accept', entryId: 'e-1', itemId: 'i-1', expect: expectFresh },
+      ])
+    );
+
+    expect(result.applied).toBe(true);
+    expect(result.results[0].applied).toBe(true);
+    expect(result.priceSkips).toEqual([
+      {
+        entryId: 'e-1',
+        itemId: 'i-1',
+        reason: expect.stringMatching(/scope-1.*e-9.*another amount/),
+      },
     ]);
   });
 

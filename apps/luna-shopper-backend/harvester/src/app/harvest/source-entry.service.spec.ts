@@ -7,13 +7,16 @@ import {
   UnitOfMeasure,
   type CreateItemInput,
   type ItemView,
+  type SettleItemAtChainResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotFoundException,
   ForbiddenException,
+  ITEM_EAN_HOLDER_DETAIL,
+  ItemEanHeldException,
 } from '@portfolio/luna-shopper/platform';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type {
   HarvestRun,
   SourceCatalogEntry,
@@ -25,6 +28,7 @@ import type { CatalogClient } from './catalog-client.service';
 import { fakeCategoryTree } from './category-tree.fake';
 import type { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
+import type { SourceEntrySettler } from './source-entry-settle';
 import { SourceEntryPriceWriter } from './source-entry-write';
 import { SourceEntryService } from './source-entry.service';
 import type { SupermarketSourceService } from './supermarket-source.service';
@@ -146,18 +150,53 @@ function build(
       reason: 'HELD' | 'INVALID' | 'NOT_FOUND';
       heldBy: string | null;
     };
+    /**
+     * The other rows the table holds (plan 0191). With it, `find` filters as
+     * the two queries of a move do. Without it, `find` answers the row.
+     */
+    others?: SourceCatalogEntry[];
+    /** Fail the settle of the product a row left (plan 0191). */
+    failSettle?: Error;
+    /** Fail the price write to the product the row is bound to now. */
+    failAddPrices?: Error;
   } = {}
 ) {
   const row = options.row ?? entry();
   const saved: SourceCatalogEntry[] = [];
+  /** Every write a decision makes, in order, by the name of what it called. */
+  const calls: string[] = [];
 
   const entries = {
     findOne: jest.fn(async () => row),
     save: jest.fn(async (input: SourceCatalogEntry) => {
       saved.push({ ...input } as SourceCatalogEntry);
+      calls.push('save');
       return input;
     }),
-    find: jest.fn(async () => [row]),
+    find: jest.fn(
+      async (query?: {
+        where?: Partial<Record<keyof SourceCatalogEntry, unknown>>;
+      }) => {
+        if (!options.others) {
+          return [row];
+        }
+        // The rows another query would answer: every clause it names holds.
+        const where = query?.where ?? {};
+        return options.others.filter((other) =>
+          Object.entries(where).every(([key, wanted]) => {
+            const held = other[key as keyof SourceCatalogEntry];
+            const operator = wanted as FindOperator<unknown>;
+            if (operator?.type === 'not') {
+              return held !== operator.value;
+            }
+            if (operator?.type === 'in') {
+              return (operator.value as unknown[]).includes(held);
+            }
+            return held === wanted;
+          })
+        );
+      }
+    ),
     delete: jest.fn(async () => ({ affected: 1 })),
     createQueryBuilder: jest.fn(),
     // How many rows of the chain print each EAN (plan 0185). One, unless a
@@ -179,20 +218,32 @@ function build(
     findOne: jest.fn(async () => null),
   } as unknown as Repository<HarvestRun>;
 
-  const addPrices = jest.fn(async () => ({ inserted: 1, confirmed: 0 }));
+  const addPrices = jest.fn(async () => {
+    calls.push('addPrices');
+    if (options.failAddPrices) {
+      throw options.failAddPrices;
+    }
+    return { inserted: 1, confirmed: 0 };
+  });
   const createItem = jest.fn(
     async (input: CreateItemInput): Promise<ItemView> =>
       // Catalog answers the product as it stored it, barcode included.
       ({ ...item(), ean: input.ean ?? null }) as ItemView
   );
+  // Plan 0191: the barcode a moving row takes off the product it leaves.
+  const removeItemEan = jest.fn(async (itemId: string, _ean: string) => {
+    calls.push('removeItemEan');
+    return item(itemId);
+  });
   const findItemByEan = jest.fn(async (_ean: string) => ({
     item: options.eanHolder ?? null,
   }));
   // Plan 0185: the barcode a bound row gives its product. It answers what
   // catalog would for a barcode nobody holds, unless a test says otherwise.
   const teachItemEans = jest.fn(
-    async (entries: { itemId: string; ean: string }[]) =>
-      options.teachRefusal
+    async (entries: { itemId: string; ean: string }[]) => {
+      calls.push('teachItemEans');
+      return options.teachRefusal
         ? {
             added: 0,
             refused: entries.map((pair) => ({
@@ -203,7 +254,8 @@ function build(
               }),
             })),
           }
-        : { added: entries.length, refused: [] }
+        : { added: entries.length, refused: [] };
+    }
   );
   const categoryTree = jest.fn(async () => fakeCategoryTree());
   const setAvailability = jest.fn(
@@ -227,6 +279,7 @@ function build(
     categoryTree,
     findItemByEan,
     teachItemEans,
+    removeItemEan,
     getSupermarket: jest.fn(async () => ({
       id: CHAIN,
       defaultPriceScopeId:
@@ -273,6 +326,23 @@ function build(
     catalog
   );
 
+  // What a row that leaves a product takes with it (plan 0191). What the
+  // settle does is its own spec. What matters here is when a decision calls
+  // it, for which product, and what its failure does to the answer.
+  const settle = jest.fn(
+    async (
+      itemId: string,
+      supermarketId: string,
+      settleOptions: { dryRun?: boolean; leaving?: unknown[] } = {}
+    ): Promise<SettleItemAtChainResult> => {
+      calls.push('settle');
+      if (options.failSettle) {
+        throw options.failSettle;
+      }
+      return settled(itemId, supermarketId, settleOptions.dryRun === true);
+    }
+  );
+
   const service = new SourceEntryService(
     entries,
     prices,
@@ -282,7 +352,8 @@ function build(
     makeAdmin(),
     priceWriter,
     config,
-    availability
+    availability,
+    { settle } as unknown as SourceEntrySettler
   );
   // The English fetch is one HTTP request to a storefront, and nothing in a unit
   // test may make one. Stubbing the private method rather than the client keeps
@@ -308,6 +379,37 @@ function build(
     setAvailability,
     setLocationAvailability,
     readClaims,
+    removeItemEan,
+    settle,
+    calls,
+    catalog,
+  };
+}
+
+/** What the settle double answers: nothing to do, for that product and chain. */
+function settled(
+  itemId: string,
+  supermarketId: string,
+  dryRun = false
+): SettleItemAtChainResult {
+  return {
+    itemId,
+    supermarketId,
+    dryRun,
+    boundEntryIds: [],
+    pricesWithdrawn: 1,
+    pricesWithdrawnAt: [],
+    pricesRestated: 0,
+    pricesNotCurrent: [],
+    pricesNotWritable: [],
+    pricesWritten: 0,
+    pricesKeptAsWritten: [],
+    pricesWithheld: [],
+    offersRemoved: [],
+    offersKept: [],
+    shopRowsRemoved: 0,
+    shopRowsCleared: 0,
+    shopRowConflicts: [],
   };
 }
 
@@ -1427,6 +1529,488 @@ describe('SourceEntryService', () => {
 
       expect(prices.delete).toHaveBeenCalledWith({ runId: 'run-monday' });
       expect(deleted).toBe(2);
+    });
+  });
+});
+
+/**
+ * A row that leaves a product takes its offers with it (plan 0191).
+ *
+ * A bound row can be decided again on these three routes. Before the plan the
+ * new product got the prices and the old one kept everything, because nothing
+ * read the old `itemId` before overwriting it.
+ */
+describe('SourceEntryService, a bound row that is decided again (plan 0191)', () => {
+  const REAL_EAN = '8402001047251';
+  /** A row a person accepted onto `item-old`. */
+  const bound = (overrides: Partial<SourceCatalogEntry> = {}) =>
+    entry({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      itemId: 'item-old',
+      decidedAt: NOW,
+      ...overrides,
+    });
+
+  describe('accept onto another product', () => {
+    it('settles the product the row left, at the row’s chain, right after the bind is saved', async () => {
+      const { service, settle, calls } = build({ row: bound() });
+
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(settle).toHaveBeenCalledTimes(1);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
+      // It is told the prices of the row that left, which is how catalog
+      // knows which rows of the old product that row wrote.
+      const [, , told] = settle.mock.calls[0];
+      expect((told as { leaving: unknown[] }).leaving).toEqual(bound().prices);
+      expect(bound().prices?.length).toBeGreaterThan(0);
+      // After the save: the settle reads the rows bound to the old product
+      // now, and this row must no longer be one of them. Before the price
+      // write: that step can fail, and a retry of the accept cannot settle,
+      // because the saved row no longer names the product it left.
+      expect(calls.indexOf('save')).toBeLessThan(calls.indexOf('settle'));
+      expect(calls.indexOf('settle')).toBeLessThan(calls.indexOf('addPrices'));
+      expect(result.entry.itemId).toBe('item-new');
+      expect(result.settled).toEqual(settled('item-old', CHAIN));
+    });
+
+    it('has settled the old product when the price write then fails, and the error says so', async () => {
+      const { service, settle, saved, calls } = build({
+        row: bound(),
+        failAddPrices: new Error('catalog is away'),
+      });
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
+
+      // The old product is settled although the request failed.
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
+      expect(calls).toEqual(['save', 'settle', 'addPrices']);
+      expect(saved[0]).toMatchObject({ itemId: 'item-new' });
+      expect(failure).toBeInstanceOf(Error);
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('item-old');
+      expect(message).toContain(CHAIN);
+      expect(message).toContain('was settled');
+      expect(message).not.toContain('NOT settled');
+    });
+
+    it('settles nothing on the retry, which is why the first call had to', async () => {
+      // The row as the failed call left it: bound to the new product.
+      const { service, settle } = build({
+        row: bound({ itemId: 'item-new' }),
+      });
+
+      await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(settle).not.toHaveBeenCalled();
+    });
+
+    it('settles nothing when the row is accepted onto the product it is bound to', async () => {
+      const { service, settle } = build({ row: bound() });
+
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-old',
+      });
+
+      expect(settle).not.toHaveBeenCalled();
+      expect(result.settled).toBeNull();
+    });
+
+    it('settles nothing for a row that only proposed a product', async () => {
+      // A CANDIDATE carries a product as a proposal. It wrote nothing on it.
+      const { service, settle } = build({
+        row: entry({
+          status: SourceEntryStatus.CANDIDATE,
+          itemId: 'item-proposed',
+        }),
+      });
+
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(settle).not.toHaveBeenCalled();
+      expect(result.settled).toBeNull();
+    });
+
+    it('leaves the decision standing when the settle fails, still writes the prices, and names the product to settle', async () => {
+      const { service, saved, addPrices } = build({
+        row: bound(),
+        failSettle: new Error('catalog is away'),
+      });
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        status: SourceEntryStatus.ACTIVE,
+        itemId: 'item-new',
+      });
+      // The new product is owed its price whatever happened to the old one.
+      expect(addPrices).toHaveBeenCalled();
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('NOT settled');
+      // Enough to call the route by hand: the product and the chain.
+      expect(message).toContain('/v1/admin/harvest/items/item-old/settle');
+      expect(message).toContain(CHAIN);
+    });
+  });
+
+  describe('createItem from a bound row', () => {
+    it('settles the product the row left', async () => {
+      const { service, settle } = build({ row: bound() });
+
+      const result = await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+      });
+
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
+      expect(result.createdItem).not.toBeNull();
+      expect(result.settled).toEqual(settled('item-old', CHAIN));
+    });
+  });
+
+  describe('reject', () => {
+    it('settles the product a bound row was on, after the row is saved', async () => {
+      const { service, settle, saved, calls } = build({ row: bound() });
+
+      const view = await service.reject({ userId: ADMIN, entryId: 'e-1' });
+
+      expect(view.status).toBe(SourceEntryStatus.REJECTED);
+      expect(view.itemId).toBeNull();
+      expect(saved[0]).toMatchObject({
+        status: SourceEntryStatus.REJECTED,
+        itemId: null,
+      });
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, {
+        leaving: expect.any(Array),
+      });
+      expect(calls).toEqual(['save', 'settle']);
+    });
+
+    it('settles nothing for a row that was waiting', async () => {
+      const { service, settle } = build();
+
+      await service.reject({ userId: ADMIN, entryId: 'e-1' });
+
+      expect(settle).not.toHaveBeenCalled();
+    });
+
+    it('leaves the row rejected when the settle fails, and answers with its error', async () => {
+      const { service, saved } = build({
+        row: bound(),
+        failSettle: new Error('catalog is away'),
+      });
+
+      const failure = await service
+        .reject({ userId: ADMIN, entryId: 'e-1' })
+        .catch((error: Error) => error);
+
+      expect(saved[0].status).toBe(SourceEntryStatus.REJECTED);
+      // A second reject cannot settle: the saved row names no product.
+      const { message } = failure as Error;
+      expect(message).toContain('catalog is away');
+      expect(message).toContain('/v1/admin/harvest/items/item-old/settle');
+      expect(message).toContain(CHAIN);
+    });
+  });
+
+  describe('a retry of a move whose price write failed, for a row that prints a barcode', () => {
+    it('moved the barcode before the price write failed, so the retry is not refused and writes the price', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const first = build({
+        row,
+        eanHolder: { id: 'item-old' } as ItemView,
+        others: [],
+        failAddPrices: new Error('catalog is away'),
+      });
+
+      await expect(
+        first.service.accept({
+          userId: ADMIN,
+          entryId: 'e-1',
+          itemId: 'item-new',
+        })
+      ).rejects.toThrow('catalog is away');
+
+      // The barcode left the old product and reached the new one although
+      // the price write failed after it.
+      expect(first.removeItemEan).toHaveBeenCalledWith('item-old', REAL_EAN);
+      expect(first.teachItemEans).toHaveBeenCalledWith([
+        { itemId: 'item-new', ean: REAL_EAN },
+      ]);
+      expect(first.calls).toEqual([
+        'save',
+        'settle',
+        'removeItemEan',
+        'teachItemEans',
+        'addPrices',
+      ]);
+
+      // The retry: the row names the new product, which holds the barcode
+      // now. Had the barcode stayed on the old product, this would be
+      // `item_ean_held`, and no price would be written.
+      const retry = build({
+        row: bound({ ean: REAL_EAN, itemId: 'item-new' }),
+        eanHolder: { id: 'item-new' } as ItemView,
+      });
+      const result = await retry.service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(result.pricesWritten).toBeGreaterThan(0);
+      expect(retry.removeItemEan).not.toHaveBeenCalled();
+      expect(retry.teachItemEans).not.toHaveBeenCalled();
+    });
+
+    it('still writes the prices when the barcode cannot be moved, and answers with that error', async () => {
+      const { service, addPrices } = build({
+        row: bound({ ean: REAL_EAN }),
+        eanHolder: { id: 'item-old' } as ItemView,
+        others: [],
+        teachRefusal: { reason: 'HELD', heldBy: 'item-other' },
+      });
+
+      const failure = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: Error) => error);
+
+      expect(failure).toBeInstanceOf(ItemEanHeldException);
+      expect(addPrices).toHaveBeenCalled();
+      expect((failure as Error).message).toContain('item-old');
+    });
+  });
+
+  describe('the barcode moves with the row', () => {
+    it('takes it off the old product and teaches it to the new one, with no manual clear', async () => {
+      // The Fanta bottle of the A5 proposal: three calls before the plan.
+      const row = bound({ ean: REAL_EAN });
+      const { service, removeItemEan, teachItemEans, calls } = build({
+        row,
+        others: [row],
+        eanHolder: item('item-old'),
+      });
+
+      await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-new',
+      });
+
+      expect(removeItemEan).toHaveBeenCalledWith('item-old', REAL_EAN);
+      expect(teachItemEans).toHaveBeenCalledWith([
+        { itemId: 'item-new', ean: REAL_EAN },
+      ]);
+      // Off the old product first: catalog holds a barcode on one product.
+      expect(calls.indexOf('removeItemEan')).toBeLessThan(
+        calls.indexOf('teachItemEans')
+      );
+    });
+
+    it('refuses the move when another row bound to the old product prints the barcode, and writes nothing', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const sibling = bound({
+        id: 'e-2',
+        supermarketId: 'chain-other',
+        ean: REAL_EAN,
+      });
+      const { service, saved, removeItemEan, settle } = build({
+        row,
+        others: [row, sibling],
+        eanHolder: item('item-old'),
+      });
+
+      const refusal = await service
+        .accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+        .catch((error: unknown) => error);
+
+      expect(refusal).toBeInstanceOf(ItemEanHeldException);
+      // `item_ean_held` stands, and its sentence names the old product and
+      // the row that keeps the barcode there.
+      expect((refusal as Error).message).toMatch(/item-old/);
+      expect((refusal as Error).message).toMatch(/e-2/);
+      expect(
+        (refusal as ItemEanHeldException).details?.[ITEM_EAN_HOLDER_DETAIL]
+      ).toBe('item-old');
+      expect(saved).toHaveLength(0);
+      expect(removeItemEan).not.toHaveBeenCalled();
+      expect(settle).not.toHaveBeenCalled();
+    });
+
+    it('still refuses a barcode a third product holds', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const { service, saved, removeItemEan } = build({
+        row,
+        others: [row],
+        eanHolder: item('item-third'),
+      });
+
+      await expect(
+        service.accept({ userId: ADMIN, entryId: 'e-1', itemId: 'item-new' })
+      ).rejects.toBeInstanceOf(ItemEanHeldException);
+
+      expect(saved).toHaveLength(0);
+      expect(removeItemEan).not.toHaveBeenCalled();
+    });
+
+    it('creates the product with no barcode and moves the barcode to it after the bind', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const { service, createItem, removeItemEan, teachItemEans, calls } =
+        build({
+          row,
+          others: [row],
+          eanHolder: item('item-old'),
+        });
+
+      const result = await service.createItem({
+        userId: ADMIN,
+        entryId: 'e-1',
+      });
+
+      // The old product still holds the barcode while the new one is made.
+      expect(createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ ean: null })
+      );
+      expect(removeItemEan).toHaveBeenCalledWith('item-old', REAL_EAN);
+      expect(teachItemEans).toHaveBeenCalledWith([
+        { itemId: result.createdItem?.id, ean: REAL_EAN },
+      ]);
+      expect(calls.indexOf('save')).toBeLessThan(
+        calls.indexOf('removeItemEan')
+      );
+    });
+
+    it('leaves the barcode on the product when the row is rejected', async () => {
+      const row = bound({ ean: REAL_EAN });
+      const { service, removeItemEan } = build({
+        row,
+        others: [row],
+        eanHolder: item('item-old'),
+      });
+
+      await service.reject({ userId: ADMIN, entryId: 'e-1' });
+
+      expect(removeItemEan).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a second article of the chain on the product', () => {
+    it('binds the row, writes no price for the shared scope, and names the other row', async () => {
+      // The El Pozo burger: 2.45 already bound, 2.95 accepted beside it.
+      const small = bound({
+        id: 'e-small',
+        itemId: 'item-1',
+        prices: [price({ entryId: 'e-small', price: 2.45, unitPrice: null })],
+      });
+      const king = entry({
+        id: 'e-king',
+        prices: [price({ entryId: 'e-king', price: 2.95, unitPrice: null })],
+      });
+      const { service, addPrices, saved } = build({
+        row: king,
+        others: [small],
+      });
+
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: 'e-king',
+        itemId: 'item-1',
+      });
+
+      expect(saved[0]).toMatchObject({
+        status: SourceEntryStatus.ACTIVE,
+        itemId: 'item-1',
+      });
+      expect(addPrices).not.toHaveBeenCalled();
+      expect(result.pricesWritten).toBe(0);
+      expect(result.pricesWithheld).toEqual([
+        {
+          entryId: 'e-king',
+          priceScopeId: NATIONAL,
+          otherEntryIds: ['e-small'],
+        },
+      ]);
+    });
+
+    it('withholds nothing for the one row of its product', async () => {
+      const { service } = build({ others: [] });
+
+      const result = await service.accept({
+        userId: ADMIN,
+        entryId: 'e-1',
+        itemId: 'item-1',
+      });
+
+      expect(result.pricesWritten).toBe(1);
+      expect(result.pricesWithheld).toEqual([]);
+    });
+  });
+
+  describe('settleItem, the route for a person', () => {
+    it('is gated, checks the chain, and settles the product at it', async () => {
+      const { service, settle, catalog } = build();
+
+      await expect(
+        service.settleItem({
+          userId: 'somebody-else',
+          itemId: 'item-old',
+          supermarketId: CHAIN,
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(settle).not.toHaveBeenCalled();
+
+      const result = await service.settleItem({
+        userId: ADMIN,
+        itemId: 'item-old',
+        supermarketId: CHAIN,
+      });
+
+      expect(catalog.getSupermarket).toHaveBeenCalledWith(CHAIN);
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, { dryRun: false });
+      expect(result).toEqual(settled('item-old', CHAIN));
+    });
+
+    it('passes a dry run on', async () => {
+      const { service, settle } = build();
+
+      const result = await service.settleItem({
+        userId: ADMIN,
+        itemId: 'item-old',
+        supermarketId: CHAIN,
+        dryRun: true,
+      });
+
+      expect(settle).toHaveBeenCalledWith('item-old', CHAIN, { dryRun: true });
+      expect(result.dryRun).toBe(true);
     });
   });
 });

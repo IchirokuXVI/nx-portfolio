@@ -43,6 +43,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   UNIT_BASES,
+  WITHDRAW_MAX_SCOPES,
 } from '../../lib/messages/catalog.messages';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
@@ -243,6 +244,14 @@ export const CATALOG_SCHEMA_IDS = {
   itemPriceIdRequest: schemaId('msg/itemPrice.id/request'),
   deleteItemPricesByRunRequest: schemaId('msg/itemPrice.deleteByRun/request'),
   deleteItemPricesByRunResult: schemaId('catalog/DeleteItemPricesByRunResult'),
+  withdrawItemPricesRequest: schemaId('msg/itemPrice.withdraw/request'),
+  withdrawItemPricesResult: schemaId('catalog/WithdrawItemPricesResult'),
+  withdrawSupermarketItemsRequest: schemaId(
+    'msg/supermarketItem.withdraw/request'
+  ),
+  withdrawSupermarketItemsResult: schemaId(
+    'catalog/WithdrawSupermarketItemsResult'
+  ),
   setSupermarketItemAvailabilityRequest: schemaId(
     'msg/supermarketItem.setAvailability/request'
   ),
@@ -2169,6 +2178,194 @@ const deleteItemPricesByRunResult = object(
   },
   ['deleted', 'reset', 'recomputed']
 );
+/** A price row a row still bound to the product holds (plan 0191). */
+const heldItemPrice: JsonSchema = {
+  type: 'object',
+  properties: {
+    priceScopeId: nonEmptyString(),
+    sourceKind: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.priceSourceKind), { type: 'null' }],
+    },
+    sourceRunId: nullableString(),
+  },
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId'],
+  additionalProperties: false,
+};
+/** The one price the bound rows state at a scope and kind (plan 0191). */
+const statedItemPrice: JsonSchema = {
+  type: 'object',
+  properties: {
+    priceScopeId: nonEmptyString(),
+    sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+    sourceRunId: nonEmptyString(),
+    copiedFromScopeId: nullableString(),
+    price: {
+      type: 'object',
+      properties: { ...itemPriceValues, observedAt: nonEmptyString() },
+      required: ['observedAt'],
+      additionalProperties: false,
+    },
+  },
+  required: ['priceScopeId', 'sourceKind', 'sourceRunId', 'price'],
+  additionalProperties: false,
+};
+/**
+ * Make the run written price rows of one product agree with the rows still
+ * bound to it (plan 0191). A row a person typed is never touched.
+ */
+const withdrawItemPricesRequest = object(
+  CATALOG_SCHEMA_IDS.withdrawItemPricesRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    priceScopeIds: {
+      ...array(nonEmptyString()),
+      maxItems: WITHDRAW_MAX_SCOPES,
+    },
+    sourceKinds: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
+    held: array(heldItemPrice),
+    stated: array(statedItemPrice),
+    left: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceRunId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceRunId'],
+      additionalProperties: false,
+    }),
+    dryRun: boolean(),
+  },
+  ['userId', 'itemId', 'priceScopeIds', 'sourceKinds']
+);
+const withdrawItemPricesResult = object(
+  CATALOG_SCHEMA_IDS.withdrawItemPricesResult,
+  {
+    deleted: integer({ minimum: 0 }),
+    removed: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        deleted: integer({ minimum: 1 }),
+      },
+      required: ['priceScopeId', 'sourceKind', 'deleted'],
+      additionalProperties: false,
+    }),
+    inserted: integer({ minimum: 0 }),
+    confirmed: integer({ minimum: 0 }),
+    keptAsWritten: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        heldAs: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind', 'heldAs'],
+      additionalProperties: false,
+    }),
+    notWritable: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+        copiedFromScopeId: nonEmptyString(),
+      },
+      required: ['priceScopeId', 'sourceKind', 'copiedFromScopeId'],
+      additionalProperties: false,
+    }),
+    notCurrent: array({
+      type: 'object',
+      properties: {
+        priceScopeId: nonEmptyString(),
+        sourceKind: ref(CATALOG_SCHEMA_IDS.priceSourceKind),
+      },
+      required: ['priceScopeId', 'sourceKind'],
+      additionalProperties: false,
+    }),
+    recomputed: integer({ minimum: 0 }),
+  },
+  [
+    'deleted',
+    'removed',
+    'inserted',
+    'confirmed',
+    'keptAsWritten',
+    'notWritable',
+    'notCurrent',
+    'recomputed',
+  ]
+);
+/**
+ * Take a product's offers out of the scopes of one chain, with the shop rows
+ * a harvest run wrote for it there (plan 0191).
+ */
+const withdrawSupermarketItemsRequest = object(
+  CATALOG_SCHEMA_IDS.withdrawSupermarketItemsRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    priceScopeIds: {
+      ...array(nonEmptyString()),
+      maxItems: WITHDRAW_MAX_SCOPES,
+    },
+    dryRun: boolean(),
+    assumePricesWithdrawn: array(ref(CATALOG_SCHEMA_IDS.priceSourceKind)),
+  },
+  ['userId', 'itemId', 'supermarketId', 'priceScopeIds']
+);
+const withdrawSupermarketItemsResult = object(
+  CATALOG_SCHEMA_IDS.withdrawSupermarketItemsResult,
+  {
+    offersRemoved: {
+      ...array(nonEmptyString()),
+      description: 'The price scopes whose offer was removed.',
+    },
+    offersKept: {
+      ...array({
+        type: 'object',
+        properties: {
+          priceScopeId: nonEmptyString(),
+          reason: {
+            type: 'string',
+            enum: ['PRICED', 'SHOP_ROW', 'PERSON', 'NO_TRAIL'],
+          },
+        },
+        required: ['priceScopeId', 'reason'],
+        additionalProperties: false,
+      }),
+      description:
+        'The offers that stayed, and why: PRICED when a price row of the product exists at the scope or at a scope it falls through to, SHOP_ROW when a shop row a person wrote backs it, PERSON when an operator wrote the offer itself, NO_TRAIL when the offer is older than the trail that would say so.',
+    },
+    shopRowsRemoved: integer({ minimum: 0 }),
+    shopRowsCleared: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Shop rows that keep a position a person typed. Their availability is cleared and the row stays.',
+    },
+    conflicts: {
+      ...array({
+        type: 'object',
+        properties: {
+          supermarketLocationId: nonEmptyString(),
+          held: { type: ['boolean', 'null'] },
+        },
+        required: ['supermarketLocationId', 'held'],
+        additionalProperties: false,
+      }),
+      description:
+        'Shop rows whose availability a person wrote. They are left alone.',
+    },
+  },
+  [
+    'offersRemoved',
+    'offersKept',
+    'shopRowsRemoved',
+    'shopRowsCleared',
+    'conflicts',
+  ]
+);
 const setSupermarketItemAvailabilityRequest = object(
   CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
   {
@@ -3043,6 +3240,10 @@ export const catalogSchemas: JsonSchema[] = [
   itemPriceIdRequest,
   deleteItemPricesByRunRequest,
   deleteItemPricesByRunResult,
+  withdrawItemPricesRequest,
+  withdrawItemPricesResult,
+  withdrawSupermarketItemsRequest,
+  withdrawSupermarketItemsResult,
   setSupermarketItemAvailabilityRequest,
   setSupermarketItemAvailabilityResult,
   listPricePoliciesRequest,
@@ -3364,6 +3565,10 @@ export const catalogMessageContracts: Record<
     request: CATALOG_SCHEMA_IDS.deleteItemPricesByRunRequest,
     response: CATALOG_SCHEMA_IDS.deleteItemPricesByRunResult,
   },
+  [ITEM_PRICE_PATTERNS.withdraw]: {
+    request: CATALOG_SCHEMA_IDS.withdrawItemPricesRequest,
+    response: CATALOG_SCHEMA_IDS.withdrawItemPricesResult,
+  },
   [PRICE_POLICY_PATTERNS.list]: {
     request: CATALOG_SCHEMA_IDS.listPricePoliciesRequest,
     response: CATALOG_SCHEMA_IDS.pricePolicyListView,
@@ -3375,6 +3580,10 @@ export const catalogMessageContracts: Record<
   [SUPERMARKET_ITEM_PATTERNS.setAvailability]: {
     request: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityRequest,
     response: CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityResult,
+  },
+  [SUPERMARKET_ITEM_PATTERNS.withdraw]: {
+    request: CATALOG_SCHEMA_IDS.withdrawSupermarketItemsRequest,
+    response: CATALOG_SCHEMA_IDS.withdrawSupermarketItemsResult,
   },
   [SUPERMARKET_ITEM_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.getSupermarketItemRequest,

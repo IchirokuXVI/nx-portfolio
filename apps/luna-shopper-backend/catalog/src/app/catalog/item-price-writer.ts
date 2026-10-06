@@ -2,6 +2,7 @@ import {
   PriceSourceKind,
   type ItemPriceBatchEntry,
   type ItemPriceOverrides,
+  type ItemPriceValues,
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { EntityManager } from 'typeorm';
@@ -268,6 +269,26 @@ function sameValues(held: ItemPrice, values: NormalizedValues): boolean {
     (held.unitPriceLabel ?? null) === values.unitPriceLabel &&
     sameInstant(held.validFrom, values.validFrom) &&
     sameInstant(held.validUntil, values.validUntil)
+  );
+}
+
+/**
+ * Whether a stored row says what these values say, read at the same scope
+ * (plan 0191).
+ *
+ * The comparison the writer makes before it inserts, exported so that a
+ * withdraw decides "this row already states it" by the rule the write that
+ * follows uses, and not by a second one.
+ */
+export function statesTheSame(
+  held: ItemPrice,
+  values: ItemPriceValues,
+  copiedFromScopeId: string | null,
+  now: Date
+): boolean {
+  return (
+    sameValues(held, normalize({ ...values, itemId: held.itemId }, now)) &&
+    (held.copiedFromScopeId ?? null) === copiedFromScopeId
   );
 }
 

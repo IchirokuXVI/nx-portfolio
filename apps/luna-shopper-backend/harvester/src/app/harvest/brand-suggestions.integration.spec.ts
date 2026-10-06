@@ -67,7 +67,9 @@ describeIntegration('brand suggestions and spellings (real Postgres)', () => {
       {
         getOrThrow: () => ({ harvestEnabled: true }),
       } as unknown as ConfigService,
-      // A read binds nothing, so nothing here writes availability.
+      // A read binds nothing, so nothing here writes availability, and
+      // nothing is settled.
+      undefined as never,
       undefined as never
     );
   }, 120_000);
