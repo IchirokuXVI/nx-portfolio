@@ -60,7 +60,13 @@ export interface MercadonaProduct {
   price: number | null;
   /** `bulk_price`, stored verbatim and never recomputed (section 2.4). */
   unitPrice: number | null;
-  /** `reference_format`, verbatim. A price tag for a human, not a machine unit. */
+  /**
+   * The label that is true of {@link unitPrice} (plan 0189). It is
+   * `reference_format` as sent when the chain's `reference_price` is the
+   * same figure, and `L`, `kg` or `ud` when `reference_format` names a
+   * figure that `bulk_price` is not: per 100 ml, per 100 g, per dozen or per
+   * wash.
+   */
   unitPriceLabel: string | null;
   currency: 'EUR';
   /** False when the detail call answered 404: not stocked in this warehouse. */

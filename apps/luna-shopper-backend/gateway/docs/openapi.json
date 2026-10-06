@@ -39771,6 +39771,23 @@
               "null"
             ]
           },
+          "unitBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT",
+                  "DOZEN",
+                  "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "validFrom": {
             "type": [
               "string",

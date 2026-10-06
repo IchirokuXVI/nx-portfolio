@@ -1,32 +1,107 @@
 {
-  "id": "69028",
-  "ean": "8480000512048",
-  "slug": "nata-para-cocinar-hacendado-brik",
-  "brand": "Hacendado",
-  "packaging": "Brik",
-  "published": true,
-  "share_url": "https://tienda.mercadona.es/product/69028/nata-para-cocinar-hacendado-brik",
-  "display_name": "Nata para cocinar Hacendado",
-  "price_instructions": {
-    "iva": 10,
-    "is_pack": false,
-    "size_format": "l",
-    "total_units": null,
-    "unit_price": "1.80",
-    "bulk_price": "4.50",
-    "unit_size": 0.4,
-    "reference_price": "4.50",
-    "reference_format": "100 ml",
-    "price_decreased": false,
-    "previous_unit_price": null
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
   },
+  "brand": "Deliplus",
   "categories": [
     {
-      "id": 78,
-      "name": "Huevos, leche y mantequilla",
+      "categories": [
+        {
+          "categories": [
+            {
+              "id": 902,
+              "level": 2,
+              "name": "Aceite corporal",
+              "order": 241
+            }
+          ],
+          "id": 189,
+          "level": 1,
+          "name": "Cuidado corporal",
+          "order": 241
+        }
+      ],
+      "id": 20,
       "level": 0,
-      "order": 3,
-      "categories": [{ "id": 81, "name": "Nata", "level": 1, "order": 4 }]
+      "name": "Cuidado facial y corporal",
+      "order": 241
     }
-  ]
+  ],
+  "color_variants": null,
+  "details": {
+    "alcohol_by_volume": null,
+    "brand": "Deliplus",
+    "counter_info": null,
+    "danger_mentions": null,
+    "description": "Aceite corporal de almendras Deliplus 100% natural",
+    "legal_name": null,
+    "mandatory_mentions": null,
+    "origin": null,
+    "production_variant": null,
+    "storage_instructions": null,
+    "suppliers": [],
+    "usage_instructions": null
+  },
+  "display_name": "Aceite corporal de almendras Deliplus 100% natural",
+  "ean": "8480000468154",
+  "extra_info": [
+    ""
+  ],
+  "id": "46815",
+  "is_bulk": false,
+  "is_new_arrival": false,
+  "is_variable_weight": false,
+  "limit": 999,
+  "nutrition_information": {
+    "allergens": null,
+    "ingredients": null
+  },
+  "origin": null,
+  "packaging": "Bote",
+  "photos": [
+    {
+      "perspective": 1,
+      "regular": "https://prod-mercadona.imgix.net/images/540b2c7636d8a7b332bfa47583ed71b9.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/540b2c7636d8a7b332bfa47583ed71b9.jpg?fit=crop&h=300&w=300",
+      "zoom": "https://prod-mercadona.imgix.net/images/540b2c7636d8a7b332bfa47583ed71b9.jpg?fit=crop&h=3600&w=3600"
+    },
+    {
+      "perspective": 9,
+      "regular": "https://prod-mercadona.imgix.net/images/de8fb87e0e952938c65fc20e1b918f82.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/de8fb87e0e952938c65fc20e1b918f82.jpg?fit=crop&h=300&w=300",
+      "zoom": "https://prod-mercadona.imgix.net/images/de8fb87e0e952938c65fc20e1b918f82.jpg?fit=crop&h=3600&w=3600"
+    }
+  ],
+  "price_instructions": {
+    "approx_size": false,
+    "bulk_price": "17.00",
+    "bunch_selector": false,
+    "drained_weight": null,
+    "increment_bunch_amount": 1,
+    "is_new": false,
+    "is_pack": false,
+    "iva": 21,
+    "min_bunch_amount": 1,
+    "pack_size": null,
+    "previous_unit_price": null,
+    "price_decreased": false,
+    "reference_format": "100 ml",
+    "reference_price": "1.700",
+    "selling_method": 0,
+    "size_format": "l",
+    "tax_percentage": "21.000",
+    "total_units": null,
+    "unit_name": null,
+    "unit_price": "3.40",
+    "unit_selector": true,
+    "unit_size": 0.2
+  },
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/46815/aceite-corporal-almendras-deliplus-100-natural-bote",
+  "slug": "aceite-corporal-almendras-deliplus-100-natural-bote",
+  "status": null,
+  "thumbnail": "https://prod-mercadona.imgix.net/images/540b2c7636d8a7b332bfa47583ed71b9.jpg?fit=crop&h=300&w=300",
+  "unavailable_from": null,
+  "unavailable_weekdays": []
 }

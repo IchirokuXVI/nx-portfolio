@@ -3,6 +3,7 @@ import {
   toOfficialSourceKind,
   toSourceEntryMatch,
   toSourceEntryStatus,
+  unitPriceUnit,
   type OfficialSourceKind,
   type SourceEntryMatch,
   type SourceEntryStatus,
@@ -201,7 +202,12 @@ function readPrice(
   }
 
   const currency = asText(price['currency']) || null;
-  const label = asText(price['unitPriceLabel']);
+  // The basis the harvester read, and the printed label only when it read
+  // none: a label is not always true of its figure (backend plan 0189).
+  const label = unitPriceUnit(
+    price['unitBasis'],
+    asText(price['unitPriceLabel'])
+  );
   const unit = formatCurrencyAmount(
     asNumber(price['unitPrice']),
     currency,

@@ -1,6 +1,11 @@
 import { isNeverABrand } from '@portfolio/luna-shopper/contracts';
 import { decodeEntities, decodeText, textOf } from './html';
-import { parseSpanishPrice, parseUnitPrice } from './price';
+import {
+  contradictsItsSizeTenfold,
+  parseSpanishPrice,
+  parseUnitPrice,
+} from './price';
+import { splitSize } from './size';
 import type {
   ElJamonCategory,
   ElJamonListingPage,
@@ -98,16 +103,25 @@ function parseRow(code: string, block: string): ElJamonListingRow | null {
   const previous = /<span class="tachado">([\s\S]*?)<\/span>/.exec(priceBlock);
   const plain = [...priceBlock.matchAll(/<span>([\s\S]*?)<\/span>/g)];
   const current = plain[plain.length - 1];
-  const unit = parseUnitPrice(
+  const description = textOf(nameLink[2]);
+  const price = current ? parseSpanishPrice(current[1]) : null;
+  const printedUnit = parseUnitPrice(
     /<div class="texto-porKilo">([\s\S]*?)<\/div>/.exec(block)?.[1]
   );
+  // A unit price that is ten times off the row's own price and size is
+  // withheld, and the price of the pack is still written (plan 0189).
+  const unit =
+    printedUnit !== null &&
+    contradictsItsSizeTenfold(price, printedUnit, splitSize(description))
+      ? null
+      : printedUnit;
 
   return {
     code,
-    description: textOf(nameLink[2]),
+    description,
     brand: brand ? brandOf(textOf(brand[1])) : null,
     url: decodeEntities(nameLink[1]),
-    price: current ? parseSpanishPrice(current[1]) : null,
+    price,
     previousPrice: previous ? parseSpanishPrice(previous[1]) : null,
     unitPrice: unit?.unitPrice ?? null,
     unitPriceLabel: unit?.unitPriceLabel ?? null,

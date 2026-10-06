@@ -32,6 +32,7 @@ import {
 import {
   harvestRunPath,
   localizedTextValue,
+  unitPriceUnit,
   type InfoContent,
   type ScopeLevel,
   type Wire,
@@ -1094,7 +1095,7 @@ export class ProductPricesTab {
           ? ''
           : formatUnitPrice(
               shown.unitPrice,
-              shown.unitPriceLabel,
+              unitPriceUnit(shown.unitBasis, shown.unitPriceLabel),
               shown.currency,
               locale
             ),
@@ -1132,7 +1133,7 @@ export class ProductPricesTab {
             formatPrice(row.price, row.currency, locale) ||
             formatUnitPrice(
               row.unitPrice,
-              row.unitPriceLabel,
+              unitPriceUnit(row.unitBasis, row.unitPriceLabel),
               row.currency,
               locale
             ),

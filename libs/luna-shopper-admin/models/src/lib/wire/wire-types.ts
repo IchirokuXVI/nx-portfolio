@@ -4350,6 +4350,7 @@ export type HarvestSourceEntryPriceView = {
   currency: string;
   unitPrice: number | null;
   unitPriceLabel: string | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
   validFrom: string | null;
   validUntil: string | null;
   details: {

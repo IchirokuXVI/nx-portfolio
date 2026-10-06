@@ -118,6 +118,57 @@ describe('parseListingPage', () => {
   });
 });
 
+describe('a unit price that contradicts its own row (plan 0189)', () => {
+  const rowPrinting = (name: string, price: string, unit: string) =>
+    parseListingPage(
+      '<div id="x_articulo_1" class="articulo"><p class="marca">EL POZO</p>' +
+        '<p class="nombre"> <a href="/detalle/-/Producto/ajo/1">' +
+        ` ${name} </a> </p><p class="precio"> <span>${price}</span> </p>` +
+        `<div class="texto-porKilo"> ${unit} </div></div>`
+    ).rows[0];
+
+  it('writes no unit price and no label, and still the price of the pack', () => {
+    // 2,89 € for 70 g is 4,13 € per 100 g. The page prints the price of a kilo.
+    expect(
+      rowPrinting('ajo troceado, 70g', '2,89\u00a0€', '41,29\u00a0€/100gr')
+    ).toMatchObject({
+      description: 'ajo troceado, 70g',
+      price: 2.89,
+      unitPrice: null,
+      unitPriceLabel: null,
+    });
+    expect(
+      rowPrinting('queso edam loncha, 100g', '1,50\u00a0€', '1,50\u00a0€/Kilo')
+    ).toMatchObject({ price: 1.5, unitPrice: null, unitPriceLabel: null });
+  });
+
+  it('keeps the printed pair of a row that agrees with itself', () => {
+    expect(
+      rowPrinting('ajo troceado, 70g', '2,89\u00a0€', '4,13\u00a0€/100gr')
+    ).toMatchObject({ price: 2.89, unitPrice: 4.13, unitPriceLabel: '100gr' });
+  });
+
+  it('withholds the one such row of the captured listing, and no other', () => {
+    // The second captured page prints `fiambre pavo sándwich, 270g` at
+    // 2,00 € beside `7,41 €/100gr`. 2,00 € for 270 g is 0,74 € per 100 g, so
+    // the page prints the price of a kilo under the label of 100 g.
+    expect(fixture('category-page-2.html')).toMatch(/7,41(&nbsp;|\s)€\/100gr/);
+    const withheld = [...first.rows, ...second.rows].filter(
+      (row) => row.unitPrice === null
+    );
+    expect(withheld).toHaveLength(1);
+    expect(withheld[0]).toMatchObject({
+      description: 'fiambre pavo sándwich, 270g',
+      price: 2,
+      unitPrice: null,
+      unitPriceLabel: null,
+    });
+    // Every row of the two pages printed a unit price, so 39 of 40 are read.
+    expect(first.rows).toHaveLength(20);
+    expect(second.rows).toHaveLength(20);
+  });
+});
+
 describe('pageCountOf', () => {
   it('counts pages of 20, and one page when nothing was printed', () => {
     expect(pageCountOf(1039)).toBe(52);

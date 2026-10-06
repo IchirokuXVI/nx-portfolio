@@ -80,8 +80,12 @@ export interface ElJamonListingRow {
   price: number | null;
   /** The struck through price when the product is on offer, or null. */
   previousPrice: number | null;
+  /**
+   * The printed unit price, or null when the row printed none or printed one
+   * that is ten times off its own price and size (plan 0189).
+   */
   unitPrice: number | null;
-  /** `Kilo`, `Litro`, `Unidad`, `100gr`, verbatim, or null. */
+  /** `Kilo`, `Litro`, `Unidad`, `100gr`, verbatim, or null with the figure. */
   unitPriceLabel: string | null;
 }
 
