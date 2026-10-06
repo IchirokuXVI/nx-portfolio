@@ -1,3 +1,5 @@
+> **PR:** [#655](https://github.com/IchirokuXVI/nx-portfolio/pull/655)
+
 # 0192: the owner's decisions on the first catalog, applied
 
 > Plan `0186` repaired the first catalog on local slot 1 and left sixteen decisions for the
