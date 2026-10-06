@@ -52,7 +52,8 @@ describe('contradictsItsSizeTenfold (plan 0189)', () => {
     return contradictsItsSizeTenfold(price, unit, splitSize(description));
   };
 
-  // Rows of the first catalog, as the chain printed them (plan 0186, step A5).
+  // Rows of the first catalog (plan 0186, step A5): the name, the price and
+  // the unit price as they were stored from the page, in `a5.read.json`.
   it.each([
     ['ajo troceado, 70g', 2.89, '41,29 €/100gr'],
     ['caña de lomo, 40g', 1.2, '30 €/100gr'],
@@ -76,22 +77,31 @@ describe('contradictsItsSizeTenfold (plan 0189)', () => {
   });
 
   it.each([
-    // The printed figure is the figure.
-    ['arroz bomba, 1kg', 3.49, '3,49 €/Kilo'],
-    ['chorizo regio, 70g', 1.39, '1,99 €/100gr'],
-    ['cerveza rubia, pk 6x33cl', 3.3, '1,67 €/Litro'],
+    // The printed figure is the figure. Rows of the two captured listing
+    // pages, `category-page-1.html` and `category-page-2.html`.
+    ['bacalao ahumado skandia, 80g', 4.25, '5,31 €/100gr'],
+    ['queso burgos natural, 900g', 4.25, '4,72 €/Kilo'],
+    ['gazpacho fresco de la huerta, 750ml', 3.19, '4,25 €/Litro'],
     // Off, and not by ten: another defect, which this rule does not judge.
+    // Rows of `a5.read.json`.
     ['noodles de arroz, 375g', 3.5, '4,67 €/Kilo'],
     ['tostadas trigo sarraceno, 100g', 2.85, '14,25 €/Kilo'],
     ['tarrito frutas variadas, 190g', 1, '1,11 €/Kilo'],
-    // Nothing to judge by: no size, a count, a size of another kind.
-    ['plátano de canarias, kg', 2.19, '2,19 €/Kilo'],
+    // Nothing to judge by: no size, or a count. The first three are rows of
+    // the captured pages and the last two are rows of `a5.read.json`.
+    ['bacon original, kg', 8.95, '8,95 €/Kilo'],
+    ['jamón serrano gran reserva, pza', 65, '65,00 €/Unidad'],
+    ['burger vacuno alta proteínas 130g, pk-2', 5.95, '22,88 €/Kilo'],
     ['tiritas infantiles, 10ud', 0.52, '0,52 €/Unidad'],
-    ['pastillas enciende fuego, 40ud', 1, '0,1 €/Unidad'],
     ['bacon en tiras family 2x100g, pk-2', 1.69, '0,85 €/Kilo'],
-    ['nata para montar, 200ml', 1.5, '0,75 €/Kilo'],
   ])('%s at %s printed %s keeps its unit price', (name, price, printed) => {
     expect(contradicts(name, price, printed)).toBe(false);
+  });
+
+  it('judges nothing when the size is of another kind than the label', () => {
+    // Not a row any page printed: a volume beside a price per kilo, made up
+    // here because neither the captures nor the audit hold one.
+    expect(contradicts('made up, 200ml', 1.5, '0,75 €/Kilo')).toBe(false);
   });
 
   it('judges nothing without a price', () => {

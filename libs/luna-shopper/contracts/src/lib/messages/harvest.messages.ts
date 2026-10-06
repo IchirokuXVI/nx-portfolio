@@ -864,7 +864,12 @@ export interface SourceEntryPriceView {
   currency: string;
   /** The source's own normalized price, stored verbatim and never recomputed. */
   unitPrice: number | null;
-  /** The source's own label for that number. Display text, never a unit. */
+  /**
+   * What the adapter says that number is per. It is the text the source
+   * printed when that text is true of the number, and the adapter's own `L`,
+   * `kg` or `ud` when the source labelled another figure (plan 0189). Display
+   * text, never a unit: {@link unitBasis} is the unit.
+   */
   unitPriceLabel: string | null;
   /**
    * What {@link unitPrice} is per, read from the label by the table catalog
