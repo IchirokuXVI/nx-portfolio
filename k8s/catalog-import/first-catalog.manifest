@@ -3,32 +3,36 @@
 # restore-database.sh before a scratch database exists, and a count that differs
 # is a refusal, not a warning.
 #
-# EVERY VALUE BELOW IS PROVISIONAL. They are the checksums and counts of the
-# dumps of 2026-10-03 20:44 (Madrid time). The owner went on editing slot 1
-# after that, so those dumps are not the ones that ship. When the owner declares
-# slot 1 final, both dumps are taken again and every value here is replaced
-# (README.md, "When slot 1 is final"). Until then this manifest refuses the new
-# files at the checksum, which is the intended failure.
+# The values below are the checksums and counts of the dumps of
+# 2026-10-06T21:12:47Z (23:12 Madrid time). They were taken at the end of
+# backend plan 0192, with every service that holds a database stopped. They
+# replace the provisional values of the dumps of 2026-10-03 20:44.
+#
+# These dumps are the ones that ship, unless slot 1 is written again. A later
+# write means new dumps and new values here (README.md, "When slot 1 is
+# final"). The owner has not yet said that slot 1 is final, and the two files
+# are NOT uploaded to a bucket yet. A file with other bytes is refused at the
+# checksum, which is the intended failure.
 #
 # The object keys, under a prefix that the nightly dumps never use.
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
-CATALOG_SHA256="53caacd7f8d8551da3de7d32e5ed7b71d5af701f6bec94696485939c88717aa8"
+CATALOG_SHA256="506247e3a8350a91fd0aaaeca406ada88fb9c89351ba6b258ff7abf757a7f9b0"
 HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
-HARVESTER_SHA256="841cf6dfdcc814c3f9e1799dd9cbd6d71e7a93c1ed29fd9d6f0ec9e316f06642"
+HARVESTER_SHA256="9c102642bf0cb87cc6a1b6f0ab6b94fec8dbf249394ff13c3e3c0252c0773512"
 #
 # The `migrations` table of each dump: how many rows, and the name with the
 # highest timestamp. The live database must hold the same names.
-CATALOG_LAST_MIGRATION="DiaCategoryTree1758500000000"
-CATALOG_MIGRATIONS="26"
-HARVESTER_LAST_MIGRATION="DiscoveredPlaceFootprint1757900000000"
-HARVESTER_MIGRATIONS="17"
+CATALOG_LAST_MIGRATION="ItemEans1758800000000"
+CATALOG_MIGRATIONS="29"
+HARVESTER_LAST_MIGRATION="SourceEntryPriceKind1759200000000"
+HARVESTER_MIGRATIONS="21"
 #
 # The state in numbers (apps/luna-shopper-backend/docs/initial-catalog-2026-10.md).
 EXPECT_SUPERMARKETS="5"
-EXPECT_PRICE_SCOPES="103"
-EXPECT_CATEGORIES="275"
+EXPECT_PRICE_SCOPES="104"
+EXPECT_CATEGORIES="309"
 EXPECT_BRANDS="2782"
-EXPECT_ITEMS="19791"
-EXPECT_ITEM_PRICES="22335"
-EXPECT_SOURCE_ENTRIES="25725"
-EXPECT_SOURCE_ENTRIES_ACTIVE="21751"
+EXPECT_ITEMS="19773"
+EXPECT_ITEM_PRICES="24964"
+EXPECT_SOURCE_ENTRIES="25861"
+EXPECT_SOURCE_ENTRIES_ACTIVE="21779"

@@ -162,6 +162,10 @@ EXPECT_SOURCE_ENTRIES_ACTIVE=21751
 
 A count that differs is a refusal, not a warning.
 
+> **Note of 2026-10-06.** `k8s/catalog-import/first-catalog.manifest` now holds the values
+> of the dumps of 2026-10-06T21:12:47Z, taken at the end of backend plan `0192`. The values
+> in this section are those of 2026-10-03, which this plan was written with.
+
 **Every value above is provisional.** The checksums and counts are those of the dumps of
 2026-10-03 20:44. The owner went on editing slot 1 after that (2026-10-04), so those dumps
 are not the ones that ship. When the owner says that slot 1 is final:

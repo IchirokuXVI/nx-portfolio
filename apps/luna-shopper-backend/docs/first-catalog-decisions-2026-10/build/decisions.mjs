@@ -50,6 +50,39 @@ export const OWNER_DECISIONS = {
   16: DECIDED + 'wait for the code fix of plan 0191. No manual write.',
 };
 
+// What the owner answered later on 2026-10-06, after the register was written, to the rows
+// that the stages of plan 0192 left. `stage-c.mjs` writes each one as
+// `ownerAnswerAfterTheRegister`. The sixteen answers above stay as they were first given,
+// so that the files of plan 0186 build byte for byte as before.
+const LATER = 'Decided by the owner, 2026-10-06, after the register was written: ';
+
+export const ANSWERS_AFTER_THE_REGISTER = {
+  duplicates:
+    LATER +
+    'each of the four probable duplicates is one product. Merge them, with the names of the pair as the product names.',
+  shops:
+    LATER +
+    'C1 is the shop at Imprenta de la Alborada 116, Z1 the shop at José María Martorell, and C2 the shop at Libertador Sucre 38.',
+  discovery: LATER + 'a store discovery for T2 and T7.',
+  offersWithNoPrice:
+    LATER + 'the offers with no price that a mapping writes stay.',
+  ownProduct: LATER + 'the row gets a product of its own.',
+  coren:
+    LATER +
+    'the row is accepted onto the Coren product, and that product is renamed "Albóndigas de pollo".',
+  marcilla:
+    LATER + 'merge the pair, with "Marcilla" in the name of the kept product.',
+  vanilla: LATER + 'the Nescafé vanilla pair stays two products.',
+  bref: LATER + 'the Bref pair waits for a barcode.',
+  fruit:
+    LATER +
+    'the product with the singular name is the loose fruit, and the product with the plural name is the bag. The 1.5 kg Golden bag is a product of its own.',
+  paella: LATER + 'the paella mix stays without a size.',
+  candle: LATER + 'the candle of 1 unit stays.',
+  cocaCola: LATER + 'the Coca-Cola packs stay as pack count 4.',
+  fanta: LATER + 'Fanta naranja stays 1,500 ml. A printed size wins.',
+};
+
 /** The entry with the answer of the owner beside its decision number. */
 export function withOwnerDecision(entry) {
   if (!('openDecision' in entry)) return entry;

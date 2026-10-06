@@ -1,0 +1,25 @@
+{
+  "step": "C1",
+  "title": "Decision 8: an English name on the four products that had none",
+  "sources": [
+    "stage-c1/c1-english-names.answers.json"
+  ],
+  "keys": "Each product is keyed as it stood at the start of the stage of plan 0192 that changed it (the items-snapshot of that stage). A product that a stage created is keyed as the create answered it. Each queue row is keyed as it stood at the start of stage 1 (stage-c1/rows-snapshot.c0-start.json).",
+  "decidedBy": "The owner, 2026-10-06 (decision 8).",
+  "count": 4,
+  "naturalKeys": {
+    "products": 4,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"product":{"brand":"Alteza","nameEs":"Besitos","size":125,"unit":"GRAM","packCount":null,"barcode":null,"localId":"c7f4688f-5a74-424a-bdfe-79b66c356c64"},"decision":{"action":"set-name","nameEs":"Besitos","nameEn":"Besitos"},"status":"applied in stage 1","openDecision":8,"ownerDecision":"Decided by the owner, 2026-10-06: the three proper names stay as they are in English. \"Sugar free angel hair pastries\" for the fourth.","why":"A proper name. It stays as it is in English."},
+    {"product":{"brand":"Hidalgo","nameEs":"Negrito","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"4c6c59dd-59f7-4856-95c3-ac1ec08e56eb"},"decision":{"action":"set-name","nameEs":"Negrito","nameEn":"Negrito"},"status":"applied in stage 1","openDecision":8,"ownerDecision":"Decided by the owner, 2026-10-06: the three proper names stay as they are in English. \"Sugar free angel hair pastries\" for the fourth.","why":"A proper name. It stays as it is in English."},
+    {"product":{"brand":"Hidalgo","nameEs":"Negrito gigante","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"a2736a53-825d-4278-a95b-08dd7fd7fa22"},"decision":{"action":"set-name","nameEs":"Negrito gigante","nameEn":"Negrito gigante"},"status":"applied in stage 1","openDecision":8,"ownerDecision":"Decided by the owner, 2026-10-06: the three proper names stay as they are in English. \"Sugar free angel hair pastries\" for the fourth.","why":"A proper name. It stays as it is in English."},
+    {"product":{"brand":"El Cateto","nameEs":"Panales de cabello sin azúcar","size":330,"unit":"GRAM","packCount":null,"barcode":null,"localId":"6fdae9cd-b711-44b6-8d2c-b7b2b8e01e1f"},"decision":{"action":"set-name","nameEs":"Panales de cabello sin azúcar","nameEn":"Sugar free angel hair pastries"},"status":"applied in stage 1","openDecision":8,"ownerDecision":"Decided by the owner, 2026-10-06: the three proper names stay as they are in English. \"Sugar free angel hair pastries\" for the fourth.","why":"The name of the recommendation, not the name that step A1 proposed."}
+  ]
+}
