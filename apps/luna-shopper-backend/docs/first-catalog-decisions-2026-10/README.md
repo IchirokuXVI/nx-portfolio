@@ -707,7 +707,7 @@ came out byte for byte as they are committed.
 
 Later that day `stage-c.mjs` learned to read `stage-c5/`, for the coordinates of the
 shop of `T7`. A build then changed one file, `c05`: its header, and the entry of the shop,
-which gained its coordinates. The other twenty-eight data files came out byte for byte as
+which gained its coordinates. The other twenty-nine files came out byte for byte as
 they are committed.
 
 | Script | What it does |
