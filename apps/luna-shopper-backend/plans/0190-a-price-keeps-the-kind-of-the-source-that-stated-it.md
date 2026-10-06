@@ -1,3 +1,5 @@
+> **PR:** [#654](https://github.com/IchirokuXVI/nx-portfolio/pull/654)
+
 # 0190: a price keeps the kind of the source that stated it
 
 > Found by the repair of the first catalog on local slot 1 (plan `0186`, stage B,
