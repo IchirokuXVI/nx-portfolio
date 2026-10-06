@@ -1,0 +1,27 @@
+{
+  "step": "A8",
+  "title": "One brand registered twice",
+  "sources": [
+    "a8.result.json"
+  ],
+  "keys": "Each product is keyed as it stood in the catalog of 2026-10-03, before stage A. That state is replayed from the end of stage A (see build/state.mjs). A brand is keyed by its label.",
+  "decidedBy": "Plan 0186, target A8. Gotitas de Oro stays unlinked: an agent read both brands, and the directing session, on the word of the owner of 2026-10-06 (\"Decide for yourself on the rest, they seem fine\") kept it.",
+  "count": 6,
+  "naturalKeys": {
+    "products": 5,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"decision":"link","spelling":{"label":"3 Brujas","localId":"3a8e293e-9c7f-486a-85cb-af3cda3b1906"},"brand":{"label":"Las 3 Brujas","localId":"f0320cbb-b48d-43cd-a088-1811ea2c511e"},"movedItems":1,"productsMoved":[{"brand":"3 Brujas","nameEs":"Limpiador de madera","size":1000,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"87bf6018-d5ad-4d47-bff3-4b6c0e87db44"}],"status":"applied in pass 1"},
+    {"decision":"link","spelling":{"label":"Sierra de Montoro","localId":"dfb2d655-033e-4294-bb17-9f54b5f9f03f"},"brand":{"label":"Sierra Montoro","localId":"c6cc8ac2-2b50-4d03-adcd-6ec9d128a1ed"},"movedItems":1,"productsMoved":[{"brand":"Sierra de Montoro","nameEs":"Miel antigoteo","size":500,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"c88c4cf7-03a4-46b2-aa5e-5682c543e461"}],"status":"applied in pass 1"},
+    {"decision":"link","spelling":{"label":"Liviana","localId":"03770547-e0ec-43dc-b517-a6e5e50e82e8"},"brand":{"label":"Fuente Liviana","localId":"f8927c92-3db3-47e5-8e1f-f2a230f3eb01"},"movedItems":2,"productsMoved":[{"brand":"Liviana","nameEs":"Agua mineral","size":12,"unit":"LITER","packCount":null,"barcode":"8423415601006","localId":"deca9f7b-1978-4154-bd2d-4938fd07cec1"},{"brand":"Liviana","nameEs":"Agua mineral","size":2,"unit":"LITER","packCount":null,"barcode":"8423415501009","localId":"b3ffdb21-84e2-4da5-b193-806ae4852a1a"}],"status":"applied in pass 1"},
+    {"decision":"link","spelling":{"label":"One","localId":"a0684aef-9c27-442b-a39b-aa0f9982397d"},"brand":{"label":"Purina One","localId":"61e35ec0-5e42-40a5-8cc9-c79aa2c42eb8"},"movedItems":1,"productsMoved":[{"brand":"One","nameEs":"Comida para gato adulto esterilizado buey y trigo","size":800,"unit":"GRAM","packCount":null,"barcode":null,"localId":"95766889-f01e-4a41-9e97-0fc20dbeb909"}],"status":"applied in pass 1"},
+    {"decision":"link","spelling":{"label":"CH Carolina Herrera","localId":"282a4d40-0cba-4351-9e61-d05a37211e36"},"brand":{"label":"Carolina Herrera","localId":"f90538c2-1eff-4065-bfeb-e348c7fc78ef"},"movedItems":0,"productsMoved":[],"status":"applied in pass 1"},
+    {"decision":"no link","spelling":{"key":"gotitasdeoro","label":"Gotitas de Oro"},"brand":{"key":"gotasdeoro","label":"Gotas de Oro"},"status":"not linked","why":"Neither is an oil. Gotas de Oro holds one product, \"Agua de colonia sport\" of 750 ml (Deza). Gotitas de Oro holds one product, \"Colonia infantil\" of 80 ml (El Jamón, printed GOTITAS ORO, in the baby care section). Gotitas de Oro is the children line of the same house, with its own name on the bottle, not another spelling of Gotas de Oro. Whether a line joins its house is a question of section 1 of the plan, so nothing was linked."}
+  ]
+}
