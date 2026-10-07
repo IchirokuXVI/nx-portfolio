@@ -7,7 +7,6 @@ import {
   PlaceMatchRung,
   PostalCodeSource,
   PriceScopeKind,
-  type CreateSupermarketLocationRequest,
   type DiscoveredPlaceGroup,
   type DiscoveredPlaceGroupsResult,
   type DiscoveredPlaceIdRequest,
@@ -288,8 +287,9 @@ function refTakenBy(
 }
 
 /**
- * A write of a shop with its reference left out, and the provider with it:
- * the provider only says whose reference that is (plan 0195).
+ * A patch of a shop with its reference left out, and the provider with it:
+ * the provider only says whose reference that is, and a later link fills a
+ * reference under the provider that the shop already names (plan 0195).
  */
 function withoutRef<
   T extends { externalRef?: unknown; externalProvider?: unknown },
@@ -776,7 +776,10 @@ export class DiscoveredPlaceService {
    * one shop for each reference across all of them. That holder is thus not
    * always a candidate. The answer is the 409 `location_external_ref_taken`
    * of catalog, passed through with the holder in its details, and nothing is
-   * written. `force` creates the shop with no reference.
+   * written. **`force` does not get past it.** `force` answers
+   * `place_matches_location` alone, and the person who sent it may never
+   * have seen the holder. An import thus never creates a shop with no
+   * reference. A link to an existing shop does go through ({@link bind}).
    */
   async import(
     req: ImportDiscoveredPlaceRequest
@@ -814,7 +817,6 @@ export class DiscoveredPlaceService {
     const { place: imported } = await this.promote(place, {
       supermarketId,
       priceScopeId,
-      withoutTakenRef: req.force === true,
     });
     return toDiscoveredPlaceView(imported);
   }
@@ -1065,20 +1067,14 @@ export class DiscoveredPlaceService {
    *
    * **A reference that another shop holds** (plan 0195) is the refusal of
    * catalog, thrown on as it came. A run logs it and leaves the place in the
-   * queue, and a hand import answers it. Only `withoutTakenRef`, which is the
-   * `force` of a person, creates the shop with no reference and no provider.
-   * The provider is left out with the reference, because a later link fills a
-   * reference under the provider that the shop already names.
+   * queue, and a hand import answers it, also with `force`. Nothing here
+   * creates a shop with no reference.
    */
   private async promote(
     place: DiscoveredPlace,
-    options: {
-      supermarketId: string;
-      priceScopeId?: string;
-      withoutTakenRef?: boolean;
-    }
+    options: { supermarketId: string; priceScopeId?: string }
   ): Promise<{ place: DiscoveredPlace; location: SupermarketLocationView }> {
-    const draft: Omit<CreateSupermarketLocationRequest, 'userId'> = {
+    const location = await this.catalog.createLocation({
       supermarketId: options.supermarketId,
       priceScopeId: options.priceScopeId,
       // The shop's own name, written once under the language its provider
@@ -1113,22 +1109,7 @@ export class DiscoveredPlaceService {
       externalProvider: place.provider,
       // Plan 0176: the outline's area, when the place was mapped as one.
       ...(place.footprintM2 ? { footprintM2: place.footprintM2 } : {}),
-    };
-    let location: SupermarketLocationView;
-    try {
-      location = await this.catalog.createLocation(draft);
-    } catch (error) {
-      const taken = options.withoutTakenRef ? refTakenBy(error) : undefined;
-      if (!taken) {
-        throw error;
-      }
-      this.logger.warn(
-        `${place.provider}/${place.externalRef} is imported as a shop with ` +
-          'no reference, because shop ' +
-          `${taken.heldBy?.supermarketLocationId ?? 'unknown'} holds it`
-      );
-      location = await this.catalog.createLocation(withoutRef(draft));
-    }
+    });
 
     place.status = DiscoveredPlaceStatus.IMPORTED;
     // Written back so a re-run recognizes the place as already ours rather than

@@ -104,7 +104,7 @@ reference, and that is a follow up with a migration.**
   catalog migrations and 21 harvester migrations, and the restore refuses a count that
   differs. A migration thus means a new manifest, for a case that no shop of today is in.
 - This plan removes the cost of the case. A reference that collides answers a refusal
-  that names the holder, and an import with `force` creates the shop with no reference.
+  that names the holder, and a link goes through with the reference left empty.
 
 **The follow up, not built here:** a migration that replaces the index with a unique index
 on `(COALESCE("externalProvider", ''), "externalRef") WHERE "externalRef" IS NOT NULL`, a
@@ -123,13 +123,14 @@ to link a place to the shop that they named until they edit a third shop. The an
 the link says what happened: `filled` lacks `EXTERNAL_REF`, and `refHeldBy` names the shop
 that holds the reference.
 
-**An import refuses, and `force` creates the shop with no reference.** An import creates a
-shop. A second shop for a reference that a shop already holds is most often a duplicate,
-so the person must see the holder first: the answer is the 409 of catalog, passed through
-with its details, and nothing is written. `force` already means "create a new shop
-anyway", and with it the shop is created with no reference and no provider. The provider
-goes with the reference, because a later link fills a reference under the provider that
-the shop already names (`place-link-fields.ts:91`).
+**An import refuses, also with `force`.** An import creates a shop. A second shop for a
+reference that a shop already holds is most often a duplicate, so the person must see the
+holder first: the answer is the 409 of catalog, passed through with its details. Nothing
+is written, and the place stays as it was. `force` keeps its one meaning, which is to get
+past `place_matches_location`. The person sends it after they saw the candidate shops, and
+the holder is not always one of them. An import thus never creates a shop with no
+reference. A person who still wants the shop links the place to an existing shop, which
+goes through with the reference left empty and reports it, or creates the shop by hand.
 
 **A trusted run never creates a shop with no reference.** It has nobody to ask. The place
 stays in the queue, the log line carries the sentence of catalog, and the run goes on.
@@ -147,8 +148,7 @@ stays in the queue, the log line carries the sentence of catalog, and the run go
    `heldBy: null`. Any other failure of the database stays as it came.
 4. A link sends the patch. On that refusal it sends the patch again with no `externalRef`
    and no `externalProvider`, marks the place, and answers `refHeldBy`.
-5. An import passes that refusal through. With `force` it creates the shop with no
-   reference and no provider.
+5. An import passes that refusal through, with or without `force`, and writes nothing.
 6. The gateway documents the code on the three routes that can answer it, and the link
    result carries the optional `refHeldBy`.
 7. The back office has a sentence for the code.
@@ -224,8 +224,10 @@ stays in the queue, the log line carries the sentence of catalog, and the run go
   the one nested under `error`. The second write carries no reference and no provider. A
   shop that lacked only the reference gets the mark and one call. Any other refusal still
   fails the link and leaves the place `NEW`. The bulk link never sends a reference. An
-  import passes the refusal through, also with `force: false`, and with `force` creates
-  the shop with no reference.
+  import passes the refusal through with the holder, with `force: false` and with
+  `force: true`, and makes no second call. `force` still gets past
+  `place_matches_location` and creates the shop, with its reference, when the reference
+  is free.
 - `discovered-place.auto-import.spec.ts`: a run goes past such a place, imports the next
   one, and sends a reference with each shop it creates.
 - `location-external-ref.http.spec.ts` in the gateway: the problem object of catalog
@@ -240,9 +242,11 @@ stays in the queue, the log line carries the sentence of catalog, and the run go
   office, which admin plan `0061` is editing now.
 - **The bulk link answers no `refHeldBy`.** It cannot reach the case, so its rows did not
   change.
-- **An import with `force` says nothing more in its answer.** It answers the place, as
-  before. The shop it names has no reference, and the harvester logs a warning with the
-  holder.
+- **The forced creation was removed after review.** The first build let an import with
+  `force` create the shop with no reference and no provider. `force` is sent to get past
+  `place_matches_location`, so one flag acknowledged two warnings and the second one, the
+  holder, was never shown. An import now answers the 409 with the holder, also with
+  `force`.
 - **The check on `update` compares the row before and after.** The form of the back office
   sends the whole record back, with the reference the shop holds. A check on each request
   that names a reference would read the table for each such save.
@@ -252,8 +256,7 @@ stays in the queue, the log line carries the sentence of catalog, and the run go
 - **The index on the provider and the reference**, as written under "The decision on the
   index". It needs a migration and a new manifest.
 - **The Places queue of the back office.** With no edit it shows the sentence of the code
-  when an import is refused. It does not yet name the holder from `details.heldBy`, it
-  offers `force` only after `place_matches_location`, and it does not say that a link
+  when an import is refused. It does not yet name the holder from `details.heldBy`, and it does not say that a link
   left the reference empty (`refHeldBy`). Those are screens of admin plan `0061` or of a
   plan after it.
 - **The shop form of the back office** shows the sentence and does not link to the holder.

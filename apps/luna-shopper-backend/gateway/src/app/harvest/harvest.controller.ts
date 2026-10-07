@@ -406,10 +406,10 @@ export class AdminHarvestPlacesController {
    * nothing. Link one of them, or send `force` to create a new shop anyway. An
    * imported place answers 409 `place_already_imported`.
    *
-   * A reference that a shop of another chain or of another provider holds
-   * answers 409 `location_external_ref_taken` with that shop in
-   * `details.heldBy`, and writes nothing (plan 0195). With `force` the shop is
-   * created with no reference.
+   * A reference that another shop holds answers 409
+   * `location_external_ref_taken` with that shop in `details.heldBy`, and
+   * writes nothing (plan 0195). `force` does not get past it: link the place
+   * to an existing shop, or create the shop by hand.
    */
   @Post(':id/import')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.import, {

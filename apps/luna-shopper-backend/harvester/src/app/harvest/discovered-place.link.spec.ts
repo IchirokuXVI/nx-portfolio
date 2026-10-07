@@ -1282,9 +1282,47 @@ describe('DiscoveredPlaceService, a reference another shop holds (plan 0195)', (
       expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
     });
 
-    it('creates the shop with no reference and no provider with force', async () => {
+    it('refuses with the holder also with force, and creates no shop', async () => {
+      // `force` answers `place_matches_location` alone. The person who sent
+      // it may never have seen that another shop holds the reference.
       const harness = build({ places: [place()] });
-      harness.catalog.createLocation.mockRejectedValueOnce(refTaken());
+      const refused = refTaken();
+      harness.catalog.createLocation.mockRejectedValueOnce(refused);
+
+      const failure = await harness.service
+        .import({ userId: ADMIN, placeId: 'place-1', force: true })
+        .catch((error: unknown) => error);
+
+      expect(failure).toBe(refused);
+      expect(failure).toMatchObject({
+        status: 409,
+        code: 'location_external_ref_taken',
+        details: { heldBy: HOLDER },
+      });
+      // One call, the refused one, and it carried the reference: no second
+      // write with the reference left out.
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+      expect(harness.catalog.createLocation.mock.calls[0][0]).toMatchObject({
+        externalRef: 'node/1',
+        externalProvider: 'OSM',
+      });
+      expect(harness.places.save).not.toHaveBeenCalled();
+      expect(harness.rows.get('place-1')?.status).toBe(
+        DiscoveredPlaceStatus.NEW
+      );
+    });
+
+    it('still creates the shop with force when the reference is free', async () => {
+      // A shop of the chain on the same spot may be this place: without
+      // force the import answers `place_matches_location`.
+      const harness = build({
+        shops: [noRefShop({ latitude: LAT, longitude: LON })],
+        places: [place()],
+      });
+      await expect(
+        harness.service.import({ userId: ADMIN, placeId: 'place-1' })
+      ).rejects.toMatchObject({ code: 'place_matches_location' });
+      expect(harness.catalog.createLocation).not.toHaveBeenCalled();
 
       const view = await harness.service.import({
         userId: ADMIN,
@@ -1292,18 +1330,11 @@ describe('DiscoveredPlaceService, a reference another shop holds (plan 0195)', (
         force: true,
       });
 
-      const [first, second] = harness.catalog.createLocation.mock.calls;
-      expect(first[0]).toMatchObject({
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+      expect(harness.catalog.createLocation.mock.calls[0][0]).toMatchObject({
+        supermarketId: ELJAMON.id,
         externalRef: 'node/1',
         externalProvider: 'OSM',
-      });
-      expect(second[0]).not.toHaveProperty('externalRef');
-      expect(second[0]).not.toHaveProperty('externalProvider');
-      expect(second[0]).toMatchObject({
-        supermarketId: ELJAMON.id,
-        address: 'Avenida de Cádiz 68',
-        latitude: LAT,
-        longitude: LON,
       });
       expect(view.status).toBe(DiscoveredPlaceStatus.IMPORTED);
       expect(view.supermarketLocationId).toBe('loc-created');

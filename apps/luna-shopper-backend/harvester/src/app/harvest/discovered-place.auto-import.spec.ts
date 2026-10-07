@@ -469,7 +469,7 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
   it('keeps the run past a place whose reference another shop holds (plan 0195)', async () => {
     // Catalog holds one shop for each reference. The place stays in the
     // queue for a person, and the run never creates a shop with no
-    // reference: only the force of a person does that.
+    // reference. No import does.
     const harness = build();
     harness.catalog.createLocation.mockRejectedValueOnce({
       status: 409,
