@@ -40,6 +40,14 @@ dumps and what stays wrong. Every other section describes the catalog as it was 
 > section holds all of it under "The re-file and the second walk (2026-10-07)". The dumps
 > of 01:32 no longer ship.
 
+> **Note of 2026-10-07, after plan 0193.** Slot 1 moved on once more that day. Section 4 of
+> plan 0193 ran on it: one El Jamón store discovery, 19 links of a place of the chain to
+> the El Jamón shop that it is, and 27 links by reference. All 19 El Jamón shops hold an
+> address, a city and a postal code now. The dumps were taken again at 13:53 Madrid time,
+> and those are the dumps that ship now. The last section holds all of it under "The
+> places and the El Jamón addresses (plan 0193, 2026-10-07)". The dumps of 12:28 no longer
+> ship.
+
 ## The state in numbers
 
 | | Count |
@@ -111,6 +119,10 @@ The table before this one is the state of 2026-10-06 and no longer the state of 
 dumps that ship. "The dumps that ship" in the last section splits the new counts by
 chain.
 
+**Note of 2026-10-07, after plan 0193:** the dumps that ship now were taken at 11:53 UTC,
+after the data step of plan 0193. That step changed none of these eight counts. It
+changed places, addresses of shops and audit rows, which the manifest does not count.
+
 ## What production must do before it serves this state
 
 Release task `0003-restore-the-first-catalog` copies this state into a cluster
@@ -143,6 +155,11 @@ The dumps of 2026-10-06 are such dumps. "Repairs after the audit" names them.
 > The dumps that ship were taken at 2026-10-07T10:28:17Z (12:28 Madrid time), after the
 > re-file and the second walk. The manifest states what they hold. They are not uploaded
 > to a bucket yet.
+
+> **Note of 2026-10-07, after plan 0193.** The dumps of 12:28 do not ship either. The dumps
+> that ship were taken at 2026-10-07T11:53:13Z (13:53 Madrid time), after the data step of
+> plan 0193. The manifest states what they hold: the same eight counts, and two new
+> checksums. They are not uploaded to a bucket yet.
 
 1. **Run the same code.** In the dumps of 2026-10-03 the catalog database holds 26
    migrations, the last one `DiaCategoryTree1758500000000` (plan 0173, PR #597). The
@@ -796,6 +813,8 @@ Slot 1 is down and locked, with its databases kept.
 > **Note of 2026-10-07:** the dumps that ship are in `stage-c5/final/` now.
 > **Note of 2026-10-07, after the second walk:** the dumps that ship are in
 > `stage-c7/final/` now.
+> **Note of 2026-10-07, after plan 0193:** the dumps that ship are in `stage-c8/final/`
+> now.
 
 ### What stays wrong
 
@@ -1016,6 +1035,11 @@ ignored folder `.curation-runs/2026-10-audit-repair/` of the checkout that did i
 > changes, and the dumps were taken again at 12:28 Madrid time. "The re-file and the
 > second walk (2026-10-07)", below, holds both stages, the new counts and the dumps that
 > ship now. The dumps of 01:32 no longer ship.
+
+> **Note of 2026-10-07, after plan 0193.** One more data stage followed, and the dumps were
+> taken again at 13:53 Madrid time. "The places and the El Jamón addresses (plan 0193,
+> 2026-10-07)", below, holds the stage and the dumps that ship now. The dumps of 12:28 no
+> longer ship.
 
 Every change went through the gateway of slot 1 as `admin@curation.local`. No SQL write was
 made. The register, `first-catalog-decisions-2026-10/README.md`, holds each decision with
@@ -1676,6 +1700,214 @@ folder, beside a `VERIFY.txt` and `manifest-values.json`.
 - **The two files are not uploaded to a bucket.**
 - Slot 1 is down and locked, with its databases kept.
 
+> **Note of 2026-10-07, after plan 0193.** These dumps no longer ship, and the manifest no
+> longer holds their checksums. The column "Ships" and the point about the manifest were
+> true at 12:28. The counts of the two tables above still hold, apart from
+> `catalog_audit`, the discovered places and the harvest runs. The next section holds the
+> dumps that ship.
+
+### The places and the El Jamón addresses (plan 0193, 2026-10-07)
+
+Written on 2026-10-07. Section 4 of backend plan 0193 ran on slot 1 that day, after the
+dumps of 12:28. The owner approved it the same day. Every figure below was read from the
+folder `stage-c8/` of the run folder. Every write went through the gateway of slot 1 as
+`admin@curation.local`: 23 requests, and each answered 201 at the first try. No SQL write
+was made. Slot 1 ran the code of `dev` at `b9eece51`, the merge of plan 0193 (PR #660),
+and no migration was pending. The register, `first-catalog-decisions-2026-10/README.md`,
+holds the pairing rule (section 1), the stage (section 8) and the open decisions (section
+9). Its files `e01` to `e04` hold the rows.
+
+**One step was not done: Eden.** "Eden, not done" below says why.
+
+#### One El Jamón store discovery
+
+- **Before the run** the El Jamón row of `supermarket_sources` read `enabled: true` and
+  `autoImportPlaces: false`. Nothing was changed on it. No postal code request was
+  pending, so the switch could start no other run.
+- **The switch.** `HARVEST_ENABLED` was true in the harvester `.env` for about one
+  minute. It was set back to false, with a restart, before the first link.
+- **The run** `32b48b42` was a `STORE_DISCOVERY` that named the chain, with
+  `postalCodes` set to 14001 to 14014, 14029 and 14193. It took one second and one
+  request to the chain. It read 368 records and kept 366. **It recorded 53 places.** It
+  imported none, wrote no shop and created no price scope, because the automatic import
+  of the chain is off.
+- **The two codes outside the city range.** 14001 to 14014 are the codes of the city.
+  14029 and 14193 were added because the list of the chain prints them on three shops
+  whose town is "Córdoba". Without them the run records 50 places.
+- **Two numbers differ from plan 0193.** The plan expected 52 new places and 33 shops
+  that the catalog lacks. The run gave 53 and 34. The plan did not say which codes it
+  counted.
+
+#### The 19 links
+
+Each of the 19 El Jamón shops of the catalog was paired with one `ELJAMON` place, before
+the first link, by this rule:
+
+- The place is the `ELJAMON` place nearest to the shop.
+- The gateway names the shop as the first candidate of the place, with the rung `NEARBY`.
+- It is the only `ELJAMON` place within 50 m of the shop.
+- No place is the nearest place of two shops.
+
+All 19 pairs met the rule. The farthest pair is 19 m apart. The next `ELJAMON` place of
+any shop is at least 75 m away. Then 19 calls of `POST /v1/admin/harvest/places/:id/link`
+followed, one at a time, never with `acrossChains`.
+
+| # | Shop | Street that the chain prints | Code of the chain | Metres | What the link filled |
+| ---: | --- | --- | --- | ---: | --- |
+| 1 | `13362069` | C/ ALONSO EL SABIO, 6 | 14001 | 12 | Postal code, address, city |
+| 2 | `20c64e1b` | C/ DOCTOR BARRAQUER, 8 | 14004 | 1 | Postal code, address, city |
+| 3 | `334bf1f9` | CARRETERA DE TRASSIERRA, 19B | 14011 | 19 | Postal code, address, city |
+| 4 | `3d4e2feb` | AVDA. DE LOS ALMOGAVARES, 32 | 14006 | 2 | Postal code, address, city |
+| 5 | `4a76729e` | C/ REYES CATOLICOS, 20 | 14001 | 9 | Postal code, address |
+| 6 | `5e6b5fc7` | AVDA. VIRGEN MILAGROSA, 18 | 14010 | 1 | Postal code, address, city |
+| 7 | `5ecf49e7` | AVDA. GRAN VIA PARQUE, 23 | 14005 | 13 | Nothing |
+| 8 | `6521c023` | C/ HISTORIADOR JAEN MORENTE, 28 | 14014 | 4 | Address, city |
+| 9 | `6c262d01` | AVDA. CERVANTES, 8 | 14008 | 3 | Postal code, address, city |
+| 10 | `6d44d488` | C/ MARRUECOS, 6 | 14004 | 5 | Postal code, city |
+| 11 | `8e561111` | AVDA. EL CAIRO ESQ. C/ HNO JUAN FERNANDEZ | 14007 | 3 | Nothing |
+| 12 | `91c9a984` | C/ DOÑA BERENGUELA, Nº 18 | 14006 | 16 | Nothing |
+| 13 | `a35697e3` | C/ RONDA, 5 | 14013 | 18 | Nothing |
+| 14 | `a5b70c95` | C/ REALEJO, 1 | 14002 | 5 | Postal code, address, city |
+| 15 | `ab4298f4` | C/ COMPOSITOR RAMON MEDINA, 38 | 14010 | 4 | Postal code, address, city |
+| 16 | `c7c99336` | C/ MANUEL FUENTES BOCANEGRA, 17 | 14005 | 19 | Nothing |
+| 17 | `d6184bb1` | AVDA. VIRGEN DE FATIMA, 19 | 14014 | 13 | Postal code, address, city |
+| 18 | `e2ab1ead` | C/ DUQUE DE HORNACHUELOS, 2 | 14002 | 4 | Postal code, address, city |
+| 19 | `f6dcfea2` | C/ MANUEL DE SANDOVAL, 5 | 14008 | 4 | Postal code, address, city |
+
+- **All 19 El Jamón shops hold an address, a city and a postal code now.** 5 did before.
+- **14 shops got a field.** 13 got a postal code, each marked `SOURCE`. 13 got an
+  address, and 13 got a city. They are not the same 13: 11 shops got all three, shop 5
+  kept its city, shop 8 kept its code, and shop 10 kept its address "Marruecos", where
+  the chain says "C/ MARRUECOS, 6".
+- **5 shops were complete and got nothing.** The link wrote only the mark on the place.
+- **A link fills only what the shop lacks.** No value that existed was replaced.
+- **Shop 12, Doña Berenguela 18, still says 14011.** The chain says 14006. The code on
+  the shop is marked `SOURCE`, from OpenStreetMap, so the link left it.
+- **Shop 16 holds "Calle Manuel Fuentes "Bocanegra" 19",** and the chain says number 17.
+  The place is 19 m away and the only one within 436 m, so it is the same shop.
+- The new addresses are in the upper case writing of the chain ("AVDA. CERVANTES, 8").
+- The coordinates, the reference, the provider, the country and the label of all 42
+  shops are unchanged. No label was written.
+
+#### The bulk link by reference
+
+`POST /v1/admin/harvest/places/link-by-ref` links a `NEW` place to the one shop that
+holds the same reference and provider. It was called three times.
+
+- **Dry, with the body `{}`:** 27 to link and none skipped. 19 are of El Jamón and 8 of
+  Deza, all OpenStreetMap places. That is the count that plan 0193 expected. No entry
+  named a postal code.
+- **With `{ "apply": true }`:** the same 27 were linked. One field was written: the
+  footprint of 758 m² of the place `way/821913293` on its shop, Doña Berenguela 18,
+  which held none.
+- **Dry again:** nothing to link.
+
+Each of the 19 El Jamón shops is now named by two places: the one of the chain and the
+one of OpenStreetMap. 8 of the 10 Deza shops got their mark here. One had it before, and
+the tenth, on Acera Fuente de la Salud, has no place.
+
+#### What the stage left
+
+Nothing else was linked. No place was imported or rejected. `e03` of the register holds
+the 46 places that the first two points name.
+
+- **91 places are `NEW`.** 14 name a candidate shop, and 77 name none.
+- **The catalog lacks 34 El Jamón shops.** 32 `ELJAMON` places name no shop. 2 more are
+  near a shop that is linked to its own place, at 75 m and at 209 m, so they are other
+  shops of the chain. The owner has not decided to import them. That is decision F of
+  plan 0193, and it stays open. A trusted run would import the 32 and leave the 2 in
+  the queue.
+- **12 OpenStreetMap places are near a Mercadona or Lidl shop that no place names.** 9
+  are within 50 m (7 of Mercadona, 2 of Lidl) and are very likely those shops. 3 are
+  between 55 m and 132 m. The Lidl one at 55 m holds the address of its shop, "Avenida de
+  Cádiz 68".
+- **45 OpenStreetMap places name no candidate:** 20 with no brand, 7 of Dia, 3 of ALDI,
+  and 15 more under thirteen other names.
+- **14 shops are named by no place:** 10 of Mercadona, 3 of Lidl and 1 of Deza.
+
+#### Eden, not done
+
+The owner decided on 2026-10-07 that Eden is two brands with the same name: the toilet
+gel, and the shoe care range. The registry cannot say that, so **nothing was written.**
+
+- `brands.key` is unique, and the key is made from the label. A second brand with the
+  label "Eden" has the key `eden` again, and the create answers 409.
+- A homonym of plan 0178 is not a second brand with the same name. It is a pointer from
+  the printed key `eden` to a second brand that has another label and another key.
+  "Poseidon Food" beside "Poseidon" is the case that exists.
+- A product takes its brand from the text written on it, by key. The 16 shoe care
+  products can thus only move to a brand whose label is not "Eden".
+
+The owner chose no such label. One brand `Eden` holds 17 products and no homonym, as
+before. What the step takes: the owner names the second brand, the brand is created, a
+homonym for the printed key `eden` is added to it, and the 16 products take its label.
+The other way is a change of the model, which is a migration. `e04` of the register
+holds the 17 products and the calls. Either way slot 1 is written again, and the dumps
+are taken once more.
+
+#### Counts before and after
+
+| | Before (the dumps of 12:28) | After (the dumps that ship) |
+| --- | ---: | ---: |
+| Shops | 42 | 42 |
+| Price scopes | 105 | 105 |
+| El Jamón shops with an address, a city and a postal code | 5 | 19 |
+| Discovered places | 85 | 138 |
+| Places `NEW` | 84 | 91 |
+| Places `IMPORTED`, which name a shop | 1 | 47 |
+| Harvest runs | 15 | 16 |
+| `catalog_audit` | 341,006 | 341,021 |
+| Products, brands, price rows, queue rows | 22,203, 2,830, 25,074, 25,861 | The same |
+
+By provider, the places are 57 `NEW` and 28 `IMPORTED` of OpenStreetMap, and 34 `NEW`
+and 19 `IMPORTED` of the chain. No place is `REJECTED`.
+
+Five tables changed, and the other 30 tables of catalog and harvester have the same row
+count and the same hash:
+
+- `supermarket_locations`: 53 values on 15 shops, each one null before. They are 13
+  addresses, 13 cities, 13 postal codes, 13 postal code sources and 1 footprint.
+- `catalog_audit`: 15 rows, one for each shop that changed. Each names the service actor
+  of the harvester.
+- `discovered_places`: 53 new rows, and 46 rows that went from `NEW` to `IMPORTED`.
+- `harvest_runs`: the one run, `COMPLETED`.
+- `supermarket_sources`: the run times of the El Jamón row. `enabled` and
+  `autoImportPlaces` were never changed.
+
+#### The dumps that ship now
+
+The dumps were taken at 2026-10-07T11:53:13Z (13:53 Madrid time) with `pg_dump -Fc`
+(PostgreSQL 16.15), on the code of `dev` at `b9eece51`. Only the gateway ran, and it holds
+no database, so nothing wrote. The hash of every table right before and right after the
+dumps equals the hash of the verification. They stand in `stage-c8/final/` of the run
+folder, beside a `VERIFY.txt` and `manifest-values.json`.
+
+| Dump | Bytes | sha256 | Ships |
+| --- | ---: | --- | --- |
+| `catalog.dump` | 51,094,969 | `e81ba4c20a3535d0a6b9aa9184b3913c13248f46a89fce97d10054e1211f9650` | Yes |
+| `harvester.dump` | 11,636,411 | `93cc20ab47eb4f93ed46ef54ab61602622f79d173c281d08a2a98ea0a56cd2ec` | Yes |
+| `auth.dump` | 26,069 | `1fca9acb1c172cb665548853088b180d354871addc7af57512201d995589f42a` | No |
+| `core.dump` | 99,428 | `3902aa7efb3ed3a88126ce5d3f01cd9d27a5123568ffbbc9ec93e4665504118e` | No |
+
+- The migrations are the same 29 and 21, with the same last names.
+- Copies of `catalog.dump` and `harvester.dump` were restored with
+  `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, never on
+  slot 1. Both exited 0. All 39 values read from the copies equal those read from slot 1,
+  and all 35 tables of the copies hold the row count and the hash of slot 1.
+- `k8s/catalog-import/first-catalog.manifest` holds the values of these dumps. Two of its
+  lines changed against the dumps of 12:28: the two checksums. Every count is the same.
+- **The owner has not said that slot 1 is final,** and Eden means one more write. The
+  copy that the owner is checking on slot 0 is the restore of the dumps of 00:33. It
+  holds none of the three stages of 2026-10-07.
+- **The two files are not uploaded to a bucket.**
+- Slot 1 is down and locked, with its databases kept.
+
+**Not verified.** Nobody compared the 19 pairs with a map or with the shop fronts. The
+rule was the distance, the rung and the count of places within 50 m. That
+`HARVEST_ENABLED` is false inside the running process was not tested with a request: the
+file was read, and the harvester was restarted after the change. The auth and core
+databases were not hashed. Nothing was looked at in a browser.
+
 ### What stays wrong or open
 
 This list replaces "What stays wrong" of the section before it. Each item has its own
@@ -1684,6 +1916,8 @@ title, so that it can be found and fixed later. It was written on 2026-10-06. A 
 under "What a shopper would notice" are new. A note "after the second walk" stands on
 each item that the re-file or the second walk changed. "What a person must still decide"
 in the section before this one holds the points that those two stages opened.
+A note "after plan 0193" stands on each item that the data step of that plan changed, and
+"Open since plan 0193" holds the points that it opened.
 
 #### In the data
 
@@ -1769,6 +2003,27 @@ in the section before this one holds the points that those two stages opened.
   re-file left on a leaf that may not be theirs, the brand `Golden`, the 16 shoe care
   products under the brand `Eden`, the brands that wait for a person, and names that are
   not uniform across batches. "What a person must still decide" holds each one.
+  **Note of 2026-10-07, after plan 0193:** the owner decided that Eden is two brands.
+  Nothing is written yet, and the next item says why.
+- **Open since plan 0193 (2026-10-07).** "The places and the El Jamón addresses" holds
+  each one.
+  - **Eden waits for a label.** The registry cannot hold two brands with the label
+    "Eden". The owner names the second brand, or asks for a change of the model. 16
+    shoe care products stay under the brand of the toilet gel until then.
+  - **The catalog lacks 34 El Jamón shops of the city.** They wait in the queue as `NEW`
+    places. The import is decision F of plan 0193, and nobody has taken it. An import
+    adds shops and `STORE` price scopes, so it moves `EXPECT_PRICE_SCOPES`.
+  - **Doña Berenguela 18 holds the postal code 14011,** from OpenStreetMap. The chain
+    says 14006. A person decides which is right and types it on the shop.
+  - **12 OpenStreetMap places are near a Mercadona or Lidl shop** that no place names. A
+    person links each one in the back office, or rejects it.
+  - **The rest of the place queue:** 45 OpenStreetMap places with no candidate, 20 of
+    them with no brand. Three `ELJAMON` places of the codes 14029 and 14193 are among
+    the 34 above, and a person can reject them if those codes are not the city.
+  - **The new El Jamón addresses are in upper case,** as the chain prints them ("AVDA.
+    CERVANTES, 8"). A shopper reads them so.
+  - **Done by this step:** the El Jamón shops had coordinates and little else. All 19
+    hold an address, a city and a postal code now.
 
 #### What a shopper would notice (read on 2026-10-07)
 
@@ -1854,6 +2109,9 @@ id is the first eight characters of the uuid on slot 1.
   the second walk:** the dumps that ship are those of 12:28 now. That copy holds neither
   the re-file nor the second walk, so it lacks 2,430 products and holds make-up under
   `facial-care`.
+  **Note of 2026-10-07, after plan 0193:** the dumps that ship are those of 13:53 now.
+  The copy on slot 0 also lacks the addresses of 14 El Jamón shops. Eden means one more
+  write to slot 1, and one more pair of dumps, before slot 1 can be final.
 - **Prices age.** The newest Mercadona prices were read on 2026-10-06, for three Córdoba
   warehouses. The Deza leaflet prices end on 2026-10-08. The El Jamón prices are stale
   from 2026-10-10 (2026-10-07).

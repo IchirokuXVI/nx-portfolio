@@ -36,16 +36,28 @@ ship. Section 1 holds the rules of both stages, section 6 says what each did, an
 7 holds the nine decisions that the walk left for the owner. The files `d01-…json` to
 `d06-…json` hold the rows.
 
+**The data step of plan `0193` followed the same day.** Plan `0193`
+(`../../plans/0193-a-place-links-to-the-shop-it-is.md`) built the link of a place to the
+shop that it is, and its section 4 is a data step. It ran on slot 1 on 2026-10-07 after
+the dumps of 12:28: one El Jamón store discovery, 19 links of a place of the chain to its
+El Jamón shop, and 27 links by reference. All 19 El Jamón shops hold an address, a city
+and a postal code now. Nothing was imported or rejected. The owner also decided that Eden
+is two brands, and nothing could be written for it. The dumps were taken again at 13:53
+Madrid time, and those are the dumps that ship. Section 1 holds the rules, section 8 says
+what the step did, and section 9 holds the decisions that it left. The files
+`e01-…json` to `e04-…json` hold the rows.
+
 The folder holds four things:
 
 - This file: the rules, the decisions of each step, the sixteen decisions that the
-  repair left, each with the answer of the owner, what plan `0192` did with each, and
-  the two stages of 2026-10-07.
+  repair left, each with the answer of the owner, what plan `0192` did with each, the
+  two stages of 2026-10-07, and the data step of plan `0193`.
 - [`loose-fruit-rows.md`](loose-fruit-rows.md): the loose fruit rows that still sit on a
   product that is not the singular fruit, for the fix that the owner put off.
-- Thirty-five data files and `gaps.json`. Sixteen are the steps of plan `0186`
+- Thirty-nine data files and `gaps.json`. Sixteen are the steps of plan `0186`
   (`a01-…json` to `b05-…json`). Thirteen are the work of plan `0192` (`c01-…json` to
   `c13-…json`). Six are the re-file and the second walk (`d01-…json` to `d06-…json`).
+  Four are the data step of plan `0193` (`e01-…json` to `e04-…json`).
 - `build/`: the scripts that wrote the data files from the files of the repair.
 
 ## How to read a data file
@@ -99,6 +111,18 @@ reference. The shop of `T7` was created by hand and has no reference.
   products that the walk created, and the 579 printed texts that are not a brand. The
   `d` files hold their rules and their counts. `fullRecord` in the header of a file names
   the file of the run folder that holds each row.
+
+**An `e` file holds the data step of plan `0193`, and its entries are shops and places.**
+
+- A shop is keyed by its chain, its address, its postal code and its OpenStreetMap
+  reference (`provider` and `externalRef`).
+- A place is keyed by its provider and its reference. The reference of an `ELJAMON`
+  place is the postal code and the street that the chain prints, in lower case. A new
+  discovery of the same list gives the same reference.
+- `e01` holds a pair in each entry: the shop as it stood before its link, the place, the
+  distance, what the link filled (`filled`) and the shop after it. `keptOnTheShop`
+  holds a field that the shop held and the chain prints in another way.
+- `e03` holds places that nobody decided. `e04` keys a product, as the other files do.
 
 A new harvest and a new curation will not give every product the same name. An entry that
 finds no product is not an error. Read its `why` and decide again.
@@ -202,6 +226,21 @@ format merges, and a name never carries its brand or its size.
 | R52 | A printed word that the registry holds as a brand of another kind of goods is a `REVIEW` (`BRAND_HOMONYM`). A person registers the second meaning. No agent does. |
 | R53 | A link that the decider itself doubted becomes a `REVIEW` (`AMBIGUOUS_CANDIDATE`). A wrong link writes a price onto a real product. A doubted link with no price may stay. |
 | R54 | A create sends every field of the product, also a field that is null. The route fills an absent field from the row, and on a kiosk row that is the title as the brand. |
+
+### Rules of the place links (2026-10-07)
+
+The session of stage c8 set R55, R57 and R58, and the owner approved the stage that day.
+R56 is the rule of the code of plan `0193`. R59 and R60 are what the owner had not
+decided, so the session stopped there. The owner can change each one.
+
+| # | Rule |
+| --- | --- |
+| R55 | **A place of a chain is the shop when four things hold.** It is the place of that provider nearest to the shop. The gateway names the shop as its first candidate, with the rung `NEARBY`. It is the only place of that provider within 50 m of the shop. No place is the nearest place of two shops. A pair that fails one of the four is left for a person. |
+| R56 | **A link fills only what the shop lacks.** Where the chain prints another value than the shop holds, the shop keeps its value, and a person decides. A postal code marked `SOURCE` or `MANUAL` stays. No link writes a label. |
+| R57 | **A store discovery of a chain names the postal codes of the city,** and every other code that the list of the chain prints on a shop whose town is the city. For Córdoba that is 14001 to 14014, plus 14029 and 14193. Without a filter the run records every shop of the chain. |
+| R58 | **A place of the chain near a shop that is linked to its own place is another shop.** It is not a second place of that shop, and it is not linked. |
+| R59 | **Nothing is imported and nothing is rejected without the owner.** The automatic import of a chain stays off, so a run records places and creates no shop and no price scope. |
+| R60 | **A second business under a printed brand name needs a label of its own.** The registry holds one brand for one key. No agent invents the label that a shopper reads. The step stops and waits for the owner. |
 
 ## 2. Decisions taken
 
@@ -398,6 +437,10 @@ names (the category, the image) is not in the keys at all.
 | `d04` | 25 | 0 | 25 | None. The 160 rows that took a height are a count for each batch. |
 | `d05` | 142 | 0 | 142 | None. The 1,496 queue rows outside the walk are counts for each group of reason codes. |
 | `d06` | 14 | 14 | 14 | None. The 2,430 products that the walk created are counts for each leaf and each batch. |
+| `e01` | 19 | 0 | 0 | None. 19 shops and 19 places, each with its reference. The run stands in the header. |
+| `e02` | 27 | 0 | 0 | None. 27 shops and 27 places, each with its reference. |
+| `e03` | 46 | 0 | 0 | None. 46 places, each with its reference. The 45 OpenStreetMap places with no candidate are counts for each brand. |
+| `e04` | 17 | 17 | 0 | None. |
 
 No product in any file carries only its uuid. In the `c` files and the `d` files no queue
 row lacks its chain, its source kind, its external id or its printed name.
@@ -934,8 +977,10 @@ source that prints the size.
 
 ## 7. The decisions that the second walk left
 
-Nobody has answered these. The session of stage c7 wrote them for the owner. A repeat of
-the curation meets each of them again.
+The session of stage c7 wrote them for the owner. A repeat of the curation meets each of
+them again. The owner has answered one: on 2026-10-07 the owner said that Eden, question
+2, is two brands. Nothing is written for it yet. Section 9 says why and what it waits
+for. Nobody has answered the other eight.
 
 | # | Question | Where it stands |
 | ---: | --- | --- |
@@ -958,7 +1003,116 @@ Two more points are not questions, and a person should know them:
   products. The preparation counted about 110 products for the 110 Pompea rows. The other
   way is one product for each model. The owner can change the rule before a repeat.
 
-## 8. How to build the data files again
+## 8. The data step of plan 0193 (2026-10-07)
+
+Section 4 of plan `0193` ran on slot 1 on 2026-10-07, between 13:48 and 13:51 Madrid
+time, on the code of `dev` at `b9eece51`. The owner approved the stage that day. Every
+write went through the gateway of slot 1 as `admin@curation.local`: 23 requests, each
+answered 201 at the first try. No SQL write was made, and no migration ran. A backup of
+the four databases was taken before the first write. The files stand in `stage-c8/` of
+the run folder, with a `RESULT.md`. The report, `../initial-catalog-2026-10.md`, holds
+the stage under "The places and the El Jamón addresses (plan 0193, 2026-10-07)".
+
+The stage ran in another order than the plan lists: the run, the 19 links, then the bulk
+link. The plan lists the bulk link first.
+
+### The store discovery (`e01`, the header)
+
+- The El Jamón row of `supermarket_sources` read `enabled: true` and
+  `autoImportPlaces: false` before the run. Nothing was changed on it.
+- `HARVEST_ENABLED` was set to true in the harvester `.env`, the harvester was
+  restarted, the run was started, and the switch was set back to false with a second
+  restart, before the first link.
+- `POST /v1/admin/harvest/runs` with the mode `STORE_DISCOVERY`, the chain, and
+  `postalCodes` set to the 16 codes of rule R57.
+- The run read 368 records, kept 366 and recorded 53 places. It imported none and wrote
+  no shop and no price scope. Without the codes 14029 and 14193 it records 50.
+
+### The 19 links (`e01`)
+
+- Each of the 19 El Jamón shops got its pair by rule R55, before the first link. All 19
+  pairs met the rule. The farthest pair is 19 m apart, and the next `ELJAMON` place of
+  any shop is at least 75 m away.
+- `POST /v1/admin/harvest/places/:id/link` with the shop, one pair at a time, never with
+  `acrossChains`.
+- **14 shops got a field:** 13 a postal code marked `SOURCE`, 13 an address and 13 a
+  city. 11 got all three. 5 shops were complete and got nothing. All 19 hold an address,
+  a city and a postal code now, where 5 did.
+- **Nothing that a shop held was replaced** (rule R56). Six entries hold
+  `keptOnTheShop`. Four are the same street in another writing. Two differ in
+  substance: Doña Berenguela 18 keeps the postal code 14011 where the chain says 14006,
+  and Manuel Fuentes Bocanegra keeps the number 19 where the chain says 17.
+
+### The bulk link by reference (`e02`)
+
+- `POST /v1/admin/harvest/places/link-by-ref` with `{}` answered 27 places to link and
+  none skipped: 19 of El Jamón and 8 of Deza, all OpenStreetMap places whose reference is
+  the reference of a shop.
+- The same call with `{ "apply": true }` linked the same 27. One field was written: the
+  footprint of 758 m² on the shop of Doña Berenguela 18.
+- A third call with `{}` answered nothing to link.
+
+### What it changed, in counts
+
+| | Before | After |
+| --- | ---: | ---: |
+| Shops | 42 | 42 |
+| Price scopes | 105 | 105 |
+| El Jamón shops with an address, a city and a postal code | 5 | 19 |
+| Discovered places | 85 | 138 |
+| Places `NEW` | 84 | 91 |
+| Places `IMPORTED`, which name a shop | 1 | 47 |
+| Harvest runs | 15 | 16 |
+| `catalog_audit` | 341,006 | 341,021 |
+
+No product, brand, price row or queue row changed. The eight counts of the restore
+manifest are the same, and only its two checksums changed. The dumps that ship were taken
+at 2026-10-07T11:53:13Z (13:53 Madrid time) and stand in `stage-c8/final/`.
+
+### What it left (`e03`)
+
+91 places are `NEW`. Nothing was imported or rejected (rule R59).
+
+- **34 El Jamón shops that the catalog lacks.** 32 `ELJAMON` places name no shop. 2 more
+  are near a shop that is linked to its own place, so they are other shops (rule R58).
+- **12 OpenStreetMap places near a Mercadona or Lidl shop that no place names.** 9 are
+  within 50 m, and 3 are between 55 m and 132 m.
+- **45 OpenStreetMap places with no candidate,** as counts for each brand in the header.
+
+### Eden (`e04`)
+
+The owner said on 2026-10-07 that Eden is two brands with the same name. Nothing was
+written. `brands.key` is unique and is made from the label, so a second brand with the
+label "Eden" answers 409. A homonym of plan `0178` points the printed key `eden` at a
+second brand that has another label. The 16 shoe care products can thus only move to a
+brand whose label is not "Eden", and the owner chose none (rule R60). `e04` holds the 16
+products, the one that stays, and the four calls that the step takes after the owner
+names the label.
+
+## 9. The decisions that the data step of plan 0193 left
+
+Nobody has answered these. Each one is a write to slot 1, so each one means new dumps
+and new checksums in the manifest.
+
+| # | Question | Where it stands |
+| ---: | --- | --- |
+| 1 | **The label of the second Eden brand.** Its key must not be `eden`. The other way is a change of the model so that two brands hold one label, which is a migration. | `e04`. Nothing written |
+| 2 | **The 34 El Jamón shops that the catalog lacks** (decision F of plan `0193`). Import them, leave them in the queue, or import only those of the postal codes where a zone exists? An import adds a shop and a `STORE` price scope for each one, so it moves `EXPECT_PRICE_SCOPES`. A trusted run imports the 32 with no candidate and leaves the 2 in the queue. | `e03`, the 34 entries of `ELJAMON`. In the queue as `NEW` |
+| 3 | **The postal code of Doña Berenguela 18.** The shop holds 14011, from OpenStreetMap. The chain says 14006. | `e01`, the entry with `keptOnTheShop.postalCode`. The shop keeps 14011 |
+| 4 | **The 12 OpenStreetMap places near a Mercadona or Lidl shop.** Link each one to its candidate, or reject it? | `e03`, the 12 entries of `OSM`. In the queue as `NEW` |
+| 5 | **The postal codes of the city.** 14029 and 14193 brought 3 places that a filter of 14001 to 14014 leaves out. Are they the city? | `e03`, the entries with those codes. They can be rejected in the queue |
+| 6 | **The rest of the place queue:** 45 OpenStreetMap places with no candidate, 20 of them with no brand. | `e03`, the header |
+
+Three more points are not questions, and a person should know them:
+
+- **Nobody compared the 19 pairs with a map or with the shop fronts.** The rule was the
+  distance, the rung and the count of places within 50 m.
+- **The new addresses are in the upper case writing of the chain** ("AVDA. CERVANTES,
+  8"). The shops that held an address keep the writing of OpenStreetMap.
+- **Manuel Fuentes Bocanegra** holds the number 19, and the chain says 17. The place is
+  19 m from the shop and the only one within 436 m.
+
+## 10. How to build the data files again
 
 The scripts read files only. They open no database and call no service.
 
@@ -976,9 +1130,10 @@ files of the two changes of 2026-10-07 stand in `stage-c4/`, which has none. The
 the coordinates of the shop of `T7` stand in `stage-c5/`, which has none either. The
 files of the re-file stand in `stage-c6/`, with a `README.md`. The files of the second
 walk stand in `stage-c7/`, with a `README.md` for the preparation and a `RESULT.md` for
-the apply.
+the apply. The files of the data step of plan `0193` stand in `stage-c8/`, with a
+`RESULT.md`.
 
-A build writes all thirty-five files again. The sixteen files of plan `0186` come out byte
+A build writes all thirty-nine files again. The sixteen files of plan `0186` come out byte
 for byte as they are committed, which was checked on 2026-10-06 after `stage-c.mjs` was
 added. `gaps.json` is the one older file that changed: it gained the thirteen new rows.
 
@@ -998,6 +1153,10 @@ rows. The twenty-nine data files of plans `0186` and `0192` came out byte for by
 they are committed. The build also counts its own rules: the header of `d01` says how
 many moved products no rule of the file explains, and the answer is 0.
 
+After the data step of plan `0193`, `stage-e.mjs` was added for `stage-c8/`. A build
+then wrote four new files, `e01` to `e04`, and changed one, `gaps.json`, which gained
+four rows. The thirty-five older data files came out with the content that is committed.
+
 | Script | What it does |
 | --- | --- |
 | `build/lib.mjs` | Reads the source files, shapes a product and a queue row by their natural keys, counts the keys that are absent, writes one entry on one line. |
@@ -1006,6 +1165,7 @@ many moved products no rule of the file explains, and the answer is 0.
 | `build/stage-b.mjs` | Steps B1 to B5. |
 | `build/stage-c.mjs` | The thirteen files of plan `0192`, from `stage-c1/`, `stage-c2/` and `stage-c3/`. For `c05` and `c13` it also reads `stage-c4/`, and for `c05` it reads `stage-c5/` too. |
 | `build/stage-d.mjs` | The six files of the re-file and the second walk, from `stage-c6/` and `stage-c7/`. It holds the rules of the re-file as data, and the rule that groups the reason codes of the rows outside the walk. |
+| `build/stage-e.mjs` | The four files of the data step of plan `0193`, from `stage-c8/`. For `e04` it also reads the products at the end of the second walk, from `stage-c7/`. |
 | `build/decisions.mjs` | The answer of the owner to each of the sixteen decisions. `lib.mjs` writes it as `ownerDecision` beside every `openDecision`. It also holds the answers that came after the register was written, and the five answers of 2026-10-07. |
 | `build/build.mjs` | Runs all of it and writes `gaps.json`. |
 
@@ -1028,3 +1188,7 @@ from `stage-c6/propose.mjs`, and the build checks them against the moved product
 sentence that explains each class of correction is taken from `stage-c7/RESULT.md`. The
 five groups of the rows outside the walk are a reading of the code names, made for this
 register: no file of the stage holds them.
+
+`stage-e.mjs` writes the four lines of the pairing rule itself, from `stage-c8/RESULT.md`,
+and the reason of each place that was left. The reasons of Eden are the words of
+`stage-c8/eden.json`.

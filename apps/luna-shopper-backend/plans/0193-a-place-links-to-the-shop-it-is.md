@@ -573,3 +573,65 @@ the new rung and no sentence of its own for the new code.
 **Not done: the rehearsal on copies of the two dumps** (build order 6 and the last line of
 "Progress evidence"). The stage that runs section 4 does it, with the dumps. The numbers
 27, 57 and "no count of the manifest moved" are thus not yet read by this build.
+
+## 7. What the data step found (2026-10-07)
+
+Section 4 ran on slot 1 on 2026-10-07, after this plan was merged. The owner approved it
+that day. The sentences above describe the build and stay as they were written. The
+register (`apps/luna-shopper-backend/docs/first-catalog-decisions-2026-10/README.md`,
+sections 8 and 9) and the report (`apps/luna-shopper-backend/docs/initial-catalog-2026-10.md`,
+"The places and the El Jamón addresses (plan 0193, 2026-10-07)") hold the pairs, the
+counts and the list of what stays open. The files of the work are in
+`.curation-runs/2026-10-audit-repair/stage-c8/` of the main checkout, which git ignores.
+
+Every write went through the gateway as an admin: 23 requests, each answered 201 at the
+first try. No step was SQL, and no migration ran.
+
+- **The order.** The run came first, then the 19 links, then the bulk act. Section 4
+  lists the bulk act first.
+- **Step 2, the store discovery.** One `STORE_DISCOVERY` of El Jamón, with `postalCodes`
+  set to 14001 to 14014, 14029 and 14193. It recorded 53 places, all `NEW`, and wrote
+  nothing to catalog: no shop and no price scope. `autoImportPlaces` was false and stayed
+  false.
+- **Step 3, the 19 links.** Each El Jamón shop was linked to the `ELJAMON` place nearest
+  to it. Every pair is within 19 m. 14 shops got a field: 13 a postal code, 13 an address
+  and 13 a city. All 19 hold all three now. Nothing that a shop held was overwritten.
+  Doña Berenguela 18 keeps the postal code 14011 where the chain says 14006, and Manuel
+  Fuentes Bocanegra keeps the number 19 where the chain says 17.
+- **Step 1, the bulk act.** The dry call named 27 places, 19 of El Jamón and 8 of Deza,
+  as expected. The apply linked the same 27. It filled one field, the footprint of one
+  shop. A second dry call named none.
+- **The places after it.** 57 `NEW` and 28 `IMPORTED` of OpenStreetMap, as step 1
+  expected, and 34 `NEW` and 19 `IMPORTED` of the chain: 138 places, 91 `NEW` and 47
+  `IMPORTED`. The shops are 42 and the price scopes 105, as before.
+- **Step 4, decision F, stays open.** Nothing was imported and nothing was rejected. The
+  shops of the chain that the catalog lacks wait in the queue as `NEW` places.
+- **Step 5, the rest of the queue.** 12 OpenStreetMap places name a Mercadona or Lidl
+  shop as their candidate, 9 of them within 50 m. Nobody linked them.
+- **Step 6, the dumps.** New dumps were taken at 2026-10-07T11:53:13Z. No count of the
+  manifest moved, and only its two checksums changed. A restore of copies of both dumps
+  into throwaway containers read the same values as slot 1.
+- **The rehearsal of section 6.** The three numbers that section 6 names as not yet
+  read are read now: 27, 57, and no count of the manifest moved. The stage ran on slot 1
+  itself, with a backup of the four databases taken first. It did not run on copies of
+  the dumps on an ephemeral slot.
+
+Two numbers differ from what this plan expected:
+
+| | The plan | The run |
+| --- | ---: | ---: |
+| New `ELJAMON` places (step 2) | 52 | 53 |
+| El Jamón shops that the catalog lacks (decision F) | 33 | 34 |
+
+The reason is the list of postal codes. The plan left the codes to the owner and did not
+say which ones its two numbers counted. The run named the 14 codes of the city, 14001 to
+14014, and added 14029 and 14193, because the list of the chain prints those two on three
+shops whose town is "Córdoba". With the 14 codes alone the run records 50 places. Of the
+34 shops, 32 name no shop of the catalog, and 2 stand 75 m and 209 m from a shop that is
+linked to its own place. The cost of decision F is thus at most 34 shops and 34 `STORE`
+scopes, not 33.
+
+One more reading differs in a detail. Step 3 expected the 13 bare shops to get an
+address and a city, and the 6 other shops to keep what they hold. One bare shop held a
+city already, and one held a postal code. One of the 6, "Marruecos", lacked a city and a
+postal code and got both.

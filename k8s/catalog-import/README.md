@@ -295,9 +295,9 @@ kubectl -n nx-portfolio exec luna-shopper-backend-harvester-db-0 -- \
 
 ## When slot 1 is final
 
-**The manifest describes the dumps of 12:28 of 2026-10-07.** They were taken
-at 2026-10-07T10:28:17Z (2026-10-07 12:28 Madrid time). Only the gateway was
-served, and it holds no database, so nothing wrote. They hold two data stages
+**The manifest describes the dumps of 13:53 of 2026-10-07.** They were taken
+at 2026-10-07T11:53:13Z (2026-10-07 13:53 Madrid time). Only the gateway was
+served, and it holds no database, so nothing wrote. They hold three data stages
 of that day, which came after the three changes that the owner asked for:
 
 - **The re-file.** 2,250 products moved onto the leaves that backend plan 0179
@@ -305,45 +305,60 @@ of that day, which came after the three changes that the owner asked for:
 - **The second curation walk.** 2,586 queue rows that the first walk could not
   place were decided. 2,430 became new products, 14 were bound to a product
   that exists, and 142 stay in the queue.
+- **The data step of backend plan 0193 (section 4).** One El Jamón store
+  discovery recorded 53 places. 19 of them were linked to the 19 El Jamón
+  shops, and 27 OpenStreetMap places were linked to their shop by reference.
+  14 El Jamón shops got the address, the city or the postal code that they
+  lacked, so all 19 hold all three now. It changed no count of the manifest.
 
-The values of three earlier pairs of dumps of that night are gone from the
-manifest: those of 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time), those
-of 2026-10-06T22:33:14Z (00:33) and those of 2026-10-06T21:12:47Z. So are those
-of 2026-10-03 20:44.
+The values of four earlier pairs of dumps are gone from the manifest: those of
+2026-10-07T10:28:17Z (2026-10-07 12:28 Madrid time), which held the first two
+stages and not the third, those of 2026-10-06T23:32:21Z (01:32), those of
+2026-10-06T22:33:14Z (00:33) and those of 2026-10-06T21:12:47Z. So are those of
+2026-10-03 20:44.
 
 | File             |      Bytes | SHA-256                                                            |
 | ---------------- | ---------: | ------------------------------------------------------------------ |
-| `catalog.dump`   | 51,092,778 | `f81e6023528d17f6b6e457a8e27a216ecb388d43883a0b9b9c145c9d92a04880` |
-| `harvester.dump` | 11,629,145 | `e75f10e693304f357060e3dc42d8c68c8cbf18ae09dbde830f975ed256d20f08` |
+| `catalog.dump`   | 51,094,969 | `e81ba4c20a3535d0a6b9aa9184b3913c13248f46a89fce97d10054e1211f9650` |
+| `harvester.dump` | 11,636,411 | `93cc20ab47eb4f93ed46ef54ab61602622f79d173c281d08a2a98ea0a56cd2ec` |
 
 - The catalog dump holds 29 migrations, the last one `ItemEans1758800000000`.
   The harvester dump holds 21, the last one `SourceEntryPriceKind1759200000000`.
-  That is the code of `dev` at `b67f6f94`. A cluster that runs other migrations
+  That is the code of `dev` at `b9eece51`. A cluster that runs other migrations
   is refused at step 3.
-- Four counts of the manifest changed against the dumps of 01:32, all by the
-  second walk: 22,203 products (19,773 before), 2,830 brands (2,782), 25,074
-  price rows (24,964) and 24,223 `ACTIVE` queue rows (21,779). The other four
-  are the same: 5 chains, 105 price scopes, 309 categories and 25,861 queue
-  rows. 1,638 queue rows are `UNRESOLVED`, where 4,082 were.
+- No count of the manifest changed against the dumps of 12:28. Only the two
+  checksums did. The eight counts are 5 chains, 105 price scopes, 309
+  categories, 2,830 brands, 22,203 products, 25,074 price rows and 25,861 queue
+  rows, 24,223 of them `ACTIVE`. 1,638 queue rows are `UNRESOLVED`.
+- What did change is outside the manifest. The harvester dump holds 138
+  discovered places (85 before): 91 are `NEW` and 47 are `IMPORTED`, which is
+  the mark of a place that names its shop. It holds 16 harvest runs (15). The
+  catalog dump holds 341,021 audit rows (341,006).
 - The catalog dump holds 42 shops, and all 42 hold coordinates. The owner read
   those of the tenth Deza shop from Google Maps on 2026-10-07: latitude
   37.89862387806124, longitude -4.772603355414682.
 - The two files stand in the folder
-  `.curation-runs/2026-10-audit-repair/stage-c7/final/` of the checkout that did
+  `.curation-runs/2026-10-audit-repair/stage-c8/final/` of the checkout that did
   the work. Git ignores that folder. A `VERIFY.txt` stands beside them, and so
   does `manifest-values.json`, which states how each value was read. The folder
-  `stage-c5/final/` holds the dumps of 01:32, `stage-c4/final/` those of 00:33,
-  and `stage-c3/final/` those of 2026-10-06. None of the three pairs ships.
+  `stage-c7/final/` holds the dumps of 12:28, `stage-c5/final/` those of 01:32,
+  `stage-c4/final/` those of 00:33, and `stage-c3/final/` those of 2026-10-06.
+  None of the four pairs ships.
 - Slot 1 is down and locked, with its databases kept.
-- `apps/luna-shopper-backend/docs/initial-catalog-2026-10.md` holds both stages
-  under "The re-file and the second walk (2026-10-07)".
+- `apps/luna-shopper-backend/docs/initial-catalog-2026-10.md` holds the first
+  two stages under "The re-file and the second walk (2026-10-07)" and the third
+  under "The places and the El Jamón addresses (plan 0193, 2026-10-07)".
 
-**These dumps ship unless slot 1 is written again.** The owner has not said in
-words that slot 1 is final. The owner is checking the data first: on 2026-10-07
-the dumps of 00:33 were restored onto the owner's own slot 0 for that. That
-copy is not these dumps. It holds neither the re-file nor the second walk, so
-it lacks 2,430 products, and its tenth Deza shop has no coordinates. What the
-owner still has to do:
+**These dumps ship unless slot 1 is written again, and one more write is
+known.** The owner decided that the brand Eden is two brands. The registry
+cannot hold two brands with one label, so nothing was written, and the step
+waits for the owner to name the second label. That write means one more pair
+of dumps. The owner has not said in words that slot 1 is final. The owner is
+checking the data first: on 2026-10-07 the dumps of 00:33 were restored onto
+the owner's own slot 0 for that. That copy is not these dumps. It holds none
+of the three stages, so it lacks 2,430 products, its tenth Deza shop has no
+coordinates, and 14 of its El Jamón shops lack an address, a city or a postal
+code. What the owner still has to do:
 
 1. Say that slot 1 is final, or ask for more work on it. More work means new
    dumps, and the steps below again.
@@ -404,7 +419,7 @@ the shell rewrites `/bin/sh` on its way to `docker exec`.
 
 On 2026-10-04, against Postgres 16 containers and a local S3 server. The two
 dumps were only read: copies of them were uploaded. No cluster and no Luna slot
-that holds data was touched. Those were the dumps of 2026-10-03. The last four
+that holds data was touched. Those were the dumps of 2026-10-03. The last five
 rows of the table are the tests of the later dumps, and none of them ran the script.
 The last row is the one test of the dumps that the manifest describes.
 
@@ -431,3 +446,4 @@ The last row is the one test of the dumps that the manifest describes.
 | The dumps of 00:33 of 2026-10-07, restored on 2026-10-07 (2026-10-06T22:34Z)                        | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. All 37 values read from the copies equal the values read from slot 1, the 105 price scopes among them.                   |
 | The dumps of 01:32 of 2026-10-07, restored on 2026-10-07 (2026-10-06T23:33Z)                        | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. All 37 values read from the copies equal those of slot 1. The copy holds the coordinates of the tenth Deza shop.         |
 | The dumps of 12:28 of 2026-10-07, restored on 2026-10-07 (2026-10-07T10:28Z)                        | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. All 39 values read from the copies equal those of slot 1, and all 35 tables hold the row count and the hash of slot 1.   |
+| The dumps of 13:53 of 2026-10-07, restored on 2026-10-07 (2026-10-07T11:53Z)                        | Not a run of the script. Copies of both files were restored with `pg_restore --exit-on-error` into two throwaway `postgres:16-alpine` containers, and both exited 0. All 39 values read from the copies equal those of slot 1, and all 35 tables hold the row count and the hash of slot 1.   |
