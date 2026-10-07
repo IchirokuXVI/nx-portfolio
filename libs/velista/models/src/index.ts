@@ -11,6 +11,7 @@ export * from './lib/attribution';
 export * from './lib/basket-changes';
 export * from './lib/basket-search';
 export * from './lib/basket-summary';
+export * from './lib/basket-total';
 export * from './lib/basket-view';
 export * from './lib/catalog-browse';
 export * from './lib/compose-basket-view';

@@ -12,6 +12,7 @@ import {
   basketPricedAtShop,
   basketReadAtShop,
   basketSettleShop,
+  basketTotal,
   basketUsualApplies,
   basketViewActiveCount,
   basketViewChips,
@@ -27,6 +28,7 @@ import {
   type BasketProduct,
   type BasketRow,
   type BasketShop,
+  type BasketTotal,
   type BasketViewContext,
   type BasketViewProperty,
   type BasketViewState,
@@ -405,6 +407,25 @@ export class BasketViewStore {
    */
   readonly readAtShop = computed(() =>
     basketReadAtShop(this.state(), { shop: this.shopAt() })
+  );
+
+  /**
+   * What the rows on the screen come to (velista `0132`, section 2).
+   *
+   * Over {@link visibleRows} and never the whole basket, so it follows the kept
+   * lists, the usual switch and the search as the rows under it do. It is handed
+   * {@link pricedAtShop} and {@link readAtShop}, which are what the page hands
+   * each row, so the number and the rows read the same price of the same product.
+   *
+   * A `computed` and nothing subscribed, for {@link sections}'s reason: a settle,
+   * a realtime write and a read at another shop all land on signals this reads.
+   */
+  readonly total = computed<BasketTotal>(() =>
+    basketTotal(this.visibleRows(), {
+      products: this._basket.products(),
+      pricedAtShop: this.pricedAtShop(),
+      readAtShop: this.readAtShop(),
+    })
   );
 
   /** How many of the five properties are on, for the filter button's badge. */

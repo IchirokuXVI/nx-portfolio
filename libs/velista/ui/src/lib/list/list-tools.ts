@@ -28,8 +28,11 @@ import { FilterIcon } from '../icons/icons';
  * ## What the page puts in it
  *
  * The default slot is the leading edge of the row, which on the basket is how much of
- * the trip is got. A projected element marked `listToolsBelow` is drawn under the row,
- * which is where the basket's chips go. The zone list page projects neither.
+ * the trip is got. A projected element marked `listToolsTrail` sits at the trailing
+ * edge, before the filter button, which is where the basket's estimated total goes
+ * (velista `0132`, section 3). A projected element marked `listToolsBelow` is drawn
+ * under the row, which is where the basket's chips and the bar of that total go. The
+ * zone list page projects none of the three.
  *
  * ## Sticky on its own host
  *

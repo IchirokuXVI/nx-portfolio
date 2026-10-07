@@ -1613,6 +1613,33 @@
       "addedLabel": "{{name}}, new on the list",
       "changedLabel": "{{name}}, changed"
     },
+    "total": {
+      "amount": "~{{amount}}",
+      "open": "Estimated total, about {{amount}}. See what is behind it.",
+      "barLabel": "About {{bought}} bought of about {{total}}",
+      "boughtEnd": "{{amount}} bought",
+      "leftEnd": "{{amount}} left",
+      "title": "Estimated total",
+      "bought": "Bought",
+      "left": "Still to buy",
+      "total": "Total",
+      "withProduct": "{{count}} of {{lines}} lines have a product.",
+      "withPrice": "{{count}} of those {{products}} have a price.",
+      "withPriceAt": "{{count}} of those {{products}} have a price at {{chain}}.",
+      "why": "These prices are not final. Shops change their prices, and some shops do not publish them or keep them up to date.",
+      "none": {
+        "title": "No prices yet.",
+        "more": "See more",
+        "less": "See less",
+        "words": "A price comes from a product. These lines are only words, so there is nothing to add up.",
+        "step1": "Open a line.",
+        "step2": "Choose the product you buy.",
+        "step3": "Its price shows on the line and joins the total.",
+        "shop": "With a shop chosen, only the prices of that shop count.",
+        "unpriced": "We have no price for these products yet. Shops change what they publish, so a price can show later.",
+        "otherShop": "Choose another shop in the filter to see its prices."
+      }
+    },
     "changes": {
       "banner_one": "{{count}} change on your lists",
       "banner_other": "{{count}} changes on your lists",

@@ -1,0 +1,41 @@
+<div class="head">
+  <lib-info-icon aria-hidden="true" class="glyph" />
+  <p class="title" id="no-prices-title">
+    {{ 'basket.total.none.title' | rokuT }}
+  </p>
+  <!--
+    The words change with the state and `aria-expanded` says it too. Described by
+    the title, so "See more" out of context still says more of what.
+  -->
+  <button
+    (click)="toggle()"
+    [attr.aria-expanded]="expanded()"
+    aria-describedby="no-prices-title"
+    class="more"
+    type="button"
+  >
+    {{
+      (expanded() ? 'basket.total.none.less' : 'basket.total.none.more') | rokuT
+    }}
+  </button>
+</div>
+
+<!-- Opened in place, directly after its button, so it is what is read next. -->
+@if (expanded()) {
+  <div class="body">
+    @if (showSteps()) {
+      <p>{{ 'basket.total.none.words' | rokuT }}</p>
+      <ol class="steps">
+        <li>{{ 'basket.total.none.step1' | rokuT }}</li>
+        <li>{{ 'basket.total.none.step2' | rokuT }}</li>
+        <li>{{ 'basket.total.none.step3' | rokuT }}</li>
+      </ol>
+      <p>{{ 'basket.total.none.shop' | rokuT }}</p>
+    } @else {
+      <p>{{ 'basket.total.none.unpriced' | rokuT }}</p>
+      @if (shopChosen()) {
+        <p>{{ 'basket.total.none.otherShop' | rokuT }}</p>
+      }
+    }
+  </div>
+}

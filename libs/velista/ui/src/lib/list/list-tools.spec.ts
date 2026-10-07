@@ -4,7 +4,7 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ListTools } from './list-tools';
 
-/** A page that projects both slots, as the basket does. */
+/** A page that projects every slot, as the basket does. */
 @Component({
   imports: [ListTools],
   template: `
@@ -13,6 +13,7 @@ import { ListTools } from './list-tools';
       [activeCount]="active()"
     >
       <p class="lead-content">4 of 12 got</p>
+      <p class="trail-content" listToolsTrail>total</p>
       <p class="below-content" listToolsBelow>chips</p>
     </lib-list-tools>
   `,
@@ -21,6 +22,13 @@ class Host {
   readonly active = signal(0);
   filters = 0;
 }
+
+/** A page that projects nothing, as the zone list does. */
+@Component({
+  imports: [ListTools],
+  template: `<lib-list-tools />`,
+})
+class Bare {}
 
 async function render(): Promise<ComponentFixture<Host>> {
   await TestBed.configureTestingModule({
@@ -50,6 +58,31 @@ describe('ListTools', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelectorAll('.tools .tool')
     ).toHaveLength(1);
+  });
+
+  /** Velista `0132`, section 3: the total sits between the count and the filter. */
+  it('draws what the page marks `listToolsTrail` directly before the filter', async () => {
+    const fixture = await render();
+    const trail = query(fixture, '.tools > .trail-content');
+
+    expect(trail?.previousElementSibling?.classList).toContain('lead');
+    expect(trail?.nextElementSibling?.classList).toContain('tool');
+  });
+
+  /** The zone list page fills neither, and an empty slot must cost no layout. */
+  it('leaves nothing between the lead and the filter for a page that projects no trail', async () => {
+    await TestBed.configureTestingModule({
+      imports: [Bare, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideVelistaTesting()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Bare);
+    fixture.detectChanges();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector('.tools');
+    expect(Array.from(row?.children ?? []).map((el) => el.className)).toEqual([
+      'lead',
+      'tool',
+    ]);
   });
 
   /** Velista `0117`: the composer's field is the search, so the row has none. */
