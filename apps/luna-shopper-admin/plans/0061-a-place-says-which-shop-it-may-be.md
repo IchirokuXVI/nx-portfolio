@@ -1,3 +1,5 @@
+> **PR:** [#666](https://github.com/IchirokuXVI/nx-portfolio/pull/666)
+
 # 0061 A place says which shop it may be
 
 > Backend half: `apps/luna-shopper-backend/plans/0193` (a place links to the shop it is).
