@@ -1,0 +1,70 @@
+// One quiet row in the scroll (velista 0132, section 6): a hairline above it, no
+// ground and no radius. The page sets the gutter, as it does for the rows under it.
+:host {
+  display: block;
+  border-block-start: 1px solid var(--app-border-subtle);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  line-height: 1.4;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-touch-target);
+}
+
+// Every icon is 1em, so the glyph is sized by its font size.
+.glyph {
+  font-size: var(--app-icon-sm);
+  color: var(--app-text-muted);
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+}
+
+// A text button, one touch target tall. The end margin takes its padding back, so
+// its words end on the gutter and not one padding short of it.
+.more {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  margin-inline-end: calc(var(--app-space-4) * -1);
+  padding: 0 var(--app-space-4);
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
+
+// Stepped in to start under the title and not under the glyph.
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  padding-inline: calc(var(--app-icon-sm) + var(--app-space-3));
+  padding-block-end: var(--app-space-3);
+
+  p {
+    margin: 0;
+  }
+}
+
+// What to do, so it is the part in the primary text colour.
+.steps {
+  margin: 0;
+  padding-inline-start: var(--app-space-6);
+  color: var(--app-text-primary);
+}

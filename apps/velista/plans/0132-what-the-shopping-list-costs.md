@@ -1,3 +1,5 @@
+> **PR:** [#667](https://github.com/IchirokuXVI/nx-portfolio/pull/667)
+
 # 0132: what the shopping list costs
 
 > Asked for by the owner on 2026-10-07. The shopping list tab (the basket page) shows

@@ -1,0 +1,45 @@
+:host {
+  display: block;
+}
+
+// The list page's progress bar, thinner (velista 0132, section 4). Its whole
+// length is the total, on the hairline colour so an empty bar is still a bar.
+.track {
+  block-size: var(--app-total-track-height);
+  border-radius: var(--app-radius-full);
+  background: var(--app-border-subtle);
+  overflow: hidden;
+}
+
+// The bought part, in the action colour. A width that is already there when the
+// element is first drawn has nothing to travel from, so the first paint is still.
+.fill {
+  display: block;
+  block-size: 100%;
+  background: var(--app-action-bg);
+  transition: inline-size var(--app-motion-base) var(--app-motion-ease);
+}
+
+// The bar follows a quantity, and a quantity is instant. Under reduced motion it
+// simply is the new width, with no travel to watch.
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}
+
+// What is bought at the leading end and what is left at the trailing one.
+.ends {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin: var(--app-space-2) 0 0;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+.end {
+  white-space: nowrap;
+}

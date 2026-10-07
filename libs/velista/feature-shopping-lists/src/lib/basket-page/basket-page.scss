@@ -147,6 +147,16 @@ lib-list-tools {
   inset-block-start: calc(var(--app-space-3) * -1);
   margin-block-start: calc(var(--app-space-3) * -1);
   padding-block-start: var(--app-space-3);
+  // The column's own inline padding is zero, so its rows reach the edges. The bar is
+  // not a row: without this its count, its chips and the bar of the total started on
+  // the edge of the screen. The trailing side is the filter button's, which keeps its
+  // own small inset, so what sits under the row takes the trailing gutter itself.
+  padding-inline-start: var(--app-space-5);
+}
+
+.chips,
+.total-bar {
+  margin-inline-end: var(--app-space-5);
 }
 
 // The tools row itself is `ListTools` in `velista/ui` since velista 0082, which moved
@@ -157,6 +167,13 @@ lib-list-tools {
   margin: 0;
   font-size: var(--app-text-sm);
   color: var(--app-text-muted);
+}
+
+// No visible line has a price (velista 0132, section 6). The small row is as wide as
+// it is given, so its gutter is set here, where the column's own is zero. Its hairline
+// is on its host, so it still runs from edge to edge.
+.no-prices {
+  padding-inline: var(--app-space-5);
 }
 
 // Quieter than the count beside it: it is a fact about the trip rather than

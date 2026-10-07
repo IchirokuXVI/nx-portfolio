@@ -1,0 +1,102 @@
+// A flex item of the tools row that never shrinks: a number cut short is a
+// different number.
+:host {
+  display: flex;
+  flex: none;
+}
+
+// The weight of the count at the other end of the row (velista 0132, section 3):
+// the secondary text role, no border and no ground. The height is the touch
+// target, and the padding is what makes the press wider than the digits.
+.number {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  border: 0;
+  border-radius: var(--app-radius-full);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-family: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  // The digits change under a thumb, and they must not shift the filter beside them.
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+
+  // The same lift as the filter button beside it.
+  &:hover {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+  }
+
+  // Held down while its popover is open, so the popover reads as this number's.
+  &[aria-expanded='true'] {
+    background: var(--app-surface-sunken);
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
+
+// What is inside the popover. The surface is `AnchoredPopover`'s own; this is one
+// step up from its small print, because these are sums somebody reads in an aisle.
+.explain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  font-size: var(--app-text-sm);
+}
+
+.title,
+.counts,
+.why {
+  margin: 0;
+}
+
+.title {
+  color: var(--app-text-primary);
+  font-size: var(--app-text-base);
+  font-weight: 600;
+}
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+// A label at the leading end and its amount at the trailing one.
+.entry {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+
+  dd {
+    margin: 0;
+    white-space: nowrap;
+  }
+}
+
+// The sum, under a hairline as on a receipt, in the primary text colour.
+.is-sum {
+  margin-block-start: var(--app-space-2);
+  padding-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+  color: var(--app-text-primary);
+  font-weight: 600;
+}
+
+// Two facts, each a sentence on its own line.
+.counts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  color: var(--app-text-primary);
+}
