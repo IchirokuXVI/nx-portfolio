@@ -1,53 +1,69 @@
 import type { ActivatedRouteSnapshot } from '@angular/router';
 import {
-  visitFloor,
+  canStepLine,
+  isUnsavedLine,
   type AddTargetList,
-  type CatalogVisit,
+  type HeldLine,
+  type HoldingRow,
 } from '@portfolio/velista/models';
 import type { ProductRowAdd } from '@portfolio/velista/ui';
 
 /** What the plus of every row draws, for one chosen list. */
 export interface RowAdds {
   /**
-   * The plus of a row with nothing on the chosen list. One object for all of
-   * them, so a row is redrawn only when its own count moves. Null with no list to
-   * add to, which draws no plus at all.
+   * The plus of a row whose product the chosen list does not hold. One object for
+   * all of them, so a row is redrawn only when its own lines move. Null with no
+   * list to add to, which draws no plus at all.
    */
   readonly plain: ProductRowAdd | null;
-  /** The rows that hold a count, by product. */
+  /** The rows whose product the chosen list holds, by product. */
   readonly byItem: ReadonlyMap<string, ProductRowAdd>;
 }
 
 /**
- * The plus of each product row (velista `0134`, section 4.1), from the chosen
- * list, the record of the visit and the row whose stepper is open.
+ * The plus of each product row and the lines under it (velista `0134`, section
+ * 4.1), from the chosen list and the lines the store holds.
  *
  * Shared by the catalog page and the product page, whose similar products carry
  * the same plus and add to the same list.
  */
 export function rowAdds(
   target: AddTargetList | null,
-  visit: CatalogVisit,
-  stepperOpen: string | null
+  held: readonly HeldLine[]
 ): RowAdds {
   const byItem = new Map<string, ProductRowAdd>();
   if (target === null) {
     return { plain: null, byItem };
   }
-  for (const entry of visit) {
-    if (entry.listId === target.listId) {
-      byItem.set(entry.itemId, {
-        count: entry.quantity,
-        floor: visitFloor(entry),
-        open: stepperOpen === entry.itemId,
-        list: target.name,
-      });
+
+  const lines = new Map<string, HoldingRow[]>();
+  for (const line of held) {
+    if (line.listId !== target.listId) {
+      continue;
+    }
+    const row: HoldingRow = {
+      lineId: line.lineId,
+      name: line.name,
+      quantity: line.quantity,
+      editable:
+        !isUnsavedLine(line.lineId) &&
+        canStepLine(target.permissions, line.pending),
+      pending: line.pending,
+    };
+    for (const itemId of line.itemIds) {
+      const rows = lines.get(itemId);
+      if (rows === undefined) {
+        lines.set(itemId, [row]);
+      } else {
+        rows.push(row);
+      }
     }
   }
-  return {
-    plain: { count: 0, floor: 1, open: false, list: target.name },
-    byItem,
-  };
+  for (const [itemId, rows] of lines) {
+    byItem.set(itemId, { list: target.name, lines: rows });
+  }
+
+  return { plain: { list: target.name, lines: [] }, byItem };
 }
 
 /**

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   inject,
   viewChild,
 } from '@angular/core';
@@ -42,6 +43,15 @@ import { coveredPageUrl } from '../row-adds';
         />
       } @else if (ready()) {
         <p class="note">{{ 'catalog.lists.none' | rokuT }}</p>
+      } @else if (failed()) {
+        <!--
+          The read did not answer. Said, with a second try, so the sheet is never
+          left on "Loading your lists".
+        -->
+        <p class="note" role="alert">{{ 'catalog.lists.failed' | rokuT }}</p>
+        <button (click)="retry()" class="retry" type="button">
+          {{ 'catalog.error.retry' | rokuT }}
+        </button>
       } @else {
         <p class="note" role="status">{{ 'catalog.lists.loading' | rokuT }}</p>
       }
@@ -63,10 +73,15 @@ export class AddListSheet {
   protected readonly lists = this._adds.lists;
   protected readonly target = this._adds.target;
   protected readonly ready = this._adds.ready;
+  protected readonly failed = computed(() => this._adds.status() === 'failed');
 
   constructor() {
     // The page underneath has usually read them. A cold load of this URL has not.
     void this._adds.ensure();
+  }
+
+  protected retry(): void {
+    void this._adds.retry();
   }
 
   /** A press chooses and closes, through the shell so the sheet falls. */

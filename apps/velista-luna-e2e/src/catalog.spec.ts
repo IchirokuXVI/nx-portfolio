@@ -188,15 +188,17 @@ test.describe('the Supermarket selector', () => {
 
 /**
  * Adding from the catalog and the product page (velista plan 0134), walked once:
- * the plus adds to the list the line above the tab bar names, the count opens what
- * the visit added, one product is taken back, and a product opens a page whose
- * back control returns to the list.
+ * the plus adds to the list the line above the tab bar names, the line it made
+ * shows under the row with its own stepper, the count opens what the visit added,
+ * the product is taken back, the list is put in a price order, and a product
+ * opens a page with its prices, their history and the person's lists.
  */
 test.describe('adding from the catalog', () => {
-  test('adds a product to the named list, takes it back, and opens a product page', async ({
+  test('adds a product to the named list, takes it back, orders by price, and opens a product page', async ({
     page,
   }) => {
     const adding = page.locator('lib-adding-bar');
+    const held = products(page, 'Bread').locator('.held-line');
 
     await test.step('1. the line names a list before the first plus', async () => {
       await signIn(page, ALICE_EMAIL);
@@ -207,12 +209,16 @@ test.describe('adding from the catalog', () => {
       await expect(page).toHaveURL(/\/en\/catalog$/);
       await expect(adding).toContainText('Adding to');
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
+      await expect(held).toHaveCount(0);
     });
 
-    await test.step('2. the plus adds one, and the line counts it', async () => {
+    await test.step('2. the plus adds one: the line shows under the row, and the bar counts it', async () => {
       await products(page, 'Bread').locator('button.add').click();
 
-      await expect(products(page, 'Bread').locator('button.add')).toHaveText(
+      await expect(held).toHaveCount(1);
+      await expect(held).toContainText('Bread');
+      await expect(held.getByRole('spinbutton')).toHaveAttribute(
+        'aria-valuenow',
         '1'
       );
       await expect(adding.locator('[data-adding="count"]')).toHaveText(
@@ -220,7 +226,15 @@ test.describe('adding from the catalog', () => {
       );
     });
 
-    await test.step('3. the name opens the sheet of lists, and Close keeps the choice', async () => {
+    await test.step('3. the stepper of that line raises it', async () => {
+      await held.getByRole('button', { name: 'One more' }).click();
+      await expect(held.getByRole('spinbutton')).toHaveAttribute(
+        'aria-valuenow',
+        '2'
+      );
+    });
+
+    await test.step('4. the name opens the sheet of lists, and Close keeps the choice', async () => {
       await adding.locator('[data-adding="list"]').click();
       await expect(page).toHaveURL(/\/en\/catalog\/sheet\/add-list$/);
 
@@ -233,23 +247,38 @@ test.describe('adding from the catalog', () => {
       await expect(page).toHaveURL(/\/en\/catalog$/);
     });
 
-    await test.step('4. the count opens what was added, and the minus takes it back', async () => {
+    await test.step('5. the count opens what was added, and the minus takes it back', async () => {
       await adding.locator('[data-adding="count"]').click();
       await expect(page).toHaveURL(/\/en\/catalog\/sheet\/added$/);
 
       const added = page.getByRole('dialog');
       await expect(added.getByText('Bread', { exact: true })).toBeVisible();
       await added.getByRole('button', { name: 'One fewer' }).click();
+      await expect(added.getByRole('spinbutton')).toHaveAttribute(
+        'aria-valuenow',
+        '1'
+      );
+      await added.getByRole('button', { name: 'One fewer' }).click();
 
-      // The last product taken back closes the sheet, and the plus is a plus again.
+      // The last line taken back closes the sheet, and the row holds no line.
       await expect(page).toHaveURL(/\/en\/catalog$/);
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
-      await expect(
-        products(page, 'Bread').locator('button.add.has-count')
-      ).toHaveCount(0);
+      await expect(held).toHaveCount(0);
     });
 
-    await test.step('5. a product is a page, and back returns to the list', async () => {
+    await test.step('6. the order menu puts the list in a price order, kept in the URL', async () => {
+      await page.getByRole('button', { name: /^Order:/ }).click();
+      await page.getByRole('radio', { name: /^Lowest price Products/ }).click();
+
+      await expect(page).toHaveURL(/\/en\/catalog\?order=price$/);
+      await expect(page.getByRole('button', { name: /^Order:/ })).toContainText(
+        'Lowest price'
+      );
+      await expect(products(page, 'Bread')).toBeVisible();
+      await expect(products(page, 'Milk')).toBeVisible();
+    });
+
+    await test.step('7. a product is a page: its prices, their history and the lists', async () => {
       await products(page, 'Milk').locator('button.open').click();
 
       await expect(page).toHaveURL(/\/en\/catalog\/products\/[0-9a-f-]{36}$/);
@@ -259,10 +288,33 @@ test.describe('adding from the catalog', () => {
       await expect(
         page.getByRole('heading', { name: 'Price at your supermarkets' })
       ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'How the price has moved' })
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'In your lists' })
+      ).toBeVisible();
       await expectCatalogLit(page);
+    });
 
+    await test.step('8. the stepper of a list adds the product there, and takes it off again', async () => {
+      const list = page.locator('lib-lists-table .list').first();
+      const count = list.locator('.row').getByRole('spinbutton');
+      const before = Number(await count.getAttribute('aria-valuenow'));
+
+      await list.locator('.row').getByRole('button', { name: 'One more' }).click();
+      await expect(count).toHaveAttribute('aria-valuenow', String(before + 1));
+
+      await list
+        .locator('.row')
+        .getByRole('button', { name: 'One fewer' })
+        .click();
+      await expect(count).toHaveAttribute('aria-valuenow', String(before));
+    });
+
+    await test.step('9. back returns to the list, in the order it was left in', async () => {
       await page.getByRole('button', { name: 'Back', exact: true }).click();
-      await expect(page).toHaveURL(/\/en\/catalog$/);
+      await expect(page).toHaveURL(/\/en\/catalog\?order=price$/);
       await expect(products(page, 'Bread')).toBeVisible();
     });
   });

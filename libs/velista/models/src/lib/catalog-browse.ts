@@ -8,15 +8,18 @@ import {
 } from './shopping-profile';
 
 /**
- * The orders the catalog tab offers (velista `0134`, section 3).
+ * The orders the catalog tab offers (velista `0134`, section 3; backend `0196`,
+ * section 1).
  *
- * The two the read can serve today. `name` is the order the tab opens on, and the
- * menu calls it the catalog's own order. Newest is gone (section 1). The price
- * orders and the order by aisle wait for the read to grow them (section 9): prices
- * are attached after the page of products is cut, so no order by price exists, and
- * one drawn here would be a label over the wrong list.
+ * - `category` is the catalog's own order: by aisle, then by name. The tab opens
+ *   on it.
+ * - `price` is the lowest price at the scopes of the read.
+ * - `unitPrice` is the lowest price per kilo or litre.
+ * - `relevance` is Best match, and exists only while the field has text.
+ *
+ * A to Z and Newest are gone (section 1).
  */
-export type CatalogOrder = 'relevance' | 'name';
+export type CatalogOrder = 'relevance' | 'category' | 'price' | 'unitPrice';
 
 /**
  * A catalog name in the reader's language, or in the other one when it has only
@@ -39,12 +42,47 @@ export function catalogName(name: LocalizedName, locale: string): string {
  * Which orders the menu offers, in order (rule C2 of velista `0100`).
  *
  * **Best match exists only while there is something to match.** That is the
- * server's own rule: the read defaults to relevance with a query and to name
- * without one, and relevance with no words is an arbitrary order wearing a
- * confident label.
+ * server's own rule: relevance with no words is an arbitrary order wearing a
+ * confident label. With words it comes first, because somebody who typed a name
+ * wants that product before they want the cheapest thing near it.
  */
 export function catalogOrdersFor(query: string): readonly CatalogOrder[] {
-  return query.trim() === '' ? ['name'] : ['relevance', 'name'];
+  return query.trim() === ''
+    ? ['category', 'price', 'unitPrice']
+    : ['relevance', 'category', 'price', 'unitPrice'];
+}
+
+/**
+ * Where the "Without a price" line stands (velista `0134`, section 3): before the
+ * first row with no price that follows a row with one. Null when no line is drawn.
+ *
+ * Only a price order has the line, because only there do the rows with no price
+ * come last. A list where no row has a price draws none either: the line separates
+ * two parts, and one part needs no separator.
+ *
+ * `unitPrice` reads the price per kilo or litre, since that is what placed the row.
+ */
+export function unpricedStart(
+  order: CatalogOrder,
+  products: readonly CatalogProduct[]
+): number | null {
+  if (order !== 'price' && order !== 'unitPrice') {
+    return null;
+  }
+  const priced = (product: CatalogProduct): boolean => {
+    const offer = product.offer;
+    return (
+      offer !== null &&
+      (order === 'price' ? offer.price : offer.unitPrice) !== null
+    );
+  };
+
+  for (let index = 1; index < products.length; index++) {
+    if (!priced(products[index]) && priced(products[index - 1])) {
+      return index;
+    }
+  }
+  return null;
 }
 
 /**

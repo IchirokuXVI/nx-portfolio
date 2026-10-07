@@ -4,6 +4,7 @@ import type {
   AddLineQuantityRequest,
   AddLineRequest,
   AlsoOnVm,
+  ItemLists,
   Line,
   LineApprovalStatus,
   LineOrder,
@@ -22,6 +23,7 @@ import { operation } from '../auth/http-context';
 import {
   toAlsoOnPlace,
   toDeletedId,
+  toItemLists,
   toLine,
   toLineSettlement,
   toPage,
@@ -274,6 +276,17 @@ export class LineApi implements LineServiceI {
           hasMore: body['hasMore'] === true,
         }
       : { places: [], hasMore: false };
+  }
+
+  async linesHoldingItem(itemId: string): Promise<ItemLists> {
+    const body = await firstValueFrom(
+      this._http.get<unknown>(
+        this._urls.gateway(`/v1/items/${itemId}/list-lines`),
+        { context: operation('lines.holdingLines') }
+      )
+    );
+
+    return toItemLists(body, itemId);
   }
 
   /**

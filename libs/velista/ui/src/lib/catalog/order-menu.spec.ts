@@ -1,6 +1,8 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type { CatalogOrder } from '@portfolio/velista/models';
+import { catalogOrdersFor, type CatalogOrder } from '@portfolio/velista/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { OrderMenu } from './order-menu';
 
 /**
@@ -10,7 +12,15 @@ import { OrderMenu } from './order-menu';
  * The overlay is drawn into the document next to its anchor, so the queries for
  * the rows read the document and not the fixture.
  */
-const BOTH: readonly CatalogOrder[] = ['relevance', 'name'];
+const BOTH: readonly CatalogOrder[] = ['relevance', 'category'];
+
+/** Every order of stage 2, as the menu shows them while the field has text. */
+const EVERY: readonly CatalogOrder[] = [
+  'relevance',
+  'category',
+  'price',
+  'unitPrice',
+];
 
 let fixture: ComponentFixture<OrderMenu>;
 let picked: CatalogOrder[];
@@ -91,30 +101,90 @@ describe('OrderMenu', () => {
     expect(group()).not.toBeNull();
     expect(radios().map((one) => one.dataset['order'])).toEqual([
       'relevance',
-      'name',
+      'category',
     ]);
     expect(control().getAttribute('aria-expanded')).toBe('true');
   });
 
   it('draws no row for an order the read cannot serve', async () => {
-    await render(['name'], 'name');
+    await render(['category'], 'category');
 
     await open();
 
-    expect(radios().map((one) => one.dataset['order'])).toEqual(['name']);
+    expect(radios().map((one) => one.dataset['order'])).toEqual(['category']);
+  });
+
+  it('offers the three orders of a field with no text, and no best match', async () => {
+    await render(catalogOrdersFor(''), 'category');
+
+    expect(control().textContent).toContain('catalog.order.short.category');
+    await open();
+
+    expect(radios().map((one) => one.dataset['order'])).toEqual([
+      'category',
+      'price',
+      'unitPrice',
+    ]);
+  });
+
+  it('offers best match as a fourth order while the field has text', async () => {
+    await render(catalogOrdersFor('milk'), 'relevance');
+
+    await open();
+
+    expect(radios().map((one) => one.dataset['order'])).toEqual([
+      'relevance',
+      'category',
+      'price',
+      'unitPrice',
+    ]);
   });
 
   it('says what each order is called and what it does', async () => {
-    await render();
+    await render(EVERY, 'relevance');
 
     await open();
 
-    expect(radio('relevance').textContent).toContain('catalog.order.relevance');
-    expect(radio('relevance').textContent).toContain(
-      'catalog.order.hint.relevance'
-    );
-    expect(radio('name').textContent).toContain('catalog.order.name');
-    expect(radio('name').textContent).toContain('catalog.order.hint.name');
+    for (const order of EVERY) {
+      expect(radio(order).querySelector('.option-name')?.textContent).toContain(
+        `catalog.order.${order}`
+      );
+      expect(radio(order).querySelector('.option-hint')?.textContent).toContain(
+        `catalog.order.hint.${order}`
+      );
+    }
+  });
+
+  it('names the order it holds by its short name, whichever it is', async () => {
+    for (const order of EVERY) {
+      await render(EVERY, order);
+
+      expect(control().textContent).toContain(`catalog.order.short.${order}`);
+
+      fixture.destroy();
+      (fixture.nativeElement as HTMLElement).remove();
+    }
+  });
+
+  it('has a name, a short name and a hint for each order in both languages, and none for an order that is gone', () => {
+    // The testing translator answers the key, so the strings are read off the
+    // files the real one loads.
+    for (const locale of ['en', 'es']) {
+      const file = join(__dirname, '../../../assets/i18n', `${locale}.json`);
+      const order = JSON.parse(readFileSync(file, 'utf8')).catalog.order;
+
+      expect(typeof order.label).toBe('string');
+      for (const one of EVERY) {
+        expect([one, typeof order[one]]).toEqual([one, 'string']);
+        expect([one, typeof order.short[one]]).toEqual([one, 'string']);
+        expect([one, typeof order.hint[one]]).toEqual([one, 'string']);
+      }
+      expect(Object.keys(order).sort()).toEqual(
+        [...EVERY, 'hint', 'label', 'short'].sort()
+      );
+      expect(Object.keys(order.short).sort()).toEqual([...EVERY].sort());
+      expect(Object.keys(order.hint).sort()).toEqual([...EVERY].sort());
+    }
   });
 
   it('names the group by its title', async () => {
@@ -133,34 +203,34 @@ describe('OrderMenu', () => {
   });
 
   it('checks the order that is chosen, and only that one', async () => {
-    await render(BOTH, 'name');
+    await render(BOTH, 'category');
 
     await open();
 
-    expect(radio('name').getAttribute('aria-checked')).toBe('true');
-    expect(radio('name').classList.contains('is-on')).toBe(true);
-    expect(radio('name').getAttribute('tabindex')).toBe('0');
+    expect(radio('category').getAttribute('aria-checked')).toBe('true');
+    expect(radio('category').classList.contains('is-on')).toBe(true);
+    expect(radio('category').getAttribute('tabindex')).toBe('0');
     expect(radio('relevance').getAttribute('aria-checked')).toBe('false');
     expect(radio('relevance').classList.contains('is-on')).toBe(false);
     expect(radio('relevance').getAttribute('tabindex')).toBe('-1');
   });
 
   it('enters the group at the chosen row', async () => {
-    await render(BOTH, 'name');
+    await render(BOTH, 'category');
 
     await open();
 
-    expect(document.activeElement).toBe(radio('name'));
+    expect(document.activeElement).toBe(radio('category'));
   });
 
   it('says which order was chosen, closes, and goes back to the control', async () => {
     await render();
     await open();
 
-    radio('name').click();
+    radio('category').click();
     await settle();
 
-    expect(picked).toEqual(['name']);
+    expect(picked).toEqual(['category']);
     expect(group()).toBeNull();
     expect(control().getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(control());
@@ -208,7 +278,7 @@ describe('OrderMenu', () => {
   it('opens again after it was closed', async () => {
     await render();
     await open();
-    radio('name').click();
+    radio('category').click();
     await settle();
 
     await open();
@@ -228,9 +298,9 @@ describe('OrderMenu', () => {
     });
     radio('relevance').dispatchEvent(down);
     expect(down.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(radio('name'));
+    expect(document.activeElement).toBe(radio('category'));
 
-    radio('name').dispatchEvent(
+    radio('category').dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
     );
     expect(document.activeElement).toBe(radio('relevance'));
@@ -238,7 +308,7 @@ describe('OrderMenu', () => {
     radio('relevance').dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })
     );
-    expect(document.activeElement).toBe(radio('name'));
+    expect(document.activeElement).toBe(radio('category'));
     // An arrow moves focus. It chooses nothing.
     expect(picked).toEqual([]);
   });

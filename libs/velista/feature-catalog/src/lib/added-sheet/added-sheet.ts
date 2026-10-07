@@ -30,8 +30,8 @@ import { coveredPageUrl } from '../row-adds';
 /**
  * What this visit to the catalog added (velista `0134`, section 4.4).
  *
- * Opened by the count on the line above the tab bar. One row for each product
- * added since the person came to the catalog, with a stepper. The minus at the
+ * Opened by the count on the line above the tab bar. One row for each line the
+ * person added to since they came to the catalog, with a stepper. The minus at the
  * floor takes the product back, one quiet button takes back all of a list, and a
  * link opens the list.
  *
@@ -93,6 +93,7 @@ export class AddedSheet {
       listId: section.listId,
       name: lists.find((list) => list.listId === section.listId)?.name ?? '',
       rows: section.entries.map((entry) => ({
+        lineId: entry.lineId,
         itemId: entry.itemId,
         name: entry.name,
         detail: entry.detail,
@@ -117,7 +118,11 @@ export class AddedSheet {
   }
 
   protected step(step: VisitAddedStep): void {
-    void this._adds.step(step.listId, step.itemId, step.by);
+    void this._adds.step(
+      { listId: step.listId, itemId: step.itemId, detail: step.detail },
+      step.lineId,
+      step.by
+    );
   }
 
   protected takeAllBack(listId: string): void {

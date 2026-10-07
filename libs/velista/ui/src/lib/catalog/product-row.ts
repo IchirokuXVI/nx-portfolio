@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type { HoldingRow } from '@portfolio/velista/models';
 import { PlusIcon, ProductIcon } from '../icons/icons';
 import { QuantityStepper } from '../list/quantity-stepper';
 
@@ -31,9 +32,9 @@ export interface ProductRowView {
   /** The accessible name: the product, the size and the price, in that order. */
   readonly label: string;
   /**
-   * The detail with the price in it ("1 L · 1,09 € at Carrefour"), for a row whose
-   * trailing edge holds a stepper and for the sheet of what a visit added
-   * (velista `0134`, section 4.1). Null with neither a detail nor a price.
+   * The detail with the price in it ("1 L · 1,09 € at Carrefour"), for the sheet
+   * of what a visit added (velista `0134`, section 4.4). Null with neither a
+   * detail nor a price.
    */
   readonly summary: string | null;
 }
@@ -44,14 +45,19 @@ export interface ProductRowView {
  * adding.
  */
 export interface ProductRowAdd {
-  /** How many of the product the chosen list holds. Zero draws the plus. */
-  readonly count: number;
-  /** The lowest count the stepper shows. A minus pressed there takes it back. */
-  readonly floor: number;
-  /** Whether the stepper is open in this row. One is open at a time. */
-  readonly open: boolean;
-  /** The chosen list's name, for the control's accessible name. */
+  /** The chosen list's name, for the heading of the lines and the names of the controls. */
   readonly list: string;
+  /**
+   * The lines of the chosen list that hold this product, each with its own
+   * quantity. Empty when the list does not hold it.
+   */
+  readonly lines: readonly HoldingRow[];
+}
+
+/** A press on the stepper of one line under a row. */
+export interface ProductRowLineStep {
+  readonly lineId: string;
+  readonly by: 1 | -1;
 }
 
 /**
@@ -69,9 +75,15 @@ export interface ProductRowAdd {
  * A button in a button is not a control anybody can reach. So the card is the
  * host's own box, the product button fills it, and the plus sits after it.
  *
- * A press adds one. The plus then shows the count, and a press on the count opens
- * a stepper in the row. While the stepper is open the price moves into the detail
- * line, because the trailing edge has room for one of the two.
+ * A press adds one, and the plus stays a plus.
+ *
+ * ## The lines that hold the product are under it, one stepper each
+ *
+ * A list can hold one product on several lines: once under the product's name and
+ * again under a name somebody typed. One number on the plus could not say which
+ * line it counted, so the row shows every line of the chosen list that holds the
+ * product, with its name and its own stepper (the owner's decision after the walk
+ * of stage 1). It is what the search of a list page shows under a product.
  *
  * ## The price is never colour alone
  *
@@ -112,18 +124,12 @@ export interface ProductRowAdd {
 
         <span class="what">
           <span class="name">{{ row().name }}</span>
-          @if (stepping()) {
-            @if (row().summary; as summary) {
-              <span class="detail">{{ summary }}</span>
-            }
-          } @else if (row().detail; as detail) {
+          @if (row().detail; as detail) {
             <span class="detail">{{ detail }}</span>
           }
         </span>
 
-        @if (stepping()) {
-          <!-- The price is in the detail line while the stepper is open. -->
-        } @else if (row().price; as price) {
+        @if (row().price; as price) {
           <span [class.is-stale]="row().stale" class="price">
             <span class="amount">{{ price }}</span>
             @if (row().caption; as caption) {
@@ -147,49 +153,51 @@ export interface ProductRowAdd {
       </button>
 
       @if (add(); as adding) {
-        @if (stepping()) {
-          <lib-quantity-stepper
-            (stepped)="stepped.emit($event)"
-            [accent]="true"
-            [compact]="true"
-            [controlled]="true"
-            [label]="
-              'catalog.add.stepper'
-                | rokuT: { name: row().name, list: adding.list }
-            "
-            [min]="adding.floor - 1"
-            [value]="adding.count"
-            class="stepper"
-          />
-        } @else if (adding.count > 0) {
-          <button
-            (click)="counted.emit(row().id)"
-            [attr.aria-label]="
-              'catalog.add.count'
-                | rokuT
-                  : {
-                      name: row().name,
-                      count: adding.count,
-                      list: adding.list,
+        <button
+          (click)="added.emit(row().id)"
+          [attr.aria-label]="
+            'catalog.add.label' | rokuT: { name: row().name, list: adding.list }
+          "
+          class="add"
+          type="button"
+        >
+          <span class="add-dot"><lib-plus-icon /></span>
+        </button>
+
+        @if (adding.lines.length > 0) {
+          <div class="held">
+            <span class="held-title">{{
+              'catalog.held.title' | rokuT: { list: adding.list }
+            }}</span>
+            <ul class="held-lines">
+              @for (line of adding.lines; track line.lineId) {
+                <li [attr.data-line]="line.lineId" class="held-line">
+                  <span class="held-what">
+                    <span class="held-name">{{ line.name }}</span>
+                    @if (line.pending) {
+                      <span class="held-pending">{{
+                        'catalog.added.pending' | rokuT
+                      }}</span>
                     }
-            "
-            class="add has-count"
-            type="button"
-          >
-            <span class="add-dot">{{ adding.count }}</span>
-          </button>
-        } @else {
-          <button
-            (click)="added.emit(row().id)"
-            [attr.aria-label]="
-              'catalog.add.label'
-                | rokuT: { name: row().name, list: adding.list }
-            "
-            class="add"
-            type="button"
-          >
-            <span class="add-dot"><lib-plus-icon /></span>
-          </button>
+                  </span>
+                  <lib-quantity-stepper
+                    (stepped)="
+                      lineStepped.emit({ lineId: line.lineId, by: $event })
+                    "
+                    [accent]="line.quantity > 0"
+                    [compact]="true"
+                    [controlled]="true"
+                    [disabled]="!line.editable"
+                    [label]="
+                      'catalog.held.stepper'
+                        | rokuT: { line: line.name, list: adding.list }
+                    "
+                    [value]="line.quantity"
+                  />
+                </li>
+              }
+            </ul>
+          </div>
         }
       }
     </div>
@@ -223,17 +231,8 @@ export class ProductRow {
   /** The plus was pressed: add one of this product. */
   readonly added = output<string>();
 
-  /** The count was pressed: open the stepper in this row. */
-  readonly counted = output<string>();
-
-  /** A press on the stepper: one more, or one fewer. */
-  readonly stepped = output<1 | -1>();
-
-  /** Whether the stepper is what the trailing edge holds. */
-  protected readonly stepping = computed(() => {
-    const add = this.add();
-    return add !== null && add.open && add.count > 0;
-  });
+  /** A press on the stepper of one line that holds the product. */
+  readonly lineStepped = output<ProductRowLineStep>();
 
   /** A picture that failed to load, so the carton takes its place. */
   protected readonly broken = signal<string | null>(null);

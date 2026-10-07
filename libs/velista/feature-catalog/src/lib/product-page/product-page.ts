@@ -25,6 +25,7 @@ import {
   CatalogAddStore,
   CategoryStore,
   GroupMembers,
+  SessionStore,
   type CatalogBrowseServiceI,
   type CatalogServiceI,
 } from '@portfolio/velista/data-access';
@@ -32,11 +33,21 @@ import {
   APP_BASE_PATH,
   catalogName,
   categoryName,
+  chainPriceHistories,
+  PRICE_HISTORY_DEFAULT_RANGE,
+  PRICE_HISTORY_READ_DAYS,
+  priceHistoryStart,
+  productListGroups,
   productPricesSeenAt,
   productShopPrices,
   similarProducts,
+  stepsWithin,
   type CatalogBrowseContext,
   type CatalogItem,
+  type ItemList,
+  type PriceHistoryRange,
+  type ProductListGroup,
+  type ProductPriceHistory,
   type ProductShopPrice,
 } from '@portfolio/velista/models';
 import {
@@ -50,14 +61,19 @@ import {
 import {
   AddingBar,
   ChevronRightIcon,
+  ListsTable,
   PageHeader,
+  PriceHistory,
   PriceTable,
   ProductIcon,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
+  type ListsTableStep,
+  type PriceHistoryLine,
   type PriceTableRow,
   type ProductRowAdd,
+  type ProductRowLineStep,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
@@ -70,12 +86,18 @@ import { rowAdds } from '../row-adds';
  */
 type PageStatus = 'loading' | 'ready' | 'failed' | 'gone';
 
+/** A section that is read after the page is drawn, and can fail alone. */
+type SectionStatus = 'loading' | 'ready' | 'failed';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
  * One product, on a page of its own (velista `0134`, section 5).
  *
  * It replaces the product sheet, which had room for a name and a few lines. From
  * top to bottom: the header with the product's name, the product, what each
- * supermarket of the shopping profile charges, and similar products.
+ * supermarket of the shopping profile charges, how that price has moved, the
+ * person's lists with how many of the product each holds, and similar products.
  *
  * ## The prices come first, and are on screen when the page opens
  *
@@ -85,30 +107,40 @@ type PageStatus = 'loading' | 'ready' | 'failed' | 'gone';
  * each chain at its cheapest, and the chains near the person with no row say `not
  * sold here`.
  *
+ * ## The history and the lists are read after the page is drawn
+ *
+ * Neither holds the page back, and either can fail alone: a product whose history
+ * did not load still shows its prices. One year of history is read once, and the
+ * three ranges are cut from it, so a press on a range asks the server for nothing.
+ *
+ * ## In your lists
+ *
+ * Every list the person can read, under its group, with a stepper for the line
+ * that has this product. The lines live in `CatalogAddStore`, where the rows of
+ * the catalog read them too, so a quantity changed here is the quantity there.
+ * What is added here joins the record of the visit.
+ *
  * ## Similar products carry the plus
  *
  * The other products of its group, each with the plus of the catalog's rows. The
  * heading says which list the plus adds to and opens the same sheet of lists as
- * the catalog: the choice is one value for both pages, and what is added here
- * joins the record of the visit. A press on a row opens that product's page.
+ * the catalog: the choice is one value for both pages. A press on a row opens
+ * that product's page.
  *
  * ## Back never leaves the app
  *
  * The back control pops when this document pushed the entry behind it, which is
  * the catalog, a list or a basket that linked here. On a cold load the fallback
  * is the catalog.
- *
- * ## What waits for the backend (stage 2)
- *
- * The price history and the table of lists (sections 6 and 7) need reads the
- * gateway does not serve yet (section 9). Nothing is drawn for them.
  */
 @Component({
   selector: 'lib-product-page',
   imports: [
     AddingBar,
     ChevronRightIcon,
+    ListsTable,
     PageHeader,
+    PriceHistory,
     PriceTable,
     ProductIcon,
     ProductRow,
@@ -131,9 +163,11 @@ export class ProductPage {
   private readonly _categories = inject(CategoryStore);
   private readonly _groupMembers = inject(GroupMembers);
   private readonly _adds = inject(CatalogAddStore);
+  private readonly _session = inject(SessionStore);
   private readonly _pages = inject(PageNavigation);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _locale = inject(RokuLocaleStore).locale;
+  protected readonly locale = this._locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _route = inject(ActivatedRoute);
   private readonly _router = inject(Router);
@@ -156,8 +190,21 @@ export class ProductPage {
   /** A picture that failed to load, so the carton takes its place. */
   protected readonly brokenImage = signal<string | null>(null);
 
-  /** The similar product whose stepper is open. One is open at a time. */
-  protected readonly stepperOpen = signal<string | null>(null);
+  private readonly _browseContext = signal<CatalogBrowseContext | null>(null);
+
+  /** One year of history, read once. The ranges are cut from it. */
+  private readonly _history = signal<ProductPriceHistory | null>(null);
+  protected readonly historyStatus = signal<SectionStatus>('loading');
+  protected readonly range = signal<PriceHistoryRange>(
+    PRICE_HISTORY_DEFAULT_RANGE
+  );
+
+  /** Every list the person can read. The lines of them are the store's. */
+  private readonly _lists = signal<readonly ItemList[]>([]);
+  protected readonly listsStatus = signal<SectionStatus>('loading');
+
+  /** A guest has no lists, so the page asks for none and draws no table. */
+  protected readonly signedIn = computed(() => !this._session.isGuest());
 
   /** A write that failed, said once in the live region until the next press. */
   protected readonly addFailed = signal(false);
@@ -254,6 +301,60 @@ export class ProductPage {
     });
   });
 
+  /** The currency the table is in, for the chart's axis. */
+  protected readonly currency = computed(
+    () =>
+      this._prices()
+        .map((line) => line.offer?.currency ?? null)
+        .find((currency) => currency !== null) ?? 'EUR'
+  );
+
+  /** The window the chart draws: the chosen range, ending where the read ends. */
+  protected readonly historyWindow = computed(() => {
+    const history = this._history();
+    if (history === null) {
+      return null;
+    }
+    const to = history.to.getTime();
+    // Never before the read starts: the server may have cut the year short.
+    const from = Math.max(
+      priceHistoryStart(this.range(), history.to).getTime(),
+      history.from.getTime()
+    );
+    return { from, to };
+  });
+
+  /** One line for each chain, cut to the window, named in the reader's language. */
+  protected readonly historyLines = computed<readonly PriceHistoryLine[]>(
+    () => {
+      const history = this._history();
+      const context = this._browseContext();
+      const window = this.historyWindow();
+      if (history === null || context === null || window === null) {
+        return [];
+      }
+      const locale = this._locale();
+      return chainPriceHistories(history, context).map((line) => ({
+        id: line.supermarketId,
+        name: catalogName(line.chain, locale),
+        slot: line.slot,
+        steps: stepsWithin(line.steps, window.from, window.to),
+      }));
+    }
+  );
+
+  /** The table of lists (section 7), the last used list and its group first. */
+  protected readonly listGroups = computed<readonly ProductListGroup[]>(() => {
+    const target = this.addTarget();
+    return productListGroups(
+      this._lists(),
+      this._adds.held(),
+      this.itemId(),
+      this.name(),
+      target === null ? null : `${target.zoneId}/${target.listId}`
+    );
+  });
+
   /** "two days ago", in the reader's language, or null with no price seen. */
   protected readonly seen = computed(() => {
     const at = productPricesSeenAt(this._prices());
@@ -290,7 +391,7 @@ export class ProductPage {
   });
 
   private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.visit(), this.stepperOpen())
+    rowAdds(this.addTarget(), this._adds.held())
   );
 
   constructor() {
@@ -298,7 +399,6 @@ export class ProductPage {
       const itemId = map.get('itemId') ?? '';
       if (itemId !== this.itemId()) {
         this.itemId.set(itemId);
-        this.stepperOpen.set(null);
         void this._load();
       }
     });
@@ -343,17 +443,49 @@ export class ProductPage {
     });
   }
 
-  protected openStepper(itemId: string): void {
-    this.stepperOpen.set(itemId);
-  }
-
-  protected stepProduct(itemId: string, by: 1 | -1): void {
+  /** A press on the stepper of one line under a similar product. */
+  protected stepLine(row: ProductRowView, step: ProductRowLineStep): void {
     const target = this.addTarget();
     if (target === null) {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(target.listId, itemId, by);
+    void this._adds.step(
+      { listId: target.listId, itemId: row.id, detail: row.summary },
+      step.lineId,
+      step.by
+    );
+  }
+
+  /** The plus of a list in the table: one of this product on that list. */
+  protected addToList(listId: string): void {
+    this.addFailed.set(false);
+    void this._adds.add(
+      { itemId: this.itemId(), name: this.name(), detail: this.detail() },
+      listId
+    );
+  }
+
+  /** A press on the stepper of a line in the table. */
+  protected stepListLine(step: ListsTableStep): void {
+    this.addFailed.set(false);
+    void this._adds.step(
+      { listId: step.listId, itemId: this.itemId(), detail: this.detail() },
+      step.lineId,
+      step.by
+    );
+  }
+
+  protected chooseRange(range: PriceHistoryRange): void {
+    this.range.set(range);
+  }
+
+  protected retryHistory(): void {
+    void this._loadHistory(this.itemId());
+  }
+
+  protected retryLists(): void {
+    void this._loadLists(this.itemId());
   }
 
   /** A similar product: its own page, pushed, so back returns to this one. */
@@ -404,11 +536,48 @@ export class ProductPage {
     }
 
     this._item.set(item);
+    this._browseContext.set(context);
     this.priced.set(hasScopes(context));
     this._prices.set(
       hasScopes(context) ? productShopPrices(rows, context) : []
     );
     this.status.set('ready');
+
+    // Neither holds the page back, and each fails alone.
+    if (hasScopes(context)) {
+      void this._loadHistory(itemId);
+    }
+    if (this.signedIn()) {
+      void this._loadLists(itemId);
+    }
+  }
+
+  /** One year of what the person's supermarkets showed for this product. */
+  private async _loadHistory(itemId: string): Promise<void> {
+    this.historyStatus.set('loading');
+    this._history.set(null);
+    const to = new Date();
+    const history = await this._browse.priceHistory(
+      itemId,
+      new Date(to.getTime() - PRICE_HISTORY_READ_DAYS * DAY_MS),
+      to
+    );
+    if (itemId !== this.itemId()) {
+      return;
+    }
+    this._history.set(history);
+    this.historyStatus.set(history === null ? 'failed' : 'ready');
+  }
+
+  /** The person's lists, and the lines of them that hold this product. */
+  private async _loadLists(itemId: string): Promise<void> {
+    this.listsStatus.set('loading');
+    const lists = await this._adds.readItem(itemId);
+    if (itemId !== this.itemId()) {
+      return;
+    }
+    this._lists.set(lists ?? []);
+    this.listsStatus.set(lists === null ? 'failed' : 'ready');
   }
 }
 

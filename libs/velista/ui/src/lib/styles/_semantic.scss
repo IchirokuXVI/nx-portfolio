@@ -339,6 +339,10 @@ $app-content-max: 480px;
   // A product's picture on its own page: the one product there, so nearly twice
   // the row's.
   --app-product-page-image-size: 96px;
+  // A chart (velista 0134, section 6): how thick a line of data is, and the mark
+  // under the chosen range.
+  --app-chart-line-width: 2px;
+  --app-chart-range-mark: 3px;
   // One of a shop's sections under its row: small enough that five share a line.
   --app-section-chip-height: 24px;
   // A pick row's radio, a native one in the action colour, the mock's size.

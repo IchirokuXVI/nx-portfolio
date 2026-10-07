@@ -84,4 +84,20 @@
   --app-sky-600-rgb: 37 99 235;
   --app-sky-600: rgb(var(--app-sky-600-rgb));
   --app-sky-700: #1d4ed8;
+
+  // Chart series (velista 0134, section 6): five hues for five lines, one set for
+  // each theme. They are identities and not statuses, so they are their own ramp
+  // and never borrow a status colour. Checked with the dataviz validator for
+  // colour blind separation on both grounds. Three of the Day steps are under 3:1
+  // on white, which is why a line always ends in its value written in text colour.
+  --app-chart-day-1: #2a78d6;
+  --app-chart-day-2: #eb6834;
+  --app-chart-day-3: #1baf7a;
+  --app-chart-day-4: #eda100;
+  --app-chart-day-5: #e87ba4;
+  --app-chart-night-1: #3987e5;
+  --app-chart-night-2: #d95926;
+  --app-chart-night-3: #199e70;
+  --app-chart-night-4: #c98500;
+  --app-chart-night-5: #d55181;
 }

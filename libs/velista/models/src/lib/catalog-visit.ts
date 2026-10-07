@@ -1,25 +1,28 @@
+import { canDeleteLine, lastListId } from './catalog-holdings';
 import type { ListPermission } from './enums';
 
 /**
- * One product that this visit to the catalog put on a list (velista `0134`,
+ * One line that this visit to the catalog put a product on (velista `0134`,
  * section 4.4).
  *
- * It holds what is needed to undo the add and no more: the line the add answered,
- * and what that line was before the visit touched it.
+ * It holds what is needed to undo the add and no more: the line, and what that
+ * line was before the visit touched it. One entry for each line, because a list
+ * can hold a product on several lines and each has its own quantity.
  */
 export interface VisitAddition {
   readonly listId: string;
   readonly itemId: string;
-  /** The line the add answered: a new one, or the one it merged into. */
+  /** The line the visit raised: a new one, or one that was there before. */
   readonly lineId: string;
-  /** The product's name and detail as the row drew them, for the sheet. */
+  /** What the line says, which is the product's name when the visit made it. */
   readonly name: string;
+  /** The product's detail as the row drew it, for the sheet. */
   readonly detail: string | null;
   /** How many the line holds now. */
   readonly quantity: number;
   /** How many it held before this visit. Zero when the visit made the line. */
   readonly before: number;
-  /** Whether the add made the line, rather than raising one that was there. */
+  /** Whether the visit made the line, rather than raising one that was there. */
   readonly created: boolean;
   /** Whether the line waits for approval (section 4.4). */
   readonly pending: boolean;
@@ -28,55 +31,54 @@ export interface VisitAddition {
 /** Everything one visit added, in the order it was added. */
 export type CatalogVisit = readonly VisitAddition[];
 
-/** What an add or a quantity change answered about a line. */
+/** What a write answered about a line. */
 export interface VisitLineState {
   readonly lineId: string;
+  readonly name: string;
   readonly quantity: number;
   readonly pending: boolean;
 }
 
-/** The entry for a product on a list, or null when the visit did not add it. */
+/** The product a write was for, as the record keeps it. */
+export interface VisitProduct {
+  readonly listId: string;
+  readonly itemId: string;
+  readonly detail: string | null;
+}
+
+/** The entry for a line, or null when the visit did not raise it. */
 export function visitAddition(
   visit: CatalogVisit,
-  listId: string,
-  itemId: string
+  lineId: string
 ): VisitAddition | null {
-  return (
-    visit.find((entry) => entry.listId === listId && entry.itemId === itemId) ??
-    null
-  );
+  return visit.find((entry) => entry.lineId === lineId) ?? null;
 }
 
 /**
  * The visit after an add was answered.
  *
- * The first add of a product to a list writes the entry, and what the line held
- * before is worked out from the answer: a merge raised a line by `added`, so the
- * line held that much less. Every later answer for the same product moves the
- * quantity and leaves `before` and `created` alone, because those are about the
- * moment before the visit.
+ * The first add onto a line writes the entry, and what the line held before is
+ * worked out from the answer: a merge raised a line by `added`, so the line held
+ * that much less. Every later answer for the same line moves the quantity and
+ * leaves `before` and `created` alone, because those are about the moment before
+ * the visit.
  */
 export function visitAfterAdd(
   visit: CatalogVisit,
-  product: {
-    readonly listId: string;
-    readonly itemId: string;
-    readonly name: string;
-    readonly detail: string | null;
-  },
+  product: VisitProduct,
   line: VisitLineState,
   merged: boolean,
   added = 1
 ): CatalogVisit {
-  const held = visitAddition(visit, product.listId, product.itemId);
-  if (held !== null) {
-    return visitAfterQuantity(visit, product.listId, product.itemId, line);
+  if (visitAddition(visit, line.lineId) !== null) {
+    return withLine(visit, line);
   }
   return [
     ...visit,
     {
       ...product,
       lineId: line.lineId,
+      name: line.name,
       quantity: line.quantity,
       before: merged ? Math.max(0, line.quantity - added) : 0,
       created: !merged,
@@ -85,46 +87,68 @@ export function visitAfterAdd(
   ];
 }
 
-/** The visit after a line's quantity moved. */
-export function visitAfterQuantity(
+/**
+ * The visit after a stepper moved a line from `was` to what `line` says.
+ *
+ * - A line the visit already raised moves, and leaves the record when it is back
+ *   at what it held before, or under it: the visit then added nothing to it.
+ * - A line the visit had not touched joins the record when it went up. It was
+ *   there before, so taking it back lowers it and never deletes it.
+ * - A line that only went down is not something the visit added.
+ */
+export function visitAfterStep(
   visit: CatalogVisit,
-  listId: string,
-  itemId: string,
-  line: VisitLineState
+  product: VisitProduct,
+  line: VisitLineState,
+  was: number
 ): CatalogVisit {
-  return visit.map((entry) =>
-    entry.listId === listId && entry.itemId === itemId
-      ? {
-          ...entry,
-          lineId: line.lineId,
-          quantity: line.quantity,
-          pending: line.pending,
-        }
-      : entry
-  );
+  const held = visitAddition(visit, line.lineId);
+  if (held !== null) {
+    return line.quantity > held.before
+      ? withLine(visit, line)
+      : visitWithout(visit, line.lineId);
+  }
+  if (line.quantity <= was) {
+    return visit;
+  }
+  return [
+    ...visit,
+    {
+      ...product,
+      lineId: line.lineId,
+      name: line.name,
+      quantity: line.quantity,
+      before: was,
+      created: false,
+      pending: line.pending,
+    },
+  ];
 }
 
-/** The visit without one product on one list. */
+/** The visit without one line. */
 export function visitWithout(
   visit: CatalogVisit,
-  listId: string,
-  itemId: string
+  lineId: string
 ): CatalogVisit {
-  return visit.filter(
-    (entry) => !(entry.listId === listId && entry.itemId === itemId)
-  );
+  return visit.filter((entry) => entry.lineId !== lineId);
 }
 
 /**
- * The lowest quantity the stepper shows: one more than the line held before the
- * visit. A minus pressed there takes the product back.
+ * The lowest quantity the sheet's stepper shows: one more than the line held
+ * before the visit. A minus pressed there takes the product back.
  */
 export function visitFloor(entry: VisitAddition): number {
   return entry.before + 1;
 }
 
+/** What the record needs to know about the list of an entry. */
+export interface VisitList {
+  readonly permissions: readonly ListPermission[];
+  readonly autoApproveLines: boolean;
+}
+
 /**
- * How to take one product back (section 4.4): **undo what the visit did, and no
+ * How to take one line back (section 4.4): **undo what the visit did, and no
  * more.**
  *
  * - A line the visit made is deleted.
@@ -132,9 +156,9 @@ export function visitFloor(entry: VisitAddition): number {
  *   signed change and not an absolute write, so what somebody else added to the
  *   line in the meantime stays.
  *
- * `canDelete` is the server's rule, read from the person's permissions: an
- * approved line is deleted only by somebody who manages the list. Without it the
- * line the visit made is lowered to nothing, which a list draws as stocked.
+ * Whether the person may delete is the server's rule ({@link canDeleteLine}).
+ * Without it the line the visit made is lowered to nothing, which a list draws as
+ * stocked.
  */
 export type VisitTakeBack =
   | { readonly kind: 'delete'; readonly lineId: string }
@@ -142,12 +166,12 @@ export type VisitTakeBack =
 
 export function visitTakeBack(
   entry: VisitAddition,
-  permissions: readonly ListPermission[]
+  list: VisitList
 ): VisitTakeBack {
-  const canDelete =
-    permissions.includes('MANAGE') ||
-    (entry.pending && permissions.includes('WRITE'));
-  if (entry.created && canDelete) {
+  if (
+    entry.created &&
+    canDeleteLine(list.permissions, list.autoApproveLines, entry.pending)
+  ) {
     return { kind: 'delete', lineId: entry.lineId };
   }
   return {
@@ -190,7 +214,7 @@ export function visitSections(
 }
 
 /** One list a product can be added to, as the sheet of lists draws it. */
-export interface AddTargetList {
+export interface AddTargetList extends VisitList {
   readonly listId: string;
   readonly zoneId: string;
   readonly name: string;
@@ -198,7 +222,6 @@ export interface AddTargetList {
   readonly zoneName: string;
   /** Lines the list still wants. */
   readonly wanted: number;
-  readonly permissions: readonly ListPermission[];
 }
 
 /**
@@ -211,7 +234,7 @@ export function firstAddTarget(
   lists: readonly AddTargetList[],
   lastList: string | null
 ): AddTargetList | null {
-  const lastId = lastList?.split('/')[1] ?? null;
+  const lastId = lastListId(lastList);
   return lists.find((list) => list.listId === lastId) ?? lists[0] ?? null;
 }
 
@@ -219,4 +242,17 @@ export function firstAddTarget(
 export function isCatalogUrl(url: string): boolean {
   const path = url.split('#')[0]?.split('?')[0] ?? '';
   return path.split('/').includes('catalog');
+}
+
+function withLine(visit: CatalogVisit, line: VisitLineState): CatalogVisit {
+  return visit.map((entry) =>
+    entry.lineId === line.lineId
+      ? {
+          ...entry,
+          name: line.name,
+          quantity: line.quantity,
+          pending: line.pending,
+        }
+      : entry
+  );
 }

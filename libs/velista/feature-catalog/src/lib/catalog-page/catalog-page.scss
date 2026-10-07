@@ -176,6 +176,46 @@
   }
 }
 
+// The lists, or the lines of the chosen one, did not load. It stands where the
+// line above the tab bar would be, at the same height, so nothing moves when the
+// second try answers.
+.adds-failed {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-block-size: var(--app-adding-bar-height);
+  margin: 0;
+  padding-inline: var(--app-space-5);
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: var(--app-surface-raised);
+  font-size: var(--app-text-sm);
+}
+
+.adds-failed-text {
+  flex: 1;
+  min-inline-size: 0;
+  color: var(--app-text-secondary);
+}
+
+.adds-failed-retry {
+  flex: none;
+  min-block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-action-quiet-fg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
 .rows {
   display: flex;
   flex-direction: column;
@@ -183,6 +223,13 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+// Where the rows with no price start, in a price order (section 3).
+.unpriced {
+  padding-block-start: var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
 }
 
 // The one card a priceless read draws, in the quiet action colour: it is a thing

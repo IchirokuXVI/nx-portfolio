@@ -1,0 +1,94 @@
+// In your lists (velista 0134, section 7), as the `Product` artboard draws it: the
+// name of a group, then one card of its lists with a hairline between them.
+:host {
+  display: block;
+}
+
+.group {
+  margin: var(--app-space-5) 0 var(--app-space-3);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+
+  &:first-child {
+    margin-block-start: 0;
+  }
+}
+
+.lists {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+  list-style: none;
+}
+
+.list {
+  border-block-end: 1px solid var(--app-border-subtle);
+
+  &:last-child {
+    border-block-end: none;
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-line-row-height);
+  padding: var(--app-space-3) var(--app-space-3) var(--app-space-3)
+    var(--app-space-5);
+}
+
+.what {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+  line-height: var(--app-leading-heading);
+}
+
+.name {
+  overflow-wrap: anywhere;
+
+  // A list the person only reads: still named, and quieter.
+  &.is-read {
+    color: var(--app-text-secondary);
+  }
+}
+
+// Two words and a colour. The words carry it.
+.last {
+  font-size: var(--app-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--app-tracking-wordmark);
+  text-transform: uppercase;
+  color: var(--app-action-quiet-fg);
+}
+
+.sub {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// A line that holds the product under another name: inset under its list, on the
+// sunken ground, open toward the edge its stepper sits at.
+.other {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-adding-bar-height);
+  margin: 0 0 var(--app-space-3) var(--app-space-5);
+  padding: var(--app-space-2) var(--app-space-3) var(--app-space-2)
+    var(--app-space-4);
+  border-start-start-radius: var(--app-radius-md);
+  border-end-start-radius: var(--app-radius-md);
+  background: var(--app-surface-sunken);
+}
+
+.other-name {
+  font-size: var(--app-text-sm);
+  overflow-wrap: anywhere;
+}

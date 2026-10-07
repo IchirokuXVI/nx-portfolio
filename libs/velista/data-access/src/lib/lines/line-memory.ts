@@ -6,6 +6,9 @@ import {
   LINE_QUANTITY_MIN,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
+  type HeldLine,
+  type ItemList,
+  type ItemLists,
   type Line,
   type LineApprovalStatus,
   type LineOrder,
@@ -577,6 +580,61 @@ export class LineMemory implements LineServiceI {
   }
 
   /**
+   * Every list the caller can read, with the lines of each that hold a product
+   * (backend plan 0196, section 3).
+   *
+   * A list with no such line is answered too, and a line at zero or one that waits
+   * is included: the table of lists draws a stepper for each. A rejected line is
+   * left out, as the server leaves it out, because an add does not raise it.
+   */
+  async linesHoldingItem(itemId: string): Promise<ItemLists> {
+    if (itemId === '') {
+      throw memoryFailure('validation_failed', 400);
+    }
+
+    const lists: ItemList[] = [];
+    const lines: HeldLine[] = [];
+
+    for (const zone of this._zones.zones()) {
+      // A group the caller is not approved in refuses the read, and has no list
+      // of theirs to answer.
+      const page = await this._lists
+        .listLists(zone.id, { limit: 100 })
+        .catch(() => null);
+      for (const list of page?.items ?? []) {
+        if (!list.myPermissions.includes('READ')) {
+          continue;
+        }
+        lists.push({
+          listId: list.id,
+          zoneId: zone.id,
+          name: list.name,
+          zoneName: zone.name,
+          autoApproveLines: list.autoApproveLines,
+          permissions: list.myPermissions,
+        });
+        for (const line of order(this._lines(list.id), 'position')) {
+          if (
+            line.itemIds.includes(itemId) &&
+            line.approvalStatus !== 'REJECTED'
+          ) {
+            lines.push({
+              lineId: line.id,
+              listId: list.id,
+              name: line.content,
+              quantity: line.quantity,
+              pending: line.approvalStatus === 'PENDING',
+              itemIds: line.itemIds,
+            });
+          }
+        }
+      }
+    }
+
+    return { lists, lines, hasMore: false };
+  }
+
+  /**
    * A page of settlements, newest first, cursored on the boundary row's own id.
    *
    * An id rather than a timestamp, for the reason the server's cursor is one: two
@@ -665,13 +723,17 @@ export class LineMemory implements LineServiceI {
    * `WRITE` reaches a `PENDING` or `REJECTED` line and stops there; deleting an approved
    * line is `MANAGE`, and not `DECIDE`, because un-approving it first is the path a
    * decider already has and it leaves the line's history saying what happened.
+   *
+   * On a list that approves lines by itself `WRITE` reaches an approved line too
+   * (backend plan 0196, section 4): nobody agreed to that line, so there is no
+   * agreement for a writer to undo.
    */
   async deleteLine(lineId: string): Promise<string> {
     const line = this._lineOrThrow(lineId);
-    this._require(
-      line.listId,
-      line.approvalStatus === 'APPROVED' ? 'MANAGE' : 'WRITE'
-    );
+    const agreed =
+      line.approvalStatus === 'APPROVED' &&
+      this._lists.listById(line.listId)?.autoApproveLines !== true;
+    this._require(line.listId, agreed ? 'MANAGE' : 'WRITE');
     this._maybeFail();
 
     this._write(

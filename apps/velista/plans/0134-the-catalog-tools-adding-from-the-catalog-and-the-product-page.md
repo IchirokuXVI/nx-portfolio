@@ -224,12 +224,16 @@ The mock artboards are `CatalogAdding`, `CatalogLists` and `CatalogAdded`.
 
 - A product row gains a second control at its end, 44 by 44 pixels: a plus in a circle.
   The row stays one button for the product, and the plus is a sibling of it, not a child.
-- **A press adds one** of the product to the chosen list. The plus then shows the count
-  for that list, in quiet amber.
-- **A press on the count opens a stepper in the row.** The price moves into the detail
-  line while the stepper is open. One stepper is open at a time.
-- **Every press saves.** An add is `addLine(listId, name, 1, [itemId])`. A later press is
-  a quantity change on the line that the add answered.
+- **A press adds one** of the product to the chosen list. The plus stays a plus.
+- **Under the row sit the lines of the chosen list that hold the product**, each with its
+  name and its own stepper. A list can hold one product on several lines, and one number
+  on the plus could not say which line it counted. This is what the search of a list page
+  shows under a product. The owner decided it after the walk of stage 1 (section 14), and
+  it replaces the count on the plus and the stepper that opened in the row.
+- **Every press saves.** An add is `addLine(listId, name, 1, [itemId])`. A press on a
+  stepper is a quantity change on that line.
+- **A minus to zero** deletes a line that this visit made, where the person may delete it.
+  A line that was there before goes to zero and stays, which is what a list calls stocked.
 - **The name of the line is the name of the product in the reader's language**, from
   `catalogName`.
 - **A failed write** puts the count back and says so once, in the live region of the
@@ -264,6 +268,10 @@ The mock artboards are `CatalogAdding`, `CatalogLists` and `CatalogAdded`.
 - **Taking back undoes what the visit did, and no more.** If the add made a new line,
   the line is deleted. If the add merged into a line that was there before, that line
   goes back to the quantity it had.
+- **Who may delete is the rule of the server** (backend `0196`, section 4): somebody who
+  manages the list, a person with write access on a line that still waits, and a person
+  with write access on a list that approves lines by itself. Anybody else lowers the line
+  to zero.
 - Products added to two lists show under two headings, one for each list.
 - A line that came back `PENDING` says "Waiting for approval" under its name.
 
@@ -377,8 +385,9 @@ The mock artboard is `Product`.
 
 ## 9. What the backend has to serve
 
-No backend plan covers this yet. The next free backend number on `dev` is `0196`. That
-plan decides the names and the shapes. This section states the needs.
+Backend plan `0196` serves this. It decided the names and the shapes: the orders
+`category`, `price` and `unitPrice`, `GET /v1/catalog/items/:id/price-history`, and
+`GET /v1/items/:id/list-lines`. This section states the needs it was written from.
 
 1. **Three orders on `GET /v1/catalog/items`.** An order by the lowest price at the
    scopes of the read, an order by the lowest unit price, and an order by category
@@ -398,6 +407,10 @@ plan decides the names and the shapes. This section states the needs.
    20 lists. That is not enough for a stepper.
 
 Stage 1 does not wait for any of them.
+
+The rows of the catalog page need no read of their own for section 4.1. The page reads the
+lines of the chosen list (`GET /v1/lists/:id/lines`) and joins them to the products on the
+client, as the list page does.
 
 ## 10. Strings
 
@@ -438,3 +451,15 @@ is written for the same reader as the English text, not translated word for word
    wanted.
 3. **The count on the product page.** The record survives a product page, but that page
    shows no count, because it has no line above the tab bar. Say so if it has to show.
+
+## 14. What the owner decided after the walk of stage 1
+
+The owner read the five decisions in the pull request of stage 1 on 2026-10-08.
+
+| Point of stage 1 | Decision |
+| --- | --- |
+| Taking back an approved line without the manage permission lowered it to zero | A list that approves lines by itself lets a person with write access delete. Backend `0196`, section 4, changes the server, and the client follows it |
+| The number on the plus was what the list held | Confusing. Show the lines of the list that hold the product, each with its own quantity, as the search of a list page does (section 4.1) |
+| The order menu had one row while the field was empty | Stage 2 gives the menu its three orders, so the question goes away |
+| The product could not be added from its own page | Fine. The table of lists of stage 2 does it (section 7) |
+| A failed read of the lists showed nothing | Add a failed state in stage 2. The line above the tab bar, the sheet of lists and the table of lists each say so and offer a second try |

@@ -328,16 +328,23 @@
     "order": {
       "label": "Orden",
       "relevance": "Más parecido",
-      "name": "Orden del catálogo",
+      "category": "Orden del catálogo",
+      "price": "Más barato primero",
+      "unitPrice": "Más barato por kilo o litro",
       "short": {
         "relevance": "Más parecido",
-        "name": "Catálogo"
+        "category": "Catálogo",
+        "price": "Más barato",
+        "unitPrice": "Precio por kilo"
       },
       "hint": {
         "relevance": "Primero lo que más se parece a lo que has escrito",
-        "name": "Por nombre, de la A a la Z"
+        "category": "Por pasillos, como en la tienda",
+        "price": "Los productos sin precio van al final",
+        "unitPrice": "Para comparar un envase grande con uno pequeño"
       }
     },
+    "unpriced": "Sin precio",
     "head": {
       "chainNear": "Cualquier {{chain}} cerca de {{code}}"
     },
@@ -349,22 +356,27 @@
     },
     "add": {
       "label": "Añadir {{name}} a {{list}}",
-      "count": "{{name}}, {{count}} en {{list}}. Cambiar la cantidad",
-      "stepper": "{{name}} en {{list}}",
       "failed": "No se ha guardado. Revisa la conexión e inténtalo de nuevo."
+    },
+    "held": {
+      "title": "En {{list}}",
+      "stepper": "Cuántos de {{line}} en {{list}}"
     },
     "adding": {
       "to": "Se añade a",
       "change": "Se añade a {{list}}. Cambiar de lista",
       "count_one": "{{count}} producto añadido",
-      "count_other": "{{count}} productos añadidos"
+      "count_other": "{{count}} productos añadidos",
+      "failedLists": "No se han cargado tus listas.",
+      "failedLines": "No se ha cargado {{list}}."
     },
     "lists": {
       "title": "¿A qué lista lo añado?",
       "toBuy_one": "{{count}} por comprar",
       "toBuy_other": "{{count}} por comprar",
       "none": "Todavía no tienes ninguna lista a la que puedas añadir.",
-      "loading": "Cargando tus listas"
+      "loading": "Cargando tus listas",
+      "failed": "No se han cargado tus listas. Revisa la conexión e inténtalo de nuevo."
     },
     "added": {
       "title": "Añadido a {{list}}",
@@ -428,6 +440,44 @@
       "goneTitle": "Este producto ya no está en el catálogo",
       "goneBody": "Puede que se haya quitado, o que se haya unido con otro.",
       "toCatalog": "Ir al catálogo"
+    },
+    "history": {
+      "title": "Cómo ha cambiado el precio",
+      "today": "Precios de hoy.",
+      "on": "Precios del {{day}}.",
+      "hide": "Pulsa un supermercado para ocultar su línea.",
+      "day": "El día del que se leen los precios",
+      "axisToday": "hoy",
+      "rangeLabel": "Desde cuándo",
+      "range": {
+        "month": "1 mes",
+        "quarter": "3 meses",
+        "year": "1 año"
+      },
+      "chart": {
+        "month_one": "Precio de {{name}} en {{count}} supermercado en el último mes",
+        "month_other": "Precio de {{name}} en {{count}} supermercados en el último mes",
+        "quarter_one": "Precio de {{name}} en {{count}} supermercado en los últimos tres meses",
+        "quarter_other": "Precio de {{name}} en {{count}} supermercados en los últimos tres meses",
+        "year_one": "Precio de {{name}} en {{count}} supermercado en el último año",
+        "year_other": "Precio de {{name}} en {{count}} supermercados en el último año"
+      },
+      "none": {
+        "month": "El precio no se ha movido en el último mes, o Velista no lo ha visto.",
+        "quarter": "El precio no se ha movido en los últimos tres meses, o Velista no lo ha visto.",
+        "year": "El precio no se ha movido en el último año, o Velista no lo ha visto."
+      },
+      "failed": "No se ha cargado el historial de precios."
+    },
+    "inLists": {
+      "title": "En tus listas",
+      "last": "La última",
+      "stepper": "Cuántos en {{list}}",
+      "other": "Ya está en esta lista, con este producto",
+      "otherPending": "Ya está en esta lista, pendiente de aprobar",
+      "readOnly": "Puedes ver esta lista. No puedes añadir nada.",
+      "readOnlyHolds": "Esta lista tiene {{count}}. Puedes verla, y no puedes cambiarla.",
+      "failed": "No se han cargado tus listas."
     },
     "similar": {
       "title": "Productos similares",

@@ -7,9 +7,11 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { QuantityStepper } from '../list/quantity-stepper';
 
-/** One product the visit added, as its row draws it. */
+/** One line the visit added to, as its row draws it. */
 export interface VisitAddedRow {
+  readonly lineId: string;
   readonly itemId: string;
+  /** What the line says. */
   readonly name: string;
   readonly detail: string | null;
   /** How many the list holds now. */
@@ -32,13 +34,17 @@ export interface VisitAddedSection {
 export interface VisitAddedStep {
   readonly listId: string;
   readonly itemId: string;
+  readonly lineId: string;
+  /** The product's detail, which the record keeps for the line. */
+  readonly detail: string | null;
   readonly by: 1 | -1;
 }
 
 /**
  * What this visit to the catalog added (velista `0134`, section 4.4).
  *
- * One row for each product: the name, the detail with its price, and a stepper.
+ * One row for each line the visit added to: its name, the detail with the price,
+ * and a stepper.
  * **The minus at the floor takes the product back**, so the stepper's lowest value
  * is one under the floor and the container reads a step down from the floor as
  * the undo. One quiet button takes back everything on a list, and a link opens
@@ -57,8 +63,12 @@ export interface VisitAddedStep {
           <h3 class="heading">{{ section.name }}</h3>
         }
         <ul class="rows">
-          @for (row of section.rows; track row.itemId) {
-            <li [attr.data-item]="row.itemId" class="row">
+          @for (row of section.rows; track row.lineId) {
+            <li
+              [attr.data-item]="row.itemId"
+              [attr.data-line]="row.lineId"
+              class="row"
+            >
               <span class="what">
                 <span class="name">{{ row.name }}</span>
                 @if (row.detail; as detail) {
@@ -75,6 +85,8 @@ export interface VisitAddedStep {
                   stepped.emit({
                     listId: section.listId,
                     itemId: row.itemId,
+                    lineId: row.lineId,
+                    detail: row.detail,
                     by: $event,
                   })
                 "

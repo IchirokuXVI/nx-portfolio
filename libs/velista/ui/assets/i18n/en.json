@@ -328,16 +328,23 @@
     "order": {
       "label": "Order",
       "relevance": "Best match",
-      "name": "Catalog order",
+      "category": "Catalog order",
+      "price": "Lowest price",
+      "unitPrice": "Lowest price per kilo or litre",
       "short": {
         "relevance": "Best match",
-        "name": "Catalog"
+        "category": "Catalog",
+        "price": "Lowest price",
+        "unitPrice": "Price per kilo"
       },
       "hint": {
         "relevance": "The closest to what you typed comes first",
-        "name": "By name, from A to Z"
+        "category": "By aisle, the way a shop is laid out",
+        "price": "Products with no price go last",
+        "unitPrice": "Compares a big pack with a small one"
       }
     },
+    "unpriced": "Without a price",
     "head": {
       "chainNear": "Any {{chain}} near {{code}}"
     },
@@ -349,22 +356,27 @@
     },
     "add": {
       "label": "Add {{name}} to {{list}}",
-      "count": "{{name}}, {{count}} in {{list}}. Change how many",
-      "stepper": "{{name}} in {{list}}",
       "failed": "That did not save. Check your connection and try again."
+    },
+    "held": {
+      "title": "On {{list}}",
+      "stepper": "How many of {{line}} in {{list}}"
     },
     "adding": {
       "to": "Adding to",
       "change": "Adding to {{list}}. Change the list",
       "count_one": "{{count}} product added",
-      "count_other": "{{count}} products added"
+      "count_other": "{{count}} products added",
+      "failedLists": "Your lists did not load.",
+      "failedLines": "{{list}} did not load."
     },
     "lists": {
       "title": "Add to which list?",
       "toBuy_one": "{{count}} to buy",
       "toBuy_other": "{{count}} to buy",
       "none": "You have no list you can add to yet.",
-      "loading": "Loading your lists"
+      "loading": "Loading your lists",
+      "failed": "Your lists did not load. Check your connection and try again."
     },
     "added": {
       "title": "Added to {{list}}",
@@ -428,6 +440,44 @@
       "goneTitle": "This product is no longer in the catalog",
       "goneBody": "It may have been removed, or joined with another product.",
       "toCatalog": "Go to the catalog"
+    },
+    "history": {
+      "title": "How the price has moved",
+      "today": "Prices today.",
+      "on": "Prices on {{day}}.",
+      "hide": "Press a supermarket to hide its line.",
+      "day": "The day the prices are read at",
+      "axisToday": "today",
+      "rangeLabel": "How far back",
+      "range": {
+        "month": "1 month",
+        "quarter": "3 months",
+        "year": "1 year"
+      },
+      "chart": {
+        "month_one": "Price of {{name}} at {{count}} supermarket over the last month",
+        "month_other": "Price of {{name}} at {{count}} supermarkets over the last month",
+        "quarter_one": "Price of {{name}} at {{count}} supermarket over the last three months",
+        "quarter_other": "Price of {{name}} at {{count}} supermarkets over the last three months",
+        "year_one": "Price of {{name}} at {{count}} supermarket over the last year",
+        "year_other": "Price of {{name}} at {{count}} supermarkets over the last year"
+      },
+      "none": {
+        "month": "The price did not move in the last month, or Velista did not see it.",
+        "quarter": "The price did not move in the last three months, or Velista did not see it.",
+        "year": "The price did not move in the last year, or Velista did not see it."
+      },
+      "failed": "The price history did not load."
+    },
+    "inLists": {
+      "title": "In your lists",
+      "last": "Last used",
+      "stepper": "How many in {{list}}",
+      "other": "Already on this list, with this product",
+      "otherPending": "Already on this list, waiting for approval",
+      "readOnly": "You can read this list. You cannot add to it.",
+      "readOnlyHolds": "This list has {{count}}. You can read it, and you cannot change it.",
+      "failed": "Your lists did not load."
     },
     "similar": {
       "title": "Similar products",

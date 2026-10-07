@@ -153,13 +153,19 @@
       @default {
         @if (rows().length > 0) {
           <ul class="rows">
-            @for (row of rows(); track row.id) {
+            @for (row of rows(); track row.id; let index = $index) {
+              <!--
+                In a price order the rows with no price come last, and this says
+                where they start (section 3).
+              -->
+              @if (index === unpricedAt()) {
+                <li class="unpriced">{{ 'catalog.unpriced' | rokuT }}</li>
+              }
               <li>
                 <lib-product-row
                   (added)="addProduct(row)"
-                  (counted)="openStepper(row.id)"
+                  (lineStepped)="stepLine(row, $event)"
                   (opened)="open($event)"
-                  (stepped)="stepProduct(row.id, $event)"
                   [add]="addOf(row.id)"
                   [row]="row"
                 />
@@ -261,6 +267,27 @@
   Which list the plus adds to (section 4.2), between the page and the tab bar.
   Absent for a guest and for a person with no list they can write to, who see no
   plus either.
+-->
+@if (addsProblem(); as problem) {
+  <!--
+    The lists, or the lines of the chosen one, did not load. Said where the line
+    would be, with a second try, so it is not mistaken for having no list.
+  -->
+  <p class="adds-failed" role="alert">
+    <span class="adds-failed-text">{{
+      (problem === 'lists'
+        ? 'catalog.adding.failedLists'
+        : 'catalog.adding.failedLines'
+      ) | rokuT: { list: addTarget()?.name ?? '' }
+    }}</span>
+    <button (click)="retryAdds()" class="adds-failed-retry" type="button">
+      {{ 'catalog.error.retry' | rokuT }}
+    </button>
+  </p>
+}
+<!--
+  The line stays while only the lines of the chosen list failed: it is the one
+  way to another list, and the plus still adds to the list it names.
 -->
 @if (addTarget(); as target) {
   <lib-adding-bar

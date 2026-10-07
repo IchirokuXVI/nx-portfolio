@@ -228,6 +228,12 @@
   background: var(--app-surface-raised);
 }
 
+// The bones of a section that is read after the page: it already sits under a
+// section's own margin.
+.skeleton.is-inline {
+  margin-block-start: 0;
+}
+
 .bone-row {
   display: flex;
   align-items: center;

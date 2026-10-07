@@ -5,39 +5,21 @@ import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
+import { CatalogAddStore } from '@portfolio/velista/data-access';
 import {
-  CatalogAddStore,
-  LINE_SERVICE,
-  LIST_SERVICE,
-  SessionStore,
-  ZONE_SERVICE,
-} from '@portfolio/velista/data-access';
-import type { ListPermission } from '@portfolio/velista/models';
-import {
-  provideFakeBrowserFacade,
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import {
+  fakeAdds,
+  madeLineId,
+  WEEKLY,
+  type FakeAdds,
+  type FakeLine,
+  type FakeList,
+} from '../catalog-adds.testing';
 import { AddedSheet } from './added-sheet';
 
-/** One list as the store reads it from the list service. */
-interface FakeList {
-  readonly id: string;
-  readonly zoneId: string;
-  readonly zoneName: string;
-  readonly name: string;
-  readonly wantedCount: number;
-  readonly myPermissions: readonly ListPermission[];
-}
-
-const WEEKLY: FakeList = {
-  id: 'list-weekly',
-  zoneId: 'zone-home',
-  zoneName: 'Home',
-  name: 'Weekly shop',
-  wantedCount: 14,
-  myPermissions: ['READ', 'WRITE', 'MANAGE'],
-};
 const CLEANING: FakeList = {
   ...WEEKLY,
   id: 'list-cleaning',
@@ -75,9 +57,29 @@ const BLEACH: Seed = {
   name: 'Bleach',
 };
 
+/** The oil again on the weekly shop, under a name somebody typed, one of it. */
+const FRYING_LINE: FakeLine = {
+  id: 'line-frying',
+  listId: 'list-weekly',
+  content: 'Oil for frying',
+  quantity: 1,
+  itemIds: ['item-oil'],
+};
+
+/** A line that was there before the visit, which a stepper of the catalog raised. */
+interface Raised {
+  readonly listId: string;
+  readonly itemId: string;
+  readonly lineId: string;
+}
+
 interface Options {
   /** What the visit added, in the order it was added. */
   readonly added?: readonly Seed[];
+  /** Lines the lists held before the visit, beside the ones `before` makes. */
+  readonly lines?: readonly FakeLine[];
+  /** The lines the visit raised by one from a row's stepper, after its adds. */
+  readonly raised?: readonly Raised[];
   readonly basePath?: string;
   /** The URL of the page the sheet covers, one route for each entry. */
   readonly covered?: readonly (readonly string[])[];
@@ -87,11 +89,8 @@ interface Harness {
   readonly fixture: ComponentFixture<AddedSheet>;
   readonly store: CatalogAddStore;
   readonly sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
-  readonly lines: {
-    addLineResult: jest.Mock;
-    addQuantity: jest.Mock;
-    deleteLine: jest.Mock;
-  };
+  /** The line service double the store reads and writes through. */
+  readonly lines: FakeAdds['lines'];
 }
 
 /** A route snapshot's chain from the root, reduced to what the sheet reads. */
@@ -116,83 +115,45 @@ async function settle(fixture: ComponentFixture<AddedSheet>): Promise<void> {
   fixture.detectChanges();
 }
 
+/** The line an add of this product is on: the one that add made or raised. */
 function lineIdOf(seed: Pick<Seed, 'listId' | 'itemId'>): string {
-  return `line-${seed.listId}-${seed.itemId}`;
+  return madeLineId(seed.listId, seed.itemId);
 }
 
 async function render(options: Options = {}): Promise<Harness> {
   TestBed.resetTestingModule();
 
   const added = options.added ?? [OIL];
-  const lists = [WEEKLY, CLEANING];
-  const zones = lists.map((list) => ({
-    id: list.zoneId,
-    name: list.zoneName,
-    myStatus: 'APPROVED',
-  }));
   const sheets = {
     dismiss: jest.fn().mockResolvedValue(undefined),
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
-  // The line double keeps each quantity, so a step answers what the server would.
-  const quantities = new Map<string, number>();
-  const lines = {
-    addLineResult: jest.fn(
-      async (
-        listId: string,
-        _content: string,
-        quantity = 1,
-        itemIds: readonly string[] = []
-      ) => {
-        const itemId = itemIds[0] ?? '';
-        const seed = added.find(
-          (one) => one.listId === listId && one.itemId === itemId
-        );
-        const id = lineIdOf({ listId, itemId });
-        const before = seed?.before ?? 0;
-        quantities.set(id, before + quantity);
-        return {
-          line: {
-            id,
-            quantity: before + quantity,
-            approvalStatus: seed?.pending === true ? 'PENDING' : 'APPROVED',
-          },
-          merged: before > 0,
-        };
-      }
-    ),
-    addQuantity: jest.fn(async (lineId: string, delta: number) => {
-      const quantity = (quantities.get(lineId) ?? 0) + delta;
-      quantities.set(lineId, quantity);
-      return { id: lineId, quantity, approvalStatus: 'APPROVED' };
-    }),
-    deleteLine: jest.fn(async (lineId: string) => lineId),
-  };
+  // The real store, over doubles of what it reads and writes. A product the list
+  // held before the visit is a line under the product's name, which the add raises.
+  const adds = fakeAdds({
+    lists: [WEEKLY, CLEANING],
+    lines: [
+      ...added
+        .filter((seed) => (seed.before ?? 0) > 0)
+        .map((seed) => ({
+          id: lineIdOf(seed),
+          listId: seed.listId,
+          content: seed.name,
+          quantity: seed.before ?? 0,
+          itemIds: [seed.itemId],
+        })),
+      ...(options.lines ?? []),
+    ],
+    pendingItemIds: added
+      .filter((seed) => seed.pending === true)
+      .map((seed) => seed.itemId),
+  });
 
   await TestBed.configureTestingModule({
     imports: [AddedSheet, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: options.basePath ?? '/velista' }),
-      provideFakeBrowserFacade(new Map()),
-      // The real store, over doubles of what it reads and writes.
-      CatalogAddStore,
-      { provide: SessionStore, useValue: { isGuest: signal(false) } },
-      {
-        provide: ZONE_SERVICE,
-        useValue: {
-          listMyZones: async () => ({ items: zones, nextCursor: null }),
-        },
-      },
-      {
-        provide: LIST_SERVICE,
-        useValue: {
-          listLists: async (zoneId: string) => ({
-            items: lists.filter((list) => list.zoneId === zoneId),
-            nextCursor: null,
-          }),
-        },
-      },
-      { provide: LINE_SERVICE, useValue: lines },
+      ...adds.providers,
       { provide: SheetNavigation, useValue: sheets },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       {
@@ -214,18 +175,40 @@ async function render(options: Options = {}): Promise<Harness> {
   await store.ensure();
   for (const seed of added) {
     store.choose(seed.listId);
+    // The lines of a list chosen for the first time, before anything is added.
+    await pause();
     await store.add({
       itemId: seed.itemId,
       name: seed.name,
       detail: seed.detail ?? null,
     });
   }
+  // The stepper of a line under a row of the catalog, pressed once.
+  for (const line of options.raised ?? []) {
+    store.choose(line.listId);
+    await pause();
+    await store.step(
+      { listId: line.listId, itemId: line.itemId, detail: null },
+      line.lineId,
+      1
+    );
+  }
+  for (const mock of Object.values(adds.lines)) {
+    mock.mockClear();
+  }
 
   const fixture = TestBed.createComponent(AddedSheet);
   fixture.detectChanges();
   await settle(fixture);
 
-  return { fixture, store, sheets, lines };
+  return { fixture, store, sheets, lines: adds.lines };
+}
+
+/** Lets every pending promise run. */
+async function pause(): Promise<void> {
+  for (let tick = 0; tick < 20; tick++) {
+    await Promise.resolve();
+  }
 }
 
 function host(fixture: ComponentFixture<AddedSheet>): HTMLElement {
@@ -249,16 +232,49 @@ function row(
   );
 }
 
+/** Every row of the sheet, in the order drawn. */
+function rows(fixture: ComponentFixture<AddedSheet>): HTMLElement[] {
+  return [
+    ...host(fixture).querySelectorAll<HTMLElement>('lib-visit-added .row'),
+  ];
+}
+
+/** The row of one line. A product on two lines of a list has two of them. */
+function lineRow(
+  fixture: ComponentFixture<AddedSheet>,
+  lineId: string
+): HTMLElement | null {
+  return host(fixture).querySelector<HTMLElement>(
+    `lib-visit-added [data-line="${lineId}"]`
+  );
+}
+
+/** The minus and the plus of the stepper in one row. */
+function stepsOf(scope: HTMLElement | null): {
+  minus: HTMLButtonElement | null;
+  plus: HTMLButtonElement | null;
+} {
+  const steps =
+    scope?.querySelectorAll<HTMLButtonElement>(
+      'lib-quantity-stepper button.step'
+    ) ?? [];
+  return { minus: steps[0] ?? null, plus: steps[1] ?? null };
+}
+
+function quantityIn(scope: HTMLElement | null): string | null {
+  return (
+    scope
+      ?.querySelector('lib-quantity-stepper [role="spinbutton"]')
+      ?.getAttribute('aria-valuenow') ?? null
+  );
+}
+
 /** The minus and the plus of one row's stepper. */
 function stepper(
   fixture: ComponentFixture<AddedSheet>,
   itemId: string
 ): { minus: HTMLButtonElement | null; plus: HTMLButtonElement | null } {
-  const steps =
-    row(fixture, itemId)?.querySelectorAll<HTMLButtonElement>(
-      'lib-quantity-stepper button.step'
-    ) ?? [];
-  return { minus: steps[0] ?? null, plus: steps[1] ?? null };
+  return stepsOf(row(fixture, itemId));
 }
 
 function quantityOf(
@@ -330,7 +346,7 @@ describe('AddedSheet', () => {
     expect(row(fixture, 'item-rice')?.querySelector('.pending')).toBeNull();
   });
 
-  it('passes a step to the store, for that list and that product', async () => {
+  it('passes a step to the store, for that list, that product and that line', async () => {
     const { fixture, store, lines } = await render({ added: [OIL, RICE] });
     const step = jest.spyOn(store, 'step');
 
@@ -338,7 +354,11 @@ describe('AddedSheet', () => {
     await settle(fixture);
 
     expect(step).toHaveBeenCalledTimes(1);
-    expect(step).toHaveBeenCalledWith('list-weekly', 'item-rice', 1);
+    expect(step).toHaveBeenCalledWith(
+      { listId: 'list-weekly', itemId: 'item-rice', detail: null },
+      lineIdOf(RICE),
+      1
+    );
     expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(RICE), 1);
     expect(quantityOf(fixture, 'item-rice')).toBe('2');
     expect(quantityOf(fixture, 'item-oil')).toBe('1');
@@ -347,10 +367,105 @@ describe('AddedSheet', () => {
     stepper(fixture, 'item-rice').minus?.click();
     await settle(fixture);
 
-    expect(step).toHaveBeenLastCalledWith('list-weekly', 'item-rice', -1);
+    expect(step).toHaveBeenLastCalledWith(
+      { listId: 'list-weekly', itemId: 'item-rice', detail: null },
+      lineIdOf(RICE),
+      -1
+    );
     expect(lines.addQuantity).toHaveBeenLastCalledWith(lineIdOf(RICE), -1);
     expect(lines.deleteLine).not.toHaveBeenCalled();
     expect(quantityOf(fixture, 'item-rice')).toBe('1');
+  });
+
+  it('hands the detail the record keeps back with a step, so the row still says it', async () => {
+    const { fixture, store } = await render({ added: [OIL] });
+    const step = jest.spyOn(store, 'step');
+
+    stepper(fixture, 'item-oil').plus?.click();
+    await settle(fixture);
+
+    expect(step).toHaveBeenCalledWith(
+      {
+        listId: 'list-weekly',
+        itemId: 'item-oil',
+        detail: 'Hacendado · 1 L · €8.45 at Mercadona',
+      },
+      lineIdOf(OIL),
+      1
+    );
+    expect(
+      row(fixture, 'item-oil')?.querySelector('.detail')?.textContent
+    ).toBe('Hacendado · 1 L · €8.45 at Mercadona');
+  });
+
+  describe('a product the visit raised on two lines of one list', () => {
+    // The plus made the line under the product's name, and the stepper of "Oil for
+    // frying" raised that line, which was there before with one.
+    const twice: Options = {
+      added: [OIL],
+      lines: [FRYING_LINE],
+      raised: [
+        { listId: 'list-weekly', itemId: 'item-oil', lineId: 'line-frying' },
+      ],
+    };
+
+    it('draws a row for each line, keyed by the line and named by what the line says', async () => {
+      const { fixture } = await render(twice);
+
+      expect(
+        rows(fixture).map((one) => [
+          one.dataset['item'],
+          one.dataset['line'],
+          one.querySelector('.name')?.textContent?.trim(),
+          quantityIn(one),
+        ])
+      ).toEqual([
+        ['item-oil', lineIdOf(OIL), 'Extra virgin olive oil', '1'],
+        ['item-oil', 'line-frying', 'Oil for frying', '2'],
+      ]);
+    });
+
+    it('names the line in a step, and moves that line alone', async () => {
+      const { fixture, store, lines } = await render(twice);
+      const step = jest.spyOn(store, 'step');
+
+      stepsOf(lineRow(fixture, 'line-frying')).plus?.click();
+      await settle(fixture);
+
+      expect(step).toHaveBeenCalledTimes(1);
+      expect(step).toHaveBeenCalledWith(
+        { listId: 'list-weekly', itemId: 'item-oil', detail: null },
+        'line-frying',
+        1
+      );
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1);
+      expect(quantityIn(lineRow(fixture, 'line-frying'))).toBe('3');
+      expect(quantityIn(lineRow(fixture, lineIdOf(OIL)))).toBe('1');
+    });
+
+    it('takes each line back its own way: the one that was there is lowered, the one the visit made is deleted', async () => {
+      const { fixture, lines, sheets, store } = await render(twice);
+
+      // "Oil for frying" held one before the visit, so it goes back to one.
+      stepsOf(lineRow(fixture, 'line-frying')).minus?.click();
+      await settle(fixture);
+
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1);
+      expect(lines.deleteLine).not.toHaveBeenCalled();
+      expect(lineRow(fixture, 'line-frying')).toBeNull();
+      expect(lineRow(fixture, lineIdOf(OIL))).not.toBeNull();
+      expect(sheets.dismiss).not.toHaveBeenCalled();
+
+      stepsOf(lineRow(fixture, lineIdOf(OIL))).minus?.click();
+      await settle(fixture);
+
+      expect(lines.deleteLine).toHaveBeenCalledTimes(1);
+      expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(OIL));
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(store.count()).toBe(0);
+    });
   });
 
   it('takes a product back with the minus at the floor: the line the visit made is deleted', async () => {
@@ -362,7 +477,11 @@ describe('AddedSheet', () => {
     stepper(fixture, 'item-oil').minus?.click();
     await settle(fixture);
 
-    expect(step).toHaveBeenCalledWith('list-weekly', 'item-oil', -1);
+    expect(step).toHaveBeenCalledWith(
+      expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
+      lineIdOf(OIL),
+      -1
+    );
     expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(OIL));
     expect(lines.addQuantity).not.toHaveBeenCalled();
     expect(row(fixture, 'item-oil')).toBeNull();

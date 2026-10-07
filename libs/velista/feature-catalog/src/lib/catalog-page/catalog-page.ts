@@ -36,6 +36,7 @@ import {
   categoryName,
   chainOfScope,
   scopesOfChain,
+  unpricedStart,
   type CatalogBrowseContext,
   type CatalogLocation,
   type CatalogOrder,
@@ -60,6 +61,7 @@ import {
   productRowView,
   SearchIcon,
   type ProductRowAdd,
+  type ProductRowLineStep,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
@@ -105,10 +107,14 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
  * ## The plus adds to the list the line names (velista `0134`, section 4)
  *
  * Each row has a plus, and a line above the tab bar says which list it adds to.
- * `CatalogAddStore` holds that list and the record of what this visit added, and
- * it is the app's and not this page's: the pickers are pages of their own, so this
- * component is destroyed while one is open. A guest and a person with no list to
- * write to see neither the plus nor the line.
+ * Under a row sit the lines of that list that already hold the product, each with
+ * its own stepper. `CatalogAddStore` holds the list, those lines and the record of
+ * what this visit added, and it is the app's and not this page's: the pickers are
+ * pages of their own, so this component is destroyed while one is open. A guest
+ * and a person with no list to write to see neither the plus nor the line.
+ *
+ * When the lists cannot be read the line says so and offers a second try. Without
+ * that a failed read looked exactly like having no list.
  *
  * ## A chain narrows the products and the prices, and a shop narrows them further
  *
@@ -189,8 +195,16 @@ export class CatalogPage {
   /** How many products this visit added, for the line above the tab bar. */
   protected readonly addedCount = this._adds.count;
 
-  /** The row whose stepper is open. One is open at a time (section 4.1). */
-  protected readonly stepperOpen = signal<string | null>(null);
+  /**
+   * What could not be read, or null: the lists, or the lines of the chosen one.
+   * Either draws one sentence and a second try where the line would be.
+   */
+  protected readonly addsProblem = computed<'lists' | 'lines' | null>(() => {
+    if (this._adds.status() === 'failed') {
+      return 'lists';
+    }
+    return this._adds.linesStatus() === 'failed' ? 'lines' : null;
+  });
 
   /** A write that failed, said once in the live region until the next press. */
   protected readonly addFailed = signal(false);
@@ -210,7 +224,7 @@ export class CatalogPage {
   /** The chosen shop, named, once `GET /v1/catalog/locations/:id` answers. */
   protected readonly location = signal<CatalogLocation | null>(null);
 
-  protected readonly order = signal<CatalogOrder>('name');
+  protected readonly order = signal<CatalogOrder>(defaultCatalogOrder(''));
 
   protected readonly context = signal<CatalogBrowseContext | null>(null);
 
@@ -376,35 +390,52 @@ export class CatalogPage {
     appPath(this._locale(), this._basePath, 'account', 'profiles')
   );
 
+  /**
+   * The products as they are priced on this screen. A shop's read is priced at
+   * that shop by the server, so there is no other chain's price to strip from it.
+   */
+  private readonly _shown = computed<readonly CatalogProduct[]>(() => {
+    const context = this.context();
+    const chosen = this.chain();
+    return this.shop() !== null
+      ? this._products()
+      : this._products().map((product) =>
+          this._pricedBy(product, context, chosen)
+        );
+  });
+
+  /**
+   * The row the "Without a price" line stands before (section 3), or null. The
+   * server puts the rows with no price last in a price order, and the line says
+   * where they start.
+   */
+  protected readonly unpricedAt = computed(() =>
+    unpricedStart(this.order(), this._shown())
+  );
+
   protected readonly rows = computed<readonly ProductRowView[]>(() => {
     const locale = this._locale();
     // Read so the rows are drawn again once the words arrive.
     this._translator.loaded();
     const context = this.context();
-    const chosen = this.chain();
     const shopChosen = this.shop() !== null;
-    const chainChosen = chosen !== null || shopChosen;
+    const chainChosen = this.chain() !== null || shopChosen;
 
-    return this._products().map((product) =>
-      productRowView(
-        // A shop's read is priced at that shop by the server, so there is no other
-        // chain's price to strip from it.
-        shopChosen ? product : this._pricedBy(product, context, chosen),
-        {
-          locale,
-          chainChosen,
-          shopChosen,
-          translate: (key, args) =>
-            this._translator.t(key, undefined, locale, args),
-          chainOf: (scope) => this._chainName(context, scope, locale),
-        }
-      )
+    return this._shown().map((product) =>
+      productRowView(product, {
+        locale,
+        chainChosen,
+        shopChosen,
+        translate: (key, args) =>
+          this._translator.t(key, undefined, locale, args),
+        chainOf: (scope) => this._chainName(context, scope, locale),
+      })
     );
   });
 
-  /** The plus of each row, for the chosen list (section 4.1). */
+  /** The plus of each row and the lines under it, for the chosen list (section 4.1). */
   private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.visit(), this.stepperOpen())
+    rowAdds(this.addTarget(), this._adds.held())
   );
 
   /**
@@ -504,19 +535,23 @@ export class CatalogPage {
     });
   }
 
-  /** The count on a row: its stepper opens, and any other one closes. */
-  protected openStepper(itemId: string): void {
-    this.stepperOpen.set(itemId);
-  }
-
-  /** A press on a row's stepper. */
-  protected stepProduct(itemId: string, by: 1 | -1): void {
+  /** A press on the stepper of one line under a row. */
+  protected stepLine(row: ProductRowView, step: ProductRowLineStep): void {
     const target = this.addTarget();
     if (target === null) {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(target.listId, itemId, by);
+    void this._adds.step(
+      { listId: target.listId, itemId: row.id, detail: row.summary },
+      step.lineId,
+      step.by
+    );
+  }
+
+  /** The second try after the lists, or the lines of the chosen one, did not load. */
+  protected retryAdds(): void {
+    void this._adds.retry();
   }
 
   /** The name on the line above the tab bar: the sheet of lists. */

@@ -256,19 +256,19 @@ describe('CatalogSupermarketPage', () => {
 
     it('hands the text and the order back as they came, whatever is answered', async () => {
       const { fixture, navigate } = await render({
-        query: { category: 'milk', chain: 'sm-dia', q: 'leche', order: 'name' },
+        query: { category: 'milk', chain: 'sm-dia', q: 'leche', order: 'price' },
       });
 
       host(fixture)
         .querySelector<HTMLButtonElement>('lib-franchise-buttons .chip')
         ?.click();
       expect(last(navigate).url).toBe(
-        '/velista/en/catalog/supermarket/sm-mercadona?category=milk&chain=sm-dia&q=leche&order=name'
+        '/velista/en/catalog/supermarket/sm-mercadona?category=milk&chain=sm-dia&q=leche&order=price'
       );
 
       host(fixture).querySelector<HTMLInputElement>('.any input')?.click();
       expect(last(navigate)).toEqual({
-        url: '/velista/en/catalog?category=milk&q=leche&order=name',
+        url: '/velista/en/catalog?category=milk&q=leche&order=price',
         replace: true,
       });
     });

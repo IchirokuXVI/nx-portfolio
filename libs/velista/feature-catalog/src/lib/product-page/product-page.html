@@ -105,6 +105,96 @@
         }
       </section>
 
+      @if (priced()) {
+        <section aria-labelledby="product-history-title" class="section">
+          <h2 class="heading" id="product-history-title">
+            {{ 'catalog.history.title' | rokuT }}
+          </h2>
+          @switch (historyStatus()) {
+            @case ('loading') {
+              <div aria-hidden="true" class="skeleton is-inline">
+                <span class="bone-row"></span>
+                <span class="bone-row"></span>
+              </div>
+            }
+            @case ('failed') {
+              <div class="state is-start" role="alert">
+                <p class="state-body">
+                  {{ 'catalog.history.failed' | rokuT }}
+                </p>
+                <button
+                  (click)="retryHistory()"
+                  class="secondary"
+                  type="button"
+                >
+                  {{ 'catalog.error.retry' | rokuT }}
+                </button>
+              </div>
+            }
+            @default {
+              @if (historyWindow(); as window) {
+                <lib-price-history
+                  (rangeChosen)="chooseRange($event)"
+                  [currency]="currency()"
+                  [from]="window.from"
+                  [lines]="historyLines()"
+                  [locale]="locale()"
+                  [product]="name()"
+                  [range]="range()"
+                  [to]="window.to"
+                />
+              }
+            }
+          }
+        </section>
+      }
+
+      <!--
+        In your lists (section 7). A guest has none. A person whose lists did not
+        load is told so, with a second try.
+      -->
+      @if (signedIn()) {
+        @switch (listsStatus()) {
+          @case ('loading') {
+            <section aria-hidden="true" class="section">
+              <div class="skeleton is-inline">
+                <span class="bone-row"></span>
+                <span class="bone-row"></span>
+              </div>
+            </section>
+          }
+          @case ('failed') {
+            <section aria-labelledby="product-lists-title" class="section">
+              <h2 class="heading" id="product-lists-title">
+                {{ 'catalog.inLists.title' | rokuT }}
+              </h2>
+              <div class="state is-start" role="alert">
+                <p class="state-body">
+                  {{ 'catalog.inLists.failed' | rokuT }}
+                </p>
+                <button (click)="retryLists()" class="secondary" type="button">
+                  {{ 'catalog.error.retry' | rokuT }}
+                </button>
+              </div>
+            </section>
+          }
+          @default {
+            @if (listGroups().length > 0) {
+              <section aria-labelledby="product-lists-title" class="section">
+                <h2 class="heading" id="product-lists-title">
+                  {{ 'catalog.inLists.title' | rokuT }}
+                </h2>
+                <lib-lists-table
+                  (added)="addToList($event)"
+                  (lineStepped)="stepListLine($event)"
+                  [groups]="listGroups()"
+                />
+              </section>
+            }
+          }
+        }
+      }
+
       @if (similar(); as group) {
         @if (group.failed) {
           <p class="note">{{ 'catalog.similar.failed' | rokuT }}</p>
@@ -133,9 +223,8 @@
                 <li>
                   <lib-product-row
                     (added)="addProduct(row)"
-                    (counted)="openStepper(row.id)"
+                    (lineStepped)="stepLine(row, $event)"
                     (opened)="openSimilar($event)"
-                    (stepped)="stepProduct(row.id, $event)"
                     [add]="addOf(row.id)"
                     [row]="row"
                   />

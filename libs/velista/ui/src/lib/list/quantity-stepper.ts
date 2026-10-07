@@ -29,6 +29,7 @@ import {
   imports: [RokuTranslatorPipe],
   template: `
     <div
+      [attr.aria-disabled]="disabled() ? 'true' : null"
       [attr.aria-label]="label() ?? ('list.add.quantity' | rokuT)"
       [attr.aria-valuemax]="max"
       [attr.aria-valuemin]="min()"

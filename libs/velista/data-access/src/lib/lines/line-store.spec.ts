@@ -154,6 +154,8 @@ function service(seed: readonly Line[]) {
     listItemSettlements: async () => ({ items: [], nextCursor: null }),
     // Nothing in this file draws the "also on" indicator; the store does not hold it.
     listsHoldingItem: async () => ({ places: [], hasMore: false }),
+    // The catalog's read, which `CatalogAddStore` makes and this store never does.
+    linesHoldingItem: async () => ({ lists: [], lines: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
     reorder: async () => {

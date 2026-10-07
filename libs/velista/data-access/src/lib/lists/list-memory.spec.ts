@@ -509,6 +509,158 @@ describe('LineMemory refuses what the server would refuse', () => {
     });
   });
 
+  describe('deleting a line (backend plan 0196, section 4)', () => {
+    /** The read only list, with the caller made a writer who does not decide. */
+    async function writerOnSunday() {
+      const built = await build();
+      built.lists.setAccessFixture(READ_ONLY, [
+        { membershipId: 'm-parents-me', permissions: ['READ', 'WRITE'] },
+      ]);
+      return built;
+    }
+
+    it('lets a writer delete an approved line on a list that approves lines by itself', async () => {
+      // `list-pantry` asks nobody. Nobody agreed to `ln-p-02`, so a writer who
+      // deletes it undoes no agreement.
+      const { lines } = await build();
+
+      expect(await lines.deleteLine('ln-p-02')).toBe('ln-p-02');
+      expect(
+        (await lines.listLines(WRITE_ONLY)).items.map((row) => row.id)
+      ).not.toContain('ln-p-02');
+    });
+
+    it('refuses a writer an approved line on a list that asks first', async () => {
+      const { lines } = await writerOnSunday();
+
+      expect(await codeOf(lines.deleteLine('ln-s-03'))).toBe('forbidden');
+      expect((await lines.listLines(READ_ONLY)).items).toHaveLength(9);
+    });
+
+    it('lets that writer delete a line that still waits', async () => {
+      const { lines } = await writerOnSunday();
+      const waiting = await lines.addLine(READ_ONLY, 'Mint', 1);
+      expect(waiting.approvalStatus).toBe('PENDING');
+
+      expect(await lines.deleteLine(waiting.id)).toBe(waiting.id);
+    });
+
+    it('still refuses somebody who decides and does not write', async () => {
+      const { lines } = await build();
+
+      expect(await codeOf(lines.deleteLine('ln-m-01'))).toBe('forbidden');
+      expect(await codeOf(lines.deleteLine('ln-m-03'))).toBe('forbidden');
+    });
+  });
+
+  describe('the lines that hold one product (backend plan 0196, section 3)', () => {
+    const MILK = 'item-milk-hacendado';
+
+    /** The fixture with three more lines that hold the milk, one in each state. */
+    async function stocked() {
+      const built = await build();
+      const market = (await built.lines.listLines(DECIDE_ONLY)).items;
+      built.lines.setLines(
+        DECIDE_ONLY,
+        market.map((row) =>
+          row.id === 'ln-m-02' ? row : { ...row, itemIds: [MILK] }
+        )
+      );
+      return built;
+    }
+
+    it('answers every list the caller can read, with or without such a line', async () => {
+      const { lines } = await build();
+
+      const answer = await lines.linesHoldingItem(MILK);
+
+      // Six lists in the two groups the caller is approved in and shares lists
+      // with. Only one of them holds the milk, and the other five are answered too.
+      expect(answer.lists.map((list) => list.listId).sort()).toEqual([
+        'list-cleaning',
+        'list-freezer',
+        'list-market',
+        'list-pantry',
+        'list-sunday',
+        'list-weekly',
+      ]);
+      expect(answer.lines.map((line) => line.listId)).toEqual(['list-weekly']);
+      expect(answer.hasMore).toBe(false);
+    });
+
+    it('says what the caller may do on each list, and names its group', async () => {
+      const { lines } = await build();
+
+      const { lists } = await lines.linesHoldingItem(MILK);
+
+      expect(lists.find((list) => list.listId === WRITE_ONLY)).toEqual({
+        listId: 'list-pantry',
+        zoneId: 'zone-parents',
+        name: 'Pantry top up',
+        zoneName: "Mum and Dad's",
+        autoApproveLines: true,
+        permissions: ['READ', 'WRITE'],
+      });
+      expect(
+        lists.find((list) => list.listId === READ_ONLY)?.permissions
+      ).toEqual(['READ']);
+    });
+
+    it('answers a line at zero, with its id, its name and its quantity', async () => {
+      // `listsHoldingItem` leaves a settled line out, because it has stopped
+      // asking for the product. A stepper starts at zero and still needs the line.
+      const { lines } = await build();
+
+      const answer = await lines.linesHoldingItem(MILK);
+
+      expect(answer.lines).toEqual([
+        {
+          lineId: 'ln-w-02',
+          listId: 'list-weekly',
+          name: 'Milk',
+          quantity: 0,
+          pending: false,
+          itemIds: ['item-milk-hacendado', 'item-milk-pascual'],
+        },
+      ]);
+    });
+
+    it('answers a line that waits, and leaves a rejected one out', async () => {
+      const { lines } = await stocked();
+
+      const answer = await lines.linesHoldingItem(MILK);
+
+      expect(
+        answer.lines
+          .filter((line) => line.listId === DECIDE_ONLY)
+          .map((line) => [line.lineId, line.quantity, line.pending])
+      ).toEqual([
+        ['ln-m-01', 3, false],
+        ['ln-m-03', 1, true],
+      ]);
+    });
+
+    it('leaves out a list the caller has been revoked from, with its lines', async () => {
+      const { lists, lines } = await stocked();
+      lists.setAccessFixture(DECIDE_ONLY, []);
+
+      const answer = await lines.linesHoldingItem(MILK);
+
+      expect(answer.lists.map((list) => list.listId)).not.toContain(
+        DECIDE_ONLY
+      );
+      expect(answer.lines.map((line) => line.listId)).toEqual(['list-weekly']);
+    });
+
+    it('refuses to look for no product', async () => {
+      const { lines } = await build();
+
+      expect(await codeOf(lines.linesHoldingItem(''))).toBe(
+        'validation_failed'
+      );
+    });
+  });
+
   it('answers not_found for a list the caller cannot see at all', async () => {
     // Before `forbidden`, matching core, so the difference between the two never leaks
     // the existence of a list in a zone the caller is not in.

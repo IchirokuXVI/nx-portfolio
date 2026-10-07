@@ -3,10 +3,15 @@ import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import type { CatalogProduct, ProductOffer } from '@portfolio/velista/models';
+import type {
+  CatalogProduct,
+  HoldingRow,
+  ProductOffer,
+} from '@portfolio/velista/models';
 import {
   ProductRow,
   type ProductRowAdd,
+  type ProductRowLineStep,
   type ProductRowView,
 } from './product-row';
 import { productRowView, type ProductRowOptions } from './product-row-view';
@@ -124,7 +129,7 @@ describe('productRowView', () => {
     expect(view.detail).toBeNull();
   });
 
-  describe('summary, the detail line of a row whose stepper is open', () => {
+  describe('summary, the detail line in the sheet of what a visit added', () => {
     it('says the price with the chain that charges it', () => {
       const view = productRowView(OIL, options());
 
@@ -282,19 +287,44 @@ describe('ProductRow', () => {
 
   /**
    * The plus (velista `0134`, section 4.1): a sibling of the product button that
-   * adds one, then shows the count, then opens a stepper in the row.
+   * adds one, and stays a plus. Under the row sit the lines of the chosen list
+   * that hold the product, each with its name and its own stepper.
    */
   describe('the plus', () => {
     const LIST = 'Weekly shop';
 
-    function adding(overrides: Partial<ProductRowAdd> = {}): ProductRowAdd {
-      return { count: 0, floor: 1, open: false, list: LIST, ...overrides };
+    function held(overrides: Partial<HoldingRow> = {}): HoldingRow {
+      return {
+        lineId: 'line-oil',
+        name: 'Extra virgin olive oil',
+        quantity: 2,
+        editable: true,
+        pending: false,
+        ...overrides,
+      };
     }
 
-    /** The values the last call for a key was given. */
-    function valuesOf(key: string): unknown {
-      const calls = asked.mock.calls.filter((call) => call[0] === key);
-      return calls[calls.length - 1]?.[3];
+    /** The line under the product's own name, and one somebody typed. */
+    const OWN = held();
+    const TYPED = held({
+      lineId: 'line-fry',
+      name: 'Oil for the fryer',
+      quantity: 5,
+    });
+
+    function adding(lines: readonly HoldingRow[] = []): ProductRowAdd {
+      return { list: LIST, lines };
+    }
+
+    /** The values every call for a key was given, with no repeats. */
+    function valuesOf(key: string): unknown[] {
+      const seen = new Map<string, unknown>();
+      for (const call of asked.mock.calls) {
+        if (call[0] === key) {
+          seen.set(JSON.stringify(call[3]), call[3]);
+        }
+      }
+      return [...seen.values()];
     }
 
     function plus(
@@ -303,35 +333,52 @@ describe('ProductRow', () => {
       return host(fixture).querySelector<HTMLButtonElement>('button.add');
     }
 
-    function steps(fixture: ComponentFixture<ProductRow>): HTMLButtonElement[] {
+    function heldLines(fixture: ComponentFixture<ProductRow>): HTMLElement[] {
+      return [...host(fixture).querySelectorAll<HTMLElement>('li.held-line')];
+    }
+
+    function heldLine(
+      fixture: ComponentFixture<ProductRow>,
+      lineId: string
+    ): HTMLElement {
+      return host(fixture).querySelector(
+        `li.held-line[data-line="${lineId}"]`
+      ) as HTMLElement;
+    }
+
+    /** A line's two stepper buttons: the minus, then the plus. */
+    function steps(
+      fixture: ComponentFixture<ProductRow>,
+      lineId: string
+    ): HTMLButtonElement[] {
       return [
-        ...host(fixture).querySelectorAll<HTMLButtonElement>(
+        ...heldLine(fixture, lineId).querySelectorAll<HTMLButtonElement>(
           'lib-quantity-stepper button'
         ),
       ];
     }
 
-    function spinbutton(fixture: ComponentFixture<ProductRow>): Element | null {
-      return host(fixture).querySelector('[role="spinbutton"]');
+    function spinbutton(
+      fixture: ComponentFixture<ProductRow>,
+      lineId: string
+    ): Element | null {
+      return heldLine(fixture, lineId).querySelector('[role="spinbutton"]');
     }
 
     function record(fixture: ComponentFixture<ProductRow>): {
       opened: string[];
       added: string[];
-      counted: string[];
-      stepped: number[];
+      lineStepped: ProductRowLineStep[];
     } {
       const heard = {
         opened: [] as string[],
         added: [] as string[],
-        counted: [] as string[],
-        stepped: [] as number[],
+        lineStepped: [] as ProductRowLineStep[],
       };
       const row = fixture.componentInstance;
       row.opened.subscribe((id) => heard.opened.push(id));
       row.added.subscribe((id) => heard.added.push(id));
-      row.counted.subscribe((id) => heard.counted.push(id));
-      row.stepped.subscribe((by) => heard.stepped.push(by));
+      row.lineStepped.subscribe((step) => heard.lineStepped.push(step));
       return heard;
     }
 
@@ -340,24 +387,26 @@ describe('ProductRow', () => {
 
       expect(host(fixture).querySelectorAll('button')).toHaveLength(1);
       expect(plus(fixture)).toBeNull();
+      expect(host(fixture).querySelector('.held')).toBeNull();
       expect(host(fixture).querySelector('lib-quantity-stepper')).toBeNull();
       expect(
         host(fixture).querySelector('.row')?.classList.contains('has-add')
       ).toBe(false);
     });
 
-    it('draws a plus named for the product and the list while the list holds none', async () => {
+    it('draws a plus named for the product and the list', async () => {
       const fixture = await render(productRowView(OIL, options()), adding());
 
       const button = plus(fixture);
       expect(button).not.toBeNull();
-      expect(button?.classList.contains('has-count')).toBe(false);
       expect(button?.querySelector('lib-plus-icon')).not.toBeNull();
       expect(button?.getAttribute('aria-label')).toBe('catalog.add.label');
-      expect(valuesOf('catalog.add.label')).toEqual({
-        name: 'Extra virgin olive oil',
-        list: LIST,
-      });
+      expect(valuesOf('catalog.add.label')).toEqual([
+        { name: 'Extra virgin olive oil', list: LIST },
+      ]);
+      expect(
+        host(fixture).querySelector('.row')?.classList.contains('has-add')
+      ).toBe(true);
     });
 
     it('adds one on a press, and does not open the product', async () => {
@@ -368,7 +417,7 @@ describe('ProductRow', () => {
 
       expect(heard.added).toEqual(['item-oil']);
       expect(heard.opened).toEqual([]);
-      expect(heard.counted).toEqual([]);
+      expect(heard.lineStepped).toEqual([]);
     });
 
     it('still opens the product from its own button', async () => {
@@ -381,223 +430,302 @@ describe('ProductRow', () => {
       expect(heard.added).toEqual([]);
     });
 
-    it('draws the count in place of the plus once the list holds some', async () => {
+    it('stays a plus once the list holds the product, and adds one more', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
-        adding({ count: 3 })
-      );
-
-      const button = plus(fixture);
-      expect(button?.classList.contains('has-count')).toBe(true);
-      expect(button?.textContent?.trim()).toBe('3');
-      expect(button?.querySelector('lib-plus-icon')).toBeNull();
-      expect(button?.getAttribute('aria-label')).toBe('catalog.add.count');
-      expect(valuesOf('catalog.add.count')).toEqual({
-        name: 'Extra virgin olive oil',
-        count: 3,
-        list: LIST,
-      });
-      // The price keeps its place until the stepper opens.
-      expect(host(fixture).querySelector('.price')).not.toBeNull();
-    });
-
-    it('asks for the stepper on a press on the count, and adds nothing', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 3 })
+        adding([OWN, TYPED])
       );
       const heard = record(fixture);
 
-      plus(fixture)?.click();
+      const button = plus(fixture);
+      expect(button?.querySelector('lib-plus-icon')).not.toBeNull();
+      // No number on the plus: it could not say which line it counted.
+      expect(button?.textContent?.trim()).toBe('');
+      expect(button?.getAttribute('aria-label')).toBe('catalog.add.label');
 
-      expect(heard.counted).toEqual(['item-oil']);
+      button?.click();
+
+      expect(heard.added).toEqual(['item-oil']);
+      expect(heard.lineStepped).toEqual([]);
+    });
+
+    it('draws no block of lines while the list holds none', async () => {
+      const fixture = await render(productRowView(OIL, options()), adding());
+
+      expect(host(fixture).querySelector('.held')).toBeNull();
+      expect(heldLines(fixture)).toHaveLength(0);
+      expect(host(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+    });
+
+    it('heads the lines with the name of the list', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN])
+      );
+
+      expect(host(fixture).querySelector('.held-title')?.textContent).toContain(
+        'catalog.held.title'
+      );
+      expect(valuesOf('catalog.held.title')).toEqual([{ list: LIST }]);
+    });
+
+    it('draws one row for each line that holds the product, with its own quantity', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN, TYPED])
+      );
+
+      expect(heldLines(fixture).map((one) => one.dataset['line'])).toEqual([
+        'line-oil',
+        'line-fry',
+      ]);
+      expect(
+        heldLines(fixture).map(
+          (one) => one.querySelector('.held-name')?.textContent
+        )
+      ).toEqual(['Extra virgin olive oil', 'Oil for the fryer']);
+      expect(
+        heldLines(fixture).map(
+          (one) => one.querySelector('.value')?.textContent
+        )
+      ).toEqual(['2', '5']);
+      expect(
+        heldLines(fixture).map((one) =>
+          one
+            .querySelector('[role="spinbutton"]')
+            ?.getAttribute('aria-valuenow')
+        )
+      ).toEqual(['2', '5']);
+    });
+
+    it('keeps the price in the row while the lines are drawn under it', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN])
+      );
+
+      const open = host(fixture).querySelector('button.open');
+      expect(open?.querySelector('.price .amount')?.textContent).toBe('€8.45');
+      expect(open?.querySelector('.caption')?.textContent).toContain(
+        'Mercadona'
+      );
+    });
+
+    it('names each stepper for its line and the list', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN, TYPED])
+      );
+
+      expect(spinbutton(fixture, 'line-oil')?.getAttribute('aria-label')).toBe(
+        'catalog.held.stepper'
+      );
+      expect(valuesOf('catalog.held.stepper')).toEqual([
+        { line: 'Extra virgin olive oil', list: LIST },
+        { line: 'Oil for the fryer', list: LIST },
+      ]);
+    });
+
+    it('draws each stepper small, and in the quiet colour while the line holds some', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN, held({ lineId: 'line-zero', quantity: 0 })])
+      );
+
+      const some = heldLine(fixture, 'line-oil').querySelector(
+        'lib-quantity-stepper'
+      );
+      const none = heldLine(fixture, 'line-zero').querySelector(
+        'lib-quantity-stepper'
+      );
+      expect(some?.classList.contains('is-compact')).toBe(true);
+      expect(some?.classList.contains('is-accent')).toBe(true);
+      expect(none?.classList.contains('is-compact')).toBe(true);
+      expect(none?.classList.contains('is-accent')).toBe(false);
+    });
+
+    it('says one more for the line whose plus was pressed', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN, TYPED])
+      );
+      const heard = record(fixture);
+
+      steps(fixture, 'line-fry')[1]?.click();
+
+      expect(heard.lineStepped).toEqual([{ lineId: 'line-fry', by: 1 }]);
+      // A step on a line is not an add, and it does not open the product.
       expect(heard.added).toEqual([]);
       expect(heard.opened).toEqual([]);
     });
 
-    it('draws the stepper when open, and moves the price into the detail line', async () => {
-      const view = productRowView(OIL, options());
-      const fixture = await render(view, adding({ count: 2, open: true }));
-
-      const stepper = host(fixture).querySelector('lib-quantity-stepper');
-      expect(stepper).not.toBeNull();
-      expect(stepper?.classList.contains('is-accent')).toBe(true);
-      expect(stepper?.classList.contains('is-compact')).toBe(true);
-      expect(stepper?.querySelector('.value')?.textContent).toBe('2');
-      expect(plus(fixture)).toBeNull();
-
-      expect(host(fixture).querySelector('.price')).toBeNull();
-      expect(host(fixture).querySelector('.no-price')).toBeNull();
-      expect(host(fixture).querySelector('.caption')).toBeNull();
-      expect(host(fixture).querySelector('.detail')?.textContent).toBe(
-        view.summary
-      );
-    });
-
-    it('names the stepper for the product and the list', async () => {
+    it('says one fewer for the line whose minus was pressed', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
-        adding({ count: 2, open: true })
+        adding([OWN, TYPED])
       );
+      const heard = record(fixture);
 
-      expect(spinbutton(fixture)?.getAttribute('aria-label')).toBe(
-        'catalog.add.stepper'
-      );
-      expect(valuesOf('catalog.add.stepper')).toEqual({
-        name: 'Extra virgin olive oil',
-        list: LIST,
-      });
+      steps(fixture, 'line-oil')[0]?.click();
+
+      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
     });
 
-    it('keeps the plus while open is set on a row the list holds none of', async () => {
-      // An open stepper with nothing to count would be a stepper at zero.
+    it('says one fewer at one too, which is how a line goes to zero', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
-        adding({ count: 0, open: true })
+        adding([held({ quantity: 1 })])
+      );
+      const heard = record(fixture);
+
+      expect(
+        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuemin')
+      ).toBe('0');
+      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(false);
+      steps(fixture, 'line-oil')[0]?.click();
+
+      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
+    });
+
+    it('has no minus to press on a line at zero', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([held({ quantity: 0 })])
+      );
+      const heard = record(fixture);
+
+      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(true);
+      expect(steps(fixture, 'line-oil')[1]?.disabled).toBe(false);
+      steps(fixture, 'line-oil')[0]?.click();
+
+      expect(heard.lineStepped).toEqual([]);
+    });
+
+    it('says a step down and then a step up when both land before the quantity moves', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN])
+      );
+      const heard = record(fixture);
+
+      steps(fixture, 'line-oil')[0]?.click();
+      fixture.detectChanges();
+      steps(fixture, 'line-oil')[1]?.click();
+      fixture.detectChanges();
+
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', by: -1 },
+        { lineId: 'line-oil', by: 1 },
+      ]);
+    });
+
+    it('draws the quantity it is given again after a press the list did not take', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN])
+      );
+      const heard = record(fixture);
+
+      // The write fails, so the quantity the row is given never moves.
+      steps(fixture, 'line-oil')[1]?.click();
+      fixture.detectChanges();
+
+      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: 1 }]);
+      expect(
+        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
+      ).toBe('2');
+      expect(
+        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuenow')
+      ).toBe('2');
+    });
+
+    it('draws the new quantity only once the list has taken the press', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN, TYPED])
       );
 
-      expect(host(fixture).querySelector('lib-quantity-stepper')).toBeNull();
+      steps(fixture, 'line-oil')[1]?.click();
+      fixture.detectChanges();
+      expect(
+        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
+      ).toBe('2');
+
+      fixture.componentRef.setInput(
+        'add',
+        adding([held({ quantity: 3 }), TYPED])
+      );
+      fixture.detectChanges();
+
+      expect(
+        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
+      ).toBe('3');
+      // The other line did not move.
+      expect(
+        heldLine(fixture, 'line-fry').querySelector('.value')?.textContent
+      ).toBe('5');
+    });
+
+    it('disables the stepper of a line the person may not change, and still shows how many', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([held({ editable: false }), TYPED])
+      );
+      const heard = record(fixture);
+
+      expect(steps(fixture, 'line-oil').map((one) => one.disabled)).toEqual([
+        true,
+        true,
+      ]);
+      expect(
+        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
+      ).toBe('2');
+      // The line beside it is the person's to change.
+      expect(steps(fixture, 'line-fry').map((one) => one.disabled)).toEqual([
+        false,
+        false,
+      ]);
+
+      for (const button of steps(fixture, 'line-oil')) {
+        button.click();
+      }
+
+      expect(heard.lineStepped).toEqual([]);
+    });
+
+    it('says a line waits for approval only when it does', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([held({ pending: true }), TYPED])
+      );
+
+      expect(
+        heldLine(fixture, 'line-oil').querySelector('.held-pending')
+          ?.textContent
+      ).toContain('catalog.added.pending');
+      expect(
+        heldLine(fixture, 'line-fry').querySelector('.held-pending')
+      ).toBeNull();
+    });
+
+    it('takes the lines away again when the list holds the product no more', async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([OWN])
+      );
+
+      fixture.componentRef.setInput('add', adding());
+      fixture.detectChanges();
+
+      expect(host(fixture).querySelector('.held')).toBeNull();
       expect(plus(fixture)).not.toBeNull();
-      expect(host(fixture).querySelector('.price')).not.toBeNull();
-    });
-
-    it('draws no detail line under an open stepper with neither a detail nor a price', async () => {
-      const fixture = await render(
-        productRowView(
-          {
-            ...OIL,
-            brand: null,
-            size: 1,
-            unit: 'UNIT',
-            offer: null,
-            unitBasis: null,
-          },
-          options()
-        ),
-        adding({ count: 1, open: true })
-      );
-
-      expect(host(fixture).querySelector('.detail')).toBeNull();
-      expect(host(fixture).querySelector('.no-price')).toBeNull();
-    });
-
-    it('says one more on the stepper plus', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 2, open: true })
-      );
-      const heard = record(fixture);
-
-      steps(fixture)[1]?.click();
-
-      expect(heard.stepped).toEqual([1]);
-      expect(heard.opened).toEqual([]);
-    });
-
-    it('says one fewer on the stepper minus', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 2, open: true })
-      );
-      const heard = record(fixture);
-
-      steps(fixture)[0]?.click();
-
-      expect(heard.stepped).toEqual([-1]);
-    });
-
-    it('says one fewer at the floor too, which is how a product is taken back', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 1, floor: 1, open: true })
-      );
-      const heard = record(fixture);
-
-      expect(spinbutton(fixture)?.getAttribute('aria-valuemin')).toBe('0');
-      expect(steps(fixture)[0]?.disabled).toBe(false);
-      steps(fixture)[0]?.click();
-
-      expect(heard.stepped).toEqual([-1]);
-    });
-
-    it('puts the lowest value one under the floor of a line that was there before the visit', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 4, floor: 4, open: true })
-      );
-      const heard = record(fixture);
-
-      expect(spinbutton(fixture)?.getAttribute('aria-valuemin')).toBe('3');
-      steps(fixture)[0]?.click();
-
-      expect(heard.stepped).toEqual([-1]);
-    });
-
-    it('says one step for each press when the count follows the press', async () => {
-      const view = productRowView(OIL, options());
-      const fixture = await render(view, adding({ count: 2, open: true }));
-      const heard = record(fixture);
-
-      steps(fixture)[0]?.click();
-      fixture.componentRef.setInput('add', adding({ count: 1, open: true }));
-      fixture.detectChanges();
-      steps(fixture)[1]?.click();
-
-      expect(heard.stepped).toEqual([-1, 1]);
-    });
-
-    it('says a step down and then a step up when both land before the count moves', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 2, open: true })
-      );
-      const heard = record(fixture);
-
-      steps(fixture)[0]?.click();
-      fixture.detectChanges();
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-
-      expect(heard.stepped).toEqual([-1, 1]);
-    });
-
-    it('draws the count it is given again after a press the list did not take', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 2, open: true })
-      );
-      const heard = record(fixture);
-
-      // The write fails, so the count the row is given never moves.
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-
-      expect(heard.stepped).toEqual([1]);
-      expect(host(fixture).querySelector('.value')?.textContent).toBe('2');
-      expect(spinbutton(fixture)?.getAttribute('aria-valuenow')).toBe('2');
-    });
-
-    it('draws the new count only once the list has taken the press', async () => {
-      const fixture = await render(
-        productRowView(OIL, options()),
-        adding({ count: 2, open: true })
-      );
-
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-      expect(host(fixture).querySelector('.value')?.textContent).toBe('2');
-
-      fixture.componentRef.setInput('add', adding({ count: 3, open: true }));
-      fixture.detectChanges();
-
-      expect(host(fixture).querySelector('.value')?.textContent).toBe('3');
     });
 
     it('never draws a button inside the product button', async () => {
       const states: ProductRowAdd[] = [
         adding(),
-        adding({ count: 2 }),
-        adding({ count: 2, open: true }),
+        adding([OWN]),
+        adding([OWN, TYPED]),
       ];
 
       for (const state of states) {
@@ -606,11 +734,15 @@ describe('ProductRow', () => {
 
         expect(host(fixture).querySelector('button button')).toBeNull();
         expect(open?.querySelector('lib-quantity-stepper')).toBeNull();
-        const control =
-          plus(fixture) ?? host(fixture).querySelector('lib-quantity-stepper');
-        expect(control).not.toBeNull();
-        expect(control?.closest('button.open')).toBeNull();
-        expect(control?.parentElement).toBe(open?.parentElement);
+        expect(plus(fixture)?.closest('button.open')).toBeNull();
+        expect(plus(fixture)?.parentElement).toBe(open?.parentElement);
+
+        const block = host(fixture).querySelector('.held');
+        expect(block === null).toBe(state.lines.length === 0);
+        if (block !== null) {
+          expect(block.closest('button')).toBeNull();
+          expect(block.parentElement).toBe(open?.parentElement);
+        }
       }
     });
   });

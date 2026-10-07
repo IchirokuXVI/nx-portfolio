@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   AlsoOnVm,
+  ItemLists,
   Line,
   LineApprovalStatus,
   LineOrder,
@@ -219,6 +220,20 @@ export interface LineServiceI {
     itemId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<Page<LineSettlement>>;
+
+  /**
+   * Every list the caller can read, in every group, and the lines of each that
+   * hold one product (`GET /v1/items/:id/list-lines`, backend `0196`, section 3).
+   *
+   * The read behind the product page's table of lists (velista `0134`, section 7).
+   * It differs from {@link listsHoldingItem} in what the table needs: a list with
+   * no such line is still answered, each line comes with its id, its name and its
+   * quantity, lines that wait and lines at zero are included, and each list says
+   * what the caller may do on it.
+   *
+   * Capped, not paged: `hasMore` says the server cut the lists short.
+   */
+  linesHoldingItem(itemId: string): Promise<ItemLists>;
 
   /**
    * Decide a suggested line (`POST /v1/lines/:id/approval`).

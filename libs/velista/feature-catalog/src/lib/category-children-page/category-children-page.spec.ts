@@ -142,10 +142,10 @@ describe('CategoryChildrenPage (velista 0119)', () => {
         chain: 'chain-deza',
         shop: 'location-deza-1',
         q: 'leche',
-        order: 'name',
+        order: 'price',
       }
     );
-    const rest = '&chain=chain-deza&shop=location-deza-1&q=leche&order=name';
+    const rest = '&chain=chain-deza&shop=location-deza-1&q=leche&order=price';
     const [everything, children] = cards(fixture);
 
     expect(everything?.[0]?.getAttribute('href')).toBe(

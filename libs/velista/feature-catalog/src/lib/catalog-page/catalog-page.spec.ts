@@ -1,5 +1,5 @@
 import { Location } from '@angular/common';
-import { Component, signal, type Provider } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import {
@@ -20,118 +20,44 @@ import {
   CatalogAddStore,
   CatalogBrowseMemory,
   fakeCategoryStore,
-  LINE_SERVICE,
-  LIST_SERVICE,
   MEMORY_CATEGORIES,
   provideFakeCategoryStore,
-  SessionStore,
-  ZONE_SERVICE,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import type {
   CatalogBrowseQuery,
   CatalogLocation,
   CatalogPriceState,
-  ListPermission,
 } from '@portfolio/velista/models';
-import {
-  provideFakeBrowserFacade,
-  provideVelistaTesting,
-} from '@portfolio/velista/platform';
+import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { AddingBar } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
+import {
+  fakeAdds,
+  WEEKLY,
+  type FakeAdds,
+  type FakeAddsOptions,
+  type FakeLine,
+} from '../catalog-adds.testing';
 import { CATALOG_SEARCH_DEBOUNCE_MS, CatalogPage } from './catalog-page';
 
-/** One list as the store reads it from the list service. */
-interface FakeList {
-  readonly id: string;
-  readonly zoneId: string;
-  readonly zoneName: string;
-  readonly name: string;
-  readonly wantedCount: number;
-  readonly myPermissions: readonly ListPermission[];
-}
-
-const WEEKLY: FakeList = {
-  id: 'list-weekly',
-  zoneId: 'zone-home',
-  zoneName: 'Home',
-  name: 'Weekly shop',
-  wantedCount: 14,
-  myPermissions: ['READ', 'WRITE', 'MANAGE'],
+/** The oil under its own name, two of it, as the weekly shop held it before. */
+const OIL_LINE: FakeLine = {
+  id: 'line-oil',
+  listId: 'list-weekly',
+  content: 'Extra virgin olive oil',
+  quantity: 2,
+  itemIds: ['item-oil'],
 };
 
-interface AddOptions {
-  /** The lists of the person. One list they can write to unless a test says. */
-  readonly lists?: readonly FakeList[];
-  /** A guest, who is never asked for lists. */
-  readonly guest?: boolean;
-}
-
-/**
- * The real `CatalogAddStore` over doubles of what it reads and writes. The line
- * double keeps each quantity, so a step answers what the server would.
- */
-function fakeAdds(options: AddOptions = {}) {
-  const lists = options.lists ?? [WEEKLY];
-  const zones = [
-    ...new Map(
-      lists.map((list) => [
-        list.zoneId,
-        { id: list.zoneId, name: list.zoneName, myStatus: 'APPROVED' },
-      ])
-    ).values(),
-  ];
-  const quantities = new Map<string, number>();
-  const lines = {
-    addLineResult: jest.fn(
-      async (
-        listId: string,
-        _content: string,
-        quantity = 1,
-        itemIds: readonly string[] = []
-      ) => {
-        const id = `line-${listId}-${itemIds[0]}`;
-        quantities.set(id, quantity);
-        return {
-          line: { id, quantity, approvalStatus: 'APPROVED' },
-          merged: false,
-        };
-      }
-    ),
-    addQuantity: jest.fn(async (lineId: string, delta: number) => {
-      const quantity = (quantities.get(lineId) ?? 0) + delta;
-      quantities.set(lineId, quantity);
-      return { id: lineId, quantity, approvalStatus: 'APPROVED' };
-    }),
-    deleteLine: jest.fn(async (lineId: string) => lineId),
-  };
-  const providers: Provider[] = [
-    CatalogAddStore,
-    provideFakeBrowserFacade(new Map()),
-    {
-      provide: SessionStore,
-      useValue: { isGuest: signal(options.guest === true) },
-    },
-    {
-      provide: ZONE_SERVICE,
-      useValue: {
-        listMyZones: async () => ({ items: zones, nextCursor: null }),
-      },
-    },
-    {
-      provide: LIST_SERVICE,
-      useValue: {
-        listLists: async (zoneId: string) => ({
-          items: lists.filter((list) => list.zoneId === zoneId),
-          nextCursor: null,
-        }),
-      },
-    },
-    { provide: LINE_SERVICE, useValue: lines },
-  ];
-  return { lines, providers };
-}
+/** The same product again, under a name somebody typed. */
+const FRYING_LINE: FakeLine = {
+  id: 'line-frying',
+  listId: 'list-weekly',
+  content: 'Oil for frying',
+  quantity: 1,
+  itemIds: ['item-oil'],
+};
 
 interface Harness {
   readonly fixture: ComponentFixture<CatalogPage>;
@@ -140,11 +66,13 @@ interface Harness {
   /** The tab's query parameters, which a test moves as a navigation would. */
   readonly query: BehaviorSubject<ParamMap>;
   readonly tree: FakeCategoryStore;
-  /** The line service double the store writes through. */
-  readonly lines: ReturnType<typeof fakeAdds>['lines'];
+  /** The line service double the store reads and writes through. */
+  readonly lines: FakeAdds['lines'];
+  /** Every double of the store, for the reads of the groups and the lists. */
+  readonly adds: FakeAdds;
 }
 
-interface RenderOptions extends AddOptions {
+interface RenderOptions extends FakeAddsOptions {
   /** The mount. The portfolio's unless a test wants the standalone build. */
   readonly basePath?: string;
   /** The slug in `?category=` on arrival. */
@@ -166,7 +94,7 @@ interface RenderOptions extends AddOptions {
  * never settles under fake timers.
  */
 async function settle(fixture: ComponentFixture<CatalogPage>): Promise<void> {
-  for (let tick = 0; tick < 10; tick++) {
+  for (let tick = 0; tick < 20; tick++) {
     await Promise.resolve();
   }
   fixture.detectChanges();
@@ -211,7 +139,7 @@ async function render(
   await settle(fixture);
   await settle(fixture);
 
-  return { fixture, memory, browse, query, tree, lines: adds.lines };
+  return { fixture, memory, browse, query, tree, lines: adds.lines, adds };
 }
 
 /** Where the router was last sent, as a URL string whichever form it was given. */
@@ -329,12 +257,95 @@ function headNote(fixture: ComponentFixture<CatalogPage>): string | null {
   return notes[0]?.textContent?.trim() ?? null;
 }
 
-/** The trailing control of each row: the plus, or the count after an add. */
+/** The trailing control of each row: the plus. */
 function plusses(fixture: ComponentFixture<CatalogPage>): HTMLButtonElement[] {
   return [
     ...host(fixture).querySelectorAll<HTMLButtonElement>(
       'lib-product-row button.add'
     ),
+  ];
+}
+
+/** The row of one product, found by the name it draws. */
+function rowOf(
+  fixture: ComponentFixture<CatalogPage>,
+  name: string
+): HTMLElement {
+  const row = [
+    ...host(fixture).querySelectorAll<HTMLElement>('lib-product-row'),
+  ].find((one) => one.querySelector('.name')?.textContent?.trim() === name);
+  if (row === undefined) {
+    throw new Error(`no row for ${name}`);
+  }
+  return row;
+}
+
+/** The plus of one product's row, or null for a row with none. */
+function plusOf(
+  fixture: ComponentFixture<CatalogPage>,
+  name: string
+): HTMLButtonElement | null {
+  return rowOf(fixture, name).querySelector<HTMLButtonElement>('button.add');
+}
+
+/** The names of the products drawn, in the order drawn. */
+function names(fixture: ComponentFixture<CatalogPage>): string[] {
+  return [...host(fixture).querySelectorAll('lib-product-row .name')].map(
+    (name) => name.textContent?.trim() ?? ''
+  );
+}
+
+/** One line of the chosen list under a row, as the row draws it. */
+interface DrawnLine {
+  readonly lineId: string;
+  readonly name: string;
+  readonly quantity: string | null;
+  readonly minus: HTMLButtonElement | null;
+  readonly plus: HTMLButtonElement | null;
+}
+
+/** The lines of the chosen list that hold one product, under its row. */
+function heldLines(
+  fixture: ComponentFixture<CatalogPage>,
+  name: string
+): DrawnLine[] {
+  return [
+    ...rowOf(fixture, name).querySelectorAll<HTMLElement>('.held-line'),
+  ].map((line) => {
+    const steps = line.querySelectorAll<HTMLButtonElement>(
+      'lib-quantity-stepper button.step'
+    );
+    return {
+      lineId: line.dataset['line'] ?? '',
+      name: line.querySelector('.held-name')?.textContent?.trim() ?? '',
+      quantity:
+        line
+          .querySelector('lib-quantity-stepper [role="spinbutton"]')
+          ?.getAttribute('aria-valuenow') ?? null,
+      minus: steps[0] ?? null,
+      plus: steps[1] ?? null,
+    };
+  });
+}
+
+/** What stands where the line above the tab bar would, when a read failed. */
+function addsFailed(fixture: ComponentFixture<CatalogPage>): {
+  readonly alert: HTMLElement | null;
+  readonly text: string;
+  readonly retry: HTMLButtonElement | null;
+} {
+  const alert = host(fixture).querySelector<HTMLElement>('p.adds-failed');
+  return {
+    alert,
+    text: alert?.querySelector('.adds-failed-text')?.textContent?.trim() ?? '',
+    retry: alert?.querySelector<HTMLButtonElement>('button') ?? null,
+  };
+}
+
+/** The "Without a price" lines of the list. */
+function unpriced(fixture: ComponentFixture<CatalogPage>): HTMLElement[] {
+  return [
+    ...host(fixture).querySelectorAll<HTMLElement>('ul.rows li.unpriced'),
   ];
 }
 
@@ -364,17 +375,19 @@ describe('CatalogPage', () => {
     const { fixture, browse } = await render();
 
     expect(orderMenu(fixture)).toEqual({
-      orders: ['name'],
-      checked: 'name',
-      shown: 'catalog.order.short.name',
+      orders: ['category', 'price', 'unitPrice'],
+      checked: 'category',
+      shown: 'catalog.order.short.category',
     });
     expect(lastQuery(browse)).toMatchObject({
       query: '',
-      order: 'name',
+      order: 'category',
       soldBy: null,
       priceScopeIds: [],
     });
     expect(rows(fixture)).toBeGreaterThan(5);
+    // By aisle, so no line says where the rows with no price start.
+    expect(unpriced(fixture)).toHaveLength(0);
   });
 
   it('heads the page with the one page header: the catalog tab’s glyph, the title and no action', async () => {
@@ -427,7 +440,7 @@ describe('CatalogPage', () => {
       order: 'relevance',
     });
     expect(orderMenu(fixture)).toEqual({
-      orders: ['relevance', 'name'],
+      orders: ['relevance', 'category', 'price', 'unitPrice'],
       checked: 'relevance',
       shown: 'catalog.order.short.relevance',
     });
@@ -447,10 +460,10 @@ describe('CatalogPage', () => {
     await settle(fixture);
 
     expect(orderMenu(fixture)).toMatchObject({
-      orders: ['name'],
-      checked: 'name',
+      orders: ['category', 'price', 'unitPrice'],
+      checked: 'category',
     });
-    expect(lastQuery(browse)).toMatchObject({ query: '', order: 'name' });
+    expect(lastQuery(browse)).toMatchObject({ query: '', order: 'category' });
   });
 
   it('draws the tools as the field and one row of two selectors, with nothing chosen', async () => {
@@ -706,8 +719,8 @@ describe('CatalogPage', () => {
       .spyOn(TestBed.inject(Router), 'navigateByUrl')
       .mockResolvedValue(true);
 
-    host(fixture)
-      .querySelector<HTMLButtonElement>('lib-product-row button.open')
+    rowOf(fixture, 'Extra virgin olive oil')
+      .querySelector<HTMLButtonElement>('button.open')
       ?.click();
 
     expect(lastUrl(navigate)).toBe('/velista/en/catalog/products/item-oil');
@@ -755,13 +768,17 @@ describe('CatalogPage', () => {
       expect(headNote(plain.fixture)).toBeNull();
     });
 
-    it('offers the catalog order alone with an empty field, and Best match beside it with text', async () => {
+    it('offers the three orders with an empty field, and Best match before them with text', async () => {
       const plain = await render();
-      expect(orderMenu(plain.fixture).orders).toEqual(['name']);
+      expect(orderMenu(plain.fixture).orders).toEqual([
+        'category',
+        'price',
+        'unitPrice',
+      ]);
 
       const typed = await render('priced', { q: 'leche' });
       expect(orderMenu(typed.fixture)).toEqual({
-        orders: ['relevance', 'name'],
+        orders: ['relevance', 'category', 'price', 'unitPrice'],
         checked: 'relevance',
         shown: 'catalog.order.short.relevance',
       });
@@ -770,18 +787,174 @@ describe('CatalogPage', () => {
     it('reads again in the order a row of the menu names', async () => {
       const { fixture, browse } = await render('priced', { q: 'leche' });
 
-      chooseOrder(fixture, 'name');
+      chooseOrder(fixture, 'category');
       await settle(fixture);
 
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',
-        order: 'name',
+        order: 'category',
       });
-      expect(orderMenu(fixture).checked).toBe('name');
+      expect(orderMenu(fixture).checked).toBe('category');
+    });
+
+    it('sends Lowest price when it is chosen, and keeps it in the URL in place of the entry', async () => {
+      const { fixture, browse } = await render();
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigateByUrl')
+        .mockResolvedValue(true);
+      const url = jest
+        .spyOn(router, 'url', 'get')
+        .mockReturnValue('/velista/en/catalog');
+      const reads = browse.mock.calls.length;
+
+      chooseOrder(fixture, 'price');
+      await settle(fixture);
+
+      expect(browse.mock.calls.length).toBe(reads + 1);
+      expect(lastQuery(browse)).toMatchObject({ query: '', order: 'price' });
+      expect(orderMenu(fixture)).toMatchObject({
+        checked: 'price',
+        shown: 'catalog.order.short.price',
+      });
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog?order=price');
+      expect(navigate.mock.calls[navigate.mock.calls.length - 1][1]).toEqual({
+        replaceUrl: true,
+      });
+
+      // The order it opens on is the URL without the parameter, not `order=category`.
+      url.mockReturnValue('/velista/en/catalog?order=price');
+      chooseOrder(fixture, 'category');
+      await settle(fixture);
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog');
+    });
+
+    it('sends the price per kilo or litre order too, from a link that names it', async () => {
+      const { fixture, browse } = await render('priced', {
+        order: 'unitPrice',
+      });
+
+      expect(lastQuery(browse)).toMatchObject({ order: 'unitPrice' });
+      expect(orderMenu(fixture)).toMatchObject({
+        checked: 'unitPrice',
+        shown: 'catalog.order.short.unitPrice',
+      });
+    });
+
+    it('keeps a price order through a search that begins and one that ends', async () => {
+      const { fixture, browse } = await render('priced', { order: 'price' });
+      const router = TestBed.inject(Router);
+      const navigate = jest
+        .spyOn(router, 'navigateByUrl')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(router, 'url', 'get')
+        .mockReturnValue('/velista/en/catalog?order=price');
+      jest.useFakeTimers();
+
+      const input = field(fixture);
+      input.value = 'leche';
+      input.dispatchEvent(new Event('input'));
+      jest.advanceTimersByTime(CATALOG_SEARCH_DEBOUNCE_MS);
+      await settle(fixture);
+
+      // Best match joins the menu, and the cheapest is still what was asked for.
+      expect(lastQuery(browse)).toMatchObject({
+        query: 'leche',
+        order: 'price',
+      });
+      expect(orderMenu(fixture)).toEqual({
+        orders: ['relevance', 'category', 'price', 'unitPrice'],
+        checked: 'price',
+        shown: 'catalog.order.short.price',
+      });
+      expect(lastUrl(navigate)).toBe('/velista/en/catalog?q=leche&order=price');
+
+      host(fixture).querySelector<HTMLButtonElement>('.field-clear')?.click();
+      await settle(fixture);
+
+      expect(lastQuery(browse)).toMatchObject({ query: '', order: 'price' });
+      expect(orderMenu(fixture)).toMatchObject({
+        orders: ['category', 'price', 'unitPrice'],
+        checked: 'price',
+      });
+    });
+
+    it('draws "Without a price" once, before the first row with no price, in a price order', async () => {
+      const { fixture } = await render('priced', { order: 'price' });
+
+      // Cheapest first, and the one product nobody near sells comes last.
+      expect(names(fixture)[0]).toBe('Whole milk');
+      expect(names(fixture)[names(fixture).length - 1]).toBe(
+        'Traditional gazpacho'
+      );
+
+      const lines = unpriced(fixture);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]?.textContent?.trim()).toBe('catalog.unpriced');
+      // A row of the list, between the last priced product and the first without.
+      const before = lines[0]?.previousElementSibling;
+      expect(before?.querySelector('.name')?.textContent?.trim()).toBe(
+        'Extra virgin olive oil'
+      );
+      expect(before?.querySelector('.price')).not.toBeNull();
+      const after = lines[0]?.nextElementSibling;
+      expect(after?.querySelector('.name')?.textContent?.trim()).toBe(
+        'Traditional gazpacho'
+      );
+      expect(after?.querySelector('.no-price')).not.toBeNull();
+      expect(lines[0]?.querySelector('lib-product-row')).toBeNull();
+    });
+
+    it('draws it where the chosen chain stops pricing, not where the catalog does', async () => {
+      const { fixture } = await render('priced', {
+        chain: 'chain-mercadona',
+        order: 'price',
+      });
+
+      const lines = unpriced(fixture);
+      expect(lines).toHaveLength(1);
+      // Mercadona stocks the bread and gives it no price.
+      expect(
+        lines[0]?.nextElementSibling
+          ?.querySelector('.name')
+          ?.textContent?.trim()
+      ).toBe('Wholemeal sliced bread');
+      expect(lines[0]?.nextElementSibling?.nextElementSibling).toBeNull();
+    });
+
+    it('draws it in the price per kilo or litre order, and appears when a price order is chosen', async () => {
+      const { fixture } = await render();
+      expect(unpriced(fixture)).toHaveLength(0);
+
+      chooseOrder(fixture, 'unitPrice');
+      await settle(fixture);
+
+      expect(unpriced(fixture)).toHaveLength(1);
+      expect(
+        unpriced(fixture)[0]
+          ?.nextElementSibling?.querySelector('.name')
+          ?.textContent?.trim()
+      ).toBe('Traditional gazpacho');
+
+      chooseOrder(fixture, 'category');
+      await settle(fixture);
+      expect(unpriced(fixture)).toHaveLength(0);
+    });
+
+    it('draws none when no row has a price: one part needs no separator', async () => {
+      const { fixture, browse } = await render('noPlace', { order: 'price' });
+
+      expect(lastQuery(browse)).toMatchObject({ order: 'price' });
+      expect(rows(fixture)).toBeGreaterThan(5);
+      expect(unpriced(fixture)).toHaveLength(0);
     });
   });
 
   describe('adding from a row (velista 0134, section 4)', () => {
+    const OIL = 'Extra virgin olive oil';
+    const RICE = 'Short grain rice';
+
     it('draws a plus on every row and the line that names the list', async () => {
       const { fixture } = await render();
 
@@ -791,6 +964,8 @@ describe('CatalogPage', () => {
       );
       // A sibling of the row's own button, never a child of it.
       expect(plusses(fixture)[0]?.closest('button.open')).toBeNull();
+      // The list holds none of these products, so no row has a line under it.
+      expect(host(fixture).querySelector('lib-product-row .held')).toBeNull();
 
       const bar = addingBar(fixture);
       expect(bar?.querySelector('.list-name')?.textContent?.trim()).toBe(
@@ -800,31 +975,46 @@ describe('CatalogPage', () => {
       expect(bar?.querySelector('[data-adding="count"]')).toBeNull();
       // Outside the scroller, so it stays above the tab bar.
       expect(bar?.closest('.page')).toBeNull();
+      expect(addsFailed(fixture).alert).toBeNull();
     });
 
-    it('draws no plus and no line for a guest', async () => {
-      const { fixture } = await render('priced', { guest: true });
+    it('draws no plus, no line and no list for a guest, who is never asked for lists', async () => {
+      const { fixture, adds } = await render('priced', {
+        guest: true,
+        lines: [OIL_LINE],
+      });
 
       expect(rows(fixture)).toBeGreaterThan(5);
       expect(plusses(fixture)).toHaveLength(0);
+      expect(host(fixture).querySelector('lib-product-row .held')).toBeNull();
+      expect(
+        host(fixture).querySelector('lib-product-row lib-quantity-stepper')
+      ).toBeNull();
       expect(addingBar(fixture)).toBeNull();
+      // Having no list is not a failed read, so nothing offers a second try.
+      expect(addsFailed(fixture).alert).toBeNull();
+      expect(adds.zones.listMyZones).not.toHaveBeenCalled();
+      expect(adds.lines.listLines).not.toHaveBeenCalled();
     });
 
     it('draws no plus and no line for a person with no list they can write to', async () => {
       const { fixture } = await render('priced', {
         lists: [{ ...WEEKLY, myPermissions: ['READ'] }],
+        lines: [OIL_LINE],
       });
 
       expect(rows(fixture)).toBeGreaterThan(5);
       expect(plusses(fixture)).toHaveLength(0);
+      expect(host(fixture).querySelector('lib-product-row .held')).toBeNull();
       expect(addingBar(fixture)).toBeNull();
+      expect(addsFailed(fixture).alert).toBeNull();
     });
 
     it('adds one of the product, by its id and its name, when the plus is pressed', async () => {
       const { fixture, lines } = await render();
       const add = jest.spyOn(TestBed.inject(CatalogAddStore), 'add');
 
-      plusses(fixture)[0]?.click();
+      plusOf(fixture, OIL)?.click();
       await settle(fixture);
 
       expect(add).toHaveBeenCalledTimes(1);
@@ -841,42 +1031,197 @@ describe('CatalogPage', () => {
         1,
         ['item-oil']
       );
-      // The plus now shows the count for that list.
-      expect(plusses(fixture)[0]?.classList.contains('has-count')).toBe(true);
-      expect(plusses(fixture)[0]?.textContent?.trim()).toBe('1');
+      // The plus stays a plus. The line it made is under the row, with one.
+      expect(plusOf(fixture, OIL)?.classList.contains('has-count')).toBe(false);
+      expect(
+        plusOf(fixture, OIL)?.querySelector('lib-plus-icon')
+      ).not.toBeNull();
+      expect(heldLines(fixture, OIL)).toMatchObject([
+        {
+          lineId: 'line-list-weekly-item-oil',
+          name: 'Extra virgin olive oil',
+          quantity: '1',
+        },
+      ]);
+      expect(
+        host(fixture).querySelectorAll('lib-product-row .held')
+      ).toHaveLength(1);
+
+      // A second press raises that line. It does not make another.
+      plusOf(fixture, OIL)?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).toHaveBeenCalledTimes(2);
+      expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
+        '2',
+      ]);
     });
 
-    it('opens one stepper at a time from a count, and every press on it saves', async () => {
-      const { fixture, lines } = await render();
-      plusses(fixture)[0]?.click();
-      plusses(fixture)[1]?.click();
-      await settle(fixture);
-      const steppers = () =>
-        host(fixture).querySelectorAll('lib-product-row lib-quantity-stepper');
+    it('shows under a row the lines of the chosen list that already hold the product, each with its quantity', async () => {
+      const party = { ...WEEKLY, id: 'list-party', name: 'Party' };
+      const { fixture, lines } = await render('priced', {
+        lists: [WEEKLY, party],
+        lines: [
+          OIL_LINE,
+          FRYING_LINE,
+          // Another list holds the rice. That is not the list the plus adds to.
+          {
+            id: 'line-party-rice',
+            listId: 'list-party',
+            content: 'Short grain rice',
+            quantity: 4,
+            itemIds: ['item-rice'],
+          },
+        ],
+      });
 
-      plusses(fixture)[0]?.click();
-      fixture.detectChanges();
-      expect(steppers()).toHaveLength(1);
-
-      // The other row's count: its stepper opens and the first one closes.
-      plusses(fixture)[0]?.click();
-      fixture.detectChanges();
-      expect(steppers()).toHaveLength(1);
+      expect(lines.listLines).toHaveBeenCalledWith(
+        'list-weekly',
+        expect.anything()
+      );
+      expect(heldLines(fixture, OIL)).toMatchObject([
+        { lineId: 'line-oil', name: 'Extra virgin olive oil', quantity: '2' },
+        { lineId: 'line-frying', name: 'Oil for frying', quantity: '1' },
+      ]);
+      const held = rowOf(fixture, OIL).querySelector('.held');
+      expect(held?.querySelector('.held-title')?.textContent?.trim()).toBe(
+        'catalog.held.title'
+      );
       expect(
-        steppers()[0]
-          ?.closest('li')
-          ?.querySelector('button.open')
+        held
+          ?.querySelector('lib-quantity-stepper [role="spinbutton"]')
           ?.getAttribute('aria-label')
-      ).toContain('Short grain rice');
+      ).toBe('catalog.held.stepper');
+      // The lines sit beside the product's button and the plus, inside neither.
+      expect(held?.closest('button')).toBeNull();
+      expect(plusOf(fixture, OIL)).not.toBeNull();
 
-      steppers()[0]
-        ?.querySelectorAll<HTMLButtonElement>('button.step')[1]
-        ?.click();
+      expect(heldLines(fixture, RICE)).toHaveLength(0);
+      expect(
+        host(fixture).querySelectorAll('lib-product-row .held')
+      ).toHaveLength(1);
+      // Nothing was added in this visit, so the line above the tab bar counts none.
+      expect(
+        addingBar(fixture)?.querySelector('[data-adding="count"]')
+      ).toBeNull();
+    });
+
+    it('writes the line whose stepper was pressed, and no other', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [OIL_LINE, FRYING_LINE],
+      });
+      const store = TestBed.inject(CatalogAddStore);
+      const step = jest.spyOn(store, 'step');
+
+      heldLines(fixture, OIL)[1]?.plus?.click();
       await settle(fixture);
+
+      expect(step).toHaveBeenCalledTimes(1);
+      expect(step).toHaveBeenCalledWith(
+        {
+          listId: 'list-weekly',
+          itemId: 'item-oil',
+          detail: expect.stringContaining('Hacendado'),
+        },
+        'line-frying',
+        1
+      );
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1);
+      expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
+        '2',
+        '2',
+      ]);
+      // A line raised in this visit joins the record of it.
+      expect(store.count()).toBe(1);
+
+      heldLines(fixture, OIL)[0]?.minus?.click();
+      await settle(fixture);
+
+      expect(step).toHaveBeenLastCalledWith(
+        expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
+        'line-oil',
+        -1
+      );
+      expect(lines.addQuantity).toHaveBeenLastCalledWith('line-oil', -1);
+      expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
+        '1',
+        '2',
+      ]);
+      // A stepper moves a line. It never adds one and never deletes one of these.
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+      expect(lines.deleteLine).not.toHaveBeenCalled();
+      expect(store.count()).toBe(1);
+    });
+
+    it('gives each row its own lines, and a press on one row leaves the other alone', async () => {
+      const { fixture, lines } = await render();
+      plusOf(fixture, OIL)?.click();
+      plusOf(fixture, RICE)?.click();
+      await settle(fixture);
+
+      expect(
+        host(fixture).querySelectorAll('lib-product-row lib-quantity-stepper')
+      ).toHaveLength(2);
+      expect(heldLines(fixture, OIL)).toHaveLength(1);
+      expect(heldLines(fixture, RICE)).toHaveLength(1);
+
+      heldLines(fixture, RICE)[0]?.plus?.click();
+      await settle(fixture);
+
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith(
         'line-list-weekly-item-rice',
         1
       );
+      expect(heldLines(fixture, RICE)[0]?.quantity).toBe('2');
+      expect(heldLines(fixture, OIL)[0]?.quantity).toBe('1');
+    });
+
+    it('takes back a line the plus made with the minus at one, and leaves a line that was there before at zero', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [FRYING_LINE],
+      });
+      plusOf(fixture, RICE)?.click();
+      await settle(fixture);
+      expect(heldLines(fixture, RICE)[0]?.quantity).toBe('1');
+
+      // The visit made the rice's line, so nothing of it is left behind.
+      heldLines(fixture, RICE)[0]?.minus?.click();
+      await settle(fixture);
+      expect(lines.deleteLine).toHaveBeenCalledWith(
+        'line-list-weekly-item-rice'
+      );
+      expect(heldLines(fixture, RICE)).toHaveLength(0);
+      expect(TestBed.inject(CatalogAddStore).count()).toBe(0);
+
+      // The oil for frying was there before: it goes to zero and stays.
+      heldLines(fixture, OIL)[0]?.minus?.click();
+      await settle(fixture);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1);
+      expect(lines.deleteLine).toHaveBeenCalledTimes(1);
+      expect(heldLines(fixture, OIL)).toMatchObject([
+        { lineId: 'line-frying', quantity: '0' },
+      ]);
+      // At zero there is nothing fewer to ask for.
+      expect(heldLines(fixture, OIL)[0]?.minus?.disabled).toBe(true);
+    });
+
+    it('draws a line the person may not change with its stepper out of action, and still offers the plus', async () => {
+      // Somebody who can add and cannot decide: an approved line is not theirs to move.
+      const { fixture, lines } = await render('priced', {
+        lists: [{ ...WEEKLY, myPermissions: ['READ', 'WRITE'] }],
+        lines: [OIL_LINE],
+      });
+
+      const line = heldLines(fixture, OIL)[0];
+      expect(line?.quantity).toBe('2');
+      expect(line?.minus?.disabled).toBe(true);
+      expect(line?.plus?.disabled).toBe(true);
+      line?.plus?.click();
+      await settle(fixture);
+      expect(lines.addQuantity).not.toHaveBeenCalled();
+
+      expect(plusOf(fixture, OIL)).not.toBeNull();
     });
 
     it('counts what the visit added on the line, and opens both sheets with the choice kept', async () => {
@@ -915,7 +1260,7 @@ describe('CatalogPage', () => {
       );
     });
 
-    it('says a failed add once, puts the count back, and takes the sentence down on the next press', async () => {
+    it('says a failed add once, takes the line back off the row, and takes the sentence down on the next press', async () => {
       const { fixture, lines } = await render();
       expect(addFailed(fixture)).toBe('');
       const live = host(fixture).querySelector('.add-failed');
@@ -923,23 +1268,120 @@ describe('CatalogPage', () => {
       expect(live?.getAttribute('aria-live')).toBe('polite');
 
       lines.addLineResult.mockRejectedValueOnce(new Error('offline'));
-      plusses(fixture)[0]?.click();
+      plusOf(fixture, OIL)?.click();
       await settle(fixture);
 
       expect(TestBed.inject(CatalogAddStore).failures()).toBe(1);
       expect(addFailed(fixture)).toBe('catalog.add.failed');
-      expect(plusses(fixture)[0]?.classList.contains('has-count')).toBe(false);
+      expect(heldLines(fixture, OIL)).toHaveLength(0);
       expect(
         addingBar(fixture)?.querySelector('[data-adding="count"]')
       ).toBeNull();
 
       // The next press writes, and the sentence is gone and stays gone.
-      plusses(fixture)[1]?.click();
+      plusOf(fixture, RICE)?.click();
       fixture.detectChanges();
       expect(addFailed(fixture)).toBe('');
       await settle(fixture);
       expect(addFailed(fixture)).toBe('');
-      expect(plusses(fixture)[1]?.textContent?.trim()).toBe('1');
+      expect(heldLines(fixture, RICE)[0]?.quantity).toBe('1');
+    });
+
+    it('says a failed step too, and puts the line back at the quantity it had', async () => {
+      const { fixture, lines } = await render('priced', { lines: [OIL_LINE] });
+
+      lines.addQuantity.mockRejectedValueOnce(new Error('offline'));
+      heldLines(fixture, OIL)[0]?.plus?.click();
+      await settle(fixture);
+
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1);
+      expect(addFailed(fixture)).toBe('catalog.add.failed');
+      expect(heldLines(fixture, OIL)[0]?.quantity).toBe('2');
+      expect(TestBed.inject(CatalogAddStore).count()).toBe(0);
+
+      heldLines(fixture, OIL)[0]?.plus?.click();
+      fixture.detectChanges();
+      expect(addFailed(fixture)).toBe('');
+      await settle(fixture);
+      expect(heldLines(fixture, OIL)[0]?.quantity).toBe('3');
+    });
+
+    it('says the lists did not load where the line would be, and reads them again from Try again', async () => {
+      const { fixture, adds } = await render('priced', {
+        arm: ({ zones }) =>
+          zones.listMyZones.mockRejectedValueOnce(new Error('offline')),
+      });
+
+      const failed = addsFailed(fixture);
+      expect(failed.alert?.getAttribute('role')).toBe('alert');
+      expect(failed.text).toBe('catalog.adding.failedLists');
+      expect(failed.retry?.textContent?.trim()).toBe('catalog.error.retry');
+      // In place of the line, outside the scroller, and not mistaken for no list.
+      expect(failed.alert?.closest('.page')).toBeNull();
+      expect(addingBar(fixture)).toBeNull();
+      expect(plusses(fixture)).toHaveLength(0);
+      // The catalog itself is still there to read.
+      expect(rows(fixture)).toBeGreaterThan(5);
+      expect(adds.zones.listMyZones).toHaveBeenCalledTimes(1);
+
+      failed.retry?.click();
+      await settle(fixture);
+
+      expect(adds.zones.listMyZones).toHaveBeenCalledTimes(2);
+      expect(addsFailed(fixture).alert).toBeNull();
+      expect(
+        addingBar(fixture)?.querySelector('.list-name')?.textContent?.trim()
+      ).toBe('Weekly shop');
+      expect(plusses(fixture)).toHaveLength(rows(fixture));
+    });
+
+    it('says the lines of the chosen list did not load, and reads those alone from Try again', async () => {
+      const { fixture, adds } = await render('priced', {
+        lines: [OIL_LINE],
+        arm: ({ lines }) =>
+          lines.listLines.mockRejectedValueOnce(new Error('offline')),
+      });
+
+      const failed = addsFailed(fixture);
+      expect(failed.alert?.getAttribute('role')).toBe('alert');
+      expect(failed.text).toBe('catalog.adding.failedLines');
+      // The line stays: it is the one way to another list, and the plus still
+      // adds to the list it names.
+      expect(
+        addingBar(fixture)?.querySelector('.list-name')?.textContent?.trim()
+      ).toBe('Weekly shop');
+      // Whether the list holds the oil is not known, so no line is drawn for it.
+      expect(heldLines(fixture, OIL)).toHaveLength(0);
+
+      failed.retry?.click();
+      await settle(fixture);
+
+      expect(adds.lines.listLines).toHaveBeenCalledTimes(2);
+      // The lists were read once. Only the lines were asked for again.
+      expect(adds.zones.listMyZones).toHaveBeenCalledTimes(1);
+      expect(addsFailed(fixture).alert).toBeNull();
+      expect(
+        addingBar(fixture)?.querySelector('.list-name')?.textContent?.trim()
+      ).toBe('Weekly shop');
+      expect(heldLines(fixture, OIL)).toMatchObject([
+        { lineId: 'line-oil', quantity: '2' },
+      ]);
+    });
+
+    it('says it again when the second try fails too', async () => {
+      const { fixture, adds } = await render('priced', {
+        arm: ({ zones }) =>
+          zones.listMyZones
+            .mockRejectedValueOnce(new Error('offline'))
+            .mockRejectedValueOnce(new Error('offline')),
+      });
+
+      addsFailed(fixture).retry?.click();
+      await settle(fixture);
+
+      expect(adds.zones.listMyZones).toHaveBeenCalledTimes(2);
+      expect(addsFailed(fixture).text).toBe('catalog.adding.failedLists');
+      expect(addingBar(fixture)).toBeNull();
     });
   });
 
@@ -948,17 +1390,17 @@ describe('CatalogPage', () => {
       const { fixture, browse } = await render('priced', {
         chain: 'chain-deza',
         q: 'leche',
-        order: 'name',
+        order: 'price',
       });
 
       expect(field(fixture).value).toBe('leche');
       expect(orderMenu(fixture)).toMatchObject({
-        orders: ['relevance', 'name'],
-        checked: 'name',
+        orders: ['relevance', 'category', 'price', 'unitPrice'],
+        checked: 'price',
       });
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',
-        order: 'name',
+        order: 'price',
         soldBy: 'chain-deza',
       });
     });
@@ -970,12 +1412,15 @@ describe('CatalogPage', () => {
       const plain = await render('priced', { order: 'relevance' });
       expect(lastQuery(plain.browse)).toMatchObject({
         query: '',
-        order: 'name',
+        order: 'category',
       });
 
       // An order the read no longer has, as an old link still names it.
       const old = await render('priced', { q: 'leche', order: 'created' });
       expect(lastQuery(old.browse)).toMatchObject({ order: 'relevance' });
+      const older = await render('priced', { order: 'name' });
+      expect(lastQuery(older.browse)).toMatchObject({ order: 'category' });
+      expect(orderMenu(older.fixture).checked).toBe('category');
     });
 
     it('writes the text and the order into the URL in place of the entry, as they change', async () => {
@@ -1000,11 +1445,11 @@ describe('CatalogPage', () => {
         replaceUrl: true,
       });
 
-      chooseOrder(fixture, 'name');
+      chooseOrder(fixture, 'price');
       await settle(fixture);
 
       expect(lastUrl(navigate)).toBe(
-        '/velista/en/catalog?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=price'
       );
     });
 
@@ -1012,7 +1457,7 @@ describe('CatalogPage', () => {
       const { fixture } = await render('priced', {
         chain: 'chain-deza',
         q: 'leche',
-        order: 'name',
+        order: 'price',
       });
       const navigate = jest
         .spyOn(TestBed.inject(Router), 'navigateByUrl')
@@ -1020,11 +1465,11 @@ describe('CatalogPage', () => {
 
       selector(fixture, 'supermarket').body.click();
       expect(lastUrl(navigate)).toBe(
-        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=price'
       );
       selector(fixture, 'category').body.click();
       expect(lastUrl(navigate)).toBe(
-        '/velista/en/catalog/categories?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog/categories?chain=chain-deza&q=leche&order=price'
       );
     });
 
@@ -1054,7 +1499,7 @@ describe('CatalogPage', () => {
       expect(field(fixture).value).toBe('');
       expect(lastQuery(browse)).toMatchObject({
         query: '',
-        order: 'name',
+        order: 'category',
         categoryId: 'cat-milk',
       });
     });
@@ -1112,11 +1557,11 @@ describe('CatalogPage', () => {
       orderControl(page()).click();
       harness.detectChanges();
       orderOptions()
-        .find((option) => option.dataset['order'] === 'name')
+        .find((option) => option.dataset['order'] === 'price')
         ?.click();
       await wait(harness);
       expect(router.url).toBe(
-        '/velista/en/catalog?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=price'
       );
       expect(input()?.value).toBe('leche');
 
@@ -1126,33 +1571,33 @@ describe('CatalogPage', () => {
         ?.click();
       await wait(harness);
       expect(router.url).toBe(
-        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog/supermarket?chain=chain-deza&q=leche&order=price'
       );
 
       // The chevron pops onto the tab's entry, which was written in place.
       location.back();
       await wait(harness);
       expect(router.url).toBe(
-        '/velista/en/catalog?chain=chain-deza&q=leche&order=name'
+        '/velista/en/catalog?chain=chain-deza&q=leche&order=price'
       );
       expect(input()?.value).toBe('leche');
-      expect(shown()).toContain('catalog.order.short.name');
+      expect(shown()).toContain('catalog.order.short.price');
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',
-        order: 'name',
+        order: 'price',
         soldBy: 'chain-deza',
       });
 
       // An answer from the picker: another chain, everything else as it was.
       await harness.navigateByUrl(
-        '/velista/en/catalog?chain=chain-mercadona&q=leche&order=name'
+        '/velista/en/catalog?chain=chain-mercadona&q=leche&order=price'
       );
       await wait(harness);
       expect(input()?.value).toBe('leche');
-      expect(shown()).toContain('catalog.order.short.name');
+      expect(shown()).toContain('catalog.order.short.price');
       expect(lastQuery(browse)).toMatchObject({
         query: 'leche',
-        order: 'name',
+        order: 'price',
         soldBy: 'chain-mercadona',
       });
     });

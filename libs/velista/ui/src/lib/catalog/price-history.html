@@ -1,0 +1,140 @@
+@if (drawable()) {
+  <!--
+    The legend, above the chart. Each entry is a button: the colour, the chain and
+    its price on the day the chart is read at. A press hides the chain's line.
+  -->
+  <ul class="legend">
+    @for (entry of legend(); track entry.id) {
+      <li>
+        <button
+          (click)="toggle(entry.id)"
+          [attr.aria-pressed]="!entry.off"
+          [attr.data-chain]="entry.id"
+          [class.is-off]="entry.off"
+          class="entry"
+          type="button"
+        >
+          <span
+            [attr.data-slot]="entry.slot"
+            aria-hidden="true"
+            class="swatch"
+          ></span>
+          <span class="entry-name">{{ entry.name }}</span>
+          @if (!entry.off && entry.value; as value) {
+            <span class="entry-value">{{ value }}</span>
+          }
+        </button>
+      </li>
+    }
+  </ul>
+  <p class="reading">
+    @if (today()) {
+      {{ 'catalog.history.today' | rokuT }}
+    } @else {
+      {{ 'catalog.history.on' | rokuT: { day: dayLong() } }}
+    }
+    {{ 'catalog.history.hide' | rokuT }}
+  </p>
+
+  <div class="chart">
+    <svg
+      [attr.aria-label]="
+        'catalog.history.chart.' + range()
+          | rokuT: { name: product(), count: drawn().length }
+      "
+      [attr.viewBox]="viewBox"
+      class="drawing"
+      role="img"
+    >
+      <path [attr.d]="grid()" class="grid" />
+      @for (tick of ticks(); track tick.y) {
+        <text [attr.y]="tick.y + 3" class="tick" x="0">{{ tick.label }}</text>
+      }
+
+      <path
+        [attr.d]="'M' + cursorX() + ' ' + (plot.top - 6) + 'V' + plot.bottom"
+        class="cursor"
+      />
+
+      @for (line of drawn(); track line.id) {
+        <path [attr.d]="line.path" [attr.data-slot]="line.slot" class="line" />
+      }
+      @for (line of drawn(); track line.id) {
+        @if (line.dotY !== null) {
+          <circle
+            [attr.cx]="cursorX()"
+            [attr.cy]="line.dotY"
+            [attr.data-slot]="line.slot"
+            class="dot"
+            r="4"
+          />
+        }
+        @if (line.labelY !== null) {
+          <text [attr.x]="plot.end" [attr.y]="line.labelY + 3.5" class="end">
+            {{ line.end }}
+          </text>
+        }
+      }
+
+      <text [attr.x]="plot.left" [attr.y]="plot.labels" class="tick">
+        {{ startLabel() }}
+      </text>
+      @if (cursorLabel(); as label) {
+        <text
+          [attr.x]="cursorX()"
+          [attr.y]="plot.labels"
+          class="end"
+          text-anchor="middle"
+        >
+          {{ label }}
+        </text>
+      }
+      <text
+        [attr.x]="plot.right"
+        [attr.y]="plot.labels"
+        class="tick"
+        text-anchor="end"
+      >
+        {{ 'catalog.history.axisToday' | rokuT }}
+      </text>
+    </svg>
+
+    <!--
+      The day the chart is read at. Nothing of it is drawn: the dashed line in the
+      drawing is its thumb. It lies over the plot from its first day to its last.
+    -->
+    <input
+      (input)="read($event)"
+      [attr.aria-label]="'catalog.history.day' | rokuT"
+      [attr.aria-valuetext]="dayLong()"
+      [max]="days()"
+      [value]="position()"
+      class="day"
+      min="0"
+      step="1"
+      type="range"
+    />
+  </div>
+} @else {
+  <p class="none">{{ 'catalog.history.none.' + range() | rokuT }}</p>
+}
+
+<!-- How far back. The longest range may hold a movement the shortest does not. -->
+<div
+  [attr.aria-label]="'catalog.history.rangeLabel' | rokuT"
+  class="ranges"
+  role="group"
+>
+  @for (option of ranges; track option) {
+    <button
+      (click)="choose(option)"
+      [attr.aria-pressed]="option === range()"
+      [attr.data-range]="option"
+      [class.is-on]="option === range()"
+      class="range"
+      type="button"
+    >
+      {{ 'catalog.history.range.' + option | rokuT }}
+    </button>
+  }
+</div>

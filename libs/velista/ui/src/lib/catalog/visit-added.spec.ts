@@ -12,11 +12,12 @@ import {
 
 /**
  * What this visit to the catalog added (velista `0134`, section 4.4): one row and
- * one stepper for each product, a button that takes all of them back, and a link
- * to the list.
+ * one stepper for each line the visit added to, a button that takes all of them
+ * back, and a link to the list.
  */
 function row(overrides: Partial<VisitAddedRow> = {}): VisitAddedRow {
   return {
+    lineId: 'line-oil',
     itemId: 'item-oil',
     name: 'Olive oil',
     detail: '1 L · €8.45 at Mercadona',
@@ -28,6 +29,7 @@ function row(overrides: Partial<VisitAddedRow> = {}): VisitAddedRow {
 }
 
 const MILK = row({
+  lineId: 'line-milk',
   itemId: 'item-milk',
   name: 'Milk',
   detail: null,
@@ -43,7 +45,36 @@ const WEEKLY: VisitAddedSection = {
 const BARBECUE: VisitAddedSection = {
   listId: 'l2',
   name: 'Barbecue',
-  rows: [row({ itemId: 'item-coal', name: 'Charcoal', quantity: 3 })],
+  rows: [
+    row({
+      lineId: 'line-coal',
+      itemId: 'item-coal',
+      name: 'Charcoal',
+      quantity: 3,
+    }),
+  ],
+};
+
+/** A press on the minus of the olive oil on the weekly shop. */
+const OIL_DOWN: VisitAddedStep = {
+  listId: 'l1',
+  itemId: 'item-oil',
+  lineId: 'line-oil',
+  detail: '1 L · €8.45 at Mercadona',
+  by: -1,
+};
+
+/**
+ * One product on two lines of one list: under its own name, and under a name
+ * somebody typed. The visit added to both.
+ */
+const TWICE: VisitAddedSection = {
+  listId: 'l1',
+  name: 'Weekly shop',
+  rows: [
+    row(),
+    row({ lineId: 'line-fry', name: 'Oil for the fryer', quantity: 4 }),
+  ],
 };
 
 /** Every translator call of the render, to read the values a string was given. */
@@ -112,6 +143,17 @@ function valuesOf(key: string): unknown[] {
   return [...seen.values()];
 }
 
+/** One row by its line, which is what tells two rows of one product apart. */
+function line(
+  fixture: ComponentFixture<VisitAdded>,
+  listId: string,
+  lineId: string
+): HTMLElement {
+  return section(fixture, listId).querySelector(
+    `[data-line="${lineId}"]`
+  ) as HTMLElement;
+}
+
 function steppedOf(fixture: ComponentFixture<VisitAdded>): VisitAddedStep[] {
   const heard: VisitAddedStep[] = [];
   fixture.componentInstance.stepped.subscribe((step) => heard.push(step));
@@ -169,6 +211,38 @@ describe('VisitAdded', () => {
       expect(oil.querySelector('.value')?.textContent).toBe('2');
     });
 
+    it('marks each row with its line and its product', async () => {
+      const fixture = await render([WEEKLY]);
+
+      expect(
+        [...host(fixture).querySelectorAll<HTMLElement>('.row')].map((one) => [
+          one.dataset['line'],
+          one.dataset['item'],
+        ])
+      ).toEqual([
+        ['line-oil', 'item-oil'],
+        ['line-milk', 'item-milk'],
+      ]);
+    });
+
+    it('draws a row for each line when two lines hold one product', async () => {
+      const fixture = await render([TWICE]);
+
+      expect(section(fixture, 'l1').querySelectorAll('.row')).toHaveLength(2);
+      expect(
+        line(fixture, 'l1', 'line-oil').querySelector('.name')?.textContent
+      ).toBe('Olive oil');
+      expect(
+        line(fixture, 'l1', 'line-oil').querySelector('.value')?.textContent
+      ).toBe('2');
+      expect(
+        line(fixture, 'l1', 'line-fry').querySelector('.name')?.textContent
+      ).toBe('Oil for the fryer');
+      expect(
+        line(fixture, 'l1', 'line-fry').querySelector('.value')?.textContent
+      ).toBe('4');
+    });
+
     it('draws no detail line for a row with none', async () => {
       const fixture = await render([WEEKLY]);
 
@@ -216,22 +290,69 @@ describe('VisitAdded', () => {
   });
 
   describe('the stepper', () => {
-    it('says one more, with the list and the product', async () => {
+    it('says one more, with the list, the product, the line and its detail', async () => {
       const fixture = await render([WEEKLY, BARBECUE]);
       const heard = steppedOf(fixture);
 
       steps(fixture, 'l2', 'item-coal')[1]?.click();
 
-      expect(heard).toEqual([{ listId: 'l2', itemId: 'item-coal', by: 1 }]);
+      expect(heard).toEqual([
+        {
+          listId: 'l2',
+          itemId: 'item-coal',
+          lineId: 'line-coal',
+          detail: '1 L · €8.45 at Mercadona',
+          by: 1,
+        },
+      ]);
     });
 
-    it('says one fewer, with the list and the product', async () => {
+    it('says which line was pressed when two lines hold one product', async () => {
+      const fixture = await render([TWICE]);
+      const heard = steppedOf(fixture);
+
+      line(fixture, 'l1', 'line-fry')
+        .querySelectorAll<HTMLButtonElement>('lib-quantity-stepper button')[1]
+        ?.click();
+      line(fixture, 'l1', 'line-oil')
+        .querySelectorAll<HTMLButtonElement>('lib-quantity-stepper button')[0]
+        ?.click();
+
+      expect(heard).toEqual([
+        { ...OIL_DOWN, lineId: 'line-fry', by: 1 },
+        OIL_DOWN,
+      ]);
+    });
+
+    it('moves only the line that took the press when two lines hold one product', async () => {
+      const fixture = await render([TWICE]);
+
+      fixture.componentRef.setInput('sections', [
+        {
+          ...TWICE,
+          rows: [
+            row(),
+            row({ lineId: 'line-fry', name: 'Oil for the fryer', quantity: 5 }),
+          ],
+        },
+      ]);
+      fixture.detectChanges();
+
+      expect(
+        line(fixture, 'l1', 'line-oil').querySelector('.value')?.textContent
+      ).toBe('2');
+      expect(
+        line(fixture, 'l1', 'line-fry').querySelector('.value')?.textContent
+      ).toBe('5');
+    });
+
+    it('says one fewer, with the list, the product, the line and its detail', async () => {
       const fixture = await render([WEEKLY, BARBECUE]);
       const heard = steppedOf(fixture);
 
       steps(fixture, 'l1', 'item-oil')[0]?.click();
 
-      expect(heard).toEqual([{ listId: 'l1', itemId: 'item-oil', by: -1 }]);
+      expect(heard).toEqual([OIL_DOWN]);
     });
 
     it('says one fewer at the floor too, which takes the product back', async () => {
@@ -245,7 +366,15 @@ describe('VisitAdded', () => {
       expect(steps(fixture, 'l1', 'item-milk')[0]?.disabled).toBe(false);
       steps(fixture, 'l1', 'item-milk')[0]?.click();
 
-      expect(heard).toEqual([{ listId: 'l1', itemId: 'item-milk', by: -1 }]);
+      expect(heard).toEqual([
+        {
+          listId: 'l1',
+          itemId: 'item-milk',
+          lineId: 'line-milk',
+          detail: null,
+          by: -1,
+        },
+      ]);
     });
 
     it('puts the lowest value one under the floor of a line that was there before the visit', async () => {
@@ -261,7 +390,7 @@ describe('VisitAdded', () => {
       ).toBe('4');
       steps(fixture, 'l1', 'item-oil')[0]?.click();
 
-      expect(heard).toEqual([{ listId: 'l1', itemId: 'item-oil', by: -1 }]);
+      expect(heard).toEqual([OIL_DOWN]);
     });
 
     it('says a step down and then a step up when both land before the quantity moves', async () => {
@@ -273,10 +402,7 @@ describe('VisitAdded', () => {
       steps(fixture, 'l1', 'item-oil')[1]?.click();
       fixture.detectChanges();
 
-      expect(heard).toEqual([
-        { listId: 'l1', itemId: 'item-oil', by: -1 },
-        { listId: 'l1', itemId: 'item-oil', by: 1 },
-      ]);
+      expect(heard).toEqual([OIL_DOWN, { ...OIL_DOWN, by: 1 }]);
     });
 
     it('draws the quantity it is given again after a press the list did not take', async () => {

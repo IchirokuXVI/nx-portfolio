@@ -1,0 +1,238 @@
+// How the price has moved (velista 0134, section 6), as the `Product` artboard
+// draws it: one card with the legend, the chart and the ranges.
+:host {
+  display: block;
+  padding: var(--app-space-3) var(--app-space-3) 0;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+// Two entries in a row.
+.legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: 0 var(--app-space-3);
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The colour of a chain. A short thick line, like the line it stands for.
+.swatch {
+  box-sizing: content-box;
+  flex: none;
+  inline-size: var(--app-space-4);
+  block-size: var(--app-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-full);
+  background: var(--series);
+}
+
+.entry-name {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The value is text, in the text colour. The swatch beside the name says whose.
+.entry-value {
+  flex: none;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+// Hidden: the name is struck through and the swatch is an outline. Two signs, so
+// it is not the missing colour alone that says the line is off.
+.entry.is-off {
+  .entry-name {
+    color: var(--app-text-muted);
+    font-weight: 500;
+    text-decoration: line-through;
+  }
+
+  .swatch {
+    border-color: var(--app-border-strong);
+    background: transparent;
+  }
+}
+
+.reading {
+  margin: 0;
+  padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+.chart {
+  position: relative;
+  margin-inline: var(--app-space-3);
+}
+
+.drawing {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  overflow: visible;
+}
+
+[data-slot='0'] {
+  --series: var(--app-chart-series-1);
+}
+
+[data-slot='1'] {
+  --series: var(--app-chart-series-2);
+}
+
+[data-slot='2'] {
+  --series: var(--app-chart-series-3);
+}
+
+[data-slot='3'] {
+  --series: var(--app-chart-series-4);
+}
+
+[data-slot='4'] {
+  --series: var(--app-chart-series-5);
+}
+
+.grid {
+  fill: none;
+  stroke: var(--app-border-subtle);
+  stroke-width: 1px;
+}
+
+.line {
+  fill: none;
+  stroke: var(--series);
+  stroke-width: var(--app-chart-line-width);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+// A ring in the colour of the card, so a dot on a crossing of two lines is still
+// one dot.
+.dot {
+  fill: var(--series);
+  stroke: var(--app-surface-raised);
+  stroke-width: var(--app-chart-line-width);
+}
+
+.cursor {
+  fill: none;
+  stroke: var(--app-border-strong);
+  stroke-width: 1px;
+  stroke-dasharray: 3 3;
+}
+
+.tick {
+  fill: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.end {
+  fill: var(--app-text-primary);
+  font-size: var(--app-text-2xs);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+// The range input over the plot. It covers the plot from its first day to its
+// last (36 to 288 of 326 units across) and all of its height, and draws nothing.
+.day {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(36 / 326 * 100%);
+  inline-size: calc(252 / 326 * 100%);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  touch-action: pan-y;
+
+  // A thumb with no width, so a press sets the day under the finger and not half
+  // a thumb beside it.
+  &::-webkit-slider-thumb {
+    inline-size: 1px;
+    block-size: 100%;
+    appearance: none;
+  }
+
+  &::-moz-range-thumb {
+    inline-size: 1px;
+    block-size: 100%;
+    border: none;
+  }
+}
+
+// The input is not seen, so the drawing wears its focus ring.
+.chart:has(.day:focus-visible) {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+  border-radius: var(--app-radius-sm);
+}
+
+.none {
+  margin: 0;
+  padding: var(--app-space-4) var(--app-space-3) var(--app-space-5);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.ranges {
+  display: flex;
+  margin-block-start: var(--app-space-3);
+  border-block-start: 1px solid var(--app-border-subtle);
+}
+
+.range {
+  flex: 1;
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  border-block-end: var(--app-chart-range-mark) solid transparent;
+  background: transparent;
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &.is-on {
+    border-block-end-color: var(--app-action-bg);
+    color: var(--app-text-primary);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}

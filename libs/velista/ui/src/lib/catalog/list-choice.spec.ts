@@ -17,7 +17,15 @@ function list(
   zoneName: string,
   wanted: number
 ): AddTargetList {
-  return { listId, zoneId, name, zoneName, wanted, permissions: ['WRITE'] };
+  return {
+    listId,
+    zoneId,
+    name,
+    zoneName,
+    wanted,
+    autoApproveLines: false,
+    permissions: ['WRITE'],
+  };
 }
 
 const WEEKLY = list('l1', 'z1', 'Weekly shop', 'Home', 14);

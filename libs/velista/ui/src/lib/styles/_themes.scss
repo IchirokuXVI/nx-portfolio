@@ -177,6 +177,13 @@ $app-status-line: 26%;
     var(--app-white-rgb)
   );
 
+
+  // The lines of a chart. A colour belongs to a series and not to a position.
+  --app-chart-series-1: var(--app-chart-night-1);
+  --app-chart-series-2: var(--app-chart-night-2);
+  --app-chart-series-3: var(--app-chart-night-3);
+  --app-chart-series-4: var(--app-chart-night-4);
+  --app-chart-series-5: var(--app-chart-night-5);
   @include app-contrast-preferences;
 }
 
@@ -264,5 +271,12 @@ $app-status-line: 26%;
     var(--app-ink-900-rgb)
   );
 
+
+  // The lines of a chart. A colour belongs to a series and not to a position.
+  --app-chart-series-1: var(--app-chart-day-1);
+  --app-chart-series-2: var(--app-chart-day-2);
+  --app-chart-series-3: var(--app-chart-day-3);
+  --app-chart-series-4: var(--app-chart-day-4);
+  --app-chart-series-5: var(--app-chart-day-5);
   @include app-contrast-preferences;
 }

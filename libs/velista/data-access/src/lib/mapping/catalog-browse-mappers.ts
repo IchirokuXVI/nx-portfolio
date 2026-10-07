@@ -10,6 +10,9 @@ import {
   type CatalogScopeChain,
   type CatalogScopeOffer,
   type LocalizedName,
+  type PricePoint,
+  type ProductPriceHistory,
+  type ScopePriceSeries,
   type Supermarket,
 } from '@portfolio/velista/models';
 import { toProductCategories } from './category-mappers';
@@ -19,6 +22,7 @@ import {
   toProductOffer,
 } from './mappers';
 import {
+  date,
   isRecord,
   mapArray,
   nullableNum,
@@ -110,6 +114,57 @@ export function toCatalogLocation(raw: unknown): CatalogLocation | null {
     address: nullableStr(raw['address']),
     city: nullableStr(raw['city']),
   };
+}
+
+/**
+ * From `catalog.ItemPriceHistoryView` (backend `0196`, section 2).
+ *
+ * Null when the answer or its range is unreadable: the chart cannot place a line
+ * without knowing where the range starts. A series or a point this build cannot
+ * read is dropped alone.
+ */
+export function toProductPriceHistory(
+  raw: unknown
+): ProductPriceHistory | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const from = date(raw['from']);
+  const to = date(raw['to']);
+  if (from === null || to === null) {
+    return null;
+  }
+  return { from, to, series: mapArray(raw['series'], toScopePriceSeries) };
+}
+
+function toScopePriceSeries(raw: unknown): ScopePriceSeries | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const priceScopeId = str(raw['priceScopeId']);
+  const supermarketId = str(raw['supermarketId']);
+  if (priceScopeId === null || supermarketId === null) {
+    return null;
+  }
+  return {
+    priceScopeId,
+    supermarketId,
+    points: mapArray(raw['points'], toPricePoint),
+  };
+}
+
+function toPricePoint(raw: unknown): PricePoint | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const at = date(raw['at']);
+  return at === null
+    ? null
+    : {
+        at,
+        price: nullableNum(raw['price']),
+        unitPrice: nullableNum(raw['unitPrice']),
+      };
 }
 
 /** From one `catalog.ResolvedScopeView`. */
