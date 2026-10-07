@@ -359,6 +359,16 @@ export const ERROR_CODES = {
    */
   SECTION_SLUG_TAKEN: 'section_slug_taken',
   /**
+   * A shop was given an external reference that another shop holds (plan
+   * 0194).
+   *
+   * The catalog holds one shop for each reference, across chains and
+   * providers. Nothing was written. The reference travels in `details` as
+   * `externalRef`, and the shop that holds it as `heldBy`, with its id, its
+   * chain, its label and its address, so the back office can name that shop.
+   */
+  LOCATION_EXTERNAL_REF_TAKEN: 'location_external_ref_taken',
+  /**
    * `GET /v1/catalog/items` was sent `locationId` beside another way of saying
    * where a price comes from, or beside a `soldBy` naming another chain (plan
    * 0170, section 4).
@@ -543,6 +553,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.SECTION_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ERROR_CODES.SECTION_OF_ANOTHER_CHAIN]: HttpStatus.CONFLICT,
   [ERROR_CODES.SECTION_SLUG_TAKEN]: HttpStatus.CONFLICT,
+  // 409: the reference is well formed, and another shop holds it (plan 0194).
+  [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: HttpStatus.CONFLICT,
   // Plan 0170: a malformed combination of query parameters, and a shop that
   // does not exist.
   [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: HttpStatus.BAD_REQUEST,

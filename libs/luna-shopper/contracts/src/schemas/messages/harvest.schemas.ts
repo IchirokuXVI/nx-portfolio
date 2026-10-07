@@ -87,6 +87,8 @@ export const HARVEST_SCHEMA_IDS = {
   placeLinkSkipReason: schemaId('enums/PlaceLinkSkipReason'),
   placeLocationCandidate: schemaId('harvest/PlaceLocationCandidate'),
   placeLinkResult: schemaId('harvest/PlaceLinkResult'),
+  // The shop a link could not take a reference from (plan 0194).
+  locationRefHolder: schemaId('harvest/LocationRefHolder'),
   placeRefLink: schemaId('harvest/PlaceRefLink'),
   placeRefSkip: schemaId('harvest/PlaceRefSkip'),
   linkPlacesByRefResult: schemaId('harvest/LinkPlacesByRefResult'),
@@ -440,14 +442,48 @@ const discoveredPlaceView = object(
 );
 
 /**
+ * The shop that holds an external reference (plan 0194): its chain, its label
+ * and its address, which is what a person tells one shop from another by.
+ */
+const locationRefHolder = object(
+  HARVEST_SCHEMA_IDS.locationRefHolder,
+  {
+    supermarketLocationId: nonEmptyString(),
+    supermarketId: nonEmptyString(),
+    supermarketName: ref(CATALOG_SCHEMA_IDS.localizedText),
+    label: {
+      anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
+    },
+    address: nullableString(),
+    city: nullableString(),
+    externalProvider: nullableString(),
+  },
+  [
+    'supermarketLocationId',
+    'supermarketId',
+    'supermarketName',
+    'label',
+    'address',
+    'city',
+    'externalProvider',
+  ]
+);
+
+/**
  * What a link did (plan 0193): the place, and each thing the link wrote on
  * the shop because the shop lacked it.
+ *
+ * `refHeldBy` is present only when the link left the reference of the shop
+ * empty, because another shop holds the reference of the place (plan 0194).
  */
 const placeLinkResult = object(
   HARVEST_SCHEMA_IDS.placeLinkResult,
   {
     place: ref(HARVEST_SCHEMA_IDS.discoveredPlaceView),
     filled: array(ref(HARVEST_SCHEMA_IDS.placeLinkField)),
+    refHeldBy: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.locationRefHolder), { type: 'null' }],
+    },
   },
   ['place', 'filled']
 );
@@ -1743,6 +1779,7 @@ export const harvestSchemas: JsonSchema[] = [
   harvestRunExportResult,
   placeLocationCandidate,
   discoveredPlaceView,
+  locationRefHolder,
   placeLinkResult,
   placeRefLink,
   placeRefSkip,

@@ -465,4 +465,38 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
     expect(harness.stored[1].status).toBe(DiscoveredPlaceStatus.IMPORTED);
   });
+
+  it('keeps the run past a place whose reference another shop holds (plan 0194)', async () => {
+    // Catalog holds one shop for each reference. The place stays in the
+    // queue for a person, and the run never creates a shop with no
+    // reference: only the force of a person does that.
+    const harness = build();
+    harness.catalog.createLocation.mockRejectedValueOnce({
+      status: 409,
+      code: 'location_external_ref_taken',
+      message: 'Another shop already holds that external reference.',
+      correlationId: 'corr-1',
+      details: {
+        externalRef: 'lidl/1',
+        heldBy: { supermarketLocationId: 'loc-holder' },
+      },
+    });
+
+    const result = await harness.service.observe(
+      [
+        observed({ externalRef: 'lidl/1' }),
+        observed({ externalRef: 'lidl/2', latitude: 37.9 }),
+      ],
+      options()
+    );
+
+    expect(result.imported).toBe(1);
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+    expect(harness.stored[0].supermarketLocationId ?? null).toBeNull();
+    expect(harness.stored[1].status).toBe(DiscoveredPlaceStatus.IMPORTED);
+    expect(harness.catalog.createLocation).toHaveBeenCalledTimes(2);
+    for (const [sent] of harness.catalog.createLocation.mock.calls) {
+      expect(sent).toHaveProperty('externalRef');
+    }
+  });
 });

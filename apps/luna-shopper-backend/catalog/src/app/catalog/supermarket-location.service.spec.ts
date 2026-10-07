@@ -4,8 +4,11 @@ import {
   PostalCodeSource,
   PriceScopeKind,
 } from '@portfolio/luna-shopper/contracts';
-import { ValidationException } from '@portfolio/luna-shopper/platform';
-import type { Repository } from 'typeorm';
+import {
+  LocationExternalRefTakenException,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
+import { Not, QueryFailedError, type Repository } from 'typeorm';
 // `SupermarketLocation` is a value here: the audit double keys on the class.
 import {
   PriceScope,
@@ -798,5 +801,199 @@ describe('SupermarketLocationService.priceStack', () => {
     await expect(
       service.priceStack({ supermarketLocationId: 'missing' })
     ).rejects.toMatchObject({ code: 'not_found' });
+  });
+});
+
+/**
+ * One shop for each external reference (plan 0194).
+ *
+ * The index `uq_locations_external_ref` is on the reference alone. These
+ * cases are about the answer: the code and the shop that holds the reference,
+ * before the write and from the refusal of the database. That the database
+ * refuses at all is `location-external-ref.integration.spec.ts`.
+ */
+describe('SupermarketLocationService external reference', () => {
+  const REF = 'node/1156230891';
+  const HOLDER = {
+    id: 'shop-holder',
+    supermarketId: 'chain-dia',
+    supermarket: { id: 'chain-dia', name: { es: 'Dia' } },
+    label: { es: 'Dia Gran Vía' },
+    address: 'Gran Vía 1',
+    city: 'Córdoba',
+    externalRef: REF,
+    externalProvider: 'OSM',
+  };
+  const HELD_BY = {
+    supermarketLocationId: 'shop-holder',
+    supermarketId: 'chain-dia',
+    supermarketName: { es: 'Dia' },
+    label: { es: 'Dia Gran Vía' },
+    address: 'Gran Vía 1',
+    city: 'Córdoba',
+    externalProvider: 'OSM',
+  };
+
+  type Where = { id?: unknown; externalRef?: string };
+
+  /**
+   * The service, with a repository that answers a read by reference from
+   * `holders`, one answer per read, and a read by id from what was stored.
+   */
+  function buildWithHolders(holders: Array<typeof HOLDER | null>) {
+    const built = build();
+    const byRef: Where[] = [];
+    const findOne = built.locations.findOne as jest.Mock;
+    findOne.mockImplementation(async (options: { where: Where }) => {
+      if (options.where.externalRef !== undefined) {
+        byRef.push(options.where);
+        return holders.shift() ?? null;
+      }
+      const row = built.stored.find((held) => held.id === options.where.id);
+      return row ? { ...row } : null;
+    });
+    return { ...built, byRef };
+  }
+
+  /** What Postgres answers when the index refuses a row. */
+  function uniqueViolation(constraint: string): QueryFailedError {
+    return new QueryFailedError('INSERT INTO "supermarket_locations"', [], {
+      code: '23505',
+      constraint,
+    } as unknown as Error);
+  }
+
+  async function refusalOf(
+    write: Promise<unknown>
+  ): Promise<LocationExternalRefTakenException> {
+    const error = await write.catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(LocationExternalRefTakenException);
+    return error as LocationExternalRefTakenException;
+  }
+
+  it('refuses a new shop whose reference another shop holds, and writes nothing', async () => {
+    const { service, locations, byRef } = buildWithHolders([HOLDER]);
+
+    const refused = await refusalOf(
+      service.create({ ...CREATE, externalRef: REF, externalProvider: 'LIDL' })
+    );
+
+    expect(refused.code).toBe('location_external_ref_taken');
+    expect(refused.exposesDetails).toBe(true);
+    expect(refused.details).toEqual({ externalRef: REF, heldBy: HELD_BY });
+    // Across chains and providers, as the index reads: the reference alone.
+    expect(byRef).toEqual([{ externalRef: REF }]);
+    expect(locations.save).not.toHaveBeenCalled();
+  });
+
+  it('asks nothing for a shop with no reference', async () => {
+    const { service, byRef, stored } = buildWithHolders([HOLDER]);
+
+    await service.create({ ...CREATE, address: 'Hand made 7' });
+
+    expect(byRef).toEqual([]);
+    expect(stored).toHaveLength(1);
+  });
+
+  it('refuses an edit onto a reference another shop holds, and leaves the row', async () => {
+    const { service, locations, byRef, stored } = buildWithHolders([HOLDER]);
+    const shop = await service.create({ ...CREATE, address: 'Hand made 7' });
+    (locations.save as jest.Mock).mockClear();
+
+    const refused = await refusalOf(
+      service.update({
+        userId: OWNER,
+        supermarketLocationId: shop.id,
+        externalRef: REF,
+      })
+    );
+
+    expect(refused.details).toEqual({ externalRef: REF, heldBy: HELD_BY });
+    // The shop being written may keep its own, so it is not its own holder.
+    expect(byRef).toEqual([{ externalRef: REF, id: Not(shop.id) }]);
+    expect(locations.save).not.toHaveBeenCalled();
+    expect(stored[0].externalRef).toBeNull();
+  });
+
+  it('checks only a reference that the edit changes', async () => {
+    const { service, byRef } = buildWithHolders([null]);
+    const shop = await service.create({ ...CREATE, externalRef: REF });
+    expect(byRef).toHaveLength(1);
+
+    // The form sends the whole record back, the reference it holds included.
+    await service.update({
+      userId: OWNER,
+      supermarketLocationId: shop.id,
+      externalRef: REF,
+      city: 'Córdoba',
+    });
+    await service.update({
+      userId: OWNER,
+      supermarketLocationId: shop.id,
+      address: 'Gran Vía 2',
+    });
+
+    expect(byRef).toHaveLength(1);
+  });
+
+  it('answers the same code when the database refuses a create that passed the check', async () => {
+    // The check found nobody, another write took the reference, and the
+    // read after the refusal finds that shop.
+    const { service, locations } = buildWithHolders([null, HOLDER]);
+    (locations.save as jest.Mock).mockRejectedValueOnce(
+      uniqueViolation('uq_locations_external_ref')
+    );
+
+    const refused = await refusalOf(
+      service.create({ ...CREATE, externalRef: REF })
+    );
+
+    expect(refused.code).toBe('location_external_ref_taken');
+    expect(refused.details).toEqual({ externalRef: REF, heldBy: HELD_BY });
+  });
+
+  it('answers the same code when the database refuses an edit that passed the check', async () => {
+    const { service, locations, byRef } = buildWithHolders([null, HOLDER]);
+    const shop = await service.create({ ...CREATE, address: 'Hand made 7' });
+    (locations.save as jest.Mock).mockRejectedValueOnce(
+      uniqueViolation('uq_locations_external_ref')
+    );
+
+    const refused = await refusalOf(
+      service.update({
+        userId: OWNER,
+        supermarketLocationId: shop.id,
+        externalRef: REF,
+      })
+    );
+
+    expect(refused.details).toEqual({ externalRef: REF, heldBy: HELD_BY });
+    expect(byRef).toEqual([
+      { externalRef: REF, id: Not(shop.id) },
+      { externalRef: REF, id: Not(shop.id) },
+    ]);
+  });
+
+  it('names no holder when that shop left before it could be read', async () => {
+    const { service, locations } = buildWithHolders([null, null]);
+    (locations.save as jest.Mock).mockRejectedValueOnce(
+      uniqueViolation('uq_locations_external_ref')
+    );
+
+    const refused = await refusalOf(
+      service.create({ ...CREATE, externalRef: REF })
+    );
+
+    expect(refused.details).toEqual({ externalRef: REF, heldBy: null });
+  });
+
+  it('leaves any other refusal of the database as it came', async () => {
+    const { service, locations } = buildWithHolders([null]);
+    const other = uniqueViolation('uq_price_scopes_key');
+    (locations.save as jest.Mock).mockRejectedValueOnce(other);
+
+    await expect(service.create({ ...CREATE, externalRef: REF })).rejects.toBe(
+      other
+    );
   });
 });

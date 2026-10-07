@@ -227,6 +227,11 @@ export const ERROR_CATALOG: Record<
     en: 'This chain already has a section with that slug.',
     es: 'Esta cadena ya tiene una sección con ese identificador.',
   },
+  // One shop for each external reference (plan 0194).
+  [ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN]: {
+    en: 'Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.',
+    es: 'Otra tienda ya tiene esa referencia externa. Una referencia nombra una sola tienda: usa esa tienda o quítale antes la referencia.',
+  },
   // The catalog read at one shop (plan 0170).
   [ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE]: {
     en: 'A read at one shop is priced at that shop and lists its chain alone. Send the shop without other scopes, places, profiles or chains.',

@@ -549,6 +549,29 @@ export class SectionSlugTakenException extends DomainException {
 }
 
 /**
+ * A shop was given an external reference that another shop holds (plan 0194).
+ *
+ * It publishes its details, for the reason {@link ItemEanHeldException} does:
+ * only an admin reaches a route that raises it, and what the admin does next
+ * is open the shop that holds the reference. The reference travels under
+ * {@link LOCATION_REF_DETAIL} and that shop under
+ * {@link LOCATION_REF_HOLDER_DETAIL}, as a `LocationRefHolder` of the
+ * contracts. The holder is null only when it left between the refusal of the
+ * database and the read that names it. Nothing was written when this is
+ * thrown.
+ */
+export class LocationExternalRefTakenException extends DomainException {
+  readonly code = ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link LocationExternalRefTakenException} names the reference under. */
+export const LOCATION_REF_DETAIL = 'externalRef';
+
+/** The `details` key a {@link LocationExternalRefTakenException} names the holding shop under. */
+export const LOCATION_REF_HOLDER_DETAIL = 'heldBy';
+
+/**
  * The catalog read was sent `locationId` beside another selector of where a
  * price comes from, or beside a `soldBy` naming another chain (plan 0170).
  */
