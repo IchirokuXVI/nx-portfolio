@@ -1,3 +1,5 @@
+> **PR:** [#660](https://github.com/IchirokuXVI/nx-portfolio/pull/660)
+
 # 0193: a place links to the shop it is
 
 > Asked for by the owner on 2026-10-07, while he read the first catalog in the back office.
