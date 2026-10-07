@@ -54,6 +54,7 @@ import {
 } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import {
   LineComment,
   LineSettlement,
@@ -63,7 +64,6 @@ import {
   ShoppingList,
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../baskets/line-claim.service';
 import {
   actorOf,
   LineChangeRecorder,
@@ -73,7 +73,7 @@ import {
   type ListRef,
 } from './changes/line-change.recorder';
 import { itemSetHash } from './item-set-hash';
-import { normalizeContent } from './line-content';
+import { lineIdentities, normalizeContent } from './line-content';
 import {
   EMPTY_LINE_ITEM_SET,
   toLineItemSet,
@@ -694,15 +694,21 @@ export class LineService {
    *
    * ## It may raise a line instead of creating one (plan 0091)
    *
-   * **A zone list holds one line per normalized name.** Adding a name the list
-   * already carries raises that line's quantity by the amount added and creates
-   * nothing, so a household never ends up with two Milks, two quantities and two
-   * things to delete for one thing they buy. The fold is
-   * {@link normalizeContent}, shared with the generation run so the two agree,
-   * and it is conservative: "milk" and "whole milk" stay two lines.
+   * **A zone list holds one line per name and product combination.** Adding a
+   * thing the list already carries raises that line's quantity by the amount
+   * added and creates nothing, so a household never ends up with two Milks, two
+   * quantities and two things to delete for one thing they buy. The name is
+   * folded by {@link normalizeContent}, shared with the generation run so the
+   * two agree, and it is conservative: "milk" and "whole milk" stay two lines.
+   *
+   * **The name alone is not the thing.** Two products can carry one name and
+   * differ in brand or in format, and those are two purchases. So an add lands
+   * on a line only when {@link lineIdentities} agrees: the same name and the same
+   * product group, or the same product set, or free text on both sides.
+   * Otherwise it creates a line beside the one that shares its name.
    *
    * What a merge does and refuses to do is {@link raiseForAdd}, and which line it
-   * lands on is {@link findMergeTarget}. The answer says which of the two
+   * lands on is {@link findAddTarget}. The answer says which of the two
    * happened, because a caller reading it back to a person cannot tell from the
    * line alone.
    */
@@ -743,10 +749,18 @@ export class LineService {
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
 
-      const target = await this.findMergeTarget(manager, req.listId, [
-        req.content,
-      ]);
-      const existing = target.get(normalizeContent(req.content));
+      const identities = lineIdentities({
+        content: req.content,
+        itemSetHash: itemSetHash(itemIds),
+        productGroupId,
+      });
+      const targets = await this.findAddTarget(manager, req.listId, identities);
+      // The earliest line met in either way, which is the rule for two lines of
+      // one name (plan 0091, section 3.1) asked of two ways to be the same thing.
+      const existing = identities
+        .map((identity) => targets.get(identity))
+        .filter((line): line is ListLine => line !== undefined)
+        .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
       if (existing !== undefined) {
         return {
           merged: true as const,
@@ -832,9 +846,11 @@ export class LineService {
    * **It merges, per item, and it folds duplicates inside the batch** (plan 0091,
    * section 2). Section 6.3 decided the other way, on the argument that somebody
    * pasting a list may have meant two entries; the list rule now says a list
-   * holds one line per normalized name, and a rule the batch could walk through
-   * would not be one. Two items naming one thing therefore produce one line at
-   * the summed quantity, and both slots of the answer name it.
+   * holds one line per name and product combination, and a rule the batch could
+   * walk through would not be one. Two items naming one thing therefore produce
+   * one line at the summed quantity, and both slots of the answer name it. Two
+   * items of one name and different products are two things, as they are for a
+   * single add ({@link lineIdentities}).
    *
    * **The permission set is resolved once** and applies to every item, which is
    * right because it is one adder and one list, and it is most of the point:
@@ -873,7 +889,17 @@ export class LineService {
     const quantities = items.map((item) =>
       this.validateQuantity(item.quantity ?? 1)
     );
-    const keys = items.map((item) => normalizeContent(item.content));
+    // What each item is, by the rule a single add follows. A batch item names no
+    // group (`AddLinesItem` carries none), so it can be met in exactly one way:
+    // by its product set, or as free text.
+    const keys = items.map(
+      (item, index) =>
+        lineIdentities({
+          content: item.content,
+          itemSetHash: itemSetHash(itemSets[index]),
+          productGroupId: null,
+        })[0]
+    );
     const actor = actorOf(req);
 
     const written = await this.dataSource.transaction(async (manager) => {
@@ -881,7 +907,7 @@ export class LineService {
       // whole batch (plan 0091, section 3.2).
       await this.lockList(manager, req.listId);
       const repo = manager.getRepository(ListLine);
-      const targets = await this.findMergeTarget(manager, req.listId, keys);
+      const targets = await this.findAddTarget(manager, req.listId, keys);
 
       // Planned before anything is written, because a line this batch creates is
       // a merge target for a later item in the same batch, and its quantity has
@@ -1092,7 +1118,7 @@ export class LineService {
    * There is no `WHERE` clause that means {@link normalizeContent}, for the
    * reason {@link lockList} gives, so the list's lines are read and folded in
    * application code. That is a read of one household list rather than of a
-   * table, it asks for four columns, and it happens under a lock that has
+   * table, it asks for a few columns, and it happens under a lock that has
    * already made this add the only one running on this list.
    *
    * ## Earliest by position wins, and a rejected line is not a target
@@ -1119,9 +1145,47 @@ export class LineService {
     listId: string,
     contents: readonly string[]
   ): Promise<Map<string, ListLine>> {
-    const wanted = new Set(
-      contents.map((content) => normalizeContent(content))
+    return this.findEarliestLines(
+      manager,
+      listId,
+      contents.map((content) => normalizeContent(content)),
+      (candidate) => [normalizeContent(candidate.content)]
     );
+  }
+
+  /**
+   * The line each of these identities would land an add on, locked and ready to
+   * be raised.
+   *
+   * {@link findMergeTarget}'s rules about which line wins, asked of
+   * {@link lineIdentities} rather than of the name: an add meets a line only
+   * when the two name the same thing **and** mean the same products by it. A
+   * rename still asks the name alone, because it asks a person before it merges
+   * (plan 0112), and an add asks nobody.
+   */
+  private async findAddTarget(
+    manager: EntityManager,
+    listId: string,
+    identities: readonly string[]
+  ): Promise<Map<string, ListLine>> {
+    return this.findEarliestLines(manager, listId, identities, lineIdentities);
+  }
+
+  /**
+   * The earliest line of a list under each wanted key, whole and locked.
+   *
+   * The read both finders share. `keysOf` is what tells them apart: the folded
+   * name for a rename, the identities for an add.
+   */
+  private async findEarliestLines(
+    manager: EntityManager,
+    listId: string,
+    keys: readonly string[],
+    keysOf: (
+      candidate: Pick<ListLine, 'content' | 'itemSetHash' | 'productGroupId'>
+    ) => readonly string[]
+  ): Promise<Map<string, ListLine>> {
+    const wanted = new Set(keys);
     const targets = new Map<string, ListLine>();
     if (wanted.size === 0) {
       return targets;
@@ -1133,6 +1197,8 @@ export class LineService {
       select: {
         id: true,
         content: true,
+        itemSetHash: true,
+        productGroupId: true,
         approvalStatus: true,
         position: true,
       },
@@ -1144,13 +1210,14 @@ export class LineService {
       if (candidate.approvalStatus === LineApprovalStatus.REJECTED) {
         continue;
       }
-      const key = normalizeContent(candidate.content);
-      if (wanted.has(key) && !ids.has(key)) {
-        ids.set(key, candidate.id);
+      for (const key of keysOf(candidate)) {
+        if (wanted.has(key) && !ids.has(key)) {
+          ids.set(key, candidate.id);
+        }
       }
     }
 
-    // Read again, whole and locked. The rows above were four columns of a row
+    // Read again, whole and locked. The rows above were a few columns of a row
     // this transaction is about to write, and a raise needs the entity itself.
     for (const [key, id] of ids) {
       const line = await repo.findOne({
@@ -1183,11 +1250,11 @@ export class LineService {
    *
    * ## What it leaves alone
    *
-   * The request's `itemIds` and `productGroupId` are ignored. Somebody who types
-   * "milk" onto a list whose Milk names eleven products has said nothing about
-   * products, and writing the request's set over the line's, or into it, would
-   * put products in a household's list on the strength of a name (plan 0065,
-   * section 3). The merged line keeps its own.
+   * The line's products and its group. An add only reaches here for a line
+   * that already means what the request means ({@link lineIdentities}), so there
+   * is nothing of the request's to write: a free text add met a free text line,
+   * and an add of a product met the line holding that product. Nothing is put
+   * in a household's list on the strength of a name (plan 0065, section 3).
    *
    * ## The ceiling clamps rather than refuses
    *

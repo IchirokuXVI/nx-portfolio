@@ -11,6 +11,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ShoppingList } from '../entities';
 import {
   LineSettlement,
@@ -19,9 +20,9 @@ import {
   ListLineItem,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
+import { itemSetHash } from './item-set-hash';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
 import { LineMergeService } from './line-merge.service';
 import { fakeLineSettlements } from './line-settlements.fake';
@@ -39,7 +40,8 @@ beforeEach(() => {
 });
 
 /**
- * A zone list holds one line per normalized name (plan 0091).
+ * A zone list holds one line per name and product combination (plan 0091, and
+ * the rule under "a name shared by two products is two lines" below).
  *
  * Somebody types "Milk" into a list that already has a Milk and the list gets a
  * second one, from the list page, from the assistant and from a basket sending a
@@ -63,6 +65,12 @@ const LIST_ID = 'l1';
 const ZONE_ID = 'z1';
 const ADDER = 'u-adder';
 const AUTHOR = 'u-author';
+
+/** Two products that share the name "Milk", and two groups a line may follow. */
+const WHOLE = '3f1a0c5e-2b7d-4a6f-8c91-000000000001';
+const OAT = '3f1a0c5e-2b7d-4a6f-8c91-000000000002';
+const GROUP = '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52';
+const OTHER_GROUP = '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f53';
 
 interface Seed {
   id: string;
@@ -107,7 +115,13 @@ function build(options: {
         listId: LIST_ID,
         content: seed.content,
         quantity: seed.quantity ?? 1,
-        itemSetHash: null,
+        // The digest of the products seeded onto the line, as the service
+        // stamps it, since it is half of what an add compares.
+        itemSetHash: itemSetHash(
+          (options.products ?? [])
+            .filter((row) => row.lineId === seed.id)
+            .map((row) => row.itemId)
+        ),
         productGroupId: seed.productGroupId ?? null,
         position: seed.position ?? index + 1,
         approvalStatus: seed.approvalStatus ?? LineApprovalStatus.APPROVED,
@@ -349,6 +363,148 @@ describe('which line an add lands on (plan 0091, sections 1 and 3.1)', () => {
   });
 });
 
+/**
+ * The name is half of what a line is, and what it means by the name is the other
+ * half.
+ *
+ * Two products can carry one name and differ in brand or in format. An add that
+ * raised the line of the first when somebody picked the second lost a purchase
+ * without saying so, which is the failure the fold was written to avoid. So an
+ * add lands on a line only when the name **and** the products agree: the same
+ * product group, or the same product set, or free text on both sides.
+ */
+describe('a name shared by two products is two lines', () => {
+  it('creates beside a line of the same name that holds another product', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Milk', quantity: 2 }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Milk', { itemIds: [OAT] });
+
+    expect(result.merged).toBe(false);
+    expect(result.line.id).not.toBe('li1');
+    expect(result.line.itemIds).toEqual([OAT]);
+    expect(result.line.quantity).toBe(1);
+    expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineAdded]);
+  });
+
+  it('raises the line that holds the same name and the same product', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-whole', content: 'Milk', quantity: 2, position: 1 },
+        { id: 'li-oat', content: 'Milk', quantity: 1, position: 2 },
+      ],
+      products: [
+        { lineId: 'li-whole', itemId: WHOLE, position: 0 },
+        { lineId: 'li-oat', itemId: OAT, position: 0 },
+      ],
+    });
+
+    // The later of the two, because the earlier one is another product.
+    const result = await add(w, 'milk', { itemIds: [OAT] });
+
+    expect(result.merged).toBe(true);
+    expect(result.line.id).toBe('li-oat');
+    expect(result.line.quantity).toBe(2);
+  });
+
+  it('keeps free text apart from a line that names a product', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Milk' }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+    });
+
+    const typed = await add(w, 'milk');
+
+    expect(typed.merged).toBe(false);
+    expect(typed.line.itemIds).toEqual([]);
+  });
+
+  it('keeps a product apart from the free text line of its name', async () => {
+    const w = build({ holds: [{ id: 'li1', content: 'Milk' }] });
+
+    const picked = await add(w, 'Milk', { itemIds: [WHOLE] });
+
+    expect(picked.merged).toBe(false);
+    expect(picked.line.itemIds).toEqual([WHOLE]);
+  });
+
+  it('meets a line on its group, whatever products the group has since given it', async () => {
+    // A line that follows a group takes the group's products as the catalog
+    // syncs, so its set a week later is not the set the suggestion sent.
+    const w = build({
+      holds: [{ id: 'li1', content: 'Milk', productGroupId: GROUP }],
+      products: [
+        { lineId: 'li1', itemId: WHOLE, position: 0 },
+        { lineId: 'li1', itemId: OAT, position: 1 },
+      ],
+    });
+
+    const same = await add(w, 'Milk', {
+      itemIds: [WHOLE],
+      productGroupId: GROUP,
+    });
+    const other = await add(w, 'Milk', {
+      itemIds: [WHOLE],
+      productGroupId: OTHER_GROUP,
+    });
+
+    expect(same.merged).toBe(true);
+    expect(same.line.id).toBe('li1');
+    // Another group and another set, so neither way of meeting it holds.
+    expect(other.merged).toBe(false);
+  });
+
+  it('meets a line that follows a group on the products alone', async () => {
+    // A basket's add names products and never a group, so the same suggestion
+    // picked on a shopping list has to meet the line a list page made from it.
+    const w = build({
+      holds: [{ id: 'li1', content: 'Milk', productGroupId: GROUP }],
+      products: [
+        { lineId: 'li1', itemId: WHOLE, position: 0 },
+        { lineId: 'li1', itemId: OAT, position: 1 },
+      ],
+    });
+
+    const result = await add(w, 'Milk', { itemIds: [OAT, WHOLE] });
+
+    expect(result.merged).toBe(true);
+    expect(result.line.id).toBe('li1');
+    expect(result.line.productGroupId).toBe(GROUP);
+  });
+
+  it('never takes a group line with no product for free text', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'Milk', productGroupId: GROUP }],
+    });
+
+    const typed = await add(w, 'milk');
+
+    expect(typed.merged).toBe(false);
+  });
+
+  it('holds a batch to the same rule', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Milk', itemIds: [WHOLE] },
+        { content: 'Milk', itemIds: [OAT] },
+        { content: 'milk', itemIds: [WHOLE], quantity: 2 },
+      ],
+    });
+
+    // Two lines: the whole milk asked for twice, and the oat one.
+    expect(results.map((entry) => entry.merged)).toEqual([false, false, true]);
+    expect(results[0].line.id).toBe(results[2].line.id);
+    expect(results[0].line.id).not.toBe(results[1].line.id);
+    expect(results[0].line.quantity).toBe(3);
+  });
+});
+
 describe('what a merge may change (plan 0091, section 3)', () => {
   it('keeps the line pending, and does not ask for approval again', async () => {
     // Plan 0047 section 7: a quantity change never re-triggers approval. Asking
@@ -393,26 +549,24 @@ describe('what a merge may change (plan 0091, section 3)', () => {
     expect(result.line.quantity).toBe(5);
   });
 
-  it('ignores the products and the group the request named', async () => {
-    // Somebody who types "milk" onto a list whose Milk names two products has
-    // said nothing about products, and writing the request's set over the line's
-    // would put products into a household's list on the strength of a name.
+  it('leaves the products of the line it raises exactly as they were', async () => {
+    // A raise only happens onto a line that already means what the request
+    // means, so there is nothing of the request's to write onto it.
     const w = build({
       holds: [{ id: 'li1', content: 'milk', productGroupId: null }],
       products: [
-        { lineId: 'li1', itemId: 'item-a', position: 0 },
-        { lineId: 'li1', itemId: 'item-b', position: 1 },
+        { lineId: 'li1', itemId: WHOLE, position: 0 },
+        { lineId: 'li1', itemId: OAT, position: 1 },
       ],
     });
 
-    const result = await add(w, 'milk', {
-      itemIds: ['3f1a0c5e-2b7d-4a6f-8c91-000000000001'],
-      productGroupId: '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52',
-    });
+    // The same set in another order, which is the same set.
+    const result = await add(w, 'milk', { itemIds: [OAT, WHOLE] });
 
-    expect(result.line.itemIds).toEqual(['item-a', 'item-b']);
+    expect(result.merged).toBe(true);
+    expect(result.line.itemIds).toEqual([WHOLE, OAT]);
     expect(result.line.productGroupId).toBeNull();
-    expect(w.items.rows.map((row) => row.itemId)).toEqual(['item-a', 'item-b']);
+    expect(w.items.rows.map((row) => row.itemId)).toEqual([WHOLE, OAT]);
   });
 
   it('raises a line at zero back off it, keeping what was bought', async () => {

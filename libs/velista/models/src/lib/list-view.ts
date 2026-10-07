@@ -88,6 +88,17 @@ export interface LineRowVm {
   readonly id: string;
   readonly content: string;
   /**
+   * The format and the brand of the line's product, as one string, or null.
+   *
+   * Set only for a line that names **exactly one** product, and only for what the
+   * catalog knows of it. A list can hold two lines of one name that differ in
+   * brand or in format, and this is what tells them apart on the row. A line of
+   * several products has no single format to state, and free text has none.
+   *
+   * Optional, so a row built without a catalog draws as it always did.
+   */
+  readonly detail?: string | null;
+  /**
    * How many are wanted, which is the row's state and the reel's value.
    *
    * Drawn on **every** row now, zero included, where `0012` drew it only above

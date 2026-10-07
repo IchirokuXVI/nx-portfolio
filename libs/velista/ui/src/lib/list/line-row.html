@@ -97,6 +97,16 @@
     </span>
 
     <!--
+      The format and the brand of the line's one product. A list can hold two
+      lines of one name that differ in exactly these, and this is what tells them
+      apart. Absent for free text, for a line of several products, and for a
+      product the catalog knows neither fact of, so an ordinary row is unchanged.
+    -->
+    @if (line().detail; as detail) {
+      <span class="detail">{{ detail }}</span>
+    }
+
+    <!--
       The three indicators (section 3.3). A row can carry more than one at once, which
       is why this is a loop over a list and not a switch: a loaf that was missing last
       week, is wanted again, and is in somebody's basket right now shows two.

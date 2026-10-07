@@ -8,6 +8,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import {
   LineSettlement,
@@ -15,7 +16,6 @@ import {
   ListLineItem,
 } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeGroupRemovals, fakeLineItems } from './line-items.fake';
@@ -93,6 +93,9 @@ function build(options: {
     content: 'Tinned tomatoes',
     quantity: options.quantity ?? 3,
     itemSetHash: null,
+    // Free text, as a row reads it: the column is null and never absent, and
+    // an add compares it to decide which line it lands on.
+    productGroupId: null,
     position: 10,
     approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
     createdByUserId: AUTHOR,

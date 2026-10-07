@@ -36,6 +36,7 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
+  productSizeText,
   QuantityReel,
   SlashCircleIcon,
   SwapIcon,
@@ -835,6 +836,27 @@ export class BasketRow {
   });
 
   /**
+   * How big the product's packet is, as words, or null where the catalog does
+   * not say or a count of one says nothing.
+   */
+  protected readonly productFormat = computed<string | null>(() => {
+    const product = this._product();
+    if (product === null) {
+      return null;
+    }
+    const locale = this._locale();
+    return productSizeText(product.size, product.unit, locale, (key, args) =>
+      this._translator.t(key, undefined, locale, args)
+    );
+  });
+
+  /** The product's brand, or null where the catalog names none. */
+  protected readonly productBrand = computed<string | null>(() => {
+    const brand = this._product()?.brand?.trim() ?? '';
+    return brand === '' ? null : brand;
+  });
+
+  /**
    * The product this row means, or null (velista `0092`, section 5).
    *
    * The **row's** and never the entry's, because a row is one thing to pick off
@@ -1065,6 +1087,9 @@ export class BasketRow {
       // sentence of its own: a mark is words beside a number and a reader who
       // hears the row hears it (velista `0078`, section 7).
       this.productName() ?? '',
+      // The format and the brand, in the order the row draws them.
+      this.productFormat() ?? '',
+      this.productBrand() ?? '',
       this.productPrice() ?? '',
       this.markCaption() ?? '',
       // A cheaper product of the same group, said as it is drawn.

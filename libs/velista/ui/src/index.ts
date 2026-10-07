@@ -26,6 +26,7 @@ export * from './lib/brand/brand-wordmark';
 export * from './lib/catalog/order-pills';
 export * from './lib/catalog/product-row';
 export * from './lib/catalog/product-row-view';
+export * from './lib/catalog/product-size';
 export * from './lib/catalog/similar-products';
 export * from './lib/catalog/supermarket-button';
 export * from './lib/entry/account-lost-panel';

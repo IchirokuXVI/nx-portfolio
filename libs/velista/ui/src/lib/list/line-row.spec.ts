@@ -154,6 +154,30 @@ describe('LineRow', () => {
       expect(row(fixture).getAttribute('aria-label')).toBe('Milk, 1');
     });
 
+    it('draws the format and the brand under the name, and says them', async () => {
+      const fixture = await render(
+        vm({ content: 'Milk', quantity: 2, detail: '1 L · Oatly' })
+      );
+      const host = fixture.nativeElement as HTMLElement;
+
+      // What tells this Milk from another Milk on the same list, to a reader who
+      // sees the row and to one who hears it.
+      expect(host.querySelector('.detail')?.textContent?.trim()).toBe(
+        '1 L · Oatly'
+      );
+      expect(row(fixture).getAttribute('aria-label')).toBe(
+        'Milk, 1 L · Oatly, 2'
+      );
+    });
+
+    it('draws no detail line on a row that has none', async () => {
+      const fixture = await render(vm({ detail: null }));
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.detail')
+      ).toBeNull();
+    });
+
     it('says zero rather than dropping it', async () => {
       const fixture = await render(vm({ content: 'Olive oil', quantity: 0 }));
 
