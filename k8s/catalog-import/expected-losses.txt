@@ -14,4 +14,6 @@
 # not hold does nothing, so one file serves staging and production.
 #
 # This file is written from a dry run on each cluster and read by the owner
-# before the release. No dry run has been made yet, so it accepts nothing.
+# before the release. The dry run on staging of 2026-10-07 named one row, the
+# line below. No dry run has been made on production yet.
+brands 21960ff9-c895-41c9-8419-2e5567299ff3 "D.O." means Denominación de Origen and is not a brand; the owner confirmed it and curation deleted it (initial-catalog-2026-10.md, "D.O. removed"). It holds no product on staging.
