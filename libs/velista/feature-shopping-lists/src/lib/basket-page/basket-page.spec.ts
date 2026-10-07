@@ -1733,6 +1733,27 @@ describe('searching the basket', () => {
       expect(css).not.toMatch(/position:\s*sticky/);
       expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
     });
+
+    it('sticks the tools bar over the start padding of its column', () => {
+      // A sticky offset is measured from the content box of the scroller. With a start
+      // padding on `.page` and an offset of zero, the bar stopped that padding short of
+      // the header and the lines showed through the strip above it. So the bar's offset
+      // and its own padding are both the padding of the column, under one token.
+      const css = readFileSync(
+        join(__dirname, 'basket-page.scss'),
+        'utf8'
+      ).replace(/\/\/.*$/gm, '');
+
+      const lead = /\.page\s*\{[^}]*padding-block-start:\s*(var\([^)]+\))/.exec(
+        css
+      )?.[1];
+      const bar = /lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+
+      expect(lead).toBeDefined();
+      expect(bar).toContain(`inset-block-start: calc(${lead} * -1)`);
+      expect(bar).toContain(`margin-block-start: calc(${lead} * -1)`);
+      expect(bar).toContain(`padding-block-start: ${lead}`);
+    });
   });
 
   /**
