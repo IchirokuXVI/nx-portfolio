@@ -193,6 +193,40 @@ lunaShopperBackend:
     # carries this, which is what asserts the key is actually in the cluster.
     harvestEnabled: true
 
+  # Two cores for the catalog database. values.yaml gives it one, with the
+  # measurements. One search statement is one process, so the second core is for
+  # the second statement that runs beside it: a typeahead sends a search for each
+  # pause in the typing, and the back office opens a page with about ten reads at
+  # once. This node has eight cores and 2,560m of them requested, so the request
+  # costs nothing that another pod needs. Memory, buffers and `jit` are not
+  # restated here and come from values.yaml.
+  postgres:
+    instanceOverrides:
+      luna-shopper-backend-catalog-db:
+        resources:
+          requests:
+            cpu: '2'
+            memory: 1Gi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+
+  # Redis does 5m of work, and its limit is still what stalls it. Each health
+  # probe is a `redis-cli ping` that runs inside the container, and one cost about
+  # 30 ms of CPU when measured on staging. A limit of 100m allows 10 ms in each 100 ms period, so the
+  # probe uses the whole period and the server waits about 20 ms for the next
+  # one. That happened in 2% of the periods here (385,885 of 18,449,527). 500m
+  # allows 50 ms, which holds one probe and the server together. Memory and
+  # `maxmemory` do not move.
+  redis:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 128Mi
+
   # Nightly pg_dump off the node (plan 0005). Production only: staging holds
   # nothing worth restoring. Needs luna-shopper-backend-backup-secret to exist.
   backups:

@@ -72,6 +72,10 @@ spec:
             - shared_buffers={{ $sharedBuffers }}
             - -c
             - work_mem={{ $workMem }}
+            {{- with $own.jit }}
+            - -c
+            - jit={{ . }}
+            {{- end }}
           ports:
             - containerPort: 5432
           env:
