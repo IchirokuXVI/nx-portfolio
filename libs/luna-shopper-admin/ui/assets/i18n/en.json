@@ -215,6 +215,7 @@
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
       "sectionOfAnotherChain": "That section belongs to another chain. A shop and a product's pins can only use their own chain's sections. Read the screen again and try once more.",
       "sectionSlugTaken": "This chain already has a section with that slug. Choose another one.",
+      "locationExternalRefTaken": "Another shop already holds that reference. A reference names one shop. Use that shop, or remove the reference from it first.",
       "openRow": "Open the row it names."
     },
     "bulk": {

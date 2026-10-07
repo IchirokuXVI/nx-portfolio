@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DiscoveredPlaceStatus,
+  PlaceLinkField,
   PlaceLinkSkipReason,
   PlaceMatchRung,
   PostalCodeSource,
@@ -18,6 +19,7 @@ import {
   type LinkPlacesByRefResult,
   type ListDiscoveredPlacesRequest,
   type LocalizedText,
+  type LocationRefHolder,
   type NewChainInput,
   type PlaceLinkResult,
   type PlaceLocationCandidate,
@@ -31,6 +33,8 @@ import {
   decodeCursor,
   describeError,
   encodeCursor,
+  ERROR_CODES,
+  LOCATION_REF_HOLDER_DETAIL,
   NotFoundException,
   PLACE_CANDIDATES_DETAIL,
   PLACE_CHAIN_DETAIL,
@@ -255,6 +259,45 @@ function placeGroupName(places: DiscoveredPlace[]): string | null {
   }
   const [first] = places;
   return !first.brandKey && normalizeName(first.name ?? '') ? first.name : null;
+}
+
+/**
+ * Whether catalog refused a write because another shop holds the reference
+ * (plan 0195), and which shop that is.
+ *
+ * Undefined for any other failure. Null inside is a holder that catalog could
+ * not name. The error crossed NATS, so it is the problem object of catalog
+ * and not an `Error`, bare or nested under `error` (see `describeError`).
+ */
+function refTakenBy(
+  error: unknown
+): { heldBy: LocationRefHolder | null } | undefined {
+  if (describeError(error).code !== ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN) {
+    return undefined;
+  }
+  for (const candidate of [error, (error as { error?: unknown })?.error]) {
+    const details = (candidate as { details?: Record<string, unknown> } | null)
+      ?.details;
+    const heldBy = details?.[LOCATION_REF_HOLDER_DETAIL];
+    if (heldBy && typeof heldBy === 'object') {
+      return { heldBy: heldBy as LocationRefHolder };
+    }
+  }
+  return { heldBy: null };
+}
+
+/**
+ * A patch of a shop with its reference left out, and the provider with it:
+ * the provider only says whose reference that is, and a later link fills a
+ * reference under the provider that the shop already names (plan 0195).
+ */
+function withoutRef<
+  T extends { externalRef?: unknown; externalProvider?: unknown },
+>(write: T): Omit<T, 'externalRef' | 'externalProvider'> {
+  const rest = { ...write };
+  delete rest.externalRef;
+  delete rest.externalProvider;
+  return rest;
 }
 
 function alreadyImported(): PlaceAlreadyImportedException {
@@ -727,6 +770,16 @@ export class DiscoveredPlaceService {
    * section 2). The answer is `place_matches_location` with the candidates, and
    * nothing is written: {@link link} binds the place to one of them, and
    * `force` creates a new shop anyway.
+   *
+   * **A reference that another shop holds stops it too** (plan 0195). The
+   * matching above reads one chain and one provider, and the catalog holds
+   * one shop for each reference across all of them. That holder is thus not
+   * always a candidate. The answer is the 409 `location_external_ref_taken`
+   * of catalog, passed through with the holder in its details, and nothing is
+   * written. **`force` does not get past it.** `force` answers
+   * `place_matches_location` alone, and the person who sent it may never
+   * have seen the holder. An import thus never creates a shop with no
+   * reference. A link to an existing shop does go through ({@link bind}).
    */
   async import(
     req: ImportDiscoveredPlaceRequest
@@ -916,17 +969,51 @@ export class DiscoveredPlaceService {
    *
    * Catalog is written first. A write that fails leaves the place `NEW`, and
    * linking it again sends the same fields.
+   *
+   * **A reference that another shop holds is left unfilled, and the link is
+   * made** (plan 0195). The reference is one of the fields a link fills if
+   * empty, and a field it cannot fill is no reason to refuse the others or
+   * the mark: the place names its shop through `supermarketLocationId`. The
+   * refusal of catalog wrote nothing, so the same patch is sent again with no
+   * reference and no provider, and the answer names the holder in
+   * `refHeldBy`. Nothing is taken from the holder, and nothing that has a
+   * value is overwritten.
    */
   private async bind(
     place: DiscoveredPlace,
     location: SupermarketLocationView
   ): Promise<PlaceLinkResult> {
-    const { patch, filled } = missingFields(place, location);
+    const missing = missingFields(place, location);
+    let { filled } = missing;
+    let taken: { heldBy: LocationRefHolder | null } | undefined;
     if (filled.length > 0) {
-      await this.catalog.updateLocation({
-        supermarketLocationId: location.id,
-        ...patch,
-      });
+      try {
+        await this.catalog.updateLocation({
+          supermarketLocationId: location.id,
+          ...missing.patch,
+        });
+      } catch (error) {
+        taken = filled.includes(PlaceLinkField.EXTERNAL_REF)
+          ? refTakenBy(error)
+          : undefined;
+        if (!taken) {
+          throw error;
+        }
+        filled = filled.filter(
+          (field) => field !== PlaceLinkField.EXTERNAL_REF
+        );
+        this.logger.warn(
+          `${place.provider}/${place.externalRef} is linked to shop ` +
+            `${location.id} with no reference, because shop ` +
+            `${taken.heldBy?.supermarketLocationId ?? 'unknown'} holds it`
+        );
+        if (filled.length > 0) {
+          await this.catalog.updateLocation({
+            supermarketLocationId: location.id,
+            ...withoutRef(missing.patch),
+          });
+        }
+      }
     }
 
     place.status = DiscoveredPlaceStatus.IMPORTED;
@@ -934,6 +1021,7 @@ export class DiscoveredPlaceService {
     return {
       place: toDiscoveredPlaceView(await this.places.save(place)),
       filled,
+      ...(taken ? { refHeldBy: taken.heldBy } : {}),
     };
   }
 
@@ -976,6 +1064,11 @@ export class DiscoveredPlaceService {
    * The actor on the write is the harvester's provisioned `HARVESTER_ACTOR_ID`,
    * which `CatalogClient` stamps on every call, so the catalog audit says a run
    * did this and not a person.
+   *
+   * **A reference that another shop holds** (plan 0195) is the refusal of
+   * catalog, thrown on as it came. A run logs it and leaves the place in the
+   * queue, and a hand import answers it, also with `force`. Nothing here
+   * creates a shop with no reference.
    */
   private async promote(
     place: DiscoveredPlace,

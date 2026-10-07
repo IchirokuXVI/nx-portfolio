@@ -257,11 +257,17 @@ export class AdminCatalogSupermarketsController {
     });
   }
 
+  /**
+   * An `externalRef` that another shop holds answers 409
+   * `location_external_ref_taken` and names that shop in `details.heldBy`
+   * (plan 0195). The catalog holds one shop for each reference, across
+   * chains and providers. Nothing is written.
+   */
   @Post(':id/locations')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.create, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, locationRefTaken: true })
   createLocation(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -410,10 +416,14 @@ export class AdminCatalogLocationsController {
    * **Editing a postal code does not move the shop's price scope**, which the
    * entity says and which is a real trap: an operator correcting an address may
    * reasonably expect the pricing to follow, and it does not.
+   *
+   * An `externalRef` that another shop holds answers 409
+   * `location_external_ref_taken` and names that shop in `details.heldBy`
+   * (plan 0195). Nothing is written.
    */
   @Patch(':id')
   @ApiContractResponse(SUPERMARKET_LOCATION_PATTERNS.update)
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, locationRefTaken: true })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,

@@ -1089,3 +1089,270 @@ describe('DiscoveredPlaceService.import, the label it writes (plan 0193)', () =>
     );
   });
 });
+
+/**
+ * A reference that another shop holds (plan 0195).
+ *
+ * Catalog holds one shop for each reference and refuses a second one with
+ * `location_external_ref_taken`. The refusal crosses NATS, so it reaches this
+ * service as the problem object of catalog and not as an `Error`.
+ */
+describe('DiscoveredPlaceService, a reference another shop holds (plan 0195)', () => {
+  const HOLDER = {
+    supermarketLocationId: 'loc-holder',
+    supermarketId: DIA.id,
+    supermarketName: DIA.name,
+    label: null,
+    address: 'Gran Vía 1',
+    city: 'Córdoba',
+    externalProvider: 'OSM',
+  };
+
+  /** What `CatalogClient` rejects with when catalog refuses the reference. */
+  function refTaken(heldBy: typeof HOLDER | null = HOLDER) {
+    return {
+      status: 409,
+      code: 'location_external_ref_taken',
+      message: 'Another shop already holds that external reference.',
+      correlationId: 'corr-1',
+      details: { externalRef: 'node/1', heldBy },
+    };
+  }
+
+  /** A shop with a position and nothing else, not even a reference. */
+  const noRefShop = (overrides: Partial<SupermarketLocationView> = {}) =>
+    bareShop({ externalRef: null, externalProvider: null, ...overrides });
+
+  describe('link', () => {
+    it('links anyway, fills the other fields and leaves the reference empty', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+      harness.catalog.updateLocation.mockRejectedValueOnce(refTaken());
+
+      const result = await harness.service.link(link());
+
+      expect(result.filled).toEqual([
+        PlaceLinkField.POSTAL_CODE,
+        PlaceLinkField.ADDRESS,
+        PlaceLinkField.CITY,
+        PlaceLinkField.COUNTRY,
+      ]);
+      expect(result.refHeldBy).toEqual(HOLDER);
+      expect(result.place.status).toBe(DiscoveredPlaceStatus.IMPORTED);
+      expect(result.place.supermarketLocationId).toBe('loc-1');
+
+      const [first, second] = harness.catalog.updateLocation.mock.calls;
+      expect(first[0]).toMatchObject({
+        externalRef: 'node/1',
+        externalProvider: 'OSM',
+      });
+      expect(second[0]).toEqual({
+        supermarketLocationId: 'loc-1',
+        postalCode: '14010',
+        postalCodeSource: PostalCodeSource.SOURCE,
+        address: 'Avenida de Cádiz 68',
+        city: 'Córdoba',
+        country: 'es',
+      });
+      expect(harness.shops[0].externalRef).toBeNull();
+      expect(harness.shops[0].externalProvider).toBeNull();
+    });
+
+    it('reads the refusal also when NATS nests it under error', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+      harness.catalog.updateLocation.mockRejectedValueOnce({
+        error: refTaken(),
+      });
+
+      const result = await harness.service.link(link());
+
+      expect(result.refHeldBy).toEqual(HOLDER);
+      expect(result.filled).not.toContain(PlaceLinkField.EXTERNAL_REF);
+    });
+
+    it('writes only the mark when the reference was all the shop lacked', async () => {
+      const harness = build({
+        shops: [shop({ externalRef: null, externalProvider: null })],
+        places: [place()],
+      });
+      harness.catalog.updateLocation.mockRejectedValueOnce(refTaken());
+
+      const result = await harness.service.link(link());
+
+      expect(result.filled).toEqual([]);
+      expect(result.refHeldBy).toEqual(HOLDER);
+      expect(harness.catalog.updateLocation).toHaveBeenCalledTimes(1);
+      expect(harness.rows.get('place-1')?.status).toBe(
+        DiscoveredPlaceStatus.IMPORTED
+      );
+    });
+
+    it('answers a null holder when catalog could not name the shop', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+      harness.catalog.updateLocation.mockRejectedValueOnce(refTaken(null));
+
+      const result = await harness.service.link(link());
+
+      expect(result).toHaveProperty('refHeldBy', null);
+    });
+
+    it('says nothing about a holder on a link that filled the reference', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+
+      const result = await harness.service.link(link());
+
+      expect(result.filled).toContain(PlaceLinkField.EXTERNAL_REF);
+      expect(result).not.toHaveProperty('refHeldBy');
+      expect(harness.catalog.updateLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('still fails on any other refusal of catalog, and leaves the place NEW', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+      const conflict = { ...refTaken(), code: 'conflict' };
+      harness.catalog.updateLocation.mockRejectedValueOnce(conflict);
+
+      await expect(harness.service.link(link())).rejects.toBe(conflict);
+
+      expect(harness.catalog.updateLocation).toHaveBeenCalledTimes(1);
+      expect(harness.places.save).not.toHaveBeenCalled();
+    });
+
+    it('leaves the place NEW when the write without the reference fails', async () => {
+      const harness = build({ shops: [noRefShop()], places: [place()] });
+      harness.catalog.updateLocation
+        .mockRejectedValueOnce(refTaken())
+        .mockRejectedValueOnce(new Error('down'));
+
+      await expect(harness.service.link(link())).rejects.toThrow('down');
+
+      expect(harness.places.save).not.toHaveBeenCalled();
+      expect(harness.rows.get('place-1')?.status).toBe(
+        DiscoveredPlaceStatus.NEW
+      );
+    });
+  });
+
+  describe('linkByRef', () => {
+    it('never sends a reference, so catalog has nothing to refuse', async () => {
+      // The shop the bulk act links is the one that carries the reference.
+      const harness = build({
+        shops: [bareShop({ externalRef: 'node/1', externalProvider: 'OSM' })],
+        places: [place()],
+      });
+
+      const result = await harness.service.linkByRef({
+        userId: ADMIN,
+        apply: true,
+      });
+
+      expect(result.linked).toHaveLength(1);
+      for (const [sent] of harness.catalog.updateLocation.mock.calls) {
+        expect(sent).not.toHaveProperty('externalRef');
+        expect(sent).not.toHaveProperty('externalProvider');
+      }
+    });
+  });
+
+  describe('import', () => {
+    it('passes the refusal of catalog through, and leaves the place NEW', async () => {
+      const harness = build({ places: [place()] });
+      const refused = refTaken();
+      harness.catalog.createLocation.mockRejectedValueOnce(refused);
+
+      await expect(
+        harness.service.import({ userId: ADMIN, placeId: 'place-1' })
+      ).rejects.toBe(refused);
+
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+      expect(harness.places.save).not.toHaveBeenCalled();
+    });
+
+    it('does not take force: false for a yes', async () => {
+      const harness = build({ places: [place()] });
+      const refused = refTaken();
+      harness.catalog.createLocation.mockRejectedValueOnce(refused);
+
+      await expect(
+        harness.service.import({
+          userId: ADMIN,
+          placeId: 'place-1',
+          force: false,
+        })
+      ).rejects.toBe(refused);
+
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses with the holder also with force, and creates no shop', async () => {
+      // `force` answers `place_matches_location` alone. The person who sent
+      // it may never have seen that another shop holds the reference.
+      const harness = build({ places: [place()] });
+      const refused = refTaken();
+      harness.catalog.createLocation.mockRejectedValueOnce(refused);
+
+      const failure = await harness.service
+        .import({ userId: ADMIN, placeId: 'place-1', force: true })
+        .catch((error: unknown) => error);
+
+      expect(failure).toBe(refused);
+      expect(failure).toMatchObject({
+        status: 409,
+        code: 'location_external_ref_taken',
+        details: { heldBy: HOLDER },
+      });
+      // One call, the refused one, and it carried the reference: no second
+      // write with the reference left out.
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+      expect(harness.catalog.createLocation.mock.calls[0][0]).toMatchObject({
+        externalRef: 'node/1',
+        externalProvider: 'OSM',
+      });
+      expect(harness.places.save).not.toHaveBeenCalled();
+      expect(harness.rows.get('place-1')?.status).toBe(
+        DiscoveredPlaceStatus.NEW
+      );
+    });
+
+    it('still creates the shop with force when the reference is free', async () => {
+      // A shop of the chain on the same spot may be this place: without
+      // force the import answers `place_matches_location`.
+      const harness = build({
+        shops: [noRefShop({ latitude: LAT, longitude: LON })],
+        places: [place()],
+      });
+      await expect(
+        harness.service.import({ userId: ADMIN, placeId: 'place-1' })
+      ).rejects.toMatchObject({ code: 'place_matches_location' });
+      expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+
+      const view = await harness.service.import({
+        userId: ADMIN,
+        placeId: 'place-1',
+        force: true,
+      });
+
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+      expect(harness.catalog.createLocation.mock.calls[0][0]).toMatchObject({
+        supermarketId: ELJAMON.id,
+        externalRef: 'node/1',
+        externalProvider: 'OSM',
+      });
+      expect(view.status).toBe(DiscoveredPlaceStatus.IMPORTED);
+      expect(view.supermarketLocationId).toBe('loc-created');
+    });
+
+    it('still fails with force on any other refusal of catalog', async () => {
+      const harness = build({ places: [place()] });
+      harness.catalog.createLocation.mockRejectedValueOnce(new Error('down'));
+
+      await expect(
+        harness.service.import({
+          userId: ADMIN,
+          placeId: 'place-1',
+          force: true,
+        })
+      ).rejects.toThrow('down');
+
+      expect(harness.catalog.createLocation).toHaveBeenCalledTimes(1);
+    });
+  });
+});

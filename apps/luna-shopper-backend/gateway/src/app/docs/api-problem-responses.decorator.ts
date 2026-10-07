@@ -95,6 +95,13 @@ export interface ProblemResponseOptions {
    * plain conflict because the client names the product that holds it.
    */
   eanHeld?: boolean;
+  /**
+   * The route can give a shop an external reference (plan 0195), so a
+   * reference another shop holds answers 409 with a code of its own. It is
+   * told apart from a plain conflict because the client names the shop that
+   * holds it.
+   */
+  locationRefTaken?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -197,6 +204,9 @@ export function ApiProblemResponses(
   }
   if (options.eanHeld) {
     codes.push(ERROR_CODES.ITEM_EAN_HELD);
+  }
+  if (options.locationRefTaken) {
+    codes.push(ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);
