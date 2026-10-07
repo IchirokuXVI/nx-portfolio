@@ -8,6 +8,7 @@ import {
   type CreateSupermarketLocationRequest,
   type ListSupermarketLocationsRequest,
   type LocalizedText,
+  type LocationRefHolder,
   type PostalCodeLocationCountsView,
   type SearchShopsRequest,
   type ShopPage,
@@ -24,11 +25,20 @@ import {
   clampPageSize,
   decodeCursor,
   encodeCursor,
+  LOCATION_REF_DETAIL,
+  LOCATION_REF_HOLDER_DETAIL,
+  LocationExternalRefTakenException,
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import { randomUUID } from 'node:crypto';
-import { In, Repository, type SelectQueryBuilder } from 'typeorm';
+import {
+  In,
+  Not,
+  QueryFailedError,
+  Repository,
+  type SelectQueryBuilder,
+} from 'typeorm';
 import type { CatalogConfig } from '../config/app-config';
 import { PriceScope, Supermarket, SupermarketLocation } from '../entities';
 import { shopsWithMap } from '../shop-walks/has-map';
@@ -59,6 +69,53 @@ function withStoreScope(
 interface LocationCursor {
   value: string;
   id: string;
+}
+
+const PG_UNIQUE_VIOLATION = '23505';
+
+/** The partial unique index on `supermarket_locations.externalRef`. */
+const REF_INDEX = 'uq_locations_external_ref';
+
+/** Whether the database refused a write because the reference is held. */
+function isRefTaken(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) {
+    return false;
+  }
+  const driver = (
+    error as { driverError?: { code?: string; constraint?: string } }
+  ).driverError;
+  return (
+    driver?.code === PG_UNIQUE_VIOLATION && driver.constraint === REF_INDEX
+  );
+}
+
+/** The refusal of a reference that another shop holds (plan 0195). */
+function refTaken(
+  externalRef: string,
+  holder: SupermarketLocation | null
+): LocationExternalRefTakenException {
+  const heldBy: LocationRefHolder | null = holder
+    ? {
+        supermarketLocationId: holder.id,
+        supermarketId: holder.supermarketId,
+        supermarketName: holder.supermarket.name,
+        label: holder.label,
+        address: holder.address,
+        city: holder.city,
+        externalProvider: holder.externalProvider,
+      }
+    : null;
+  return new LocationExternalRefTakenException(
+    `${holder ? `Shop ${holder.id}` : 'Another shop'} already holds the ` +
+      `external reference ${externalRef}. A reference names one shop, so ` +
+      'take it off that shop first.',
+    {
+      details: {
+        [LOCATION_REF_DETAIL]: externalRef,
+        [LOCATION_REF_HOLDER_DETAIL]: heldBy,
+      },
+    }
+  );
 }
 
 /**
@@ -150,24 +207,88 @@ export class SupermarketLocationService {
       externalProvider: req.externalProvider ?? null,
       footprintM2: req.footprintM2 ?? null,
     });
+    await this.requireFreeRef(draft.externalRef, null);
     await this.fillPostalCodeFromCentroid(draft);
 
-    const saved = await this.audit.write(actor, async (tx) => {
-      const store = await this.scopes.ensureStoreScope(
-        tx,
-        req.supermarketId,
-        id,
-        req.label ?? null
-      );
-      const row = await tx.create(SupermarketLocation, draft);
-      await this.writeStack(
-        tx.manager,
-        id,
-        withStoreScope(namedScopeIds, store)
-      );
-      return row;
-    });
+    const saved = await this.writingRef(draft.externalRef, null, () =>
+      this.audit.write(actor, async (tx) => {
+        const store = await this.scopes.ensureStoreScope(
+          tx,
+          req.supermarketId,
+          id,
+          req.label ?? null
+        );
+        const row = await tx.create(SupermarketLocation, draft);
+        await this.writeStack(
+          tx.manager,
+          id,
+          withStoreScope(namedScopeIds, store)
+        );
+        return row;
+      })
+    );
     return this.viewOf(saved);
+  }
+
+  /**
+   * The shop that holds a reference, or null (plan 0195).
+   *
+   * The index `uq_locations_external_ref` is on the reference alone, so the
+   * holder is looked for across chains and providers, exactly as the database
+   * will. `exceptId` is the shop being written, which may keep its own.
+   */
+  private refHolder(
+    externalRef: string,
+    exceptId: string | null
+  ): Promise<SupermarketLocation | null> {
+    return this.locations.findOne({
+      where: {
+        externalRef,
+        ...(exceptId === null ? {} : { id: Not(exceptId) }),
+      },
+      relations: { supermarket: true },
+    });
+  }
+
+  /**
+   * Refuse a reference that another shop holds, before anything is written
+   * (plan 0195). A shop with no reference is never refused: the index is
+   * partial, and most hand made shops have none.
+   */
+  private async requireFreeRef(
+    externalRef: string | null,
+    exceptId: string | null
+  ): Promise<void> {
+    if (externalRef === null) {
+      return;
+    }
+    const holder = await this.refHolder(externalRef, exceptId);
+    if (holder) {
+      throw refTaken(externalRef, holder);
+    }
+  }
+
+  /**
+   * Run a write of a shop, and answer a reference the database refused with
+   * the code {@link requireFreeRef} answers (plan 0195).
+   *
+   * The check runs first, so this is the write that lost a race: another
+   * write took the reference between the check and the statement. The
+   * transaction is rolled back by then, so nothing was written.
+   */
+  private async writingRef<T>(
+    externalRef: string | null,
+    exceptId: string | null,
+    write: () => Promise<T>
+  ): Promise<T> {
+    try {
+      return await write();
+    } catch (error) {
+      if (externalRef === null || !isRefTaken(error)) {
+        throw error;
+      }
+      throw refTaken(externalRef, await this.refHolder(externalRef, exceptId));
+    }
   }
 
   /**
@@ -341,6 +462,11 @@ export class SupermarketLocationService {
     if (req.externalRef !== undefined) {
       row.externalRef = req.externalRef;
     }
+    // Plan 0195: only a reference that this write changes is checked. A shop
+    // keeps the one it holds through any other edit.
+    if (row.externalRef !== before.externalRef) {
+      await this.requireFreeRef(row.externalRef, row.id);
+    }
     if (req.externalProvider !== undefined) {
       row.externalProvider = req.externalProvider;
     }
@@ -352,25 +478,28 @@ export class SupermarketLocationService {
     }
     await this.fillPostalCodeFromCentroid(row);
 
-    const saved = await this.audit.write(actor, async (tx) => {
-      const updated = await tx.update(SupermarketLocation, before, row);
-      if (namedScopeIds.length > 0) {
-        // The store scope is implied, the same way it is on create (plan 0116,
-        // section 5), and a shop created before that rule gains one here.
-        const store = await this.scopes.ensureStoreScope(
-          tx,
-          row.supermarketId,
-          row.id,
-          row.label
-        );
-        await this.writeStack(
-          tx.manager,
-          row.id,
-          withStoreScope(namedScopeIds, store)
-        );
-      }
-      return updated;
-    });
+    const saved = await this.writingRef(row.externalRef, row.id, () =>
+      this.audit.write(actor, async (tx) => {
+        const updated = await tx.update(SupermarketLocation, before, row);
+        if (namedScopeIds.length > 0) {
+          // The store scope is implied, the same way it is on create (plan
+          // 0116, section 5), and a shop created before that rule gains one
+          // here.
+          const store = await this.scopes.ensureStoreScope(
+            tx,
+            row.supermarketId,
+            row.id,
+            row.label
+          );
+          await this.writeStack(
+            tx.manager,
+            row.id,
+            withStoreScope(namedScopeIds, store)
+          );
+        }
+        return updated;
+      })
+    );
     return this.viewOf(saved);
   }
 

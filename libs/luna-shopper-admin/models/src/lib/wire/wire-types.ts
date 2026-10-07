@@ -601,6 +601,7 @@ export type ProblemDetails = {
     | 'section_not_found'
     | 'section_of_another_chain'
     | 'section_slug_taken'
+    | 'location_external_ref_taken'
     | 'catalog_location_exclusive'
     | 'supermarket_location_not_found'
     | 'permission_required'
@@ -4240,11 +4241,25 @@ export type HarvestLinkPlacesByRefResult = {
 };
 
 /**
+ * `harvest.LocationRefHolder` in the gateway's OpenAPI document.
+ */
+export type HarvestLocationRefHolder = {
+  supermarketLocationId: string;
+  supermarketId: string;
+  supermarketName: CatalogLocalizedText;
+  label: CatalogLocalizedText | null;
+  address: string | null;
+  city: string | null;
+  externalProvider: string | null;
+};
+
+/**
  * `harvest.PlaceLinkResult` in the gateway's OpenAPI document.
  */
 export type HarvestPlaceLinkResult = {
   place: HarvestDiscoveredPlaceView;
   filled: EnumsPlaceLinkField[];
+  refHeldBy?: HarvestLocationRefHolder | null;
 };
 
 /**

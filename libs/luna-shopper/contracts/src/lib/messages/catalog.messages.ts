@@ -737,6 +737,25 @@ export interface SupermarketView {
   locationCount?: number;
 }
 
+/**
+ * The shop that holds an external reference (plan 0195).
+ *
+ * What the 409 `location_external_ref_taken` names under `details.heldBy`,
+ * and what a link of a place answers when it left the reference of the shop
+ * empty. It carries what a person needs to tell the shop from its
+ * neighbours: the chain, the label and the address.
+ */
+export interface LocationRefHolder {
+  supermarketLocationId: string;
+  supermarketId: string;
+  supermarketName: LocalizedText;
+  label: LocalizedText | null;
+  address: string | null;
+  city: string | null;
+  /** Whose reference the shop says it holds. Null when it names nobody. */
+  externalProvider: string | null;
+}
+
 export interface SupermarketLocationView {
   id: string;
   supermarketId: string;

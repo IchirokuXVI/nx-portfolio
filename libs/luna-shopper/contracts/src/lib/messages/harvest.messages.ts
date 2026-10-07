@@ -31,6 +31,7 @@ import type {
   ContentLocale,
   ItemView,
   LocalizedText,
+  LocationRefHolder,
   OfferKeptReason,
   UnitBasis,
 } from './catalog.messages';
@@ -1334,6 +1335,16 @@ export interface LinkDiscoveredPlaceRequest extends AdminCredential {
 export interface PlaceLinkResult {
   place: DiscoveredPlaceView;
   filled: PlaceLinkField[];
+  /**
+   * The shop that already holds the reference of the place (plan 0195).
+   *
+   * Present only when the shop linked had no reference and the link could not
+   * give it this one, because the catalog holds one shop for each reference.
+   * The link is made all the same: `filled` then lacks `EXTERNAL_REF`, and
+   * the place names its shop through `supermarketLocationId`. Null when that
+   * shop was gone by the time it was read.
+   */
+  refHeldBy?: LocationRefHolder | null;
 }
 
 /**

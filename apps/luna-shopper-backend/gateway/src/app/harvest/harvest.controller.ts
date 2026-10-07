@@ -405,12 +405,17 @@ export class AdminHarvestPlacesController {
    * with `details.candidates`, each naming the rung that found it, and writes
    * nothing. Link one of them, or send `force` to create a new shop anyway. An
    * imported place answers 409 `place_already_imported`.
+   *
+   * A reference that another shop holds answers 409
+   * `location_external_ref_taken` with that shop in `details.heldBy`, and
+   * writes nothing (plan 0195). `force` does not get past it: link the place
+   * to an existing shop, or create the shop by hand.
    */
   @Post(':id/import')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.import, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, locationRefTaken: true })
   importPlace(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
@@ -462,6 +467,10 @@ export class AdminHarvestPlacesController {
    * answers 409 `place_names_another_chain` with `details.chain` (`id` and
    * `name`) and writes nothing; send `acrossChains` to link anyway. An
    * imported place answers 409 `place_already_imported`.
+   *
+   * A reference that another shop holds does not stop the link (plan 0195).
+   * The reference of the shop stays empty, `filled` lacks `EXTERNAL_REF`, and
+   * `refHeldBy` names the shop that holds it.
    */
   @Post(':id/link')
   @ApiContractResponse(DISCOVERED_PLACE_PATTERNS.link, {

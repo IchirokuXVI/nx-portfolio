@@ -15087,7 +15087,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15830,6 +15830,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -24672,7 +24682,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`location_external_ref_taken` — Another shop already holds that external reference. A reference names one shop: use that shop, or take the reference off it first.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -39365,6 +39375,60 @@
         ],
         "additionalProperties": false
       },
+      "harvest.LocationRefHolder": {
+        "type": "object",
+        "properties": {
+          "supermarketLocationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "supermarketName": {
+            "$ref": "#/components/schemas/catalog.LocalizedText"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/catalog.LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "externalProvider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "supermarketLocationId",
+          "supermarketId",
+          "supermarketName",
+          "label",
+          "address",
+          "city",
+          "externalProvider"
+        ],
+        "additionalProperties": false
+      },
       "harvest.PlaceLinkResult": {
         "type": "object",
         "properties": {
@@ -39376,6 +39440,16 @@
             "items": {
               "$ref": "#/components/schemas/enums.PlaceLinkField"
             }
+          },
+          "refHeldBy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/harvest.LocationRefHolder"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -42073,6 +42147,7 @@
               "section_not_found",
               "section_of_another_chain",
               "section_slug_taken",
+              "location_external_ref_taken",
               "catalog_location_exclusive",
               "supermarket_location_not_found",
               "permission_required",
