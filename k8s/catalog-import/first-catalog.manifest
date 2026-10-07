@@ -4,27 +4,26 @@
 # is a refusal, not a warning.
 #
 # The values below are the checksums and counts of the dumps of
-# 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time). They were taken after
-# the three changes that the owner asked for on 2026-10-07 (the tenth Deza
-# shop, the three shoe creams, and the coordinates of that shop), with every
-# service that holds a database stopped. They replace the values of the dumps
-# of 2026-10-06T22:33:14Z, which held the first two changes only.
+# 2026-10-07T10:28:17Z (2026-10-07 12:28 Madrid time). They were taken after
+# two data stages of that day: the re-file of 2,250 products onto the leaves of
+# backend plan 0179, and the second curation walk, which created 2,430 products
+# from queue rows that the first walk could not place. Only the gateway was
+# served, and it holds no database, so nothing wrote. They replace the values
+# of the dumps of 2026-10-06T23:32:21Z, which held neither stage.
 #
 # These dumps are the ones that ship, unless slot 1 is written again. A later
 # write means new dumps and new values here (README.md, "When slot 1 is
-# final"). The owner has NOT yet said that slot 1 is final. The owner is
-# checking the data on a restore of the dumps of 2026-10-06T22:33:14Z on the
-# owner's own machine. That copy differs from these dumps in one shop row (it
-# holds no coordinates for the tenth Deza shop) and in the one audit row of
-# that write.
+# final"). The owner has NOT yet said that slot 1 is final. The copy that the
+# owner restored onto the owner's own machine on 2026-10-07 is older: it is the
+# restore of the dumps of 2026-10-06T22:33:14Z, and it holds neither stage.
 # The two files are NOT uploaded to a bucket yet. A file with other bytes is
 # refused at the checksum, which is the intended failure.
 #
 # The object keys, under a prefix that the nightly dumps never use.
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
-CATALOG_SHA256="634196da6d64feadf883142dd434cccd8a4756f70073c8ec5a0deb0831af4319"
+CATALOG_SHA256="f81e6023528d17f6b6e457a8e27a216ecb388d43883a0b9b9c145c9d92a04880"
 HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
-HARVESTER_SHA256="c74fb2430e5f8fae3ebc1b25bc19c66344a30bb72fd49a563a28190d4a9c4c87"
+HARVESTER_SHA256="e75f10e693304f357060e3dc42d8c68c8cbf18ae09dbde830f975ed256d20f08"
 #
 # The `migrations` table of each dump: how many rows, and the name with the
 # highest timestamp. The live database must hold the same names.
@@ -37,8 +36,8 @@ HARVESTER_MIGRATIONS="21"
 EXPECT_SUPERMARKETS="5"
 EXPECT_PRICE_SCOPES="105"
 EXPECT_CATEGORIES="309"
-EXPECT_BRANDS="2782"
-EXPECT_ITEMS="19773"
-EXPECT_ITEM_PRICES="24964"
+EXPECT_BRANDS="2830"
+EXPECT_ITEMS="22203"
+EXPECT_ITEM_PRICES="25074"
 EXPECT_SOURCE_ENTRIES="25861"
-EXPECT_SOURCE_ENTRIES_ACTIVE="21779"
+EXPECT_SOURCE_ENTRIES_ACTIVE="24223"

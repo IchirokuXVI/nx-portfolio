@@ -24,18 +24,28 @@ a later fix. Section 4 holds the four answers, section 5 holds the two changes, 
 `loose-fruit-rows.md` is the report of the rows that wait.
 
 **Later on 2026-10-07 the owner gave the coordinates of the shop of `T7`,** read from
-Google Maps. They are stored on slot 1, and the dumps were taken once more. Those are the
-dumps that ship. Section 4 holds that fifth answer, and section 5 holds the write.
+Google Maps. They are stored on slot 1, and the dumps were taken once more. Section 4
+holds that fifth answer, and section 5 holds the write.
+
+**Two data stages followed on 2026-10-07, and neither is a plan.** The re-file moved
+2,250 products onto the leaves that plan `0179` added. The second curation walk then
+decided 2,586 queue rows that the first walk could not place: 2,430 new products, 14
+rows bound to a product that exists, and 142 rows left. The owner approved the walk that
+day. The dumps were taken after it, at 12:28 Madrid time, and those are the dumps that
+ship. Section 1 holds the rules of both stages, section 6 says what each did, and section
+7 holds the nine decisions that the walk left for the owner. The files `d01-…json` to
+`d06-…json` hold the rows.
 
 The folder holds four things:
 
 - This file: the rules, the decisions of each step, the sixteen decisions that the
-  repair left, each with the answer of the owner, and what plan `0192` did with each.
+  repair left, each with the answer of the owner, what plan `0192` did with each, and
+  the two stages of 2026-10-07.
 - [`loose-fruit-rows.md`](loose-fruit-rows.md): the loose fruit rows that still sit on a
   product that is not the singular fruit, for the fix that the owner put off.
-- Twenty-nine data files and `gaps.json`. Sixteen are the steps of plan `0186`
+- Thirty-five data files and `gaps.json`. Sixteen are the steps of plan `0186`
   (`a01-…json` to `b05-…json`). Thirteen are the work of plan `0192` (`c01-…json` to
-  `c13-…json`).
+  `c13-…json`). Six are the re-file and the second walk (`d01-…json` to `d06-…json`).
 - `build/`: the scripts that wrote the data files from the files of the repair.
 
 ## How to read a data file
@@ -77,6 +87,18 @@ its categories. `ownerAnswerAfterTheRegister` is an answer that the owner gave o
 `ownerAnswerOf20261007` is an answer of the next day, and only `c05` and `c13` hold one.
 A shop is keyed by its chain, its address, its postal code and its OpenStreetMap
 reference. The shop of `T7` was created by hand and has no reference.
+
+**A `d` file holds a stage of 2026-10-07, and not every entry is a product.**
+
+- `d01` holds rules. An entry names the leaf that a product is in, a test on its Spanish
+  name, and the leaf it goes to. Apply a rule to every product that it fits.
+- `d03` holds printed brands. An entry is keyed by the text that the chain printed and by
+  its normalized key.
+- `d02` keys a product, and `d04`, `d05` and `d06` key a queue row, as the other files do.
+- Three records are too large for this folder: the 2,250 moves of the re-file, the 2,430
+  products that the walk created, and the 579 printed texts that are not a brand. The
+  `d` files hold their rules and their counts. `fullRecord` in the header of a file names
+  the file of the run folder that holds each row.
 
 A new harvest and a new curation will not give every product the same name. An entry that
 finds no product is not an error. Read its `why` and decide again.
@@ -141,10 +163,51 @@ The plan states these rules in its target table.
 | R30 | For one product stored by weight and by count, keep the product in grams or millilitres and put the count in the pack count. Merge only when the two names are the same word for word. | An agent (step B5, the Bref pair). On 2026-10-06 the owner widened the last sentence (decision 6): merge when the rows of both agree on count and weight. |
 | R31 | A size that only price over unit price gives is not proof. Do not write it without a row that prints it. | An agent (steps A5 and B1). On 2026-10-06 the owner made one exception, for the 22 frozen fish products (decision 3). R32 holds for every other case. |
 
+### Rules of the re-file (2026-10-07)
+
+The session of stage c6 set these, after it read the names that each one matches. The
+owner can change each one. `d01-refile-rules.json` holds every rule as data.
+
+| # | Rule |
+| --- | --- |
+| R34 | A product leaves the leaf that stood in for a missing one and takes the leaf that plan `0179` added. It keeps every other category, and the new leaf takes the position of the old one. |
+| R35 | A product that held two leaves which both stood in for the missing one loses both: a pet accessory under dog care and cat care, a sherry under white wine and vermouth. |
+| R36 | The shelf of Mercadona names the make-up leaf. The Deza shelf "Color" holds every kind of make-up, and the shelf paths of El Jamón do not describe the product, so there the curated name decides. |
+| R37 | Setting sprays and primers are "Bases y correctores". Bronzers and highlighters are "Polvos y colorete". A tinted lip balm or a lip oil with a shade number is "Labios". An eyelash curler is "Brochas y accesorios". Lip care stays in facial care. |
+| R38 | A product that two leaves fit is left where it is, for a person. No rule moves a product on a guess. |
+
+### Rules of the second walk (2026-10-07)
+
+The session that prepared stage c7 wrote these into the prompt of the deciders. Each one
+follows what the catalog already held. The owner approved the walk on 2026-10-07 and can
+change each one. The first walk had no rule for these kinds of product, because the tree
+had no leaf for them. The merge rules of the first walk still hold: same brand plus same
+format merges, and a name never carries its brand or its size.
+
+| # | Rule |
+| --- | --- |
+| R39 | **A book** is "Libro" plus its title, in sentence case with its accents ("Libro El asesinato de Aristóteles"). The English name is "Book" plus the same title, never translated. It has no brand, no size, `UNIT`, leaf `books`. The printed brand of a book row is its title. A number of a series stays in the title. Two rows with one title are one book. |
+| R40 | **A book of a licence that the registry holds** carries the licence as its brand, and the rest of the title is the name: "Libro Abuelitas", brand `Bluey`. |
+| R41 | **A magazine** carries its masthead as the brand. The name is "Revista" plus the edition word ("Revista Easy", brand `Burda`), and a plain issue is named "Revista" alone. When the masthead is not a brand of the registry, the product has no brand and the masthead stays in the name. The issue of the week is not a product. A special edition with its own name is. |
+| R42 | **A collectible** is "Coleccionable" plus the name of the collection, with no brand. A year or an issue word that the row prints stays. A licence that the registry holds is the brand and leaves the name. |
+| R43 | **A garment** holds, in its name, the garment, its model or material, who it is for, the colour and "talla X": "Braguita de algodón camel talla XXL". Each size and each colour is its own product. |
+| R44 | Deza prints a clothing size as `t/` plus letters or digits. `t/sm` is "talla S/M". Four digits are a range of two sizes: `t/3538` is "talla 35-38". A size that cannot be read for sure is a `REVIEW` (`SIZE_UNREADABLE`). |
+| R45 | **A count is a size in `UNIT`:** 3 pairs of socks, 80 sheets, 12 crayons, 6 plates. `20 den` is a variant word and stays in the name. The weight of paper (80 g) is never the size of the pack. |
+| R46 | **A measure or a capacity is never the size.** The product is `UNIT` with no size. The measure goes at the end of both names, as the row prints it, when it tells two products apart: "Sábana bajera rosa 90 cm". The content of a pack is a size: 20 litres of substrate is 20000 `MILLILITER`. |
+| R47 | **An artificial flower or plant always holds its printed height** at the end of both names: "Ramo artificial atado de rosas blanco 35 cm". The session added it to the answers that lacked it. |
+| R48 | **Deza's lone letter "G" is its mark for a product with no brand.** It is never a brand and never part of a name. |
+| R49 | A season word (`HALLOWEEN`, `NAVIDAD`, `CARNAVAL`) is never a brand. It stays in the name when the object is made for the season. A licensed character on merchandise is a brand when the registry holds it, and then it leaves the name. |
+| R50 | "Colores surtidos" on one article that the shop sells in whatever colour it has is one product, and the words stay in the name. Two or three exact alternatives ("gris, negra o blanca") are several products: `REVIEW` (`SEVERAL_PRODUCTS`). |
+| R51 | A colour printed with a slash on a product to create is a `REVIEW` (`SEVERAL_PRODUCTS`), because it may be a choice. A set that prints the colours of its pieces is one product. |
+| R52 | A printed word that the registry holds as a brand of another kind of goods is a `REVIEW` (`BRAND_HOMONYM`). A person registers the second meaning. No agent does. |
+| R53 | A link that the decider itself doubted becomes a `REVIEW` (`AMBIGUOUS_CANDIDATE`). A wrong link writes a price onto a real product. A doubted link with no price may stay. |
+| R54 | A create sends every field of the product, also a field that is null. The route fills an absent field from the row, and on a kiosk row that is the title as the brand. |
+
 ## 2. Decisions taken
 
 The counts are those of the data files. "Applied" means that the write was sent and read back.
-This section holds the steps of plan `0186`. Section 5 holds the work of plan `0192`.
+This section holds the steps of plan `0186`. Section 5 holds the work of plan `0192`, and
+section 6 holds the two stages of 2026-10-07.
 
 ### A1, an English name for each product that had none
 
@@ -323,15 +386,25 @@ names (the category, the image) is not in the keys at all.
 | `c05` | 13 | 0 | 0 | None. 11 shop codes, 10 shops and 1 discovered place, each with its address or its printed name. The last entry is the shop that was created by hand on 2026-10-07, with the coordinates that the owner gave later that day. |
 | `c06` | 14 | 21 | 14 | None. |
 | `c07` | 15 | 25 | 11 | None. |
-| `c08` | 47 | 94 | 124 | None. |
+| `c08` | 47 | 94 | 132 | None. |
 | `c09` | 1 | 2 | 1 | None. |
 | `c10` | 9 | 14 | 8 | None. |
 | `c11` | 4 | 8 | 5 | None. |
 | `c12` | 1 | 1 | 0 | None. The 20 offers are a count, and their scopes are not keyed. |
 | `c13` | 7 | 7 | 0 | None. A category is keyed by its slug. |
+| `d01` | 50 | 0 | 0 | None. An entry is a rule. The 2,250 products that the rules moved are not in the file. |
+| `d02` | 92 | 92 | 0 | None. |
+| `d03` | 50 | 0 | 0 | None. A printed brand is keyed by its text and its key. The 579 texts that are not a brand are a count. |
+| `d04` | 25 | 0 | 25 | None. The 160 rows that took a height are a count for each batch. |
+| `d05` | 142 | 0 | 142 | None. The 1,496 queue rows outside the walk are counts for each group of reason codes. |
+| `d06` | 14 | 14 | 14 | None. The 2,430 products that the walk created are counts for each leaf and each batch. |
 
-No product in any file carries only its uuid. In the `c` files no queue row lacks its
-chain, its source kind, its external id or its printed name.
+No product in any file carries only its uuid. In the `c` files and the `d` files no queue
+row lacks its chain, its source kind, its external id or its printed name.
+
+The three large records of 2026-10-07 need no read of a dump. They stand as files in the
+run folder: `stage-c6/proposal/`, `stage-c7/applied/created.jsonl` and
+`stage-c7/brands/skipped.jsonl`.
 
 What one read of the kept dumps would add:
 
@@ -603,6 +676,10 @@ UTC, so they read 2026-10-06T22:24Z to 22:34Z, which is after midnight in Madrid
 
 ### The coordinates of the shop of `T7`, and the dumps that ship
 
+> **Note of 2026-10-07, after the second walk.** The dumps of this part no longer ship.
+> The dumps of 12:28 of that day do, and section 6 names them. The text below stays as it
+> was written.
+
 The owner gave the coordinates on 2026-10-07, after the dumps of 00:33: latitude
 37.89862387806124 and longitude -4.772603355414682, read from Google Maps. The files of
 the session read 2026-10-06T23:30Z to 23:35Z, which is 01:30 to 01:35 in Madrid.
@@ -658,6 +735,10 @@ which ship, hold the same figures.
 The shop of `T7` took the shops (`supermarket_locations`) from 41 to 42 and the price
 scopes from 104 to 105. Ten of the 42 shops are Deza shops.
 
+**Note of 2026-10-07, after the second walk:** the last column no longer holds the dumps
+that ship. Section 6 holds the counts of the dumps of 12:28, under "The counts of both
+stages".
+
 ### What stays left, and why
 
 Two rows left this table on 2026-10-07: `T7` has its shop, and the three shoe creams have
@@ -679,7 +760,205 @@ the same day, from Google Maps, and they are stored. No row stands here for them
 The report, `../initial-catalog-2026-10.md`, holds the full list of what stays wrong or
 open, under "The owner's decisions applied (plan 0192, 2026-10-06)".
 
-## 6. How to build the data files again
+## 6. The re-file and the second walk (2026-10-07)
+
+Both stages changed data on slot 1 only, through the gateway of slot 1 as
+`admin@curation.local`. No SQL write was made. Each took a backup before its first
+write. Their files stand in `stage-c6/` and `stage-c7/` of the run folder. The report,
+`../initial-catalog-2026-10.md`, holds both under "The re-file and the second walk
+(2026-10-07)".
+
+### The re-file (stage c6)
+
+Plan `0179` added 34 categories on 2026-10-05. The products that belong on them had
+been filed on the nearest leaf that existed, or on `uncategorised`. The re-file moved
+them.
+
+- **2,250 products moved onto 23 leaves,** in four calls of
+  `PATCH /v1/admin/catalog/items/batch`. Each answered 200 at the first try.
+- **1,850 left `facial-care`** for the six make-up leaves, and 9 more reached those
+  leaves from `dyes`, `parapharmacy` and `shower-gel-and-sponges`. `facial-care` went
+  from 2,346 products to 496.
+- **The 31 products of `uncategorised` all moved:** 10 books, 9 magazines and
+  collectibles, 5 decoration products, 3 toys, 3 pencil cases and 1 graduation cap.
+- **The other 360** are pet accessories (68), lighting and electrical (67), small
+  appliances (52), sherry and sweet wines (50), party (34), car care (32), premixed
+  drinks (16), DIY (15), hair accessories (12), shoe care (5), home textiles (4), storage
+  (3) and decoration (2).
+- **92 products were left for a person,** each with its reason. Nothing was sent for
+  them.
+- **Nothing else changed.** No name, brand, size or bound row of a product differs. Only
+  `item_categories` changed: 21,707 rows to 21,660, because 47 products lost two leaves
+  for one. The route writes no audit row, so `catalog_audit` is the same.
+- Data: `d01-refile-rules.json` (rules R34 to R37, as 50 rules with their counts) and
+  `d02-refile-left-for-a-person.json` (rule R38, 92 products).
+
+### The second walk (stage c7)
+
+The queue held 4,082 rows, all `UNRESOLVED`. 2,586 of them were in the walk:
+
+| Group | Rows | What it is |
+| ---: | ---: | --- |
+| 1 | 1,072 | The driver of the first walk skipped the row with no model call, because its section had no category |
+| 2 | 1,379 | A decider of the first walk left the row with `NO_CATEGORY` |
+| 3 | 135 | The row was first seen on 2026-10-05 or 2026-10-06, after the first walk |
+
+2,515 rows are of Deza, 42 of El Jamón and 29 of Mercadona. The other 1,496 queue rows
+were not in the walk, because a new category does not answer their reason.
+
+**The order of the work.** Blind brand deciders answered nine packets, which hold the 629
+printed brands that the registry did not hold. Blind product deciders (Opus) then
+answered 26 batches of about 100 rows each. A decider read its prompt, the category list
+and its packet, and called no service. An offline check read every answer. The session
+then corrected the answers, sent the brands, and sent one request for each batch. The
+files of the stage do not name the model. "Opus" is the word of the session that directed
+the walk.
+
+**The brands** (`d03-second-walk-brands.json`).
+
+- 26 answers `REGISTER` and 15 answers `SPELLING_OF` were sent, in 41 requests. All
+  answered 201. The registry went from 2,782 rows to 2,830: 26 brands and 22 spellings.
+  Seven registered brands print a text whose key is not the key of the label, so the
+  printed text became a spelling too.
+- 579 printed texts are not a brand. 303 of them are book titles.
+- 9 answers are `REVIEW`. **The session changed seven of them from `REGISTER`** before
+  anything was sent, each for a reason that stands in the file:
+  - `AR`: two letters on unrelated goods, and the maker is not confirmed.
+  - `MAS` and `PIN`: a fragment of a masthead ("Más y Más", "Pin y Pon"). So short a key
+    would name many other rows.
+  - `ARQUITECTURA`: a fragment of "Arquitectura y Diseño", and a generic word as the key.
+  - `BRAINROT` and `COCHES`: the masthead is not confirmed.
+  - `SABER VIVIR MUY`: the row may be a pack of two magazines.
+- The answer of the decider stands beside each of the seven, as `answerOfTheDecider`.
+
+**The corrections before the batches were sent** (`d04-second-walk-corrections.json`).
+No answer file was edited. Each correction stands in a final file beside it.
+
+| Correction | Rows | What was done |
+| --- | ---: | --- |
+| 1, an artificial flower or plant with no height in its name | 160 | The printed height was added to both names (R47). 173 other rows already held it |
+| 1, a garbled measure (`1416 cm`, `1114 cm`) | 2 | `CREATE` became `REVIEW` `SIZE_UNREADABLE` |
+| 2, a colour with a slash on a `CREATE` | 9 | `CREATE` became `REVIEW` `SEVERAL_PRODUCTS` (R51) |
+| 2, a pen set that prints the colours it holds | 2 | Left |
+| 3, a `LINK` that the decider itself doubted | 2 | `LINK` became `REVIEW` `AMBIGUOUS_CANDIDATE` (R53) |
+| 3, a magazine promotion row with no price | 3 | Left: bound to the magazine that the same batch created |
+| 4, the brand `Golden` on stationery and a mirror | 7 | `CREATE` became `REVIEW` `BRAND_HOMONYM` (R52). The registry brand holds one coaster |
+| 5, a `CREATE` that the live catalog already held | 0 | Checked before each batch. None was found |
+| Two `CREATE`s of two batches that are equal | 0 | Checked after the heights were added. None was found |
+| 6, the lone letter "G" as a brand or in a name | 0 | No answer writes it (R48) |
+
+The brand check of correction 4 read every `CREATE` that writes a brand which the
+registry held before the walk: 200 brands. 57 are mastheads, and 50 of those hold no
+product outside the kiosk. 28 other brands hold products only in leaves that the walk
+does not write for them. Only `Golden` was changed. The other 27 were left, each for a
+reason that the data shows: a licence on merchandise, a pet brand with a new kind of
+animal, or a maker that sells across shelves.
+
+**The result.**
+
+- The answers held 2,448 `CREATE`, 16 `LINK` and 122 `REVIEW`. After the corrections
+  they held 2,430, 14 and 142.
+- 27 requests to `POST /v1/admin/harvest/entries/decisions`, one for each batch and one
+  small first request of six rows. Each answered 201 at the first try.
+- **2,430 products were created.** 1,325 carry a brand and 1,105 carry none. 87 sit in
+  two leaves. Each created product was read back and compared with what was sent, and
+  none differs. `d06-second-walk-links.json` holds the count for each leaf.
+- **14 rows were accepted onto a product** (`d06`): 6 onto a product of their own batch,
+  and 8 onto a product from before the walk.
+- **142 rows stay in the queue** (`d05-second-walk-left-in-the-queue.json`): 122 by the
+  answer of a decider and 20 by a correction.
+- **One product from before the walk changed, in its barcode only.** Dove "Desodorante en
+  crema original" now holds the barcode `80466468`, which the Mercadona row that was
+  accepted onto it prints (plan `0185`).
+- 110 price rows were written, on 72 products. Deza's website prints no price, so most
+  products of the walk have an offer with no price.
+
+### The counts of both stages
+
+| | Before the re-file | After the re-file | The dumps of 12:28, which ship |
+| --- | ---: | ---: | ---: |
+| Products (`items`) | 19,773 | 19,773 | 22,203 |
+| Brands | 2,782 | 2,782 | 2,830 |
+| Brands that are a spelling | 506 | 506 | 528 |
+| Rows of `item_categories` | 21,707 | 21,660 | 24,177 |
+| Price rows (`item_prices`) | 24,964 | 24,964 | 25,074 |
+| Offers (`supermarket_items`) | 305,218 | 305,218 | 330,733 |
+| Shop rows (`supermarket_location_items`) | 110,890 | 110,890 | 132,890 |
+| Barcodes (`item_eans`) | 3,990 | 3,990 | 4,013 |
+| Queue rows | 25,861 | 25,861 | 25,861 |
+| Queue rows `ACTIVE` | 21,779 | 21,779 | 24,223 |
+| Queue rows `UNRESOLVED` | 4,082 | 4,082 | 1,638 |
+| Products in `facial-care` | 2,346 | 496 | 497 |
+| Products in `uncategorised` | 31 | 0 | 0 |
+| Leaves with no product, `uncategorised` not counted | 29 | 7 | 0 |
+
+The first column is the state of the dumps of 01:32 of 2026-10-07. The categories (309),
+the price scopes (105), the shops (42) and the chains (5) are the same in all three.
+
+### What stays in the queue
+
+1,638 rows are `UNRESOLVED`, and none is `CANDIDATE`: 900 of Deza, 565 of El Jamón, 130
+of Mercadona and 43 of Lidl.
+
+**The 142 rows of the walk,** by reason code (`d05`):
+
+| Code | Rows |
+| --- | ---: |
+| `PRODUCT_UNCLEAR` | 35 |
+| `SEVERAL_PRODUCTS` | 23 |
+| `BRAND_UNKNOWN` | 21 |
+| `NO_CATEGORY` | 16 |
+| `POSSIBLE_DUPLICATE` | 10 |
+| `SIZE_UNREADABLE` | 10 |
+| `BRAND_HOMONYM` | 9 |
+| `OTHER` | 7 |
+| `FORMAT_UNKNOWN` | 6 |
+| `AMBIGUOUS_CANDIDATE` | 3 |
+| `MULTIPACK_SIZE` | 2 |
+
+**The 1,496 rows outside the walk.** Each kept the reason of the first walk. The first
+walk wrote 129 different codes on them, so the build puts each code in one of five groups
+by the words of the code. `OUTSIDE_GROUPS` in `build/stage-d.mjs` is the rule, and the header of
+`d05` holds the largest codes of each group.
+
+| Group | Rows | The largest codes |
+| --- | ---: | --- |
+| Unreadable size | 593 | `FORMAT_UNKNOWN` 224, `MULTIPACK_SIZE` 114 |
+| Unknown brand | 432 | `BRAND_UNREGISTERED` 243, `BRAND_UNKNOWN` 45, `BRAND_UNCLEAR` 43 |
+| Unsure match | 253 | `POSSIBLE_DUPLICATE` 84, `SHARED_EAN` 48, `AMBIGUOUS` 30 |
+| Unclear | 142 | `PRODUCT_UNCLEAR` 45, `VARIANT_UNKNOWN` 17 |
+| Several products | 76 | `SEVERAL_PRODUCTS` 46, `GIFT_SET` 17 |
+
+A new walk does not help these rows. Each needs a person, a brand in the registry, or a
+source that prints the size.
+
+## 7. The decisions that the second walk left
+
+Nobody has answered these. The session of stage c7 wrote them for the owner. A repeat of
+the curation meets each of them again.
+
+| # | Question | Where it stands |
+| ---: | --- | --- |
+| 1 | **Golden.** The registry brand holds one coaster. Seven rows print the word on drawing blocks, coloured paper, a note block and a mirror. Register a second brand for the printed key (`POST /v1/admin/catalog/brands/:id/homonyms`), or say that both are one brand and create the rows under it? | `d04`, the 7 entries of `C4_BRAND_HOMONYM`. In the queue |
+| 2 | **Eden.** 16 shoe care products "EDEN Natural Comfort" were created under the brand that held one product, "Discos de gel para WC". Deza prints both on one shelf, so they were read as one supplier. If they are two businesses, the 16 need a brand of their own. | Applied. Not in a data file: the 16 are among the 44 creates of `shoe-care` |
+| 3 | **Two tones, or a choice.** The buddha head "blanco/oro" and the two ficus leaves "verde/amarilla" and "verde/blanca" are probably one article each. The six slippers with two colours can be either. | `d04`, the 9 entries of `C2_SEVERAL_PRODUCTS`. In the queue |
+| 4 | **Brands that wait for a person.** The magazine `Pronto` and the lantern `RAM` are homonyms of a registered brand. Seven mastheads have no brand: Arquitectura y Diseño, Brainrot, Coches, Cocina cada día con alma, Más y Más, Pin y Pon and Saber Vivir. The mark `AR` stands on six rows (rugs, doormats, shoe trees and an umbrella). Each needs a brand or a homonym in the registry. | `d03`, the 9 entries of `REVIEW`. `d05`, the rows with `BRAND_UNKNOWN` and `BRAND_HOMONYM` |
+| 5 | **The rows marked "G"** that the deciders could not name: "Globos fiesta G surtidos", "Inflador de globos G manual" and "Regla de aluminio G". | `d05`. They wait for a later walk |
+| 6 | **The Dove deodorant** holds the Mercadona barcode `80466468` since the walk. An accept teaches the barcode of its row to the product, and the link had a confidence of 0.95. Is the barcode right on that product? | `d06`, the entry with `barcodeTaughtToTheProduct` |
+| 7 | **Names are not uniform across batches.** The English name of an artificial bouquet puts the colour first in two batches ("White artificial ... bouquet 43 cm") and last in one ("Artificial ... bouquet white 46 cm"). The tea colour is "color té" in three batches and "té" in one. No rule of the walk makes them one. | Applied as the deciders wrote them |
+| 8 | **The 92 products that the re-file left.** Each fits two leaves, or its name does not say what it is. | `d02` |
+| 9 | **The queue:** the 142 rows of the walk and the 1,496 rows outside it. | `d05` |
+
+Two more points are not questions, and a person should know them:
+
+- **Nobody read the 2,430 names one by one.** They are the answers of the deciders,
+  checked by rule and not by eye, apart from the rows that a correction touched and the
+  two magazine batches.
+- **Rule R43 makes many products.** A garment in five sizes and three colours is fifteen
+  products. The preparation counted about 110 products for the 110 Pompea rows. The other
+  way is one product for each model. The owner can change the rule before a repeat.
+
+## 8. How to build the data files again
 
 The scripts read files only. They open no database and call no service.
 
@@ -694,9 +973,12 @@ The run folder is git ignored and stands in the checkout that did the repair. It
 plan `0186`. The files of plan `0192` stand in four folders of the same run folder:
 `after-0189/`, `stage-c1/`, `stage-c2/` and `stage-c3/`. Each has a `summary.md`. The
 files of the two changes of 2026-10-07 stand in `stage-c4/`, which has none. The files of
-the coordinates of the shop of `T7` stand in `stage-c5/`, which has none either.
+the coordinates of the shop of `T7` stand in `stage-c5/`, which has none either. The
+files of the re-file stand in `stage-c6/`, with a `README.md`. The files of the second
+walk stand in `stage-c7/`, with a `README.md` for the preparation and a `RESULT.md` for
+the apply.
 
-A build writes all twenty-nine files again. The sixteen files of plan `0186` come out byte
+A build writes all thirty-five files again. The sixteen files of plan `0186` come out byte
 for byte as they are committed, which was checked on 2026-10-06 after `stage-c.mjs` was
 added. `gaps.json` is the one older file that changed: it gained the thirteen new rows.
 
@@ -710,6 +992,12 @@ shop of `T7`. A build then changed one file, `c05`: its header, and the entry of
 which gained its coordinates. The other twenty-nine files came out byte for byte as
 they are committed.
 
+After the second walk, `stage-d.mjs` was added for `stage-c6/` and `stage-c7/`. A build
+then wrote six new files, `d01` to `d06`, and changed one, `gaps.json`, which gained six
+rows. The twenty-nine data files of plans `0186` and `0192` came out byte for byte as
+they are committed. The build also counts its own rules: the header of `d01` says how
+many moved products no rule of the file explains, and the answer is 0.
+
 | Script | What it does |
 | --- | --- |
 | `build/lib.mjs` | Reads the source files, shapes a product and a queue row by their natural keys, counts the keys that are absent, writes one entry on one line. |
@@ -717,6 +1005,7 @@ they are committed.
 | `build/stage-a.mjs` | Steps A1 to A11. |
 | `build/stage-b.mjs` | Steps B1 to B5. |
 | `build/stage-c.mjs` | The thirteen files of plan `0192`, from `stage-c1/`, `stage-c2/` and `stage-c3/`. For `c05` and `c13` it also reads `stage-c4/`, and for `c05` it reads `stage-c5/` too. |
+| `build/stage-d.mjs` | The six files of the re-file and the second walk, from `stage-c6/` and `stage-c7/`. It holds the rules of the re-file as data, and the rule that groups the reason codes of the rows outside the walk. |
 | `build/decisions.mjs` | The answer of the owner to each of the sixteen decisions. `lib.mjs` writes it as `ownerDecision` beside every `openDecision`. It also holds the answers that came after the register was written, and the five answers of 2026-10-07. |
 | `build/build.mjs` | Runs all of it and writes `gaps.json`. |
 
@@ -733,3 +1022,9 @@ that `stage-c3/d6.reading.md` names. The reasons of the candidate rows and of th
 pairs are the words of the agent that read them, copied from the files of stage 1. For
 the shop of `T7` it writes the address of the page of the chain, which the owner gave, and
 the kind `STORE` of the price scope, which the create answers by its id only.
+
+`stage-d.mjs` writes three kinds of text itself. The rules of the re-file are copied
+from `stage-c6/propose.mjs`, and the build checks them against the moved products. The
+sentence that explains each class of correction is taken from `stage-c7/RESULT.md`. The
+five groups of the rows outside the walk are a reading of the code names, made for this
+register: no file of the stage holds them.

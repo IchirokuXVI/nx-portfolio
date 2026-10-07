@@ -353,6 +353,78 @@
       "rowsWithNoSourceKind": 0,
       "rowsWithNoExternalId": 0,
       "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d01-refile-rules.json",
+      "step": "D1",
+      "count": 50,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d02-refile-left-for-a-person.json",
+      "step": "D2",
+      "count": 92,
+      "products": 92,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d03-second-walk-brands.json",
+      "step": "D3",
+      "count": 50,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d04-second-walk-corrections.json",
+      "step": "D4",
+      "count": 25,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 25,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d05-second-walk-left-in-the-queue.json",
+      "step": "D5",
+      "count": 142,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 142,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "d06-second-walk-links.json",
+      "step": "D6",
+      "count": 14,
+      "products": 14,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 14,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
     }
   ]
 }
