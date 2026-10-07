@@ -3,10 +3,12 @@
   "title": "The categories of the products that plan 0192 created with none",
   "sources": [
     "stage-c3/d7.before.json",
-    "stage-c3/d7.after.json"
+    "stage-c3/d7.after.json",
+    "stage-c4/c2.before.json",
+    "stage-c4/c2.after.json"
   ],
-  "keys": "Each product is keyed as the read before the batch printed it.",
-  "decidedBy": "The stage 3 session of plan 0192. No decision of the owner names a category.",
+  "keys": "Each product is keyed as the read before the batch of stage 3 printed it.",
+  "decidedBy": "The stage 3 session of plan 0192, for the four products that took the categories of a sibling. The owner, 2026-10-07, for the three shoe creams.",
   "count": 7,
   "naturalKeys": {
     "products": 7,
@@ -19,9 +21,9 @@
   },
   "entries": [
     {"product":{"brand":"Bosque Verde","nameEs":"Vela perfumada Chai","size":1,"unit":"UNIT","packCount":null,"barcode":"8402001036187","localId":"500d7da6-e3ff-4899-b7ab-883197fdcb89"},"decision":{"action":"set-categories","slugs":["air-fresheners-refills-and-candles"]},"was":["uncategorised"],"status":"applied in stage 3","why":"The categories of its sibling product."},
-    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color blanco","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"74bdc211-0af2-481b-bba5-23d5b3d0f858"},"decision":{"action":"none"},"was":["uncategorised"],"status":"left","why":"No sibling product holds a category that fits. The leaf shoe-care exists and holds no product."},
-    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color marrón","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"e8f102a7-4b21-4ca3-9ddd-2b54fbac56d5"},"decision":{"action":"none"},"was":["uncategorised"],"status":"left","why":"No sibling product holds a category that fits. The leaf shoe-care exists and holds no product."},
-    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color negro","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"c8ad0b91-e02d-455c-a2fa-ff2bb243ae8f"},"decision":{"action":"none"},"was":["uncategorised"],"status":"left","why":"No sibling product holds a category that fits. The leaf shoe-care exists and holds no product."},
+    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color blanco","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"74bdc211-0af2-481b-bba5-23d5b3d0f858"},"decision":{"action":"set-categories","slugs":["shoe-care"]},"was":["uncategorised"],"status":"left in stage 3, applied on 2026-10-07","ownerAnswerOf20261007":"Decided by the owner, 2026-10-07: the three shoe creams go into the leaf \"Cuidado del calzado\". No category is created.","why":"The owner named the leaf. It existed and held no product. No category was created."},
+    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color marrón","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"e8f102a7-4b21-4ca3-9ddd-2b54fbac56d5"},"decision":{"action":"set-categories","slugs":["shoe-care"]},"was":["uncategorised"],"status":"left in stage 3, applied on 2026-10-07","ownerAnswerOf20261007":"Decided by the owner, 2026-10-07: the three shoe creams go into the leaf \"Cuidado del calzado\". No category is created.","why":"The owner named the leaf. It existed and held no product. No category was created."},
+    {"product":{"brand":"Búfalo","nameEs":"Crema calzado color negro","size":50,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"c8ad0b91-e02d-455c-a2fa-ff2bb243ae8f"},"decision":{"action":"set-categories","slugs":["shoe-care"]},"was":["uncategorised"],"status":"left in stage 3, applied on 2026-10-07","ownerAnswerOf20261007":"Decided by the owner, 2026-10-07: the three shoe creams go into the leaf \"Cuidado del calzado\". No category is created.","why":"The owner named the leaf. It existed and held no product. No category was created."},
     {"product":{"brand":"Despecho","nameEs":"Vino tinto roble D.O. Ribera del Duero","size":750,"unit":"MILLILITER","packCount":null,"barcode":null,"localId":"5ddcbea9-3757-4552-a84f-fd4a86c199ba"},"decision":{"action":"set-categories","slugs":["red-wine"]},"was":["uncategorised"],"status":"applied in stage 3","why":"The categories of its sibling product."},
     {"product":{"brand":"El Pozo","nameEs":"Burger de pavo con espinacas King","size":240,"unit":"GRAM","packCount":null,"barcode":null,"localId":"34f9a57e-ab64-4889-a8a6-01bad1ec3aa0"},"decision":{"action":"set-categories","slugs":["hamburgers-ground-beef-and-meatballs","turkey"]},"was":["uncategorised"],"status":"applied in stage 3","why":"The categories of its sibling product."},
     {"product":{"brand":"Mahou","nameEs":"Cerveza botellín","size":1500,"unit":"MILLILITER","packCount":6,"barcode":null,"localId":"e8b3de1d-52ea-4f5b-b65b-0e43354c6dbb"},"decision":{"action":"set-categories","slugs":["beer-packs","beers"]},"was":["uncategorised"],"status":"applied in stage 3","why":"The categories of its sibling product."}

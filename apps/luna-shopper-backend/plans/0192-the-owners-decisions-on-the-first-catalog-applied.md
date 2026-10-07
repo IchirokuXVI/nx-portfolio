@@ -795,3 +795,5 @@ Where the work left the text of this plan:
   decisions with a write, and one for the categories. Decisions 1, 5, 13 and 15 have none.
 - **k8s plan `0012`.** The scope says not to touch it. It got one dated line that says
   that the manifest now holds the values of 2026-10-06, and nothing else changed in it.
+
+**Note of 2026-10-07 ([#656](https://github.com/IchirokuXVI/nx-portfolio/pull/656)).** After this plan the owner asked for three more changes on slot 1: the Deza code `T7` got a shop that was created by hand and is mapped to it, the three Búfalo shoe creams went into the leaf `shoe-care`, and that shop got the coordinates that the owner read from Google Maps (37.89862387806124, -4.772603355414682). New dumps were taken at 2026-10-06T23:32:21Z (2026-10-07 01:32 Madrid time), and the manifest holds their values, with 105 price scopes. The loose fruit rows wait for a later fix, and `apps/luna-shopper-backend/docs/first-catalog-decisions-2026-10/loose-fruit-rows.md` lists them. The sentences above describe 2026-10-06 and stay as they were written.
