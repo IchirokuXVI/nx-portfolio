@@ -98,42 +98,77 @@ function coordinates(place: Place): string {
  * Which rule found a catalog shop a place may be (backend plan 0152, section
  * 2), in the order the harvester tries them.
  *
+ * The first three are strict: the harvester refuses an import on them. The
+ * fourth, `SAME_CHAIN_NEAR`, is a hint (backend plan 0193, target 6): a shop
+ * of the chain farther than fifty metres and within two hundred and fifty.
+ *
  * `UNKNOWN` is this app's own member, for a rung a later backend adds: the
  * candidate is still drawn and still linkable, and only the sentence saying why
  * it was offered is the generic one.
  */
-export type PlaceMatchRung = 'EXTERNAL_REF' | 'NEARBY' | 'ADDRESS' | 'UNKNOWN';
+export type PlaceMatchRung =
+  | 'EXTERNAL_REF'
+  | 'NEARBY'
+  | 'ADDRESS'
+  | 'SAME_CHAIN_NEAR'
+  | 'UNKNOWN';
 
-const RUNGS: readonly PlaceMatchRung[] = ['EXTERNAL_REF', 'NEARBY', 'ADDRESS'];
+const RUNGS: readonly PlaceMatchRung[] = [
+  'EXTERNAL_REF',
+  'NEARBY',
+  'ADDRESS',
+  'SAME_CHAIN_NEAR',
+];
 
 /**
  * One shop the catalog already holds that a place may be.
  *
- * This app's own shape. The candidates arrive in the details of a 409, an
- * error body that the document describes as an open object, so there is no
- * generated type to borrow and rule D4 applies with most force.
+ * This app's own shape, and one shape for both ways a candidate arrives: on
+ * the list read, where the document describes it, and in the details of a
+ * 409, an error body that the document describes as an open object. The
+ * second has no generated type to borrow, so rule D4 applies with most force,
+ * and the first is read by the same mapper so that the panel draws one thing.
  */
 export interface PlaceCandidate {
   readonly supermarketLocationId: string;
+  /** The chain of the shop, or `''` when the answer did not say. */
+  readonly supermarketId: string;
   /** The shop's label, or its address, or its id: never blank. */
   readonly title: string;
   readonly address: string;
+  readonly city: string;
   readonly postalCode: string;
+  /** Whole metres from the place, or null for a shop with no position. */
+  readonly metres: number | null;
   readonly rung: PlaceMatchRung;
+  /**
+   * Whether this is a hint and not a match: a shop of the chain that is only
+   * near. Its button is the quiet kind (admin plan 0061, target 3).
+   */
+  readonly hint: boolean;
 }
 
 /**
  * The candidates a `place_matches_location` refusal named, read from its
  * `details`.
- *
- * Takes `unknown` and drops anything without a shop id, because a candidate
- * that cannot be linked is not an answer the panel can offer. Never throws.
  */
 export function placeCandidates(
   details: Readonly<Record<string, unknown>>,
   locales: readonly string[]
 ): readonly PlaceCandidate[] {
-  const listed = details['candidates'];
+  return candidatesOf(details['candidates'], locales);
+}
+
+/**
+ * A list of candidates, as this app draws them.
+ *
+ * Takes `unknown` and drops anything without a shop id, because a candidate
+ * that cannot be linked is not an answer the panel can offer. Never throws.
+ */
+export function candidatesOf(
+  listed: unknown,
+  locales: readonly string[]
+): readonly PlaceCandidate[] {
   if (!Array.isArray(listed)) {
     return [];
   }
@@ -149,16 +184,103 @@ export function placeCandidates(
       continue;
     }
     const address = textOf(row['address']);
-    const rung = row['rung'];
+    const metres = row['metres'];
+    const distance =
+      typeof metres === 'number' && Number.isFinite(metres)
+        ? Math.round(metres)
+        : null;
+    const hint = row['rung'] === 'SAME_CHAIN_NEAR';
+    // The sentence of a hint names the distance. A hint that came with none
+    // keeps its quiet button and takes the generic sentence.
+    const rung =
+      hint && distance === null
+        ? 'UNKNOWN'
+        : (RUNGS.find((known) => known === row['rung']) ?? 'UNKNOWN');
     candidates.push({
       supermarketLocationId: id,
+      supermarketId: textOf(row['supermarketId']),
       title: localizedTextValue(row['label'], locales) || address || id,
       address,
+      city: textOf(row['city']),
       postalCode: textOf(row['postalCode']),
-      rung: RUNGS.find((known) => known === rung) ?? 'UNKNOWN',
+      metres: distance,
+      rung,
+      hint,
     });
   }
   return candidates;
+}
+
+/**
+ * What the mark on a line of the column says, or null for a place with no
+ * candidate (admin plan 0061, target 1).
+ *
+ * Two sentences, because a hint must read as a hint on the line as well. A
+ * place that a strict rule found a shop for is probably that shop. A place
+ * with only a shop of its chain nearby is not: two shops of one chain two
+ * hundred metres apart exist.
+ */
+export function candidateMarkKey(listed: unknown): string | null {
+  if (!Array.isArray(listed) || listed.length === 0) {
+    return null;
+  }
+  const strict = (listed as unknown[]).some(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      (entry as Record<string, unknown>)['rung'] !== 'SAME_CHAIN_NEAR'
+  );
+  return strict ? 'harvest.places.mark.probable' : 'harvest.places.mark.near';
+}
+
+/** The fields a link can fill, in the order the sentence names them. */
+const LINK_FIELDS: readonly string[] = [
+  'ADDRESS',
+  'CITY',
+  'POSTAL_CODE',
+  'COUNTRY',
+  'COORDINATES',
+  'EXTERNAL_REF',
+  'FOOTPRINT',
+];
+
+/**
+ * The translation keys of what a link filled, in a fixed order (admin plan
+ * 0061, target 7).
+ *
+ * The order is this app's and not the answer's, so the sentence reads the
+ * same way every time: the address, the city, the postal code, and then the
+ * rest. A field a later backend adds is named "another field" once.
+ */
+export function filledFieldKeys(filled: unknown): readonly string[] {
+  if (!Array.isArray(filled)) {
+    return [];
+  }
+  const named = (filled as unknown[]).filter(
+    (field): field is string => typeof field === 'string'
+  );
+  const keys = LINK_FIELDS.filter((field) => named.includes(field)).map(
+    (field) => `harvest.places.linked.field.${field}`
+  );
+  return named.some((field) => !LINK_FIELDS.includes(field))
+    ? [...keys, 'harvest.places.linked.field.OTHER']
+    : keys;
+}
+
+/**
+ * The chain a `place_names_another_chain` refusal named, read from its
+ * `details`, or `''` when it named none this app can read.
+ */
+export function refusedChainName(
+  details: Readonly<Record<string, unknown>>,
+  locales: readonly string[]
+): string {
+  const chain = details['chain'];
+  if (typeof chain !== 'object' || chain === null) {
+    return '';
+  }
+  const name = (chain as Record<string, unknown>)['name'];
+  return typeof name === 'string' ? name : localizedTextValue(name, locales);
 }
 
 /** A catalog shop near the place, for the duplicates panel. */
@@ -166,6 +288,7 @@ export interface NearbyShop {
   readonly id: string;
   readonly title: string;
   readonly address: string;
+  readonly city: string;
   readonly postalCode: string;
   /** Rounded metres, or null for a shop the catalog holds no position for. */
   readonly metres: number | null;
@@ -219,6 +342,7 @@ export function nearbyShops(
       id,
       title: localizedTextValue(row['label'], locales) || address || id,
       address,
+      city: textOf(row['city']),
       postalCode,
       metres,
     });
@@ -229,6 +353,121 @@ export function nearbyShops(
       (a.metres ?? Number.POSITIVE_INFINITY) -
       (b.metres ?? Number.POSITIVE_INFINITY)
   );
+}
+
+/** One place the bulk act links, and the shop it links it to. */
+export interface RefLinkLine {
+  readonly placeId: string;
+  /** The name of the place, or its reference: never blank. */
+  readonly place: string;
+  /** Its street and city, as far as it has them. */
+  readonly where: string;
+  readonly shop: string;
+  /** The translation keys of what the link fills, in the fixed order. */
+  readonly filledKeys: readonly string[];
+}
+
+/** One place the bulk act leaves as it is, and why. */
+export interface RefSkipLine {
+  readonly placeId: string;
+  readonly place: string;
+  readonly where: string;
+  readonly reasonKey: string;
+}
+
+/** What the bulk act does, or would do, as the preview draws it. */
+export interface RefLinkPreview {
+  readonly linked: readonly RefLinkLine[];
+  readonly skipped: readonly RefSkipLine[];
+}
+
+const SKIP_REASONS: readonly string[] = ['SEVERAL_SHOPS', 'PROVIDER_NOT_NAMED'];
+
+/**
+ * The answer of the bulk link, dry or applied, as lines to draw (admin plan
+ * 0061, target 8).
+ *
+ * The shop of a line goes through the same mapper as every other candidate,
+ * so it is called by its label, then its address, then its id. A reason a
+ * later backend adds reads "Not linked".
+ */
+export function refLinkPreview(
+  answer: Wire.HarvestLinkPlacesByRefResult,
+  locales: readonly string[]
+): RefLinkPreview {
+  return {
+    linked: answer.linked.map((row) => ({
+      placeId: row.place.id,
+      place: row.place.name ?? row.place.externalRef,
+      where: whereOf(row.place),
+      shop:
+        candidatesOf([row.shop], locales)[0]?.title ??
+        row.shop.supermarketLocationId,
+      filledKeys: filledFieldKeys(row.filled),
+    })),
+    skipped: answer.skipped.map((row) => ({
+      placeId: row.place.id,
+      place: row.place.name ?? row.place.externalRef,
+      where: whereOf(row.place),
+      reasonKey: `harvest.places.byRef.reason.${
+        SKIP_REASONS.includes(row.reason) ? row.reason : 'UNKNOWN'
+      }`,
+    })),
+  };
+}
+
+/**
+ * What a sentence calls one place: its name, and its street after it.
+ *
+ * The name alone does not say which place. Every place of a chain that prints
+ * its banner on each record has the same name, and the street is what tells
+ * two of them apart.
+ */
+export function placeLabel(place: Place): string {
+  const name = place.name ?? place.externalRef;
+  const street = (place.street ?? '').trim();
+  return street === '' ? name : `${name} (${street})`;
+}
+
+function whereOf(place: Place): string {
+  return [place.street, place.city]
+    .filter((part): part is string => part !== null && part.trim() !== '')
+    .join(', ');
+}
+
+/** The shop a person picked, as the line above the link button draws it. */
+export interface PickedShop {
+  readonly id: string;
+  readonly title: string;
+  readonly address: string;
+  readonly city: string;
+  readonly postalCode: string;
+}
+
+/**
+ * One catalog row as the shop a person picked to link to, or null for a row
+ * with no id (admin plan 0061, target 4).
+ */
+export function pickedShop(
+  row: unknown,
+  locales: readonly string[]
+): PickedShop | null {
+  if (typeof row !== 'object' || row === null) {
+    return null;
+  }
+  const fields = row as Record<string, unknown>;
+  const id = fields['id'];
+  if (typeof id !== 'string' || id === '') {
+    return null;
+  }
+  const address = textOf(fields['address']);
+  return {
+    id,
+    title: localizedTextValue(fields['label'], locales) || address || id,
+    address,
+    city: textOf(fields['city']),
+    postalCode: textOf(fields['postalCode']),
+  };
 }
 
 /**
@@ -246,8 +485,10 @@ export function fromOpenStreetMap(place: Place): boolean {
  * The sentence for a refusal of a place decision, where the places queue has
  * one of its own, and `null` where the generic sentence is the right one.
  *
- * The three codes backend plan 0152 added. `place_matches_location` is here
- * for the bulk report: the single decision draws the candidates instead.
+ * The three codes backend plan 0152 added, and the one of backend plan 0193.
+ * `place_matches_location` and `place_names_another_chain` each have a panel
+ * of their own on the open place, so their sentences are for the case in which
+ * that panel could not be drawn.
  */
 export function placeRefusalKey(error: GatewayError | null): string | null {
   switch (error?.code) {
@@ -257,6 +498,8 @@ export function placeRefusalKey(error: GatewayError | null): string | null {
       return 'harvest.places.error.alreadyImported';
     case 'scope_not_found':
       return 'harvest.places.error.scopeNotFound';
+    case 'place_names_another_chain':
+      return 'harvest.places.error.namesAnotherChain';
     default:
       return null;
   }

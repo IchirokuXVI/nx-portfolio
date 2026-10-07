@@ -1,13 +1,19 @@
 import { GatewayError } from '@portfolio/luna-shopper-admin/data-access';
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
+  candidateMarkKey,
+  candidatesOf,
+  filledFieldKeys,
   fromOpenStreetMap,
   metresBetween,
   nearby,
   nearbyShops,
+  pickedShop,
   placeCandidates,
   placeLines,
   placeRefusalKey,
+  refLinkPreview,
+  refusedChainName,
 } from './place-view';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
@@ -159,10 +165,14 @@ describe('placeCandidates', () => {
     expect(found).toEqual([
       {
         supermarketLocationId: 'loc-1',
+        supermarketId: '',
         title: 'Libertador',
         address: 'Avenida del Gran Capitán 12',
+        city: '',
         postalCode: '14001',
+        metres: null,
         rung: 'EXTERNAL_REF',
+        hint: false,
       },
     ]);
   });
@@ -203,6 +213,240 @@ describe('placeCandidates', () => {
   });
 });
 
+/**
+ * Admin plan 0061: the candidates the list read carries, read by the same
+ * mapper as the ones a refusal carries, so the panel draws one thing.
+ */
+describe('candidatesOf', () => {
+  const listed: Wire.HarvestPlaceLocationCandidate[] = [
+    {
+      supermarketLocationId: 'loc-1',
+      supermarketId: 'chain-1',
+      label: null,
+      address: 'Calle Mayor 1',
+      city: 'Córdoba',
+      postalCode: '14001',
+      rung: 'NEARBY',
+      metres: 28,
+    },
+    {
+      supermarketLocationId: 'loc-2',
+      supermarketId: 'chain-1',
+      label: { es: 'Sector Sur' },
+      address: 'Avenida de Cádiz 68',
+      city: 'Córdoba',
+      postalCode: '14013',
+      rung: 'SAME_CHAIN_NEAR',
+      metres: 61.8,
+    },
+  ];
+
+  it('reads the chain, the city and the distance of each candidate', () => {
+    expect(candidatesOf(listed, ['en', 'es'])).toEqual([
+      {
+        supermarketLocationId: 'loc-1',
+        supermarketId: 'chain-1',
+        title: 'Calle Mayor 1',
+        address: 'Calle Mayor 1',
+        city: 'Córdoba',
+        postalCode: '14001',
+        metres: 28,
+        rung: 'NEARBY',
+        hint: false,
+      },
+      {
+        supermarketLocationId: 'loc-2',
+        supermarketId: 'chain-1',
+        title: 'Sector Sur',
+        address: 'Avenida de Cádiz 68',
+        city: 'Córdoba',
+        postalCode: '14013',
+        metres: 62,
+        rung: 'SAME_CHAIN_NEAR',
+        hint: true,
+      },
+    ]);
+  });
+
+  it('marks a shop that is only near as a hint', () => {
+    expect(candidatesOf(listed, ['en']).map((found) => found.hint)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
+  /** The sentence of a hint names the distance, so it needs one. */
+  it('gives a hint with no distance the generic sentence and keeps it a hint', () => {
+    const [found] = candidatesOf(
+      [{ supermarketLocationId: 'loc-1', rung: 'SAME_CHAIN_NEAR' }],
+      ['en']
+    );
+
+    expect(found.rung).toBe('UNKNOWN');
+    expect(found.hint).toBe(true);
+  });
+
+  it('answers nothing for what is not a list', () => {
+    expect(candidatesOf(undefined, ['en'])).toEqual([]);
+    expect(candidatesOf({ length: 2 }, ['en'])).toEqual([]);
+  });
+});
+
+describe('candidateMarkKey', () => {
+  it('says nothing for a place with no candidate', () => {
+    expect(candidateMarkKey([])).toBeNull();
+    expect(candidateMarkKey(undefined)).toBeNull();
+  });
+
+  it('says the place is probably a shop we hold on a strict rung', () => {
+    expect(candidateMarkKey([{ rung: 'EXTERNAL_REF' }])).toBe(
+      'harvest.places.mark.probable'
+    );
+    expect(
+      candidateMarkKey([{ rung: 'SAME_CHAIN_NEAR' }, { rung: 'NEARBY' }])
+    ).toBe('harvest.places.mark.probable');
+  });
+
+  it('says only that a shop is near when every candidate is a hint', () => {
+    expect(candidateMarkKey([{ rung: 'SAME_CHAIN_NEAR' }])).toBe(
+      'harvest.places.mark.near'
+    );
+  });
+});
+
+describe('filledFieldKeys', () => {
+  it('names the fields in one fixed order, whatever order they came in', () => {
+    expect(
+      filledFieldKeys(['POSTAL_CODE', 'COORDINATES', 'CITY', 'ADDRESS'])
+    ).toEqual([
+      'harvest.places.linked.field.ADDRESS',
+      'harvest.places.linked.field.CITY',
+      'harvest.places.linked.field.POSTAL_CODE',
+      'harvest.places.linked.field.COORDINATES',
+    ]);
+  });
+
+  it('answers nothing for a link that wrote only the mark', () => {
+    expect(filledFieldKeys([])).toEqual([]);
+    expect(filledFieldKeys(undefined)).toEqual([]);
+  });
+
+  it('names a field it does not know once, as another field', () => {
+    expect(filledFieldKeys(['CITY', 'PHONE', 'HOURS'])).toEqual([
+      'harvest.places.linked.field.CITY',
+      'harvest.places.linked.field.OTHER',
+    ]);
+  });
+});
+
+describe('refusedChainName', () => {
+  it('reads the localized name of the chain the place names', () => {
+    expect(
+      refusedChainName({ chain: { id: 'chain-2', name: { es: 'Dia' } } }, [
+        'en',
+        'es',
+      ])
+    ).toBe('Dia');
+  });
+
+  it('answers an empty name for details it cannot read', () => {
+    expect(refusedChainName({}, ['en'])).toBe('');
+    expect(refusedChainName({ chain: 'Dia' }, ['en'])).toBe('');
+    expect(refusedChainName({ chain: { id: 'chain-2' } }, ['en'])).toBe('');
+  });
+});
+
+describe('pickedShop', () => {
+  it('reads a catalog row as the shop the link form draws', () => {
+    expect(
+      pickedShop(
+        {
+          id: 'loc-1',
+          label: null,
+          address: 'Calle Mayor 1',
+          city: 'Córdoba',
+          postalCode: '14001',
+        },
+        ['en']
+      )
+    ).toEqual({
+      id: 'loc-1',
+      title: 'Calle Mayor 1',
+      address: 'Calle Mayor 1',
+      city: 'Córdoba',
+      postalCode: '14001',
+    });
+  });
+
+  it('answers null for a row with no id', () => {
+    expect(pickedShop(undefined, ['en'])).toBeNull();
+    expect(pickedShop({ address: 'x' }, ['en'])).toBeNull();
+  });
+});
+
+describe('refLinkPreview', () => {
+  const shop: Wire.HarvestPlaceLocationCandidate = {
+    supermarketLocationId: 'loc-1',
+    supermarketId: 'chain-1',
+    label: null,
+    address: 'Calle Mayor 1',
+    city: 'Madrid',
+    postalCode: '28013',
+    rung: 'EXTERNAL_REF',
+    metres: 4,
+  };
+
+  it('draws one line for each place with its shop and what the link fills', () => {
+    const preview = refLinkPreview(
+      {
+        applied: false,
+        linked: [{ place: place(), shop, filled: ['CITY'] }],
+        skipped: [],
+      },
+      ['en']
+    );
+
+    expect(preview).toEqual({
+      linked: [
+        {
+          placeId: 'place-1',
+          place: 'Dia Market',
+          where: 'Calle Mayor 14, Madrid',
+          shop: 'Calle Mayor 1',
+          filledKeys: ['harvest.places.linked.field.CITY'],
+        },
+      ],
+      skipped: [],
+    });
+  });
+
+  it('draws a skipped place with its reason', () => {
+    const preview = refLinkPreview(
+      {
+        applied: false,
+        linked: [],
+        skipped: [
+          {
+            place: place({ name: null, street: null }),
+            reason: 'PROVIDER_NOT_NAMED',
+            shops: [shop],
+          },
+        ],
+      },
+      ['en']
+    );
+
+    expect(preview.skipped).toEqual([
+      {
+        placeId: 'place-1',
+        place: 'node/1',
+        where: 'Madrid',
+        reasonKey: 'harvest.places.byRef.reason.PROVIDER_NOT_NAMED',
+      },
+    ]);
+  });
+});
+
 describe('nearbyShops', () => {
   it('keeps shops within reach, nearest first', () => {
     const shops = nearbyShops(
@@ -235,6 +479,7 @@ describe('nearbyShops', () => {
         id: 'same',
         title: 'same',
         address: '',
+        city: '',
         postalCode: '28013',
         metres: null,
       },
@@ -263,6 +508,12 @@ describe('placeRefusalKey', () => {
     );
     expect(placeRefusalKey(refusal('scope_not_found'))).toBe(
       'harvest.places.error.scopeNotFound'
+    );
+  });
+
+  it('names the refusal backend plan 0193 added', () => {
+    expect(placeRefusalKey(refusal('place_names_another_chain'))).toBe(
+      'harvest.places.error.namesAnotherChain'
     );
   });
 

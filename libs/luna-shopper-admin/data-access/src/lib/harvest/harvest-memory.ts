@@ -19,7 +19,8 @@ import {
   HARVEST_RUN_PRICE_SEED,
   HARVEST_RUN_SEED,
   ITEM_SOURCE_ENTRY_SEED,
-  PLACE_CANDIDATE_SEED,
+  PLACE_CHAIN_SEED,
+  PLACE_SHOP_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
@@ -42,6 +43,15 @@ import type {
   ShopQuery,
   SourceEntryAcceptResult,
 } from './harvest-service';
+import {
+  candidate,
+  chainOfPlace,
+  decideByRef,
+  linkFields,
+  strictShops,
+  suggestShops,
+  type LinkableShop,
+} from './place-linking';
 
 /** How many rows a page holds when nothing asks for a size. */
 const PAGE_SIZE = 25;
@@ -75,6 +85,11 @@ export class HarvestMemory implements HarvestServiceI {
   private readonly _places: Wire.HarvestDiscoveredPlaceView[] = clone(
     DISCOVERED_PLACE_SEED
   );
+  /**
+   * The shops of the catalog that a place can be linked to. A link fills these
+   * rows, so the next read works its candidates out against what was written.
+   */
+  private readonly _placeShops: LinkableShop[] = clone(PLACE_SHOP_SEED);
   private readonly _entries: Wire.HarvestSourceCatalogEntryView[] =
     clone(SOURCE_ENTRY_SEED);
   private readonly _sources: Wire.HarvestSupermarketSourceView[] = clone(
@@ -334,7 +349,19 @@ export class HarvestMemory implements HarvestServiceI {
           place.postalCode === query.postalCode)
     );
 
-    return page(matching, query);
+    // The candidates are worked out on the read and stored nowhere, and only
+    // for a place nobody decided (backend plan 0193, target 5).
+    const read = page(matching, query);
+    return {
+      ...read,
+      items: read.items.map((place) => ({
+        ...place,
+        candidates:
+          place.status === 'NEW'
+            ? suggestShops(place, this._placeShops, PLACE_CHAIN_SEED)
+            : [],
+      })),
+    };
   }
 
   async placeGroups(
@@ -373,9 +400,10 @@ export class HarvestMemory implements HarvestServiceI {
    * An import, refused the ways the server refuses one (backend plans 0152 and
    * 0153).
    *
-   * An imported place answers `place_already_imported`. A place the seed says
-   * the catalog may already hold answers `place_matches_location` with the
-   * candidates under `details`, unless `force` is sent. An OpenStreetMap place
+   * An imported place answers `place_already_imported`. A place that one of
+   * the three strict rungs finds a shop for answers `place_matches_location`
+   * with the candidates under `details`, unless `force` is sent. A shop that
+   * is only near is a hint, and it refuses nothing. An OpenStreetMap place
    * with no brand key and no chain named answers the plain conflict the
    * harvester answers, because the place cannot say what language its name is
    * in; `newChain` is the way through.
@@ -387,7 +415,14 @@ export class HarvestMemory implements HarvestServiceI {
     const place = this._undecidedPlace(id);
 
     if (input.force !== true) {
-      const candidates = PLACE_CANDIDATE_SEED[place.id] ?? [];
+      const chain = chainOfPlace(place, PLACE_CHAIN_SEED);
+      const candidates = strictShops(
+        place,
+        chain === null
+          ? this._placeShops
+          : this._placeShops.filter((shop) => shop.supermarketId === chain.id),
+        chain !== null
+      );
       if (candidates.length > 0) {
         throw new GatewayError({
           code: 'place_matches_location',
@@ -418,17 +453,93 @@ export class HarvestMemory implements HarvestServiceI {
     return this._decidePlace(id, 'IMPORTED', input.supermarketId ?? null);
   }
 
-  /** A place joins a shop the catalog holds, and nothing is created. */
+  /**
+   * A place joins a shop the catalog holds, and nothing is created (backend
+   * plan 0193, targets 1 to 4).
+   *
+   * The shop that is named decides the chain. A place that names no chain
+   * links with no question. A place that names another chain answers 409
+   * `place_names_another_chain` with that chain under `details`, and writes
+   * nothing, unless `acrossChains` is sent. The answer says which fields of
+   * the shop the link filled.
+   */
   async linkPlace(
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
   ): Promise<Wire.HarvestPlaceLinkResult> {
-    this._undecidedPlace(id);
-    return {
-      place: this._decidePlace(id, 'IMPORTED', input.supermarketLocationId),
-      // The double holds no shop to fill, so a link here writes only the mark.
-      filled: [],
+    const place = this._undecidedPlace(id);
+    const shop = this._placeShops.find(
+      (row) => row.id === input.supermarketLocationId
+    );
+    if (shop === undefined) {
+      throw notFound();
+    }
+
+    if (input.acrossChains !== true) {
+      const chain = chainOfPlace(place, PLACE_CHAIN_SEED);
+      if (chain !== null && chain.id !== shop.supermarketId) {
+        throw new GatewayError({
+          code: 'place_names_another_chain',
+          status: 409,
+          correlationId: '',
+          details: { chain: { id: chain.id, name: { ...chain.name } } },
+        });
+      }
+    }
+
+    return this._linkPlace(place, shop);
+  }
+
+  /**
+   * Link every place that a shop was made from (backend plan 0193, target 8).
+   *
+   * Without `apply` nothing changes and the answer says what would. A place is
+   * linked when exactly one shop carries its reference and names the same
+   * provider. A second call with `apply` finds nothing, because a linked place
+   * is no longer `NEW`.
+   */
+  async linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult> {
+    const apply = input.apply === true;
+    const result: Wire.HarvestLinkPlacesByRefResult = {
+      applied: apply,
+      linked: [],
+      skipped: [],
     };
+
+    for (const place of this._places) {
+      if (place.status !== 'NEW') {
+        continue;
+      }
+      const decision = decideByRef(place, this._placeShops);
+      if (decision === null) {
+        continue;
+      }
+      if (decision.kind === 'skip') {
+        result.skipped.push({
+          place: { ...place, candidates: [] },
+          reason: decision.reason,
+          shops: decision.shops.map((shop) =>
+            candidate(place, shop, 'EXTERNAL_REF')
+          ),
+        });
+        continue;
+      }
+
+      const shop = candidate(place, decision.shop, 'EXTERNAL_REF');
+      // The dry answer shows the place as it is and what the link would
+      // write. With `apply` the same row comes back imported.
+      const linked = apply
+        ? this._linkPlace(place, decision.shop)
+        : {
+            place: { ...place, candidates: [] },
+            filled: linkFields(place, decision.shop).filled,
+          };
+      result.linked.push({ ...linked, shop });
+    }
+
+    return result;
   }
 
   /**
@@ -1275,6 +1386,19 @@ export class HarvestMemory implements HarvestServiceI {
     place.status = status;
     place.supermarketLocationId = supermarketLocationId;
     return { ...place };
+  }
+
+  /** Fill what the shop lacks from the place, and mark the place imported. */
+  private _linkPlace(
+    place: Wire.HarvestDiscoveredPlaceView,
+    shop: LinkableShop
+  ): Wire.HarvestPlaceLinkResult {
+    const { patch, filled } = linkFields(place, shop);
+    Object.assign(shop, patch);
+    return {
+      place: this._decidePlace(place.id, 'IMPORTED', shop.id),
+      filled,
+    };
   }
 
   private _preset(id: string): StoredPreset {

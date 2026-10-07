@@ -133,6 +133,12 @@ export interface QueueRowRef {
       }
     </header>
 
+    <!-- What a tool of the header answered: the preview of a bulk act, or
+         what the last decision did (admin plan 0061). Under the header and
+         above the rows, and drawn whatever the rows are doing, since a bulk
+         act reads the queue again while its answer is on screen. -->
+    <ng-content select="[queueBanner]" />
+
     <!-- A view of the queue's own. It reads for itself, so it is drawn
          whatever the rows are doing. Hidden and not removed while another
          view is on screen, because projected content has one place. -->

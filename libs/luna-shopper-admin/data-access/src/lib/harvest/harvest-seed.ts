@@ -1,4 +1,5 @@
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
+import type { LinkableChain, LinkableShop } from './place-linking';
 
 /**
  * What the harvester screens show with nothing listening.
@@ -582,11 +583,10 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
     },
     {
       // The shop the catalog already holds (backend plan 0152). The run that
-      // found it declared warehouse 4661, and an import answers 409
-      // `place_matches_location` with the seeded shop as a candidate, so the
-      // link path is reachable with nothing listening. Near
-      // `loc_cordoba_centro` in the catalog seed, and carrying Mercadona's
-      // brand key, so the duplicates panel finds that shop too.
+      // found it declared warehouse 4661. It stands 28 metres from
+      // `loc_cordoba_centro` and carries the brand key of Mercadona, so the
+      // list read names that shop as its candidate on the second rung, and an
+      // import answers 409 `place_matches_location` with the same shop.
       id: 'place-mercadona-libertador',
       runId: 'run-store-aborted',
       provider: 'mercadona',
@@ -609,6 +609,65 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       supermarketLocationId: null,
       firstSeenAt: '2026-09-01T08:04:00.000Z',
       lastSeenAt: '2026-09-01T08:04:00.000Z',
+      candidates: [],
+    },
+    {
+      // The place a shop was made from (backend plan 0193, target 8).
+      // `loc_cordoba_oeste` carries this reference and names the same provider,
+      // so the list read names it on the first rung and the bulk act links it.
+      // The shop holds a postal code that catalog guessed and this place states
+      // one, so the link fills the postal code.
+      id: 'place-mercadona-oeste',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'way/48821004',
+      brandKey: 'Q1888874',
+      brandName: 'Mercadona',
+      name: 'Mercadona',
+      latitude: 37.87595,
+      longitude: -4.80125,
+      street: 'Calle Historiador Domínguez Ortiz 4',
+      city: 'Córdoba',
+      postalCode: '14005',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: null,
+      openingHours: 'Mo-Sa 09:00-21:30',
+      tags: { shop: 'supermarket', brand: 'Mercadona' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:30.000Z',
+      lastSeenAt: '2026-09-01T08:04:30.000Z',
+      candidates: [],
+    },
+    {
+      // A hint and no more (backend plan 0193, target 6). About 110 metres
+      // from `loc_sierra`, which is outside the strict fifty and inside the two
+      // hundred and fifty of the fourth rung. An import of it is not refused.
+      // The shop has no city and no postal code, so a link fills both.
+      id: 'place-mercadona-trassierra',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/7730045512',
+      brandKey: 'Q1888874',
+      brandName: 'Mercadona',
+      name: 'Mercadona Trassierra',
+      latitude: 37.9321,
+      longitude: -4.8866,
+      street: 'Carretera de Trassierra km 8',
+      city: 'Córdoba',
+      postalCode: '14012',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { shop: 'supermarket', brand: 'Mercadona' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:40.000Z',
+      lastSeenAt: '2026-09-01T08:04:40.000Z',
       candidates: [],
     },
     {
@@ -642,41 +701,111 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
   ];
 
 /**
- * One catalog shop a place may be, as the 409 `place_matches_location` lists
- * it under `details.candidates` (backend plan 0152, section 2).
+ * The shops of the catalog, as the memory harvester knows them (admin plan
+ * 0061, target 10).
  *
- * Not a generated type: the candidates travel in the error envelope's
- * `details`, which the document describes as an open object. The memory
- * harvester throws exactly this shape so the screen's mapper reads it the way
- * it reads the server's.
+ * The harvester asks catalog for the shops of a chain when it works out the
+ * candidates of a place, when it links one and when it links by reference. The
+ * memory harvester has no catalog to ask, so it holds these. They are the
+ * shops of `LOCATION_SEED` in `feature-catalog`, field for field, and
+ * `place-seed-agrees.spec.ts` in `feature-harvest` fails when the two differ.
+ *
+ * A link fills these rows and not the rows of the catalog seed. The two
+ * libraries share no table, and a shop record opened after a link thus shows
+ * the shop as it was.
  */
-export interface SeededPlaceCandidate {
-  readonly supermarketLocationId: string;
-  readonly label: Readonly<Record<string, string>> | null;
-  readonly address: string | null;
-  readonly postalCode: string | null;
-  readonly rung: 'EXTERNAL_REF' | 'NEARBY' | 'ADDRESS';
-}
+export const PLACE_SHOP_SEED: readonly LinkableShop[] = [
+  {
+    id: 'loc_cordoba_centro',
+    supermarketId: 'sm_mercadona',
+    label: null,
+    address: 'Avenida del Gran Capitán 12',
+    city: 'Córdoba',
+    country: 'ES',
+    postalCode: '14001',
+    postalCodeSource: 'SOURCE',
+    latitude: 37.8882,
+    longitude: -4.7794,
+    externalRef: 'node/1156230891',
+    externalProvider: 'osm',
+  },
+  {
+    id: 'loc_cordoba_oeste',
+    supermarketId: 'sm_mercadona',
+    label: null,
+    address: 'Calle Historiador Domínguez Ortiz 4',
+    city: 'Córdoba',
+    country: 'ES',
+    postalCode: '14005',
+    postalCodeSource: 'DERIVED',
+    latitude: 37.8759,
+    longitude: -4.8012,
+    externalRef: 'way/48821004',
+    externalProvider: 'osm',
+  },
+  {
+    id: 'loc_sierra',
+    supermarketId: 'sm_mercadona',
+    label: null,
+    address: 'Carretera de Trassierra km 8',
+    city: null,
+    country: 'ES',
+    postalCode: null,
+    postalCodeSource: null,
+    latitude: 37.9312,
+    longitude: -4.8871,
+    externalRef: 'node/9920011234',
+    externalProvider: 'osm',
+  },
+  {
+    id: 'loc_consum_centro',
+    supermarketId: 'sm_consum',
+    label: { en: 'Consum Centro', es: 'Consum Centro' },
+    address: 'Calle Cruz Conde 20',
+    city: 'Córdoba',
+    country: 'ES',
+    postalCode: '14003',
+    postalCodeSource: 'MANUAL',
+    latitude: 37.8867,
+    longitude: -4.7823,
+    externalRef: null,
+    externalProvider: null,
+  },
+];
 
 /**
- * What an import of each seeded place would find in the catalog, by place id.
- *
- * A place absent here matches nothing and imports. The ids are shops of the
- * catalog seed, so a link names a shop the locations screen can open.
+ * The chains of the catalog, as the memory harvester knows them: the chains
+ * of `SUPERMARKET_SEED` in `feature-catalog`, with the brand key each is known
+ * by. A place resolves to one of these or to none, which is what decides the
+ * chain question of a link (backend plan 0193, target 4).
  */
-export const PLACE_CANDIDATE_SEED: Readonly<
-  Record<string, readonly SeededPlaceCandidate[]>
-> = {
-  'place-mercadona-libertador': [
-    {
-      supermarketLocationId: 'loc_cordoba_centro',
-      label: null,
-      address: 'Avenida del Gran Capitán 12',
-      postalCode: '14001',
-      rung: 'NEARBY',
-    },
-  ],
-};
+export const PLACE_CHAIN_SEED: readonly LinkableChain[] = [
+  {
+    id: 'sm_mercadona',
+    name: { en: 'Mercadona', es: 'Mercadona' },
+    brandKey: 'Q1888874',
+  },
+  {
+    id: 'sm_bonpreu',
+    name: { en: 'Bonpreu', es: 'Bonpreu' },
+    brandKey: 'Q11924747',
+  },
+  {
+    id: 'sm_carrefour',
+    name: { en: 'Carrefour', es: 'Carrefour' },
+    brandKey: 'Q217599',
+  },
+  {
+    id: 'sm_carrefour_express',
+    name: { en: 'Carrefour Express', es: 'Carrefour Express' },
+    brandKey: 'Q2940602',
+  },
+  {
+    id: 'sm_consum',
+    name: { en: 'Consum', es: 'Consum' },
+    brandKey: 'Q8350308',
+  },
+];
 
 /**
  * The one queue, in every shape it draws (backend plan 0086, section 3; admin

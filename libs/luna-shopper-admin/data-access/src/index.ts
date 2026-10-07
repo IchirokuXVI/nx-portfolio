@@ -88,6 +88,8 @@ export { HarvestMemory } from './lib/harvest/harvest-memory';
 export {
   HARVEST_RUN_SEED,
   MERCADONA_WEEKLY_PRESET,
+  PLACE_CHAIN_SEED,
+  PLACE_SHOP_SEED,
 } from './lib/harvest/harvest-seed';
 export {
   HARVEST_SERVICE,

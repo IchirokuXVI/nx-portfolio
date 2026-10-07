@@ -176,3 +176,123 @@ Every statement below was read in the file it names, on `dev` at `b67f6f94`.
   thing a person reads.
 - The other choice: hide the button while a strict candidate is shown, and keep "Create a
   new shop anyway" as the only way to import.
+
+## 3. What was built, and what the plan did not settle
+
+Targets 1 to 10 are built, with the recommended answer of decisions A, B and C: no mock,
+the bulk act as a control in the header of the queue, and an Import button that did not
+change. The points below are the choices the builder made where the plan left room.
+
+### The mark has two sentences
+
+Target 1 names one sentence, "Probably a shop we hold". Target 3 says that a hint reads as
+a hint. On the first catalog 5 of the 14 places with a candidate have only a hint, and two
+of them stand 75 m and 209 m from a shop that is linked to its own place. "Probably" is not
+true for those.
+
+- A place that a strict rung found a shop for carries "Probably a shop we hold".
+- A place whose every candidate is a hint carries "A shop of its chain is near", drawn
+  with no wash.
+
+The panel of the open place follows the same rule. With hints alone its heading is "A shop
+of its chain is near", and it takes no amber, which the remodel keeps for a decision that
+waits.
+
+**For the owner:** say so if the line must read "Probably a shop we hold" for a hint too.
+It is one function, `candidateMarkKey` in `place-view.ts`.
+
+### "Create a new shop anyway" answers a refused import, and nothing else
+
+The panel is now drawn from the list read, before any import. Its button "Create a new
+shop anyway" and the sentence "Nothing was added" stay with a refused import, because
+they are the answer to that refusal (decision C). A panel that the list read drew says
+"Link the place to the shop that is the same one" and has no such button. A 409 of an
+import replaces the list with its own candidates, as target 2 asks.
+
+### The link form holds its own chain
+
+Target 4 says the shop picker is over the chain of the chain picker, or of the first
+candidate, "or it asks for a chain first". The form draws a chain picker of its own above
+the shop picker, filled with that chain. So a person reads which chain the shops are of,
+and names another one in the same place. It is a second signal and not the chain picker of
+the import: a chain named to find a shop must not file a later import under that chain.
+
+One source was added before the form asks. A place with no candidate and no picked chain
+opens on the chain whose brand key it carries, when catalog holds that chain. The 34
+places of El Jamón that the catalog lacks a shop for thus open on the shops of El Jamón.
+
+The nearby panel follows the chain of the form too. A person who names Deza in the form
+for a place with no brand sees the shops of Deza within 250 m, each with its button.
+
+### The nearby panel after target 5
+
+The harvester now names every shop of the chain within 250 m as a candidate. The nearby
+panel reads the same shops, so for most places every shop of it is already above. The
+panel then says "The shops of this chain near it are listed above" and not that the
+catalog holds none. It still lists what no rung names: a shop with no position at the same
+postal code, the shops of a chain a person picked, and the hints after a refused import
+replaced the list with the strict candidates.
+
+### The notice
+
+- It is drawn under the header of the queue and not in the card, because a link takes its
+  place out of the queue. After the last place of the queue there is no card.
+- It names the place by its name and its street. Every place of El Jamón has the same
+  name.
+- It names the fields in one order of its own: the address, the city, the postal code, the
+  country, the position, the provider reference, the floor area. A field that a later
+  backend adds reads "another field".
+- It goes when another place comes up.
+
+### The other chain question
+
+- `details.chain.name` is a localized name. It is read in the content language of the
+  admin. With no readable name the sentence is "This place names another chain. Link it to
+  this shop?".
+- "Cancel" sends nothing and leaves no failure line above the queue.
+- A second refusal after "Link anyway" is drawn as any other failure.
+
+### The bulk act
+
+- **The preview is a panel under the header, and its button is the confirm.** "Link N
+  places" is drawn only while a dry answer with a place to link is on screen. The page
+  refuses to send `apply` in any other state. No second dialog asks again.
+- **The act is not narrowed by the chain filter.** The route reads every `NEW` place, and
+  the preview says so.
+- **Each line says what the link would fill**, from `filled` of the dry answer.
+- **A skipped place is listed under "Left as they are"** with its reason. A reason that a
+  later backend adds reads "Not linked".
+- **A failed apply reads the queue again.** The harvester keeps the links it made before
+  the failure (backend `0193`, section 6). The page says that the link stopped part way,
+  marks nothing as linked, and reads the queue and the counts again.
+
+### Outside the scope list: one slot in `queue-frame.ts`
+
+`libs/luna-shopper-admin/ui/src/lib/harvest/queue-frame.ts` has a new slot,
+`queueBanner`, between its header and its rows. The preview and the notice are drawn
+there. The header of the frame is one row that the tools share with the view switch, so a
+panel inside it is squeezed beside the switch. The slot adds no behaviour, and the two
+other queues project nothing into it.
+
+### The memory back end works its candidates out
+
+Target 10 asks for candidates on two seed places. The memory harvester holds no list of
+candidates. `place-linking.ts` in `data-access` holds the rules of backend `0193` as pure
+functions (the chain a place names, the four rungs, what a link fills, the bulk decision),
+and the memory harvester applies them to a copy of the shops and the chains of the catalog
+seed. Three seed places have a candidate: one by reference, one within 50 m and one hint.
+`place-seed-agrees.spec.ts` fails when the copy and the catalog seed differ.
+
+A link in memory fills the copy and not the catalog seed, so a shop record that is opened
+after a link shows the shop as it was. The two libraries share no table.
+
+### What was looked at, and how
+
+The places queue was walked in a browser against backend slot 0, which holds the first
+catalog: 91 `NEW` places, 14 with a mark (9 "Probably a shop we hold", 5 "A shop of its
+chain is near"). Slot 0 was only read. The walk stopped every request that could write
+before it left the browser, and let through the sign in and the dry call of the bulk act,
+which answered that no place carries the reference of a shop. The other chain question,
+the notice and a preview with places were drawn from answers that the walk gave in place
+of the gateway. No link was sent to a real back end by this build: the routes were walked
+over a gateway by backend `0193`, and the specs of `harvest-api.ts` hold the requests.

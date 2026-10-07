@@ -178,6 +178,16 @@ export class HarvestApi implements HarvestServiceI {
   }
 
   /**
+   * The bulk link, dry or applied (backend plan 0193, target 8). One route for
+   * both, and the body says which: `{}` changes nothing.
+   */
+  linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult> {
+    return this._send('post', `${ROOT}/places/link-by-ref`, { body: input });
+  }
+
+  /**
    * The one queue, over one flat collection (backend plan 0086, section 10).
    *
    * `GET /entries` with the chain as a filter, where it used to be

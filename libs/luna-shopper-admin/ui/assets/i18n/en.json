@@ -1269,8 +1269,12 @@
       "chainHasNoKey": "This chain has no brand key, so its places cannot be told apart. Every place is shown.",
       "info": {
         "title": "What to do with this place",
-        "found": "Discovery found this place and could not match it to a shop.",
-        "decide": "Add it to the catalog, link it to a shop we have, or reject it."
+        "found": "A place is a shop that discovery found, on OpenStreetMap or in a chain's own list.",
+        "decide": "Add it to the catalog, link it to a shop we hold, or reject it."
+      },
+      "mark": {
+        "probable": "Probably a shop we hold",
+        "near": "A shop of its chain is near"
       },
       "supermarketId": "Chain to file it under (optional)",
       "near": {
@@ -1320,24 +1324,81 @@
       "match": {
         "heading": "The catalog may already hold this shop",
         "lead": "Nothing was added. Link the place to the shop that is the same one, or add it as a new shop if none of them is.",
+        "leadFound": "Link the place to the shop that is the same one. A link adds no shop and fills only what the shop lacks.",
+        "headingNear": "A shop of its chain is near",
+        "leadNear": "It may be another shop of the chain. Link the place only when it is the same shop.",
         "rung": {
           "EXTERNAL_REF": "Same provider reference",
           "NEARBY": "Same chain within 50 metres",
           "ADDRESS": "Same address and postal code",
+          "SAME_CHAIN_NEAR": "Same chain, {{metres}} m away",
           "UNKNOWN": "Matched by the catalog"
         },
+        "metres": "{{metres}} m away",
         "link": "Link to this shop",
         "force": "Create a new shop anyway"
+      },
+      "link": {
+        "start": "Link to an existing shop",
+        "heading": "Link to a shop the catalog holds",
+        "chain": "Chain of the shop",
+        "chainFirst": "Pick the chain to choose one of its shops.",
+        "shop": "Shop",
+        "submit": "Link"
+      },
+      "otherChain": {
+        "ask": "This place names {{chain}}. Link it to a shop of another chain?",
+        "askUnnamed": "This place names another chain. Link it to this shop?",
+        "confirm": "Link anyway"
+      },
+      "linked": {
+        "filled": "Linked {{place}} to {{shop}}. Filled {{fields}}.",
+        "nothing": "Linked {{place}} to {{shop}}. The shop already held everything.",
+        "list": "{{others}} and {{last}}",
+        "field": {
+          "ADDRESS": "the address",
+          "CITY": "the city",
+          "POSTAL_CODE": "the postal code",
+          "COUNTRY": "the country",
+          "COORDINATES": "the position",
+          "EXTERNAL_REF": "the provider reference",
+          "FOOTPRINT": "the floor area",
+          "OTHER": "another field"
+        }
+      },
+      "byRef": {
+        "start": "Link places that shops were made from",
+        "heading": "Places that shops were made from",
+        "reading": "Looking for them.",
+        "lead": "Nothing is linked yet. Each place below carries the reference of one shop, which was made from it. Every chain is read, whatever chain is chosen above.",
+        "none": "No place in the queue carries the reference of a shop. There is nothing to link.",
+        "to": "to {{shop}}",
+        "fills": "Fills {{fields}}",
+        "fillsNothing": "Fills nothing",
+        "skipped": "Left as they are",
+        "reason": {
+          "SEVERAL_SHOPS": "Several shops carry its reference",
+          "PROVIDER_NOT_NAMED": "The shop names no provider for its reference",
+          "UNKNOWN": "Not linked"
+        },
+        "apply_one": "Link {{count}} place",
+        "apply_other": "Link {{count}} places",
+        "close": "Close",
+        "done_one": "Linked {{count}} place.",
+        "done_other": "Linked {{count}} places.",
+        "failed": "The link stopped part way and may have linked some places. The queue shows what is left."
       },
       "error": {
         "matchesLocation": "The catalog may already hold this shop, so nothing was added. Open it on its own to link it or to add it anyway.",
         "alreadyImported": "This place is already in the catalog. Its shop is removed from the catalog's locations, not from this queue.",
         "scopeNotFound": "The run declared a price scope this chain does not hold. Create that scope first, or pick one.",
+        "namesAnotherChain": "This place names another chain than the shop, so nothing was linked.",
         "needsChain": "OpenStreetMap does not say what language this place's name is in, so no chain could be made from it. Name the chain below, or pick one."
       },
       "nearCatalog": {
         "heading": "Shops of this chain the catalog holds nearby",
         "none": "The catalog holds no shop of this chain near it.",
+        "above": "The shops of this chain near it are listed above.",
         "unplaced": "No position, same postal code",
         "metres": "{{metres}} m away"
       }
@@ -1565,8 +1626,8 @@
     "shops": {
       "heading": "Source shops",
       "info": {
-        "row": "One row is a shop that a source names.",
-        "map": "Map it to one of our shops, or ignore it.",
+        "row": "A source shop is the code a chain's website uses for one of its shops.",
+        "map": "Map it to one of our shops so that what the chain says lands there. It never creates a shop.",
         "unmapped": "A run writes nothing for a shop that is not mapped."
       },
       "chains": {
