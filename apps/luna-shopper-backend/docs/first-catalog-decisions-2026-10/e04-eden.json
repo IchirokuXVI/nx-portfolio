@@ -1,0 +1,55 @@
+{
+  "step": "E4",
+  "title": "Eden, read on 2026-10-07: two brands under one name, and why nothing was written",
+  "sources": [
+    "stage-c8/eden.json",
+    "stage-c7/applied/items.after.json"
+  ],
+  "keys": "Each product is keyed as it stood at the end of the second walk. Stage c8 changed no product.",
+  "decidedBy": "The owner, 2026-10-07: Eden is two brands with the same name. The session of stage c8 then found that the registry cannot hold that, and stopped.",
+  "done": false,
+  "brand": {
+    "label": "Eden",
+    "key": "eden",
+    "localId": "8eab6dbc-135d-4ddc-9ca2-5acab4d86d2d"
+  },
+  "productsUnderTheKey": 17,
+  "homonyms": 0,
+  "why": "brands.key is unique (index uq_brands_key) and the key is brandKey(label), so a second brand whose label is \"Eden\" answers 409. A homonym (plan 0178) is a pointer from the printed key \"eden\" to a second brand that has ANOTHER label and key, as \"Poseidon Food\" is beside \"Poseidon\". A product takes its brand from the text that is written on it, by key, so the 16 products can only move to a brand whose label is not \"Eden\". The label is shown to shoppers and the owner did not choose one, so nothing was written.",
+  "whatItTakes": [
+    "The owner names the second brand (a label whose key is not \"eden\", for example the legal or range name of the shoe care business).",
+    "POST /v1/admin/catalog/brands { \"label\": \"<that label>\" } creates it. linkedItems must be 0.",
+    "POST /v1/admin/catalog/brands/<new id>/homonyms { \"printedKey\": \"eden\" } makes a queue row that prints EDEN answer both brands in brandMatches, the bathroom brand first.",
+    "PATCH /v1/admin/catalog/items/batch (or the single item route) with brand = \"<that label>\" on the 16 ids below. The WC product is not sent.",
+    "Or: a change of the model so that two registry rows can hold one label. That is a migration, and it moves the restore manifest."
+  ],
+  "count": 17,
+  "naturalKeys": {
+    "products": 17,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"product":{"brand":"Eden","nameEs":"Cordón plano blanco Natural Comfort 130 cm","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"025eefff-7202-4058-be62-bab264221b7b"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Media plantilla de gel para talones Style&Performance","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"166708f8-2ff1-4f52-a2e6-b76232e88d72"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantilla de gel anatomic Style&Performance talla 41-46","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"25bd7b38-8946-4569-a4f1-bf2ca4c83c84"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantilla sport balance Style&Performance talla 37-41","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"3ff5e50f-94a0-4af5-bfc1-16646835a10d"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Cordón redondo negro Natural Comfort 180 cm","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"61a22957-9b20-4a0d-8455-ec7d8ba11b13"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Cordón encerado negro Natural Comfort 70 cm","size":2,"unit":"UNIT","packCount":null,"barcode":null,"localId":"65480fa5-6b6b-48b3-a4f0-c58d7819180f"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Cordón encerado marrón Natural Comfort 70 cm","size":2,"unit":"UNIT","packCount":null,"barcode":null,"localId":"88e7db9a-5d1c-4599-94a4-48bb7374a993"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Talonera de gel salvatalón Style&Performance","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"90dcfe9e-b4ea-4b6c-b7db-6c8cfa281aaa"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantilla de gel anatomic Style&Performance talla 36-41","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"9131da58-390b-4e34-a565-ce8cba528dce"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Cordón redondo de algodón negro Natural Comfort 90 cm","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"9a01fa8a-5d5e-4e42-8cf4-e6e866065597"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Media plantilla de gel plantar","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"a2b82d2e-787e-4682-8558-8906898bc3ab"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantilla memory confort Style&Performance talla 35-46","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"bb02cb28-d969-4712-848c-026b4eb5910f"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantillas de carbón activo Natural Comfort talla 22-46","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"befdf53b-8f70-4b4d-8ba5-3ac1e55f160e"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantillas perfumadas Natural Comfort talla 22-46","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"cfbe7bca-e572-401c-85f0-42a90fa2177c"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Cordón de calzado trekking Natural Comfort 140 cm","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"e69c1e57-013d-4377-8141-f19323f56fab"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Plantilla sport balance Style&Performance talla 41-47","size":null,"unit":"UNIT","packCount":null,"barcode":null,"localId":"f65d5dfb-f063-4c7b-bd7d-949572461d03"},"categories":["shoe-care"],"decision":{"action":"move-to-the-second-brand"},"status":"left for the owner, nothing written","why":"Shoe care. The owner said that it is another business than the toilet gel. It waits for the label of the second brand."},
+    {"product":{"brand":"Eden","nameEs":"Discos de gel para WC","size":6,"unit":"UNIT","packCount":null,"barcode":null,"localId":"b0ed49b4-0241-4e5d-9eea-3f31e46122d2"},"categories":["bathroom-and-toilet-cleaning"],"decision":{"action":"none"},"status":"left for the owner, nothing written","why":"The one product that the brand held before the second walk. It stays."}
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "step": "E1",
+  "title": "Plan 0193, section 4, on 2026-10-07: one El Jamón store discovery, and the place that each El Jamón shop is",
+  "sources": [
+    "stage-c8/step3.source.before.json",
+    "stage-c8/step3.run.request.json",
+    "stage-c8/step3.run.final.json",
+    "stage-c8/step3.pairs.json",
+    "stage-c8/step3.links.json"
+  ],
+  "keys": "A shop is keyed by its chain, its address, its postal code and its OpenStreetMap reference, as it stood before its link. A place of the chain is keyed by its provider and its reference, which the harvester builds from the postal code and the street that the chain prints.",
+  "decidedBy": "The session of stage c8, by the pairing rule below. The owner approved the stage on 2026-10-07. Nobody compared a pair with a map or a shop front.",
+  "run": {
+    "route": "POST /v1/admin/harvest/runs",
+    "mode": "STORE_DISCOVERY",
+    "chain": "El Jamón",
+    "postalCodes": [
+      "14001",
+      "14002",
+      "14003",
+      "14004",
+      "14005",
+      "14006",
+      "14007",
+      "14008",
+      "14009",
+      "14010",
+      "14011",
+      "14012",
+      "14013",
+      "14014",
+      "14029",
+      "14193"
+    ],
+    "sourceBefore": {
+      "adapterKey": "eljamon-web",
+      "enabled": true,
+      "autoImportPlaces": false
+    },
+    "status": "COMPLETED",
+    "requests": 1,
+    "recordsRead": 368,
+    "recordsKept": 366,
+    "recordsDropped": [
+      "Cash Lepe, Lepe: OTHER_BANNER",
+      "Cash Lepe Moron, Moron: OTHER_BANNER"
+    ],
+    "placesRecorded": 53,
+    "placesImported": 0,
+    "shopsWritten": 0,
+    "scopesCreated": 0,
+    "warnings": 0,
+    "localId": "32b48b42-e6c4-471d-ab9e-5882b1769b94"
+  },
+  "pairingRule": [
+    "The place is the `ELJAMON` place nearest to the shop.",
+    "The gateway names the shop as the first candidate of the place, with the rung `NEARBY`.",
+    "It is the only `ELJAMON` place within 50 m of the shop.",
+    "No place is the nearest place of two shops."
+  ],
+  "route": "POST /v1/admin/harvest/places/:id/link with { \"supermarketLocationId\": \"<the shop>\" }, one pair at a time, never with `acrossChains`.",
+  "theLinkFillsOnlyWhatTheShopLacks": "A field that the shop held was left, also where the chain prints another value. `keptOnTheShop` holds each such field. An address in another writing is the same address. Two entries differ in substance: the postal code of Doña Berenguela 18, and the street number of Manuel Fuentes Bocanegra.",
+  "pairsThatMetTheRule": 19,
+  "farthestPairMetres": 19,
+  "nearestOtherElJamonPlaceMetres": 75.3,
+  "shopsThatGot": {
+    "aPostalCode": 13,
+    "anAddress": 13,
+    "aCity": 13,
+    "allThree": 11,
+    "anyField": 14,
+    "nothing": 5
+  },
+  "count": 19,
+  "naturalKeys": {
+    "products": 0,
+    "productsWithOnlyTheUuid": 0,
+    "rows": 0,
+    "rowsWithNoChain": 0,
+    "rowsWithNoSourceKind": 0,
+    "rowsWithNoExternalId": 0,
+    "rowsWithNoPrintedName": 0
+  },
+  "entries": [
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/12797505512","localId":"13362069-32b8-4383-b8a1-d4f16dc446a3"},"place":{"provider":"ELJAMON","externalRef":"14001:c alonso el sabio 6","street":"C/ ALONSO EL SABIO, 6","city":"Córdoba","postalCode":"14001","localId":"dd865024-fcf6-46e4-9207-f3c8d15db49b"},"rung":"NEARBY","metres":12,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":419.4,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ ALONSO EL SABIO, 6","city":"Córdoba","postalCode":"14001","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/3647840964","localId":"20c64e1b-5a72-47a0-a824-5cd50358f731"},"place":{"provider":"ELJAMON","externalRef":"14004:c doctor barraquer 8","street":"C/ DOCTOR BARRAQUER, 8","city":"Córdoba","postalCode":"14004","localId":"56b527d5-f39f-49f0-8f9f-40e7b009f461"},"rung":"NEARBY","metres":1,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":305.7,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ DOCTOR BARRAQUER, 8","city":"Córdoba","postalCode":"14004","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/908652698","localId":"334bf1f9-4f6e-4ac4-8931-cb89eb027cee"},"place":{"provider":"ELJAMON","externalRef":"14011:carretera de trassierra 19b","street":"CARRETERA DE TRASSIERRA, 19B","city":"Córdoba","postalCode":"14011","localId":"e4a41ab6-ee8e-42f5-a786-f74e1e1dce06"},"rung":"NEARBY","metres":19,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":468.9,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"CARRETERA DE TRASSIERRA, 19B","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/9839534838","localId":"3d4e2feb-71ae-4b75-9ae0-dcb97dbe01e2"},"place":{"provider":"ELJAMON","externalRef":"14006:avda de los almogavares 32","street":"AVDA. DE LOS ALMOGAVARES, 32","city":"Córdoba","postalCode":"14006","localId":"63fcfe67-4285-4f4b-9a0b-b2e114a19845"},"rung":"NEARBY","metres":2,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":268.7,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"AVDA. DE LOS ALMOGAVARES, 32","city":"Córdoba","postalCode":"14006","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":"Córdoba","postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/909201880","localId":"4a76729e-1e9a-4206-9e02-eb7bf2a1c223"},"place":{"provider":"ELJAMON","externalRef":"14001:c reyes catolicos 20","street":"C/ REYES CATOLICOS, 20","city":"Córdoba","postalCode":"14001","localId":"073d0cec-bfde-4b85-8c6e-31e19ec0bb7e"},"rung":"NEARBY","metres":9,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":202.9,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS"],"shopAfter":{"address":"C/ REYES CATOLICOS, 20","city":"Córdoba","postalCode":"14001","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/2432408937","localId":"5e6b5fc7-b00f-4d57-be32-71c37bce131a"},"place":{"provider":"ELJAMON","externalRef":"14010:avda virgen milagrosa 18","street":"AVDA. VIRGEN MILAGROSA, 18","city":"Córdoba","postalCode":"14010","localId":"e2a56601-236d-4450-a31d-3bcc8dffc11b"},"rung":"NEARBY","metres":1,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":359.7,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"AVDA. VIRGEN MILAGROSA, 18","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Gran Vía Parque 23","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/7579932313","localId":"5ecf49e7-791e-4fe4-8bd0-6d39cb1a8f87"},"place":{"provider":"ELJAMON","externalRef":"14005:avda gran via parque 23","street":"AVDA. GRAN VIA PARQUE, 23","city":"Córdoba","postalCode":"14005","localId":"ac393d7f-2bce-4088-89bb-75c5d18cca81"},"rung":"NEARBY","metres":13,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":391.5,"decision":{"action":"link"},"filled":[],"shopAfter":{"address":"Gran Vía Parque 23","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Gran Vía Parque 23","theChainPrints":"AVDA. GRAN VIA PARQUE, 23"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":"14014","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/1657902402","localId":"6521c023-2be7-4cc9-ab26-f59f618c0e9d"},"place":{"provider":"ELJAMON","externalRef":"14014:c historiador jaen morente 28","street":"C/ HISTORIADOR JAEN MORENTE, 28","city":"Córdoba","postalCode":"14014","localId":"5b45ff04-feda-4c45-9cd4-da15878e8e9f"},"rung":"NEARBY","metres":4,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":437.5,"decision":{"action":"link"},"filled":["ADDRESS","CITY"],"shopAfter":{"address":"C/ HISTORIADOR JAEN MORENTE, 28","city":"Córdoba","postalCode":"14014","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/10566052707","localId":"6c262d01-2f25-4323-bfec-91905ad5809d"},"place":{"provider":"ELJAMON","externalRef":"14008:avda cervantes 8","street":"AVDA. CERVANTES, 8","city":"Córdoba","postalCode":"14008","localId":"d6278d61-40b8-41bf-9abd-2db8bc570e7c"},"rung":"NEARBY","metres":3,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":260.5,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"AVDA. CERVANTES, 8","city":"Córdoba","postalCode":"14008","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Marruecos","city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/7868611485","localId":"6d44d488-c97e-4b7e-aafc-7f5dd768aa98"},"place":{"provider":"ELJAMON","externalRef":"14004:c marruecos 6","street":"C/ MARRUECOS, 6","city":"Córdoba","postalCode":"14004","localId":"3861a7af-a750-42c3-b04f-475f08610d50"},"rung":"NEARBY","metres":5,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":209.2,"decision":{"action":"link"},"filled":["POSTAL_CODE","CITY"],"shopAfter":{"address":"Marruecos","city":"Córdoba","postalCode":"14004","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Marruecos","theChainPrints":"C/ MARRUECOS, 6"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle Hermano Juan Fernández","city":"Córdoba","postalCode":"14007","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/12899332111","localId":"8e561111-4115-4289-a7fc-6994b63eb58c"},"place":{"provider":"ELJAMON","externalRef":"14007:avda el cairo esq c hno juan fernandez","street":"AVDA. EL CAIRO ESQ. C/ HNO JUAN FERNANDEZ","city":"Córdoba","postalCode":"14007","localId":"a4d8b912-59a3-4397-82f1-bde4c0c6f2cd"},"rung":"NEARBY","metres":3,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":431.9,"decision":{"action":"link"},"filled":[],"shopAfter":{"address":"Calle Hermano Juan Fernández","city":"Córdoba","postalCode":"14007","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Calle Hermano Juan Fernández","theChainPrints":"AVDA. EL CAIRO ESQ. C/ HNO JUAN FERNANDEZ"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Doña Berenguela 18","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"way/821913293","localId":"91c9a984-a5c6-4cff-96f6-5dc61af5a0de"},"place":{"provider":"ELJAMON","externalRef":"14006:c dona berenguela n 18","street":"C/ DOÑA BERENGUELA, Nº 18","city":"Córdoba","postalCode":"14006","localId":"d163b7ed-f684-4b5c-a5b6-10f87297fe6c"},"rung":"NEARBY","metres":16,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":440.2,"decision":{"action":"link"},"filled":[],"shopAfter":{"address":"Doña Berenguela 18","city":"Córdoba","postalCode":"14011","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Doña Berenguela 18","theChainPrints":"C/ DOÑA BERENGUELA, Nº 18"},"postalCode":{"theShopHolds":"14011","theChainPrints":"14006"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle de Ronda 5","city":"Córdoba","postalCode":"14013","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/14166743654","localId":"a35697e3-457f-4139-ab29-aec157c78ac7"},"place":{"provider":"ELJAMON","externalRef":"14013:c ronda 5","street":"C/ RONDA, 5","city":"Córdoba","postalCode":"14013","localId":"573d22e1-6a7c-48c6-a4e8-f78f22eebdfe"},"rung":"NEARBY","metres":18,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":419.4,"decision":{"action":"link"},"filled":[],"shopAfter":{"address":"Calle de Ronda 5","city":"Córdoba","postalCode":"14013","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Calle de Ronda 5","theChainPrints":"C/ RONDA, 5"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/5537564359","localId":"a5b70c95-cb00-4588-ab5d-9f34746566c4"},"place":{"provider":"ELJAMON","externalRef":"14002:c realejo 1","street":"C/ REALEJO, 1","city":"Córdoba","postalCode":"14002","localId":"519fc724-fe63-4160-8cf6-dbe325134e1d"},"rung":"NEARBY","metres":5,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":390.1,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ REALEJO, 1","city":"Córdoba","postalCode":"14002","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/9839543820","localId":"ab4298f4-29c2-4aa7-b1f1-98baf0caf162"},"place":{"provider":"ELJAMON","externalRef":"14010:c compositor ramon medina 38","street":"C/ COMPOSITOR RAMON MEDINA, 38","city":"Córdoba","postalCode":"14010","localId":"abbe1bec-dc7f-4598-bb45-d1da408a0e7a"},"rung":"NEARBY","metres":4,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":419.1,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ COMPOSITOR RAMON MEDINA, 38","city":"Córdoba","postalCode":"14010","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":"Calle Manuel Fuentes \"Bocanegra\" 19","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE","provider":"OSM","externalRef":"node/11529014913","localId":"c7c99336-7ebb-4617-bc3a-b37d48efd648"},"place":{"provider":"ELJAMON","externalRef":"14005:c manuel fuentes bocanegra 17","street":"C/ MANUEL FUENTES BOCANEGRA, 17","city":"Córdoba","postalCode":"14005","localId":"cf0f12af-c501-4970-b5de-70aaa01461a8"},"rung":"NEARBY","metres":19,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":436.4,"decision":{"action":"link"},"filled":[],"shopAfter":{"address":"Calle Manuel Fuentes \"Bocanegra\" 19","city":"Córdoba","postalCode":"14005","postalCodeSource":"SOURCE"},"keptOnTheShop":{"address":{"theShopHolds":"Calle Manuel Fuentes \"Bocanegra\" 19","theChainPrints":"C/ MANUEL FUENTES BOCANEGRA, 17"}},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/2195839176","localId":"d6184bb1-7780-4941-a06e-451604e7ea5d"},"place":{"provider":"ELJAMON","externalRef":"14014:avda virgen de fatima 19","street":"AVDA. VIRGEN DE FATIMA, 19","city":"Córdoba","postalCode":"14014","localId":"10ea3242-d220-42aa-815e-5b11a946b178"},"rung":"NEARBY","metres":13,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":355.2,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"AVDA. VIRGEN DE FATIMA, 19","city":"Córdoba","postalCode":"14014","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/12802209024","localId":"e2ab1ead-b50c-4eeb-b8d9-522a25f75c69"},"place":{"provider":"ELJAMON","externalRef":"14002:c duque de hornachuelos 2","street":"C/ DUQUE DE HORNACHUELOS, 2","city":"Córdoba","postalCode":"14002","localId":"ab582752-6daf-4ee4-a2e0-270dc6db84c8"},"rung":"NEARBY","metres":4,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":302.3,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ DUQUE DE HORNACHUELOS, 2","city":"Córdoba","postalCode":"14002","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"},
+    {"shop":{"chain":"El Jamón","address":null,"city":null,"postalCode":null,"postalCodeSource":null,"provider":"OSM","externalRef":"node/12569327955","localId":"f6dcfea2-19c8-492d-9da8-bcdc9633abd9"},"place":{"provider":"ELJAMON","externalRef":"14008:c manuel de sandoval 5","street":"C/ MANUEL DE SANDOVAL, 5","city":"Córdoba","postalCode":"14008","localId":"6e6934a7-a6d1-4d51-9238-5bd3b40594ee"},"rung":"NEARBY","metres":4,"elJamonPlacesWithin50m":1,"nextElJamonPlaceMetres":75.3,"decision":{"action":"link"},"filled":["POSTAL_CODE","ADDRESS","CITY"],"shopAfter":{"address":"C/ MANUEL DE SANDOVAL, 5","city":"Córdoba","postalCode":"14008","postalCodeSource":"SOURCE"},"status":"applied on 2026-10-07 (stage c8)"}
+  ]
+}

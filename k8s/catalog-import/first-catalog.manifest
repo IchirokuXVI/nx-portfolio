@@ -4,26 +4,32 @@
 # is a refusal, not a warning.
 #
 # The values below are the checksums and counts of the dumps of
-# 2026-10-07T10:28:17Z (2026-10-07 12:28 Madrid time). They were taken after
-# two data stages of that day: the re-file of 2,250 products onto the leaves of
-# backend plan 0179, and the second curation walk, which created 2,430 products
-# from queue rows that the first walk could not place. Only the gateway was
-# served, and it holds no database, so nothing wrote. They replace the values
-# of the dumps of 2026-10-06T23:32:21Z, which held neither stage.
+# 2026-10-07T11:53:13Z (2026-10-07 13:53 Madrid time). They were taken after
+# the data step of backend plan 0193 (section 4) of that day: one El Jamón
+# store discovery that recorded 53 places, 19 links of a place of the chain to
+# the El Jamón shop that it is, and 27 links by reference. 14 El Jamón shops
+# got the address, the city or the postal code that they lacked, and one got
+# its footprint. No shop and no price scope was created, so every count below
+# is the count of the dumps before these. Only the two checksums changed. Only
+# the gateway was served, and it holds no database, so nothing wrote. They
+# replace the values of the dumps of 2026-10-07T10:28:17Z (12:28 Madrid time),
+# which held the re-file and the second curation walk and not this step.
 #
 # These dumps are the ones that ship, unless slot 1 is written again. A later
 # write means new dumps and new values here (README.md, "When slot 1 is
-# final"). The owner has NOT yet said that slot 1 is final. The copy that the
+# final"). One such write is known: the brand Eden waits for a label from the
+# owner. The owner has NOT yet said that slot 1 is final. The copy that the
 # owner restored onto the owner's own machine on 2026-10-07 is older: it is the
-# restore of the dumps of 2026-10-06T22:33:14Z, and it holds neither stage.
+# restore of the dumps of 2026-10-06T22:33:14Z, and it holds none of the three
+# data stages of 2026-10-07.
 # The two files are NOT uploaded to a bucket yet. A file with other bytes is
 # refused at the checksum, which is the intended failure.
 #
 # The object keys, under a prefix that the nightly dumps never use.
 CATALOG_KEY="imports/2026-10-first-catalog/catalog.dump"
-CATALOG_SHA256="f81e6023528d17f6b6e457a8e27a216ecb388d43883a0b9b9c145c9d92a04880"
+CATALOG_SHA256="e81ba4c20a3535d0a6b9aa9184b3913c13248f46a89fce97d10054e1211f9650"
 HARVESTER_KEY="imports/2026-10-first-catalog/harvester.dump"
-HARVESTER_SHA256="e75f10e693304f357060e3dc42d8c68c8cbf18ae09dbde830f975ed256d20f08"
+HARVESTER_SHA256="93cc20ab47eb4f93ed46ef54ab61602622f79d173c281d08a2a98ea0a56cd2ec"
 #
 # The `migrations` table of each dump: how many rows, and the name with the
 # highest timestamp. The live database must hold the same names.

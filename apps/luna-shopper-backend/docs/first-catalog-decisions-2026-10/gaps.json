@@ -425,6 +425,54 @@
       "rowsWithNoSourceKind": 0,
       "rowsWithNoExternalId": 0,
       "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "e01-el-jamon-shop-links.json",
+      "step": "E1",
+      "count": 19,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "e02-links-by-reference.json",
+      "step": "E2",
+      "count": 27,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "e03-places-left-for-the-owner.json",
+      "step": "E3",
+      "count": 46,
+      "products": 0,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
+    },
+    {
+      "file": "e04-eden.json",
+      "step": "E4",
+      "count": 17,
+      "products": 17,
+      "productsWithOnlyTheUuid": 0,
+      "rows": 0,
+      "rowsWithNoChain": 0,
+      "rowsWithNoSourceKind": 0,
+      "rowsWithNoExternalId": 0,
+      "rowsWithNoPrintedName": 0
     }
   ]
 }
