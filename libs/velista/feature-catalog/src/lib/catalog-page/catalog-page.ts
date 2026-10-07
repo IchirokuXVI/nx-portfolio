@@ -24,6 +24,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   CATALOG_BROWSE_SERVICE,
+  CatalogAddStore,
   CategoryStore,
   type CatalogBrowseServiceI,
 } from '@portfolio/velista/data-access';
@@ -31,6 +32,7 @@ import {
   APP_BASE_PATH,
   catalogName,
   catalogOrdersFor,
+  catalogToolsView,
   categoryName,
   chainOfScope,
   scopesOfChain,
@@ -42,25 +44,27 @@ import {
 import {
   appPath,
   BrowserFacade,
+  CATALOG_PATHS,
+  productPagePath,
   sheetSegments,
 } from '@portfolio/velista/platform';
 import {
-  ChevronRightIcon,
+  AddingBar,
+  CatalogSelectors,
   CloseIcon,
-  ListLinesIcon,
-  OrderPills,
+  OrderMenu,
   PageHeader,
   ProductIcon,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
   SearchIcon,
-  SupermarketButton,
-  type ChainLogoView,
+  type ProductRowAdd,
   type ProductRowView,
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
 import { categoryChoice } from '../category-choice';
+import { rowAdds } from '../row-adds';
 import {
   CATALOG_PARAMS,
   catalogChoiceOf,
@@ -85,23 +89,31 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
 /**
  * The second tab: every product from every supermarket (velista `0100`).
  *
- * ## The tools are on the screen (rule C1)
+ * ## The tools are the search and one row (velista `0134`, section 2)
  *
- * A field, the Supermarket button and three order pills, all drawn, none behind
- * a sheet. That is the opposite of the basket's `ListTools`, and deliberately: here
- * narrowing **is** the activity, so a screen that hid its own controls would give
- * somebody a wall of products and a magnifier.
+ * A field, and under it two selectors that name what the list shows: the
+ * supermarket and the category. They were four stacked rows that took a third of
+ * the screen. The order moved onto the line that heads the list (section 3), with
+ * where the prices are from at its other end.
  *
  * ## Best match exists only while there is something to match (rule C2)
  *
- * The screen opens on A to Z. The moment a search begins, Best match appears in
- * front and is chosen. When the field is emptied it goes, and the order falls back
- * to A to Z if it was on.
+ * The screen opens on the catalog's own order. The moment a search begins, Best
+ * match joins the menu and is chosen. When the field is emptied it goes, and the
+ * order falls back if it was on.
+ *
+ * ## The plus adds to the list the line names (velista `0134`, section 4)
+ *
+ * Each row has a plus, and a line above the tab bar says which list it adds to.
+ * `CatalogAddStore` holds that list and the record of what this visit added, and
+ * it is the app's and not this page's: the pickers are pages of their own, so this
+ * component is destroyed while one is open. A guest and a person with no list to
+ * write to see neither the plus nor the line.
  *
  * ## A chain narrows the products and the prices, and a shop narrows them further
  *
- * The chain chips became one Supermarket button (velista `0124`), which opens the
- * shop picker as a page of its own. A chain is enough and a shop is optional.
+ * The Supermarket selector opens the shop picker as a page of its own (velista
+ * `0124`). A chain is enough and a shop is optional.
  *
  * With a chain, `soldBy` narrows which products are listed (backend `0146`), and
  * the chain's own scopes are sent as the price scopes, so every price on the screen
@@ -137,10 +149,10 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
 @Component({
   selector: 'lib-catalog-page',
   imports: [
-    ChevronRightIcon,
+    AddingBar,
+    CatalogSelectors,
     CloseIcon,
-    ListLinesIcon,
-    OrderPills,
+    OrderMenu,
     PageHeader,
     ProductIcon,
     ProductRow,
@@ -149,7 +161,6 @@ type MoreStatus = 'idle' | 'loading' | 'failed';
     RouterLink,
     RouterOutlet,
     SearchIcon,
-    SupermarketButton,
   ],
   providers: [CatalogContext],
   templateUrl: './catalog-page.html',
@@ -168,8 +179,21 @@ export class CatalogPage {
   private readonly _browser = inject(BrowserFacade);
   private readonly _route = inject(ActivatedRoute);
   private readonly _categories = inject(CategoryStore);
+  private readonly _adds = inject(CatalogAddStore);
 
   protected readonly skeletonRows = SKELETON_ROWS;
+
+  /** The list the plus adds to, or null for somebody with none to write to. */
+  protected readonly addTarget = this._adds.target;
+
+  /** How many products this visit added, for the line above the tab bar. */
+  protected readonly addedCount = this._adds.count;
+
+  /** The row whose stepper is open. One is open at a time (section 4.1). */
+  protected readonly stepperOpen = signal<string | null>(null);
+
+  /** A write that failed, said once in the live region until the next press. */
+  protected readonly addFailed = signal(false);
 
   /** What is in the field, exactly as typed. */
   protected readonly typed = signal('');
@@ -266,38 +290,28 @@ export class CatalogPage {
     return town !== '' && town !== name ? `${name}, ${town}` : name;
   });
 
-  /** What the Supermarket button draws (target 8). */
-  protected readonly supermarket = computed<{
-    readonly logo: ChainLogoView;
-    readonly value: string;
-    readonly detail: string | null;
-    readonly chosen: boolean;
-  }>(() => {
+  /** What the two selectors and the line that heads the list say. */
+  protected readonly tools = computed(() => {
+    const choice = this.choice();
     const locale = this._locale();
-    this._translator.loaded();
-    const id = this.chain();
-    if (id === null) {
-      return {
-        logo: { logoUrl: null, name: '', store: true },
-        value: this._translator.t('catalog.supermarket.all', undefined, locale),
-        detail: null,
-        chosen: false,
-      };
-    }
-    const name = this.chosenChainName();
-    return {
-      logo: {
-        logoUrl: this.chosenChain()?.logoUrl ?? null,
-        name,
-        store: false,
-      },
-      value: name,
-      detail:
-        this.shop() === null
-          ? this._translator.t('catalog.supermarket.anyShop', undefined, locale)
-          : this.shopName() || null,
-      chosen: true,
-    };
+    return catalogToolsView({
+      chainId: this.chain(),
+      chainName: this.chosenChainName(),
+      chainLogoUrl: this.chosenChain()?.logoUrl ?? null,
+      shopChosen: this.shop() !== null,
+      shopPlace: this.shopPlace(),
+      category:
+        choice === null
+          ? null
+          : {
+              name: categoryName(choice.node, locale),
+              root:
+                choice.node === choice.root
+                  ? null
+                  : categoryName(choice.root, locale),
+            },
+      postalCode: this.near(),
+    });
   });
 
   /** The chosen category and its root, or null for none or a slug not in the tree. */
@@ -311,42 +325,14 @@ export class CatalogPage {
     return choice === null ? '' : categoryName(choice.node, this._locale());
   });
 
-  /** The root's name, drawn in front of a leaf on the chip (rule P4). */
-  protected readonly categoryRootLabel = computed(() => {
-    const choice = this.choice();
-    return choice === null ? '' : categoryName(choice.root, this._locale());
-  });
-
-  /** Whether the choice is a leaf, which the chip draws as root and leaf. */
-  protected readonly leafChosen = computed(() => {
-    const choice = this.choice();
-    return choice !== null && choice.node !== choice.root;
-  });
-
-  /** The chip's accessible name: both names whole, and what a tap does. */
-  protected readonly categoryChipLabel = computed(() => {
-    const locale = this._locale();
-    this._translator.loaded();
-    return this.leafChosen()
-      ? this._translator.t('catalog.categories.chip', undefined, locale, {
-          root: this.categoryRootLabel(),
-          leaf: this.categoryLabel(),
-        })
-      : this._translator.t('catalog.categories.chipRoot', undefined, locale, {
-          root: this.categoryLabel(),
-        });
-  });
-
-  /** The page of parents, where the Categories link goes. */
-  protected readonly categoriesPath = computed(() =>
-    appPath(this._locale(), this._basePath, 'catalog', 'categories')
-  );
-
-  /** The chosen root's children page, where the chip's body goes (target 3). */
-  protected readonly categoryChipPath = computed(() => {
+  /**
+   * Where the Category selector goes: the page of parents, or with a category
+   * chosen its root's children page, where the choice is marked.
+   */
+  private readonly _categoryPath = computed(() => {
     const choice = this.choice();
     return choice === null
-      ? this.categoriesPath()
+      ? appPath(this._locale(), this._basePath, 'catalog', 'categories')
       : appPath(
           this._locale(),
           this._basePath,
@@ -371,14 +357,6 @@ export class CatalogPage {
       order: order === defaultCatalogOrder(typed) ? null : order,
     };
   });
-
-  /**
-   * The whole choice, carried to both category pages: the children page marks the
-   * category with it, and whichever row is chosen comes back with the rest of it.
-   */
-  protected readonly choiceQuery = computed(() =>
-    catalogQueryOf(this._choice())
-  );
 
   /** The first postal code, for `near 14013`. */
   protected readonly near = computed(
@@ -424,9 +402,13 @@ export class CatalogPage {
     );
   });
 
+  /** The plus of each row, for the chosen list (section 4.1). */
+  private readonly _rowAdds = computed(() =>
+    rowAdds(this.addTarget(), this._adds.visit(), this.stepperOpen())
+  );
+
   /**
-   * How many products are drawn, for the count heard on a keystroke and shown
-   * while searching. The read is a cursor page with no total, so a list with more
+   * How many products are drawn, for the count heard on a keystroke. The read is a cursor page with no total, so a list with more
    * to come says "more than".
    */
   protected readonly countKey = computed(() =>
@@ -492,6 +474,59 @@ export class CatalogPage {
     });
 
     void this._context.load().then((context) => this.context.set(context));
+    void this._adds.ensure();
+
+    // A failed write is said once (section 4.1): the store counts them, and each
+    // new one raises the sentence until the next press takes it down.
+    let failures = this._adds.failures();
+    effect(() => {
+      const now = this._adds.failures();
+      if (now !== failures) {
+        failures = now;
+        untracked(() => this.addFailed.set(true));
+      }
+    });
+  }
+
+  /** What a row's trailing control draws, or null for a row with no plus. */
+  protected addOf(itemId: string): ProductRowAdd | null {
+    const adds = this._rowAdds();
+    return adds.byItem.get(itemId) ?? adds.plain;
+  }
+
+  /** The plus on a row: one of this product on the chosen list. */
+  protected addProduct(row: ProductRowView): void {
+    this.addFailed.set(false);
+    void this._adds.add({
+      itemId: row.id,
+      name: row.name,
+      detail: row.summary,
+    });
+  }
+
+  /** The count on a row: its stepper opens, and any other one closes. */
+  protected openStepper(itemId: string): void {
+    this.stepperOpen.set(itemId);
+  }
+
+  /** A press on a row's stepper. */
+  protected stepProduct(itemId: string, by: 1 | -1): void {
+    const target = this.addTarget();
+    if (target === null) {
+      return;
+    }
+    this.addFailed.set(false);
+    void this._adds.step(target.listId, itemId, by);
+  }
+
+  /** The name on the line above the tab bar: the sheet of lists. */
+  protected openLists(): void {
+    void this._router.navigateByUrl(this._sheetUrl(CATALOG_PATHS.addListSheet));
+  }
+
+  /** The count on that line: the sheet of what this visit added. */
+  protected openAdded(): void {
+    void this._router.navigateByUrl(this._sheetUrl(CATALOG_PATHS.addedSheet));
   }
 
   /** A keystroke: shown at once, asked for after the debounce. */
@@ -512,8 +547,9 @@ export class CatalogPage {
   }
 
   /**
-   * The Supermarket button: the picker, a page of its own (target 8), handed the
-   * current choice so it can check it, and the category so it comes back with it.
+   * The Supermarket selector: the picker, a page of its own (velista `0124`,
+   * target 8), handed the current choice so it can check it, and the category so
+   * it comes back with it.
    */
   protected openSupermarket(): void {
     const url = this._router.parseUrl(
@@ -523,7 +559,7 @@ export class CatalogPage {
     void this._router.navigateByUrl(url);
   }
 
-  /** The x: every supermarket again, pushed like the category chip's cross. */
+  /** Its cross: every supermarket again, pushed like the category's cross. */
   protected clearSupermarket(): void {
     void this._router.navigateByUrl(
       this._tabUrl({ ...this._choice(), chain: null, shop: null })
@@ -539,23 +575,30 @@ export class CatalogPage {
     void this._firstPage();
   }
 
-  protected open(itemId: string): void {
-    // The sheet covers the narrowed tab, so it keeps the choice in its URL and
-    // closing it pops back onto the same narrowing.
-    const url = this._router.parseUrl(
-      appPath(
-        this._locale(),
-        this._basePath,
-        'catalog',
-        ...sheetSegments('products', itemId)
-      )
-    );
+  /**
+   * The Category selector: the picker's pages (velista `0119`), handed the whole
+   * choice. The children page marks the category with it, and whichever row is
+   * chosen comes back with the rest of it.
+   */
+  protected openCategory(): void {
+    const url = this._router.parseUrl(this._categoryPath());
     url.queryParams = catalogQueryOf(this._choice());
     void this._router.navigateByUrl(url);
   }
 
   /**
-   * The chip's cross and the empty leaf's button: the tab without the parameter,
+   * A row: the product's page (velista `0134`, section 5). The tab keeps its
+   * choice in its own history entry, so the page's back control pops onto the
+   * same list.
+   */
+  protected open(itemId: string): void {
+    void this._router.navigateByUrl(
+      productPagePath(this._locale(), this._basePath, itemId)
+    );
+  }
+
+  /**
+   * The selector's cross and the empty leaf's button: the tab without the parameter,
    * pushed and not popped (target 4), so the supermarket and the text survive it.
    */
   protected clearCategory(): void {
@@ -649,12 +692,12 @@ export class CatalogPage {
   }
 
   /**
-   * The chosen shop's words, for the button and the note. A shop named without its
+   * The chosen shop's words, for the note on the line that heads the list. A shop named without its
    * chain takes the chain from the shop, so a hand typed link still says whose.
    *
    * The chain it takes is written into the URL too, in place of this entry. The URL
    * is the choice, and a signal holding a chain the URL does not would read the next
-   * emission (a product sheet closing onto `?shop=` alone, say) as a different
+   * emission (a sheet closing onto `?shop=` alone, say) as a different
    * choice: the chain dropped again and the first page read for nothing.
    */
   private _readLocation(shopId: string | null): void {
@@ -705,6 +748,20 @@ export class CatalogPage {
     void this._router
       .navigateByUrl(url, { replaceUrl: true })
       .then(landed, landed);
+  }
+
+  /** A sheet over the tab, keeping the choice so it closes onto the same list. */
+  private _sheetUrl(about: string) {
+    const url = this._router.parseUrl(
+      appPath(
+        this._locale(),
+        this._basePath,
+        'catalog',
+        ...sheetSegments(about)
+      )
+    );
+    url.queryParams = catalogQueryOf(this._choice());
+    return url;
   }
 
   private _tabPath(): string {

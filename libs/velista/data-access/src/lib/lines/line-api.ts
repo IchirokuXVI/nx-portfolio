@@ -28,7 +28,11 @@ import {
 } from '../mapping/mappers';
 import { isRecord, mapArray, str } from '../mapping/primitives';
 import { required } from '../mapping/required';
-import type { LineServiceI, LineUpdateResult } from './line-service';
+import type {
+  LineAddResult,
+  LineServiceI,
+  LineUpdateResult,
+} from './line-service';
 
 /**
  * Lines, over HTTP. The default behind `LINE_SERVICE`.
@@ -77,6 +81,19 @@ export class LineApi implements LineServiceI {
     quantity?: number,
     itemIds?: readonly string[]
   ): Promise<Line> {
+    // Only the line is read here, because the store upserts by id, so a merge
+    // lands on the screen as the existing row moving rather than a new row
+    // appearing.
+    const result = await this.addLineResult(listId, content, quantity, itemIds);
+    return result.line;
+  }
+
+  async addLineResult(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
+  ): Promise<LineAddResult> {
     // Built as the request type rather than spread from anything, because the
     // gateway's pipe runs with `forbidNonWhitelisted` and an unexpected property is a
     // 400. `quantity` is omitted rather than sent as 1, so the server's own default
@@ -98,11 +115,12 @@ export class LineApi implements LineServiceI {
     );
 
     // The route answers what the add did, not the line alone (plan 0091): it may
-    // have raised a line the list already held rather than created one. Only the
-    // line is read here, because the store upserts by id, so a merge lands on the
-    // screen as the existing row moving rather than a new row appearing.
+    // have raised a line the list already held rather than created one.
     const record = body as Record<string, unknown> | null;
-    return required(toLine(record?.['line']), 'lines.add');
+    return {
+      line: required(toLine(record?.['line']), 'lines.add'),
+      merged: record?.['merged'] === true,
+    };
   }
 
   async updateLine(

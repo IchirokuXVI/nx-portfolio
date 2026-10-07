@@ -306,7 +306,6 @@
       "clear": "Clear the search"
     },
     "supermarket": {
-      "label": "Supermarket",
       "title": "Supermarket",
       "back": "Back to the catalog",
       "backToChains": "Back to every chain",
@@ -314,24 +313,72 @@
       "allDetail": "Every product from every chain",
       "any": "Any {{chain}} shop",
       "anyDetail": "Every {{chain}} product",
-      "anyShop": "any shop",
       "pricesAt": "Prices at {{shop}}",
       "notPriced": "not priced here",
       "clear": "Show every supermarket"
     },
+    "selector": {
+      "supermarketAll": "Supermarket: all supermarkets. Change",
+      "supermarketAny": "Supermarket: {{chain}}, any shop. Change",
+      "supermarketShop": "Supermarket: {{chain}}, one shop. Change",
+      "categoryAll": "Category: all categories. Change",
+      "categoryLeaf": "Category: {{root}}, {{leaf}}. Change",
+      "categoryRoot": "Category: {{root}}. Change"
+    },
     "order": {
       "label": "Order",
       "relevance": "Best match",
-      "name": "A to Z",
-      "created": "Newest"
+      "name": "Catalog order",
+      "short": {
+        "relevance": "Best match",
+        "name": "Catalog"
+      },
+      "hint": {
+        "relevance": "The closest to what you typed comes first",
+        "name": "By name, from A to Z"
+      }
+    },
+    "head": {
+      "chainNear": "Any {{chain}} near {{code}}"
     },
     "count": "{{count}} products",
     "countMore": "More than {{count}} products",
-    "chain": {
-      "shops": "{{count}} shops near you. Prices are what {{chain}} charges here."
-    },
     "row": {
-      "noPrice": "no price"
+      "noPrice": "no price",
+      "priceAt": "{{price}} at {{chain}}"
+    },
+    "add": {
+      "label": "Add {{name}} to {{list}}",
+      "count": "{{name}}, {{count}} in {{list}}. Change how many",
+      "stepper": "{{name}} in {{list}}",
+      "failed": "That did not save. Check your connection and try again."
+    },
+    "adding": {
+      "to": "Adding to",
+      "change": "Adding to {{list}}. Change the list",
+      "count_one": "{{count}} product added",
+      "count_other": "{{count}} products added"
+    },
+    "lists": {
+      "title": "Add to which list?",
+      "toBuy_one": "{{count}} to buy",
+      "toBuy_other": "{{count}} to buy",
+      "none": "You have no list you can add to yet.",
+      "loading": "Loading your lists"
+    },
+    "added": {
+      "title": "Added to {{list}}",
+      "titleMany": "Added in this visit",
+      "note": "Change how many, or take one back with the minus.",
+      "none": "Nothing was added in this visit.",
+      "pending": "Waiting for approval",
+      "stepper": "How many of {{name}}",
+      "takeAll_one": "Take it back",
+      "takeAll_other": "Take all {{count}} back",
+      "open": "Open {{list}}"
+    },
+    "sheet": {
+      "close": "Close"
     },
     "unit": {
       "KILOGRAM": "{{price}} / kg",
@@ -372,10 +419,15 @@
       "cheapest": "CHEAPEST",
       "notSold": "not sold here",
       "seen": "Seen {{when}}. Velista reads the shops, so a price can be behind the shelf.",
-      "loading": "Looking up the prices",
-      "failed": "The prices did not load. Close this and try again.",
+      "loading": "Loading the product",
       "noShops": "We do not know where you shop, so there are no prices to show.",
-      "close": "Close"
+      "title": "Product",
+      "back": "Back",
+      "pricesTitle": "Price at your supermarkets",
+      "failedTitle": "The product did not load",
+      "goneTitle": "This product is no longer in the catalog",
+      "goneBody": "It may have been removed, or joined with another product.",
+      "toCatalog": "Go to the catalog"
     },
     "similar": {
       "title": "Similar products",
@@ -386,7 +438,7 @@
     },
     "categories": {
       "title": "Categories",
-      "open": "Categories",
+      "all": "All categories",
       "back": "Back to the catalog",
       "backToRoots": "Back to categories",
       "everything": "Everything in {{name}}",
@@ -394,8 +446,6 @@
       "count_other": "{{shown}} products",
       "row": "{{name}}, {{amount}}",
       "rowChosen": "{{name}}, {{amount}}, chosen",
-      "chip": "{{root}}, {{leaf}}. Change the category",
-      "chipRoot": "{{root}}. Change the category",
       "clear": "Clear the category",
       "search": "Search in {{category}}",
       "searchChain": "Search in {{category}} at {{chain}}",

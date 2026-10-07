@@ -1,0 +1,280 @@
+// A product's page (velista 0134, section 5), as the `Product` artboard draws it.
+//
+// The host is a column of the page header and then the scroller, as on the picker
+// pages: the header stays and the scroller takes what is left.
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// Not a flex column, whose children would shrink to fit rather than overflow.
+.page {
+  flex: 1;
+  min-block-size: 0;
+  padding: var(--app-space-5) var(--app-space-5) var(--app-space-7);
+  overflow-y: auto;
+}
+
+// Heard and not seen. Here and not global: velista has no global utility class.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// The product: its picture, and beside it the whole name, the detail and the way
+// to its category.
+.product {
+  display: flex;
+  gap: var(--app-space-5);
+}
+
+.picture {
+  box-sizing: border-box;
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-product-page-image-size);
+  block-size: var(--app-product-page-image-size);
+  overflow: hidden;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-sunken);
+}
+
+.picture-image {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.picture-glyph {
+  font-size: var(--app-icon-lg);
+  color: var(--app-text-muted);
+}
+
+.about {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.about-name {
+  margin: 0;
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.about-detail {
+  margin: var(--app-space-2) 0 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-muted);
+}
+
+// A link, so it wears the chevron every way forward in the app wears. It sits at
+// the foot of the block, level with the foot of the picture.
+.about-category {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--app-space-hair);
+  min-block-size: var(--app-touch-target);
+  margin-block-start: auto;
+  color: var(--app-action-quiet-fg);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.about-chevron {
+  font-size: var(--app-icon-sm);
+}
+
+.section {
+  display: block;
+  margin-block-start: var(--app-space-7);
+}
+
+.heading {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-text-base);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+}
+
+.note {
+  margin: var(--app-space-4) 0 0;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-muted);
+}
+
+// The heading of Similar products, with the list the plus adds to at its end.
+.similar-head {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  margin-block-end: var(--app-space-2);
+
+  .heading {
+    flex: 1;
+    margin: 0;
+  }
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// The failed read and the product that is gone: a quiet card with one way on.
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-7) var(--app-space-5);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  text-align: center;
+
+  // The note for a person with no shopping place, inside the prices section.
+  &.is-start {
+    align-items: flex-start;
+    padding: var(--app-space-5);
+    text-align: start;
+  }
+}
+
+.state-title {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: 650;
+}
+
+.state-body {
+  max-inline-size: 34ch;
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-button-height);
+  margin-block-start: var(--app-space-3);
+  padding-inline: var(--app-space-5);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+// The loading page: bones where the product and the price table will be.
+.bone {
+  display: block;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+}
+
+.picture.bone {
+  border-radius: var(--app-card-radius);
+}
+
+.bone-title {
+  inline-size: 80%;
+  block-size: var(--app-space-6);
+}
+
+.bone-detail {
+  inline-size: 45%;
+  block-size: var(--app-space-4);
+  margin-block-start: var(--app-space-3);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  margin-block-start: var(--app-space-7);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-card-radius);
+  background: var(--app-surface-raised);
+}
+
+.bone-row {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--app-line-row-height);
+  padding-inline: var(--app-space-5);
+
+  & + & {
+    border-block-start: 1px solid var(--app-border-subtle);
+  }
+
+  &::before {
+    content: '';
+    inline-size: 45%;
+    block-size: var(--app-space-4);
+    border-radius: var(--app-radius-sm);
+    background: var(--app-surface-sunken);
+  }
+}
+
+// A failed add, in the live region. It takes no room while it says nothing.
+.add-failed {
+  flex: none;
+  margin: 0;
+  padding: var(--app-space-3) var(--app-space-5);
+  background: var(--app-status-danger-bg);
+  color: var(--app-status-danger-fg);
+  font-size: var(--app-text-sm);
+
+  &:empty {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bone,
+  .bone-row::before {
+    animation: pulse var(--app-motion-slow) var(--app-motion-ease) infinite
+      alternate;
+  }
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.55;
+  }
+}

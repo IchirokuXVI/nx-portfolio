@@ -56,6 +56,7 @@ import {
   BrowserFacade,
   ListSearchNavigation,
   NavChrome,
+  productPagePath,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -98,7 +99,6 @@ import {
   visitTime,
 } from '../basket-labels';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
-import { basketPath } from '../basket-paths';
 import { BasketRow } from '../basket-row/basket-row';
 import { basketGroupScope } from '../swap-sheet/swap';
 import { ChangeAcknowledger } from './change-acknowledger';
@@ -2069,22 +2069,18 @@ export class BasketPage {
   });
 
   /**
-   * Where a card's "Details" opens a product: the product sheet, over this basket
-   * (velista `0107`), so the basket stays underneath and closing the sheet lands
-   * back on it. Null for a guest, because every catalog read needs an account and a
+   * Where a card's "Details" opens a product: the product's own page (velista
+   * `0134`, section 8). Its back control pops, so it lands back on this basket.
+   * Null for a guest, because every catalog read needs an account and a
    * link that ends on a sign in wall is not a way through to the product.
    */
   protected readonly productLink = computed(() => {
     if (this._store.me()?.kind === 'GUEST') {
       return null;
     }
-    const page = basketPath(
-      this._locale(),
-      this._basePath,
-      this._store.address()
-    );
+    const locale = this._locale();
     return (itemId: string): string =>
-      `${page}/${sheetSegments('products', itemId).join('/')}`;
+      productPagePath(locale, this._basePath, itemId);
   });
 
   /**

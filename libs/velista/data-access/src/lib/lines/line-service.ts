@@ -25,6 +25,15 @@ export interface LineUpdateResult {
 }
 
 /**
+ * What an add answers (backend plan 0091): the line, and whether it is a line the
+ * list already held, raised, rather than a new one.
+ */
+export interface LineAddResult {
+  readonly line: Line;
+  readonly merged: boolean;
+}
+
+/**
  * The lines on a list, and every write the list screen makes to one.
  *
  * Split from `ListServiceI` on the same line that separates memberships from zones:
@@ -69,6 +78,23 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[]
   ): Promise<Line>;
+
+  /**
+   * The same add, answering what it did as well (velista `0134`, section 4.4).
+   *
+   * A list holds one line for each name and product identity, so an add that
+   * matches raises that line and answers `merged: true`. The catalog asks this way
+   * because it has to undo an add exactly: a new line is deleted, and a raised one
+   * goes back to the quantity it had. A screen that holds the list in `LineStore`
+   * uses {@link addLine}, because the store upserts by id and the difference never
+   * reaches it.
+   */
+  addLineResult(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
+  ): Promise<LineAddResult>;
 
   /**
    * Change what a line says, how many, or which products (`PATCH /v1/lines/:id`).

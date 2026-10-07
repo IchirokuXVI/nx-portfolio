@@ -306,7 +306,6 @@
       "clear": "Borrar la búsqueda"
     },
     "supermarket": {
-      "label": "Supermercado",
       "title": "Supermercado",
       "back": "Volver al catálogo",
       "backToChains": "Volver a todas las cadenas",
@@ -314,24 +313,72 @@
       "allDetail": "Todos los productos de todas las cadenas",
       "any": "Cualquier tienda de {{chain}}",
       "anyDetail": "Todos los productos de {{chain}}",
-      "anyShop": "cualquier tienda",
       "pricesAt": "Precios en {{shop}}",
       "notPriced": "sin precio aquí",
       "clear": "Ver todos los supermercados"
     },
+    "selector": {
+      "supermarketAll": "Supermercado: todos los supermercados. Cambiar",
+      "supermarketAny": "Supermercado: {{chain}}, cualquier tienda. Cambiar",
+      "supermarketShop": "Supermercado: {{chain}}, una tienda. Cambiar",
+      "categoryAll": "Categoría: todas las categorías. Cambiar",
+      "categoryLeaf": "Categoría: {{root}}, {{leaf}}. Cambiar",
+      "categoryRoot": "Categoría: {{root}}. Cambiar"
+    },
     "order": {
       "label": "Orden",
       "relevance": "Más parecido",
-      "name": "A a Z",
-      "created": "Más nuevos"
+      "name": "Orden del catálogo",
+      "short": {
+        "relevance": "Más parecido",
+        "name": "Catálogo"
+      },
+      "hint": {
+        "relevance": "Primero lo que más se parece a lo que has escrito",
+        "name": "Por nombre, de la A a la Z"
+      }
+    },
+    "head": {
+      "chainNear": "Cualquier {{chain}} cerca de {{code}}"
     },
     "count": "{{count}} productos",
     "countMore": "Más de {{count}} productos",
-    "chain": {
-      "shops": "{{count}} tiendas cerca. Los precios son los de {{chain}} aquí."
-    },
     "row": {
-      "noPrice": "sin precio"
+      "noPrice": "sin precio",
+      "priceAt": "{{price}} en {{chain}}"
+    },
+    "add": {
+      "label": "Añadir {{name}} a {{list}}",
+      "count": "{{name}}, {{count}} en {{list}}. Cambiar la cantidad",
+      "stepper": "{{name}} en {{list}}",
+      "failed": "No se ha guardado. Revisa la conexión e inténtalo de nuevo."
+    },
+    "adding": {
+      "to": "Se añade a",
+      "change": "Se añade a {{list}}. Cambiar de lista",
+      "count_one": "{{count}} producto añadido",
+      "count_other": "{{count}} productos añadidos"
+    },
+    "lists": {
+      "title": "¿A qué lista lo añado?",
+      "toBuy_one": "{{count}} por comprar",
+      "toBuy_other": "{{count}} por comprar",
+      "none": "Todavía no tienes ninguna lista a la que puedas añadir.",
+      "loading": "Cargando tus listas"
+    },
+    "added": {
+      "title": "Añadido a {{list}}",
+      "titleMany": "Añadido en esta visita",
+      "note": "Cambia la cantidad, o quita uno con el menos.",
+      "none": "No se ha añadido nada en esta visita.",
+      "pending": "Pendiente de aprobar",
+      "stepper": "Cantidad de {{name}}",
+      "takeAll_one": "Quitarlo",
+      "takeAll_other": "Quitar los {{count}}",
+      "open": "Abrir {{list}}"
+    },
+    "sheet": {
+      "close": "Cerrar"
     },
     "unit": {
       "KILOGRAM": "{{price}} / kg",
@@ -372,10 +419,15 @@
       "cheapest": "MÁS BARATO",
       "notSold": "aquí no se vende",
       "seen": "Visto {{when}}. Velista lee las tiendas, así que un precio puede ir por detrás del lineal.",
-      "loading": "Buscando los precios",
-      "failed": "No se han cargado los precios. Cierra y vuelve a intentarlo.",
+      "loading": "Cargando el producto",
       "noShops": "No sabemos dónde compras, así que no hay precios que mostrar.",
-      "close": "Cerrar"
+      "title": "Producto",
+      "back": "Volver",
+      "pricesTitle": "Precio en tus supermercados",
+      "failedTitle": "El producto no se ha cargado",
+      "goneTitle": "Este producto ya no está en el catálogo",
+      "goneBody": "Puede que se haya quitado, o que se haya unido con otro.",
+      "toCatalog": "Ir al catálogo"
     },
     "similar": {
       "title": "Productos similares",
@@ -386,7 +438,7 @@
     },
     "categories": {
       "title": "Categorías",
-      "open": "Categorías",
+      "all": "Todas las categorías",
       "back": "Volver al catálogo",
       "backToRoots": "Volver a las categorías",
       "everything": "Todo en {{name}}",
@@ -394,8 +446,6 @@
       "count_other": "{{shown}} productos",
       "row": "{{name}}, {{amount}}",
       "rowChosen": "{{name}}, {{amount}}, elegida",
-      "chip": "{{root}}, {{leaf}}. Cambiar la categoría",
-      "chipRoot": "{{root}}. Cambiar la categoría",
       "clear": "Quitar la categoría",
       "search": "Buscar en {{category}}",
       "searchChain": "Buscar en {{category}} en {{chain}}",

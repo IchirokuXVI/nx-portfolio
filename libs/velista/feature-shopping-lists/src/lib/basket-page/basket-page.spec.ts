@@ -3476,13 +3476,13 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
 
   it('links to the product for an account, and to nothing for a guest', async () => {
     const owned = await render({ lines: [milk()] });
-    // Over this basket and not the catalog tab (velista `0107`), so closing the
-    // sheet lands back here.
+    // The product's own page (velista `0134`). Its back control pops, so it
+    // lands back on this basket.
     expect(
       (
         owned.fixture.componentInstance as unknown as CardSurface
       ).productLink()?.('item-milk')
-    ).toMatch(/\/shopping-lists\/basket-saturday\/sheet\/products\/item-milk$/);
+    ).toMatch(/\/catalog\/products\/item-milk$/);
 
     const visiting = await render({
       lines: [milk()],

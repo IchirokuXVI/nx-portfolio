@@ -7,7 +7,8 @@ import {
   signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { ProductIcon } from '../icons/icons';
+import { PlusIcon, ProductIcon } from '../icons/icons';
+import { QuantityStepper } from '../list/quantity-stepper';
 
 /** One product row, with every string already chosen in the reader's language. */
 export interface ProductRowView {
@@ -29,17 +30,48 @@ export interface ProductRowView {
   readonly stale: boolean;
   /** The accessible name: the product, the size and the price, in that order. */
   readonly label: string;
+  /**
+   * The detail with the price in it ("1 L · 1,09 € at Carrefour"), for a row whose
+   * trailing edge holds a stepper and for the sheet of what a visit added
+   * (velista `0134`, section 4.1). Null with neither a detail nor a price.
+   */
+  readonly summary: string | null;
+}
+
+/**
+ * The plus on a row (velista `0134`, section 4.1), or null for a row with none: a
+ * guest, a person with no list to write to, and every row that is not offered for
+ * adding.
+ */
+export interface ProductRowAdd {
+  /** How many of the product the chosen list holds. Zero draws the plus. */
+  readonly count: number;
+  /** The lowest count the stepper shows. A minus pressed there takes it back. */
+  readonly floor: number;
+  /** Whether the stepper is open in this row. One is open at a time. */
+  readonly open: boolean;
+  /** The chosen list's name, for the control's accessible name. */
+  readonly list: string;
 }
 
 /**
  * One catalog product in the tab's list (velista `0100`, section 3).
  *
- * ## One button, and the name says everything
+ * ## One button for the product, and the name says everything
  *
- * The whole row opens the product sheet, so it is one control with one name
- * (section 7). The name is composed by the page, which has the translator and the
- * money helper: the product, the size and the price in that order, with `no price`
- * as words, so a screen reader hears what a sighted reader scans.
+ * The row opens the product, so that is one control with one name (section 7).
+ * The name is composed by the page, which has the translator and the money
+ * helper: the product, the size and the price in that order, with `no price` as
+ * words, so a screen reader hears what a sighted reader scans.
+ *
+ * ## The plus is a sibling of that button, never a child (velista `0134`)
+ *
+ * A button in a button is not a control anybody can reach. So the card is the
+ * host's own box, the product button fills it, and the plus sits after it.
+ *
+ * A press adds one. The plus then shows the count, and a press on the count opens
+ * a stepper in the row. While the stepper is open the price moves into the detail
+ * line, because the trailing edge has room for one of the two.
  *
  * ## The price is never colour alone
  *
@@ -49,61 +81,118 @@ export interface ProductRowView {
  */
 @Component({
   selector: 'lib-product-row',
-  imports: [ProductIcon, RokuTranslatorPipe],
+  imports: [PlusIcon, ProductIcon, QuantityStepper, RokuTranslatorPipe],
   template: `
-    <button
-      (click)="opened.emit(row().id)"
-      [attr.aria-label]="
-        verb() === null
-          ? row().label
-          : (verbLabel() ?? '' | rokuT: { label: row().label })
-      "
-      [disabled]="disabled()"
-      class="row"
-      type="button"
-    >
-      <span aria-hidden="true" class="thumb">
-        @if (image(); as src) {
-          <img
-            (error)="broken.set(src)"
-            [src]="src"
-            alt=""
-            class="image"
-            decoding="async"
-            loading="lazy"
-          />
+    <div [class.has-add]="add() !== null" class="row">
+      <button
+        (click)="opened.emit(row().id)"
+        [attr.aria-label]="
+          verb() === null
+            ? row().label
+            : (verbLabel() ?? '' | rokuT: { label: row().label })
+        "
+        [disabled]="disabled()"
+        class="open"
+        type="button"
+      >
+        <span aria-hidden="true" class="thumb">
+          @if (image(); as src) {
+            <img
+              (error)="broken.set(src)"
+              [src]="src"
+              alt=""
+              class="image"
+              decoding="async"
+              loading="lazy"
+            />
+          } @else {
+            <lib-product-icon class="glyph" />
+          }
+        </span>
+
+        <span class="what">
+          <span class="name">{{ row().name }}</span>
+          @if (stepping()) {
+            @if (row().summary; as summary) {
+              <span class="detail">{{ summary }}</span>
+            }
+          } @else if (row().detail; as detail) {
+            <span class="detail">{{ detail }}</span>
+          }
+        </span>
+
+        @if (stepping()) {
+          <!-- The price is in the detail line while the stepper is open. -->
+        } @else if (row().price; as price) {
+          <span [class.is-stale]="row().stale" class="price">
+            <span class="amount">{{ price }}</span>
+            @if (row().caption; as caption) {
+              <span class="caption">{{ caption }}</span>
+            }
+          </span>
         } @else {
-          <lib-product-icon class="glyph" />
+          <span class="no-price">
+            <span class="no-price-word">{{
+              'catalog.row.noPrice' | rokuT
+            }}</span>
+            @if (row().caption; as caption) {
+              <span class="caption">{{ caption }}</span>
+            }
+          </span>
         }
-      </span>
 
-      <span class="what">
-        <span class="name">{{ row().name }}</span>
-        @if (row().detail; as detail) {
-          <span class="detail">{{ detail }}</span>
+        @if (verb(); as key) {
+          <span aria-hidden="true" class="verb">{{ key | rokuT }}</span>
         }
-      </span>
+      </button>
 
-      @if (row().price; as price) {
-        <span [class.is-stale]="row().stale" class="price">
-          <span class="amount">{{ price }}</span>
-          @if (row().caption; as caption) {
-            <span class="caption">{{ caption }}</span>
-          }
-        </span>
-      } @else {
-        <span class="no-price">
-          <span class="no-price-word">{{ 'catalog.row.noPrice' | rokuT }}</span>
-          @if (row().caption; as caption) {
-            <span class="caption">{{ caption }}</span>
-          }
-        </span>
+      @if (add(); as adding) {
+        @if (stepping()) {
+          <lib-quantity-stepper
+            (stepped)="stepped.emit($event)"
+            [accent]="true"
+            [compact]="true"
+            [controlled]="true"
+            [label]="
+              'catalog.add.stepper'
+                | rokuT: { name: row().name, list: adding.list }
+            "
+            [min]="adding.floor - 1"
+            [value]="adding.count"
+            class="stepper"
+          />
+        } @else if (adding.count > 0) {
+          <button
+            (click)="counted.emit(row().id)"
+            [attr.aria-label]="
+              'catalog.add.count'
+                | rokuT
+                  : {
+                      name: row().name,
+                      count: adding.count,
+                      list: adding.list,
+                    }
+            "
+            class="add has-count"
+            type="button"
+          >
+            <span class="add-dot">{{ adding.count }}</span>
+          </button>
+        } @else {
+          <button
+            (click)="added.emit(row().id)"
+            [attr.aria-label]="
+              'catalog.add.label'
+                | rokuT: { name: row().name, list: adding.list }
+            "
+            class="add"
+            type="button"
+          >
+            <span class="add-dot"><lib-plus-icon /></span>
+          </button>
+        }
       }
-
-      @if (verb(); as key) {
-        <span aria-hidden="true" class="verb">{{ key | rokuT }}</span>
-      }
-    </button>
+    </div>
   `,
   styleUrl: './product-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -125,8 +214,26 @@ export class ProductRow {
   /** While the row's action is in flight. */
   readonly disabled = input(false);
 
+  /** The plus, or null for a row that offers none. See {@link ProductRowAdd}. */
+  readonly add = input<ProductRowAdd | null>(null);
+
   /** The product's id, when the row is pressed. */
   readonly opened = output<string>();
+
+  /** The plus was pressed: add one of this product. */
+  readonly added = output<string>();
+
+  /** The count was pressed: open the stepper in this row. */
+  readonly counted = output<string>();
+
+  /** A press on the stepper: one more, or one fewer. */
+  readonly stepped = output<1 | -1>();
+
+  /** Whether the stepper is what the trailing edge holds. */
+  protected readonly stepping = computed(() => {
+    const add = this.add();
+    return add !== null && add.open && add.count > 0;
+  });
 
   /** A picture that failed to load, so the carton takes its place. */
   protected readonly broken = signal<string | null>(null);

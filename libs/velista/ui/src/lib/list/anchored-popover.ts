@@ -18,6 +18,9 @@ export type AnchoredPopoverClose = 'escape' | 'outside' | 'detach';
 /** Which edge of the anchor the popover lines up with. */
 export type AnchoredPopoverAlign = 'start' | 'end';
 
+/** Which side of the anchor the popover tries first. */
+export type AnchoredPopoverSide = 'above' | 'below';
+
 /**
  * Above the anchor and aligned with its start edge, since the anchors this is drawn
  * against sit at the foot of the screen and the room is upward; below it when the
@@ -116,15 +119,23 @@ export class AnchoredPopover {
   /** Which edge of {@link origin} it lines up with. */
   readonly align = input<AnchoredPopoverAlign>('start');
 
+  /**
+   * Which side it tries first. Above by default, because most anchors sit at the
+   * foot of the screen. An anchor near the top with tools above it asks for below
+   * (velista `0134`), or the popover would cover them while it still fits.
+   */
+  readonly side = input<AnchoredPopoverSide>('above');
+
   /** The id of the element inside it that names it, for the dialog's label. */
   readonly labelledBy = input<string | null>(null);
 
   /** It wants to close, and why. */
   readonly closed = output<AnchoredPopoverClose>();
 
-  protected readonly positions = computed(() =>
-    this.align() === 'end' ? END : START
-  );
+  protected readonly positions = computed(() => {
+    const positions = this.align() === 'end' ? END : START;
+    return this.side() === 'below' ? [...positions].reverse() : positions;
+  });
 
   /** Escape closes it, and the keypress goes no further. */
   protected onKey(event: KeyboardEvent): void {

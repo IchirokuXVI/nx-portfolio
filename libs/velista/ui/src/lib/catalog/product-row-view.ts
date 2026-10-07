@@ -74,10 +74,27 @@ export function productRowView(
     caption = translate('catalog.supermarket.notPriced');
   }
 
+  // The price as the detail line says it: with the chain's name when the caption
+  // would have named it, and alone when one chain is chosen.
+  const chain =
+    price !== null && offer !== null && !options.chainChosen
+      ? options.chainOf(offer.priceScopeId)
+      : null;
+  const priceWords =
+    price === null
+      ? null
+      : chain === null
+        ? price
+        : translate('catalog.row.priceAt', { price, chain });
+  const summary = [detail, priceWords]
+    .filter((part): part is string => part !== null && part !== '')
+    .join(' · ');
+
   return {
     id: product.id,
     name,
     detail: detail === '' ? null : detail,
+    summary: summary === '' ? null : summary,
     imageUrl: product.imageUrl,
     price,
     caption,

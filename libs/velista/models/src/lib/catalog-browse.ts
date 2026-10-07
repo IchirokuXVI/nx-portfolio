@@ -8,13 +8,15 @@ import {
 } from './shopping-profile';
 
 /**
- * The orders the catalog tab offers (velista `0100`, section 2).
+ * The orders the catalog tab offers (velista `0134`, section 3).
  *
- * Three of the server's four. `updated` is left out because nothing on the screen
- * could explain it to a shopper, and a price order is left out because the read has
- * none (section 8).
+ * The two the read can serve today. `name` is the order the tab opens on, and the
+ * menu calls it the catalog's own order. Newest is gone (section 1). The price
+ * orders and the order by aisle wait for the read to grow them (section 9): prices
+ * are attached after the page of products is cut, so no order by price exists, and
+ * one drawn here would be a label over the wrong list.
  */
-export type CatalogOrder = 'relevance' | 'name' | 'created';
+export type CatalogOrder = 'relevance' | 'name';
 
 /**
  * A catalog name in the reader's language, or in the other one when it has only
@@ -34,7 +36,7 @@ export function catalogName(name: LocalizedName, locale: string): string {
 }
 
 /**
- * Which pills the screen draws, in order (rule C2 of the mock).
+ * Which orders the menu offers, in order (rule C2 of velista `0100`).
  *
  * **Best match exists only while there is something to match.** That is the
  * server's own rule: the read defaults to relevance with a query and to name
@@ -42,9 +44,7 @@ export function catalogName(name: LocalizedName, locale: string): string {
  * confident label.
  */
 export function catalogOrdersFor(query: string): readonly CatalogOrder[] {
-  return query.trim() === ''
-    ? ['name', 'created']
-    : ['relevance', 'name', 'created'];
+  return query.trim() === '' ? ['name'] : ['relevance', 'name'];
 }
 
 /**
@@ -229,10 +229,12 @@ export interface CatalogScopeOffer {
   readonly available: boolean;
 }
 
-/** One line of the product sheet: a chain near the person, and what it charges. */
+/** One row of a product's price table: a chain near the person, and what it charges. */
 export interface ProductShopPrice {
   readonly supermarketId: string;
   readonly chain: LocalizedName;
+  /** The chain's logo, or null for none yet, which draws its initial. */
+  readonly logoUrl: string | null;
   /**
    * `priced` has a price, `unpriced` stocks it with no price anybody saw, and
    * `notSold` has no available row at any of the person's scopes.
@@ -246,12 +248,12 @@ export interface ProductShopPrice {
 
 /**
  * Every chain near the person and what it charges for one product (velista
- * `0100`, section 5), cheapest first.
+ * `0100`, section 5, and the product page of `0134`), cheapest first.
  *
  * Only the person's own scopes count. The source rows come from every scope in the
  * country, and a price in a town somebody never shops in is not their price.
  *
- * A chain is named once, at its cheapest scope, because the question the sheet
+ * A chain is named once, at its cheapest scope, because the question the table
  * answers is "what does this cost at Mercadona", not "at which warehouse". Priced
  * chains come first by price, then chains that stock it with no price, then the
  * chains near the person that do not sell it. A chain the read resolved a scope
@@ -286,6 +288,7 @@ export function productShopPrices(
       stocked.push({
         supermarketId,
         chain,
+        logoUrl: logoOf(context, supermarketId),
         kind: offer.price === null ? 'unpriced' : 'priced',
         offer,
         cheapest: false,
@@ -299,6 +302,7 @@ export function productShopPrices(
     .map((chain) => ({
       supermarketId: chain.supermarketId,
       chain: chain.name,
+      logoUrl: chain.logoUrl,
       kind: 'notSold',
       offer: null,
       cheapest: false,
@@ -313,10 +317,10 @@ export function productShopPrices(
 }
 
 /**
- * The newest moment any priced line was seen, for the sheet's foot.
+ * The newest moment any priced line was seen, for the note under the table.
  *
  * The newest rather than the cheapest's, because the sentence is about how far
- * behind the shelf the whole sheet can be, and it says "a price can be behind".
+ * behind the shelf the whole table can be, and it says "a price can be behind".
  */
 export function productPricesSeenAt(
   lines: readonly ProductShopPrice[]
@@ -351,6 +355,16 @@ function byPrice(a: ProductShopPrice, b: ProductShopPrice): number {
     return -1;
   }
   return left - right;
+}
+
+function logoOf(
+  context: CatalogBrowseContext,
+  supermarketId: string
+): string | null {
+  return (
+    context.chains.find((chain) => chain.supermarketId === supermarketId)
+      ?.logoUrl ?? null
+  );
 }
 
 function nameOf(

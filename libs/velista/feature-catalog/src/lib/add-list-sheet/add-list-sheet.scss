@@ -1,0 +1,13 @@
+@use '../add-sheet';
+
+.title {
+  @include add-sheet.title;
+}
+
+.note {
+  @include add-sheet.note;
+}
+
+.close {
+  @include add-sheet.close;
+}

@@ -23,7 +23,7 @@ export type GroupMembersEntry =
  * basket's best price mark.
  *
  * A group is one product sold under several labels, so its members are the
- * products a line can change to. The line page, the product sheet and the basket
+ * products a line can change to. The line page, the product page and the basket
  * all ask the same question, often about the same group, so the answer is held
  * here for the session, keyed by group **and** scope: the same group priced at a
  * basket's scopes and at a profile's is two different answers.

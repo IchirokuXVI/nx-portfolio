@@ -1,0 +1,84 @@
+// The sheet of lists (velista 0134, section 4.3), as the `CatalogLists` artboard
+// draws it.
+:host {
+  display: block;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+}
+
+.group {
+  margin: var(--app-space-5) 0 var(--app-space-2);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-line-row-height);
+  padding: var(--app-space-2);
+  border: none;
+  border-block-end: 1px solid var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  text-align: start;
+  cursor: pointer;
+
+  &.is-on {
+    font-weight: 650;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The order menu's radio: a ring, and a dot inside it on the chosen row.
+.radio {
+  box-sizing: border-box;
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+}
+
+.option.is-on .radio {
+  border-color: var(--app-action-bg);
+
+  &::after {
+    content: '';
+    inline-size: 55%;
+    block-size: 55%;
+    border-radius: var(--app-radius-full);
+    background: var(--app-action-bg);
+  }
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  line-height: var(--app-leading-heading);
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.caption {
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+}

@@ -8,8 +8,8 @@
 
 <div class="page">
   <!--
-    The tools, all on the screen (rule C1), held at the top while the list scrolls
-    under them: the field, the Supermarket button, the category and the order.
+    The tools (velista 0134, section 2), held at the top while the list scrolls
+    under them: the field, and one row of two selectors.
   -->
   <div class="tools">
     <label class="visually-hidden" for="catalog-search">
@@ -42,88 +42,51 @@
     </span>
 
     <!--
-      The one Supermarket button (velista 0124), where the chain chips were: the
-      body opens the picker page, and once a chain or a shop is chosen an x beside
-      it goes back to every supermarket.
+      Each selector names what the list shows. With a choice it is two controls:
+      the body opens the picker page, and the cross clears that choice alone.
     -->
-    <lib-supermarket-button
-      (cleared)="clearSupermarket()"
-      (opened)="openSupermarket()"
-      [chosen]="supermarket().chosen"
-      [detail]="supermarket().detail"
-      [logo]="supermarket().logo"
-      [value]="supermarket().value"
+    <lib-catalog-selectors
+      (categoryCleared)="clearCategory()"
+      (categoryOpened)="openCategory()"
+      (supermarketCleared)="clearSupermarket()"
+      (supermarketOpened)="openSupermarket()"
+      [category]="tools().category"
+      [supermarket]="tools().supermarket"
     />
+  </div>
 
-    <!-- The way into the categories, or the chosen category (velista 0119). -->
-    <div class="chip-row">
-      @if (choice(); as chosen) {
-        <span class="category-chip">
-          <a
-            [attr.aria-label]="categoryChipLabel()"
-            [queryParams]="choiceQuery()"
-            [routerLink]="categoryChipPath()"
-            class="category-chip-body"
-          >
-            @if (leafChosen()) {
-              <span class="category-chip-root">{{ categoryRootLabel() }}</span>
-              <span aria-hidden="true" class="category-chip-mid">·</span>
+  <!--
+    The line that heads the list (section 3): where the prices are from, and the
+    order. Only one note shows: the shop, else the chain, else the postal code.
+  -->
+  <div class="head">
+    @if (tools().note; as note) {
+      <span class="head-note">
+        @switch (note.kind) {
+          @case ('shop') {
+            {{ 'catalog.supermarket.pricesAt' | rokuT: { shop: note.shop } }}
+          }
+          @case ('chain') {
+            @if (note.postalCode; as code) {
+              {{
+                'catalog.head.chainNear' | rokuT: { chain: note.chain, code }
+              }}
+            } @else {
+              {{ 'catalog.supermarket.any' | rokuT: { chain: note.chain } }}
             }
-            <span class="category-chip-leaf">{{ categoryLabel() }}</span>
-          </a>
-          <button
-            (click)="clearCategory()"
-            [attr.aria-label]="'catalog.categories.clear' | rokuT"
-            class="category-chip-clear"
-            type="button"
-          >
-            <lib-close-icon class="category-chip-clear-glyph" />
-          </button>
-        </span>
-      } @else {
-        <a
-          [queryParams]="choiceQuery()"
-          [routerLink]="categoriesPath()"
-          class="categories-link"
-        >
-          <lib-list-lines-icon class="categories-link-lead" />
-          {{ 'catalog.categories.open' | rokuT }}
-          <lib-chevron-right-icon class="categories-link-chevron" />
-        </a>
-      }
-    </div>
-
-    <!--
-      The order, and where the prices are from at the row's end. The quiet text is
-      not an action, so it is here and not in the header (velista 0130, rule H5).
-    -->
-    <div class="order-row">
-      <lib-order-pills
-        (chosen)="chooseOrder($event)"
-        [orders]="orders()"
-        [selected]="order()"
-      />
-      @if (near(); as code) {
-        <span class="near">{{ 'catalog.near' | rokuT: { code } }}</span>
-      }
-    </div>
-
-    @if (shop() !== null && shopPlace() !== '') {
-      <p class="note">
-        {{ 'catalog.supermarket.pricesAt' | rokuT: { shop: shopPlace() } }}
-      </p>
-    } @else if (shop() === null && chosenChain(); as chosen) {
-      <p class="note">
-        {{
-          'catalog.chain.shops'
-            | rokuT: { count: chosen.locations, chain: chosenChainName() }
-        }}
-      </p>
-    } @else if (query().trim() !== '' && status() === 'ready') {
-      <p aria-hidden="true" class="note">
-        {{ countKey() | rokuT: { count: count() } }}
-      </p>
+          }
+          @default {
+            {{ 'catalog.near' | rokuT: { code: note.postalCode } }}
+          }
+        }
+      </span>
     }
+    <lib-order-menu
+      (chosen)="chooseOrder($event)"
+      [orders]="orders()"
+      [selected]="order()"
+      class="head-order"
+    />
   </div>
 
   <!--
@@ -191,7 +154,16 @@
         @if (rows().length > 0) {
           <ul class="rows">
             @for (row of rows(); track row.id) {
-              <li><lib-product-row (opened)="open($event)" [row]="row" /></li>
+              <li>
+                <lib-product-row
+                  (added)="addProduct(row)"
+                  (counted)="openStepper(row.id)"
+                  (opened)="open($event)"
+                  (stepped)="stepProduct(row.id, $event)"
+                  [add]="addOf(row.id)"
+                  [row]="row"
+                />
+              </li>
             }
           </ul>
         } @else if (query().trim() !== '') {
@@ -275,5 +247,29 @@
   </section>
 </div>
 
-<!-- The product sheet, a child route over the list (section 5). -->
+<!--
+  A write that failed, said once (section 4.1). The count is already back where it
+  was, and this is what says why.
+-->
+<p aria-live="polite" class="add-failed" role="status">
+  @if (addFailed()) {
+    {{ 'catalog.add.failed' | rokuT }}
+  }
+</p>
+
+<!--
+  Which list the plus adds to (section 4.2), between the page and the tab bar.
+  Absent for a guest and for a person with no list they can write to, who see no
+  plus either.
+-->
+@if (addTarget(); as target) {
+  <lib-adding-bar
+    (countPressed)="openAdded()"
+    (listPressed)="openLists()"
+    [count]="addedCount()"
+    [list]="target.name"
+  />
+}
+
+<!-- The two sheets of section 4, child routes over the list. -->
 <router-outlet />

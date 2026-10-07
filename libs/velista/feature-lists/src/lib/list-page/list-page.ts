@@ -69,6 +69,7 @@ import {
   NavChrome,
   NOTIFICATION_TONE,
   PageNavigation,
+  productPagePath,
   RECORDING_LIMITS,
   type RecordingLimits,
   searchOpenOf,
@@ -1480,24 +1481,13 @@ export class ListPage {
   });
 
   /**
-   * Where a card's "Details" opens a product: the product sheet, over this list
-   * (velista `0107`), so the list stays underneath, its tab stays lit and closing
-   * the sheet lands back here.
+   * Where a card's "Details" opens a product: the product's own page (velista
+   * `0134`, section 8). Its back control pops, so it lands back on this list.
    */
   readonly productLink = computed(() => {
     const locale = this._locale();
-    const zoneId = this.zoneId();
-    const listId = this.listId();
     return (itemId: string): string =>
-      appPath(
-        locale,
-        this._basePath,
-        'zones',
-        zoneId,
-        'lists',
-        listId,
-        ...sheetSegments('products', itemId)
-      );
+      productPagePath(locale, this._basePath, itemId);
   });
 
   /**

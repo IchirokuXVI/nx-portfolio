@@ -15,6 +15,7 @@ import {
   TripStore,
 } from '@portfolio/velista/data-access';
 import {
+  CATALOG_PATHS,
   NAV_CHROME,
   NO_NAV_CHROME,
   RENDERS_WHILE_CONNECTING,
@@ -115,27 +116,22 @@ function sheet(route: Route): Route {
 }
 
 /**
- * One product and every shop's price for it (velista `0100`, section 5), as a child
- * of whichever page offered it.
+ * "Add to which list?" (velista `0134`, section 4.3), as a child of whichever page
+ * offered it.
  *
- * A child route under rule E1, so the page underneath keeps its scroll and back
- * dismisses the sheet. `products/:itemId`: a sheet is addressed by what it is about.
- *
- * It covers **three** pages (velista `0107`): the catalog, whose rows open it, and the
- * zone list and the baskets, whose composers link a suggestion's Details to it. Over
- * the catalog alone, Details on a list left the list, lit the catalog tab and closed
- * onto the catalog, which reads as the app losing its place. One function and not
- * three entries, for `entrySheetRoutes`' reason: the copies must not be able to drift.
- * Nothing differs between them, because the sheet reads the page it covers out of its
- * own route rather than being told.
+ * It covers **two** pages: the catalog, whose line above the tab bar opens it, and a
+ * product's page, whose heading of Similar products does. One function and not two
+ * entries, for `entrySheetRoutes`' reason: the copies must not be able to drift.
+ * Nothing differs between them, because the sheet reads the page it covers out of
+ * its own route rather than being told.
  */
-function productSheetRoutes(): Route[] {
+function addListSheetRoutes(): Route[] {
   return [
     sheet({
-      path: 'products/:itemId',
+      path: CATALOG_PATHS.addListSheet,
       loadComponent: () =>
         import('@portfolio/velista/feature-catalog').then(
-          (m) => m.ProductSheet
+          (m) => m.AddListSheet
         ),
     }),
   ];
@@ -375,10 +371,6 @@ function basketSheetRoutes(options: { finish: boolean }): Route[] {
           (m) => m.FilterSheet
         ),
     }),
-    // A suggestion's Details in the composer (velista `0107`). Over both routes,
-    // like the composer itself. Unguarded like its siblings: a guest is given no
-    // link to it, and every catalog read behind it is refused without an account.
-    ...productSheetRoutes(),
   ];
 }
 
@@ -499,8 +491,6 @@ function listSheetRoutes(): Route[] {
           (m) => m.ListFilterSheet
         ),
     }),
-    // A suggestion's Details in the composer (velista `0107`).
-    ...productSheetRoutes(),
   ];
 }
 
@@ -777,8 +767,6 @@ export const AppShellRoutes: Route[] = [
                     (m) => m.DeleteLineSheet
                   ),
               }),
-              // A similar product, opened by a reader who cannot change the line.
-              ...productSheetRoutes(),
             ],
           },
           {
@@ -1064,7 +1052,37 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.CatalogPage
               ),
-            children: [...productSheetRoutes()],
+            children: [
+              // The two sheets of velista `0134`, section 4: which list the plus
+              // adds to, and what this visit added.
+              ...addListSheetRoutes(),
+              sheet({
+                path: CATALOG_PATHS.addedSheet,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-catalog').then(
+                    (m) => m.AddedSheet
+                  ),
+              }),
+            ],
+          },
+          {
+            /**
+             * One product, on a page of its own (velista `0134`, section 5). It
+             * replaced the product sheet that four pages each registered.
+             *
+             * Under `catalog`, so `activeNavTab` lights the Catalog tab. A sibling
+             * of the tab rather than a child, like the picker pages: the tab renders
+             * its children into its sheets' outlet. The tab's guards, because every
+             * catalog read behind it is refused without an account. The list page,
+             * the line page and the basket link here too.
+             */
+            path: `${CATALOG_PATHS.tab}/${CATALOG_PATHS.products}/:itemId`,
+            canActivate: [authenticatedGuard, setupGuard],
+            loadComponent: () =>
+              import('@portfolio/velista/feature-catalog').then(
+                (m) => m.ProductPage
+              ),
+            children: [...addListSheetRoutes()],
           },
           {
             /**
@@ -1074,7 +1092,7 @@ export const AppShellRoutes: Route[] = [
              * Under `catalog`, so `activeNavTab` lights the Catalog tab and the bar is
              * drawn with nothing added. The tab's guards, because every catalog read is
              * refused without an account (target 8). A sibling of the tab rather than a
-             * child: the tab renders its children into the product sheet's outlet.
+             * child: the tab renders its children into its sheets' outlet.
              */
             path: 'catalog/categories',
             canActivate: [authenticatedGuard, setupGuard],
@@ -1097,7 +1115,7 @@ export const AppShellRoutes: Route[] = [
              * The catalog's supermarket picker (velista `0124`): the shop picker as a
              * page of its own, where a chain is enough and a shop is optional. A
              * sibling of the tab like the category pages, for their reason: the tab
-             * renders its children into the product sheet's outlet.
+             * renders its children into its sheets' outlet.
              */
             path: 'catalog/supermarket',
             canActivate: [authenticatedGuard, setupGuard],

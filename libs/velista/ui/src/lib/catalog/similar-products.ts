@@ -27,8 +27,10 @@ import { productRowView } from './product-row-view';
  * by the price per litre or kilo, which is how the members compare.
  *
  * The page decides what a row does. With {@link verb} null a row opens the
- * product, as on the product sheet. With a verb ("Change") a row does that
- * instead, as on the line page and the basket's change sheet.
+ * product, as on the line page for a reader who cannot change the line. With a
+ * verb ("Change") a row does that instead, as on the line page and the basket's
+ * change sheet. A product's own page draws its similar products itself, because
+ * its rows carry the plus (velista `0134`).
  *
  * **Nothing is drawn** while the members load, when the product has no
  * siblings, or with no group at all: a heading over an empty list would promise

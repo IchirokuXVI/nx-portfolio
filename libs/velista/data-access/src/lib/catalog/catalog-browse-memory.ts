@@ -93,14 +93,12 @@ export class CatalogBrowseMemory implements CatalogBrowseServiceI {
     );
 
     const ordered =
-      query.order === 'created'
-        ? [...matched].reverse()
-        : query.order === 'relevance'
-          ? [...matched].sort(
-              (a, b) =>
-                Number(!startsWith(b, needle)) - Number(!startsWith(a, needle))
-            )
-          : [...matched].sort((a, b) => a.es.localeCompare(b.es, 'es'));
+      query.order === 'relevance'
+        ? [...matched].sort(
+            (a, b) =>
+              Number(!startsWith(b, needle)) - Number(!startsWith(a, needle))
+          )
+        : [...matched].sort((a, b) => a.es.localeCompare(b.es, 'es'));
 
     const start = query.cursor === null ? 0 : Number(query.cursor);
     const page = ordered.slice(start, start + query.limit);

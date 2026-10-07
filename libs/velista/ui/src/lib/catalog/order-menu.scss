@@ -1,0 +1,116 @@
+// The order control and its menu (velista 0134, section 3), as the `CatalogOrder`
+// artboard draws them.
+:host {
+  display: block;
+  flex: none;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  block-size: var(--app-touch-target);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.control-value {
+  color: var(--app-text-primary);
+  font-weight: 650;
+}
+
+.control-chevron {
+  font-size: var(--app-icon-sm);
+}
+
+// Heard and not seen. Here and not global: velista has no global utility class.
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  padding: var(--app-space-2);
+  border: none;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-base);
+  text-align: start;
+  cursor: pointer;
+
+  &.is-on {
+    font-weight: 650;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// A drawn radio, the size of the pick rows' native one. The mark is a dot inside
+// the ring as well as a colour, so the chosen row is told apart without colour.
+.radio {
+  box-sizing: border-box;
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-pick-radio);
+  block-size: var(--app-pick-radio);
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+}
+
+.option.is-on .radio {
+  border-color: var(--app-action-bg);
+
+  &::after {
+    content: '';
+    inline-size: 55%;
+    block-size: 55%;
+    border-radius: var(--app-radius-full);
+    background: var(--app-action-bg);
+  }
+}
+
+.option-text {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  line-height: var(--app-leading-heading);
+}
+
+.option-hint {
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+}

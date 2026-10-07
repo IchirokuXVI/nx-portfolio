@@ -2493,11 +2493,12 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     });
   });
 
-  it('links a card to the product sheet over this list (velista 0107)', async () => {
+  it('links a card to the product page (velista 0134)', async () => {
     const { fixture } = await render();
 
+    // A page of its own, under the catalog. Its back control pops onto this list.
     expect(fixture.componentInstance.productLink()('item-oat')).toMatch(
-      new RegExp(`/zones/${ZONE_ID}/lists/${LIST_ID}/sheet/products/item-oat$`)
+      /\/catalog\/products\/item-oat$/
     );
   });
 });

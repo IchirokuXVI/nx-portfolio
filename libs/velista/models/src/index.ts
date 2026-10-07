@@ -14,6 +14,8 @@ export * from './lib/basket-summary';
 export * from './lib/basket-total';
 export * from './lib/basket-view';
 export * from './lib/catalog-browse';
+export * from './lib/catalog-tools';
+export * from './lib/catalog-visit';
 export * from './lib/compose-basket-view';
 export * from './lib/compose-list-groups';
 export * from './lib/compose-list-view';

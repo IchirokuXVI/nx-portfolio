@@ -14,6 +14,7 @@ import { BasketSessionStore } from './baskets/basket-session-store';
 import { BasketStore } from './baskets/basket-store';
 import { LiveBasketStore } from './baskets/live-basket-store';
 import { SharedListStore } from './baskets/shared-list-store';
+import { CatalogAddStore } from './catalog/catalog-add-store';
 import { CatalogBrowseMemory } from './catalog/catalog-browse-memory';
 import { CategoryStore } from './catalog/category-store';
 import { GroupMembers } from './catalog/group-members';
@@ -159,7 +160,7 @@ import { ZoneStore } from './zones/zone-store';
  * question about the same products, and the second is usually opened from the first.
  * `GroupNames` (plan 0065) joins beside it for every one of those reasons, being the
  * same resolver for the group a line follows rather than for the products on it.
- * `GroupMembers` joins for the same reasons: the line page, the product sheet and the
+ * `GroupMembers` joins for the same reasons: the line page, the product page and the
  * basket ask for the same group's members, and it primes `ItemNames` as they arrive.
  * `CategoryStore` (velista `0118`) joins for `ItemNames`' first reason, and is app
  * scoped for a stronger version of its second: the tree is read once per session, and
@@ -236,6 +237,7 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShopWalkMemory,
   MappingSettingsStore,
   GroupMembers,
+  CatalogAddStore,
   GroupNames,
   ItemNames,
   MemberNames,

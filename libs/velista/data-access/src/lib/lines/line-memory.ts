@@ -18,7 +18,11 @@ import {
 import { GatewayError } from '../errors';
 import { ListMemory } from '../lists/list-memory';
 import { ZoneMemory } from '../zones/zone-memory';
-import type { LineServiceI, LineUpdateResult } from './line-service';
+import type {
+  LineAddResult,
+  LineServiceI,
+  LineUpdateResult,
+} from './line-service';
 import { SEED_LINES } from './static-line-data';
 
 /**
@@ -120,6 +124,46 @@ export class LineMemory implements LineServiceI {
    * Nothing here has ever been bought, in all three, because a line cannot acquire a
    * history in the same breath as being created.
    */
+  /**
+   * The add that says what it did. Unlike {@link addLine} it models the merge
+   * (backend plan 0091): a line of the same name, or holding exactly the same
+   * products, is raised and answered instead of a second one being made.
+   */
+  async addLineResult(
+    listId: string,
+    content: string,
+    quantity?: number,
+    itemIds?: readonly string[]
+  ): Promise<LineAddResult> {
+    this._require(listId, 'WRITE');
+
+    const name = content.trim().toLocaleLowerCase();
+    const set = [...(itemIds ?? [])].sort().join(',');
+    const existing = this._lines(listId).find(
+      (held) =>
+        held.content.trim().toLocaleLowerCase() === name ||
+        (set !== '' && [...held.itemIds].sort().join(',') === set)
+    );
+    if (existing === undefined) {
+      return {
+        line: await this.addLine(listId, content, quantity, itemIds),
+        merged: false,
+      };
+    }
+
+    this._maybeFail();
+    const raised: Line = {
+      ...existing,
+      quantity: existing.quantity + (quantity ?? 1),
+      version: existing.version + 1,
+    };
+    this._write(
+      listId,
+      this._lines(listId).map((held) => (held.id === raised.id ? raised : held))
+    );
+    return { line: raised, merged: true };
+  }
+
   async addLine(
     listId: string,
     content: string,

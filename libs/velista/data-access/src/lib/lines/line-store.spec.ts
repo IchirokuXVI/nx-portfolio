@@ -103,6 +103,17 @@ function service(seed: readonly Line[]) {
           version: 1,
         })
       ),
+    addLineResult: async (listId, content, quantity) => ({
+      line: await answer(
+        line('server-id', {
+          listId,
+          content,
+          quantity: quantity ?? 1,
+          version: 1,
+        })
+      ),
+      merged: false,
+    }),
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
       const absorbedLineId = absorbNext;
       absorbNext = null;

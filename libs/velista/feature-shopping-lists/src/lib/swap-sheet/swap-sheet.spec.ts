@@ -172,7 +172,7 @@ function rows(fixture: ComponentFixture<SwapSheet>): HTMLButtonElement[] {
   return [
     ...(
       fixture.nativeElement as HTMLElement
-    ).querySelectorAll<HTMLButtonElement>('lib-similar-products .row'),
+    ).querySelectorAll<HTMLButtonElement>('lib-similar-products .row .open'),
   ];
 }
 
