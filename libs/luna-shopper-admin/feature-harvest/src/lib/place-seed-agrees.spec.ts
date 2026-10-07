@@ -37,6 +37,7 @@ const FIELDS = [
   'longitude',
   'externalRef',
   'externalProvider',
+  'footprintM2',
 ] as const;
 
 function registry(): ResourceRegistry {

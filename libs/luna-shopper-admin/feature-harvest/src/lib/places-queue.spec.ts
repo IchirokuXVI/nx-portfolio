@@ -3,7 +3,10 @@ import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
   DASHBOARD_SERVICE,
@@ -194,6 +197,32 @@ function front(page: PlacesQueuePage) {
 
 const text = (fixture: ComponentFixture<PlacesQueuePage>): string =>
   fixture.nativeElement.textContent;
+
+/** An answer that a test gives when it chooses to, for a press in flight. */
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason: unknown) => void = () => undefined;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Every sentence the page asked the translator for, with what it gave it. */
+function said() {
+  return jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+}
+
+/** A Consum shop, which no place of the seed is a candidate of. */
+const CONSUM_SHOP = {
+  id: 'loc_consum_centro',
+  title: 'Consum Centro',
+  address: 'Calle Cruz Conde 20',
+  city: 'Córdoba',
+  postalCode: '14003',
+  metres: 120,
+};
 
 describe('the places queue, importing under a scope', () => {
   it('shows the scope the run declared for the place', async () => {
@@ -1071,7 +1100,11 @@ describe('the places queue, a place that names another chain', () => {
     ]);
     expect(page.question()).toEqual({
       placeId: CARREFOUR,
-      shop: { id: 'loc_sierra', title: 'Carretera de Trassierra km 8' },
+      shop: {
+        id: 'loc_sierra',
+        title: 'Carretera de Trassierra km 8',
+        where: '',
+      },
       chain: 'Carrefour',
     });
     const ask = fixture.nativeElement.querySelector('.ask') as HTMLElement;
@@ -1129,6 +1162,181 @@ describe('the places queue, a place that names another chain', () => {
 
     expect(page.queue.current()?.id).not.toBe(CARREFOUR);
     expect(page.question()).toBeNull();
+  });
+});
+
+/**
+ * The question is about one shop. "Link anyway" used to send the shop of
+ * the refused link whatever was on screen by then: a person who picked
+ * another shop and pressed it linked the first shop across chains.
+ */
+describe('the places queue, the other chain question and the shop it is about', () => {
+  const A = 'loc_sierra';
+  const B = 'loc_cordoba_centro';
+
+  async function asked() {
+    const rendered = await render(CARREFOUR);
+    const { fixture, page } = rendered;
+    page.startLinking();
+    page.chooseLinkChain(MERCADONA);
+    await page.pickShop(A);
+    await page.linkPicked();
+    fixture.detectChanges();
+    return rendered;
+  }
+
+  const across = (calls: readonly Call[], shop: string) =>
+    named(calls, 'linkPlace').filter((args) => {
+      const body = args[1] as Wire.LinkDiscoveredPlaceDto;
+      return body.supermarketLocationId === shop && body.acrossChains === true;
+    });
+
+  it('names the shop in the sentence, and draws its address line', async () => {
+    const rendered = await render(CARREFOUR);
+    const { fixture, page } = rendered;
+    const sentences = said();
+    page.startLinking();
+    page.chooseLinkChain(MERCADONA);
+    await page.pickShop(B);
+    await page.linkPicked();
+    fixture.detectChanges();
+
+    expect(page.question()?.shop).toEqual({
+      id: B,
+      title: 'Avenida del Gran Capitán 12',
+      where: '14001 Córdoba',
+    });
+    expect(sentences).toHaveBeenCalledWith(
+      'harvest.places.otherChain.ask',
+      undefined,
+      undefined,
+      { chain: 'Carrefour', shop: 'Avenida del Gran Capitán 12' }
+    );
+    expect(
+      fixture.nativeElement.querySelector('.ask .where').textContent
+    ).toContain('14001 Córdoba');
+  });
+
+  it('takes the question away when another shop is picked, and sends nothing for the first', async () => {
+    const { fixture, page, calls } = await asked();
+    expect(page.question()?.shop.id).toBe(A);
+
+    await page.pickShop(B);
+    fixture.detectChanges();
+
+    expect(page.question()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.ask')).toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('[data-link-anyway]')
+    ).toBeNull();
+
+    // A press that got through anyway sends nothing.
+    await page.linkAnyway();
+    expect(named(calls, 'linkPlace')).toHaveLength(1);
+    expect(across(calls, A)).toEqual([]);
+  });
+
+  it('asks again about the second shop, and "Link anyway" sends that shop', async () => {
+    const { fixture, page, calls } = await asked();
+
+    await page.pickShop(B);
+    await page.linkPicked();
+    fixture.detectChanges();
+    expect(page.question()?.shop.id).toBe(B);
+
+    fixture.nativeElement.querySelector('[data-link-anyway]').click();
+    await drain();
+
+    expect(named(calls, 'linkPlace')).toEqual([
+      [CARREFOUR, { supermarketLocationId: A }],
+      [CARREFOUR, { supermarketLocationId: B }],
+      [CARREFOUR, { supermarketLocationId: B, acrossChains: true }],
+    ]);
+    expect(across(calls, A)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'the chain of the link form changes',
+      (page: PlacesQueuePage) => page.chooseLinkChain('sm_consum'),
+    ],
+    [
+      'the picked shop is cleared',
+      (page: PlacesQueuePage) => page.pickShop(''),
+    ],
+    [
+      'the link form is cancelled',
+      (page: PlacesQueuePage) => page.cancelLinking(),
+    ],
+    [
+      'the link form is opened again',
+      (page: PlacesQueuePage) => page.startLinking(),
+    ],
+    [
+      'the chain picker of the import changes',
+      (page: PlacesQueuePage) => page.chooseChain('sm_consum'),
+    ],
+    ['the place is skipped', (page: PlacesQueuePage) => page.skip()],
+  ])('takes the question away when %s', async (_when, act) => {
+    const { page, calls } = await asked();
+
+    await act(page);
+
+    expect(page.question()).toBeNull();
+    await page.linkAnyway();
+    expect(across(calls, A)).toEqual([]);
+  });
+
+  /** A link from a panel is a new link, with a question of its own. */
+  it('replaces the question when another shop is linked from a panel', async () => {
+    const { fixture, page, calls } = await asked();
+    page.catalogNear.set([CONSUM_SHOP]);
+    fixture.detectChanges();
+
+    await page.link(CONSUM_SHOP);
+
+    expect(page.question()?.shop).toEqual({
+      id: 'loc_consum_centro',
+      title: 'Consum Centro',
+      where: 'Calle Cruz Conde 20, 14003 Córdoba',
+    });
+    await page.linkAnyway();
+    expect(across(calls, A)).toEqual([]);
+    expect(across(calls, 'loc_consum_centro')).toHaveLength(1);
+  });
+
+  /** A link that fails for another reason leaves no question of the last one. */
+  it('holds no question after another link failed for another reason', async () => {
+    const memory = new HarvestMemory();
+    let sent = 0;
+    const { page, calls } = await render(CARREFOUR, undefined, {
+      overrides: {
+        linkPlace: (id, input) => {
+          sent += 1;
+          return sent === 1
+            ? memory.linkPlace(id, input)
+            : Promise.reject(
+                new GatewayError({
+                  code: 'internal',
+                  status: 500,
+                  correlationId: '',
+                })
+              );
+        },
+      },
+    });
+    page.startLinking();
+    page.chooseLinkChain(MERCADONA);
+    await page.pickShop(A);
+    await page.linkPicked();
+    expect(page.question()?.shop.id).toBe(A);
+
+    await page.link(CONSUM_SHOP);
+
+    expect(page.question()).toBeNull();
+    expect(page.errorKey()).not.toBeNull();
+    await page.linkAnyway();
+    expect(across(calls, A)).toEqual([]);
   });
 });
 
@@ -1427,5 +1635,750 @@ describe('the places queue, linking the places that shops were made from', () =>
       fixture.nativeElement.querySelector('.byref .refused').textContent
     ).toContain('harvest.places.byRef.failed');
     expect(page.queue.items().some((place) => place.id === OESTE)).toBe(true);
+  });
+});
+
+/**
+ * The apply sends no list: the server works it out again. So a preview does
+ * not outlive the queue it read, and the notice says when what was linked is
+ * not what was shown.
+ */
+describe('the places queue, a preview of the bulk act that goes stale', () => {
+  const tool = (fixture: ComponentFixture<PlacesQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-tool="by-ref"]'
+    ) as HTMLButtonElement;
+
+  async function previewed(focus?: string, overrides?: Overrides) {
+    const rendered = await render(focus, undefined, { overrides });
+    tool(rendered.fixture).click();
+    await drain();
+    rendered.fixture.detectChanges();
+    expect(rendered.page.byRef()?.linked).toHaveLength(1);
+    return rendered;
+  }
+
+  async function gone(rendered: Awaited<ReturnType<typeof previewed>>) {
+    const { fixture, page, calls } = rendered;
+    await settle(fixture);
+
+    expect(page.byRef()).toBeNull();
+    expect(page.byRefOpen()).toBe(false);
+    expect(fixture.nativeElement.querySelector('[data-apply]')).toBeNull();
+    // And "Link N places" is not armed behind the screen either.
+    await page.applyByRef();
+    expect(
+      named(calls, 'linkPlacesByRef').filter(
+        (args) => (args[0] as Wire.LinkPlacesByRefDto).apply === true
+      )
+    ).toEqual([]);
+  }
+
+  it('drops the preview when a place is linked', async () => {
+    const rendered = await previewed(TRASSIERRA);
+
+    rendered.fixture.nativeElement.querySelector('.matches li button').click();
+    await drain();
+
+    expect(named(rendered.calls, 'linkPlace')).toHaveLength(1);
+    await gone(rendered);
+  });
+
+  it('drops the preview when a place is imported', async () => {
+    const rendered = await previewed(TRASSIERRA);
+
+    await rendered.page.importPlace();
+
+    expect(rendered.page.queue.error()).toBeNull();
+    await gone(rendered);
+  });
+
+  it('drops the preview when a place is rejected', async () => {
+    const rendered = await previewed(UNBRANDED);
+
+    rendered.page.reject();
+    await drain();
+
+    expect(named(rendered.calls, 'rejectPlace')).toHaveLength(1);
+    await gone(rendered);
+  });
+
+  it('drops the preview when the queue is read again', async () => {
+    const rendered = await previewed();
+
+    rendered.page.reload();
+    await drain();
+
+    await gone(rendered);
+  });
+
+  it('drops the preview when the chain filter builds another queue', async () => {
+    const rendered = await previewed();
+
+    TestBed.inject(ReviewChain).choose(MERCADONA);
+    await settle(rendered.fixture);
+
+    await gone(rendered);
+  });
+
+  it('keeps the preview when a decision is refused, since nothing changed', async () => {
+    const { fixture, page } = await previewed(LIBERTADOR);
+
+    await page.importPlace();
+    await settle(fixture);
+
+    expect(page.queue.error()?.code).toBe('place_matches_location');
+    expect(page.byRef()?.linked).toHaveLength(1);
+  });
+
+  /** Reading another place decides nothing, so the list is still the list. */
+  it('keeps the preview when a place is skipped or opened', async () => {
+    const { page } = await previewed();
+
+    page.skip();
+    page.open(OESTE);
+
+    expect(page.byRef()?.linked).toHaveLength(1);
+  });
+
+  it('does not show a preview that was asked for before the queue was read again', async () => {
+    const answer = deferred<Wire.HarvestLinkPlacesByRefResult>();
+    const memory = new HarvestMemory();
+    const { fixture, page } = await render(undefined, undefined, {
+      overrides: { linkPlacesByRef: () => answer.promise },
+    });
+
+    tool(fixture).click();
+    await drain();
+    page.reload();
+    answer.resolve(await memory.linkPlacesByRef({}));
+    await settle(fixture);
+
+    expect(page.byRef()).toBeNull();
+    expect(page.byRefOpen()).toBe(false);
+    expect(page.byRefBusy()).toBe(false);
+  });
+
+  /** What the second read linked, against what the first read showed. */
+  async function applied(placeIds: readonly string[]) {
+    const memory = new HarvestMemory();
+    const dry = await memory.linkPlacesByRef({});
+    const rendered = await previewed(undefined, {
+      linkPlacesByRef: async (input) =>
+        input.apply === true
+          ? {
+              applied: true,
+              skipped: [],
+              linked: placeIds.map((id) => ({
+                ...dry.linked[0],
+                place: { ...dry.linked[0].place, id },
+              })),
+            }
+          : dry,
+    });
+
+    rendered.fixture.nativeElement.querySelector('[data-apply]').click();
+    await settle(rendered.fixture);
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('says nothing more when the answer linked the places that were shown', async () => {
+    const { page } = await applied([OESTE]);
+
+    expect(page.notice()).toEqual(
+      expect.objectContaining({
+        key: 'harvest.places.byRef.done',
+        args: { count: 1 },
+        more: [],
+      })
+    );
+  });
+
+  it('says how many more and how many fewer places the answer linked', async () => {
+    const { fixture, page } = await applied(['other-1', 'other-2']);
+
+    expect(page.notice()).toEqual(
+      expect.objectContaining({
+        key: 'harvest.places.byRef.done',
+        args: { count: 2 },
+        more: [
+          { key: 'harvest.places.byRef.more', args: { count: 2 } },
+          { key: 'harvest.places.byRef.fewer', args: { count: 1 } },
+        ],
+      })
+    );
+    const drawn = fixture.nativeElement.querySelector('.linked').textContent;
+    expect(drawn).toContain('harvest.places.byRef.more');
+    expect(drawn).toContain('harvest.places.byRef.fewer');
+  });
+
+  it('says only how many more when every shown place was linked too', async () => {
+    const { page } = await applied([OESTE, 'other-1']);
+
+    expect(page.notice()?.more).toEqual([
+      { key: 'harvest.places.byRef.more', args: { count: 1 } },
+    ]);
+  });
+});
+
+/**
+ * One write at a time. The bulk act links places of the queue, so it and a
+ * decision of the queue lock each other while either is in flight, and a
+ * second press on a button whose own request is in flight sends nothing.
+ */
+describe('the places queue, a press while a write is in flight', () => {
+  const tool = (fixture: ComponentFixture<PlacesQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-tool="by-ref"]'
+    ) as HTMLButtonElement;
+  const button = (fixture: ComponentFixture<PlacesQueuePage>, css: string) =>
+    fixture.nativeElement.querySelector(css) as HTMLButtonElement;
+
+  it('holds the bulk act while a link is in flight', async () => {
+    const answer = deferred<Wire.HarvestPlaceLinkResult>();
+    const { fixture, page, calls } = await render(OESTE, undefined, {
+      overrides: { linkPlace: () => answer.promise },
+    });
+    tool(fixture).click();
+    await drain();
+    fixture.detectChanges();
+    expect(button(fixture, '[data-apply]').disabled).toBe(false);
+
+    button(fixture, '.matches li button').click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.locked()).toBe(true);
+    expect(button(fixture, '[data-apply]').disabled).toBe(true);
+    expect(tool(fixture).getAttribute('aria-disabled')).toBe('true');
+    button(fixture, '[data-apply]').click();
+    await page.applyByRef();
+    tool(fixture).click();
+    await page.previewByRef();
+    await drain();
+    // The one read of the preview, and no apply.
+    expect(named(calls, 'linkPlacesByRef')).toEqual([[{}]]);
+
+    answer.reject(
+      new GatewayError({ code: 'internal', status: 500, correlationId: '' })
+    );
+    await settle(fixture);
+    expect(page.locked()).toBe(false);
+    expect(button(fixture, '[data-apply]').disabled).toBe(false);
+  });
+
+  it('holds every decision of the queue while the bulk act is applied', async () => {
+    const answer = deferred<Wire.HarvestLinkPlacesByRefResult>();
+    const memory = new HarvestMemory();
+    const { fixture, page, calls } = await render(OESTE, undefined, {
+      overrides: {
+        linkPlacesByRef: (input) =>
+          input.apply === true ? answer.promise : memory.linkPlacesByRef(input),
+      },
+    });
+    tool(fixture).click();
+    await drain();
+    fixture.detectChanges();
+
+    button(fixture, '[data-apply]').click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.locked()).toBe(true);
+    expect(button(fixture, '.matches li button').disabled).toBe(true);
+    const frame = fixture.debugElement.query(
+      (node) => node.name === 'lib-queue-frame'
+    ).componentInstance as { busy(): boolean };
+    expect(frame.busy()).toBe(true);
+
+    button(fixture, '.matches li button').click();
+    await page.link(CONSUM_SHOP);
+    await page.importPlace();
+    await page.forceImport();
+    page.reject();
+    await drain();
+
+    expect(named(calls, 'linkPlace')).toEqual([]);
+    expect(named(calls, 'importPlace')).toEqual([]);
+    expect(named(calls, 'rejectPlace')).toEqual([]);
+
+    // A second press on "Link N places" itself.
+    await page.applyByRef();
+    expect(
+      named(calls, 'linkPlacesByRef').filter(
+        (args) => (args[0] as Wire.LinkPlacesByRefDto).apply === true
+      )
+    ).toHaveLength(1);
+
+    answer.resolve({ applied: true, linked: [], skipped: [] });
+    await settle(fixture);
+    await settle(fixture);
+    expect(page.locked()).toBe(false);
+  });
+
+  it('holds the link buttons while the preview is read', async () => {
+    const answer = deferred<Wire.HarvestLinkPlacesByRefResult>();
+    const { fixture, page, calls } = await render(OESTE, undefined, {
+      overrides: { linkPlacesByRef: () => answer.promise },
+    });
+
+    tool(fixture).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(button(fixture, '.matches li button').disabled).toBe(true);
+    await page.link(CONSUM_SHOP);
+    expect(named(calls, 'linkPlace')).toEqual([]);
+    // A second press on the control reads once.
+    tool(fixture).click();
+    await drain();
+    expect(named(calls, 'linkPlacesByRef')).toHaveLength(1);
+
+    answer.resolve({ applied: false, linked: [], skipped: [] });
+    await settle(fixture);
+    expect(button(fixture, '.matches li button').disabled).toBe(false);
+  });
+
+  /**
+   * The second press used to read the queue before the first answer: it held
+   * no refusal yet, so the press cleared the panel and read the counts as if
+   * the import had gone through.
+   */
+  it('sends one import for two presses, and does not read the second as an answer', async () => {
+    const answer = deferred<Wire.HarvestDiscoveredPlaceView>();
+    const { fixture, page, calls } = await render(TRASSIERRA, undefined, {
+      overrides: { importPlace: () => answer.promise },
+    });
+    page.chooseChain(MERCADONA);
+    const counts = dashboardReads;
+
+    const first = page.importPlace();
+    await drain();
+    await page.importPlace();
+    await drain();
+
+    expect(named(calls, 'importPlace')).toHaveLength(1);
+    expect(page.supermarketId()).toBe(MERCADONA);
+    expect(dashboardReads).toBe(counts);
+
+    answer.reject(
+      new GatewayError({ code: 'internal', status: 500, correlationId: '' })
+    );
+    await first;
+    await settle(fixture);
+    expect(page.queue.current()?.id).toBe(TRASSIERRA);
+    expect(page.supermarketId()).toBe(MERCADONA);
+  });
+
+  it('sends one link and one reject for two presses each', async () => {
+    const link = deferred<Wire.HarvestPlaceLinkResult>();
+    const linking = await render(OESTE, undefined, {
+      overrides: { linkPlace: () => link.promise },
+    });
+    void linking.page.link(CONSUM_SHOP);
+    await drain();
+    await linking.page.link(CONSUM_SHOP);
+    linking.page.reject();
+    await drain();
+    expect(named(linking.calls, 'linkPlace')).toHaveLength(1);
+    expect(named(linking.calls, 'rejectPlace')).toEqual([]);
+
+    const reject = deferred<Wire.HarvestDiscoveredPlaceView>();
+    const rejecting = await render(UNBRANDED, undefined, {
+      overrides: { rejectPlace: () => reject.promise },
+    });
+    rejecting.page.reject();
+    await drain();
+    rejecting.page.reject();
+    await drain();
+    expect(named(rejecting.calls, 'rejectPlace')).toHaveLength(1);
+  });
+});
+
+/**
+ * Backend plan 0195. The catalog holds one shop for each reference, so an
+ * import of a place whose reference a shop holds is refused, also with
+ * `force`, and a link goes through with the reference left empty.
+ */
+describe('the places queue, a reference that another shop holds', () => {
+  const taken = (heldBy: unknown) => () =>
+    Promise.reject(
+      new GatewayError({
+        code: 'location_external_ref_taken',
+        status: 409,
+        correlationId: '',
+        details: { externalRef: 'way/48821004', heldBy },
+      })
+    );
+
+  it('names the shop that holds the reference, and offers the link and no new shop', async () => {
+    const { fixture, page, calls } = await render(OESTE);
+    const sentences = said();
+
+    await page.importPlace();
+    await settle(fixture);
+    // The candidates panel offered "Create a new shop anyway".
+    expect(
+      fixture.nativeElement.querySelector('.matches .force')
+    ).not.toBeNull();
+    await page.forceImport();
+    await settle(fixture);
+
+    expect(named(calls, 'importPlace')).toEqual([
+      [OESTE, {}],
+      [OESTE, { force: true }],
+    ]);
+    expect(page.queue.current()?.id).toBe(OESTE);
+    expect(page.queue.items().some((place) => place.id === OESTE)).toBe(true);
+
+    const panel = fixture.nativeElement.querySelector(
+      '[data-holder]'
+    ) as HTMLElement;
+    expect(panel.getAttribute('role')).toBe('alert');
+    expect(panel.textContent).toContain('harvest.places.refTaken.said');
+    // The chain, the address and the city of the holder.
+    expect(sentences).toHaveBeenCalledWith(
+      'harvest.places.holder.named',
+      undefined,
+      undefined,
+      {
+        shop: 'Calle Historiador Domínguez Ortiz 4',
+        where: 'Mercadona, Córdoba',
+      }
+    );
+    // The panel is the answer, so no sentence sits above the queue as well.
+    expect(page.errorKey()).toBeNull();
+    // No "create anyway": `force` does not get past this refusal.
+    expect(page.refused()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.matches .force')).toBeNull();
+    // The shop that holds the reference is still offered as a candidate.
+    expect(fixture.nativeElement.querySelector('.matches')).not.toBeNull();
+  });
+
+  it('opens the link form from the panel', async () => {
+    const { fixture, page } = await render(OESTE, undefined, {
+      overrides: { importPlace: taken(null) },
+    });
+    await page.importPlace();
+    await settle(fixture);
+
+    fixture.nativeElement.querySelector('[data-holder-link]').click();
+    await settle(fixture);
+
+    expect(page.linking()).not.toBeNull();
+    // The sentence stays: it is why the form was opened.
+    expect(page.refTaken()).not.toBeNull();
+  });
+
+  it('calls a holder with no label and no address a shop with no address', async () => {
+    const { fixture, page } = await render(OESTE, undefined, {
+      overrides: {
+        importPlace: taken({
+          supermarketLocationId: '0b6f1c1e-7f5d-4a55-9d0e-0d1f4a6a9b21',
+          supermarketId: MERCADONA,
+          supermarketName: { es: 'Mercadona' },
+          label: null,
+          address: null,
+          city: null,
+          externalProvider: null,
+        }),
+      },
+    });
+    const sentences = said();
+
+    await page.importPlace();
+    await settle(fixture);
+
+    expect(sentences).toHaveBeenCalledWith(
+      'harvest.places.holder.named',
+      undefined,
+      undefined,
+      { shop: 'harvest.places.shop.unnamed', where: 'Mercadona' }
+    );
+    expect(text(fixture)).not.toContain('0b6f1c1e');
+  });
+
+  it('says another shop for a holder that the answer could not name', async () => {
+    const { fixture, page } = await render(OESTE, undefined, {
+      overrides: { importPlace: taken(null) },
+    });
+
+    await page.importPlace();
+    await settle(fixture);
+
+    expect(page.refTaken()).toEqual({
+      holder: 'harvest.places.holder.unknown',
+    });
+  });
+
+  it('takes the sentence away when another place comes up, and on the next link', async () => {
+    const { fixture, page } = await render(OESTE, undefined, {
+      overrides: { importPlace: taken(null) },
+    });
+    await page.importPlace();
+    await settle(fixture);
+
+    page.skip();
+    expect(page.refTaken()).toBeNull();
+    page.open(OESTE);
+    expect(page.refTaken()).toBeNull();
+  });
+
+  /**
+   * The Consum shop has no reference, and a Mercadona shop holds the one of
+   * the place. The link goes through, and its notice says what was left.
+   */
+  it('says in the notice of a link that the reference was left empty', async () => {
+    const { fixture, page } = await render(OESTE);
+    const sentences = said();
+    page.catalogNear.set([CONSUM_SHOP]);
+    fixture.detectChanges();
+
+    await page.link(CONSUM_SHOP);
+    await page.linkAnyway();
+    await settle(fixture);
+
+    expect(page.queue.items().some((place) => place.id === OESTE)).toBe(false);
+    expect(page.notice()?.more).toEqual([
+      {
+        key: 'harvest.places.linked.refHeld',
+        args: { holder: 'harvest.places.holder.named' },
+      },
+    ]);
+    expect(sentences).toHaveBeenCalledWith(
+      'harvest.places.holder.named',
+      undefined,
+      undefined,
+      {
+        shop: 'Calle Historiador Domínguez Ortiz 4',
+        where: 'Mercadona, Córdoba',
+      }
+    );
+    expect(
+      fixture.nativeElement.querySelector('.linked').textContent
+    ).toContain('harvest.places.linked.refHeld');
+  });
+
+  it('says nothing about the reference after a link that filled or kept it', async () => {
+    const { fixture, page } = await render(TRASSIERRA);
+
+    fixture.nativeElement.querySelector('.matches li button').click();
+    await drain();
+
+    expect(page.notice()?.more).toEqual([]);
+  });
+});
+
+/**
+ * A second tab or a run decided the place. The link is refused with
+ * `place_already_imported`, which used to draw a sentence written for a
+ * reject and leave the row in the list.
+ */
+describe('the places queue, linking a place that was decided elsewhere', () => {
+  it('says so in words of its own, and takes the stale row out', async () => {
+    const { fixture, page, service } = await render(OESTE);
+    await service.linkPlace(OESTE, {
+      supermarketLocationId: 'loc_cordoba_oeste',
+    });
+    const counts = dashboardReads;
+
+    fixture.nativeElement.querySelector('.matches li button').click();
+    await settle(fixture);
+
+    expect(page.queue.items().some((place) => place.id === OESTE)).toBe(false);
+    expect(page.queue.current()?.id).not.toBe(OESTE);
+    expect(page.notice()).toEqual(
+      expect.objectContaining({
+        key: 'harvest.places.linked.already',
+        args: { place: 'Mercadona (Calle Historiador Domínguez Ortiz 4)' },
+      })
+    );
+    expect(
+      fixture.nativeElement.querySelector('.linked').textContent
+    ).toContain('harvest.places.linked.already');
+    // Not the sentence of a reject, and no failure line beside the notice.
+    expect(page.errorKey()).toBeNull();
+    expect(text(fixture)).not.toContain('harvest.places.error.alreadyImported');
+    // The queue is one shorter, so the rail is read again.
+    expect(dashboardReads).toBe(counts + 1);
+  });
+});
+
+/** A candidate with nothing to be called by is not called by its id. */
+describe('the places queue, a candidate with every field null', () => {
+  const ID = '0b6f1c1e-7f5d-4a55-9d0e-0d1f4a6a9b21';
+
+  const bare = (supermarketId: string): Overrides => ({
+    async listPlaces(this: HarvestMemory, query) {
+      const read = await HarvestMemory.prototype.listPlaces.call(this, query);
+      return {
+        ...read,
+        items: read.items.map((place) =>
+          place.id === DIA
+            ? {
+                ...place,
+                candidates: [
+                  {
+                    supermarketLocationId: ID,
+                    supermarketId,
+                    label: null,
+                    address: null,
+                    city: null,
+                    postalCode: null,
+                    rung: 'EXTERNAL_REF' as const,
+                    metres: null,
+                  },
+                ],
+              }
+            : place
+        ),
+      };
+    },
+  });
+
+  it('reads as a shop of its chain with no address', async () => {
+    const { fixture, page } = await render(DIA, undefined, {
+      overrides: bare(MERCADONA),
+    });
+    await settle(fixture);
+    await settle(fixture);
+    // Asked again here, where the answer of the translator can be read.
+    const sentences = said();
+    page.shopTitle({ title: '', supermarketId: MERCADONA });
+
+    const panel = fixture.nativeElement.querySelector(
+      '.matches'
+    ) as HTMLElement;
+    expect(page.candidates()?.[0].title).toBe('');
+    expect(panel.querySelector('li strong')?.textContent).toBe(
+      'harvest.places.shop.untitledOf'
+    );
+    expect(sentences).toHaveBeenCalledWith(
+      'harvest.places.shop.untitledOf',
+      undefined,
+      undefined,
+      { chain: 'Mercadona' }
+    );
+    expect(text(fixture)).not.toContain(ID);
+  });
+
+  it('reads as a shop with no address when the candidate names no chain', async () => {
+    const { fixture } = await render(DIA, undefined, { overrides: bare('') });
+
+    expect(
+      fixture.nativeElement.querySelector('.matches li strong')?.textContent
+    ).toBe('harvest.places.shop.untitled');
+    expect(text(fixture)).not.toContain(ID);
+  });
+
+  it('still links to that shop by its id, and names it in words in the notice', async () => {
+    const { fixture, page, calls } = await render(DIA, undefined, {
+      overrides: {
+        ...bare(''),
+        linkPlace: async (id) => ({
+          place: { ...front(page), id, status: 'IMPORTED' },
+          filled: [],
+        }),
+      },
+    });
+
+    fixture.nativeElement.querySelector('.matches li button').click();
+    await drain();
+
+    expect(named(calls, 'linkPlace')).toEqual([
+      [DIA, { supermarketLocationId: ID }],
+    ]);
+    expect(page.notice()?.args).toEqual(
+      expect.objectContaining({ shop: 'harvest.places.shop.unnamed' })
+    );
+  });
+});
+
+/** The focus follows the link form, and the header control keeps it. */
+describe('the places queue, where the focus goes', () => {
+  const active = () => document.activeElement as HTMLElement | null;
+
+  it('moves into the link form when it opens: to the shop picker of a known chain', async () => {
+    const { fixture } = await render(OESTE);
+
+    fixture.nativeElement.querySelector('[data-link-start]').click();
+    await settle(fixture);
+
+    expect(active()?.id).toBe('places-link-shop');
+  });
+
+  it('moves to the chain picker when a chain must be named first', async () => {
+    const { fixture } = await render(DIA);
+
+    fixture.nativeElement.querySelector('[data-link-start]').click();
+    await settle(fixture);
+
+    expect(active()?.id).toBe('places-link-chain');
+  });
+
+  it('returns to the button that opened the form when it is cancelled', async () => {
+    const { fixture, page } = await render(OESTE);
+    fixture.nativeElement.querySelector('[data-link-start]').click();
+    await settle(fixture);
+
+    page.cancelLinking();
+    await settle(fixture);
+
+    expect(active()?.hasAttribute('data-link-start')).toBe(true);
+  });
+
+  it('returns to that button after a link from the form closed it', async () => {
+    const { fixture, page } = await render(DIA);
+    page.startLinking();
+    page.chooseLinkChain(MERCADONA);
+    await page.pickShop('loc_sierra');
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('[data-link-picked]').click();
+    await settle(fixture);
+
+    expect(page.linking()).toBeNull();
+    expect(active()?.hasAttribute('data-link-start')).toBe(true);
+  });
+
+  /** A disabled button drops the focus to the body. This one is held. */
+  it('keeps the focus on the bulk control while it reads', async () => {
+    const answer = deferred<Wire.HarvestLinkPlacesByRefResult>();
+    const { fixture } = await render(undefined, undefined, {
+      overrides: { linkPlacesByRef: () => answer.promise },
+    });
+    const tool = fixture.nativeElement.querySelector(
+      '[data-tool="by-ref"]'
+    ) as HTMLButtonElement;
+
+    tool.focus();
+    tool.click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(tool.disabled).toBe(false);
+    expect(tool.getAttribute('aria-disabled')).toBe('true');
+    expect(active()).toBe(tool);
+
+    answer.resolve({ applied: false, linked: [], skipped: [] });
+    await settle(fixture);
+    expect(tool.getAttribute('aria-disabled')).toBeNull();
+    expect(active()).toBe(tool);
+  });
+
+  it('returns to the bulk control when its preview is closed', async () => {
+    const { fixture } = await render();
+    const tool = fixture.nativeElement.querySelector(
+      '[data-tool="by-ref"]'
+    ) as HTMLButtonElement;
+    tool.click();
+    await drain();
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('[data-close]').click();
+    await settle(fixture);
+
+    expect(active()).toBe(tool);
   });
 });

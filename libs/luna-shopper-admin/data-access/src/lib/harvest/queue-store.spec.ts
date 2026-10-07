@@ -480,3 +480,42 @@ describe('QueueStore, a row decided where it sits', () => {
     expect(queue.items()).toEqual(items('a'));
   });
 });
+
+/**
+ * A row that was decided somewhere else leaves as a decided row does, and
+ * the refusal that said so goes with it.
+ */
+describe('QueueStore, a row that somebody else decided', () => {
+  const refused = () =>
+    Promise.reject(
+      new GatewayError({ code: 'conflict', status: 409, correlationId: '' })
+    );
+
+  it('takes the row out, brings the next one up, and holds no refusal', async () => {
+    const source = pages({ items: items('a', 'b', 'c'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+    queue.focus('b');
+    await queue.decide(refused);
+    expect(queue.error()).not.toBeNull();
+
+    queue.drop('b');
+
+    expect(queue.items()).toEqual(items('a', 'c'));
+    expect(queue.current()).toEqual({ id: 'c' });
+    expect(queue.error()).toBeNull();
+  });
+
+  it('leaves a queue that it empties empty, and not broken', async () => {
+    const source = pages({ items: items('a'), nextCursor: null });
+    const queue = new QueueStore(source.read, (item) => item.id);
+    await queue.load();
+    await queue.decide(refused);
+
+    queue.drop('a');
+
+    expect(queue.current()).toBeNull();
+    expect(queue.empty()).toBe(true);
+    expect(queue.failed()).toBe(false);
+  });
+});

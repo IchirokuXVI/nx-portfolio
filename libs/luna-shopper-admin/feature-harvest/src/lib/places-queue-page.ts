@@ -1,9 +1,12 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -53,11 +56,15 @@ import {
   placeLabel,
   placeLines,
   placeRefusalKey,
+  refHolderOf,
   refLinkPreview,
   refusedChainName,
+  refusedRefHolder,
+  shopWhere,
   type NearbyShop,
   type PickedShop,
   type PlaceCandidate,
+  type RefHolder,
   type RefLinkPreview,
 } from './place-view';
 import { ReviewChain } from './review-chain';
@@ -67,7 +74,22 @@ type Place = Wire.HarvestDiscoveredPlaceView;
 /** A shop a link is sent to, and what the sentence after it calls the shop. */
 interface LinkTarget {
   readonly id: string;
+  /** The name of the shop inside a sentence: never blank, never its id. */
   readonly title: string;
+  /** Its address line, or `''`. The other chain question draws it. */
+  readonly where: string;
+}
+
+/** A shop as far as its name is worked out. */
+interface NamedShop {
+  readonly title: string;
+  readonly supermarketId?: string;
+}
+
+/** One sentence, as its key and what the key is given. */
+interface Sentence {
+  readonly key: string;
+  readonly args: Readonly<Record<string, string | number>>;
 }
 
 /** The languages a chain's name can be given in, which are the catalog's. */
@@ -109,7 +131,19 @@ const CATALOG_SHOPS_READ = 100;
  *
  * **One act links the places that shops were made from.** The control in the
  * header reads what the act would do and shows it. Nothing is linked before
- * the button under that preview is pressed.
+ * the button under that preview is pressed. The server works the list out
+ * again on that press, so the preview is dropped as soon as the queue changes,
+ * and the notice after it says when what was linked is not what was shown.
+ *
+ * **One write at a time.** A decision of the queue and the bulk act lock each
+ * other while either is in flight ({@link locked}), and a second press on a
+ * button whose own request is in flight does nothing.
+ *
+ * **A reference that another shop holds** (backend plan 0195). An import of
+ * such a place is refused, also with `force`: the panel names the shop that
+ * holds the reference and offers the link form, and never "Create a new shop
+ * anyway". A link goes through with the reference left empty, and its notice
+ * says so.
  *
  * **An import can be answered with a question** (backend plan 0152). When the
  * catalog may already hold the shop, the import writes nothing and answers 409
@@ -160,7 +194,7 @@ const CATALOG_SHOPS_READ = 100;
       (openRow)="open($event)"
       (reject)="reject()"
       (skip)="skip()"
-      [busy]="queue.busy()"
+      [busy]="locked()"
       [canLoadMore]="queue.canLoadMore()"
       [currentId]="queue.current()?.id ?? null"
       [empty]="queue.empty()"
@@ -176,11 +210,13 @@ const CATALOG_SHOPS_READ = 100;
       titleKey="harvest.places.heading"
     >
       <!-- The bulk act, always there and costing no request until it is
-           pressed (admin plan 0061, decision B). -->
+           pressed (admin plan 0061, decision B). Held and not disabled while
+           a write is in flight: a disabled button drops the focus to the
+           body, and the press that it ignores sends nothing. -->
       <button
         (click)="previewByRef()"
+        [attr.aria-disabled]="locked() ? 'true' : null"
         [attr.aria-expanded]="byRefOpen()"
-        [disabled]="byRefBusy()"
         class="tool"
         queueTool
         type="button"
@@ -194,6 +230,9 @@ const CATALOG_SHOPS_READ = 100;
           @if (notice(); as said) {
             <p class="linked" role="status">
               {{ said.key | rokuT: said.args }}
+              @for (more of said.more; track more.key) {
+                {{ more.key | rokuT: more.args }}
+              }
             </p>
           }
 
@@ -226,7 +265,7 @@ const CATALOG_SHOPS_READ = 100;
                         <span class="who">
                           <span>{{
                             'harvest.places.byRef.to'
-                              | rokuT: { shop: line.shop }
+                              | rokuT: { shop: shopName({ title: line.shop }) }
                           }}</span>
                           <span class="muted">
                             @if (line.filledKeys.length === 0) {
@@ -267,7 +306,7 @@ const CATALOG_SHOPS_READ = 100;
                   @if (preview.linked.length > 0) {
                     <button
                       (click)="applyByRef()"
-                      [disabled]="byRefBusy()"
+                      [disabled]="locked()"
                       class="primary"
                       type="button"
                       data-apply
@@ -297,7 +336,7 @@ const CATALOG_SHOPS_READ = 100;
       }
 
       <lib-harvest-notice
-        (retry)="queue.load()"
+        (retry)="reload()"
         [absent]="shell.absent()"
         queueFailure
       />
@@ -322,23 +361,33 @@ const CATALOG_SHOPS_READ = 100;
         </dl>
 
         <!-- A place that names another chain than the shop is asked about
-             once, and it stays in front (admin plan 0061, target 6). -->
+             once, and it stays in front (admin plan 0061, target 6). The
+             question names the shop it is about, and "Link anyway" sends
+             that shop and no other. -->
         @if (question(); as asked) {
           <div class="ask" role="alert">
             <p>
-              @if (asked.chain === '') {
-                {{ 'harvest.places.otherChain.askUnnamed' | rokuT }}
-              } @else {
-                {{
-                  'harvest.places.otherChain.ask'
-                    | rokuT: { chain: asked.chain }
-                }}
+              <span>
+                @if (asked.chain === '') {
+                  {{
+                    'harvest.places.otherChain.askUnnamed'
+                      | rokuT: { shop: asked.shop.title }
+                  }}
+                } @else {
+                  {{
+                    'harvest.places.otherChain.ask'
+                      | rokuT: { chain: asked.chain, shop: asked.shop.title }
+                  }}
+                }
+              </span>
+              @if (asked.shop.where !== '') {
+                <span class="where">{{ asked.shop.where }}</span>
               }
             </p>
             <div class="controls">
               <button
                 (click)="linkAnyway()"
-                [disabled]="queue.busy()"
+                [disabled]="locked()"
                 class="plain"
                 type="button"
                 data-link-anyway
@@ -347,12 +396,35 @@ const CATALOG_SHOPS_READ = 100;
               </button>
               <button
                 (click)="cancelQuestion()"
-                [disabled]="queue.busy()"
+                [disabled]="locked()"
                 class="plain"
                 type="button"
                 data-cancel-question
               >
                 {{ 'resource.action.cancel' | rokuT }}
+              </button>
+            </div>
+          </div>
+        }
+
+        <!-- An import that another shop holds the reference of (backend
+             plan 0195). No new shop is offered: the place is linked to an
+             existing shop, or left. -->
+        @if (refTaken(); as taken) {
+          <div class="ask" role="alert" data-holder>
+            <p>
+              {{
+                'harvest.places.refTaken.said' | rokuT: { holder: taken.holder }
+              }}
+            </p>
+            <div class="controls">
+              <button
+                (click)="startLinking()"
+                class="plain"
+                type="button"
+                data-holder-link
+              >
+                {{ 'harvest.places.link.start' | rokuT }}
               </button>
             </div>
           </div>
@@ -390,7 +462,7 @@ const CATALOG_SHOPS_READ = 100;
               @for (candidate of found; track candidate.supermarketLocationId) {
                 <li>
                   <div class="who">
-                    <strong>{{ candidate.title }}</strong>
+                    <strong>{{ shopTitle(candidate) }}</strong>
                     @if (candidate.address !== candidate.title) {
                       <span>{{ candidate.address }}</span>
                     }
@@ -414,7 +486,7 @@ const CATALOG_SHOPS_READ = 100;
                     (click)="link(candidate)"
                     [class.primary]="!candidate.hint"
                     [class.quiet]="candidate.hint"
-                    [disabled]="queue.busy()"
+                    [disabled]="locked()"
                     type="button"
                   >
                     {{ 'harvest.places.match.link' | rokuT }}
@@ -426,7 +498,7 @@ const CATALOG_SHOPS_READ = 100;
             @if (refused()) {
               <button
                 (click)="forceImport()"
-                [disabled]="queue.busy()"
+                [disabled]="locked()"
                 class="force"
                 type="button"
               >
@@ -468,7 +540,7 @@ const CATALOG_SHOPS_READ = 100;
             @if (form.shop; as shop) {
               <p class="picked">
                 <span class="who">
-                  <strong>{{ shop.title }}</strong>
+                  <strong>{{ shopTitle(shop) }}</strong>
                   @if (shop.address !== shop.title) {
                     <span>{{ shop.address }}</span>
                   }
@@ -478,7 +550,7 @@ const CATALOG_SHOPS_READ = 100;
                 </span>
                 <button
                   (click)="linkPicked()"
-                  [disabled]="queue.busy()"
+                  [disabled]="locked()"
                   class="primary"
                   type="button"
                   data-link-picked
@@ -616,7 +688,7 @@ const CATALOG_SHOPS_READ = 100;
           <ul class="catalog">
             @for (shop of catalogOthers(); track shop.id) {
               <li>
-                <strong>{{ shop.title }}</strong>
+                <strong>{{ shopTitle(shop) }}</strong>
                 @if (shop.address !== shop.title) {
                   <span>{{ shop.address }}</span>
                 }
@@ -633,7 +705,7 @@ const CATALOG_SHOPS_READ = 100;
                 </span>
                 <button
                   (click)="link(shop)"
-                  [disabled]="queue.busy()"
+                  [disabled]="locked()"
                   class="quiet"
                   type="button"
                 >
@@ -996,8 +1068,16 @@ const CATALOG_SHOPS_READ = 100;
     }
 
     .ask p {
+      display: flex;
       flex: 1 1 16rem;
+      flex-direction: column;
+      gap: 0.125rem;
       margin: 0;
+    }
+
+    /* The address line of the shop that the question is about. */
+    .ask .where {
+      font-size: 0.875rem;
     }
 
     /* The shop a person picked, and the button that links to it. */
@@ -1028,7 +1108,8 @@ const CATALOG_SHOPS_READ = 100;
       transform: translateY(1px);
     }
 
-    button:disabled {
+    button:disabled,
+    button[aria-disabled='true'] {
       opacity: 0.55;
       cursor: default;
     }
@@ -1089,6 +1170,8 @@ export class PlacesQueuePage {
   private readonly _review = inject(ReviewChain);
   private readonly _status = inject(HarvestStatus);
   private readonly _translate = inject(RokuTranslatorService);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _injector = inject(Injector);
 
   readonly chainLocales = CONTENT_LOCALES as readonly ChainLocale[];
 
@@ -1289,6 +1372,13 @@ export class PlacesQueuePage {
   /**
    * The question a link was answered with: the place names another chain
    * than the shop (backend plan 0193, target 4). Keyed on the place.
+   *
+   * **It is a question about one shop, and it holds that shop.** "Link
+   * anyway" sends the shop of the question and nothing that is on screen
+   * beside it. So the question goes as soon as what is on screen is another
+   * shop: a shop or a chain picked in the link form, that form opened or
+   * cancelled, a skip, and the start of any other link. A question left
+   * standing over a newly picked shop sent the old shop across chains.
    */
   private readonly _question = signal<{
     readonly placeId: string;
@@ -1320,6 +1410,8 @@ export class PlacesQueuePage {
     readonly over: string | null;
     readonly key: string;
     readonly args: Readonly<Record<string, string | number>>;
+    /** Sentences after the first: what the answer did not do as expected. */
+    readonly more: readonly Sentence[];
   } | null>(null);
 
   readonly notice = computed(() => {
@@ -1329,6 +1421,32 @@ export class PlacesQueuePage {
       : null;
   });
 
+  /**
+   * The shop that holds the reference of a place whose import was refused
+   * for it (backend plan 0195), or null in `holder` when the refusal named
+   * none. Keyed on the place.
+   */
+  private readonly _refTaken = signal<{
+    readonly placeId: string;
+    readonly holder: RefHolder | null;
+  } | null>(null);
+
+  /** The refused import of the place in front, with its holder in words. */
+  readonly refTaken = computed(() => {
+    const taken = this._refTaken();
+    return taken !== null && taken.placeId === this.queue.current()?.id
+      ? { holder: this._holderName(taken.holder) }
+      : null;
+  });
+
+  /**
+   * The names of chains, by id, as far as this page asked for them. Asked
+   * for only for a candidate that has no label and no address, which is then
+   * called "a shop of Deza with no address" and not by its id.
+   */
+  private readonly _chainNames = signal<ReadonlyMap<string, string>>(new Map());
+  private readonly _chainsAsked = new Set<string>();
+
   /** Whether the preview of the bulk act is on screen. */
   readonly byRefOpen = signal(false);
   /** What the bulk act would do, as its dry answer said, or null before it. */
@@ -1336,6 +1454,19 @@ export class PlacesQueuePage {
   /** A read or a write of the bulk act is in flight. */
   readonly byRefBusy = signal(false);
   readonly byRefErrorKey = signal<string | null>(null);
+  /** Bumped when a preview is dropped, so that a slow read is not shown. */
+  private _byRefTurn = 0;
+
+  /**
+   * A write of this page is in flight: a decision of the queue, or a read or
+   * a write of the bulk act.
+   *
+   * One lock for both. The bulk act links places of the queue, so a link
+   * sent while it runs is a link of a place that the act may be linking,
+   * and an apply sent while a link is in flight reads a queue that is about
+   * to change.
+   */
+  readonly locked = computed(() => this.queue.busy() || this.byRefBusy());
 
   /** Whether anything is drawn under the header of the queue. */
   readonly banner = computed(() => this.notice() !== null || this.byRefOpen());
@@ -1439,12 +1570,32 @@ export class PlacesQueuePage {
       const chain = this.supermarketId() || (this.linking()?.chain ?? '');
       void this._readCatalogNear(place, chain);
     });
+
+    // The chain of a candidate that has nothing else to be called by.
+    effect(() => {
+      const chains = (this.candidates() ?? [])
+        .filter(
+          (candidate) =>
+            candidate.title === '' && candidate.supermarketId !== ''
+        )
+        .map((candidate) => candidate.supermarketId);
+      untracked(() => {
+        for (const chain of chains) {
+          void this._readChainName(chain);
+        }
+      });
+    });
   }
 
-  /** A different chain means a different set of scopes to pick from. */
+  /**
+   * A different chain means a different set of scopes to pick from. It is
+   * also the chain of the link form until a person names one there, so the
+   * other chain question goes with it.
+   */
   chooseChain(supermarketId: string): void {
     this.supermarketId.set(supermarketId);
     this.priceScopeId.set('');
+    this._question.set(null);
   }
 
   /**
@@ -1455,13 +1606,18 @@ export class PlacesQueuePage {
    * name its own chain, the chain form opens with the place's brand in it.
    */
   async importPlace(force = false): Promise<void> {
-    const place = this.queue.current();
-    if (place === null) {
+    const queue = this.queue;
+    const place = queue.current();
+    // A second press while a write is in flight sends nothing. It must not
+    // read the answer either: the queue holds no refusal yet, and that would
+    // read as an import that went through.
+    if (place === null || this.locked()) {
       return;
     }
 
+    this._refTaken.set(null);
     const body = this._importBody(force);
-    await this.queue.decide((row) => this._service.importPlace(row.id, body));
+    await queue.decide((row) => this._service.importPlace(row.id, body));
     this._settle(place, body);
   }
 
@@ -1478,25 +1634,127 @@ export class PlacesQueuePage {
    * nearby panel. Both name the shop they link to.
    */
   link(shop: PlaceCandidate | NearbyShop): Promise<void> {
-    return this._link({
-      id:
+    return this._link(
+      this._target(
         'supermarketLocationId' in shop ? shop.supermarketLocationId : shop.id,
-      title: shop.title,
-    });
+        shop
+      )
+    );
   }
 
-  /** "Link", under the shop that was picked in the link form. */
-  linkPicked(): Promise<void> {
+  /**
+   * "Link", under the shop that was picked in the link form. A link that went
+   * through closed the form, so the focus goes to the button that opens it.
+   */
+  async linkPicked(): Promise<void> {
     const shop = this.linking()?.shop ?? null;
-    return shop === null
-      ? Promise.resolve()
-      : this._link({ id: shop.id, title: shop.title });
+    if (shop === null) {
+      return;
+    }
+    await this._link(this._target(shop.id, shop));
+    if (this.linking() === null) {
+      this._focus('[data-link-start]');
+    }
   }
 
-  /** "Link anyway": the same shop again, across chains. */
+  /**
+   * "Link anyway": the shop that the question names, across chains.
+   *
+   * The shop comes from the question and from nowhere else, and the question
+   * says its name. What the link form or the panels hold by now is not read.
+   */
   linkAnyway(): Promise<void> {
     const asked = this.question();
     return asked === null ? Promise.resolve() : this._link(asked.shop, true);
+  }
+
+  /** A shop as the target of a link, with the words that name it. */
+  private _target(
+    id: string,
+    shop: NamedShop & {
+      readonly address: string;
+      readonly city: string;
+      readonly postalCode: string;
+    }
+  ): LinkTarget {
+    return { id, title: this.shopName(shop), where: shopWhere(shop) };
+  }
+
+  /**
+   * What a row calls a shop: its label, or its address, or "Shop with no
+   * address", with its chain when the page knows it. Never its id.
+   */
+  shopTitle(shop: NamedShop): string {
+    return this._named(shop, 'untitled');
+  }
+
+  /** The same, as it reads inside a sentence: "a shop with no address". */
+  shopName(shop: NamedShop): string {
+    return this._named(shop, 'unnamed');
+  }
+
+  private _named(shop: NamedShop, form: 'untitled' | 'unnamed'): string {
+    if (shop.title !== '') {
+      return shop.title;
+    }
+    const chain = this._chainNames().get(shop.supermarketId ?? '') ?? '';
+    return chain === ''
+      ? this._say(`harvest.places.shop.${form}`)
+      : this._say(`harvest.places.shop.${form}Of`, { chain });
+  }
+
+  /**
+   * The shop that holds a reference, in words: its label or its address, then
+   * its chain and its city. A holder with neither reads "a shop with no
+   * address", and a holder that the answer could not name reads "another
+   * shop".
+   */
+  private _holderName(holder: RefHolder | null): string {
+    if (holder === null) {
+      return this._say('harvest.places.holder.unknown');
+    }
+    const shop =
+      holder.shop !== ''
+        ? holder.shop
+        : this._say('harvest.places.shop.unnamed');
+    const where = [holder.chain, holder.city]
+      .filter((part) => part.trim() !== '')
+      .join(', ');
+    return where === ''
+      ? shop
+      : this._say('harvest.places.holder.named', { shop, where });
+  }
+
+  private _say(
+    key: string,
+    args?: Readonly<Record<string, string | number>>
+  ): string {
+    return this._translate.t(key, undefined, undefined, args);
+  }
+
+  private async _readChainName(id: string): Promise<void> {
+    if (this._chainsAsked.has(id)) {
+      return;
+    }
+    this._chainsAsked.add(id);
+    try {
+      const name = (await this.references.resolve('supermarkets', id))?.title;
+      if (name !== undefined && name !== '') {
+        this._chainNames.update((names) => new Map(names).set(id, name));
+      }
+    } catch {
+      // The shop is then called a shop with no address, with no chain.
+    }
+  }
+
+  /** Move the focus once the next render drew what it goes to. */
+  private _focus(selector: string): void {
+    afterNextRender(
+      () => {
+        this._host.nativeElement.querySelector<HTMLElement>(selector)?.focus();
+      },
+      { injector: this._injector }
+    );
   }
 
   /** "Cancel" under the other chain question. Nothing was sent across. */
@@ -1518,6 +1776,13 @@ export class PlacesQueuePage {
       return;
     }
     this._linking.set({ placeId: place.id, chain: null, shop: null });
+    // A form that opens is a new link, and it holds no shop yet.
+    this._question.set(null);
+    // The focus goes into the form: to the shop picker when the chain is
+    // known, and to the chain picker when it must be named first.
+    this._focus(
+      this.linkChain() === '' ? '#places-link-chain' : '#places-link-shop'
+    );
     if (this.linkChain() !== '') {
       return;
     }
@@ -1536,13 +1801,20 @@ export class PlacesQueuePage {
     });
   }
 
+  /** Close the link form, and give the focus back to what opened it. */
   cancelLinking(): void {
     this._linking.set(null);
+    this._question.set(null);
+    this._focus('[data-link-start]');
   }
 
-  /** Another chain means another set of shops, so the picked shop goes. */
+  /**
+   * Another chain means another set of shops, so the picked shop goes, and
+   * the question about it.
+   */
   chooseLinkChain(supermarketId: string): void {
     const form = this.linking();
+    this._question.set(null);
     if (form !== null) {
       this._linking.set({ ...form, chain: supermarketId, shop: null });
     }
@@ -1557,6 +1829,8 @@ export class PlacesQueuePage {
     if (form === null) {
       return;
     }
+    // Another shop is on screen now, so a question about the last one goes.
+    this._question.set(null);
     if (supermarketLocationId === '') {
       this._linking.set({ ...form, shop: null });
       return;
@@ -1580,7 +1854,7 @@ export class PlacesQueuePage {
       ...now,
       shop: pickedShop(option?.row, this._content.order()) ?? {
         id: supermarketLocationId,
-        title: option?.title ?? supermarketLocationId,
+        title: option?.title ?? '',
         address: '',
         city: '',
         postalCode: '',
@@ -1598,9 +1872,15 @@ export class PlacesQueuePage {
   private async _link(shop: LinkTarget, acrossChains = false): Promise<void> {
     const queue = this.queue;
     const place = queue.current();
-    if (place === null || queue.busy()) {
+    if (place === null || this.locked()) {
       return;
     }
+
+    // A link is a new question. Only "Link anyway" keeps the one it answers.
+    if (!acrossChains) {
+      this._question.set(null);
+    }
+    this._refTaken.set(null);
 
     const answers: Wire.HarvestPlaceLinkResult[] = [];
     await queue.decide(async (row) => {
@@ -1629,6 +1909,21 @@ export class PlacesQueuePage {
           shop: shop.title,
           fields: this.words(fields),
         },
+        // Present only when the reference was left empty because another
+        // shop holds it (backend plan 0195). Null is a holder that is gone.
+        more:
+          answer.refHeldBy === undefined
+            ? []
+            : [
+                {
+                  key: 'harvest.places.linked.refHeld',
+                  args: {
+                    holder: this._holderName(
+                      refHolderOf(answer.refHeldBy, this._content.order())
+                    ),
+                  },
+                },
+              ],
       });
       return;
     }
@@ -1640,6 +1935,20 @@ export class PlacesQueuePage {
         placeId: place.id,
         shop,
         chain: refusedChainName(error.details, this._content.order()),
+      });
+      return;
+    }
+
+    // Somebody else decided the place: a second tab, or a run. It is no
+    // longer a question, so its row leaves, and the page says why.
+    if (error?.code === 'place_already_imported') {
+      queue.drop(place.id);
+      this._decided();
+      this._notice.set({
+        over: this.queue.current()?.id ?? null,
+        key: 'harvest.places.linked.already',
+        args: { place: placeLabel(place) },
+        more: [],
       });
     }
   }
@@ -1683,28 +1992,55 @@ export class PlacesQueuePage {
    * every undecided place, whatever chain the queue is narrowed to.
    */
   async previewByRef(): Promise<void> {
-    if (this.byRefBusy()) {
+    // Held while a decision of the queue is in flight too: the answer would
+    // be a list that the decision is about to change.
+    if (this.locked()) {
       return;
     }
+    const turn = ++this._byRefTurn;
     this.byRefOpen.set(true);
     this.byRef.set(null);
     this.byRefErrorKey.set(null);
     this.byRefBusy.set(true);
     try {
       const answer = await this._service.linkPlacesByRef({});
-      this.byRef.set(refLinkPreview(answer, this._content.order()));
+      // The queue was read again while this was asked: the answer is stale.
+      if (turn === this._byRefTurn) {
+        this.byRef.set(refLinkPreview(answer, this._content.order()));
+      }
     } catch (error) {
-      this.byRefErrorKey.set(
-        gatewayErrorKey(toGatewayError(error)) ?? 'resource.error.unknown'
-      );
+      if (turn === this._byRefTurn) {
+        this.byRefErrorKey.set(
+          gatewayErrorKey(toGatewayError(error)) ?? 'resource.error.unknown'
+        );
+      }
     } finally {
       this.byRefBusy.set(false);
     }
   }
 
   /**
+   * Take the preview away, because the queue is no longer the one it read.
+   *
+   * The apply sends no list: the server works it out again. A preview that
+   * stayed after an import, a link or a reject would keep "Link N places"
+   * armed over a list that is not the one that would be linked.
+   */
+  private _dropPreview(): void {
+    this._byRefTurn += 1;
+    this.byRefOpen.set(false);
+    this.byRef.set(null);
+    this.byRefErrorKey.set(null);
+  }
+
+  /**
    * "Link N places", under the preview. The one call that sends `apply`, and
-   * it is refused here while no preview with a place to link is on screen.
+   * it is refused here while no preview with a place to link is on screen,
+   * and while any other write is in flight.
+   *
+   * The request names no place: the server reads the queue again. So the
+   * places that the answer linked are compared with the ones that were
+   * shown, and the notice says how many more and how many fewer.
    */
   async applyByRef(): Promise<void> {
     const preview = this.byRef();
@@ -1712,17 +2048,17 @@ export class PlacesQueuePage {
       !this.byRefOpen() ||
       preview === null ||
       preview.linked.length === 0 ||
-      this.byRefBusy()
+      this.locked()
     ) {
       return;
     }
 
     this.byRefErrorKey.set(null);
     this.byRefBusy.set(true);
-    let linked: number | null = null;
+    let linked: ReadonlySet<string> | null = null;
     try {
       const answer = await this._service.linkPlacesByRef({ apply: true });
-      linked = answer.linked.length;
+      linked = new Set(answer.linked.map((row) => row.place.id));
     } catch {
       // A catalog write that fails stops the act, and the links before it
       // stay. So the queue is read again either way, and nothing is said to
@@ -1739,32 +2075,65 @@ export class PlacesQueuePage {
     this.byRefBusy.set(false);
 
     if (linked !== null) {
+      const applied = linked;
+      const shown = new Set(preview.linked.map((line) => line.placeId));
+      const more = [...applied].filter((id) => !shown.has(id)).length;
+      const fewer = [...shown].filter((id) => !applied.has(id)).length;
+      const differs: Sentence[] = [];
+      if (more > 0) {
+        differs.push({
+          key: 'harvest.places.byRef.more',
+          args: { count: more },
+        });
+      }
+      if (fewer > 0) {
+        differs.push({
+          key: 'harvest.places.byRef.fewer',
+          args: { count: fewer },
+        });
+      }
+
       this.byRefOpen.set(false);
       this.byRef.set(null);
       this._notice.set({
         over: this.queue.current()?.id ?? null,
         key: 'harvest.places.byRef.done',
-        args: { count: linked },
+        args: { count: applied.size },
+        more: differs,
       });
+      // The panel that held the pressed button is gone.
+      this._focus('[data-tool="by-ref"]');
     }
   }
 
   closeByRef(): void {
-    this.byRefOpen.set(false);
-    this.byRef.set(null);
-    this.byRefErrorKey.set(null);
+    this._dropPreview();
+    this._focus('[data-tool="by-ref"]');
   }
 
   reject(): void {
     const queue = this.queue;
+    if (this.locked()) {
+      return;
+    }
     void queue
       .decide((place) => this._service.rejectPlace(place.id))
       .then(() => {
         // A refused reject took nothing out of the queue.
         if (queue.error() === null) {
-          this._status.refresh();
+          this._decided();
         }
       });
+  }
+
+  /**
+   * Read the queue again from its first page, after a read that failed.
+   * What the panel and the preview held was about the queue before it.
+   */
+  reload(): void {
+    this._reset();
+    this._dropPreview();
+    void this.queue.load();
   }
 
   /**
@@ -1790,6 +2159,7 @@ export class PlacesQueuePage {
     this.unnarrowed.set(chain !== '' && brandKey === '');
     this._brandKey.set(brandKey);
     this._reset();
+    this._dropPreview();
 
     const queue = this._build();
     this._queue.set(queue);
@@ -1810,6 +2180,8 @@ export class PlacesQueuePage {
   /** The next place, without deciding this one, with the panel cleared. */
   skip(): void {
     const queue = this.queue;
+    // Also in a queue of one place, where a skip comes back to that place.
+    this._question.set(null);
     const moved = this._follow(() => queue.skip());
     const front = queue.current()?.id ?? null;
     // On the last place that is loaded, the queue reads the next page first
@@ -1904,6 +2276,20 @@ export class PlacesQueuePage {
       return;
     }
 
+    // Another shop holds the reference of the place (backend plan 0195).
+    // `force` does not get past it, so the candidates of an earlier refusal
+    // go, and "Create a new shop anyway" with them. The panel names the
+    // holder and offers the link form.
+    if (error.code === 'location_external_ref_taken') {
+      this._matches.set(null);
+      this._handled.set(error);
+      this._refTaken.set({
+        placeId: place.id,
+        holder: refusedRefHolder(error.details, this._content.order()),
+      });
+      return;
+    }
+
     // The plain conflict an OpenStreetMap place gets when nothing names its
     // chain (backend plan 0153). Opening the form is the answer to it.
     const unnamed =
@@ -1915,11 +2301,13 @@ export class PlacesQueuePage {
   }
 
   /**
-   * A decision went through: clear the panel for the next place, and read the
+   * A decision went through: clear the panel for the next place, drop the
+   * preview of the bulk act, which read the queue as it was, and read the
    * counts again so that the rail says what the queue holds.
    */
   private _decided(): void {
     this._reset();
+    this._dropPreview();
     this._status.refresh();
   }
 
@@ -1933,6 +2321,7 @@ export class PlacesQueuePage {
     this._needsChain.set(false);
     this._linking.set(null);
     this._question.set(null);
+    this._refTaken.set(null);
     this._notice.set(null);
   }
 

@@ -94,6 +94,67 @@ describe('HarvestMemory, an import of a place with a candidate', () => {
 
     expect(place.status).toBe('IMPORTED');
   });
+
+  /**
+   * The strict rungs read the shops of the chain that the import names. The
+   * place stands 28 metres from a Mercadona shop, and Consum has none there.
+   */
+  it('matches against the chain that is picked, and not the chain of the place', async () => {
+    const place = await new HarvestMemory().importPlace(LIBERTADOR, {
+      supermarketId: 'sm_consum',
+    });
+
+    expect(place.status).toBe('IMPORTED');
+  });
+
+  it('is still refused under the chain of the place when that chain is picked', async () => {
+    const error = await refusal(
+      new HarvestMemory().importPlace(LIBERTADOR, {
+        supermarketId: 'sm_mercadona',
+      })
+    );
+
+    expect(error?.code).toBe('place_matches_location');
+  });
+});
+
+/** Backend plan 0195: an import never makes a second shop for a reference. */
+describe('HarvestMemory, an import whose reference a shop holds', () => {
+  const holder = {
+    supermarketLocationId: 'loc_cordoba_oeste',
+    supermarketId: 'sm_mercadona',
+    supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+    label: null,
+    address: 'Calle Historiador Domínguez Ortiz 4',
+    city: 'Córdoba',
+    externalProvider: 'osm',
+  };
+
+  it('is refused with the holder, also with force', async () => {
+    const memory = new HarvestMemory();
+
+    const error = await refusal(memory.importPlace(OESTE, { force: true }));
+
+    expect(error?.status).toBe(409);
+    expect(error?.code).toBe('location_external_ref_taken');
+    expect(error?.details).toEqual({
+      externalRef: 'way/48821004',
+      heldBy: holder,
+    });
+    // Nothing was written: the place is still undecided.
+    const page = await memory.listPlaces({ status: 'NEW', limit: 100 });
+    expect(page.items.some((place) => place.id === OESTE)).toBe(true);
+  });
+
+  /** The holder is a shop of another chain than the one that is picked. */
+  it('is refused without force when the holder is of another chain', async () => {
+    const error = await refusal(
+      new HarvestMemory().importPlace(OESTE, { supermarketId: 'sm_consum' })
+    );
+
+    expect(error?.code).toBe('location_external_ref_taken');
+    expect(error?.details['heldBy']).toEqual(holder);
+  });
 });
 
 describe('HarvestMemory, a link', () => {
@@ -164,8 +225,47 @@ describe('HarvestMemory, a link', () => {
     });
 
     expect(result.place.supermarketLocationId).toBe('loc_sierra');
-    // The place holds no postal code, so only the city is filled.
-    expect(result.filled).toEqual(['CITY']);
+    // The place holds no postal code. It was mapped as an outline, and the
+    // shop has no size yet, so the floor area is filled beside the city.
+    expect(result.filled).toEqual(['FOOTPRINT', 'CITY']);
+    // Nothing held the reference, so the answer names no holder.
+    expect('refHeldBy' in result).toBe(false);
+  });
+
+  /**
+   * Backend plan 0195. The Consum shop has no reference, and a Mercadona
+   * shop holds the reference of the place.
+   */
+  it('leaves a reference that another shop holds empty, links, and names the holder', async () => {
+    const memory = new HarvestMemory();
+
+    const result = await memory.linkPlace(OESTE, {
+      supermarketLocationId: 'loc_consum_centro',
+      acrossChains: true,
+    });
+
+    expect(result.place).toEqual(
+      expect.objectContaining({
+        status: 'IMPORTED',
+        supermarketLocationId: 'loc_consum_centro',
+      })
+    );
+    expect(result.filled).not.toContain('EXTERNAL_REF');
+    expect(result.refHeldBy).toEqual(
+      expect.objectContaining({
+        supermarketLocationId: 'loc_cordoba_oeste',
+        supermarketName: { en: 'Mercadona', es: 'Mercadona' },
+        address: 'Calle Historiador Domínguez Ortiz 4',
+        city: 'Córdoba',
+      })
+    );
+
+    // The shop still has no reference: the next link fills it.
+    const next = await memory.linkPlace(DIA, {
+      supermarketLocationId: 'loc_consum_centro',
+    });
+    expect(next.filled).toEqual(['EXTERNAL_REF']);
+    expect('refHeldBy' in next).toBe(false);
   });
 
   it('refuses a shop the catalog does not hold', async () => {

@@ -33,6 +33,8 @@ export interface LinkableShop {
   longitude: number | null;
   externalRef: string | null;
   externalProvider: string | null;
+  /** The floor area in square metres, or null for a shop with no size yet. */
+  footprintM2: number | null;
 }
 
 /** A chain of the catalog, as far as a place can name one. */
@@ -47,15 +49,20 @@ export const SAME_SHOP_METRES = 50;
 /** The distance of a hint: a shop of the chain this close is worth a look. */
 export const NEAR_SHOP_METRES = 250;
 
-/** One metre of latitude, near enough, anywhere. */
-const METRES_PER_DEGREE = 111_320;
+/** The radius of the earth in metres, as the harvester takes it. */
+const EARTH_RADIUS_METRES = 6_371_000;
 
 /**
  * The chain a place names, or null.
  *
- * The brand key first, then the printed brand or the name as the exact name of
- * a chain in any language. A place that names no chain is not a refusal: it
- * links to the shop a person names, and it still finds a shop by its reference.
+ * The brand key first, then the printed brand or the name as the name of a
+ * chain in any language. Two names are the same name when they differ in case
+ * and in white space only, which is the rule of the harvester
+ * (`chainNameKey`). An accent or a hyphen is not folded: the name is the weak
+ * identity, and a wider fold widens the one case it can get wrong.
+ *
+ * A place that names no chain is not a refusal: it links to the shop a person
+ * names, and it still finds a shop by its reference.
  */
 export function chainOfPlace(
   place: Place,
@@ -68,13 +75,13 @@ export function chainOfPlace(
     }
   }
 
-  const printed = fold(place.brandName ?? place.name ?? '');
+  const printed = chainNameKey(place.brandName ?? place.name ?? '');
   if (printed === '') {
     return null;
   }
   return (
     chains.find((chain) =>
-      Object.values(chain.name).some((name) => fold(name) === printed)
+      Object.values(chain.name).some((name) => chainNameKey(name) === printed)
     ) ?? null
   );
 }
@@ -107,7 +114,7 @@ export function suggestShops(
   const named = new Set(strict.map((found) => found.supermarketLocationId));
   const near = pool
     .filter((shop) => !named.has(shop.id))
-    .map((shop) => ({ shop, metres: metresTo(place, shop) }))
+    .map((shop) => ({ shop, metres: distanceTo(place, shop) }))
     .filter(
       (entry): entry is { shop: LinkableShop; metres: number } =>
         entry.metres !== null &&
@@ -134,8 +141,10 @@ export function strictShops(
     return [];
   }
 
+  // The distance is compared as it was measured, and rounded only to be
+  // shown. A shop at 50.4 m is thus a hint, though it reads "50 m".
   const close = pool.filter((shop) => {
-    const metres = metresTo(place, shop);
+    const metres = distanceTo(place, shop);
     return metres !== null && metres <= SAME_SHOP_METRES;
   });
   if (close.length > 0) {
@@ -143,12 +152,13 @@ export function strictShops(
   }
 
   const street = fold(place.street ?? '');
+  const postalCode = (place.postalCode ?? '').trim();
   const sameAddress = pool.filter(
     (shop) =>
-      metresTo(place, shop) === null &&
+      distanceTo(place, shop) === null &&
       street !== '' &&
-      (shop.postalCode ?? '') !== '' &&
-      shop.postalCode === place.postalCode &&
+      postalCode !== '' &&
+      (shop.postalCode ?? '').trim() === postalCode &&
       fold(shop.address ?? '') === street
   );
   return ordered(place, sameAddress, 'ADDRESS');
@@ -162,10 +172,17 @@ export function strictShops(
  * catalog guessed: a code that the source of the place stated replaces it. A
  * code that was itself derived is never sent. A blank field of the place fills
  * nothing.
+ *
+ * The provider is written only together with a reference that is being
+ * filled, and never over a provider that the shop already names.
+ *
+ * `footprintM2` is the floor area of the place. The harvester holds it in a
+ * column that the view of a place does not carry, so it is an argument here.
  */
 export function linkFields(
   place: Place,
-  shop: LinkableShop
+  shop: LinkableShop,
+  footprintM2: number | null = null
 ): { readonly patch: Partial<LinkableShop>; readonly filled: Field[] } {
   const patch: Partial<LinkableShop> = {};
   const filled: Field[] = [];
@@ -177,7 +194,9 @@ export function linkFields(
   }
   if (blank(shop.externalRef) && !blank(place.externalRef)) {
     patch.externalRef = place.externalRef;
-    patch.externalProvider = place.provider;
+    if (blank(shop.externalProvider)) {
+      patch.externalProvider = place.provider;
+    }
     filled.push('EXTERNAL_REF');
   }
 
@@ -188,8 +207,12 @@ export function linkFields(
     (blank(shop.postalCode) || shop.postalCodeSource === 'DERIVED')
   ) {
     patch.postalCode = place.postalCode;
-    patch.postalCodeSource = 'SOURCE';
+    patch.postalCodeSource = place.postalCodeSource ?? 'SOURCE';
     filled.push('POSTAL_CODE');
+  }
+  if (shop.footprintM2 === null && footprintM2 !== null && footprintM2 > 0) {
+    patch.footprintM2 = footprintM2;
+    filled.push('FOOTPRINT');
   }
 
   if (blank(shop.address) && !blank(place.street)) {
@@ -241,6 +264,46 @@ export function decideByRef(
     : { kind: 'link', shop: carrying[0] };
 }
 
+/**
+ * The shop that holds a reference, or null when none does (backend plan
+ * 0195).
+ *
+ * The catalog holds one shop for each reference. Its index reads the
+ * reference alone: not the chain, and not the provider. `except` is the shop
+ * that is being written, which is never its own holder.
+ */
+export function refHolder(
+  externalRef: string | null,
+  shops: readonly LinkableShop[],
+  except: string | null = null
+): LinkableShop | null {
+  if (blank(externalRef)) {
+    return null;
+  }
+  return (
+    shops.find(
+      (shop) => shop.id !== except && shop.externalRef === externalRef
+    ) ?? null
+  );
+}
+
+/** A shop as the holder of a reference, as catalog names it in a refusal. */
+export function asRefHolder(
+  shop: LinkableShop,
+  chains: readonly LinkableChain[]
+): Wire.HarvestLocationRefHolder {
+  const chain = chains.find((held) => held.id === shop.supermarketId);
+  return {
+    supermarketLocationId: shop.id,
+    supermarketId: shop.supermarketId,
+    supermarketName: { ...(chain?.name ?? {}) },
+    label: shop.label === null ? null : { ...shop.label },
+    address: shop.address,
+    city: shop.city,
+    externalProvider: shop.externalProvider,
+  };
+}
+
 /** A shop as a candidate of a place, with the distance when both have one. */
 export function candidate(
   place: Place,
@@ -257,6 +320,12 @@ export function candidate(
     rung,
     metres: metresTo(place, shop),
   };
+}
+
+/** Whole metres between a place and a shop, which is what a person reads. */
+function metresTo(place: Place, shop: LinkableShop): number | null {
+  const metres = distanceTo(place, shop);
+  return metres === null ? null : Math.round(metres);
 }
 
 /** The first rung: the same reference, from the same provider or from none. */
@@ -282,25 +351,40 @@ function ordered(
     );
 }
 
-/** Whole metres between a place and a shop, or null for a shop with no position. */
-function metresTo(place: Place, shop: LinkableShop): number | null {
+/**
+ * Metres between a place and a shop, not rounded, or null for a shop with no
+ * position. The great circle distance, which is the one the harvester
+ * measures (`distanceMetres` of `osm-places`).
+ */
+function distanceTo(place: Place, shop: LinkableShop): number | null {
   if (shop.latitude === null || shop.longitude === null) {
     return null;
   }
-  const latitudeMetres = (place.latitude - shop.latitude) * METRES_PER_DEGREE;
-  const longitudeMetres =
-    (place.longitude - shop.longitude) *
-    METRES_PER_DEGREE *
-    Math.cos((place.latitude * Math.PI) / 180);
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitude = radians(shop.latitude - place.latitude);
+  const longitude = radians(shop.longitude - place.longitude);
+  const half =
+    Math.sin(latitude / 2) ** 2 +
+    Math.cos(radians(place.latitude)) *
+      Math.cos(radians(shop.latitude)) *
+      Math.sin(longitude / 2) ** 2;
 
-  return Math.round(Math.hypot(latitudeMetres, longitudeMetres));
+  return 2 * EARTH_RADIUS_METRES * Math.asin(Math.min(1, Math.sqrt(half)));
 }
 
 function blank(value: string | null): boolean {
   return value === null || value.trim() === '';
 }
 
-/** Case, accents and punctuation folded away, and no word changed. */
+/** A chain name with its case and its white space folded, and no more. */
+function chainNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Case, accents and punctuation folded away, and no word changed. For an
+ * address, which is what the harvester folds this way (`normalizeName`).
+ */
 function fold(value: string): string {
   return value
     .normalize('NFD')

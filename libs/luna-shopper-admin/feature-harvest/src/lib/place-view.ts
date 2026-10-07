@@ -133,7 +133,13 @@ export interface PlaceCandidate {
   readonly supermarketLocationId: string;
   /** The chain of the shop, or `''` when the answer did not say. */
   readonly supermarketId: string;
-  /** The shop's label, or its address, or its id: never blank. */
+  /**
+   * The shop's label, or its address, or `''` for a shop with neither.
+   *
+   * Never its id. An id is not a name, and a row of the panel that reads as
+   * a uuid says nothing to the person who must decide. The page says "a shop
+   * with no address" for `''`.
+   */
   readonly title: string;
   readonly address: string;
   readonly city: string;
@@ -199,7 +205,7 @@ export function candidatesOf(
     candidates.push({
       supermarketLocationId: id,
       supermarketId: textOf(row['supermarketId']),
-      title: localizedTextValue(row['label'], locales) || address || id,
+      title: localizedTextValue(row['label'], locales) || address,
       address,
       city: textOf(row['city']),
       postalCode: textOf(row['postalCode']),
@@ -283,9 +289,73 @@ export function refusedChainName(
   return typeof name === 'string' ? name : localizedTextValue(name, locales);
 }
 
+/**
+ * The shop that holds a reference (backend plan 0195), as a sentence names
+ * it. This app's own shape, read from `details.heldBy` of a refused import
+ * and from `refHeldBy` of a link.
+ */
+export interface RefHolder {
+  /** The name of its chain, or `''`. */
+  readonly chain: string;
+  /** Its label, or its address, or `''` for a shop with neither. */
+  readonly shop: string;
+  readonly city: string;
+}
+
+/**
+ * One holder of a reference, or null for an answer that names none.
+ *
+ * Takes `unknown`: the details of a refusal are an open object, and a holder
+ * that was deleted between the refusal and its read arrives as null.
+ */
+export function refHolderOf(
+  value: unknown,
+  locales: readonly string[]
+): RefHolder | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    chain: localizedTextValue(row['supermarketName'], locales),
+    shop: localizedTextValue(row['label'], locales) || textOf(row['address']),
+    city: textOf(row['city']),
+  };
+}
+
+/**
+ * The shop a `location_external_ref_taken` refusal named, read from its
+ * `details`, or null when it named none this app can read.
+ */
+export function refusedRefHolder(
+  details: Readonly<Record<string, unknown>>,
+  locales: readonly string[]
+): RefHolder | null {
+  return refHolderOf(details['heldBy'], locales);
+}
+
+/**
+ * Where a shop is, as the line under its name: its address, then its postal
+ * code and city. The address is left out when it is the name already.
+ */
+export function shopWhere(shop: {
+  readonly title: string;
+  readonly address: string;
+  readonly city: string;
+  readonly postalCode: string;
+}): string {
+  const area = [shop.postalCode, shop.city]
+    .filter((part) => part.trim() !== '')
+    .join(' ');
+  return [shop.address === shop.title ? '' : shop.address, area]
+    .filter((part) => part.trim() !== '')
+    .join(', ');
+}
+
 /** A catalog shop near the place, for the duplicates panel. */
 export interface NearbyShop {
   readonly id: string;
+  /** The label, or the address, or `''`: never the id. */
   readonly title: string;
   readonly address: string;
   readonly city: string;
@@ -340,7 +410,7 @@ export function nearbyShops(
     const address = textOf(row['address']);
     shops.push({
       id,
-      title: localizedTextValue(row['label'], locales) || address || id,
+      title: localizedTextValue(row['label'], locales) || address,
       address,
       city: textOf(row['city']),
       postalCode,
@@ -362,6 +432,7 @@ export interface RefLinkLine {
   readonly place: string;
   /** Its street and city, as far as it has them. */
   readonly where: string;
+  /** The label of the shop, or its address, or `''`: never its id. */
   readonly shop: string;
   /** The translation keys of what the link fills, in the fixed order. */
   readonly filledKeys: readonly string[];
@@ -388,8 +459,8 @@ const SKIP_REASONS: readonly string[] = ['SEVERAL_SHOPS', 'PROVIDER_NOT_NAMED'];
  * 0061, target 8).
  *
  * The shop of a line goes through the same mapper as every other candidate,
- * so it is called by its label, then its address, then its id. A reason a
- * later backend adds reads "Not linked".
+ * so it is called by its label, then its address. A reason a later backend
+ * adds reads "Not linked".
  */
 export function refLinkPreview(
   answer: Wire.HarvestLinkPlacesByRefResult,
@@ -400,9 +471,7 @@ export function refLinkPreview(
       placeId: row.place.id,
       place: row.place.name ?? row.place.externalRef,
       where: whereOf(row.place),
-      shop:
-        candidatesOf([row.shop], locales)[0]?.title ??
-        row.shop.supermarketLocationId,
+      shop: candidatesOf([row.shop], locales)[0]?.title ?? '',
       filledKeys: filledFieldKeys(row.filled),
     })),
     skipped: answer.skipped.map((row) => ({
@@ -438,6 +507,7 @@ function whereOf(place: Place): string {
 /** The shop a person picked, as the line above the link button draws it. */
 export interface PickedShop {
   readonly id: string;
+  /** The label, or the address, or `''`: never the id. */
   readonly title: string;
   readonly address: string;
   readonly city: string;
@@ -463,7 +533,7 @@ export function pickedShop(
   const address = textOf(fields['address']);
   return {
     id,
-    title: localizedTextValue(fields['label'], locales) || address || id,
+    title: localizedTextValue(fields['label'], locales) || address,
     address,
     city: textOf(fields['city']),
     postalCode: textOf(fields['postalCode']),

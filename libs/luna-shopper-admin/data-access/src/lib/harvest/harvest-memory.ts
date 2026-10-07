@@ -20,6 +20,7 @@ import {
   HARVEST_RUN_SEED,
   ITEM_SOURCE_ENTRY_SEED,
   PLACE_CHAIN_SEED,
+  PLACE_FOOTPRINT_SEED,
   PLACE_SHOP_SEED,
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
@@ -44,10 +45,12 @@ import type {
   SourceEntryAcceptResult,
 } from './harvest-service';
 import {
+  asRefHolder,
   candidate,
   chainOfPlace,
   decideByRef,
   linkFields,
+  refHolder,
   strictShops,
   suggestShops,
   type LinkableShop,
@@ -407,6 +410,17 @@ export class HarvestMemory implements HarvestServiceI {
    * with no brand key and no chain named answers the plain conflict the
    * harvester answers, because the place cannot say what language its name is
    * in; `newChain` is the way through.
+   *
+   * **The strict rungs read the shops of one chain**: the chain that the
+   * request names, else the chain of the place. A place that resolves to no
+   * chain gets a chain of its own, which has no shop yet, so nothing is
+   * matched.
+   *
+   * **A reference that another shop holds refuses the import, also with
+   * `force`** (backend plan 0195). The answer is 409
+   * `location_external_ref_taken` with the reference and the holder under
+   * `details`. The holder is any shop with that reference: the catalog reads
+   * neither the chain nor the provider.
    */
   async importPlace(
     id: string,
@@ -414,14 +428,17 @@ export class HarvestMemory implements HarvestServiceI {
   ): Promise<Wire.HarvestDiscoveredPlaceView> {
     const place = this._undecidedPlace(id);
 
-    if (input.force !== true) {
-      const chain = chainOfPlace(place, PLACE_CHAIN_SEED);
+    const picked = (input.supermarketId ?? '').trim();
+    const chainId =
+      picked !== ''
+        ? picked
+        : (chainOfPlace(place, PLACE_CHAIN_SEED)?.id ?? null);
+
+    if (input.force !== true && chainId !== null) {
       const candidates = strictShops(
         place,
-        chain === null
-          ? this._placeShops
-          : this._placeShops.filter((shop) => shop.supermarketId === chain.id),
-        chain !== null
+        this._placeShops.filter((shop) => shop.supermarketId === chainId),
+        true
       );
       if (candidates.length > 0) {
         throw new GatewayError({
@@ -450,6 +467,19 @@ export class HarvestMemory implements HarvestServiceI {
       });
     }
 
+    const holder = refHolder(place.externalRef, this._placeShops);
+    if (holder !== null) {
+      throw new GatewayError({
+        code: 'location_external_ref_taken',
+        status: 409,
+        correlationId: '',
+        details: {
+          externalRef: place.externalRef,
+          heldBy: asRefHolder(holder, PLACE_CHAIN_SEED),
+        },
+      });
+    }
+
     return this._decidePlace(id, 'IMPORTED', input.supermarketId ?? null);
   }
 
@@ -462,6 +492,10 @@ export class HarvestMemory implements HarvestServiceI {
    * `place_names_another_chain` with that chain under `details`, and writes
    * nothing, unless `acrossChains` is sent. The answer says which fields of
    * the shop the link filled.
+   *
+   * A reference that another shop holds is left empty, and the link is made
+   * (backend plan 0195). The answer then lacks `EXTERNAL_REF` and names the
+   * holder in `refHeldBy`.
    */
   async linkPlace(
     id: string,
@@ -534,7 +568,11 @@ export class HarvestMemory implements HarvestServiceI {
         ? this._linkPlace(place, decision.shop)
         : {
             place: { ...place, candidates: [] },
-            filled: linkFields(place, decision.shop).filled,
+            filled: linkFields(
+              place,
+              decision.shop,
+              PLACE_FOOTPRINT_SEED[place.id] ?? null
+            ).filled,
           };
       result.linked.push({ ...linked, shop });
     }
@@ -1388,16 +1426,40 @@ export class HarvestMemory implements HarvestServiceI {
     return { ...place };
   }
 
-  /** Fill what the shop lacks from the place, and mark the place imported. */
+  /**
+   * Fill what the shop lacks from the place, and mark the place imported.
+   *
+   * A reference that another shop holds is not written, and neither is its
+   * provider. The other fields are, and the answer names the holder.
+   */
   private _linkPlace(
     place: Wire.HarvestDiscoveredPlaceView,
     shop: LinkableShop
   ): Wire.HarvestPlaceLinkResult {
-    const { patch, filled } = linkFields(place, shop);
+    const { patch, filled } = linkFields(
+      place,
+      shop,
+      PLACE_FOOTPRINT_SEED[place.id] ?? null
+    );
+    const holder =
+      patch.externalRef === undefined
+        ? null
+        : refHolder(patch.externalRef, this._placeShops, shop.id);
+    if (holder !== null) {
+      delete patch.externalRef;
+      delete patch.externalProvider;
+    }
+
     Object.assign(shop, patch);
     return {
       place: this._decidePlace(place.id, 'IMPORTED', shop.id),
-      filled,
+      filled:
+        holder === null
+          ? filled
+          : filled.filter((field) => field !== 'EXTERNAL_REF'),
+      ...(holder === null
+        ? {}
+        : { refHeldBy: asRefHolder(holder, PLACE_CHAIN_SEED) }),
     };
   }
 

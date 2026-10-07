@@ -298,3 +298,21 @@ which answered that no place carries the reference of a shop. The other chain qu
 the notice and a preview with places were drawn from answers that the walk gave in place
 of the gateway. No link was sent to a real back end by this build: the routes were walked
 over a gateway by backend `0193`, and the specs of `harvest-api.ts` hold the requests.
+
+### What the review changed
+
+A review of the pull request found seven things, and one round fixed them. The other chain
+question now names its shop, with its address line, and goes as soon as another shop or
+chain is on screen, so "Link anyway" cannot send a shop that a person no longer reads. The
+preview of the bulk act is dropped by any decision and any reload, says that the list is
+read again on apply, and the notice counts the places that were linked beyond the preview
+and the previewed ones that were not. A decision of the queue and the bulk act lock each
+other while either is in flight, and a second press sends nothing. A refused import whose
+reference another shop holds (backend `0195`) names that shop and offers the link form and
+no new shop, a link says when the reference was left empty, and a link of a place that was
+decided elsewhere says so and takes the row out. A shop with no label and no address reads
+"a shop with no address" and never as its id. The memory harvester follows the gateway on
+the 50 m bound, the chain name, the chain of an import, the floor area, the provider and
+the taken reference. The focus moves into the link form, returns to its button, and stays
+on the header control while it reads. A preview is kept on a skip, which decides nothing.
+A reject now clears the panel as the other decisions do.

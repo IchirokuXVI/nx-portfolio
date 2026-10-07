@@ -1277,6 +1277,19 @@
         "probable": "Probably a shop we hold",
         "near": "A shop of its chain is near"
       },
+      "shop": {
+        "untitled": "Shop with no address",
+        "untitledOf": "Shop of {{chain}} with no address",
+        "unnamed": "a shop with no address",
+        "unnamedOf": "a shop of {{chain}} with no address"
+      },
+      "holder": {
+        "named": "{{shop}} ({{where}})",
+        "unknown": "another shop"
+      },
+      "refTaken": {
+        "said": "Nothing was added. The reference of this place is held by {{holder}}, and a reference names one shop. The place can be linked to an existing shop instead."
+      },
       "supermarketId": "Chain to file it under (optional)",
       "near": {
         "heading": "Others of the same brand nearby",
@@ -1348,13 +1361,15 @@
         "submit": "Link"
       },
       "otherChain": {
-        "ask": "This place names {{chain}}. Link it to a shop of another chain?",
-        "askUnnamed": "This place names another chain. Link it to this shop?",
+        "ask": "This place names {{chain}}. Link it to {{shop}}, a shop of another chain?",
+        "askUnnamed": "This place names another chain. Link it to {{shop}}?",
         "confirm": "Link anyway"
       },
       "linked": {
         "filled": "Linked {{place}} to {{shop}}. Filled {{fields}}.",
         "nothing": "Linked {{place}} to {{shop}}. The shop already held everything.",
+        "refHeld": "The provider reference was left empty, because {{holder}} holds it.",
+        "already": "{{place}} was added to the catalog or linked in the meantime, so nothing was linked. It has left the queue.",
         "list": "{{others}} and {{last}}",
         "field": {
           "ADDRESS": "the address",
@@ -1371,7 +1386,7 @@
         "start": "Link places that shops were made from",
         "heading": "Places that shops were made from",
         "reading": "Looking for them.",
-        "lead": "Nothing is linked yet. Each place below carries the reference of one shop, which was made from it. Every chain is read, whatever chain is chosen above.",
+        "lead": "Nothing is linked yet. Each place below carries the reference of one shop, which was made from it. Every chain is read, whatever chain is chosen above. The list is read again when it is applied, so what is linked can differ from this list.",
         "none": "No place in the queue carries the reference of a shop. There is nothing to link.",
         "to": "to {{shop}}",
         "fills": "Fills {{fields}}",
@@ -1387,6 +1402,10 @@
         "close": "Close",
         "done_one": "Linked {{count}} place.",
         "done_other": "Linked {{count}} places.",
+        "more_one": "The list was read again: {{count}} place that this list did not show was linked too.",
+        "more_other": "The list was read again: {{count}} places that this list did not show were linked too.",
+        "fewer_one": "{{count}} place of this list was not linked.",
+        "fewer_other": "{{count}} places of this list were not linked.",
         "failed": "The link stopped part way and may have linked some places. The queue shows what is left."
       },
       "error": {

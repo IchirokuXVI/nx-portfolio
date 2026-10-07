@@ -12,8 +12,11 @@ import {
   placeCandidates,
   placeLines,
   placeRefusalKey,
+  refHolderOf,
   refLinkPreview,
   refusedChainName,
+  refusedRefHolder,
+  shopWhere,
 } from './place-view';
 
 type Place = Wire.HarvestDiscoveredPlaceView;
@@ -177,12 +180,11 @@ describe('placeCandidates', () => {
     ]);
   });
 
-  it('names an unlabelled shop by its address, then its id', () => {
+  it('names an unlabelled shop by its address', () => {
     const found = placeCandidates(
       {
         candidates: [
           { supermarketLocationId: 'loc-1', address: 'Calle Mayor 1' },
-          { supermarketLocationId: 'loc-2' },
         ],
       },
       ['en']
@@ -190,7 +192,46 @@ describe('placeCandidates', () => {
 
     expect(found.map((candidate) => candidate.title)).toEqual([
       'Calle Mayor 1',
-      'loc-2',
+    ]);
+  });
+
+  /**
+   * An id is not a name. A candidate with every field null keeps its id to
+   * be linked by, and has nothing to be called by: the page then says "a
+   * shop with no address".
+   */
+  it('never names a shop by its id, also when every field is null', () => {
+    const id = '0b6f1c1e-7f5d-4a55-9d0e-0d1f4a6a9b21';
+    const found = placeCandidates(
+      {
+        candidates: [
+          {
+            supermarketLocationId: id,
+            supermarketId: 'chain-1',
+            label: null,
+            address: null,
+            city: null,
+            postalCode: null,
+            rung: 'EXTERNAL_REF',
+            metres: null,
+          },
+        ],
+      },
+      ['en']
+    );
+
+    expect(found).toEqual([
+      {
+        supermarketLocationId: id,
+        supermarketId: 'chain-1',
+        title: '',
+        address: '',
+        city: '',
+        postalCode: '',
+        metres: null,
+        rung: 'EXTERNAL_REF',
+        hint: false,
+      },
     ]);
   });
 
@@ -477,7 +518,7 @@ describe('nearbyShops', () => {
     expect(shops).toEqual([
       {
         id: 'same',
-        title: 'same',
+        title: '',
         address: '',
         city: '',
         postalCode: '28013',
@@ -520,5 +561,88 @@ describe('placeRefusalKey', () => {
   it('leaves every other refusal to the generic sentence', () => {
     expect(placeRefusalKey(refusal('conflict'))).toBeNull();
     expect(placeRefusalKey(null)).toBeNull();
+  });
+});
+
+/** Backend plan 0195: the shop that holds a reference, read from `unknown`. */
+describe('the shop that holds a reference', () => {
+  const held = {
+    supermarketLocationId: 'loc-9',
+    supermarketId: 'chain-1',
+    supermarketName: { es: 'Deza' },
+    label: { es: 'Deza Centro' },
+    address: 'Calle Mayor 1',
+    city: 'Córdoba',
+    externalProvider: 'osm',
+  };
+
+  it('is named by its chain, its label and its city', () => {
+    expect(refHolderOf(held, ['en', 'es'])).toEqual({
+      chain: 'Deza',
+      shop: 'Deza Centro',
+      city: 'Córdoba',
+    });
+  });
+
+  it('is named by its address when it has no label', () => {
+    expect(refHolderOf({ ...held, label: null }, ['es'])?.shop).toBe(
+      'Calle Mayor 1'
+    );
+  });
+
+  it('has no name of its own with no label and no address, and never its id', () => {
+    expect(
+      refHolderOf({ ...held, label: null, address: null, city: null }, ['es'])
+    ).toEqual({ chain: 'Deza', shop: '', city: '' });
+  });
+
+  it('is read from the details of the refusal', () => {
+    expect(
+      refusedRefHolder({ externalRef: 'node/1', heldBy: held }, ['es'])?.shop
+    ).toBe('Deza Centro');
+  });
+
+  /** A holder that was deleted before the read arrives as null. */
+  it('is none for a holder that is gone and for a malformed body', () => {
+    expect(refusedRefHolder({ heldBy: null }, ['es'])).toBeNull();
+    expect(refusedRefHolder({}, ['es'])).toBeNull();
+    expect(refHolderOf('nope', ['es'])).toBeNull();
+    expect(refHolderOf({}, ['es'])).toEqual({ chain: '', shop: '', city: '' });
+  });
+});
+
+describe('the address line of a shop', () => {
+  it('is its address, then its postal code and city', () => {
+    expect(
+      shopWhere({
+        title: 'Consum Centro',
+        address: 'Calle Cruz Conde 20',
+        city: 'Córdoba',
+        postalCode: '14003',
+      })
+    ).toBe('Calle Cruz Conde 20, 14003 Córdoba');
+  });
+
+  it('leaves the address out when it is the name already', () => {
+    expect(
+      shopWhere({
+        title: 'Calle Mayor 1',
+        address: 'Calle Mayor 1',
+        city: 'Córdoba',
+        postalCode: '',
+      })
+    ).toBe('Córdoba');
+  });
+
+  it('is empty for a shop with nothing', () => {
+    expect(
+      shopWhere({ title: '', address: '', city: '', postalCode: '' })
+    ).toBe('');
+  });
+});
+
+describe('a picked shop and a line of the bulk act', () => {
+  it('never call a shop by its id', () => {
+    expect(pickedShop({ id: 'loc-1' }, ['en'])?.title).toBe('');
   });
 });

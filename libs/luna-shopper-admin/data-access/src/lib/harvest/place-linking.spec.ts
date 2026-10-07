@@ -1,8 +1,10 @@
 import type { Wire } from '@portfolio/luna-shopper-admin/models';
 import {
+  asRefHolder,
   chainOfPlace,
   decideByRef,
   linkFields,
+  refHolder,
   strictShops,
   suggestShops,
   type LinkableChain,
@@ -55,8 +57,11 @@ function place(over: Partial<Place> = {}): Place {
   };
 }
 
-/** One metre of latitude, so a shop can be put a known distance north. */
-const METRE = 1 / 111_320;
+/**
+ * One metre of latitude on the sphere the harvester measures on, so a shop
+ * can be put a known distance north.
+ */
+const METRE = 180 / (Math.PI * 6_371_000);
 
 function shop(over: Partial<LinkableShop> = {}): LinkableShop {
   return {
@@ -72,6 +77,7 @@ function shop(over: Partial<LinkableShop> = {}): LinkableShop {
     longitude: -4.78,
     externalRef: null,
     externalProvider: null,
+    footprintM2: null,
     ...over,
   };
 }
@@ -85,11 +91,33 @@ describe('the chain a place names', () => {
 
   it('is the chain whose name is the printed brand, with no key', () => {
     const found = chainOfPlace(
-      place({ brandKey: null, brandName: 'supermercados el jamon' }),
+      place({ brandKey: null, brandName: '  supermercados   EL JAMÓN ' }),
       CHAINS
     );
 
     expect(found?.id).toBe('jamon');
+  });
+
+  /**
+   * The harvester folds case and white space, and nothing else. A twin that
+   * folded an accent away found a chain that the server does not find.
+   */
+  it.each(['Supermercados El Jamon', 'Supermercados-El-Jamón'])(
+    'is none for %s, which differs in more than case and white space',
+    (brandName) => {
+      expect(
+        chainOfPlace(place({ brandKey: null, brandName }), CHAINS)
+      ).toBeNull();
+    }
+  );
+
+  it('reads the name of the place when it prints no brand', () => {
+    expect(
+      chainOfPlace(
+        place({ brandKey: null, brandName: null, name: 'deza' }),
+        CHAINS
+      )?.id
+    ).toBe('deza');
   });
 
   it('is none for a brand the catalog files under no chain', () => {
@@ -161,6 +189,33 @@ describe('the shops a place may be', () => {
     expect(found.map((row) => [row.rung, row.metres])).toEqual([
       ['ADDRESS', null],
     ]);
+  });
+
+  /**
+   * The bound is on the distance as it was measured. Both shops read "50 m",
+   * and only the one inside the bound is the same shop.
+   */
+  it('takes a shop at 49.6 m as the same shop, and a shop at 50.4 m as a hint', () => {
+    const inside = suggestShops(
+      place(),
+      [shop({ latitude: north(49.6) })],
+      CHAINS
+    );
+    const outside = suggestShops(
+      place(),
+      [shop({ latitude: north(50.4) })],
+      CHAINS
+    );
+
+    expect(inside.map((row) => [row.rung, row.metres])).toEqual([
+      ['NEARBY', 50],
+    ]);
+    expect(outside.map((row) => [row.rung, row.metres])).toEqual([
+      ['SAME_CHAIN_NEAR', 50],
+    ]);
+    expect(
+      strictShops(place(), [shop({ latitude: north(50.4) })], true)
+    ).toEqual([]);
   });
 
   /** The two real shops at 54.9 m and 61.8 m of the backend plan. */
@@ -308,6 +363,47 @@ describe('what a link fills', () => {
     }
   );
 
+  /** The provider goes with a reference that is being filled, and only then. */
+  it('leaves the provider that a shop with no reference already names', () => {
+    const { patch, filled } = linkFields(
+      place(),
+      shop({ externalRef: null, externalProvider: 'ELJAMON' })
+    );
+
+    expect(filled).toEqual(['EXTERNAL_REF']);
+    expect(patch).toEqual({ externalRef: 'node/1' });
+  });
+
+  it('writes no provider on a shop that holds its reference', () => {
+    const { patch, filled } = linkFields(
+      place(),
+      shop({ externalRef: 'node/9', externalProvider: null })
+    );
+
+    expect(filled).toEqual([]);
+    expect(patch).toEqual({});
+  });
+
+  it('fills the floor area of a shop that has none, after the postal code', () => {
+    const { patch, filled } = linkFields(
+      place(),
+      shop({ externalRef: 'node/9', postalCode: null, city: null }),
+      420
+    );
+
+    expect(filled).toEqual(['POSTAL_CODE', 'FOOTPRINT', 'CITY']);
+    expect(patch.footprintM2).toBe(420);
+  });
+
+  it('keeps the floor area that a shop holds, and fills none from a place with none', () => {
+    const sized = shop({ externalRef: 'node/9', footprintM2: 900 });
+    const bare = shop({ externalRef: 'node/9' });
+
+    expect(linkFields(place(), sized, 420).filled).toEqual([]);
+    expect(linkFields(place(), bare).filled).toEqual([]);
+    expect(linkFields(place(), bare, null).filled).toEqual([]);
+  });
+
   it('fills no postal code from a place that has none', () => {
     expect(
       linkFields(
@@ -365,5 +461,44 @@ describe('the bulk link, one place at a time', () => {
     expect(
       decideByRef(place(), [carrying({ externalProvider: 'ELJAMON' })])
     ).toBeNull();
+  });
+});
+
+/** Backend plan 0195: the catalog holds one shop for each reference. */
+describe('the shop that holds a reference', () => {
+  const held = shop({
+    id: 'holder',
+    supermarketId: 'jamon',
+    externalRef: 'node/1',
+    externalProvider: 'ELJAMON',
+    label: { es: 'El Jamón Centro' },
+  });
+
+  it('is any shop with that reference, whatever its chain and its provider', () => {
+    expect(refHolder('node/1', [shop({ id: 'other' }), held])?.id).toBe(
+      'holder'
+    );
+  });
+
+  it('is never the shop that is being written', () => {
+    expect(refHolder('node/1', [held], 'holder')).toBeNull();
+  });
+
+  it('is none for a reference that no shop holds, and for no reference', () => {
+    expect(refHolder('node/2', [held])).toBeNull();
+    expect(refHolder(null, [shop({ externalRef: null })])).toBeNull();
+    expect(refHolder('', [shop({ externalRef: '' })])).toBeNull();
+  });
+
+  it('is named with its chain, as catalog names it in the refusal', () => {
+    expect(asRefHolder(held, CHAINS)).toEqual({
+      supermarketLocationId: 'holder',
+      supermarketId: 'jamon',
+      supermarketName: { es: 'Supermercados El Jamón' },
+      label: { es: 'El Jamón Centro' },
+      address: 'Avenida de Cádiz 68',
+      city: 'Córdoba',
+      externalProvider: 'ELJAMON',
+    });
   });
 });

@@ -728,6 +728,7 @@ export const PLACE_SHOP_SEED: readonly LinkableShop[] = [
     longitude: -4.7794,
     externalRef: 'node/1156230891',
     externalProvider: 'osm',
+    footprintM2: null,
   },
   {
     id: 'loc_cordoba_oeste',
@@ -742,6 +743,7 @@ export const PLACE_SHOP_SEED: readonly LinkableShop[] = [
     longitude: -4.8012,
     externalRef: 'way/48821004',
     externalProvider: 'osm',
+    footprintM2: 2400,
   },
   {
     id: 'loc_sierra',
@@ -756,6 +758,7 @@ export const PLACE_SHOP_SEED: readonly LinkableShop[] = [
     longitude: -4.8871,
     externalRef: 'node/9920011234',
     externalProvider: 'osm',
+    footprintM2: null,
   },
   {
     id: 'loc_consum_centro',
@@ -770,8 +773,21 @@ export const PLACE_SHOP_SEED: readonly LinkableShop[] = [
     longitude: -4.7823,
     externalRef: null,
     externalProvider: null,
+    footprintM2: null,
   },
 ];
+
+/**
+ * The floor area of a place in square metres, by place id, for the places
+ * that were mapped as an outline (backend plan 0176).
+ *
+ * The harvester holds it in a column of the place that the view of a place
+ * does not carry. A link fills it on a shop that has no size yet, and the
+ * answer then names `FOOTPRINT`. A place that is not here has none.
+ */
+export const PLACE_FOOTPRINT_SEED: Readonly<Record<string, number>> = {
+  'place-carrefour-1': 310,
+};
 
 /**
  * The chains of the catalog, as the memory harvester knows them: the chains
