@@ -32,7 +32,6 @@ const nouns: NounEntry[] = [
   { word: 'Horizon' },
   { word: 'Lagoon' },
   { word: 'Reef' },
-  { word: 'Sextant' },
   { word: 'Spinnaker' },
   { word: 'Rigging' },
   { word: 'Galley' },
