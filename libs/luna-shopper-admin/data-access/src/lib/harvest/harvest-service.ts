@@ -100,6 +100,17 @@ export interface HarvestServiceI {
     id: string,
     input: Wire.LinkDiscoveredPlaceDto
   ): Promise<Wire.HarvestPlaceLinkResult>;
+  /**
+   * Link every place that a shop was made from (backend plan 0193, target 8).
+   *
+   * Without `apply` it changes nothing and answers what it would do, which is
+   * the preview the screen shows before it asks. With `apply` it links each
+   * place that exactly one shop carries the reference of, and answers the
+   * same list. It is not narrowed by a chain: it reads every undecided place.
+   */
+  linkPlacesByRef(
+    input: Wire.LinkPlacesByRefDto
+  ): Promise<Wire.HarvestLinkPlacesByRefResult>;
 
   /**
    * The one queue (admin plan 0014, section 1; backend plan 0086, section 10).

@@ -224,6 +224,21 @@ export class QueueStore<T> {
   }
 
   /**
+   * Take out a row that was decided somewhere else.
+   *
+   * A second tab or a run decided the row, and the refusal of this screen's
+   * own act is how it learned. The row is no longer a question, so it leaves
+   * as a decided row does: the row under it comes up. The refusal goes with
+   * it, because the caller says in its own words what happened. A queue that
+   * this empties is then empty, and not broken.
+   */
+  drop(id: string): void {
+    this._error.set(null);
+    this._settle(id, null);
+    this._readAhead();
+  }
+
+  /**
    * Make this row the one being decided, without deciding anything.
    *
    * What pressing a row of the column does. The rows stay where they are: only
